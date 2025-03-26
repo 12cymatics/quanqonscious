@@ -1,0 +1,19 @@
+QuanQonscious Proprietary License
+==================================
+
+Copyright (c) 2025 Daniel James Elliot Meyer
+
+Permission is hereby granted, free of charge, to the recipient of this software 
+("Licensee") for non-commercial, research, and evaluation purposes ONLY. 
+Any commercial use, distribution, or modification of this software is strictly prohibited 
+without the express written consent of Daniel James Elliot Meyer.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL DANIEL JAMES ELLIOT MEYER BE LIABLE FOR ANY 
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing inquiries, please contact:
+danmeyer85@gmail.com
+Daniel James Elliot Meyer
