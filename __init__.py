@@ -44,6 +44,7 @@ else:
 
 # Make key submodules readily accessible via the package namespace
 from QuanQonscious import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
+from QuanQonscious.sutra_repository import SutraRepository
 
 # Optionally, set a flag or config dict for use in modules (for example, default quantum backend choice)
 DEFAULT_QUANTUM_BACKEND = "cudaq" if _has_cudaq else "cirq"
