@@ -311,11 +311,39 @@ class VedicSutras:
             
             # Convert back to original type
             result = self._from_device(result, original_type)
-            
+
             end_time = time.time()
-def paravartya_yojayet(self, x: Union[float, np.ndarray, torch.Tensor],
-                          divisor: Union[float, np.ndarray, torch.Tensor],
-                          ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+            self._record_performance(
+                "nikhilam_navatashcaramam_dashatah",
+                start_time,
+                end_time,
+                True,
+                data_size,
+            )
+            return result
+
+        except Exception as e:
+            end_time = time.time()
+            error_msg = str(e)
+            logger.error(
+                f"Error in nikhilam_navatashcaramam_dashatah: {error_msg}"
+            )
+            self._record_performance(
+                "nikhilam_navatashcaramam_dashatah",
+                start_time,
+                end_time,
+                False,
+                data_size,
+                error_msg,
+            )
+            raise
+
+    def paravartya_yojayet(
+        self,
+        x: Union[float, np.ndarray, torch.Tensor],
+        divisor: Union[float, np.ndarray, torch.Tensor],
+        ctx: Optional[SutraContext] = None,
+    ) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sutra 3: Paravartya Yojayet - "Transpose and Apply"
         
