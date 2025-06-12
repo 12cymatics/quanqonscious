@@ -1,7 +1,10 @@
 # ========== SULBA SUTRAS ==========
     
-    def sulba_square_construction(self, side_length: Union[float, np.ndarray, torch.Tensor],
-                                ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def sulba_square_construction(
+    self,
+    side_length: Union[float, np.ndarray, torch.Tensor],
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sulba Sutra: Square Construction - Calculates the area and perimeter of a square,
         with optimizations for computational geometry and spatial transformations.
@@ -83,7 +86,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _sulba_square_construction_quantum(self, side_length, context):
+def _sulba_square_construction_quantum(self, side_length, context):
         """Quantum implementation of sulba_square_construction using CUDAQ"""
         # For scalar values, implement quantum circuit
         if not isinstance(side_length, (int, float)):
@@ -140,7 +143,7 @@
         
         return (area, perimeter)
     
-    def _sulba_square_construction_hybrid(self, side_length, context):
+def _sulba_square_construction_hybrid(self, side_length, context):
         """Hybrid implementation of sulba_square_construction"""
         # For scalar values, use quantum circuit
         if isinstance(side_length, (int, float)):
@@ -160,7 +163,7 @@
             # For larger arrays, use classical implementation
             return self._sulba_square_construction_classical(side_length, context)
     
-    def _sulba_square_construction_classical(self, side_length, context):
+def _sulba_square_construction_classical(self, side_length, context):
         """Classical implementation of sulba_square_construction"""
         if isinstance(side_length, torch.Tensor):
             # Calculate area and perimeter
@@ -180,8 +183,11 @@
             perimeter = 4 * side_length
             return (area, perimeter)
 
-    def sulba_circle_construction(self, radius: Union[float, np.ndarray, torch.Tensor],
-                                ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def sulba_circle_construction(
+    self,
+    radius: Union[float, np.ndarray, torch.Tensor],
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sulba Sutra: Circle Construction - Calculates the area and circumference of a circle,
         with sulba-optimized approximations for π.
@@ -266,7 +272,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _sulba_circle_construction_quantum(self, radius, context):
+def _sulba_circle_construction_quantum(self, radius, context):
         """Quantum implementation of sulba_circle_construction using Cirq"""
         # For scalar values, implement quantum circuit
         if not isinstance(radius, (int, float)):
@@ -343,7 +349,7 @@
         
         return (area, circumference)
     
-    def _sulba_circle_construction_hybrid(self, radius, context):
+def _sulba_circle_construction_hybrid(self, radius, context):
         """Hybrid implementation of sulba_circle_construction"""
         # For scalar values, use quantum circuit
         if isinstance(radius, (int, float)):
@@ -363,7 +369,7 @@
             # For larger arrays, use classical implementation
             return self._sulba_circle_construction_classical(radius, context)
     
-    def _sulba_circle_construction_classical(self, radius, context):
+def _sulba_circle_construction_classical(self, radius, context):
         """Classical implementation of sulba_circle_construction"""
         # Use sulba approximation for pi: 3.0883... (derived from √10)
         pi_sulba = np.sqrt(10)  # Ancient Indian approximation
@@ -386,8 +392,11 @@
             circumference = 2 * pi_sulba * radius
             return (area, circumference)
 
-    def sulba_pythagorean_triples(self, max_c: int,
-                                ctx: Optional[SutraContext] = None) -> List[Tuple[int, int, int]]:
+def sulba_pythagorean_triples(
+    self,
+    max_c: int,
+    ctx: Optional[SutraContext] = None,
+) -> List[Tuple[int, int, int]]:
         """
         Sulba Sutra: Pythagorean Triples - Generates Pythagorean triples using sulba methods,
         with applications in geometric calculations and constraint satisfaction.
@@ -464,14 +473,14 @@
                                    False, data_size, error_msg)
             raise
     
-    def _sulba_pythagorean_triples_quantum(self, max_c, context):
+def _sulba_pythagorean_triples_quantum(self, max_c, context):
         """Quantum implementation of sulba_pythagorean_triples using CUDAQ"""
         # This is a combinatorial problem, and full quantum implementation
         # would involve Grover's algorithm for search or similar.
         # For simplicity and practical use, we'll implement a hybrid approach
         return self._sulba_pythagorean_triples_hybrid(max_c, context)
     
-    def _sulba_pythagorean_triples_hybrid(self, max_c, context):
+def _sulba_pythagorean_triples_hybrid(self, max_c, context):
         """Hybrid implementation of sulba_pythagorean_triples"""
         # Use quantum to verify triples, classical to generate candidates
         
@@ -507,7 +516,7 @@
         
         return verified_triples
     
-    def _verify_pythagorean_triple_quantum(self, a, b, c):
+def _verify_pythagorean_triple_quantum(self, a, b, c):
         """Verify Pythagorean triple using a quantum circuit"""
         # Create CUDAQ kernel for verification
         kernel = cudaq.make_kernel()
@@ -533,7 +542,7 @@
         counts = result.get_counts()
         return "1" in counts and counts["1"] > 0
     
-    def _sulba_pythagorean_triples_classical(self, max_c, context):
+def _sulba_pythagorean_triples_classical(self, max_c, context):
         """Classical implementation of sulba_pythagorean_triples"""
         triples = []
         
@@ -559,9 +568,12 @@
         
         return triples
 
-    def sulba_geometric_mean(self, a: Union[float, np.ndarray, torch.Tensor],
-                           b: Union[float, np.ndarray, torch.Tensor],
-                           ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def sulba_geometric_mean(
+    self,
+    a: Union[float, np.ndarray, torch.Tensor],
+    b: Union[float, np.ndarray, torch.Tensor],
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sulba Sutra: Geometric Mean - Calculates the geometric mean √(a×b),
         with applications in geometric constructions and proportional scaling.
@@ -636,7 +648,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _sulba_geometric_mean_quantum(self, a, b, context):
+def _sulba_geometric_mean_quantum(self, a, b, context):
         """Quantum implementation of sulba_geometric_mean using Cirq"""
         # For scalar values, implement quantum circuit
         if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
@@ -693,7 +705,7 @@
         
         return final_result
     
-    def _sulba_geometric_mean_hybrid(self, a, b, context):
+def _sulba_geometric_mean_hybrid(self, a, b, context):
         """Hybrid implementation of sulba_geometric_mean"""
         # For scalar values, use quantum circuit
         if isinstance(a, (int, float)) and isinstance(b, (int, float)):
@@ -710,7 +722,7 @@
             # For larger arrays, use classical implementation
             return self._sulba_geometric_mean_classical(a, b, context)
     
-    def _sulba_geometric_mean_classical(self, a, b, context):
+def _sulba_geometric_mean_classical(self, a, b, context):
         """Classical implementation of sulba_geometric_mean"""
         if isinstance(a, torch.Tensor):
             # Calculate geometric mean

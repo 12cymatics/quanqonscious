@@ -1,23 +1,18 @@
 def reset_performance_tracking(self):
-        """Resets all performance tracking data"""
-        self.performance_history = []
-        self.sutra_interactions = {}
+    """Resets all performance tracking data"""
+    self.performance_history = []
+    self.sutra_interactions = {}
         
-    def get_performance_summary(self) -> Dict[str, Any]:
-        """
-        Returns a summary of sutra performance statistics.
-        
-        Returns:
-            Dictionary with performance statistics
-        """
-        if not self.performance_history:
-            return {"error": "No performance data available."}
+def get_performance_summary(self) -> Dict[str, Any]:
+    """Returns a summary of sutra performance statistics."""
+    if not self.performance_history:
+        return {"error": "No performance data available."}
             
         summary = {
             "total_executions": len(self.performance_history),
             "success_rate": sum(1 for r in self.performance_history if r['success']) / len(self.performance_history) * 100,
             "avg_execution_time": sum(r['execution_time'] for r in self.performance_history) / len(self.performance_history),
-            "sutra_stats": {},
+        "sutra_stats": {},
             "interaction_stats": {}
         }
         

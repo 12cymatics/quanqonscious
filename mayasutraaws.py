@@ -1,9 +1,12 @@
 # ========== MAYA ILLUSION SUTRAS ==========
     
-    def maya_illusion_transform(self, x: Union[float, np.ndarray, torch.Tensor],
-                              phase_factor: float = 0.5,
-                              frequency: float = 1.0,
-                              ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def maya_illusion_transform(
+    self,
+    x: Union[float, np.ndarray, torch.Tensor],
+    phase_factor: float = 0.5,
+    frequency: float = 1.0,
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Maya Illusion Sutra: Transforms values through phase-shifting illusions,
         revealing deeper structures in data.
@@ -80,7 +83,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _maya_illusion_transform_quantum(self, x, phase_factor, frequency, context):
+def _maya_illusion_transform_quantum(self, x, phase_factor, frequency, context):
         """Quantum implementation of maya_illusion_transform using Cirq"""
         # For scalar values, implement quantum circuit
         if not isinstance(x, (int, float)):
@@ -143,7 +146,7 @@
         # Scale result back to original range
         return weighted_result
     
-    def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
+def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
         """Hybrid implementation of maya_illusion_transform"""
         # For scalar values, use quantum circuit
         if isinstance(x, (int, float)):
@@ -168,7 +171,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
             # For larger arrays, use classical implementation
             return self._maya_illusion_transform_classical(x, phase_factor, frequency, context)
     
-    def _maya_illusion_transform_classical(self, x, phase_factor, frequency, context):
+def _maya_illusion_transform_classical(self, x, phase_factor, frequency, context):
         """Classical implementation of maya_illusion_transform"""
         if isinstance(x, torch.Tensor):
             # Apply sinusoidal phase modulation
@@ -180,10 +183,13 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
             # Apply sinusoidal phase modulation for scalar
             return x * (1 + phase_factor * np.sin(frequency * np.pi * x))
 
-    def maya_illusion_multi_layer(self, x: Union[float, np.ndarray, torch.Tensor],
-                                phase_factors: List[float] = [0.3, 0.5, 0.7],
-                                frequencies: List[float] = [1.0, 2.0, 3.0],
-                                ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def maya_illusion_multi_layer(
+    self,
+    x: Union[float, np.ndarray, torch.Tensor],
+    phase_factors: List[float] = [0.3, 0.5, 0.7],
+    frequencies: List[float] = [1.0, 2.0, 3.0],
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Maya Multi-Layer Illusion Sutra: Applies multiple layers of illusion transformations,
         revealing hierarchical structures and invariant patterns.
@@ -281,7 +287,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
                                    False, data_size, error_msg)
             raise
     
-    def _maya_illusion_multi_layer_quantum(self, x, phase_factors, frequencies, context):
+def _maya_illusion_multi_layer_quantum(self, x, phase_factors, frequencies, context):
         """Quantum implementation of maya_illusion_multi_layer using CUDAQ"""
         # For scalar values, implement quantum circuit
         if not isinstance(x, (int, float)):
@@ -349,7 +355,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
             
         return weighted_result
     
-    def _maya_illusion_multi_layer_hybrid(self, x, phase_factors, frequencies, context):
+def _maya_illusion_multi_layer_hybrid(self, x, phase_factors, frequencies, context):
         """Hybrid implementation of maya_illusion_multi_layer"""
         # For scalar values, use quantum circuit
         if isinstance(x, (int, float)):
@@ -366,7 +372,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
             # For larger arrays, use classical implementation
             return self._maya_illusion_multi_layer_classical(x, phase_factors, frequencies, context)
     
-    def _maya_illusion_multi_layer_classical(self, x, phase_factors, frequencies, context):
+def _maya_illusion_multi_layer_classical(self, x, phase_factors, frequencies, context):
         """Classical implementation of maya_illusion_multi_layer"""
         # Ensure phase_factors and frequencies have same length
         n_layers = min(len(phase_factors), len(frequencies))
@@ -403,11 +409,14 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
                 
         return result
 
-    def maya_illusion_phase_cancellation(self, x: Union[float, np.ndarray, torch.Tensor],
-                                      phase_factor: float = 0.5,
-                                      frequency: float = 1.0,
-                                      threshold: Optional[float] = None,
-                                      ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def maya_illusion_phase_cancellation(
+    self,
+    x: Union[float, np.ndarray, torch.Tensor],
+    phase_factor: float = 0.5,
+    frequency: float = 1.0,
+    threshold: Optional[float] = None,
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Maya Phase Cancellation Sutra: Identifies and cancels specific phase patterns,
         revealing underlying structures hidden by phase interference.
@@ -505,7 +514,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
                                    False, data_size, error_msg)
             raise
     
-    def _maya_illusion_phase_cancellation_quantum(self, x, phase_factor, frequency, threshold, context):
+def _maya_illusion_phase_cancellation_quantum(self, x, phase_factor, frequency, threshold, context):
         """Quantum implementation of maya_illusion_phase_cancellation using Cirq"""
         # For scalar values, implement quantum circuit
         if not isinstance(x, (int, float)):
@@ -574,7 +583,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
             
         return weighted_result
     
-    def _maya_illusion_phase_cancellation_hybrid(self, x, phase_factor, frequency, threshold, context):
+def _maya_illusion_phase_cancellation_hybrid(self, x, phase_factor, frequency, threshold, context):
         """Hybrid implementation of maya_illusion_phase_cancellation"""
         # For scalar values, use quantum circuit
         if isinstance(x, (int, float)):
@@ -595,7 +604,7 @@ def _maya_illusion_transform_hybrid(self, x, phase_factor, frequency, context):
                 x, phase_factor, frequency, threshold, context
             )
     
-    def _maya_illusion_phase_cancellation_classical(self, x, phase_factor, frequency, threshold, context):
+def _maya_illusion_phase_cancellation_classical(self, x, phase_factor, frequency, threshold, context):
         """Classical implementation of maya_illusion_phase_cancellation"""
         if isinstance(x, torch.Tensor):
             # Calculate phase component

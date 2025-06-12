@@ -1,6 +1,9 @@
 import numpy as np
 import cirq
-import cudaq
+try:
+    import cudaq
+except ImportError:  # pragma: no cover - optional dependency
+    cudaq = None
 import torch
 import matplotlib.pyplot as plt
 import scipy.linalg as la
@@ -311,11 +314,39 @@ class VedicSutras:
             
             # Convert back to original type
             result = self._from_device(result, original_type)
-            
+
             end_time = time.time()
-def paravartya_yojayet(self, x: Union[float, np.ndarray, torch.Tensor],
-                          divisor: Union[float, np.ndarray, torch.Tensor],
-                          ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+            self._record_performance(
+                "nikhilam_navatashcaramam_dashatah",
+                start_time,
+                end_time,
+                True,
+                data_size,
+            )
+            return result
+
+        except Exception as e:
+            end_time = time.time()
+            error_msg = str(e)
+            logger.error(
+                f"Error in nikhilam_navatashcaramam_dashatah: {error_msg}"
+            )
+            self._record_performance(
+                "nikhilam_navatashcaramam_dashatah",
+                start_time,
+                end_time,
+                False,
+                data_size,
+                error_msg,
+            )
+            raise
+
+    def paravartya_yojayet(
+        self,
+        x: Union[float, np.ndarray, torch.Tensor],
+        divisor: Union[float, np.ndarray, torch.Tensor],
+        ctx: Optional[SutraContext] = None,
+    ) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sutra 3: Paravartya Yojayet - "Transpose and Apply"
         
@@ -2417,10 +2448,13 @@ def paravartya_yojayet(self, x: Union[float, np.ndarray, torch.Tensor],
         """Classical implementation of yavadunam"""
         return base - x
 
-def samuccayagunitah(self, a: Union[float, np.ndarray, torch.Tensor],
-                        b: Union[float, np.ndarray, torch.Tensor],
-                        operation: str = 'product_sum',
-                        ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+    def samuccayagunitah(
+        self,
+        a: Union[float, np.ndarray, torch.Tensor],
+        b: Union[float, np.ndarray, torch.Tensor],
+        operation: str = 'product_sum',
+        ctx: Optional[SutraContext] = None,
+    ) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sutra 15: Samuccayagunitah - "The product of the sum is equal to the sum of the products"
         
