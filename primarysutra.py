@@ -2445,10 +2445,13 @@ class VedicSutras:
         """Classical implementation of yavadunam"""
         return base - x
 
-def samuccayagunitah(self, a: Union[float, np.ndarray, torch.Tensor],
-                        b: Union[float, np.ndarray, torch.Tensor],
-                        operation: str = 'product_sum',
-                        ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+    def samuccayagunitah(
+        self,
+        a: Union[float, np.ndarray, torch.Tensor],
+        b: Union[float, np.ndarray, torch.Tensor],
+        operation: str = 'product_sum',
+        ctx: Optional[SutraContext] = None,
+    ) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Sutra 15: Samuccayagunitah - "The product of the sum is equal to the sum of the products"
         
