@@ -12,9 +12,9 @@ It provides:
     adaptive constant modulation.
   • A Full Configuration Interaction (FCI) solver with GRVQ corrections.
   • TTGCR hardware driver simulation (frequency setting, sensor feedback, entropy
-    monitoring) without kill-switch routines.
+    monitoring) without kill switch routines.
   • An HPC 4D PDE solver with MPI-based block-cyclic memory management and GPU
-    acceleration (using JAX for CUDA-A100).
+    acceleration (using JAX for CUDA A100).
   • A Bioelectric DNA Encoder module employing fractal Hilbert curve transformation.
   • Extended quantum circuit simulation using Cirq.
   • Automated performance profiling, dynamic dependency updating, and integrated
