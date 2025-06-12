@@ -1,8 +1,11 @@
 # ========== INTER-SUTRA INTERACTIONS ==========
     
-    def apply_sutra_sequence(self, x: Union[float, np.ndarray, torch.Tensor],
-                             sutra_sequence: List[Tuple[str, Dict[str, Any]]],
-                             ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def apply_sutra_sequence(
+    self,
+    x: Union[float, np.ndarray, torch.Tensor],
+    sutra_sequence: List[Tuple[str, Dict[str, Any]]],
+    ctx: Optional[SutraContext] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Applies a sequence of sutras to the input data, enabling complex
         transformations through sutra composition.
@@ -74,10 +77,13 @@
                                    False, data_size, error_msg)
             raise
     
-    def recommend_sutra_sequence(self, problem_type: str, 
-                                data_shape: Optional[Tuple[int, ...]] = None,
-                                data_characteristics: Optional[Dict[str, Any]] = None,
-                                ctx: Optional[SutraContext] = None) -> List[Tuple[str, Dict[str, Any]]]:
+def recommend_sutra_sequence(
+    self,
+    problem_type: str,
+    data_shape: Optional[Tuple[int, ...]] = None,
+    data_characteristics: Optional[Dict[str, Any]] = None,
+    ctx: Optional[SutraContext] = None,
+) -> List[Tuple[str, Dict[str, Any]]]:
         """
         Recommends an optimal sequence of sutras for a given problem type
         and data characteristics.
@@ -228,11 +234,14 @@
                                    False, 1)
             raise
     
-    def optimize_sutra_sequence(self, initial_sequence: List[Tuple[str, Dict[str, Any]]],
-                               test_data: Union[float, np.ndarray, torch.Tensor],
-                               target_output: Optional[Union[float, np.ndarray, torch.Tensor]] = None,
-                               iterations: int = 10,
-                               ctx: Optional[SutraContext] = None) -> List[Tuple[str, Dict[str, Any]]]:
+def optimize_sutra_sequence(
+    self,
+    initial_sequence: List[Tuple[str, Dict[str, Any]]],
+    test_data: Union[float, np.ndarray, torch.Tensor],
+    target_output: Optional[Union[float, np.ndarray, torch.Tensor]] = None,
+    iterations: int = 10,
+    ctx: Optional[SutraContext] = None,
+) -> List[Tuple[str, Dict[str, Any]]]:
         """
         Optimizes a sutra sequence by iteratively testing and refining the sequence
         to improve performance or accuracy.
@@ -409,43 +418,37 @@
                                    False, 1)
             raise
     
-    def _evaluate_sequence(self, sequence, test_data, target_output, context):
-        """Helper method to evaluate a sutra sequence"""
-        try:
-            # Apply sequence
-            timing_start = time.time()
-            result = test_data
-            for sutra_name, params in sequence:
-                # Get the method corresponding to the sutra name
-                sutra_method = getattr(self, sutra_name, None)
-                if sutra_method is not None:
-                    # Prepare parameters (replace None with appropriate value)
-                    actual_params = params.copy()
-                    if 'x' in actual_params and actual_params['x'] is None:
-                        actual_params['x'] = result
-                    elif 'a' in actual_params and actual_params['a'] is None:
-                        actual_params['a'] = result
-                    
-                    # Apply the sutra
-                    result = sutra_method(**actual_params, ctx=context)
-            timing_end = time.time()
-            
-            # Calculate error or timing
-            if target_output is not None:
-                # Calculate error against target
-                if isinstance(result, torch.Tensor) and isinstance(target_output, torch.Tensor):
-                    error = torch.mean(torch.abs(result - target_output)).item()
-                elif isinstance(result, np.ndarray) and isinstance(target_output, np.ndarray):
-                    error = np.mean(np.abs(result - target_output))
-                else:
-                    error = abs(result - target_output)
+def _evaluate_sequence(self, sequence, test_data, target_output, context):
+    """Helper method to evaluate a sutra sequence"""
+    try:
+        # Apply sequence
+        timing_start = time.time()
+        result = test_data
+        for sutra_name, params in sequence:
+            sutra_method = getattr(self, sutra_name, None)
+            if sutra_method is not None:
+                actual_params = params.copy()
+                if 'x' in actual_params and actual_params['x'] is None:
+                    actual_params['x'] = result
+                elif 'a' in actual_params and actual_params['a'] is None:
+                    actual_params['a'] = result
+
+                result = sutra_method(**actual_params, ctx=context)
+        timing_end = time.time()
+
+        if target_output is not None:
+            if isinstance(result, torch.Tensor) and isinstance(target_output, torch.Tensor):
+                error = torch.mean(torch.abs(result - target_output)).item()
+            elif isinstance(result, np.ndarray) and isinstance(target_output, np.ndarray):
+                error = np.mean(np.abs(result - target_output))
             else:
-                # Use timing as "error"
-                error = timing_end - timing_start
-            
-            return error
-            
-        except Exception as e:
-            # If execution fails, return infinity to discourage this sequence
-            logger.warning(f"Sequence evaluation failed: {e}")
-            return float('inf')
+                error = abs(result - target_output)
+        else:
+            error = timing_end - timing_start
+
+        return error
+
+    except Exception as e:
+        # If execution fails, return infinity to discourage this sequence
+        logger.warning(f"Sequence evaluation failed: {e}")
+        return float('inf')

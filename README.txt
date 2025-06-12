@@ -46,6 +46,22 @@ Import the main module in your application:
                              
 Then use the provided classes and functions to build your simulation workflow.
 
+The :class:`SutraRepository` provides a convenient interface to call any of the
+29 Vedic sutras. Each sutra automatically selects its classical, quantum or
+hybrid implementation based on the :class:`SutraContext` mode. Example usage:
+
+```python
+from QuanQonscious import SutraRepository, SutraContext, SutraMode
+
+# create repository in classical mode
+repo = SutraRepository(SutraContext(mode=SutraMode.CLASSICAL))
+result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
+
+# switch to quantum mode
+repo.update_context(mode=SutraMode.QUANTUM)
+quantum_result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
+```
+
 Documentation:
 --------------
 For detailed API documentation, please refer to the “docs/” folder included in the package.

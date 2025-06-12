@@ -1,6 +1,7 @@
 # QuanQonscious/cli.py
 
 import argparse
+import numpy as np
 from QuanQonscious import ansatz, maya_cipher, updater, zpe_solver
 
 def main():
