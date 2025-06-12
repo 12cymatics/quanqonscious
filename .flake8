@@ -1,0 +1,14 @@
+[flake8]
+max-line-length = 120
+exclude = \
+    H2_MST_Dashboard_Rank.py,\
+    H2_MST_Dashboard_Rank2.py,\
+    H2_MST_Dashboard_Rank3.py,\
+    grvq_field_solver_quantum.py,\
+    grvqsutraws.py,\
+    intersutraws.py,\
+    mayasutraaws.py,\
+    primarysutraaws2.py,\
+    sulbasutraws.py,\
+    utilitysutraws3.py,\
+    visualperformancesutraws2.py
