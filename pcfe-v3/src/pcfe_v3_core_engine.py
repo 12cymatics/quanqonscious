@@ -18,11 +18,6 @@ from numba import cuda as numba_cuda
 from numba import jit, prange, complex128, float64
 import cudaq
 import cirq
-import qiskit
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.circuit.library import QFT, QuantumPhaseEstimation
-from qiskit_aer import AerSimulator
-from qiskit.quantum_info import Statevector, DensityMatrix
 import h5py
 import zarr
 from mpi4py import MPI
@@ -579,16 +574,27 @@ class VedicSutraEngine:
         # Performance tracking
         self.performance_metrics = {sutra: [] for sutra in range(29)}
         
-    def _initialize_quantum_circuits(self) -> Dict[str, QuantumCircuit]:
+    def _initialize_quantum_circuits(self) -> Dict[str, Any]:
         """Initialize quantum circuits for hybrid sutra implementation"""
         circuits = {}
         
-        # Circuit for Ekadhikena Purvena
-        qr = QuantumRegister(self.config.num_qubits, 'q')
-        cr = ClassicalRegister(self.config.num_qubits, 'c')
-        circuits['ekadhikena'] = QuantumCircuit(qr, cr)
+        # CUDA-Quantum kernels for each sutra
+        @cudaq.kernel
+        def ekadhikena_kernel(n_qubits: int, theta: float):
+            qvec = cudaq.qvector(n_qubits)
+            # Initialize with Hadamard superposition
+            for i in range(n_qubits):
+                h(qvec[i])
+            # Apply rotation based on iteration
+            for i in range(n_qubits):
+                ry(theta * (i + 1), qvec[i])
+            # Entangle adjacent qubits
+            for i in range(n_qubits - 1):
+                cx(qvec[i], qvec[i + 1])
         
-        # Add more circuits for other sutras
+        circuits['ekadhikena'] = ekadhikena_kernel
+        
+        # Add more CUDA-Quantum kernels for other sutras
         return circuits
     
     @torch.cuda.amp.autocast()
@@ -667,7 +673,7 @@ class VedicSutraEngine:
     def urdhva_tiryagbhyam(self, field: torch.Tensor, coords: Tuple[int, int, int]) -> torch.Tensor:
         """
         Sutra 3: Urdhva-Tiryagbhyam - "Vertically and Crosswise"
-        Full tensor network implementation
+        Full tensor network implementation with CUDA-Quantum
         """
         i, j, k = coords
         
@@ -676,35 +682,37 @@ class VedicSutraEngine:
         horizontal = self._get_horizontal_slice(field, i, j, k)
         diagonal = self._get_diagonal_slice(field, i, j, k)
         
-        # Tensor network contraction
-        # Create quantum circuit for tensor operations
-        qc = QuantumCircuit(6)
+        # CUDA-Quantum kernel for tensor operations
+        @cudaq.kernel
+        def urdhva_kernel(n_qubits: int, v_angles: list[float], 
+                         h_angles: list[float], d_angles: list[float]):
+            qvec = cudaq.qvector(n_qubits)
+            
+            # Encode patterns into quantum states
+            for idx in range(min(3, n_qubits // 2)):
+                if idx < len(v_angles):
+                    ry(v_angles[idx], qvec[idx * 2])
+                if idx < len(h_angles):
+                    ry(h_angles[idx], qvec[idx * 2])
+                    cx(qvec[idx * 2], qvec[idx * 2 + 1])
+                if idx < len(d_angles):
+                    rz(d_angles[idx], qvec[idx * 2])
+                    if idx < n_qubits // 2 - 1:
+                        cy(qvec[idx * 2], qvec[idx * 2 + 2])
+                    rx(d_angles[idx], qvec[idx * 2])
         
-        # Encode patterns into quantum states
-        for idx, (v, h, d) in enumerate(zip(vertical[:3], horizontal[:3], diagonal[:3])):
-            if idx < 6:
-                # Amplitude encoding
-                v_angle = float(torch.angle(v))
-                h_angle = float(torch.angle(h))
-                d_angle = float(torch.angle(d))
-                
-                qc.ry(v_angle, idx)
-                if idx < 5:
-                    qc.cx(idx, idx + 1)
-                qc.rz(h_angle, idx)
-                if idx < 5:
-                    qc.cy(idx, idx + 1)
-                qc.rx(d_angle, idx)
+        # Prepare angles from field slices
+        v_angles = [float(torch.angle(v)) for v in vertical[:3]]
+        h_angles = [float(torch.angle(h)) for h in horizontal[:3]]
+        d_angles = [float(torch.angle(d)) for d in diagonal[:3]]
         
-        # Simulate quantum circuit
-        backend = AerSimulator()
-        qc.measure_all()
-        job = backend.run(qc, shots=1000)
-        result = job.result()
-        counts = result.get_counts()
+        # Execute quantum circuit
+        n_qubits = min(6, self.config.num_qubits)
+        result = cudaq.sample(urdhva_kernel, n_qubits, v_angles, h_angles, d_angles, 
+                             shots_count=1000)
         
         # Process quantum results
-        quantum_factor = self._process_quantum_counts(counts)
+        quantum_factor = self._process_cudaq_counts(result)
         
         # Classical tensor contraction
         tensor_result = torch.einsum('i,j,k->ijk', vertical, horizontal, diagonal)
@@ -718,29 +726,53 @@ class VedicSutraEngine:
                           divisor: torch.Tensor) -> torch.Tensor:
         """
         Sutra 4: Paravartya Yojayet - "Transpose and Apply"
-        Quantum phase estimation for division
+        Quantum phase estimation for division using CUDA-Quantum
         """
         i, j, k = coords
         psi = field[i, j, k]
         
-        # Quantum phase estimation circuit
-        n_precision = min(8, self.config.num_qubits - 1)
-        qpe = QuantumPhaseEstimation(n_precision, self._create_division_unitary(divisor))
+        # CUDA-Quantum kernel for phase estimation
+        @cudaq.kernel
+        def qpe_division_kernel(n_precision: int, divisor_phase: float):
+            # Precision qubits for phase estimation
+            precision_qubits = cudaq.qvector(n_precision)
+            # Eigenstate qubit
+            eigenstate = cudaq.qubit()
+            
+            # Initialize eigenstate
+            x(eigenstate)
+            
+            # Apply Hadamard to precision qubits
+            for i in range(n_precision):
+                h(precision_qubits[i])
+            
+            # Controlled unitary operations
+            for i in range(n_precision):
+                power = 2**i
+                # Controlled phase rotation representing division
+                angle = 2 * np.pi * power / (divisor_phase + 1e-10)
+                for _ in range(int(power)):
+                    cu(precision_qubits[i], eigenstate, 0, 0, 0, angle)
+            
+            # Inverse QFT on precision qubits
+            for i in range(n_precision // 2):
+                swap(precision_qubits[i], precision_qubits[n_precision - 1 - i])
+            
+            for i in range(n_precision):
+                for j in range(i):
+                    cu(precision_qubits[j], precision_qubits[i], 
+                       0, 0, 0, -np.pi / (2**(i - j)))
+                h(precision_qubits[i])
         
         # Run QPE
-        backend = AerSimulator()
-        qc = QuantumCircuit(n_precision + 1)
-        qc.h(range(n_precision))
-        qc.x(n_precision)  # Eigenstate
-        qc.append(qpe, range(n_precision + 1))
-        qc.measure_all()
+        n_precision = min(8, self.config.num_qubits - 1)
+        divisor_phase = float(torch.abs(divisor))
         
-        job = backend.run(qc, shots=self.config.quantum_shots)
-        result = job.result()
-        counts = result.get_counts()
+        result = cudaq.sample(qpe_division_kernel, n_precision, divisor_phase,
+                             shots_count=self.config.quantum_shots)
         
         # Extract phase and compute reciprocal
-        phase = self._extract_phase_from_counts(counts, n_precision)
+        phase = self._extract_phase_from_cudaq_result(result, n_precision)
         reciprocal = 1.0 / (divisor + 1e-10) if phase < 0.5 else 2.0 / (divisor + 1e-10)
         
         return psi * reciprocal
@@ -749,7 +781,7 @@ class VedicSutraEngine:
     def shunyam_samyasamuccaye(self, field: torch.Tensor, coords: Tuple[int, int, int]) -> torch.Tensor:
         """
         Sutra 5: Shunyam Samyasamuccaye - "When the sum is the same, it is zero"
-        Quantum interference for zero detection
+        Quantum interference for zero detection using CUDA-Quantum
         """
         i, j, k = coords
         
@@ -762,29 +794,36 @@ class VedicSutraEngine:
             pair_sum = neighbors[idx] + neighbors[-(idx+1)]
             sum_pairs.append(pair_sum)
         
-        # Quantum interference circuit
-        qc = QuantumCircuit(len(sum_pairs))
-        
-        for idx, pair_sum in enumerate(sum_pairs):
-            # Create interference
-            angle = float(torch.angle(pair_sum))
-            magnitude = float(torch.abs(pair_sum))
+        # CUDA-Quantum kernel for interference detection
+        @cudaq.kernel
+        def interference_kernel(n_pairs: int, magnitudes: list[float], phases: list[float]):
+            qvec = cudaq.qvector(n_pairs)
             
-            if magnitude < 1e-6:  # Near zero
-                qc.x(idx)  # Flip to |1⟩
-            else:
-                qc.ry(2 * np.arcsin(np.sqrt(min(1, magnitude))), idx)
-            
-            if idx > 0:
-                qc.cz(idx-1, idx)  # Entangle adjacent qubits
+            for idx in range(n_pairs):
+                # Create interference based on magnitude
+                if magnitudes[idx] < 1e-6:  # Near zero
+                    x(qvec[idx])  # Flip to |1⟩
+                else:
+                    angle = 2 * np.arcsin(np.sqrt(min(1, magnitudes[idx])))
+                    ry(angle, qvec[idx])
+                
+                # Apply phase
+                rz(phases[idx], qvec[idx])
+                
+                # Entangle adjacent qubits for interference
+                if idx > 0:
+                    cz(qvec[idx-1], qvec[idx])
         
-        # Measure and process
-        qc.measure_all()
-        backend = AerSimulator()
-        job = backend.run(qc, shots=1000)
-        counts = job.result().get_counts()
+        # Prepare data for quantum circuit
+        magnitudes = [float(torch.abs(ps)) for ps in sum_pairs[:self.config.num_qubits]]
+        phases = [float(torch.angle(ps)) for ps in sum_pairs[:self.config.num_qubits]]
+        
+        # Run quantum circuit
+        result = cudaq.sample(interference_kernel, len(magnitudes), 
+                             magnitudes, phases, shots_count=1000)
         
         # Find most likely zero pattern
+        counts = result.get_register_counts()
         zero_probability = sum(count for bitstring, count in counts.items() 
                              if bitstring.count('1') > len(bitstring) // 2) / 1000
         
@@ -903,27 +942,27 @@ class VedicSutraEngine:
             result = torch.exp(1j * complement_phase) * complement_mag
         return result
     
-    def _create_division_unitary(self, divisor: torch.Tensor) -> qiskit.circuit.Gate:
-        """Create unitary for division operation"""
-        # Simplified unitary for division by phase kickback
-        from qiskit.circuit.library import PhaseGate
-        return PhaseGate(2 * np.pi / float(torch.abs(divisor) + 1))
+    def _create_division_unitary(self, divisor: torch.Tensor) -> float:
+        """Create phase for division operation"""
+        # Return phase for CUDA-Quantum controlled rotation
+        return 2 * np.pi / float(torch.abs(divisor) + 1)
     
-    def _extract_phase_from_counts(self, counts: Dict[str, int], n_precision: int) -> float:
-        """Extract phase from QPE measurement counts"""
+    def _extract_phase_from_cudaq_result(self, result, n_precision: int) -> float:
+        """Extract phase from CUDA-Quantum measurement results"""
+        counts = result.get_register_counts()
         phase_sum = 0
         total_counts = sum(counts.values())
         
         for bitstring, count in counts.items():
             # Convert bitstring to phase
-            phase_bits = bitstring[:n_precision]
-            phase_value = sum(int(bit) * 2**(-i-1) for i, bit in enumerate(phase_bits))
+            phase_value = sum(int(bit) * 2**(-i-1) for i, bit in enumerate(bitstring[:n_precision]))
             phase_sum += phase_value * count
         
         return phase_sum / total_counts
     
-    def _process_quantum_counts(self, counts: Dict[str, int]) -> torch.Tensor:
-        """Process quantum measurement counts into complex factor"""
+    def _process_cudaq_counts(self, result) -> torch.Tensor:
+        """Process CUDA-Quantum measurement counts into complex factor"""
+        counts = result.get_register_counts()
         # Find most probable outcome
         max_outcome = max(counts.items(), key=lambda x: x[1])[0]
         
