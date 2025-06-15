@@ -1,4 +1,39 @@
-numpy
-mpi4py
-matplotlib
-pytest
+# PCFE v3.0 Essential Requirements
+# For full list see docker/requirements.txt
+
+# Core Scientific Computing
+numpy>=1.24.3
+scipy>=1.11.3
+torch>=2.1.0
+matplotlib>=3.7.2
+
+# GPU Computing
+# Note: Install CUDA-specific version matching your CUDA version
+# cupy-cuda11x>=12.2.0  # For CUDA 11.x
+# cupy-cuda12x>=12.2.0  # For CUDA 12.x
+numba>=0.58.0
+
+# Quantum Computing (CUDA-Quantum only, no Qiskit)
+cuda-quantum==0.6.0
+cirq>=1.2.0
+
+# MPI for Distributed Computing
+mpi4py>=3.1.4
+
+# Data Handling
+h5py>=3.9.0
+pandas>=2.0.3
+
+# Visualization (minimal)
+plotly>=5.17.0
+
+# Utilities
+pyyaml>=6.0.1
+psutil>=5.9.5
+
+# Testing
+pytest>=7.4.2
+
+# Install with:
+# pip install -r requirements.txt
+# pip install cupy-cuda11x  # or cupy-cuda12x depending on your CUDA version
