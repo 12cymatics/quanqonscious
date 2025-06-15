@@ -1,39 +1,55 @@
-# PCFE v3.0 Essential Requirements
-# For full list see docker/requirements.txt
+# PCFE v3.0 Production Container - CUDA-Quantum Edition
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
-# Core Scientific Computing
-numpy>=1.24.3
-scipy>=1.11.3
-torch>=2.1.0
-matplotlib>=3.7.2
+# Set environment
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
-# GPU Computing
-# Note: Install CUDA-specific version matching your CUDA version
-# cupy-cuda11x>=12.2.0  # For CUDA 11.x
-# cupy-cuda12x>=12.2.0  # For CUDA 12.x
-numba>=0.58.0
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    git \
+    wget \
+    vim \
+    build-essential \
+    cmake \
+    mpich \
+    libmpich-dev \
+    libopenmpi-dev \
+    openmpi-bin \
+    && rm -rf /var/lib/apt/lists/*
 
-# Quantum Computing (CUDA-Quantum only, no Qiskit)
-cuda-quantum==0.6.0
-cirq>=1.2.0
+# Install Python dependencies
+WORKDIR /app
+COPY docker/requirements.txt /tmp/
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# MPI for Distributed Computing
-mpi4py>=3.1.4
+# Install CUDA-Quantum (requires specific installation)
+RUN pip3 install cuda-quantum==0.6.0 --extra-index-url https://pypi.nvidia.com
 
-# Data Handling
-h5py>=3.9.0
-pandas>=2.0.3
+# Install CuPy for CUDA 11.8
+RUN pip3 install cupy-cuda11x
 
-# Visualization (minimal)
-plotly>=5.17.0
+# Copy source code
+COPY src/ /app/src/
+COPY config/ /app/config/
+COPY examples/ /app/examples/
 
-# Utilities
-pyyaml>=6.0.1
-psutil>=5.9.5
+# Set up directories
+RUN mkdir -p /app/checkpoints /app/logs /app/results
 
-# Testing
-pytest>=7.4.2
+# Environment for MPI
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
-# Install with:
-# pip install -r requirements.txt
-# pip install cupy-cuda11x  # or cupy-cuda12x depending on your CUDA version
+# CUDA-Quantum environment
+ENV CUDAQ_DEFAULT_TARGET=nvidia
+
+# Set Python path
+ENV PYTHONPATH=/app:${PYTHONPATH}
+
+# Default command
+CMD ["python3", "src/pcfe_final_integration.py", "--config", "config/default_confi
