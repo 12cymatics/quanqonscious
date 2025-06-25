@@ -4,7 +4,14 @@ try:
     import cudaq
 except ImportError:  # pragma: no cover - optional dependency
     cudaq = None
-import torch
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    TORCH_AVAILABLE = False
+    class torch:
+        class Tensor:
+            pass
 import matplotlib.pyplot as plt
 import scipy.linalg as la
 from typing import Dict, List, Tuple, Union, Optional, Callable, Any
@@ -59,12 +66,12 @@ class VedicSutras:
         self.context = context if context else SutraContext()
         
         # Initialize GPU if requested
-        if self.context.use_gpu and torch.cuda.is_available():
+        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
             self.context.device = torch.device("cuda")
             logger.info(f"Using GPU device: {torch.cuda.get_device_name(0)}")
         else:
             self.context.use_gpu = False
-            self.context.device = torch.device("cpu")
+            self.context.device = torch.device("cpu") if TORCH_AVAILABLE else 'cpu'
             logger.info("Using CPU for computations")
             
         # Initialize quantum backend if in quantum or hybrid mode

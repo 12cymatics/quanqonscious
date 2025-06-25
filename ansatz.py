@@ -8,7 +8,8 @@ try:
 except ImportError:
     cudaq = None
 
-from QuanQonscious import core_engine, maya_cipher
+# Use relative imports to support package name in lowercase
+from . import core_engine, maya_cipher
 
 class GRVQAnsatz:
     """

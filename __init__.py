@@ -43,9 +43,24 @@ elif _has_cudaq:
 else:
     print("[QuanQonscious] CUDA-Q not available – defaulting to Cirq simulator for quantum circuits.")
 
-# Make key submodules readily accessible via the package namespace
-from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
+# Lazy loading: submodules are imported when accessed by name
+__all__ = [
+    'ansatz', 'core_engine', 'sulba', 'zpe_solver', 'maya_cipher', 'performance',
+    'updater', 'SutraRepository'
+]
+
+def __getattr__(name):
+    if name in __all__:
+        module = __import__(f"{__name__}.{name}", fromlist=[name])
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name}")
+
 from .sutra_repository import SutraRepository
 
 # Optionally, set a flag or config dict for use in modules (for example, default quantum backend choice)
 DEFAULT_QUANTUM_BACKEND = "cudaq" if _has_cudaq else "cirq"
+
+# Provide backwards compatible import for mixed-case package name
+import sys as _sys
+_sys.modules.setdefault('QuanQonscious', _sys.modules[__name__])
