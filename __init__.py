@@ -1,6 +1,8 @@
 # QuanQonscious/__init__.py
 
+# Import importlib along with its util submodule for feature detection
 import importlib
+import importlib.util
 import os
 
 # Check for NVIDIA CUDA Quantum library (CUDA-Q) support
@@ -43,7 +45,10 @@ else:
     print("[QuanQonscious] CUDA-Q not available – defaulting to Cirq simulator for quantum circuits.")
 
 # Make key submodules readily accessible via the package namespace
-from QuanQonscious import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
+# Import key submodules using relative imports so the package functions
+# correctly even if the directory name does not match the canonical
+# "QuanQonscious" package name used in setup.py.
+from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
 
 # Optionally, set a flag or config dict for use in modules (for example, default quantum backend choice)
 DEFAULT_QUANTUM_BACKEND = "cudaq" if _has_cudaq else "cirq"

@@ -8,7 +8,9 @@ try:
 except ImportError:
     cudaq = None
 
-from QuanQonscious import core_engine, maya_cipher
+# Use relative imports so the module works regardless of the package name on
+# disk.
+from . import core_engine, maya_cipher
 
 class GRVQAnsatz:
     """
