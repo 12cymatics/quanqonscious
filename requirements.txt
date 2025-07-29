@@ -1,31 +1,31 @@
 # Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
 
 # Numerical and scientific computing libraries
-numpy>=2.2.6
-scipy>=1.15.3
+numpy==2.2.6
+scipy==1.15.3
 
 # MPI for parallel processing
-mpi4py>=4.1.0
+mpi4py==4.1.0
 
 # Quantum circuit simulation using Cirq
-cirq>=1.6.0
+cirq==1.6.0
 
 # Visualization utility
-matplotlib>=3.10.3
+matplotlib==3.10.3
 
 # Cryptography for Maya key encryption
-cryptography>=45.0.5
+cryptography==45.0.5
 
 # JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
-jax>=0.7.0
+jax==0.7.0
 jaxlib==0.7.0  # for CUDA GPU support install jaxlib==0.7.0+cuda12.cudnn98
 
 # Additional machine learning and quantum libraries
-torch>=2.7.1
-cudaq>=0.11.0
-union>=0.1.189
-nvidia-cuda-runtime-cu12>=12.9.79
-nvidia-cudnn-cu12>=9.11.0.98
+torch==2.7.1
+cudaq==0.11.0
+union==0.1.189
+nvidia-cuda-runtime-cu12==12.9.79
+nvidia-cudnn-cu12==9.11.0.98
 
 # (Optional) If additional testing or benchmarking utilities are required:
-pytest>=7.0.0
+pytest==7.0.0

@@ -24,8 +24,9 @@ It provides:
 
 Installation:
 -------------
-This project requires **Python 3.12** or later.  The exact packages and versions are listed
-in ``requirements.txt``.  Install everything with
+This project requires **Python 3.12** or later.  The exact package versions are
+pinned in ``requirements.txt`` to ensure a smooth install.  Install everything
+with
 
 ```
 pip install -r requirements.txt
