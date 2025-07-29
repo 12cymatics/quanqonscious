@@ -24,8 +24,6 @@ jaxlib==0.7.0  # for CUDA GPU support install jaxlib==0.7.0+cuda12.cudnn98
 torch==2.7.1
 cudaq==0.11.0
 union==0.1.189
-nvidia-cuda-runtime-cu12==12.9.79
-nvidia-cudnn-cu12==9.11.0.98
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest==7.0.0
