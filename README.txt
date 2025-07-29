@@ -24,17 +24,16 @@ It provides:
 
 Installation:
 -------------
-This package requires Python 3.10+, along with the following dependencies:
-  - numpy, scipy, jax, jaxlib
-  - mpi4py
-  - cirq
-  - hashlib (standard library)
-  - Other standard packages
+This project requires Python 3.10+.  The exact packages and versions are listed
+in ``requirements.txt``.  Install everything with
 
-To install the required dependencies, run:
-    pip install numpy scipy jax jaxlib mpi4py cirq
+```
+pip install -r requirements.txt
+```
 
-For GPU acceleration, ensure you have a CUDA-A100 environment available.
+The ``jaxlib`` entry pins the CPU build (``jaxlib==0.7.0``).  To use GPU
+acceleration on CUDA 12 hardware you may instead install the corresponding
+CUDA build, for example ``jaxlib==0.7.0+cuda12.cudnn98``.
 
 Usage:
 ------

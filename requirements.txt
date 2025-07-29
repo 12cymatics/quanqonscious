@@ -1,7 +1,7 @@
 # Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
 
 # Numerical and scientific computing libraries
-numpy>=2.3.2
+numpy>=2.2.6
 scipy>=1.16.1
 
 # MPI for parallel processing
@@ -18,7 +18,7 @@ cryptography>=45.0.5
 
 # JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
 jax>=0.7.0
-jaxlib>=0.7.0  # for CUDA support install jaxlib==0.7.0+cuda12.cudnn98
+jaxlib==0.7.0  # for CUDA GPU support install jaxlib==0.7.0+cuda12.cudnn98
 
 # Additional machine learning and quantum libraries
 torch>=2.7.1
