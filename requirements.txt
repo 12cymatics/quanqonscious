@@ -18,7 +18,7 @@ cryptography>=3.4.8
 
 # JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
 jax>=0.4.10
-jaxlib>=0.4.10+cuda11.cudnn86
+jaxlib>=0.4.10  # for CUDA support install jaxlib==0.4.10+cuda11.cudnn86
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest>=7.0.0
