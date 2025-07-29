@@ -13,8 +13,8 @@ It provides:
   • A Full Configuration Interaction (FCI) solver with GRVQ corrections.
   • TTGCR hardware driver simulation (frequency setting, sensor feedback, entropy
     monitoring) without kill switch routines.
-  • An HPC 4D PDE solver with MPI-based block-cyclic memory management and GPU
-    acceleration (using JAX for CUDA A100).
+  • An HPC 4D PDE solver with MPI-based block-cyclic memory management using
+    ``mpi4py`` for parallel processing.
   • A Bioelectric DNA Encoder module employing fractal Hilbert curve transformation.
   • Extended quantum circuit simulation using Cirq.
   • Automated performance profiling, dynamic dependency updating, and integrated
@@ -24,17 +24,19 @@ It provides:
 
 Installation:
 -------------
-This package requires Python 3.10+, along with the following dependencies:
-  - numpy, scipy, jax, jaxlib
-  - mpi4py
+This package requires **Python 3.12** or later, along with the following
+dependencies:
+
+  - numpy, scipy, mpi4py
   - cirq
   - hashlib (standard library)
   - Other standard packages
 
 To install the required dependencies, run:
-    pip install numpy scipy jax jaxlib mpi4py cirq
 
-For GPU acceleration, ensure you have a CUDA-A100 environment available.
+```
+pip install numpy scipy mpi4py cirq
+```
 
 Usage:
 ------
@@ -45,6 +47,27 @@ Import the main module in your application:
                              run_full_benchmark, FutureExtensions)
                              
 Then use the provided classes and functions to build your simulation workflow.
+
+Visualization Utility
+---------------------
+The repository includes a helper script `palindromic_alloy_visual.py` that
+computes the palindromic dual-lattice alloy described in the documentation and
+produces a bar chart of the integer evaluations `S_k(1)`. This script requires
+the `matplotlib` package. Install it with:
+
+```
+pip install matplotlib
+```
+
+Then run the script with:
+
+```
+python palindromic_alloy_visual.py
+```
+
+This prints the numeric value of the alloy and writes the figure to
+`palindromic_alloy.png`. Use `--no-show` to skip opening the plot window or
+`--output PATH` to save it elsewhere.
 
 Documentation:
 --------------
