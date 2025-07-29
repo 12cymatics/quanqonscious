@@ -2,7 +2,7 @@
 
 # Numerical and scientific computing libraries
 numpy>=2.2.6
-scipy>=1.16.1
+scipy>=1.15.3
 
 # MPI for parallel processing
 mpi4py>=4.1.0
