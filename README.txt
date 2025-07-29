@@ -24,7 +24,7 @@ It provides:
 
 Installation:
 -------------
-This project requires Python 3.10+.  The exact packages and versions are listed
+This project requires **Python 3.12** or later.  The exact packages and versions are listed
 in ``requirements.txt``.  Install everything with
 
 ```

@@ -31,5 +31,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     keywords="quantum cirq cuda quantum-computing vedic-math hybrid",
-    python_requires='>=3.8',
+    python_requires='>=3.12',
 )
