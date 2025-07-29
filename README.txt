@@ -46,6 +46,27 @@ Import the main module in your application:
                              
 Then use the provided classes and functions to build your simulation workflow.
 
+Visualization Utility
+---------------------
+The repository includes a helper script `palindromic_alloy_visual.py` that
+computes the palindromic dual-lattice alloy described in the documentation and
+produces a bar chart of the integer evaluations `S_k(1)`. This script requires
+the `matplotlib` package. Install it with:
+
+```
+pip install matplotlib
+```
+
+Then run the script with:
+
+```
+python palindromic_alloy_visual.py
+```
+
+This prints the numeric value of the alloy and writes the figure to
+`palindromic_alloy.png`. Use `--no-show` to skip opening the plot window or
+`--output PATH` to save it elsewhere.
+
 Documentation:
 --------------
 For detailed API documentation, please refer to the “docs/” folder included in the package.
