@@ -26,4 +26,4 @@ cudaq==0.11.0
 union==0.1.189
 
 # (Optional) If additional testing or benchmarking utilities are required:
-pytest==7.0.0
+pytest==8.4.1
