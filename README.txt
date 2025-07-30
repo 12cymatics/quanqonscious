@@ -69,6 +69,8 @@ This includes:
   - Detailed descriptions of each module and function.
   - Performance optimization guidelines.
   - Examples of integration with HPC and quantum backends.
+For additional resources see docs/sutraws_new.pdf and docs/sutraws_interactive.html.
+Instructions for running all sutras serial, concurrent and parallel are in sutra_orchestrator.py.
 
 Contact:
 --------
