@@ -24,17 +24,17 @@ It provides:
 
 Installation:
 -------------
-This package requires Python 3.10+, along with the following dependencies:
-  - numpy, scipy, jax, jaxlib
-  - mpi4py
-  - cirq
-  - hashlib (standard library)
-  - Other standard packages
+This project requires **Python 3.12** or later.  The exact package versions are
+pinned in ``requirements.txt`` to ensure a smooth install.  Install everything
+with
 
-To install the required dependencies, run:
-    pip install numpy scipy jax jaxlib mpi4py cirq
+```
+pip install -r requirements.txt
+```
 
-For GPU acceleration, ensure you have a CUDA-A100 environment available.
+The ``jaxlib`` entry pins the CPU build (``jaxlib==0.7.0``).  To use GPU
+acceleration on CUDA 12 hardware you may instead install the corresponding
+CUDA build, for example ``jaxlib==0.7.0+cuda12.cudnn98``.
 
 Usage:
 ------
@@ -45,6 +45,27 @@ Import the main module in your application:
                              run_full_benchmark, FutureExtensions)
                              
 Then use the provided classes and functions to build your simulation workflow.
+
+Visualization Utility
+---------------------
+The repository includes a helper script `palindromic_alloy_visual.py` that
+computes the palindromic dual-lattice alloy described in the documentation and
+produces a bar chart of the integer evaluations `S_k(1)`. This script requires
+the `matplotlib` package. Install it with:
+
+```
+pip install matplotlib
+```
+
+Then run the script with:
+
+```
+python palindromic_alloy_visual.py
+```
+
+This prints the numeric value of the alloy and writes the figure to
+`palindromic_alloy.png`. Use `--no-show` to skip opening the plot window or
+`--output PATH` to save it elsewhere.
 
 Documentation:
 --------------
