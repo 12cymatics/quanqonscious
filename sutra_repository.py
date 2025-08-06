@@ -2,7 +2,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import importlib
 
-from .primarysutra import VedicSutras, SutraContext, SutraMode
+try:
+    from .primarysutra import VedicSutras, SutraContext, SutraMode
+except ImportError:  # pragma: no cover - allow running as a script
+    from primarysutra import VedicSutras, SutraContext, SutraMode
 
 class SutraRepository:
     """Lightweight wrapper exposing all sutras as callable functions."""

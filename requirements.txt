@@ -10,12 +10,19 @@ mpi4py>=3.1.3
 # Quantum circuit simulation using Cirq
 cirq>=0.15.0
 
+# IBM Quantum Qiskit backend for quantum simulations
+qiskit>=0.45.0
+qiskit-aer>=0.12.0
+
 # Cryptography for Maya key encryption
 cryptography>=3.4.8
 
 # JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
 jax>=0.4.10
 jaxlib>=0.4.10+cuda11.cudnn86
+
+# PyTorch for sutra tensor operations
+torch>=2.0.0
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest>=7.0.0
