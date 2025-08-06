@@ -69,7 +69,13 @@ class VedicSutras:
             
         # Initialize quantum backend if in quantum or hybrid mode
         if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
-            if self.context.quantum_backend is None:
+            if cudaq is None:
+                logger.warning(
+                    "cudaq is unavailable; reverting to classical mode for sutra execution"
+                )
+                self.context.mode = SutraMode.CLASSICAL
+                self.quantum_platform = None
+            elif self.context.quantum_backend is None:
                 # Default to CUDAQ simulator
                 self.quantum_platform = cudaq.get_platform()
                 logger.info(f"Using CUDAQ platform: {self.quantum_platform.name()}")

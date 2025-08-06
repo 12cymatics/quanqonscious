@@ -14,6 +14,8 @@ setup(
         "numpy>=1.20.0",
         "cirq>=0.14.0",
         "mpi4py>=3.0.0",
+        "qiskit>=0.45.0",
+        "qiskit-aer>=0.12.0",
     ],
     extras_require={
         "gpu": ["cupy>=9.0.0", "cuda-quantum-cu12>=0.1.0"],

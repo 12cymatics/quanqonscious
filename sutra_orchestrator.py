@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Any, Dict
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
+from qiskit_backend import execute_ghz
 
 
 def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:
@@ -50,6 +51,37 @@ def parallel_hybrid_run(value: Any) -> None:
             print(f"{name} (hybrid) -> {res}")
 
 
+def hybrid_ghz_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]:
+    """Run a hybrid sutra workflow and entangle ``num_qubits`` via Qiskit.
+
+    The provided value is first processed through a representative sutra
+    (``ekadhikena_purvena``) in hybrid mode.  In parallel, a GHZ circuit
+    spanning ``num_qubits`` qubits is constructed and executed using
+    :func:`qiskit_backend.execute_ghz`.  The two results are returned together,
+    enabling subsequent fusion or analysis steps.
+
+    Parameters
+    ----------
+    value:
+        Initial numeric value supplied to the sutra pipeline.
+    num_qubits:
+        Number of qubits for the GHZ circuit. Defaults to 29 to mirror the
+        count of Vedic sutras.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the final sutra output under ``"sutra_result"``
+        and the GHZ measurement counts under ``"quantum_counts"``.
+    """
+
+    ctx = SutraContext(mode=SutraMode.HYBRID)
+    repo = SutraRepository(ctx)
+    sutra_result = repo.call_sutra("ekadhikena_purvena", value, ctx=ctx)
+    quantum_counts = execute_ghz(num_qubits=num_qubits)
+    return {"sutra_result": sutra_result, "quantum_counts": quantum_counts}
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -71,12 +103,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Execute sutras concurrently using threads",
     )
+    parser.add_argument(
+        "--ghz",
+        action="store_true",
+        help="Run hybrid sutra pipeline combined with a multi-qubit GHZ circuit",
+    )
 
     args = parser.parse_args()
 
     mode = SutraMode[args.mode.upper()]
 
-    if args.parallel:
+    if args.ghz:
+        result = hybrid_ghz_pipeline(args.value)
+        print(result)
+    elif args.parallel:
         parallel_hybrid_run(args.value)
     elif args.concurrent:
         concurrent_run(args.value, mode)
