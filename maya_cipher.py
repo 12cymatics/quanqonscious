@@ -105,42 +105,72 @@ class MayaCipher:
         plaintext = ((L & 0xFFFFFFFF) << 32) | (R & 0xFFFFFFFF)
         return plaintext
     
-    def encrypt_message(self, message: bytes) -> bytes:
+    def encrypt_message(self, message: bytes, t: float = None) -> bytes:
+        """Encrypt an arbitrary-length message by splitting into 8-byte blocks.
+
+        Parameters
+        ----------
+        message:
+            Plaintext bytes to be encrypted.
+        t:
+            Optional explicit timestamp used for all blocks.  When ``None`` and
+            ``use_time`` is ``True`` the current system time is captured once and
+            applied across every block, ensuring determinism between encryption
+            and verification.
+
+        Returns
+        -------
+        bytes
+            Ciphertext bytes (same length as input, padded to an 8-byte
+            boundary).
         """
-        Encrypt an arbitrary-length message (bytes) by splitting into 8-byte blocks.
-        
-        Args:
-            message: Plaintext bytes.
-        Returns:
-            Ciphertext as bytes (same length as input, padded if necessary).
-        """
-        # Pad message to 8-byte multiple
+
+        # Pad message to 8-byte multiple to satisfy 64-bit block requirements
         pad_len = (-len(message)) % 8
         message_padded = message + b'\x00' * pad_len
+
+        # Use a stable timestamp if provided, otherwise sample once
+        if t is None:
+            t = time.time() if self.use_time else 0.0
+
         ciphertext_blocks = []
-        t = time.time() if self.use_time else 0.0
         for i in range(0, len(message_padded), 8):
-            block = int.from_bytes(message_padded[i:i+8], byteorder='big')
+            block = int.from_bytes(message_padded[i : i + 8], byteorder="big")
             encrypted_block = self.encrypt_block(block, t=t)
-            ciphertext_blocks.append(encrypted_block.to_bytes(8, byteorder='big'))
-        return b''.join(ciphertext_blocks)
+            ciphertext_blocks.append(encrypted_block.to_bytes(8, byteorder="big"))
+
+        return b"".join(ciphertext_blocks)
     
-    def decrypt_message(self, ciphertext: bytes) -> bytes:
+    def decrypt_message(self, ciphertext: bytes, t: float = None) -> bytes:
+        """Decrypt an arbitrary-length message previously produced by this cipher.
+
+        Parameters
+        ----------
+        ciphertext:
+            Ciphertext bytes.  Length must be a multiple of eight.
+        t:
+            Timestamp used during encryption.  If ``None`` and ``use_time`` is
+            ``True`` the current time is sampled, which will only succeed if it
+            matches the original encryption window.
+
+        Returns
+        -------
+        bytes
+            Decrypted plaintext with padding removed.
         """
-        Decrypt an arbitrary-length message (bytes) that was encrypted with this cipher.
-        
-        Args:
-            ciphertext: Ciphertext bytes (length multiple of 8).
-        Returns:
-            Decrypted plaintext bytes (unpadded).
-        """
-        assert len(ciphertext) % 8 == 0, "Ciphertext length must be multiple of 8 bytes"
+
+        assert (
+            len(ciphertext) % 8 == 0
+        ), "Ciphertext length must be multiple of 8 bytes"
+
+        if t is None:
+            t = time.time() if self.use_time else 0.0
+
         plaintext_blocks = []
-        t = time.time() if self.use_time else 0.0
         for i in range(0, len(ciphertext), 8):
-            block = int.from_bytes(ciphertext[i:i+8], byteorder='big')
+            block = int.from_bytes(ciphertext[i : i + 8], byteorder="big")
             decrypted_block = self.decrypt_block(block, t=t)
-            plaintext_blocks.append(decrypted_block.to_bytes(8, byteorder='big'))
-        # Join and remove padding nulls
-        plain = b''.join(plaintext_blocks)
-        return plain.rstrip(b'\x00')
+            plaintext_blocks.append(decrypted_block.to_bytes(8, byteorder="big"))
+
+        plain = b"".join(plaintext_blocks)
+        return plain.rstrip(b"\x00")
