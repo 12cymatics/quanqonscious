@@ -14,6 +14,12 @@ setup(
         "numpy>=1.20.0",
         "cirq>=0.14.0",
         "mpi4py>=3.0.0",
+        "qiskit>=0.46.0",
+        "qiskit-aer>=0.13.1",
+        "qiskit-ibm-runtime>=0.11.0",
+        "torch>=2.0.0",
+        "matplotlib>=3.7.1",
+        "pillow>=9.0.0",
     ],
     extras_require={
         "gpu": ["cupy>=9.0.0", "cuda-quantum-cu12>=0.1.0"],
