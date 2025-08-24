@@ -103,12 +103,10 @@ H_y_local[:] = 1.0 * np.random.randn(local_Nx, NY, NZ)
 H_z_local[:] = 1.0 * np.random.randn(local_Nx, NY, NZ)
 
 # End of Part 1.
-```
 
-──────────────────────────────
-**Part 2/3: Potential Functions, Quantum Update, and Time Evolution**
-  
-```python
+#############################
+# Part 2/3: Potential Functions, Quantum Update, and Time Evolution
+#############################
 #############################
 # Potential Energy and Vedic Sutra Functions
 #############################
@@ -326,12 +324,10 @@ def maya_sutra_watermark(sim_params: dict) -> str:
     return hashlib.sha256(input_str.encode('utf-8')).hexdigest()
 
 # End of Part 2.
-```
 
-──────────────────────────────
-**Part 3/3: Optimizations, Quantum Ansatz Refinement, Dashboard, and Diagnostics**
-  
-```python
+#############################
+# Part 3/3: Optimizations, Quantum Ansatz Refinement, Dashboard, and Diagnostics
+#############################
 #############################
 # Additional Optimizations and Interactive Dashboard
 #############################
