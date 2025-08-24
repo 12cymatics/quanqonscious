@@ -24,7 +24,13 @@ It provides:
 
 Installation:
 -------------
-This project requires **Python 3.12** or later.  The exact package versions are
+This repository is organized as follows:
+
+- `src/` contains the Python package modules.
+- `notebooks/` houses exploratory Jupyter notebooks.
+- `docs/` retains research artifacts, text references, and figures.
+
+This project requires **Python 3.11** or later.  The exact package versions are
 pinned in ``requirements.txt`` to ensure a smooth install.  Install everything
 with
 
@@ -36,13 +42,25 @@ The ``jaxlib`` entry pins the CPU build (``jaxlib==0.7.0``).  To use GPU
 acceleration on CUDA 12 hardware you may instead install the corresponding
 CUDA build, for example ``jaxlib==0.7.0+cuda12.cudnn98``.
 
+> **Hardware and runtime requirements:** QuanQonscious does not implement
+> fallback execution paths.  Successful import and execution require the
+> presence of MPI (``mpi4py`` bindings), the NVIDIA CUDA-Q library, and an
+> NVIDIA A100 GPU accessible through ``cupy``.  The package will raise
+> exceptions immediately if any of these components are missing.
+
 Usage:
 ------
-Import the main module in your application:
-    from grvq_ttgcr import (VedicSutraLibrary, GRVQAnsatz, FCISolver, TTGCRDriver,
-                             hpc_quantum_simulation, BioelectricDNAEncoder,
-                             extended_quantum_simulation_cirq, orchestrate_simulation,
-                             run_full_benchmark, FutureExtensions)
+Import the core modules in your application:
+    from quanqonscious import (
+        ansatz,
+        core_engine,
+        sulba,
+        zpe_solver,
+        maya_cipher,
+        performance,
+        updater,
+        palindromic_alloy_visual,
+    )
                              
 Then use the provided classes and functions to build your simulation workflow.
 
