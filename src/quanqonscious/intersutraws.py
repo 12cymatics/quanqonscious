@@ -1,8 +1,8 @@
 # ========== INTER-SUTRA INTERACTIONS ==========
     
-    def apply_sutra_sequence(self, x: Union[float, np.ndarray, torch.Tensor],
-                             sutra_sequence: List[Tuple[str, Dict[str, Any]]],
-                             ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
+def apply_sutra_sequence(self, x: Union[float, np.ndarray, torch.Tensor],
+                         sutra_sequence: List[Tuple[str, Dict[str, Any]]],
+                         ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
         Applies a sequence of sutras to the input data, enabling complex
         transformations through sutra composition.
@@ -74,10 +74,10 @@
                                    False, data_size, error_msg)
             raise
     
-    def recommend_sutra_sequence(self, problem_type: str, 
-                                data_shape: Optional[Tuple[int, ...]] = None,
-                                data_characteristics: Optional[Dict[str, Any]] = None,
-                                ctx: Optional[SutraContext] = None) -> List[Tuple[str, Dict[str, Any]]]:
+def recommend_sutra_sequence(self, problem_type: str,
+                            data_shape: Optional[Tuple[int, ...]] = None,
+                            data_characteristics: Optional[Dict[str, Any]] = None,
+                            ctx: Optional[SutraContext] = None) -> List[Tuple[str, Dict[str, Any]]]:
         """
         Recommends an optimal sequence of sutras for a given problem type
         and data characteristics.
@@ -228,7 +228,7 @@
                                    False, 1)
             raise
     
-    def optimize_sutra_sequence(self, initial_sequence: List[Tuple[str, Dict[str, Any]]],
+def optimize_sutra_sequence(self, initial_sequence: List[Tuple[str, Dict[str, Any]]],
                                test_data: Union[float, np.ndarray, torch.Tensor],
                                target_output: Optional[Union[float, np.ndarray, torch.Tensor]] = None,
                                iterations: int = 10,
@@ -409,7 +409,7 @@
                                    False, 1)
             raise
     
-    def _evaluate_sequence(self, sequence, test_data, target_output, context):
+def _evaluate_sequence(self, sequence, test_data, target_output, context):
         """Helper method to evaluate a sutra sequence"""
         try:
             # Apply sequence

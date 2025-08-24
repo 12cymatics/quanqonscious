@@ -1,6 +1,6 @@
 # ========== SUB-SUTRAS (1-7) ==========
     
-    def anurupye_sunyamanyat(self, a: Union[float, np.ndarray, torch.Tensor],
+def anurupye_sunyamanyat(self, a: Union[float, np.ndarray, torch.Tensor],
                             b: Union[float, np.ndarray, torch.Tensor],
                             threshold: Optional[float] = None,
                             ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
@@ -127,7 +127,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _anurupye_sunyamanyat_quantum(self, a, b, epsilon, context):
+def _anurupye_sunyamanyat_quantum(self, a, b, epsilon, context):
         """Quantum implementation of anurupye_sunyamanyat using Cirq"""
         # This implements quantum interference to detect ratio relationships
         
@@ -189,7 +189,7 @@
         # No strong ratio relationship detected
         return (a, b)
     
-    def _anurupye_sunyamanyat_hybrid(self, a, b, epsilon, context):
+def _anurupye_sunyamanyat_hybrid(self, a, b, epsilon, context):
         """Hybrid implementation of anurupye_sunyamanyat"""
         # For small arrays, use quantum interference checking
         if (isinstance(a, np.ndarray) and a.size <= 4) or isinstance(a, (int, float)):
@@ -215,7 +215,7 @@
             # For larger arrays, use classical implementation
             return self._anurupye_sunyamanyat_classical(a, b, epsilon, context)
     
-    def _anurupye_sunyamanyat_classical(self, a, b, epsilon, context):
+def _anurupye_sunyamanyat_classical(self, a, b, epsilon, context):
         """Classical implementation of anurupye_sunyamanyat"""
         if isinstance(a, np.ndarray):
             # Handle division by zero
@@ -270,7 +270,7 @@
                     # Only b is close to zero
                     return (a, b)
 
-    def sisyate_sesasamjnah(self, a: Union[float, np.ndarray, torch.Tensor],
+def sisyate_sesasamjnah(self, a: Union[float, np.ndarray, torch.Tensor],
                            b: Union[float, np.ndarray, torch.Tensor],
                            ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -366,7 +366,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _sisyate_sesasamjnah_quantum(self, a, b, context):
+def _sisyate_sesasamjnah_quantum(self, a, b, context):
         """Quantum implementation of sisyate_sesasamjnah using CUDAQ"""
         # This implements a quantum circuit for modular arithmetic
         
@@ -440,7 +440,7 @@
         
         return remainder
     
-    def _sisyate_sesasamjnah_hybrid(self, a, b, context):
+def _sisyate_sesasamjnah_hybrid(self, a, b, context):
         """Hybrid implementation of sisyate_sesasamjnah"""
         # For small integer values, use quantum circuit
         if (isinstance(a, int) and isinstance(b, int) and 
@@ -460,7 +460,7 @@
             # For larger or non-integer values, use classical implementation
             return self._sisyate_sesasamjnah_classical(a, b, context)
     
-    def _sisyate_sesasamjnah_classical(self, a, b, context):
+def _sisyate_sesasamjnah_classical(self, a, b, context):
         """Classical implementation of sisyate_sesasamjnah"""
         if isinstance(a, torch.Tensor):
             # Handle division by zero
@@ -494,7 +494,7 @@
             quotient = int(a // safe_b)
             return a - quotient * safe_b
 
-    def adyamadyenantyamantyena(self, coefficients: Union[List, np.ndarray, torch.Tensor],
+def adyamadyenantyamantyena(self, coefficients: Union[List, np.ndarray, torch.Tensor],
                                x: Union[float, np.ndarray, torch.Tensor],
                                ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -640,7 +640,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _adyamadyenantyamantyena_quantum(self, coefficients, x, context):
+def _adyamadyenantyamantyena_quantum(self, coefficients, x, context):
         """Quantum implementation of adyamadyenantyamantyena using Cirq"""
         # This implements a quantum circuit for polynomial evaluation
         # focusing on first and last terms
@@ -714,7 +714,7 @@
         
         return weighted_sum
     
-    def _adyamadyenantyamantyena_hybrid(self, coefficients, x, context):
+def _adyamadyenantyamantyena_hybrid(self, coefficients, x, context):
         """Hybrid implementation of adyamadyenantyamantyena"""
         # For small polynomials with scalar x, use quantum circuit
         if len(coefficients) <= 4 and isinstance(x, (int, float)):
@@ -731,7 +731,7 @@
             # For higher-degree polynomials or larger arrays, use classical implementation
             return self._adyamadyenantyamantyena_classical(coefficients, x, context)
     
-    def _adyamadyenantyamantyena_classical(self, coefficients, x, context):
+def _adyamadyenantyamantyena_classical(self, coefficients, x, context):
         """Classical implementation of adyamadyenantyamantyena"""
         if isinstance(x, torch.Tensor):
             # Initialize result with zeros
@@ -799,7 +799,7 @@
                 
         return result
 
-    def antyayordasakepi(self, a: Union[float, np.ndarray, torch.Tensor],
+def antyayordasakepi(self, a: Union[float, np.ndarray, torch.Tensor],
                         b: Union[float, np.ndarray, torch.Tensor],
                         ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -924,7 +924,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _antyayordasakepi_quantum(self, a, b, context):
+def _antyayordasakepi_quantum(self, a, b, context):
         """Quantum implementation of antyayordasakepi using CUDAQ"""
         # This implements a quantum circuit for optimized multiplication
         # of numbers whose last digits sum to 10
@@ -1011,7 +1011,7 @@
             # For numbers whose last digits don't sum to 10, use standard multiplication
             return a * b
     
-    def _antyayordasakepi_hybrid(self, a, b, context):
+def _antyayordasakepi_hybrid(self, a, b, context):
         """Hybrid implementation of antyayordasakepi"""
         # For small integer values, use quantum circuit
         if isinstance(a, int) and isinstance(b, int):
@@ -1029,7 +1029,7 @@
             # For non-integer values or larger arrays, use classical implementation
             return self._antyayordasakepi_classical(a, b, context)
     
-    def _antyayordasakepi_classical(self, a, b, context):
+def _antyayordasakepi_classical(self, a, b, context):
         """Classical implementation of antyayordasakepi"""
         if isinstance(a, torch.Tensor):
             # Extract last digit (assuming base 10)
@@ -1086,7 +1086,7 @@
                 # Use standard multiplication
                 return a * b
 
-    def antyayoreva(self, a: Union[float, np.ndarray, torch.Tensor],
+def antyayoreva(self, a: Union[float, np.ndarray, torch.Tensor],
                   b: Union[float, np.ndarray, torch.Tensor],
                   ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -1208,7 +1208,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _antyayoreva_quantum(self, a, b, context):
+def _antyayoreva_quantum(self, a, b, context):
         """Quantum implementation of antyayoreva using Cirq"""
         # This implements a quantum circuit for digit-focused multiplication
         
@@ -1286,7 +1286,7 @@
         
         return result_value
     
-    def _antyayoreva_hybrid(self, a, b, context):
+def _antyayoreva_hybrid(self, a, b, context):
         """Hybrid implementation of antyayoreva"""
         # For small integer values, use quantum circuit
         if isinstance(a, int) and isinstance(b, int) and a <= 1000 and b <= 1000:
@@ -1305,7 +1305,7 @@
             # For non-integer values, larger values, or larger arrays, use classical implementation
             return self._antyayoreva_classical(a, b, context)
     
-    def _antyayoreva_classical(self, a, b, context):
+def _antyayoreva_classical(self, a, b, context):
         """Classical implementation of antyayoreva"""
         if isinstance(a, torch.Tensor):
             # Extract last digits
@@ -1363,7 +1363,7 @@
                 # For non-integer scalars, use standard multiplication
                 return a * b
 
-    def yavadunam_tavadunam(self, a: Union[float, np.ndarray, torch.Tensor],
+def yavadunam_tavadunam(self, a: Union[float, np.ndarray, torch.Tensor],
                            b: Union[float, np.ndarray, torch.Tensor],
                            base: float = 10.0,
                            ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
@@ -1457,7 +1457,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _yavadunam_tavadunam_quantum(self, a, b, base, context):
+def _yavadunam_tavadunam_quantum(self, a, b, base, context):
         """Quantum implementation of yavadunam_tavadunam using CUDAQ"""
         # This implements a quantum circuit for deficiency transfers
         
@@ -1522,7 +1522,7 @@
         # Convert to decimal
         return int(top_result, 2)
     
-    def _yavadunam_tavadunam_hybrid(self, a, b, base, context):
+def _yavadunam_tavadunam_hybrid(self, a, b, base, context):
         """Hybrid implementation of yavadunam_tavadunam"""
         # For scalar values, use quantum circuit
         if isinstance(a, (int, float)) and isinstance(b, (int, float)):
@@ -1539,7 +1539,7 @@
             # For larger arrays, use classical implementation
             return self._yavadunam_tavadunam_classical(a, b, base, context)
     
-    def _yavadunam_tavadunam_classical(self, a, b, base, context):
+def _yavadunam_tavadunam_classical(self, a, b, base, context):
         """Classical implementation of yavadunam_tavadunam"""
         # Calculate deficiencies
         a_deficiency = base - a
@@ -1548,7 +1548,7 @@
         # Calculate result using the formula
         return (base - a_deficiency - b_deficiency) * base + (a_deficiency * b_deficiency)
 
-    def samuccayagunitah_subsutras(self, a: Union[float, np.ndarray, torch.Tensor],
+def samuccayagunitah_subsutras(self, a: Union[float, np.ndarray, torch.Tensor],
                                  b: Union[float, np.ndarray, torch.Tensor],
                                  ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -1645,7 +1645,7 @@
                                    False, data_size, error_msg)
             raise
     
-    def _samuccayagunitah_subsutras_quantum(self, a, b, context):
+def _samuccayagunitah_subsutras_quantum(self, a, b, context):
         """Quantum implementation of samuccayagunitah_subsutras using Cirq"""
         # This implements a quantum circuit for sum-product expansion
         
@@ -1718,7 +1718,7 @@
         
         return weighted_sum
     
-    def _compute_product_of_sums_quantum(self, a1, a2, b1, b2, context):
+def _compute_product_of_sums_quantum(self, a1, a2, b1, b2, context):
         """Helper method to compute (a1+a2)(b1+b2) using quantum circuit"""
         # Create circuit for 4-term expansion
         qubits = [cirq.LineQubit(i) for i in range(4)]
@@ -1772,7 +1772,7 @@
         # Scale result back to original magnitude
         return (a1*b1 + a1*b2 + a2*b1 + a2*b2)
     
-    def _samuccayagunitah_subsutras_hybrid(self, a, b, context):
+def _samuccayagunitah_subsutras_hybrid(self, a, b, context):
         """Hybrid implementation of samuccayagunitah_subsutras"""
         # For scalar values or 2-element arrays, use quantum circuit
         if isinstance(a, (int, float)) and isinstance(b, (int, float)):
@@ -1797,7 +1797,7 @@
             # For larger arrays, use classical implementation
             return self._samuccayagunitah_subsutras_classical(a, b, context)
     
-    def _samuccayagunitah_subsutras_classical(self, a, b, context):
+def _samuccayagunitah_subsutras_classical(self, a, b, context):
         """Classical implementation of samuccayagunitah_subsutras"""
         if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
             if a.dim() == 1 and b.dim() == 1 and a.size(0) == 2 and b.size(0) == 2:

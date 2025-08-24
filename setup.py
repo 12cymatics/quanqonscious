@@ -1,15 +1,22 @@
 # setup.py
 
+from pathlib import Path
 from setuptools import setup, find_packages
+
+
+_README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
 setup(
     name="QuanQonscious",
-    version="0.1.0",
+    version="5.0.0",
     description="GRVQ-TTGCR hybrid quantum-classical framework with Vedic sutra integration",
-    author="Your Name",
-    author_email="your.email@example.com",
-    license="Proprietary",  # Assuming proprietary, adjust if open-source
-    packages=find_packages(),
+    long_description=_README,
+    long_description_content_type="text/markdown",
+    author="Daniel James Elliot Meyer",
+    author_email="danmeyer85@gmail.com",
+    license="Proprietary",  # Repository is distributed under proprietary terms
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     install_requires=[
         "numpy>=2.3.2",
         "scipy>=1.16.1",
@@ -29,7 +36,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "quanqonscious = QuanQonscious.cli:main"
+            "quanqonscious = quanqonscious.cli:main"
         ]
     },
     classifiers=[
@@ -39,5 +46,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     keywords="quantum cirq cuda quantum-computing vedic-math hybrid",
-    python_requires='>=3.12',
+    python_requires='>=3.11',
 )
