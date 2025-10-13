@@ -1,54 +1,36 @@
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Any, Dict
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
 from maya_cymatic_simulation import encrypt_with_cymatic
+from sutra_simulator import HybridQuantumClassicalSimulator
 
 
 def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:
     """Run all sutras sequentially in the specified mode."""
-    ctx = SutraContext(mode=mode)
-    repo = SutraRepository(ctx)
-    result = value
-    for name in repo.list_sutras():
-        result = repo.call_sutra(name, result, ctx=ctx)
-        print(f"{name} -> {result}")
-    return result
+    simulator = HybridQuantumClassicalSimulator(SutraContext(mode=mode))
+    report = simulator.run_serial(value)
+    for execution in report.executions:
+        print(f"{execution.name} -> {execution.output}")
+    return report.aggregate
 
 
 def concurrent_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Dict[str, Any]:
     """Execute all sutras concurrently using threads."""
-    ctx = SutraContext(mode=mode)
-    repo = SutraRepository(ctx)
-
-    def run(name: str) -> tuple[str, Any]:
-        return name, repo.call_sutra(name, value, ctx=ctx)
-
+    simulator = HybridQuantumClassicalSimulator(SutraContext(mode=mode))
+    report = simulator.run_concurrent(value)
     results: Dict[str, Any] = {}
-    with ThreadPoolExecutor() as exe:
-        futures = [exe.submit(run, name) for name in repo.list_sutras()]
-        for fut in futures:
-            name, res = fut.result()
-            results[name] = res
-            print(f"{name} -> {res}")
+    for execution in report.executions:
+        results[execution.name] = execution.output
+        print(f"{execution.name} -> {execution.output}")
     return results
 
 
 def parallel_hybrid_run(value: Any) -> None:
     """Run all sutras in hybrid mode across multiple processes."""
-    repo = SutraRepository()
-    names = repo.list_sutras()
-
-    def call(name: str, val: Any) -> tuple[str, Any]:
-        ctx = SutraContext(mode=SutraMode.HYBRID, parallel=False)
-        inner_repo = SutraRepository(ctx)
-        return name, inner_repo.call_sutra(name, val, ctx=ctx)
-
-    with ProcessPoolExecutor() as exe:
-        futures = [exe.submit(call, name, value) for name in names]
-        for fut in futures:
-            name, res = fut.result()
-            print(f"{name} (hybrid) -> {res}")
+    simulator = HybridQuantumClassicalSimulator(SutraContext(mode=SutraMode.HYBRID))
+    report = simulator.run_parallel(value)
+    for execution in report.executions:
+        print(f"{execution.name} (hybrid) -> {execution.output}")
 
 
 def hybrid_ghz_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]:
