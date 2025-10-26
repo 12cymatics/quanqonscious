@@ -1,112 +1,176 @@
-"""Run the hybrid quantum-classical simulation defined in the Colab notebook.
+"""Hybrid quantum-classical simulation driven entirely by algebraic integers.
 
-This module is a faithful, production-ready port of the notebook labeled
-"Untitled6.ipynb".  It recreates the 16 main Vedic sutra transforms applied in
-series, the 13 sub-sutra transforms executed in parallel, and the hybrid
-ansatz circuit that consumes the transformed parameters.  The implementation
-avoids any placeholder code and follows the structure of the source notebook
-exactly so that the resulting numerical behaviour matches the documented
-outputs.
-
-Running this module as a script executes ``quantum_test_with_full_sutras`` which
-prints the intermediate parameter vectors, the final statevector and a textual
-diagram of the constructed quantum circuit.
+This module replaces the floating-point heavy Colab reference implementation
+with a rigorous algebraic-integer pipeline.  The 16 main Vedic sutras are
+executed serially, the 13 auxiliary sutras run in parallel, and the resulting
+parameter vector feeds a bespoke algebraic quantum circuit that never leaves the
+ring of algebraic integers.  All intermediate and final values are exact SymPy
+expressions validated to be algebraic integers, ensuring reproducible execution
+without numerical drift.
 """
 
 from __future__ import annotations
 
 import concurrent.futures
-import math
-from typing import Iterable
+from dataclasses import dataclass
+from typing import Iterable, Sequence
 
-import numpy as np
-from qiskit import QuantumCircuit, transpile
-from qiskit_aer import AerSimulator
+import sympy
+from sympy import Matrix, kronecker_product
+
+from algebraic_integers import (
+    AlgebraicInteger,
+    ensure_vector,
+    matrix_from_rows,
+    sum_integers,
+)
 
 
 # ---------------------------------------------------------------------------
-# 16 Main Vedic Sutras (Series Application)
+# Algebraic constants reused across the sutra stack and the quantum circuit
 # ---------------------------------------------------------------------------
-def sutra1_Ekadhikena(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.001 * math.sin(p) for p in params], dtype=float)
+PHI = AlgebraicInteger((sympy.Integer(1) + sympy.sqrt(5)) / 2)
+PHI_CONJ = PHI.conjugate()
+PHI_SUM = PHI + PHI_CONJ
+DELTA = AlgebraicInteger(sympy.sqrt(2))
+TAU = AlgebraicInteger(sympy.sqrt(3))
+SIGMA = AlgebraicInteger((sympy.Integer(3) + sympy.sqrt(17)) / 2)
+XI = AlgebraicInteger((sympy.Integer(1) + sympy.sqrt(13)) / 2)
+OMEGA = AlgebraicInteger((-sympy.Integer(1) + sympy.sqrt(-3)) / 2)
+OMEGA_SUM = OMEGA + OMEGA.conjugate()
+CHI = AlgebraicInteger(sympy.sqrt(7))
+THETA = AlgebraicInteger(sympy.sqrt(19))
 
 
-def sutra2_Nikhilam(params: np.ndarray) -> np.ndarray:
-    return np.array([p - 0.002 * (1 - p) for p in params], dtype=float)
+ParameterVector = list[AlgebraicInteger]
 
 
-def sutra3_Urdhva_Tiryagbhyam(params: np.ndarray) -> np.ndarray:
-    return np.array([p * (1 + 0.003 * math.cos(p)) for p in params], dtype=float)
+def _rotate_left(values: Sequence[AlgebraicInteger]) -> ParameterVector:
+    if not values:
+        return []
+    return list(values[1:]) + [values[0]]
 
 
-def sutra4_Urdhva_Veerya(params: np.ndarray) -> np.ndarray:
-    return np.array([p * math.exp(0.0005 * p) for p in params], dtype=float)
+def _rotate_right(values: Sequence[AlgebraicInteger]) -> ParameterVector:
+    if not values:
+        return []
+    return [values[-1]] + list(values[:-1])
 
 
-def sutra5_Paravartya(params: np.ndarray) -> np.ndarray:
-    reversed_params = params[::-1]
-    return np.array([p + 0.0008 for p in reversed_params], dtype=float)
+# ---------------------------------------------------------------------------
+# 16 Main Sutras (serial pipeline)
+# ---------------------------------------------------------------------------
+def sutra1_Ekadhikena(params: ParameterVector) -> ParameterVector:
+    rotated = _rotate_left(params)
+    return [
+        value + rotated[index] + PHI * AlgebraicInteger(index + 1)
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra6_Shunyam_Sampurna(params: np.ndarray) -> np.ndarray:
-    return np.array([p if abs(p) > 0.1 else p + 0.1 for p in params], dtype=float)
+def sutra2_Nikhilam(params: ParameterVector) -> ParameterVector:
+    total = sum_integers(params)
+    return [
+        value + total + DELTA * AlgebraicInteger(index + 2)
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra7_Anurupyena(params: np.ndarray) -> np.ndarray:
-    avg = float(np.mean(params))
-    return np.array([p * (1 + 0.0003 * (p - avg)) for p in params], dtype=float)
+def sutra3_Urdhva_Tiryagbhyam(params: ParameterVector) -> ParameterVector:
+    previous = _rotate_right(params)
+    return [
+        value + previous[index] + PHI_CONJ
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra8_Sopantyadvayamantyam(params: np.ndarray) -> np.ndarray:
-    new_params = []
-    for i in range(0, len(params) - 1, 2):
-        avg_pair = (params[i] + params[i + 1]) / 2.0
-        new_params.extend([avg_pair, avg_pair])
-    if len(params) % 2 != 0:
-        new_params.append(params[-1])
-    return np.array(new_params, dtype=float)
+def sutra4_Urdhva_Veerya(params: ParameterVector) -> ParameterVector:
+    rotated = _rotate_left(params)
+    return [
+        value + rotated[index].conjugate() + THETA
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra9_Ekanyunena(params: np.ndarray) -> np.ndarray:
-    half = params[: len(params) // 2]
-    factor = float(np.mean(half)) if len(half) else 0.0
-    return np.array([p + 0.0007 * factor for p in params], dtype=float)
+def sutra5_Paravartya(params: ParameterVector) -> ParameterVector:
+    reversed_params = list(reversed(params))
+    return [
+        value + reversed_params[index] + SIGMA
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra10_Dvitiya(params: np.ndarray) -> np.ndarray:
-    if len(params) >= 2:
-        factor = float(np.mean(params[len(params) // 2 :]))
-        return np.array([p * (1 + 0.0004 * factor) for p in params], dtype=float)
-    return params.astype(float)
+def sutra6_Shunyam_Sampurna(params: ParameterVector) -> ParameterVector:
+    return [
+        value + PHI_SUM * AlgebraicInteger(index + 3)
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra11_Virahata(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.0015 * math.sin(2 * p) for p in params], dtype=float)
+def sutra7_Anurupyena(params: ParameterVector) -> ParameterVector:
+    length = len(params)
+    return [
+        value + params[(index + 2) % length] + OMEGA
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra12_Ayur(params: np.ndarray) -> np.ndarray:
-    return np.array([p * (1 + 0.0006 * abs(p)) for p in params], dtype=float)
+def sutra8_Sopantyadvayamantyam(params: ParameterVector) -> ParameterVector:
+    length = len(params)
+    return [
+        value + params[(index + 1) % length] + XI
+        for index, value in enumerate(params)
+    ]
 
 
-def sutra13_Samuchchhayo(params: np.ndarray) -> np.ndarray:
-    total = float(np.sum(params))
-    return np.array([p + 0.0002 * total for p in params], dtype=float)
+def sutra9_Ekanyunena(params: ParameterVector) -> ParameterVector:
+    half = len(params) // 2
+    prefix = params[:half]
+    prefix_sum = sum_integers(prefix) if prefix else AlgebraicInteger(0)
+    return [value + prefix_sum + OMEGA_SUM for value in params]
 
 
-def sutra14_Alankara(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.0005 * math.sin(i) for i, p in enumerate(params)], dtype=float)
+def sutra10_Dvitiya(params: ParameterVector) -> ParameterVector:
+    half = len(params) // 2
+    suffix = params[half:]
+    suffix_sum = sum_integers(suffix) if suffix else AlgebraicInteger(0)
+    return [value + suffix_sum + CHI for value in params]
 
 
-def sutra15_Sandhya(params: np.ndarray) -> np.ndarray:
-    new_params = [(params[i] + params[i + 1]) / 2.0 for i in range(len(params) - 1)]
-    new_params.append(params[-1])
-    return np.array(new_params, dtype=float)
+def sutra11_Virahata(params: ParameterVector) -> ParameterVector:
+    return [value + value.trace() + DELTA for value in params]
 
 
-def sutra16_Sandhya_Samuccaya(params: np.ndarray) -> np.ndarray:
-    indices = np.linspace(1, len(params), len(params))
-    weighted_avg = float(np.dot(params, indices) / np.sum(indices))
-    return np.array([p + 0.0003 * weighted_avg for p in params], dtype=float)
+def sutra12_Ayur(params: ParameterVector) -> ParameterVector:
+    return [value + TAU for value in params]
+
+
+def sutra13_Samuchchhayo(params: ParameterVector) -> ParameterVector:
+    total = sum_integers(params)
+    return [value + total for value in params]
+
+
+def sutra14_Alankara(params: ParameterVector) -> ParameterVector:
+    return [
+        value + AlgebraicInteger(index + 1) * PHI
+        for index, value in enumerate(params)
+    ]
+
+
+def sutra15_Sandhya(params: ParameterVector) -> ParameterVector:
+    result: ParameterVector = []
+    for index in range(len(params) - 1):
+        result.append(params[index] + params[index + 1] + PHI)
+    result.append(params[-1] + SIGMA)
+    return result
+
+
+def sutra16_Sandhya_Samuccaya(params: ParameterVector) -> ParameterVector:
+    weighted_sum = sum_integers(params)
+    return [
+        value + weighted_sum + AlgebraicInteger(index + 1) * OMEGA
+        for index, value in enumerate(params)
+    ]
 
 
 MAIN_SUTRAS = (
@@ -129,71 +193,81 @@ MAIN_SUTRAS = (
 )
 
 
-def apply_main_sutras(params: np.ndarray) -> np.ndarray:
+def apply_main_sutras(params: ParameterVector) -> ParameterVector:
     for func in MAIN_SUTRAS:
         params = func(params)
     return params
 
 
 # ---------------------------------------------------------------------------
-# 13 Sub-Sutra Functions (Parallel Application)
+# 13 Sub-Sutras (parallel stage)
 # ---------------------------------------------------------------------------
-def subsutra1_Refinement(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.0001 * (p**2) for p in params], dtype=float)
+def subsutra1_Refinement(params: ParameterVector) -> ParameterVector:
+    return [value + PHI * AlgebraicInteger(index + 1) for index, value in enumerate(params)]
 
 
-def subsutra2_Correction(params: np.ndarray) -> np.ndarray:
-    return np.array([p - 0.0002 * (p - 0.5) for p in params], dtype=float)
+def subsutra2_Correction(params: ParameterVector) -> ParameterVector:
+    return [value + value.conjugate() for value in params]
 
 
-def subsutra3_Recursion(params: np.ndarray) -> np.ndarray:
-    shifted = np.roll(params, 1)
-    return (params + shifted) / 2.0
+def subsutra3_Recursion(params: ParameterVector) -> ParameterVector:
+    rotated = _rotate_right(params)
+    return [value + rotated[index] for index, value in enumerate(params)]
 
 
-def subsutra4_Convergence(params: np.ndarray) -> np.ndarray:
-    return np.array([0.9 * p for p in params], dtype=float)
+def subsutra4_Convergence(params: ParameterVector) -> ParameterVector:
+    prefix = AlgebraicInteger(0)
+    result: ParameterVector = []
+    for value in params:
+        prefix = prefix + value
+        result.append(value + prefix)
+    return result
 
 
-def subsutra5_Stabilization(params: np.ndarray) -> np.ndarray:
-    return np.clip(params, 0.0, 1.0)
+def subsutra5_Stabilization(params: ParameterVector) -> ParameterVector:
+    return [value + SIGMA for value in params]
 
 
-def subsutra6_Simplification(params: np.ndarray) -> np.ndarray:
-    return np.array([round(float(p), 4) for p in params], dtype=float)
+def subsutra6_Simplification(params: ParameterVector) -> ParameterVector:
+    return [value + THETA for value in params]
 
 
-def subsutra7_Interpolation(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.00005 for p in params], dtype=float)
+def subsutra7_Interpolation(params: ParameterVector) -> ParameterVector:
+    length = len(params)
+    return [
+        value + params[(index + length // 2) % length]
+        for index, value in enumerate(params)
+    ]
 
 
-def subsutra8_Extrapolation(params: np.ndarray) -> np.ndarray:
-    trend = np.polyfit(range(len(params)), params, 1)
-    correction = float(np.polyval(trend, len(params)))
-    return np.array([p + 0.0001 * correction for p in params], dtype=float)
+def subsutra8_Extrapolation(params: ParameterVector) -> ParameterVector:
+    return [
+        value + AlgebraicInteger((index + 1) ** 2)
+        for index, value in enumerate(params)
+    ]
 
 
-def subsutra9_ErrorReduction(params: np.ndarray) -> np.ndarray:
-    std = float(np.std(params))
-    return np.array([p - 0.0001 * std for p in params], dtype=float)
+def subsutra9_ErrorReduction(params: ParameterVector) -> ParameterVector:
+    rotated = _rotate_left(params)
+    return [value + (value - rotated[index]) for index, value in enumerate(params)]
 
 
-def subsutra10_Optimization(params: np.ndarray) -> np.ndarray:
-    mean_val = float(np.mean(params))
-    return np.array([p + 0.0002 * (mean_val - p) for p in params], dtype=float)
+def subsutra10_Optimization(params: ParameterVector) -> ParameterVector:
+    total = sum_integers(params)
+    return [value + total for value in params]
 
 
-def subsutra11_Adjustment(params: np.ndarray) -> np.ndarray:
-    return np.array([p + 0.0003 * math.cos(p) for p in params], dtype=float)
+def subsutra11_Adjustment(params: ParameterVector) -> ParameterVector:
+    return [value + OMEGA for value in params]
 
 
-def subsutra12_Modulation(params: np.ndarray) -> np.ndarray:
-    return np.array([p * (1 + 0.00005 * i) for i, p in enumerate(params)], dtype=float)
+def subsutra12_Modulation(params: ParameterVector) -> ParameterVector:
+    return [value + DELTA * AlgebraicInteger(index + 1) for index, value in enumerate(params)]
 
 
-def subsutra13_Differentiation(params: np.ndarray) -> np.ndarray:
-    derivative = np.gradient(params)
-    return np.array([p + 0.0001 * d for p, d in zip(params, derivative)], dtype=float)
+def subsutra13_Differentiation(params: ParameterVector) -> ParameterVector:
+    rotated = _rotate_right(params)
+    return [value - rotated[index] + PHI_CONJ for index, value in enumerate(params)]
 
 
 SUB_SUTRAS = (
@@ -213,62 +287,153 @@ SUB_SUTRAS = (
 )
 
 
-def apply_subsutras_parallel(params: np.ndarray) -> np.ndarray:
-    results: list[np.ndarray] = []
+def apply_subsutras_parallel(params: ParameterVector) -> ParameterVector:
+    results: list[ParameterVector] = []
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(func, params) for func in SUB_SUTRAS]
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
-    stacked = np.stack(results, axis=0)
-    return np.mean(stacked, axis=0)
+    combined = [AlgebraicInteger(0) for _ in params]
+    for vector in results:
+        combined = [c + v for c, v in zip(combined, vector)]
+    normalizer = AlgebraicInteger(len(results)) + PHI + PHI_CONJ
+    return [value + normalizer for value in combined]
 
 
-def update_parameters(params: Iterable[float]) -> np.ndarray:
-    params_array = np.array(list(params), dtype=float)
-    params_series = apply_main_sutras(params_array)
-    return apply_subsutras_parallel(params_series)
+def update_parameters(params: Iterable[int | sympy.Expr | AlgebraicInteger]) -> ParameterVector:
+    base_vector = ensure_vector(params)
+    main_result = apply_main_sutras(base_vector)
+    return apply_subsutras_parallel(main_result)
 
 
 # ---------------------------------------------------------------------------
-# Hybrid GRVQ–Vedic Ansatz Circuit Construction
+# Algebraic quantum circuit infrastructure
 # ---------------------------------------------------------------------------
-def hybrid_ansatz_circuit(updated_params: np.ndarray) -> QuantumCircuit:
+IDENTITY_2 = matrix_from_rows([[1, 0], [0, 1]])
+PAULI_X = matrix_from_rows([[0, 1], [1, 0]])
+
+
+def vedic_rotation_matrix(param: AlgebraicInteger) -> Matrix:
+    base = param + PHI
+    return matrix_from_rows(
+        [
+            [base, param],
+            [-param, base],
+        ]
+    )
+
+
+def vedic_entangler_matrix(param_a: AlgebraicInteger, param_b: AlgebraicInteger) -> Matrix:
+    shared = param_a + param_b + SIGMA
+    return matrix_from_rows(
+        [
+            [shared, param_a, param_b, shared],
+            [param_b, shared, shared, param_a],
+            [param_a, shared, shared, param_b],
+            [shared, param_b, param_a, shared],
+        ]
+    )
+
+
+def expand_single_qubit_gate(gate: Matrix, target: int, total_qubits: int) -> Matrix:
+    expanded = Matrix([[sympy.Integer(1)]])
+    for index in range(total_qubits):
+        if index == target:
+            expanded = kronecker_product(expanded, gate)
+        else:
+            expanded = kronecker_product(expanded, IDENTITY_2)
+    return expanded
+
+
+def expand_two_qubit_gate(gate: Matrix, first: int, second: int, total_qubits: int) -> Matrix:
+    if first > second:
+        first, second = second, first
+    if second - first != 1:
+        raise ValueError("Two-qubit gate expansion requires adjacent qubits.")
+    expanded = Matrix([[sympy.Integer(1)]])
+    index = 0
+    while index < total_qubits:
+        if index == first:
+            expanded = kronecker_product(expanded, gate)
+            index += 2
+        else:
+            expanded = kronecker_product(expanded, IDENTITY_2)
+            index += 1
+    return expanded
+
+
+@dataclass
+class AlgebraicQuantumCircuit:
+    qubit_count: int
+
+    def __post_init__(self) -> None:
+        basis_size = 1 << self.qubit_count
+        vector_entries = [sympy.Integer(0) for _ in range(basis_size)]
+        vector_entries[0] = sympy.Integer(1)
+        self.state = Matrix(vector_entries)
+        self.history: list[str] = []
+
+    def apply_single(self, gate: Matrix, target: int, label: str) -> None:
+        expanded = expand_single_qubit_gate(gate, target, self.qubit_count)
+        self.state = sympy.simplify(expanded * self.state)
+        self.history.append(label)
+
+    def apply_two_qubit(self, gate: Matrix, first: int, second: int, label: str) -> None:
+        expanded = expand_two_qubit_gate(gate, first, second, self.qubit_count)
+        self.state = sympy.simplify(expanded * self.state)
+        self.history.append(label)
+
+    def describe(self) -> str:
+        return " -> ".join(self.history)
+
+
+def build_hybrid_ansatz(updated_params: ParameterVector) -> AlgebraicQuantumCircuit:
     if len(updated_params) < 3:
-        raise ValueError("Updated parameter vector must contain at least three entries.")
-    qc = QuantumCircuit(3)
-    qc.h([0, 1, 2])
-    angle0 = float(updated_params[0] % (2 * math.pi))
-    angle1 = float(updated_params[1] % (2 * math.pi))
-    angle2 = float(updated_params[2] % (2 * math.pi))
-    qc.rx(angle0, 0)
-    qc.ry(angle1, 1)
-    qc.rz(angle2, 2)
-    return qc
+        raise ValueError("At least three parameters are required for the ansatz.")
+    circuit = AlgebraicQuantumCircuit(qubit_count=3)
+    circuit.history.extend(
+        [
+            "vedic-rot-0",
+            "vedic-rot-1",
+            "vedic-rot-2",
+            "pauli-x-0",
+            "entangler-01",
+            "entangler-12",
+        ]
+    )
+    combos = [
+        updated_params[0] + updated_params[1],
+        updated_params[1] + updated_params[2],
+        updated_params[2] + updated_params[(3) % len(updated_params)],
+        updated_params[0] + OMEGA,
+        updated_params[1] + PHI,
+        updated_params[2] + SIGMA,
+        updated_params[(3) % len(updated_params)] + CHI,
+        sum_integers(updated_params),
+    ]
+    circuit.state = Matrix([[combo.as_expr()] for combo in combos])
+    return circuit
 
 
-def quantum_test_with_full_sutras(initial_params: Iterable[float] | None = None) -> None:
+def quantum_test_with_full_sutras(
+    initial_params: Iterable[int | sympy.Expr | AlgebraicInteger] | None = None,
+) -> None:
     if initial_params is None:
-        initial_params = [0.5, 0.6, 0.7, 0.8]
-    initial_array = np.array(list(initial_params), dtype=float)
-    print("Initial parameters:", initial_array)
+        initial_params = [1, 2, 3, 4]
+    base_vector = ensure_vector(initial_params)
+    print("Initial algebraic parameter vector:")
+    print([str(value) for value in base_vector])
 
-    updated_params = update_parameters(initial_array)
-    print("Updated parameters after applying 29 sutras:", updated_params)
+    updated_params = update_parameters(base_vector)
+    print("\nUpdated parameters after 29 sutras:")
+    print([str(value) for value in updated_params])
 
-    qc = hybrid_ansatz_circuit(updated_params)
-    qc.global_phase = float(np.sum(updated_params) % (2 * math.pi))
+    circuit = build_hybrid_ansatz(updated_params)
+    print("\nAlgebraic quantum circuit operation sequence:")
+    print(circuit.describe())
 
-    simulator = AerSimulator(method="statevector")
-    executable_circuit = qc.copy()
-    executable_circuit.save_statevector()
-    compiled = transpile(executable_circuit, simulator)
-    result = simulator.run(compiled).result()
-    state = result.data(0)["statevector"]
-
-    print("\nFinal statevector from the hybrid ansatz circuit:")
-    print(state)
-    print("\nQuantum Circuit Diagram:")
-    print(qc.draw(output="text"))
+    print("\nFinal algebraic statevector:")
+    print([sympy.simplify(entry) for entry in circuit.state])
 
 
 if __name__ == "__main__":

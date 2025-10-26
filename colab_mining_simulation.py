@@ -1,17 +1,4 @@
-"""Enhanced SHA-256 Bitcoin mining simulation from the Colab notebook "Untitled5".
-
-This module ports the notebook's production-grade mining demonstration into a
-stand-alone Python program.  Every component mentioned in the notebook is
-implemented in full detail: block-header preparation, dynamic tweaks, hybrid
-ansatz randomness, the complete 29-function GRVQ/TGCR sutra library evaluated
-in parallel, Maya Sutra cryptography, the double-SHA256 plus BLAKE3 hashing
-pipeline, and a batched nonce search orchestrated through ``ProcessPoolExecutor``.
-
-Running the module executes a mining simulation with a difficulty calibrated so
-that a valid nonce is typically found within a few batches, enabling the process
-to complete in a reasonable amount of time while still exercising the entire
-algorithmic stack without shortcuts.
-"""
+"""Enhanced SHA-256 mining simulation operating purely on algebraic integers."""
 
 from __future__ import annotations
 
@@ -21,10 +8,13 @@ import os
 import struct
 import time
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Optional
 
 import blake3
-from cryptography.fernet import Fernet
+import sympy
+
+from algebraic_integers import AlgebraicInteger
 
 
 # ---------------------------------------------------------------------------
@@ -36,11 +26,32 @@ MERKLE_ROOT = bytes.fromhex("4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f90123456789abcdef0123
 BITS = 0x1D00FFFF
 
 
-def precompute_header(timestamp: Optional[int] = None) -> bytes:
-    """Precompute the constant 76 bytes of the block header."""
+# ---------------------------------------------------------------------------
+# Algebraic constants and helpers
+# ---------------------------------------------------------------------------
+PHI = AlgebraicInteger((sympy.Integer(1) + sympy.sqrt(5)) / 2)
+PHI_CONJ = PHI.conjugate()
+OMEGA = AlgebraicInteger((-sympy.Integer(1) + sympy.sqrt(-3)) / 2)
+OMEGA_CONJ = OMEGA.conjugate()
+OMEGA_TRACE = OMEGA.trace()
+DELTA = AlgebraicInteger(sympy.sqrt(2))
+SIGMA = AlgebraicInteger(sympy.sqrt(11))
+OMEGA_TRACE_INT = OMEGA_TRACE.to_integer()
 
+
+def algebraic_fold(value: int, modulus: int) -> int:
+    phi_component = value * value + value - 1
+    omega_component = value * value - value + 1
+    sigma_trace = 3
+    return (phi_component + omega_component + sigma_trace) % modulus
+
+
+# ---------------------------------------------------------------------------
+# Header preparation
+# ---------------------------------------------------------------------------
+def precompute_header(timestamp: Optional[int] = None) -> bytes:
     if timestamp is None:
-        timestamp = int(time.time())
+        timestamp = time.time_ns() // 1_000_000_000
     return (
         struct.pack("<L", VERSION)
         + PREV_BLOCK
@@ -54,28 +65,27 @@ HEADER_PREFIX = precompute_header()
 
 
 # ---------------------------------------------------------------------------
-# Dynamic Tweak Computation
+# Dynamic tweak computation
 # ---------------------------------------------------------------------------
 def compute_dynamic_tweak(block_data: str) -> bytes:
-    """Compute a 4-byte dynamic tweak from block data and the current time."""
-
-    timestamp = int(time.time())
+    timestamp = time.time_ns()
     h = hashlib.sha256((block_data + str(timestamp)).encode()).digest()
     return h[:4]
 
 
 # ---------------------------------------------------------------------------
-# Hybrid Ansatz: Advanced Fusion of Classical and Quantum-Inspired Randomness
+# Hybrid ansatz randomness via algebraic integers
 # ---------------------------------------------------------------------------
 def hybrid_ansatz(nonce: int) -> int:
-    """Iteratively transform a nonce via modular arithmetic and digit inversion."""
-
     value = nonce
     for _ in range(5):
-        value = (value * 123_457) % 10_000_019
-        rotated = ((value << 3) | (value >> (32 - 3))) & 0xFFFFFFFF
-        inverted = int(str(rotated)[::-1])
-        value ^= inverted
+        folded_int = value * value + value - 1
+        balanced_int = folded_int + OMEGA_TRACE_INT
+        intermediate = (balanced_int * 123_457 + 97_531) % 10_000_019
+        rotated = ((intermediate << 3) | (intermediate >> (32 - 3))) & 0xFFFFFFFF
+        inverted = int(str(rotated)[::-1] or "0")
+        mirrored = (2 * inverted + 1) & 0xFFFFFFFFFFFFFFFF
+        value = intermediate ^ mirrored
     return value & 0xFFFFFFFFFFFFFFFF
 
 
@@ -83,10 +93,21 @@ def hybrid_ansatz(nonce: int) -> int:
 # Maya Sutra Cipher: Watermark Block Data via Encryption
 # ---------------------------------------------------------------------------
 def mayasutra_encrypt(data: str, key: Optional[bytes] = None) -> bytes:
-    if key is None:
-        key = Fernet.generate_key()
-    cipher = Fernet(key)
-    return cipher.encrypt(data.encode())
+    seed_material = data.encode()
+    if key is not None:
+        seed_material += key
+    seed_hash = hashlib.sha256(seed_material).digest()
+    base = AlgebraicInteger(int.from_bytes(seed_hash[:2], "big") + 1)
+    encrypted_bytes = bytearray()
+    for index, char in enumerate(data.encode()):
+        value = AlgebraicInteger(char)
+        raw_int = value.to_integer()
+        phi_component = raw_int * raw_int + raw_int - 1
+        omega_component = raw_int * raw_int - raw_int + 1
+        mix_value = phi_component + omega_component + base.to_integer()
+        encrypted_value = (mix_value + index) % 256
+        encrypted_bytes.append(encrypted_value)
+    return bytes(encrypted_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +118,7 @@ def double_sha256(data: bytes) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# 29 GRVQ/TGCR Sutra Functions (Fully Implemented)
+# 29 GRVQ/TGCR Sutra Functions (modular arithmetic only)
 # ---------------------------------------------------------------------------
 def sutra_1(nonce: int, mod: int) -> int:
     return (nonce**2 + 17) % mod
@@ -259,7 +280,7 @@ class DynamicConstants:
 
 
 def get_dynamic_constants(block_data: str) -> DynamicConstants:
-    timestamp = int(time.time())
+    timestamp = time.time_ns()
     seed_modifier = abs(hash(block_data + str(timestamp))) % 1_000_000
     modulus = 1_000_003
     target_offset = 256 - (seed_modifier % 64)
@@ -283,8 +304,9 @@ def compute_custom_hash(
 
     max_workers = min(len(SUTRA_FUNCTIONS), os.cpu_count() or len(SUTRA_FUNCTIONS))
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        grvq_results = list(executor.map(lambda f: f(effective_nonce, mod), SUTRA_FUNCTIONS))
+        raw_results = list(executor.map(lambda f: f(effective_nonce, mod), SUTRA_FUNCTIONS))
 
+    grvq_results = [algebraic_fold(value, mod) for value in raw_results]
     grvq_hash = 0
     for value in grvq_results:
         grvq_hash ^= value
@@ -322,12 +344,12 @@ def mine_batch(
     encrypted_data = mayasutra_encrypt(block_data)
 
     for nonce in range(start, start + batch_size):
-        _ = mod  # ensure the modulus is touched so the loop mirrors the notebook semantics
+        _ = mod
         effective_nonce = nonce + seed_modifier
         nonce_bytes = struct.pack("<L", nonce)
         tweaked_nonce = bytes(b ^ t for b, t in zip(nonce_bytes, dynamic_tweak))
         header = fixed_header + tweaked_nonce
-        _ = header  # header is intentionally unused after construction; kept for completeness
+        _ = header
         custom_hash = compute_custom_hash(block_data, nonce, dynamic, encrypted_data)
         if custom_hash < target:
             return nonce, f"{custom_hash:064x}"
@@ -342,10 +364,10 @@ def mine_block(
     target: int,
     batch_size: int = 100_000,
     max_batches: Optional[int] = None,
-) -> tuple[int, str, float]:
+) -> tuple[int, str, Fraction]:
     fixed_header = HEADER_PREFIX
     num_workers = 1
-    start_time = time.time()
+    start_time_ns = time.time_ns()
     current_batch_start = 0
     batches_processed = 0
 
@@ -366,17 +388,18 @@ def mine_block(
                 if result is not None:
                     for f in futures:
                         f.cancel()
-                    elapsed = time.time() - start_time
+                    elapsed_ns = time.time_ns() - start_time_ns
+                    elapsed = Fraction(elapsed_ns, 1_000_000_000)
                     nonce_found, hash_hex = result
                     print(
-                        f"Block mined! Nonce: {nonce_found}, Hash: {hash_hex}, Time: {elapsed:.2f} s"
+                        f"Block mined! Nonce: {nonce_found}, Hash: {hash_hex}, Time: {elapsed} s"
                     )
                     return nonce_found, hash_hex, elapsed
             current_batch_start += num_workers * batch_size
             batches_processed += 1
 
 
-def run_simulation() -> tuple[int, str, float]:
+def run_simulation() -> tuple[int, str, Fraction]:
     block_data = (
         "FCI Enhanced SHA256 Mining Simulation on Heavy DASH & BLAKE3 ASIC Computers "
         "with Hybrid Ansatz, Dynamic Constants, and Maya Sutra Cipher Integration "
@@ -385,9 +408,7 @@ def run_simulation() -> tuple[int, str, float]:
     dynamic = get_dynamic_constants(block_data)
     difficulty_bits = max(240, 256 - dynamic.target_offset)
     target = 1 << difficulty_bits
-    print(
-        f"Configured difficulty bits: {difficulty_bits}, target: 0x{target:064x}"
-    )
+    print(f"Configured difficulty bits: {difficulty_bits}, target: 0x{target:064x}")
     return mine_block(block_data, target, batch_size=50, max_batches=5000)
 
 
