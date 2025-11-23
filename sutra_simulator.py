@@ -15,10 +15,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from time import perf_counter
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
+
+ArgumentResolver = Callable[[str, Any, SutraContext, Any], Tuple[Tuple[Any, ...], Dict[str, Any]]]
 
 
 @dataclass
@@ -72,12 +74,17 @@ def _build_context(template: SutraContext, *, mode: Optional[SutraMode] = None) 
     return context
 
 
-def _execute_sutra(name: str, value: Any, context: SutraContext) -> SutraExecution:
+def _execute_sutra(
+    name: str,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+    context: SutraContext,
+) -> SutraExecution:
     """Execute a sutra inside the current process."""
 
     repo = SutraRepository(context)
     start = perf_counter()
-    result = repo.call_sutra(name, value, ctx=context)
+    result = repo.call_sutra(name, *args, ctx=context, **kwargs)
     elapsed = perf_counter() - start
     return SutraExecution(name=name, output=result, elapsed=elapsed)
 
@@ -91,10 +98,11 @@ def _execute_sutra_process(payload: Dict[str, Any]) -> SutraExecution:
     """
 
     name = payload["name"]
-    value = payload["value"]
+    args = payload["args"]
+    kwargs = payload["kwargs"]
     context_kwargs = payload["context_kwargs"]
     context = SutraContext(**context_kwargs)
-    return _execute_sutra(name, value, context)
+    return _execute_sutra(name, args, kwargs, context)
 
 
 class HybridQuantumClassicalSimulator:
@@ -106,12 +114,18 @@ class HybridQuantumClassicalSimulator:
         *,
         max_workers: Optional[int] = None,
         aggregation: Optional[Callable[[Any, SutraExecution], Any]] = None,
+        sutra_filter: Optional[Callable[[str], bool]] = None,
+        argument_resolver: Optional[ArgumentResolver] = None,
     ) -> None:
         self._base_context = context or SutraContext()
         self._repository = SutraRepository(self._base_context)
-        self._sutra_names = self._repository.list_sutras()
+        names = self._repository.list_sutras()
+        if sutra_filter is not None:
+            names = [name for name in names if sutra_filter(name)]
+        self._sutra_names = names
         self._max_workers = max_workers
         self._aggregation = aggregation or self._default_aggregation
+        self._argument_resolver = argument_resolver or self._default_argument_resolver
 
     @property
     def sutra_names(self) -> Iterable[str]:
@@ -121,6 +135,25 @@ class HybridQuantumClassicalSimulator:
         """Default aggregation simply forwards the most recent output."""
 
         return execution.output
+
+    def _default_argument_resolver(
+        self,
+        name: str,
+        current_value: Any,
+        context: SutraContext,
+        initial_value: Any,
+    ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        return (current_value,), {}
+
+    def _resolve_arguments(
+        self,
+        name: str,
+        current_value: Any,
+        context: SutraContext,
+        initial_value: Any,
+    ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        args, kwargs = self._argument_resolver(name, current_value, context, initial_value)
+        return tuple(args), dict(kwargs)
 
     def run_serial(
         self,
@@ -132,13 +165,22 @@ class HybridQuantumClassicalSimulator:
 
         context = _build_context(self._base_context, mode=mode)
         repo = SutraRepository(context)
+        initial_value: Any = value
         aggregate_value: Any = value
         report = SimulationReport(mode=context.mode, initial_value=value)
         wall_start = perf_counter()
 
         for name in self._sutra_names:
             start = perf_counter()
-            aggregate_value = repo.call_sutra(name, aggregate_value, ctx=context)
+            args, call_kwargs = self._resolve_arguments(
+                name, aggregate_value, context, initial_value
+            )
+            aggregate_value = repo.call_sutra(
+                name,
+                *args,
+                ctx=context,
+                **call_kwargs,
+            )
             elapsed = perf_counter() - start
             execution = SutraExecution(name=name, output=aggregate_value, elapsed=elapsed)
             report.executions.append(execution)
@@ -163,7 +205,10 @@ class HybridQuantumClassicalSimulator:
 
         def submit(name: str) -> SutraExecution:
             local_context = _build_context(context, mode=context.mode)
-            return _execute_sutra(name, value, local_context)
+            args, call_kwargs = self._resolve_arguments(
+                name, value, local_context, value
+            )
+            return _execute_sutra(name, args, call_kwargs, local_context)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {executor.submit(submit, name): name for name in self._sutra_names}
@@ -202,10 +247,17 @@ class HybridQuantumClassicalSimulator:
             "parallel": False,
         }
 
-        payloads = [
-            {"name": name, "value": value, "context_kwargs": context_kwargs}
-            for name in self._sutra_names
-        ]
+        payloads = []
+        for name in self._sutra_names:
+            args, call_kwargs = self._resolve_arguments(name, value, context, value)
+            payloads.append(
+                {
+                    "name": name,
+                    "args": args,
+                    "kwargs": call_kwargs,
+                    "context_kwargs": context_kwargs,
+                }
+            )
 
         with ProcessPoolExecutor(max_workers=self._max_workers) as executor:
             futures = {executor.submit(_execute_sutra_process, payload): payload["name"] for payload in payloads}
