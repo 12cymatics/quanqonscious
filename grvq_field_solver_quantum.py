@@ -122,44 +122,54 @@ def _grvq_field_solver_quantum(self, r: Union[float, np.ndarray, torch.Tensor],
     counts = result.histogram(key='result')
     prob_one = counts.get(1, 0) / 10000
     
-    # Convert probability to field value using detailed calibration
-    # Calculate the exact classical field components for precise calibration
-    epsilon = 1e-8  # Numerical stability constant
-    
-    # Radial suppression term (singularity-free)
-    r0_squared = 1.0
-    radial_term = 1.0 - r * r / (r * r + r0_squared)
-    
-    # Shape functions for the product term
-    # S₁: Spherical harmonic-inspired
-    S1_classical = np.sin(theta) * np.cos(phi) * np.exp(-0.1 * r)
-    
-    # S₂: Toroidal function-inspired
-    S2_classical = np.cos(theta) * np.sin(phi) * np.exp(-0.05 * r * r)
-    
-    # Vedic wave function (inspired by Vedic polynomials)
-    f_vedic_classical = np.sin(r + theta + phi) + 0.5 * np.cos(2 * (r + theta + phi))
-    
-    # Combine using the GRVQ ansatz
-    product_term1_classical = 1.0 - 1.0 / (abs(S1_classical) + epsilon)
-    product_term2_classical = 1.0 - 2.0 / (abs(S2_classical) + epsilon)
-    
-    # Apply Turyavrtti factor to affect the field dynamics
-    turyavrtti_modulation_classical = 1.0 + turyavrtti_factor * np.sin(np.pi * r * theta * phi)
-    
-    # Final GRVQ field calculation for calibration reference
-    grvq_field_classical = product_term1_classical * product_term2_classical * radial_term * f_vedic_classical * turyavrtti_modulation_classical
-    
-    # Determine amplitude scaling factor based on measured probability and classical reference
-    scaling_factor = abs(grvq_field_classical) / (prob_one + epsilon) if prob_one > epsilon else 1.0
-    
-    # Apply scaling and sign correction to obtain final quantum field value
-    grvq_field_quantum = prob_one * scaling_factor * np.sign(grvq_field_classical)
-    
-    # Apply quantum correction factor based on empirical calibration
-    quantum_correction = 1.0 + 0.05 * np.sin(np.pi * r * theta * phi)
-    grvq_field_final = grvq_field_quantum * quantum_correction
-    
+    # Convert quantum measurement probability directly to field value
+    # The quantum circuit has encoded all GRVQ field components through:
+    # - Spatial coordinate encoding in qubit rotations
+    # - Entanglement representing field couplings
+    # - Phase accumulation from shape functions and Vedic terms
+    # - Multi-controlled gates combining all effects
+
+    # Map measurement probability [0,1] to field value range
+    # Probability near 0.5 indicates balanced quantum state (field ~0)
+    # Probability near 0 or 1 indicates strong field deviation
+
+    # Convert to signed field value using prob_one measurement
+    # Center around 0.5 to get symmetric positive/negative field
+    prob_centered = prob_one - 0.5  # Range: [-0.5, 0.5]
+
+    # Scale to physical field magnitude based on input parameters
+    # Field strength increases with larger r, theta, phi values
+    coordinate_magnitude = np.sqrt(r**2 + theta**2 + phi**2)
+    field_scale = coordinate_magnitude * (1.0 + abs(turyavrtti_factor))
+
+    # Apply quantum-derived field value
+    # The sign and magnitude come purely from quantum measurement
+    grvq_field_quantum = prob_centered * field_scale * 10.0  # Scale factor for physical units
+
+    # Add quantum interference effects from secondary measurements
+    # Measure additional qubits to get phase information
+    circuit_phase = cirq.Circuit()
+    # Copy state preparation from main circuit (without final measurement)
+    for moment in circuit[:-1]:
+        circuit_phase.append(moment)
+
+    # Measure qubits 0-3 to extract encoded phase information
+    circuit_phase.append(cirq.measure(qubits[0], qubits[1], qubits[2], qubits[3], key='phase'))
+
+    simulator = cirq.Simulator()
+    result_phase = simulator.run(circuit_phase, repetitions=1000)
+    phase_counts = result_phase.histogram(key='phase')
+
+    # Calculate phase-based modulation from measurement distribution
+    phase_modulation = 0.0
+    for bitstring, count in phase_counts.items():
+        # Convert bitstring to signed value
+        signed_val = (bitstring / 15.0) - 0.5  # Normalize to [-0.5, 0.5]
+        phase_modulation += signed_val * (count / 1000.0)
+
+    # Final quantum field value combining amplitude and phase measurements
+    grvq_field_final = grvq_field_quantum * (1.0 + 0.2 * phase_modulation)
+
     return grvq_field_final
 
 def _grvq_field_solver_hybrid(self, r: Union[float, np.ndarray, torch.Tensor],
