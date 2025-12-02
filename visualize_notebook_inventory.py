@@ -137,7 +137,8 @@ def create_visualizations():
                    'With Dask', 'With TensorFlow']
     combo_counts = [full_stack, quantum_only, cuda_mpi, minimal, has_dask, has_tensorflow]
 
-    bars = ax4.bar(combinations, combo_counts, color=colors[:6],
+    x_pos = np.arange(len(combinations))
+    bars = ax4.bar(x_pos, combo_counts, color=colors[:6],
                    edgecolor='black', linewidth=1.2, alpha=0.8)
     ax4.set_ylabel('Number of Notebooks', fontsize=11)
     ax4.set_title('Feature Combination Analysis', fontsize=12, fontweight='bold', pad=15)
@@ -150,6 +151,7 @@ def create_visualizations():
                 f'{int(count)}', ha='center', va='bottom', fontsize=11, fontweight='bold')
 
     ax4.grid(axis='y', alpha=0.3)
+    ax4.set_xticks(x_pos)
     ax4.set_xticklabels(combinations, rotation=15, ha='right')
 
     # Add overall title
@@ -198,7 +200,7 @@ def create_detailed_notebook_table():
     for i, notebook in enumerate(notebooks):
         row = [notebook]
         for feature in features.keys():
-            value = '✓' if features[feature][i] == 1 else '—'
+            value = 'X' if features[feature][i] == 1 else '-'
             row.append(value)
         table_data.append(row)
 
@@ -217,14 +219,24 @@ def create_detailed_notebook_table():
         cell.set_facecolor('#4472C4')
         cell.set_text_props(weight='bold', color='white')
 
-    # Alternate row colors
+    # Color code cells based on feature presence
     for i in range(1, len(table_data) + 1):
         for j in range(len(headers)):
             cell = table[(i, j)]
-            if i % 2 == 0:
-                cell.set_facecolor('#E7E6E6')
-            else:
-                cell.set_facecolor('#F2F2F2')
+            if j == 0:  # Notebook name column
+                if i % 2 == 0:
+                    cell.set_facecolor('#E7E6E6')
+                else:
+                    cell.set_facecolor('#F2F2F2')
+            else:  # Feature columns
+                if table_data[i-1][j] == 'X':
+                    cell.set_facecolor('#90EE90')  # Light green for present features
+                    cell.set_text_props(weight='bold')
+                else:
+                    if i % 2 == 0:
+                        cell.set_facecolor('#FFE6E6')  # Light red for absent features
+                    else:
+                        cell.set_facecolor('#FFD6D6')
 
     plt.title('Detailed Notebook Feature Matrix',
               fontsize=14, fontweight='bold', pad=20)
