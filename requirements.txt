@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
 
 # Numerical and scientific computing libraries
@@ -16,14 +17,9 @@ matplotlib==3.10.3
 # Cryptography for Maya key encryption
 cryptography==45.0.5
 
-# JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
-jax==0.7.0
-jaxlib==0.7.0  # for CUDA GPU support install jaxlib==0.7.0+cuda12.cudnn98
-
-# Additional machine learning and quantum libraries
-torch==2.7.1
-cudaq==0.11.0
-union==0.1.189
+# GPU acceleration libraries
+cupy>=12.0.0
+numba>=0.59.0
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest==8.4.1

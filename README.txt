@@ -1,3 +1,4 @@
+SPDX-License-Identifier: Apache-2.0
 QuanQonscious: GRVQ-TTGCR Hybrid Quantum-Classical Simulation Framework
 =======================================================================
 
@@ -14,7 +15,7 @@ It provides:
   • TTGCR hardware driver simulation (frequency setting, sensor feedback, entropy
     monitoring) without kill switch routines.
   • An HPC 4D PDE solver with MPI-based block-cyclic memory management and GPU
-    acceleration (using JAX for CUDA A100).
+    acceleration (leveraging CuPy and Numba CUDA kernels for A100).
   • A Bioelectric DNA Encoder module employing fractal Hilbert curve transformation.
   • Extended quantum circuit simulation using Cirq.
   • Automated performance profiling, dynamic dependency updating, and integrated
@@ -24,13 +25,15 @@ It provides:
 
 Installation:
 -------------
-This project requires **Python 3.12** or later.  The exact package versions are
-pinned in ``requirements.txt`` to ensure a smooth install.  Install everything
-with
+This package requires Python 3.10+, along with the following dependencies:
+  - numpy, scipy, cupy, numba
+  - mpi4py
+  - cirq
+  - hashlib (standard library)
+  - Other standard packages
 
-```
-pip install -r requirements.txt
-```
+To install the required dependencies, run:
+    pip install numpy scipy cupy numba mpi4py cirq
 
 The ``jaxlib`` entry pins the CPU build (``jaxlib==0.7.0``).  To use GPU
 acceleration on CUDA 12 hardware you may instead install the corresponding
@@ -43,7 +46,7 @@ Import the main module in your application:
                              hpc_quantum_simulation, BioelectricDNAEncoder,
                              extended_quantum_simulation_cirq, orchestrate_simulation,
                              run_full_benchmark, FutureExtensions)
-                             
+
 Then use the provided classes and functions to build your simulation workflow.
 
 Visualization Utility
