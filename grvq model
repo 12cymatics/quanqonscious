@@ -186,7 +186,9 @@ class VedicSutraEngine:
     13. Gunitasamuccayah Samuccayagunitah - Product of sum equals sum of product
     """
 
-    pass
+    # The sutra implementations are bound after their standalone definitions
+    # to maintain the exact textual algorithms while providing a class-based
+    # API for the unified simulator.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA METADATA REGISTRY
@@ -1069,6 +1071,48 @@ def list_all_sutras(cls) -> List[Dict[str, Any]]:
     ]
 # ```
 
+# Bind sutra registry and implementations onto the class-based API
+VEDIC_SUTRA_METHODS = [
+    'sutra_01_ekadhikena_purvena',
+    'sutra_02_nikhilam',
+    'sutra_02_nikhilam_multiply',
+    'sutra_03_urdhva_tiryagbhyam',
+    'sutra_04_paravartya',
+    'sutra_05_shunyam_samya',
+    'sutra_06_anurupye',
+    'sutra_07_sankalana_vyavakalana',
+    'sutra_08_puranapurana',
+    'sutra_09_calana_kalana',
+    'sutra_10_yavadunam',
+    'sutra_11_vyashti_samashti',
+    'sutra_12_sheshanyankena',
+    'sutra_13_sopantyadvayam',
+    'sutra_14_ekanyunena',
+    'sutra_15_gunitasamuccaya',
+    'sutra_16_gunakasamuccaya',
+    'sutra_17_anurupyena',
+    'sutra_18_shishyate',
+    'sutra_19_adyam_adyena',
+    'sutra_20_kevalaih_saptakam',
+    'sutra_21_vestanam',
+    'sutra_22_yavadunam_tavadunam',
+    'sutra_23_yavadunam_varga',
+    'sutra_24_antyayor_dashake',
+    'sutra_25_antyayor_eva',
+    'sutra_26_samuccaya_gunitah',
+    'sutra_27_lopana_sthapana',
+    'sutra_28_vilokanam',
+    'sutra_29_gunitasamuccaya_samuccayagunitah',
+]
+
+VedicSutraEngine.SUTRA_REGISTRY = SUTRA_REGISTRY
+for _method_name in VEDIC_SUTRA_METHODS:
+    setattr(VedicSutraEngine, _method_name, staticmethod(globals()[_method_name]))
+
+VedicSutraEngine.apply_sutra = classmethod(apply_sutra)
+VedicSutraEngine.get_sutra_metadata = classmethod(get_sutra_metadata)
+VedicSutraEngine.list_all_sutras = classmethod(list_all_sutras)
+
 # End of Part 1 - Vedic Sutra Engine
 
 # Continue to Part 2: Wheeler Field Theory + Quantum Framework + GRVQ Unification
@@ -1098,71 +1142,71 @@ class WheelerHyperboloidGeometry:
     R0: Fraction = Fraction(1)
     epsilon: Fraction = Fraction(1, 10)
 
-def shape_function(self, r: Fraction, theta: Fraction) -> Dict[str, Any]:
-    """
-    EXACT: shape(r, θ) = cosh(θ) × exp(-(r/R₀)²)
-    """
-    r_normalized = r / self.R0
-    r_squared = r_normalized * r_normalized
-    
-    return {
-        'r': r,
-        'theta': theta,
-        'R0': self.R0,
-        'r_normalized': r_normalized,
-        'r_squared_over_R0_squared': r_squared,
-        'formula': 'cosh(θ) × exp(-r²/R₀²)',
-        'value_float': math.cosh(float(theta)) * math.exp(-float(r_squared))
-    }
+    def shape_function(self, r: Fraction, theta: Fraction) -> Dict[str, Any]:
+        """
+        EXACT: shape(r, θ) = cosh(θ) × exp(-(r/R₀)²)
+        """
+        r_normalized = r / self.R0
+        r_squared = r_normalized * r_normalized
 
-def radial_factor(self, r: Fraction) -> Dict[str, Fraction]:
-    """
-    EXACT: radial_factor = φ³ × (1 - r²/(r² + ε²))
-    
-    This φ³-weighted factor amplifies central curvature.
-    """
-    r_sq = r * r
-    eps_sq = self.epsilon * self.epsilon
-    denominator = r_sq + eps_sq
-    
-    if denominator == 0:
-        raise ValueError("Denominator r² + ε² = 0")
-    
-    core_factor = Fraction(1) - r_sq / denominator
-    result = PHI_CUBED * core_factor
-    
-    return {
-        'r': r,
-        'epsilon': self.epsilon,
-        'r_squared': r_sq,
-        'epsilon_squared': eps_sq,
-        'core_factor': core_factor,
-        'phi_cubed': PHI_CUBED,
-        'radial_factor': result,
-        'formula': 'φ³ × (1 - r²/(r² + ε²))'
-    }
+        return {
+            'r': r,
+            'theta': theta,
+            'R0': self.R0,
+            'r_normalized': r_normalized,
+            'r_squared_over_R0_squared': r_squared,
+            'formula': 'cosh(θ) × exp(-r²/R₀²)',
+            'value_float': math.cosh(float(theta)) * math.exp(-float(r_squared))
+        }
 
-def ansatz_modification(self, r: Fraction, theta: Fraction,
-                        alpha_h: Fraction, base_term: Fraction) -> Dict[str, Any]:
-    """
-    EXACT: term *= (1 + α_h × φ³ × shape_hyperboloid(r, θ))
-    """
-    shape = self.shape_function(r, theta)
-    shape_rational = Fraction(shape['value_float']).limit_denominator(10**15)
-    
-    modification = Fraction(1) + alpha_h * PHI_CUBED * shape_rational
-    result = base_term * modification
-    
-    return {
-        'r': r,
-        'theta': theta,
-        'alpha_h': alpha_h,
-        'phi_cubed': PHI_CUBED,
-        'shape_value': shape_rational,
-        'modification_factor': modification,
-        'result': result,
-        'formula': 'base × (1 + α_h × φ³ × shape(r,θ))'
-    }
+    def radial_factor(self, r: Fraction) -> Dict[str, Fraction]:
+        """
+        EXACT: radial_factor = φ³ × (1 - r²/(r² + ε²))
+
+        This φ³-weighted factor amplifies central curvature.
+        """
+        r_sq = r * r
+        eps_sq = self.epsilon * self.epsilon
+        denominator = r_sq + eps_sq
+
+        if denominator == 0:
+            raise ValueError("Denominator r² + ε² = 0")
+
+        core_factor = Fraction(1) - r_sq / denominator
+        result = PHI_CUBED * core_factor
+
+        return {
+            'r': r,
+            'epsilon': self.epsilon,
+            'r_squared': r_sq,
+            'epsilon_squared': eps_sq,
+            'core_factor': core_factor,
+            'phi_cubed': PHI_CUBED,
+            'radial_factor': result,
+            'formula': 'φ³ × (1 - r²/(r² + ε²))'
+        }
+
+    def ansatz_modification(self, r: Fraction, theta: Fraction,
+                            alpha_h: Fraction, base_term: Fraction) -> Dict[str, Any]:
+        """
+        EXACT: term *= (1 + α_h × φ³ × shape_hyperboloid(r, θ))
+        """
+        shape = self.shape_function(r, theta)
+        shape_rational = Fraction(shape['value_float']).limit_denominator(10**15)
+
+        modification = Fraction(1) + alpha_h * PHI_CUBED * shape_rational
+        result = base_term * modification
+
+        return {
+            'r': r,
+            'theta': theta,
+            'alpha_h': alpha_h,
+            'phi_cubed': PHI_CUBED,
+            'shape_value': shape_rational,
+            'modification_factor': modification,
+            'result': result,
+            'formula': 'base × (1 + α_h × φ³ × shape(r,θ))'
+        }
 # ```
 
 @dataclass
