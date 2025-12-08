@@ -1,26 +1,8 @@
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from typing import Any, Dict
-import inspect
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Tuple
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
-
-
-def _prepare_args(func: Any, value: Any) -> list:
-    """Generate default arguments for a sutra function."""
-    sig = inspect.signature(func)
-    args = []
-    for name, param in sig.parameters.items():
-        if name in {"self", "ctx"}:
-            continue
-        if param.kind in (inspect.Parameter.POSITIONAL_ONLY,
-                          inspect.Parameter.POSITIONAL_OR_KEYWORD):
-            if param.default is inspect.Parameter.empty:
-                if any(key in name for key in ("coeff", "angles", "values",
-                                               "parts", "list", "vector")):
-                    args.append([value, value])
-                else:
-                    args.append(value)
-    return args
+from qiskit_backend import execute_ghz
 
 
 def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:

@@ -43,7 +43,7 @@ Import the main module in your application:
                              hpc_quantum_simulation, BioelectricDNAEncoder,
                              extended_quantum_simulation_cirq, orchestrate_simulation,
                              run_full_benchmark, FutureExtensions)
-                             
+
 Then use the provided classes and functions to build your simulation workflow.
 
 The :class:`SutraRepository` provides a convenient interface to call any of the
@@ -60,6 +60,20 @@ result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
 # switch to quantum mode
 repo.update_context(mode=SutraMode.QUANTUM)
 quantum_result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
+```
+
+For whole-of-library execution, ``sutra_simulator.HybridQuantumClassicalSimulator``
+offers pre-built serial, concurrent (threaded) and parallel (multi-process)
+drivers.  This simulator ensures deterministic aggregation of all 29 sutras and
+provides structured timing reports:
+
+```python
+from sutra_simulator import HybridQuantumClassicalSimulator
+from primarysutra import SutraMode, SutraContext
+
+simulator = HybridQuantumClassicalSimulator(SutraContext(mode=SutraMode.HYBRID))
+report = simulator.run_parallel(value=108)
+print(report.to_dict())
 ```
 
 Documentation:
