@@ -132,7 +132,13 @@ class VedicSutras:
             
         # Initialize quantum backend if in quantum or hybrid mode
         if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
-            if self.context.quantum_backend is None:
+            if cudaq is None:
+                logger.warning(
+                    "cudaq is unavailable; reverting to classical mode for sutra execution"
+                )
+                self.context.mode = SutraMode.CLASSICAL
+                self.quantum_platform = None
+            elif self.context.quantum_backend is None:
                 # Default to CUDAQ simulator
                 self.quantum_platform = cudaq.get_platform()
                 logger.info(f"Using CUDAQ platform: {self.quantum_platform.name()}")
@@ -1897,7 +1903,7 @@ class VedicSutras:
             return x - 1
 
     def anurupyena(self, a: Union[float, np.ndarray, torch.Tensor],
-                  b: Union[float, np.ndarray, torch.Tensor],
+                  b: Optional[Union[float, np.ndarray, torch.Tensor]] = None,
                   ratio: float = 0.618,
                   ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -1920,7 +1926,10 @@ class VedicSutras:
         
         Args:
             a: First value or array
-            b: Second value or array
+            b: Second value or array. When omitted, the current
+                :class:`SutraContext` base is used as the proportional
+                partner so the sutra remains invocable with a single
+                positional argument within serial pipelines.
             ratio: Proportionality ratio (default: golden ratio)
             ctx: Optional execution context override
             
@@ -1933,6 +1942,14 @@ class VedicSutras:
         data_size = np.size(a) if hasattr(a, 'size') else 1
         
         try:
+            if b is None:
+                if isinstance(a, torch.Tensor):
+                    b = torch.full_like(a, fill_value=float(context.base))
+                elif isinstance(a, np.ndarray):
+                    b = np.full_like(a, fill_value=context.base)
+                else:
+                    b = context.base
+
             # Convert to device if using GPU
             a_device = self._to_device(a)
             b_device = self._to_device(b)

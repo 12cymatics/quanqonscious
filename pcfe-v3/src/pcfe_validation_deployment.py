@@ -17,8 +17,6 @@ from hypothesis.extra.numpy import arrays
 import cupy as cp
 import cudaq
 import cirq
-import qiskit
-from qiskit.quantum_info import state_fidelity, process_fidelity
 from scipy.stats import ks_2samp, chi2_contingency
 from scipy.special import rel_entr
 import matplotlib.pyplot as plt

@@ -2,7 +2,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import importlib
 
-from .primarysutra import VedicSutras, SutraContext, SutraMode
+try:
+    from .primarysutra import VedicSutras, SutraContext, SutraMode
+except ImportError:  # pragma: no cover - allow running as a script
+    from primarysutra import VedicSutras, SutraContext, SutraMode
 
 class SutraRepository:
     """Lightweight wrapper exposing all sutras as callable functions."""
@@ -53,8 +56,13 @@ class SutraRepository:
         """Return available sutra names."""
         return sorted(self._methods.keys())
 
-    def call_sutra(self, name: str, *args, ctx: Optional[SutraContext] = None,
-                   **kwargs) -> Any:
+    def call_sutra(
+        self,
+        name: str,
+        *args: Any,
+        ctx: Optional[SutraContext] = None,
+        **kwargs: Any,
+    ) -> Any:
         """Invoke a sutra by name with the provided arguments.
 
         Parameters
@@ -73,8 +81,7 @@ class SutraRepository:
 
         # Ensure a context is passed if the sutra implementation accepts one
         if 'ctx' not in kwargs:
-            kwargs['ctx'] = ctx or self.context
-
+            kwargs = {**kwargs, 'ctx': ctx or self.context}
         return func(*args, **kwargs)
 
     def update_context(self, **kwargs: Any) -> None:
