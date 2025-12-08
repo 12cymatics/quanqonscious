@@ -14,15 +14,14 @@ measurement counts suitable for downstream classical-quantum fusion.
 
 from __future__ import annotations
 
-from typing import Dict
-
-from qiskit import IBMQ, QuantumCircuit, transpile
+from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit.result import Counts
+from qiskit_ibm_runtime import QiskitRuntimeService
 
 
 # User-provided IBM Quantum API token enabling remote execution on IBM's
-# cloud backends.  The key is embedded directly per user request to allow the
+# cloud backends. The key is embedded directly per user request to allow the
 # framework to authenticate without external configuration files.
 IBMQ_API_KEY = "ApiKey-4781ceaa-523c-4404-bc6d-a991cc1d847d"
 
@@ -74,12 +73,12 @@ def execute_ghz_ibmq(
     shots: int = 1024,
     backend_name: str = "ibmq_qasm_simulator",
 ) -> Counts:
-    """Execute a GHZ state on an IBM Quantum backend authenticated by API key.
+    """Execute a GHZ state on an IBM Quantum backend via Qiskit Runtime.
 
     This routine mirrors :func:`execute_ghz` but targets IBM's cloud
-    infrastructure.  It programmatically enables the user's account using the
-    embedded API key, fetches the specified backend, and runs the fully
-    transpiled circuit.
+    infrastructure. It authenticates using the embedded API key, retrieves the
+    requested backend through :class:`qiskit_ibm_runtime.QiskitRuntimeService`,
+    and runs the transpiled circuit.
 
     Parameters
     ----------
@@ -101,11 +100,8 @@ def execute_ghz_ibmq(
     if num_qubits < 1:
         raise ValueError("num_qubits must be positive")
 
-    if not IBMQ.active_account():
-        IBMQ.enable_account(IBMQ_API_KEY)
-
-    provider = IBMQ.get_provider(hub="ibm-q")
-    backend = provider.get_backend(backend_name)
+    service = QiskitRuntimeService(channel="ibm_quantum_platform", token=IBMQ_API_KEY)
+    backend = service.backend(backend_name)
 
     circuit = QuantumCircuit(num_qubits, num_qubits, name="ghz")
     circuit.h(0)
