@@ -261,6 +261,37 @@ def hybrid_ghz_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]:
     return {"sutra_result": sutra_result, "quantum_counts": quantum_counts}
 
 
+def hybrid_ghz_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]:
+    """Run a hybrid sutra workflow and entangle ``num_qubits`` via Qiskit.
+
+    The provided value is first processed through a representative sutra
+    (``ekadhikena_purvena``) in hybrid mode.  In parallel, a GHZ circuit
+    spanning ``num_qubits`` qubits is constructed and executed using
+    :func:`qiskit_backend.execute_ghz`.  The two results are returned together,
+    enabling subsequent fusion or analysis steps.
+
+    Parameters
+    ----------
+    value:
+        Initial numeric value supplied to the sutra pipeline.
+    num_qubits:
+        Number of qubits for the GHZ circuit. Defaults to 29 to mirror the
+        count of Vedic sutras.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the final sutra output under ``"sutra_result"``
+        and the GHZ measurement counts under ``"quantum_counts"``.
+    """
+
+    ctx = SutraContext(mode=SutraMode.HYBRID)
+    repo = SutraRepository(ctx)
+    sutra_result = repo.call_sutra("ekadhikena_purvena", value, ctx=ctx)
+    quantum_counts = execute_ghz(num_qubits=num_qubits)
+    return {"sutra_result": sutra_result, "quantum_counts": quantum_counts}
+
+
 if __name__ == "__main__":
     import argparse
 
