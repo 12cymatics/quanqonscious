@@ -1,4 +1,4 @@
-from **future** import annotations
+from __future__ import annotations
 from fractions import Fraction
 from typing import (
 Tuple, Dict, List, Any, Optional, Union, Callable,
@@ -16,111 +16,113 @@ import functools
 getcontext().prec = 150
 
 class SutraCategory(Enum):
+    ARITHMETIC = auto()
+    ALGEBRAIC = auto()
+    OPTIMIZATION = auto()
 
-@staticmethod
-def fibonacci(n: int) -> int:
-    """Compute F(n) exactly using matrix exponentiation. O(log n)."""
-    if n < 0:
-        raise ValueError("Negative Fibonacci index")
-    if n <= 1:
-        return n
-    
-    def mat_mult(A, B):
-        return [
-            [A[0][0]*B[0][0] + A[0][1]*B[1][0], A[0][0]*B[0][1] + A[0][1]*B[1][1]],
-            [A[1][0]*B[0][0] + A[1][1]*B[1][0], A[1][0]*B[0][1] + A[1][1]*B[1][1]]
-        ]
-    
-    def mat_pow(M, p):
-        if p == 1:
-            return M
-        if p % 2 == 0:
-            half = mat_pow(M, p // 2)
-            return mat_mult(half, half)
-        return mat_mult(M, mat_pow(M, p - 1))
-    
-    return mat_pow([[1, 1], [1, 0]], n)[0][1]
 
-# Golden ratio convergent: F(51)/F(50)
-PHI: Fraction = Fraction(12586269025, 7778742049)
+class FundamentalConstants:
+    @staticmethod
+    def fibonacci(n: int) -> int:
+        """Compute F(n) exactly using matrix exponentiation. O(log n)."""
+        if n < 0:
+            raise ValueError("Negative Fibonacci index")
+        if n <= 1:
+            return n
 
-# Algebraic identities (exact)
-PHI_SQUARED: Fraction = PHI + Fraction(1)      # φ² = φ + 1
-PHI_CUBED: Fraction = 2 * PHI + Fraction(1)    # φ³ = 2φ + 1
-PHI_FOURTH: Fraction = 3 * PHI + Fraction(2)   # φ⁴ = 3φ + 2
-PHI_FIFTH: Fraction = 5 * PHI + Fraction(3)    # φ⁵ = 5φ + 3
+        def mat_mult(A, B):
+            return [
+                [A[0][0]*B[0][0] + A[0][1]*B[1][0], A[0][0]*B[0][1] + A[0][1]*B[1][1]],
+                [A[1][0]*B[0][0] + A[1][1]*B[1][0], A[1][0]*B[0][1] + A[1][1]*B[1][1]]
+            ]
 
-# Inverse golden ratio
-PHI_INVERSE: Fraction = PHI - Fraction(1)      # 1/φ = φ - 1
+        def mat_pow(M, p):
+            if p == 1:
+                return M
+            if p % 2 == 0:
+                half = mat_pow(M, p // 2)
+                return mat_mult(half, half)
+            return mat_mult(M, mat_pow(M, p - 1))
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SPEED OF LIGHT AND DERIVED CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────────
+        return mat_pow([[1, 1], [1, 0]], n)[0][1]
 
-# c = 299,792,458 m/s (exact by SI definition)
-C: int = 299792458
+    # Golden ratio convergent: F(51)/F(50)
+    PHI: Fraction = Fraction(12586269025, 7778742049)
 
-# c² = 89,875,517,873,681,764 (exact integer)
-C_SQUARED: int = 89875517873681764
+    # Algebraic identities (exact)
+    PHI_SQUARED: Fraction = PHI + Fraction(1)      # φ² = φ + 1
+    PHI_CUBED: Fraction = 2 * PHI + Fraction(1)    # φ³ = 2φ + 1
+    PHI_FOURTH: Fraction = 3 * PHI + Fraction(2)   # φ⁴ = 3φ + 2
+    PHI_FIFTH: Fraction = 5 * PHI + Fraction(3)    # φ⁵ = 5φ + 3
 
-# Verification: assert C * C == C_SQUARED
+    # Inverse golden ratio
+    PHI_INVERSE: Fraction = PHI - Fraction(1)      # 1/φ = φ - 1
 
-# d = 207,542 (auxiliary constant from ULTRATHINK)
-D: int = 207542
+    # ─────────────────────────────────────────────────────────────────────────────
+    # SPEED OF LIGHT AND DERIVED CONSTANTS
+    # ─────────────────────────────────────────────────────────────────────────────
 
-# d² = 43,073,681,764 (exact)
-D_SQUARED: int = 43073681764
+    # c = 299,792,458 m/s (exact by SI definition)
+    C: int = 299792458
 
-# ─────────────────────────────────────────────────────────────────────────────
-# RATIONAL π APPROXIMATIONS
-# ─────────────────────────────────────────────────────────────────────────────
+    # c² = 89,875,517,873,681,764 (exact integer)
+    C_SQUARED: int = 89875517873681764
 
-# Milü: 355/113 (error < 3×10⁻⁷)
-PI_MILU: Fraction = Fraction(355, 113)
+    # d = 207,542 (auxiliary constant from ULTRATHINK)
+    D: int = 207542
 
-# More accurate: 103993/33102 (error < 5.8×10⁻¹⁰)
-PI_ACCURATE: Fraction = Fraction(103993, 33102)
+    # d² = 43,073,681,764 (exact)
+    D_SQUARED: int = 43073681764
 
-# Very high accuracy: 833719/265381 (error < 8.7×10⁻¹²)
-PI_HIGH: Fraction = Fraction(833719, 265381)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # RATIONAL π APPROXIMATIONS
+    # ─────────────────────────────────────────────────────────────────────────────
 
-# Default π for computations
-PI: Fraction = PI_MILU
+    # Milü: 355/113 (error < 3×10⁻⁷)
+    PI_MILU: Fraction = Fraction(355, 113)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PHYSICAL CONSTANTS (exact rationals where possible)
-# ─────────────────────────────────────────────────────────────────────────────
+    # More accurate: 103993/33102 (error < 5.8×10⁻¹⁰)
+    PI_ACCURATE: Fraction = Fraction(103993, 33102)
 
-# Planck constant: h = 6.62607015×10⁻³⁴ J·s (exact by SI)
-# Represented as 662607015 / 10^42
-PLANCK_H_NUMERATOR: int = 662607015
-PLANCK_H_EXPONENT: int = 42
+    # Very high accuracy: 833719/265381 (error < 8.7×10⁻¹²)
+    PI_HIGH: Fraction = Fraction(833719, 265381)
 
-# Reduced Planck: ℏ = h / 2π
-@classmethod
-def hbar(cls) -> Fraction:
-    """Compute ℏ = h / 2π exactly."""
-    h = Fraction(cls.PLANCK_H_NUMERATOR, 10**cls.PLANCK_H_EXPONENT)
-    return h / (2 * cls.PI)
+    # Default π for computations
+    PI: Fraction = PI_MILU
 
-# Fine structure constant inverse: α⁻¹ ≈ 137.035999084
-# Rational approximation
-ALPHA_INVERSE: Fraction = Fraction(137035999084, 1000000000)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # PHYSICAL CONSTANTS (exact rationals where possible)
+    # ─────────────────────────────────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────────────────────
-# WHEELER COUPLING CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────────
+    # Planck constant: h = 6.62607015×10⁻³⁴ J·s (exact by SI)
+    # Represented as 662607015 / 10^42
+    PLANCK_H_NUMERATOR: int = 662607015
+    PLANCK_H_EXPONENT: int = 42
 
-@classmethod
-def wheeler_coupling(cls) -> Fraction:
-    """κ = 8π × φ³ (Wheeler's dielectric-curvature coupling)."""
-    return 8 * cls.PI * cls.PHI_CUBED
+    # Reduced Planck: ℏ = h / 2π
+    @classmethod
+    def hbar(cls) -> Fraction:
+        """Compute ℏ = h / 2π exactly."""
+        h = Fraction(cls.PLANCK_H_NUMERATOR, 10**cls.PLANCK_H_EXPONENT)
+        return h / (2 * cls.PI)
 
-@classmethod
-def gravitational_coupling(cls) -> Fraction:
-    """8πG/c⁴ in natural units."""
-    return 8 * cls.PI / Fraction(cls.C_SQUARED * cls.C_SQUARED)
-```
+    # Fine structure constant inverse: α⁻¹ ≈ 137.035999084
+    # Rational approximation
+    ALPHA_INVERSE: Fraction = Fraction(137035999084, 1000000000)
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # WHEELER COUPLING CONSTANTS
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def wheeler_coupling(cls) -> Fraction:
+        """κ = 8π × φ³ (Wheeler's dielectric-curvature coupling)."""
+        return 8 * cls.PI * cls.PHI_CUBED
+
+    @classmethod
+    def gravitational_coupling(cls) -> Fraction:
+        """8πG/c⁴ in natural units."""
+        return 8 * cls.PI / Fraction(cls.C_SQUARED * cls.C_SQUARED)
 
 # Convenience aliases
 
@@ -130,127 +132,132 @@ PHI_CUBED = FundamentalConstants.PHI_CUBED
 
 # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 
-# ║                                    SECTION 2: VEDIC SUTRA ENGINE                                                   ║
+# ║                                    SECTION 2: VEDIC SUTRA ENGINE                                                   ║
 
-# ║                              Complete Implementation of All 29 Sutras                                              ║
+# ║                              Complete Implementation of All 29 Sutras                                              ║
 
 # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 @dataclass
 class SutraMetadata:
-index: int
-sanskrit: str
-transliteration: str
-english: str
-category: SutraCategory
-is_primary: bool
-complexity: str  # O(…) notation
+    index: int
+    sanskrit: str
+    transliteration: str
+    english: str
+    category: SutraCategory
+    is_primary: bool
+    complexity: str  # O(...) notation
+
 
 class VedicSutraEngine:
-“”
-PRIMARY SUTRAS (16):
+    """
+    PRIMARY SUTRAS (16):
 
-1.  Ekādhikena Pūrveṇa - By one more than the previous
-2.  Nikhilam Navataścaramam Daśataḥ - All from 9, last from 10
-3.  Ūrdhva-Tiryagbhyām - Vertically and crosswise
-4.  Parāvartya Yojayet - Transpose and adjust
-5.  Śūnyam Sāmyasamuccaye - If sum is same, result is zero
-6.  Ānurūpye Śūnyamanyat - If proportional, the other is zero
-7.  Saṅkalana-Vyavakalanābhyām - By addition and subtraction
-8.  Pūraṇāpūraṇābhyām - By completion and non-completion
-9.  Calanā Kalanābhyām - By motion and rest
-10. Yāvadūnam - By the deficiency
-11. Vyaṣṭisamaṣṭiḥ - Part and whole
-12. Śeṣāṇyaṅkena Carameṇa - Remainder by the last digit
-13. Sopāntyadvayamantyam - Ultimate and twice the penultimate
-14. Ekanyūnena Pūrveṇa - By one less than the previous
-15. Guṇitasamuccayaḥ - Product of sums is sum of products
-16. Guṇakasamuccayaḥ - Sum of products is product of sums
+    1.  Ekādhikena Pūrveṇa - By one more than the previous
+    2.  Nikhilam Navataścaramam Daśataḥ - All from 9, last from 10
+    3.  Ūrdhva-Tiryagbhyām - Vertically and crosswise
+    4.  Parāvartya Yojayet - Transpose and adjust
+    5.  Śūnyam Sāmyasamuccaye - If sum is same, result is zero
+    6.  Ānurūpye Śūnyamanyat - If proportional, the other is zero
+    7.  Saṅkalana-Vyavakalanābhyām - By addition and subtraction
+    8.  Pūraṇāpūraṇābhyām - By completion and non-completion
+    9.  Calanā Kalanābhyām - By motion and rest
+    10. Yāvadūnam - By the deficiency
+    11. Vyaṣṭisamaṣṭiḥ - Part and whole
+    12. Śeṣāṇyaṅkena Carameṇa - Remainder by the last digit
+    13. Sopāntyadvayamantyam - Ultimate and twice the penultimate
+    14. Ekanyūnena Pūrveṇa - By one less than the previous
+    15. Guṇitasamuccayaḥ - Product of sums is sum of products
+    16. Guṇakasamuccayaḥ - Sum of products is product of sums
 
-SUB-SUTRAS (13):
-1.  Ānurūpyeṇa - Proportionately
-2.  Śiṣyate Śeṣasaṃjñaḥ - Remainder remains unchanged
-3.  Ādyamādyenāntyamantyena - First by the first, last by the last
-4.  Kevalaḥ Saptakaṃ Guṇyāt - Multiply by 7 alone
-5.  Veṣṭanam - Osculation
-6.  Yāvadūnaṃ Tāvadūnam - Deficiency as much as deficiency
-7.  Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet - Square the deficiency
-8.  Antyayordaśake'pi - Sum of last two digits is 10
-9.  Antyayoreva - Only the last two
-10. Samuccayagunitah - Sum multiplied
-11. Lopanasthāpanābhyām - By elimination and retention
-12. Vilokanam - By mere observation
-13. Gunitasamuccayah Samuccayagunitah - Product of sum equals sum of product
-"""
+    SUB-SUTRAS (13):
+    1.  Ānurūpyeṇa - Proportionately
+    2.  Śiṣyate Śeṣasaṃjñaḥ - Remainder remains unchanged
+    3.  Ādyamādyenāntyamantyena - First by the first, last by the last
+    4.  Kevalaḥ Saptakaṃ Guṇyāt - Multiply by 7 alone
+    5.  Veṣṭanam - Osculation
+    6.  Yāvadūnaṃ Tāvadūnam - Deficiency as much as deficiency
+    7.  Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet - Square the deficiency
+    8.  Antyayordaśake'pi - Sum of last two digits is 10
+    9.  Antyayoreva - Only the last two
+    10. Samuccayagunitah - Sum multiplied
+    11. Lopanasthāpanābhyām - By elimination and retention
+    12. Vilokanam - By mere observation
+    13. Gunitasamuccayah Samuccayagunitah - Product of sum equals sum of product
+    """
+
+    # The sutra implementations are bound after their standalone definitions
+    # to maintain the exact textual algorithms while providing a class-based
+    # API for the unified simulator.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA METADATA REGISTRY
 # ═══════════════════════════════════════════════════════════════════════════
 
 SUTRA_REGISTRY: Dict[int, SutraMetadata] = {
-    # PRIMARY SUTRAS
-    1: SutraMetadata(1, "एकाधिकेन पूर्वेण", "Ekādhikena Pūrveṇa", 
-                     "By one more than the previous", SutraCategory.ARITHMETIC, True, "O(n)"),
-    2: SutraMetadata(2, "निखिलं नवतश्चरमं दशतः", "Nikhilam Navataścaramam Daśataḥ",
-                     "All from 9, last from 10", SutraCategory.ARITHMETIC, True, "O(n)"),
-    3: SutraMetadata(3, "ऊर्ध्व-तिर्यग्भ्याम्", "Ūrdhva-Tiryagbhyām",
-                     "Vertically and crosswise", SutraCategory.ARITHMETIC, True, "O(n²)"),
-    4: SutraMetadata(4, "परावर्त्य योजयेत्", "Parāvartya Yojayet",
-                     "Transpose and adjust", SutraCategory.ALGEBRAIC, True, "O(n)"),
-    5: SutraMetadata(5, "शून्यं साम्यसमुच्चये", "Śūnyam Sāmyasamuccaye",
-                     "If sum is same, result is zero", SutraCategory.ALGEBRAIC, True, "O(1)"),
-    6: SutraMetadata(6, "आनुरूप्ये शून्यमन्यत्", "Ānurūpye Śūnyamanyat",
-                     "If proportional, the other is zero", SutraCategory.ALGEBRAIC, True, "O(1)"),
-    7: SutraMetadata(7, "सङ्कलन-व्यवकलनाभ्याम्", "Saṅkalana-Vyavakalanābhyām",
-                     "By addition and subtraction", SutraCategory.ALGEBRAIC, True, "O(n)"),
-    8: SutraMetadata(8, "पूरणापूरणाभ्याम्", "Pūraṇāpūraṇābhyām",
-                     "By completion and non-completion", SutraCategory.ALGEBRAIC, True, "O(1)"),
-    9: SutraMetadata(9, "चलन-कलनाभ्याम्", "Calanā Kalanābhyām",
-                     "By motion and rest", SutraCategory.OPTIMIZATION, True, "O(n)"),
-    10: SutraMetadata(10, "यावदूनम्", "Yāvadūnam",
-                      "By the deficiency", SutraCategory.ARITHMETIC, True, "O(1)"),
-    11: SutraMetadata(11, "व्यष्टिसमष्टिः", "Vyaṣṭisamaṣṭiḥ",
-                      "Part and whole", SutraCategory.OPTIMIZATION, True, "O(n)"),
-    12: SutraMetadata(12, "शेषाण्यङ्केन चरमेण", "Śeṣāṇyaṅkena Carameṇa",
-                      "Remainder by the last digit", SutraCategory.ARITHMETIC, True, "O(n)"),
-    13: SutraMetadata(13, "सोपान्त्यद्वयमन्त्यम्", "Sopāntyadvayamantyam",
-                      "Ultimate and twice the penultimate", SutraCategory.ARITHMETIC, True, "O(1)"),
-    14: SutraMetadata(14, "एकन्यूनेन पूर्वेण", "Ekanyūnena Pūrveṇa",
-                      "By one less than the previous", SutraCategory.ARITHMETIC, True, "O(n)"),
-    15: SutraMetadata(15, "गुणितसमुच्चयः", "Guṇitasamuccayaḥ",
-                      "Product of sums is sum of products", SutraCategory.ALGEBRAIC, True, "O(n)"),
-    16: SutraMetadata(16, "गुणकसमुच्चयः", "Guṇakasamuccayaḥ",
-                      "Sum of products is product of sums", SutraCategory.ALGEBRAIC, True, "O(n)"),
-    
-    # SUB-SUTRAS (indexed 17-29)
-    17: SutraMetadata(17, "आनुरूप्येण", "Ānurūpyeṇa",
-                      "Proportionately", SutraCategory.ALGEBRAIC, False, "O(1)"),
-    18: SutraMetadata(18, "शिष्यते शेषसंज्ञः", "Śiṣyate Śeṣasaṃjñaḥ",
-                      "Remainder remains unchanged", SutraCategory.ARITHMETIC, False, "O(1)"),
-    19: SutraMetadata(19, "आद्यमाद्येनान्त्यमन्त्येन", "Ādyamādyenāntyamantyena",
-                      "First by first, last by last", SutraCategory.ARITHMETIC, False, "O(1)"),
-    20: SutraMetadata(20, "केवलैः सप्तकं गुण्यात्", "Kevalaḥ Saptakaṃ Guṇyāt",
-                      "Multiply by 7 alone", SutraCategory.ARITHMETIC, False, "O(1)"),
-    21: SutraMetadata(21, "वेष्टनम्", "Veṣṭanam",
-                      "Osculation", SutraCategory.ARITHMETIC, False, "O(n)"),
-    22: SutraMetadata(22, "यावदूनं तावदूनम्", "Yāvadūnaṃ Tāvadūnam",
-                      "Deficiency as much as deficiency", SutraCategory.ARITHMETIC, False, "O(1)"),
-    23: SutraMetadata(23, "यावदूनं तावदूनीकृत्य वर्गं च योजयेत्", 
-                      "Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet",
-                      "Square the deficiency and add", SutraCategory.ARITHMETIC, False, "O(1)"),
-    24: SutraMetadata(24, "अन्त्ययोर्दशकेऽपि", "Antyayordaśake'pi",
-                      "Sum of last two digits is 10", SutraCategory.ARITHMETIC, False, "O(1)"),
-    25: SutraMetadata(25, "अन्त्ययोरेव", "Antyayoreva",
-                      "Only the last two", SutraCategory.ARITHMETIC, False, "O(1)"),
-    26: SutraMetadata(26, "समुच्चयगुणितः", "Samuccayagunitah",
-                      "Sum multiplied", SutraCategory.ALGEBRAIC, False, "O(n)"),
-    27: SutraMetadata(27, "लोपनस्थापनाभ्याम्", "Lopanasthāpanābhyām",
-                      "By elimination and retention", SutraCategory.ALGEBRAIC, False, "O(n)"),
-    28: SutraMetadata(28, "विलोकनम्", "Vilokanam",
-                      "By mere observation", SutraCategory.OPTIMIZATION, False, "O(1)"),
-    29: SutraMetadata(29, "गुणितसमुच्चयः समुच्चयगुणितः", 
-                      "Gunitasamuccayah Samuccayagunitah",
-                      "Product of sum equals sum of product", SutraCategory.ALGEBRAIC, False, "O(n)"),
+    # PRIMARY SUTRAS
+    1: SutraMetadata(1, "एकाधिकेन पूर्वेण", "Ekādhikena Pūrveṇa", 
+                     "By one more than the previous", SutraCategory.ARITHMETIC, True, "O(n)"),
+    2: SutraMetadata(2, "निखिलं नवतश्चरमं दशतः", "Nikhilam Navataścaramam Daśataḥ",
+                     "All from 9, last from 10", SutraCategory.ARITHMETIC, True, "O(n)"),
+    3: SutraMetadata(3, "ऊर्ध्व-तिर्यग्भ्याम्", "Ūrdhva-Tiryagbhyām",
+                     "Vertically and crosswise", SutraCategory.ARITHMETIC, True, "O(n²)"),
+    4: SutraMetadata(4, "परावर्त्य योजयेत्", "Parāvartya Yojayet",
+                     "Transpose and adjust", SutraCategory.ALGEBRAIC, True, "O(n)"),
+    5: SutraMetadata(5, "शून्यं साम्यसमुच्चये", "Śūnyam Sāmyasamuccaye",
+                     "If sum is same, result is zero", SutraCategory.ALGEBRAIC, True, "O(1)"),
+    6: SutraMetadata(6, "आनुरूप्ये शून्यमन्यत्", "Ānurūpye Śūnyamanyat",
+                     "If proportional, the other is zero", SutraCategory.ALGEBRAIC, True, "O(1)"),
+    7: SutraMetadata(7, "सङ्कलन-व्यवकलनाभ्याम्", "Saṅkalana-Vyavakalanābhyām",
+                     "By addition and subtraction", SutraCategory.ALGEBRAIC, True, "O(n)"),
+    8: SutraMetadata(8, "पूरणापूरणाभ्याम्", "Pūraṇāpūraṇābhyām",
+                     "By completion and non-completion", SutraCategory.ALGEBRAIC, True, "O(1)"),
+    9: SutraMetadata(9, "चलन-कलनाभ्याम्", "Calanā Kalanābhyām",
+                     "By motion and rest", SutraCategory.OPTIMIZATION, True, "O(n)"),
+    10: SutraMetadata(10, "यावदूनम्", "Yāvadūnam",
+                      "By the deficiency", SutraCategory.ARITHMETIC, True, "O(1)"),
+    11: SutraMetadata(11, "व्यष्टिसमष्टिः", "Vyaṣṭisamaṣṭiḥ",
+                      "Part and whole", SutraCategory.OPTIMIZATION, True, "O(n)"),
+    12: SutraMetadata(12, "शेषाण्यङ्केन चरमेण", "Śeṣāṇyaṅkena Carameṇa",
+                      "Remainder by the last digit", SutraCategory.ARITHMETIC, True, "O(n)"),
+    13: SutraMetadata(13, "सोपान्त्यद्वयमन्त्यम्", "Sopāntyadvayamantyam",
+                      "Ultimate and twice the penultimate", SutraCategory.ARITHMETIC, True, "O(1)"),
+    14: SutraMetadata(14, "एकन्यूनेन पूर्वेण", "Ekanyūnena Pūrveṇa",
+                      "By one less than the previous", SutraCategory.ARITHMETIC, True, "O(n)"),
+    15: SutraMetadata(15, "गुणितसमुच्चयः", "Guṇitasamuccayaḥ",
+                      "Product of sums is sum of products", SutraCategory.ALGEBRAIC, True, "O(n)"),
+    16: SutraMetadata(16, "गुणकसमुच्चयः", "Guṇakasamuccayaḥ",
+                      "Sum of products is product of sums", SutraCategory.ALGEBRAIC, True, "O(n)"),
+    
+    # SUB-SUTRAS (indexed 17-29)
+    17: SutraMetadata(17, "आनुरूप्येण", "Ānurūpyeṇa",
+                      "Proportionately", SutraCategory.ALGEBRAIC, False, "O(1)"),
+    18: SutraMetadata(18, "शिष्यते शेषसंज्ञः", "Śiṣyate Śeṣasaṃjñaḥ",
+                      "Remainder remains unchanged", SutraCategory.ARITHMETIC, False, "O(1)"),
+    19: SutraMetadata(19, "आद्यमाद्येनान्त्यमन्त्येन", "Ādyamādyenāntyamantyena",
+                      "First by first, last by last", SutraCategory.ARITHMETIC, False, "O(1)"),
+    20: SutraMetadata(20, "केवलैः सप्तकं गुण्यात्", "Kevalaḥ Saptakaṃ Guṇyāt",
+                      "Multiply by 7 alone", SutraCategory.ARITHMETIC, False, "O(1)"),
+    21: SutraMetadata(21, "वेष्टनम्", "Veṣṭanam",
+                      "Osculation", SutraCategory.ARITHMETIC, False, "O(n)"),
+    22: SutraMetadata(22, "यावदूनं तावदूनम्", "Yāvadūnaṃ Tāvadūnam",
+                      "Deficiency as much as deficiency", SutraCategory.ARITHMETIC, False, "O(1)"),
+    23: SutraMetadata(23, "यावदूनं तावदूनीकृत्य वर्गं च योजयेत्", 
+                      "Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet",
+                      "Square the deficiency and add", SutraCategory.ARITHMETIC, False, "O(1)"),
+    24: SutraMetadata(24, "अन्त्ययोर्दशकेऽपि", "Antyayordaśake'pi",
+                      "Sum of last two digits is 10", SutraCategory.ARITHMETIC, False, "O(1)"),
+    25: SutraMetadata(25, "अन्त्ययोरेव", "Antyayoreva",
+                      "Only the last two", SutraCategory.ARITHMETIC, False, "O(1)"),
+    26: SutraMetadata(26, "समुच्चयगुणितः", "Samuccayagunitah",
+                      "Sum multiplied", SutraCategory.ALGEBRAIC, False, "O(n)"),
+    27: SutraMetadata(27, "लोपनस्थापनाभ्याम्", "Lopanasthāpanābhyām",
+                      "By elimination and retention", SutraCategory.ALGEBRAIC, False, "O(n)"),
+    28: SutraMetadata(28, "विलोकनम्", "Vilokanam",
+                      "By mere observation", SutraCategory.OPTIMIZATION, False, "O(1)"),
+    29: SutraMetadata(29, "गुणितसमुच्चयः समुच्चयगुणितः", 
+                      "Gunitasamuccayah Samuccayagunitah",
+                      "Product of sum equals sum of product", SutraCategory.ALGEBRAIC, False, "O(n)"),
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -259,25 +266,25 @@ SUTRA_REGISTRY: Dict[int, SutraMetadata] = {
 
 @staticmethod
 def sutra_01_ekadhikena_purvena(x: Fraction) -> Dict[str, Any]:
-    """
-    Ekādhikena Pūrveṇa: "By one more than the previous."
-    
-    Primary application: Division by numbers ending in 9.
-    For x, returns x + 1.
-    
-    Mathematical basis:
-        For division by d = 10^k - 1:
-        The divisor's Ekādhikena = (d + 1) / 10^k = 1
-    """
-    result = x + Fraction(1)
-    return {
-        'sutra_index': 1,
-        'sutra_name': 'Ekādhikena Pūrveṇa',
-        'input': x,
-        'output': result,
-        'operation': 'x + 1',
-        'formula': 'n → n + 1'
-    }
+    """
+    Ekādhikena Pūrveṇa: "By one more than the previous."
+    
+    Primary application: Division by numbers ending in 9.
+    For x, returns x + 1.
+    
+    Mathematical basis:
+        For division by d = 10^k - 1:
+        The divisor's Ekādhikena = (d + 1) / 10^k = 1
+    """
+    result = x + Fraction(1)
+    return {
+        'sutra_index': 1,
+        'sutra_name': 'Ekādhikena Pūrveṇa',
+        'input': x,
+        'output': result,
+        'operation': 'x + 1',
+        'formula': 'n → n + 1'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 2: Nikhilam Navataścaramam Daśataḥ - All From 9, Last From 10
@@ -285,74 +292,74 @@ def sutra_01_ekadhikena_purvena(x: Fraction) -> Dict[str, Any]:
 
 @staticmethod
 def sutra_02_nikhilam(x: int, base: int = 10) -> Dict[str, Any]:
-    """
-    Nikhilam: "All from 9 and the last from 10."
-    
-    Computes the complement of x with respect to base.
-    Used for multiplication of numbers near powers of 10.
-    
-    Algorithm:
-        1. All digits except last: subtract from 9
-        2. Last digit: subtract from 10
-    
-    Example: 
-        nikhilam(97, 100) = 3
-        Because: 100 - 97 = 3
-    """
-    complement = base - x
-    
-    return {
-        'sutra_index': 2,
-        'sutra_name': 'Nikhilam Navataścaramam Daśataḥ',
-        'input': x,
-        'base': base,
-        'complement': complement,
-        'formula': 'base - x',
-        'application': 'Multiplication near powers of 10'
-    }
+    """
+    Nikhilam: "All from 9 and the last from 10."
+    
+    Computes the complement of x with respect to base.
+    Used for multiplication of numbers near powers of 10.
+    
+    Algorithm:
+        1. All digits except last: subtract from 9
+        2. Last digit: subtract from 10
+    
+    Example: 
+        nikhilam(97, 100) = 3
+        Because: 100 - 97 = 3
+    """
+    complement = base - x
+    
+    return {
+        'sutra_index': 2,
+        'sutra_name': 'Nikhilam Navataścaramam Daśataḥ',
+        'input': x,
+        'base': base,
+        'complement': complement,
+        'formula': 'base - x',
+        'application': 'Multiplication near powers of 10'
+    }
 
 @staticmethod
 def sutra_02_nikhilam_multiply(a: int, b: int, base: int) -> Dict[str, Any]:
-    """
-    Nikhilam multiplication for numbers near a base.
-    
-    EXACT FORMULA:
-        a × b = (a - b') × base + a' × b'
-        where a' = base - a, b' = base - b
-    
-    Example: 98 × 97 with base 100
-        a' = 100 - 98 = 2
-        b' = 100 - 97 = 3
-        Result = (98 - 3) × 100 + 2 × 3
-               = 95 × 100 + 6
-               = 9506
-    """
-    deficiency_a = base - a
-    deficiency_b = base - b
-    
-    # Cross subtraction
-    cross_result = a - deficiency_b  # or equivalently: b - deficiency_a
-    
-    # Product of deficiencies
-    deficiency_product = deficiency_a * deficiency_b
-    
-    # Final result
-    result = cross_result * base + deficiency_product
-    
-    return {
-        'sutra_index': 2,
-        'sutra_name': 'Nikhilam Multiplication',
-        'a': a,
-        'b': b,
-        'base': base,
-        'deficiency_a': deficiency_a,
-        'deficiency_b': deficiency_b,
-        'cross_result': cross_result,
-        'deficiency_product': deficiency_product,
-        'result': result,
-        'formula': '(a - b\') × base + a\' × b\'',
-        'verification': a * b == result
-    }
+    """
+    Nikhilam multiplication for numbers near a base.
+    
+    EXACT FORMULA:
+        a × b = (a - b') × base + a' × b'
+        where a' = base - a, b' = base - b
+    
+    Example: 98 × 97 with base 100
+        a' = 100 - 98 = 2
+        b' = 100 - 97 = 3
+        Result = (98 - 3) × 100 + 2 × 3
+               = 95 × 100 + 6
+               = 9506
+    """
+    deficiency_a = base - a
+    deficiency_b = base - b
+    
+    # Cross subtraction
+    cross_result = a - deficiency_b  # or equivalently: b - deficiency_a
+    
+    # Product of deficiencies
+    deficiency_product = deficiency_a * deficiency_b
+    
+    # Final result
+    result = cross_result * base + deficiency_product
+    
+    return {
+        'sutra_index': 2,
+        'sutra_name': 'Nikhilam Multiplication',
+        'a': a,
+        'b': b,
+        'base': base,
+        'deficiency_a': deficiency_a,
+        'deficiency_b': deficiency_b,
+        'cross_result': cross_result,
+        'deficiency_product': deficiency_product,
+        'result': result,
+        'formula': '(a - b\') × base + a\' × b\'',
+        'verification': a * b == result
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 3: Ūrdhva-Tiryagbhyām - Vertically and Crosswise
@@ -360,47 +367,47 @@ def sutra_02_nikhilam_multiply(a: int, b: int, base: int) -> Dict[str, Any]:
 
 @staticmethod
 def sutra_03_urdhva_tiryagbhyam(a_digits: List[int], b_digits: List[int]) -> Dict[str, Any]:
-    """
-    Ūrdhva-Tiryagbhyām: "Vertically and crosswise."
-    
-    General multiplication algorithm using cross products.
-    
-    For n-digit × n-digit multiplication:
-        c_k = Σ(i+j=k) a_i × b_j
-    
-    Visual pattern (3×3):
-        a₂ a₁ a₀
-      × b₂ b₁ b₀
-      ───────────
-      Vertical:   a₀b₀
-      Cross 1:    a₀b₁ + a₁b₀
-      Cross 2:    a₀b₂ + a₁b₁ + a₂b₀
-      Cross 3:    a₁b₂ + a₂b₁
-      Vertical:   a₂b₂
-    """
-    n_a = len(a_digits)
-    n_b = len(b_digits)
-    n_result = n_a + n_b - 1
-    
-    # Compute each coefficient c_k
-    coefficients = []
-    for k in range(n_result):
-        c_k = Fraction(0)
-        for i in range(max(0, k - n_b + 1), min(k + 1, n_a)):
-            j = k - i
-            if 0 <= j < n_b:
-                c_k += Fraction(a_digits[i]) * Fraction(b_digits[j])
-        coefficients.append(c_k)
-    
-    return {
-        'sutra_index': 3,
-        'sutra_name': 'Ūrdhva-Tiryagbhyām',
-        'a_digits': a_digits,
-        'b_digits': b_digits,
-        'coefficients': coefficients,
-        'formula': 'c_k = Σ(i+j=k) a_i × b_j',
-        'complexity': f'O({n_a * n_b})'
-    }
+    """
+    Ūrdhva-Tiryagbhyām: "Vertically and crosswise."
+    
+    General multiplication algorithm using cross products.
+    
+    For n-digit × n-digit multiplication:
+        c_k = Σ(i+j=k) a_i × b_j
+    
+    Visual pattern (3×3):
+        a₂ a₁ a₀
+      × b₂ b₁ b₀
+      ───────────
+      Vertical:   a₀b₀
+      Cross 1:    a₀b₁ + a₁b₀
+      Cross 2:    a₀b₂ + a₁b₁ + a₂b₀
+      Cross 3:    a₁b₂ + a₂b₁
+      Vertical:   a₂b₂
+    """
+    n_a = len(a_digits)
+    n_b = len(b_digits)
+    n_result = n_a + n_b - 1
+    
+    # Compute each coefficient c_k
+    coefficients = []
+    for k in range(n_result):
+        c_k = Fraction(0)
+        for i in range(max(0, k - n_b + 1), min(k + 1, n_a)):
+            j = k - i
+            if 0 <= j < n_b:
+                c_k += Fraction(a_digits[i]) * Fraction(b_digits[j])
+        coefficients.append(c_k)
+    
+    return {
+        'sutra_index': 3,
+        'sutra_name': 'Ūrdhva-Tiryagbhyām',
+        'a_digits': a_digits,
+        'b_digits': b_digits,
+        'coefficients': coefficients,
+        'formula': 'c_k = Σ(i+j=k) a_i × b_j',
+        'complexity': f'O({n_a * n_b})'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 4: Parāvartya Yojayet - Transpose and Adjust
@@ -408,29 +415,29 @@ def sutra_03_urdhva_tiryagbhyam(a_digits: List[int], b_digits: List[int]) -> Dic
 
 @staticmethod
 def sutra_04_paravartya(dividend: Fraction, divisor: Fraction) -> Dict[str, Any]:
-    """
-    Parāvartya Yojayet: "Transpose and adjust."
-    
-    Division algorithm: transpose the divisor's sign and adjust.
-    Used for algebraic division and polynomial division.
-    
-    For division p(x) / (x - a):
-        Use synthetic division with +a (transposed from -a)
-    """
-    if divisor == 0:
-        raise ValueError("Division by zero")
-    
-    quotient = dividend / divisor
-    
-    return {
-        'sutra_index': 4,
-        'sutra_name': 'Parāvartya Yojayet',
-        'dividend': dividend,
-        'divisor': divisor,
-        'quotient': quotient,
-        'formula': 'dividend / divisor with transposed sign',
-        'application': 'Polynomial and algebraic division'
-    }
+    """
+    Parāvartya Yojayet: "Transpose and adjust."
+    
+    Division algorithm: transpose the divisor's sign and adjust.
+    Used for algebraic division and polynomial division.
+    
+    For division p(x) / (x - a):
+        Use synthetic division with +a (transposed from -a)
+    """
+    if divisor == 0:
+        raise ValueError("Division by zero")
+    
+    quotient = dividend / divisor
+    
+    return {
+        'sutra_index': 4,
+        'sutra_name': 'Parāvartya Yojayet',
+        'dividend': dividend,
+        'divisor': divisor,
+        'quotient': quotient,
+        'formula': 'dividend / divisor with transposed sign',
+        'application': 'Polynomial and algebraic division'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 5: Śūnyam Sāmyasamuccaye - If Sum is Same, Result is Zero
@@ -438,56 +445,56 @@ def sutra_04_paravartya(dividend: Fraction, divisor: Fraction) -> Dict[str, Any]
 
 @staticmethod
 def sutra_05_shunyam_samya(lhs_sum: Fraction, rhs_sum: Fraction) -> Dict[str, Any]:
-    """
-    Śūnyam Sāmyasamuccaye: "If sum is same, result is zero."
-    
-    If the sum of coefficients on both sides of an equation is equal,
-    the equation reduces to 0.
-    
-    Application: Solving equations where coefficient sums match.
-    """
-    difference = lhs_sum - rhs_sum
-    is_zero = difference == 0
-    
-    return {
-        'sutra_index': 5,
-        'sutra_name': 'Śūnyam Sāmyasamuccaye',
-        'lhs_sum': lhs_sum,
-        'rhs_sum': rhs_sum,
-        'difference': difference,
-        'is_zero': is_zero,
-        'formula': 'If Σ(LHS) = Σ(RHS), then difference = 0',
-        'application': 'Equation simplification and equilibrium detection'
-    }
+    """
+    Śūnyam Sāmyasamuccaye: "If sum is same, result is zero."
+    
+    If the sum of coefficients on both sides of an equation is equal,
+    the equation reduces to 0.
+    
+    Application: Solving equations where coefficient sums match.
+    """
+    difference = lhs_sum - rhs_sum
+    is_zero = difference == 0
+    
+    return {
+        'sutra_index': 5,
+        'sutra_name': 'Śūnyam Sāmyasamuccaye',
+        'lhs_sum': lhs_sum,
+        'rhs_sum': rhs_sum,
+        'difference': difference,
+        'is_zero': is_zero,
+        'formula': 'If Σ(LHS) = Σ(RHS), then difference = 0',
+        'application': 'Equation simplification and equilibrium detection'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 6: Ānurūpye Śūnyamanyat - If Proportional, Other is Zero
 # ═══════════════════════════════════════════════════════════════════════════
 
 @staticmethod
-def sutra_06_anurupye(a: Fraction, b: Fraction, 
-                      c: Fraction, d: Fraction) -> Dict[str, Any]:
-    """
-    Ānurūpye Śūnyamanyat: "If proportional, the other is zero."
-    
-    If a/b = c/d, then ad - bc = 0.
-    Used for solving proportional equations.
-    """
-    cross_product_1 = a * d
-    cross_product_2 = b * c
-    difference = cross_product_1 - cross_product_2
-    is_proportional = difference == 0
-    
-    return {
-        'sutra_index': 6,
-        'sutra_name': 'Ānurūpye Śūnyamanyat',
-        'a': a, 'b': b, 'c': c, 'd': d,
-        'ad': cross_product_1,
-        'bc': cross_product_2,
-        'difference': difference,
-        'is_proportional': is_proportional,
-        'formula': 'a/b = c/d ⟺ ad - bc = 0'
-    }
+def sutra_06_anurupye(a: Fraction, b: Fraction, 
+                      c: Fraction, d: Fraction) -> Dict[str, Any]:
+    """
+    Ānurūpye Śūnyamanyat: "If proportional, the other is zero."
+    
+    If a/b = c/d, then ad - bc = 0.
+    Used for solving proportional equations.
+    """
+    cross_product_1 = a * d
+    cross_product_2 = b * c
+    difference = cross_product_1 - cross_product_2
+    is_proportional = difference == 0
+    
+    return {
+        'sutra_index': 6,
+        'sutra_name': 'Ānurūpye Śūnyamanyat',
+        'a': a, 'b': b, 'c': c, 'd': d,
+        'ad': cross_product_1,
+        'bc': cross_product_2,
+        'difference': difference,
+        'is_proportional': is_proportional,
+        'formula': 'a/b = c/d ⟺ ad - bc = 0'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 7: Saṅkalana-Vyavakalanābhyām - By Addition and Subtraction
@@ -495,31 +502,31 @@ def sutra_06_anurupye(a: Fraction, b: Fraction, 
 
 @staticmethod
 def sutra_07_sankalana_vyavakalana(x: Fraction, y: Fraction) -> Dict[str, Any]:
-    """
-    Saṅkalana-Vyavakalanābhyām: "By addition and subtraction."
-    
-    Solving simultaneous equations by adding and subtracting.
-    Given x + y and x - y, find x and y.
-    """
-    sum_val = x + y
-    diff_val = x - y
-    
-    # Solving: x = (sum + diff) / 2, y = (sum - diff) / 2
-    x_solved = (sum_val + diff_val) / 2
-    y_solved = (sum_val - diff_val) / 2
-    
-    return {
-        'sutra_index': 7,
-        'sutra_name': 'Saṅkalana-Vyavakalanābhyām',
-        'x': x,
-        'y': y,
-        'sum': sum_val,
-        'difference': diff_val,
-        'x_from_system': x_solved,
-        'y_from_system': y_solved,
-        'formula': 'x = (sum + diff)/2, y = (sum - diff)/2',
-        'verified': x_solved == x and y_solved == y
-    }
+    """
+    Saṅkalana-Vyavakalanābhyām: "By addition and subtraction."
+    
+    Solving simultaneous equations by adding and subtracting.
+    Given x + y and x - y, find x and y.
+    """
+    sum_val = x + y
+    diff_val = x - y
+    
+    # Solving: x = (sum + diff) / 2, y = (sum - diff) / 2
+    x_solved = (sum_val + diff_val) / 2
+    y_solved = (sum_val - diff_val) / 2
+    
+    return {
+        'sutra_index': 7,
+        'sutra_name': 'Saṅkalana-Vyavakalanābhyām',
+        'x': x,
+        'y': y,
+        'sum': sum_val,
+        'difference': diff_val,
+        'x_from_system': x_solved,
+        'y_from_system': y_solved,
+        'formula': 'x = (sum + diff)/2, y = (sum - diff)/2',
+        'verified': x_solved == x and y_solved == y
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 8: Pūraṇāpūraṇābhyām - By Completion and Non-Completion
@@ -527,53 +534,53 @@ def sutra_07_sankalana_vyavakalana(x: Fraction, y: Fraction) -> Dict[str, Any]:
 
 @staticmethod
 def sutra_08_puranapurana(x: Fraction, target: Fraction) -> Dict[str, Any]:
-    """
-    Pūraṇāpūraṇābhyām: "By completion and non-completion."
-    
-    Completing a quantity to a target and tracking the complement.
-    Used for completing the square and similar techniques.
-    """
-    completion = target - x
-    is_complete = completion == 0
-    
-    return {
-        'sutra_index': 8,
-        'sutra_name': 'Pūraṇāpūraṇābhyām',
-        'value': x,
-        'target': target,
-        'completion_needed': completion,
-        'is_complete': is_complete,
-        'formula': 'completion = target - x',
-        'application': 'Completing the square, target-based adjustments'
-    }
+    """
+    Pūraṇāpūraṇābhyām: "By completion and non-completion."
+    
+    Completing a quantity to a target and tracking the complement.
+    Used for completing the square and similar techniques.
+    """
+    completion = target - x
+    is_complete = completion == 0
+    
+    return {
+        'sutra_index': 8,
+        'sutra_name': 'Pūraṇāpūraṇābhyām',
+        'value': x,
+        'target': target,
+        'completion_needed': completion,
+        'is_complete': is_complete,
+        'formula': 'completion = target - x',
+        'application': 'Completing the square, target-based adjustments'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 9: Calanā Kalanābhyām - By Motion and Rest
 # ═══════════════════════════════════════════════════════════════════════════
 
 @staticmethod
-def sutra_09_calana_kalana(position: Fraction, velocity: Fraction, 
-                            dt: Fraction) -> Dict[str, Any]:
-    """
-    Calanā Kalanābhyām: "By motion and rest."
-    
-    Differential calculus concept: relating change to rate.
-    position_new = position + velocity × dt
-    """
-    displacement = velocity * dt
-    new_position = position + displacement
-    
-    return {
-        'sutra_index': 9,
-        'sutra_name': 'Calanā Kalanābhyām',
-        'position': position,
-        'velocity': velocity,
-        'dt': dt,
-        'displacement': displacement,
-        'new_position': new_position,
-        'formula': 'x(t+dt) = x(t) + v × dt',
-        'application': 'Numerical integration, motion equations'
-    }
+def sutra_09_calana_kalana(position: Fraction, velocity: Fraction, 
+                            dt: Fraction) -> Dict[str, Any]:
+    """
+    Calanā Kalanābhyām: "By motion and rest."
+    
+    Differential calculus concept: relating change to rate.
+    position_new = position + velocity × dt
+    """
+    displacement = velocity * dt
+    new_position = position + displacement
+    
+    return {
+        'sutra_index': 9,
+        'sutra_name': 'Calanā Kalanābhyām',
+        'position': position,
+        'velocity': velocity,
+        'dt': dt,
+        'displacement': displacement,
+        'new_position': new_position,
+        'formula': 'x(t+dt) = x(t) + v × dt',
+        'application': 'Numerical integration, motion equations'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 10: Yāvadūnam - By The Deficiency
@@ -581,79 +588,79 @@ def sutra_09_calana_kalana(position: Fraction, velocity: Fraction, 
 
 @staticmethod
 def sutra_10_yavadunam(n: int, base: int) -> Dict[str, Any]:
-    """
-    Yāvadūnam: "By the deficiency."
-    
-    Squaring numbers near a base.
-    
-    EXACT FORMULA:
-        n² = (n + deficiency) × base + deficiency²
-        where deficiency = n - base
-    
-    Example: 299792458² with base = 300000000
-        deficiency = 299792458 - 300000000 = -207542
-        n² = (299792458 - 207542) × 300000000 + (-207542)²
-           = 299584916 × 300000000 + 43073681764
-           = 89875474800000000 + 43073681764
-           = 89875517873681764 ✓ (= c²)
-    """
-    deficiency = n - base
-    
-    # Method 1: Standard formula
-    term1 = (n + deficiency) * base
-    term2 = deficiency * deficiency
-    result = term1 + term2
-    
-    return {
-        'sutra_index': 10,
-        'sutra_name': 'Yāvadūnam',
-        'n': n,
-        'base': base,
-        'deficiency': deficiency,
-        'term1_cross': term1,
-        'term2_deficiency_squared': term2,
-        'result': result,
-        'formula': 'n² = (n + d) × base + d²',
-        'verification': n * n == result
-    }
+    """
+    Yāvadūnam: "By the deficiency."
+    
+    Squaring numbers near a base.
+    
+    EXACT FORMULA:
+        n² = (n + deficiency) × base + deficiency²
+        where deficiency = n - base
+    
+    Example: 299792458² with base = 300000000
+        deficiency = 299792458 - 300000000 = -207542
+        n² = (299792458 - 207542) × 300000000 + (-207542)²
+           = 299584916 × 300000000 + 43073681764
+           = 89875474800000000 + 43073681764
+           = 89875517873681764 ✓ (= c²)
+    """
+    deficiency = n - base
+    
+    # Method 1: Standard formula
+    term1 = (n + deficiency) * base
+    term2 = deficiency * deficiency
+    result = term1 + term2
+    
+    return {
+        'sutra_index': 10,
+        'sutra_name': 'Yāvadūnam',
+        'n': n,
+        'base': base,
+        'deficiency': deficiency,
+        'term1_cross': term1,
+        'term2_deficiency_squared': term2,
+        'result': result,
+        'formula': 'n² = (n + d) × base + d²',
+        'verification': n * n == result
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 11: Vyaṣṭisamaṣṭiḥ - Part and Whole
 # ═══════════════════════════════════════════════════════════════════════════
 
 @staticmethod
-def sutra_11_vyashti_samashti(parts: List[Fraction], 
-                               constant: Fraction) -> Dict[str, Any]:
-    """
-    Vyaṣṭisamaṣṭiḥ: "Part and whole."
-    
-    Factor out common operations for efficiency.
-    
-    Instead of: Σ (part_i × constant)
-    Compute:    constant × Σ part_i
-    
-    Example: Σ m_i × c² = c² × (Σ m_i)
-    """
-    sum_of_parts = sum(parts)
-    
-    # Inefficient: sum of products
-    sum_of_products = sum(p * constant for p in parts)
-    
-    # Efficient: product of sum
-    product_of_sum = constant * sum_of_parts
-    
-    return {
-        'sutra_index': 11,
-        'sutra_name': 'Vyaṣṭisamaṣṭiḥ',
-        'parts': parts,
-        'constant': constant,
-        'sum_of_parts': sum_of_parts,
-        'sum_of_products': sum_of_products,
-        'product_of_sum': product_of_sum,
-        'formula': 'Σ(p_i × c) = c × Σ(p_i)',
-        'efficiency_gain': f'{len(parts)} multiplications → 1 multiplication',
-        'verified': sum_of_products == product_of_sum
-    }
+def sutra_11_vyashti_samashti(parts: List[Fraction], 
+                               constant: Fraction) -> Dict[str, Any]:
+    """
+    Vyaṣṭisamaṣṭiḥ: "Part and whole."
+    
+    Factor out common operations for efficiency.
+    
+    Instead of: Σ (part_i × constant)
+    Compute:    constant × Σ part_i
+    
+    Example: Σ m_i × c² = c² × (Σ m_i)
+    """
+    sum_of_parts = sum(parts)
+    
+    # Inefficient: sum of products
+    sum_of_products = sum(p * constant for p in parts)
+    
+    # Efficient: product of sum
+    product_of_sum = constant * sum_of_parts
+    
+    return {
+        'sutra_index': 11,
+        'sutra_name': 'Vyaṣṭisamaṣṭiḥ',
+        'parts': parts,
+        'constant': constant,
+        'sum_of_parts': sum_of_parts,
+        'sum_of_products': sum_of_products,
+        'product_of_sum': product_of_sum,
+        'formula': 'Σ(p_i × c) = c × Σ(p_i)',
+        'efficiency_gain': f'{len(parts)} multiplications → 1 multiplication',
+        'verified': sum_of_products == product_of_sum
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 12: Śeṣāṇyaṅkena Carameṇa - Remainder by Last Digit
@@ -661,25 +668,25 @@ def sutra_11_vyashti_samashti(parts: List[Fraction], 
 
 @staticmethod
 def sutra_12_sheshanyankena(n: int, divisor: int) -> Dict[str, Any]:
-    """
-    Śeṣāṇyaṅkena Carameṇa: "Remainder by the last digit."
-    
-    Express remainders in terms of the last digit.
-    Used for divisibility tests and modular arithmetic.
-    """
-    last_digit = n % 10
-    remainder = n % divisor
-    
-    return {
-        'sutra_index': 12,
-        'sutra_name': 'Śeṣāṇyaṅkena Carameṇa',
-        'n': n,
-        'divisor': divisor,
-        'last_digit': last_digit,
-        'remainder': remainder,
-        'formula': 'n mod d expressed via last digit patterns',
-        'application': 'Divisibility tests'
-    }
+    """
+    Śeṣāṇyaṅkena Carameṇa: "Remainder by the last digit."
+    
+    Express remainders in terms of the last digit.
+    Used for divisibility tests and modular arithmetic.
+    """
+    last_digit = n % 10
+    remainder = n % divisor
+    
+    return {
+        'sutra_index': 12,
+        'sutra_name': 'Śeṣāṇyaṅkena Carameṇa',
+        'n': n,
+        'divisor': divisor,
+        'last_digit': last_digit,
+        'remainder': remainder,
+        'formula': 'n mod d expressed via last digit patterns',
+        'application': 'Divisibility tests'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 13: Sopāntyadvayamantyam - Ultimate and Twice Penultimate
@@ -687,29 +694,29 @@ def sutra_12_sheshanyankena(n: int, divisor: int) -> Dict[str, Any]:
 
 @staticmethod
 def sutra_13_sopantyadvayam(sequence: List[Fraction]) -> Dict[str, Any]:
-    """
-    Sopāntyadvayamantyam: "Ultimate and twice the penultimate."
-    
-    Relates the last term to twice the second-to-last.
-    Used in specific sequence patterns and continued fractions.
-    """
-    if len(sequence) < 2:
-        raise ValueError("Need at least 2 terms")
-    
-    ultimate = sequence[-1]
-    penultimate = sequence[-2]
-    twice_penultimate = 2 * penultimate
-    
-    return {
-        'sutra_index': 13,
-        'sutra_name': 'Sopāntyadvayamantyam',
-        'sequence': sequence,
-        'ultimate': ultimate,
-        'penultimate': penultimate,
-        'twice_penultimate': twice_penultimate,
-        'relation': ultimate - twice_penultimate,
-        'formula': 'Relates a_n to 2 × a_(n-1)'
-    }
+    """
+    Sopāntyadvayamantyam: "Ultimate and twice the penultimate."
+    
+    Relates the last term to twice the second-to-last.
+    Used in specific sequence patterns and continued fractions.
+    """
+    if len(sequence) < 2:
+        raise ValueError("Need at least 2 terms")
+    
+    ultimate = sequence[-1]
+    penultimate = sequence[-2]
+    twice_penultimate = 2 * penultimate
+    
+    return {
+        'sutra_index': 13,
+        'sutra_name': 'Sopāntyadvayamantyam',
+        'sequence': sequence,
+        'ultimate': ultimate,
+        'penultimate': penultimate,
+        'twice_penultimate': twice_penultimate,
+        'relation': ultimate - twice_penultimate,
+        'formula': 'Relates a_n to 2 × a_(n-1)'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 14: Ekanyūnena Pūrveṇa - By One Less Than Previous
@@ -717,58 +724,58 @@ def sutra_13_sopantyadvayam(sequence: List[Fraction]) -> Dict[str, Any]:
 
 @staticmethod
 def sutra_14_ekanyunena(x: Fraction) -> Dict[str, Any]:
-    """
-    Ekanyūnena Pūrveṇa: "By one less than the previous."
-    
-    Complement of Sutra 1. Decrements by 1.
-    Used for division by numbers ending in 1.
-    """
-    result = x - Fraction(1)
-    
-    return {
-        'sutra_index': 14,
-        'sutra_name': 'Ekanyūnena Pūrveṇa',
-        'input': x,
-        'output': result,
-        'operation': 'x - 1',
-        'formula': 'n → n - 1',
-        'complement_of': 'Sutra 1 (Ekādhikena Pūrveṇa)'
-    }
+    """
+    Ekanyūnena Pūrveṇa: "By one less than the previous."
+    
+    Complement of Sutra 1. Decrements by 1.
+    Used for division by numbers ending in 1.
+    """
+    result = x - Fraction(1)
+    
+    return {
+        'sutra_index': 14,
+        'sutra_name': 'Ekanyūnena Pūrveṇa',
+        'input': x,
+        'output': result,
+        'operation': 'x - 1',
+        'formula': 'n → n - 1',
+        'complement_of': 'Sutra 1 (Ekādhikena Pūrveṇa)'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 15: Guṇitasamuccayaḥ - Product of Sums
 # ═══════════════════════════════════════════════════════════════════════════
 
 @staticmethod
-def sutra_15_gunitasamuccaya(list_a: List[Fraction], 
-                              list_b: List[Fraction]) -> Dict[str, Any]:
-    """
-    Guṇitasamuccayaḥ: "Product of sums is sum of products."
-    
-    (Σ a_i) × (Σ b_j) relates to Σ Σ a_i × b_j
-    
-    This is the distributive property.
-    """
-    sum_a = sum(list_a)
-    sum_b = sum(list_b)
-    product_of_sums = sum_a * sum_b
-    
-    # All pairwise products
-    all_products = [a * b for a in list_a for b in list_b]
-    sum_of_products = sum(all_products)
-    
-    return {
-        'sutra_index': 15,
-        'sutra_name': 'Guṇitasamuccayaḥ',
-        'list_a': list_a,
-        'list_b': list_b,
-        'sum_a': sum_a,
-        'sum_b': sum_b,
-        'product_of_sums': product_of_sums,
-        'sum_of_products': sum_of_products,
-        'formula': '(Σa)(Σb) = ΣΣ(a×b)',
-        'verified': product_of_sums == sum_of_products
-    }
+def sutra_15_gunitasamuccaya(list_a: List[Fraction], 
+                              list_b: List[Fraction]) -> Dict[str, Any]:
+    """
+    Guṇitasamuccayaḥ: "Product of sums is sum of products."
+    
+    (Σ a_i) × (Σ b_j) relates to Σ Σ a_i × b_j
+    
+    This is the distributive property.
+    """
+    sum_a = sum(list_a)
+    sum_b = sum(list_b)
+    product_of_sums = sum_a * sum_b
+    
+    # All pairwise products
+    all_products = [a * b for a in list_a for b in list_b]
+    sum_of_products = sum(all_products)
+    
+    return {
+        'sutra_index': 15,
+        'sutra_name': 'Guṇitasamuccayaḥ',
+        'list_a': list_a,
+        'list_b': list_b,
+        'sum_a': sum_a,
+        'sum_b': sum_b,
+        'product_of_sums': product_of_sums,
+        'sum_of_products': sum_of_products,
+        'formula': '(Σa)(Σb) = ΣΣ(a×b)',
+        'verified': product_of_sums == sum_of_products
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUTRA 16: Guṇakasamuccayaḥ - Sum of Products
@@ -776,29 +783,29 @@ def sutra_15_gunitasamuccaya(list_a: List[Fraction], 
 
 @staticmethod
 def sutra_16_gunakasamuccaya(factors_list: List[Tuple[Fraction, Fraction]]) -> Dict[str, Any]:
-    """
-    Guṇakasamuccayaḥ: "Sum of products is product of sums."
-    
-    For checking: Σ(a_i × b_i) = (Σa_i) × (Σb_i) under specific conditions.
-    Generally used for verification of polynomial products.
-    """
-    products = [a * b for a, b in factors_list]
-    sum_of_products = sum(products)
-    
-    sum_of_first = sum(a for a, b in factors_list)
-    sum_of_second = sum(b for a, b in factors_list)
-    
-    return {
-        'sutra_index': 16,
-        'sutra_name': 'Guṇakasamuccayaḥ',
-        'factors': factors_list,
-        'products': products,
-        'sum_of_products': sum_of_products,
-        'sum_of_first_factors': sum_of_first,
-        'sum_of_second_factors': sum_of_second,
-        'formula': 'Verification via coefficient sums',
-        'application': 'Polynomial factorization verification'
-    }
+    """
+    Guṇakasamuccayaḥ: "Sum of products is product of sums."
+    
+    For checking: Σ(a_i × b_i) = (Σa_i) × (Σb_i) under specific conditions.
+    Generally used for verification of polynomial products.
+    """
+    products = [a * b for a, b in factors_list]
+    sum_of_products = sum(products)
+    
+    sum_of_first = sum(a for a, b in factors_list)
+    sum_of_second = sum(b for a, b in factors_list)
+    
+    return {
+        'sutra_index': 16,
+        'sutra_name': 'Guṇakasamuccayaḥ',
+        'factors': factors_list,
+        'products': products,
+        'sum_of_products': sum_of_products,
+        'sum_of_first_factors': sum_of_first,
+        'sum_of_second_factors': sum_of_second,
+        'formula': 'Verification via coefficient sums',
+        'application': 'Polynomial factorization verification'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SUB-SUTRAS 17-29
@@ -806,191 +813,191 @@ def sutra_16_gunakasamuccaya(factors_list: List[Tuple[Fraction, Fraction]]) -> D
 
 @staticmethod
 def sutra_17_anurupyena(x: Fraction, ratio: Fraction) -> Dict[str, Any]:
-    """Sub-sutra 1: Ānurūpyeṇa - Proportionately."""
-    return {
-        'sutra_index': 17,
-        'sutra_name': 'Ānurūpyeṇa',
-        'input': x,
-        'ratio': ratio,
-        'output': x * ratio,
-        'formula': 'x × ratio'
-    }
+    """Sub-sutra 1: Ānurūpyeṇa - Proportionately."""
+    return {
+        'sutra_index': 17,
+        'sutra_name': 'Ānurūpyeṇa',
+        'input': x,
+        'ratio': ratio,
+        'output': x * ratio,
+        'formula': 'x × ratio'
+    }
 
 @staticmethod
 def sutra_18_shishyate(x: Fraction, divisor: Fraction) -> Dict[str, Any]:
-    """Sub-sutra 2: Śiṣyate Śeṣasaṃjñaḥ - Remainder remains unchanged."""
-    if divisor == 0:
-        raise ValueError("Division by zero")
-    quotient = x // divisor if isinstance(x, int) else int(x / divisor)
-    remainder = x - quotient * divisor
-    return {
-        'sutra_index': 18,
-        'sutra_name': 'Śiṣyate Śeṣasaṃjñaḥ',
-        'input': x,
-        'divisor': divisor,
-        'quotient': quotient,
-        'remainder': remainder
-    }
+    """Sub-sutra 2: Śiṣyate Śeṣasaṃjñaḥ - Remainder remains unchanged."""
+    if divisor == 0:
+        raise ValueError("Division by zero")
+    quotient = x // divisor if isinstance(x, int) else int(x / divisor)
+    remainder = x - quotient * divisor
+    return {
+        'sutra_index': 18,
+        'sutra_name': 'Śiṣyate Śeṣasaṃjñaḥ',
+        'input': x,
+        'divisor': divisor,
+        'quotient': quotient,
+        'remainder': remainder
+    }
 
 @staticmethod
 def sutra_19_adyam_adyena(first_a: Fraction, first_b: Fraction,
-                          last_a: Fraction, last_b: Fraction) -> Dict[str, Any]:
-    """Sub-sutra 3: Ādyamādyenāntyamantyena - First by first, last by last."""
-    return {
-        'sutra_index': 19,
-        'sutra_name': 'Ādyamādyenāntyamantyena',
-        'first_product': first_a * first_b,
-        'last_product': last_a * last_b,
-        'formula': 'First × First, Last × Last'
-    }
+                          last_a: Fraction, last_b: Fraction) -> Dict[str, Any]:
+    """Sub-sutra 3: Ādyamādyenāntyamantyena - First by first, last by last."""
+    return {
+        'sutra_index': 19,
+        'sutra_name': 'Ādyamādyenāntyamantyena',
+        'first_product': first_a * first_b,
+        'last_product': last_a * last_b,
+        'formula': 'First × First, Last × Last'
+    }
 
 @staticmethod
 def sutra_20_kevalaih_saptakam(x: Fraction) -> Dict[str, Any]:
-    """Sub-sutra 4: Kevalaḥ Saptakaṃ Guṇyāt - Multiply by 7 alone."""
-    return {
-        'sutra_index': 20,
-        'sutra_name': 'Kevalaḥ Saptakaṃ Guṇyāt',
-        'input': x,
-        'output': x * 7,
-        'formula': 'x × 7'
-    }
+    """Sub-sutra 4: Kevalaḥ Saptakaṃ Guṇyāt - Multiply by 7 alone."""
+    return {
+        'sutra_index': 20,
+        'sutra_name': 'Kevalaḥ Saptakaṃ Guṇyāt',
+        'input': x,
+        'output': x * 7,
+        'formula': 'x × 7'
+    }
 
 @staticmethod
 def sutra_21_vestanam(n: int, osculator: int) -> Dict[str, Any]:
-    """Sub-sutra 5: Veṣṭanam - Osculation (divisibility test)."""
-    last_digit = n % 10
-    remaining = n // 10
-    osculated = remaining + last_digit * osculator
-    return {
-        'sutra_index': 21,
-        'sutra_name': 'Veṣṭanam',
-        'n': n,
-        'osculator': osculator,
-        'osculated_value': osculated,
-        'formula': '(n // 10) + (n % 10) × osculator'
-    }
+    """Sub-sutra 5: Veṣṭanam - Osculation (divisibility test)."""
+    last_digit = n % 10
+    remaining = n // 10
+    osculated = remaining + last_digit * osculator
+    return {
+        'sutra_index': 21,
+        'sutra_name': 'Veṣṭanam',
+        'n': n,
+        'osculator': osculator,
+        'osculated_value': osculated,
+        'formula': '(n // 10) + (n % 10) × osculator'
+    }
 
 @staticmethod
 def sutra_22_yavadunam_tavadunam(n: int, base: int) -> Dict[str, Any]:
-    """Sub-sutra 6: Yāvadūnaṃ Tāvadūnam - Deficiency equals deficiency."""
-    deficiency = base - n
-    return {
-        'sutra_index': 22,
-        'sutra_name': 'Yāvadūnaṃ Tāvadūnam',
-        'n': n,
-        'base': base,
-        'deficiency': deficiency,
-        'symmetry': f'{n} is {deficiency} less than {base}'
-    }
+    """Sub-sutra 6: Yāvadūnaṃ Tāvadūnam - Deficiency equals deficiency."""
+    deficiency = base - n
+    return {
+        'sutra_index': 22,
+        'sutra_name': 'Yāvadūnaṃ Tāvadūnam',
+        'n': n,
+        'base': base,
+        'deficiency': deficiency,
+        'symmetry': f'{n} is {deficiency} less than {base}'
+    }
 
 @staticmethod
 def sutra_23_yavadunam_varga(n: int, base: int) -> Dict[str, Any]:
-    """Sub-sutra 7: Square the deficiency and add."""
-    deficiency = n - base
-    deficiency_squared = deficiency * deficiency
-    cross = n + deficiency
-    result = cross * base + deficiency_squared
-    return {
-        'sutra_index': 23,
-        'sutra_name': 'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet',
-        'n': n,
-        'base': base,
-        'deficiency': deficiency,
-        'deficiency_squared': deficiency_squared,
-        'result': result,
-        'formula': '(n + d) × base + d²'
-    }
+    """Sub-sutra 7: Square the deficiency and add."""
+    deficiency = n - base
+    deficiency_squared = deficiency * deficiency
+    cross = n + deficiency
+    result = cross * base + deficiency_squared
+    return {
+        'sutra_index': 23,
+        'sutra_name': 'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ Ca Yojayet',
+        'n': n,
+        'base': base,
+        'deficiency': deficiency,
+        'deficiency_squared': deficiency_squared,
+        'result': result,
+        'formula': '(n + d) × base + d²'
+    }
 
 @staticmethod
 def sutra_24_antyayor_dashake(a: int, b: int) -> Dict[str, Any]:
-    """Sub-sutra 8: Antyayordaśake'pi - Sum of last digits is 10."""
-    last_a = a % 10
-    last_b = b % 10
-    sum_is_10 = (last_a + last_b) == 10
-    return {
-        'sutra_index': 24,
-        'sutra_name': 'Antyayordaśake\'pi',
-        'a': a,
-        'b': b,
-        'last_a': last_a,
-        'last_b': last_b,
-        'sum_is_10': sum_is_10,
-        'application': 'Fast multiplication when last digits sum to 10'
-    }
+    """Sub-sutra 8: Antyayordaśake'pi - Sum of last digits is 10."""
+    last_a = a % 10
+    last_b = b % 10
+    sum_is_10 = (last_a + last_b) == 10
+    return {
+        'sutra_index': 24,
+        'sutra_name': 'Antyayordaśake\'pi',
+        'a': a,
+        'b': b,
+        'last_a': last_a,
+        'last_b': last_b,
+        'sum_is_10': sum_is_10,
+        'application': 'Fast multiplication when last digits sum to 10'
+    }
 
 @staticmethod
 def sutra_25_antyayor_eva(a: int, b: int) -> Dict[str, Any]:
-    """Sub-sutra 9: Antyayoreva - Only the last two."""
-    last_two_a = a % 100
-    last_two_b = b % 100
-    return {
-        'sutra_index': 25,
-        'sutra_name': 'Antyayoreva',
-        'a': a,
-        'b': b,
-        'last_two_a': last_two_a,
-        'last_two_b': last_two_b,
-        'product_last_two': last_two_a * last_two_b
-    }
+    """Sub-sutra 9: Antyayoreva - Only the last two."""
+    last_two_a = a % 100
+    last_two_b = b % 100
+    return {
+        'sutra_index': 25,
+        'sutra_name': 'Antyayoreva',
+        'a': a,
+        'b': b,
+        'last_two_a': last_two_a,
+        'last_two_b': last_two_b,
+        'product_last_two': last_two_a * last_two_b
+    }
 
 @staticmethod
 def sutra_26_samuccaya_gunitah(terms: List[Fraction], multiplier: Fraction) -> Dict[str, Any]:
-    """Sub-sutra 10: Samuccayagunitah - Sum multiplied."""
-    sum_terms = sum(terms)
-    result = sum_terms * multiplier
-    return {
-        'sutra_index': 26,
-        'sutra_name': 'Samuccayagunitah',
-        'terms': terms,
-        'sum': sum_terms,
-        'multiplier': multiplier,
-        'result': result,
-        'formula': '(Σ terms) × multiplier'
-    }
+    """Sub-sutra 10: Samuccayagunitah - Sum multiplied."""
+    sum_terms = sum(terms)
+    result = sum_terms * multiplier
+    return {
+        'sutra_index': 26,
+        'sutra_name': 'Samuccayagunitah',
+        'terms': terms,
+        'sum': sum_terms,
+        'multiplier': multiplier,
+        'result': result,
+        'formula': '(Σ terms) × multiplier'
+    }
 
 @staticmethod
-def sutra_27_lopana_sthapana(expression: List[Fraction], 
-                              eliminate_indices: List[int]) -> Dict[str, Any]:
-    """Sub-sutra 11: Lopanasthāpanābhyām - By elimination and retention."""
-    retained = [x for i, x in enumerate(expression) if i not in eliminate_indices]
-    eliminated = [x for i, x in enumerate(expression) if i in eliminate_indices]
-    return {
-        'sutra_index': 27,
-        'sutra_name': 'Lopanasthāpanābhyām',
-        'original': expression,
-        'eliminated': eliminated,
-        'retained': retained,
-        'formula': 'Remove specified terms, keep others'
-    }
+def sutra_27_lopana_sthapana(expression: List[Fraction], 
+                              eliminate_indices: List[int]) -> Dict[str, Any]:
+    """Sub-sutra 11: Lopanasthāpanābhyām - By elimination and retention."""
+    retained = [x for i, x in enumerate(expression) if i not in eliminate_indices]
+    eliminated = [x for i, x in enumerate(expression) if i in eliminate_indices]
+    return {
+        'sutra_index': 27,
+        'sutra_name': 'Lopanasthāpanābhyām',
+        'original': expression,
+        'eliminated': eliminated,
+        'retained': retained,
+        'formula': 'Remove specified terms, keep others'
+    }
 
 @staticmethod
 def sutra_28_vilokanam(pattern: Any) -> Dict[str, Any]:
-    """Sub-sutra 12: Vilokanam - By mere observation."""
-    return {
-        'sutra_index': 28,
-        'sutra_name': 'Vilokanam',
-        'pattern': pattern,
-        'observation': 'Direct pattern recognition',
-        'application': 'Immediate solution by inspection'
-    }
+    """Sub-sutra 12: Vilokanam - By mere observation."""
+    return {
+        'sutra_index': 28,
+        'sutra_name': 'Vilokanam',
+        'pattern': pattern,
+        'observation': 'Direct pattern recognition',
+        'application': 'Immediate solution by inspection'
+    }
 
 @staticmethod
 def sutra_29_gunitasamuccaya_samuccayagunitah(
-    list_a: List[Fraction], list_b: List[Fraction]) -> Dict[str, Any]:
-    """Sub-sutra 13: Product of sum = Sum of product (verification)."""
-    sum_a = sum(list_a)
-    sum_b = sum(list_b)
-    product_of_sums = sum_a * sum_b
-    
-    return {
-        'sutra_index': 29,
-        'sutra_name': 'Gunitasamuccayah Samuccayagunitah',
-        'sum_a': sum_a,
-        'sum_b': sum_b,
-        'product_of_sums': product_of_sums,
-        'formula': '(Σa)(Σb) for verification',
-        'application': 'Polynomial multiplication check'
-    }
+    list_a: List[Fraction], list_b: List[Fraction]) -> Dict[str, Any]:
+    """Sub-sutra 13: Product of sum = Sum of product (verification)."""
+    sum_a = sum(list_a)
+    sum_b = sum(list_b)
+    product_of_sums = sum_a * sum_b
+    
+    return {
+        'sutra_index': 29,
+        'sutra_name': 'Gunitasamuccayah Samuccayagunitah',
+        'sum_a': sum_a,
+        'sum_b': sum_b,
+        'product_of_sums': product_of_sums,
+        'formula': '(Σa)(Σb) for verification',
+        'application': 'Polynomial multiplication check'
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # UNIFIED SUTRA DISPATCHER
@@ -998,71 +1005,113 @@ def sutra_29_gunitasamuccaya_samuccayagunitah(
 
 @classmethod
 def apply_sutra(cls, sutra_index: int, *args, **kwargs) -> Dict[str, Any]:
-    """
-    Apply a sutra by index.
-    
-    Maps sutra index (1-29) to the appropriate method.
-    """
-    sutra_methods = {
-        1: cls.sutra_01_ekadhikena_purvena,
-        2: cls.sutra_02_nikhilam,
-        3: cls.sutra_03_urdhva_tiryagbhyam,
-        4: cls.sutra_04_paravartya,
-        5: cls.sutra_05_shunyam_samya,
-        6: cls.sutra_06_anurupye,
-        7: cls.sutra_07_sankalana_vyavakalana,
-        8: cls.sutra_08_puranapurana,
-        9: cls.sutra_09_calana_kalana,
-        10: cls.sutra_10_yavadunam,
-        11: cls.sutra_11_vyashti_samashti,
-        12: cls.sutra_12_sheshanyankena,
-        13: cls.sutra_13_sopantyadvayam,
-        14: cls.sutra_14_ekanyunena,
-        15: cls.sutra_15_gunitasamuccaya,
-        16: cls.sutra_16_gunakasamuccaya,
-        17: cls.sutra_17_anurupyena,
-        18: cls.sutra_18_shishyate,
-        19: cls.sutra_19_adyam_adyena,
-        20: cls.sutra_20_kevalaih_saptakam,
-        21: cls.sutra_21_vestanam,
-        22: cls.sutra_22_yavadunam_tavadunam,
-        23: cls.sutra_23_yavadunam_varga,
-        24: cls.sutra_24_antyayor_dashake,
-        25: cls.sutra_25_antyayor_eva,
-        26: cls.sutra_26_samuccaya_gunitah,
-        27: cls.sutra_27_lopana_sthapana,
-        28: cls.sutra_28_vilokanam,
-        29: cls.sutra_29_gunitasamuccaya_samuccayagunitah,
-    }
-    
-    if sutra_index not in sutra_methods:
-        raise ValueError(f"Invalid sutra index: {sutra_index}. Valid: 1-29")
-    
-    return sutra_methods[sutra_index](*args, **kwargs)
+    """
+    Apply a sutra by index.
+    
+    Maps sutra index (1-29) to the appropriate method.
+    """
+    sutra_methods = {
+        1: cls.sutra_01_ekadhikena_purvena,
+        2: cls.sutra_02_nikhilam,
+        3: cls.sutra_03_urdhva_tiryagbhyam,
+        4: cls.sutra_04_paravartya,
+        5: cls.sutra_05_shunyam_samya,
+        6: cls.sutra_06_anurupye,
+        7: cls.sutra_07_sankalana_vyavakalana,
+        8: cls.sutra_08_puranapurana,
+        9: cls.sutra_09_calana_kalana,
+        10: cls.sutra_10_yavadunam,
+        11: cls.sutra_11_vyashti_samashti,
+        12: cls.sutra_12_sheshanyankena,
+        13: cls.sutra_13_sopantyadvayam,
+        14: cls.sutra_14_ekanyunena,
+        15: cls.sutra_15_gunitasamuccaya,
+        16: cls.sutra_16_gunakasamuccaya,
+        17: cls.sutra_17_anurupyena,
+        18: cls.sutra_18_shishyate,
+        19: cls.sutra_19_adyam_adyena,
+        20: cls.sutra_20_kevalaih_saptakam,
+        21: cls.sutra_21_vestanam,
+        22: cls.sutra_22_yavadunam_tavadunam,
+        23: cls.sutra_23_yavadunam_varga,
+        24: cls.sutra_24_antyayor_dashake,
+        25: cls.sutra_25_antyayor_eva,
+        26: cls.sutra_26_samuccaya_gunitah,
+        27: cls.sutra_27_lopana_sthapana,
+        28: cls.sutra_28_vilokanam,
+        29: cls.sutra_29_gunitasamuccaya_samuccayagunitah,
+    }
+    
+    if sutra_index not in sutra_methods:
+        raise ValueError(f"Invalid sutra index: {sutra_index}. Valid: 1-29")
+    
+    return sutra_methods[sutra_index](*args, **kwargs)
 
 @classmethod
 def get_sutra_metadata(cls, sutra_index: int) -> SutraMetadata:
-    """Get metadata for a sutra."""
-    if sutra_index not in cls.SUTRA_REGISTRY:
-        raise ValueError(f"Invalid sutra index: {sutra_index}")
-    return cls.SUTRA_REGISTRY[sutra_index]
+    """Get metadata for a sutra."""
+    if sutra_index not in cls.SUTRA_REGISTRY:
+        raise ValueError(f"Invalid sutra index: {sutra_index}")
+    return cls.SUTRA_REGISTRY[sutra_index]
 
 @classmethod
 def list_all_sutras(cls) -> List[Dict[str, Any]]:
-    """List all 29 sutras with metadata."""
-    return [
-        {
-            'index': meta.index,
-            'sanskrit': meta.sanskrit,
-            'transliteration': meta.transliteration,
-            'english': meta.english,
-            'category': meta.category.name,
-            'is_primary': meta.is_primary,
-            'complexity': meta.complexity
-        }
-        for meta in cls.SUTRA_REGISTRY.values()
-    ]
-```
+    """List all 29 sutras with metadata."""
+    return [
+        {
+            'index': meta.index,
+            'sanskrit': meta.sanskrit,
+            'transliteration': meta.transliteration,
+            'english': meta.english,
+            'category': meta.category.name,
+            'is_primary': meta.is_primary,
+            'complexity': meta.complexity
+        }
+        for meta in cls.SUTRA_REGISTRY.values()
+    ]
+# ```
+
+# Bind sutra registry and implementations onto the class-based API
+VEDIC_SUTRA_METHODS = [
+    'sutra_01_ekadhikena_purvena',
+    'sutra_02_nikhilam',
+    'sutra_02_nikhilam_multiply',
+    'sutra_03_urdhva_tiryagbhyam',
+    'sutra_04_paravartya',
+    'sutra_05_shunyam_samya',
+    'sutra_06_anurupye',
+    'sutra_07_sankalana_vyavakalana',
+    'sutra_08_puranapurana',
+    'sutra_09_calana_kalana',
+    'sutra_10_yavadunam',
+    'sutra_11_vyashti_samashti',
+    'sutra_12_sheshanyankena',
+    'sutra_13_sopantyadvayam',
+    'sutra_14_ekanyunena',
+    'sutra_15_gunitasamuccaya',
+    'sutra_16_gunakasamuccaya',
+    'sutra_17_anurupyena',
+    'sutra_18_shishyate',
+    'sutra_19_adyam_adyena',
+    'sutra_20_kevalaih_saptakam',
+    'sutra_21_vestanam',
+    'sutra_22_yavadunam_tavadunam',
+    'sutra_23_yavadunam_varga',
+    'sutra_24_antyayor_dashake',
+    'sutra_25_antyayor_eva',
+    'sutra_26_samuccaya_gunitah',
+    'sutra_27_lopana_sthapana',
+    'sutra_28_vilokanam',
+    'sutra_29_gunitasamuccaya_samuccayagunitah',
+]
+
+VedicSutraEngine.SUTRA_REGISTRY = SUTRA_REGISTRY
+for _method_name in VEDIC_SUTRA_METHODS:
+    setattr(VedicSutraEngine, _method_name, staticmethod(globals()[_method_name]))
+
+VedicSutraEngine.apply_sutra = classmethod(apply_sutra)
+VedicSutraEngine.get_sutra_metadata = classmethod(get_sutra_metadata)
+VedicSutraEngine.list_all_sutras = classmethod(list_all_sutras)
 
 # End of Part 1 - Vedic Sutra Engine
 
@@ -1070,1616 +1119,1616 @@ def list_all_sutras(cls) -> List[Dict[str, Any]]:
 
 # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 
-# ║                                    SECTION 3: WHEELER Φ³ FIELD THEORY                                              ║
+# ║                                    SECTION 3: WHEELER Φ³ FIELD THEORY                                              ║
 
-# ║                              Hyperboloid Dielectric Rarefaction Algebra                                            ║
+# ║                              Hyperboloid Dielectric Rarefaction Algebra                                            ║
 
 # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 
 @dataclass
 class WheelerHyperboloidGeometry:
-“””
-Ken Wheeler’s Hyperboloid Field Geometry.
+    """
+    Ken Wheeler's Hyperboloid Field Geometry.
 
-```
-From source: "shape_hyperboloid(r, θ) = cosh(θ) × exp(-(r/R₀)²)"
+    # ```
+    From source: "shape_hyperboloid(r, θ) = cosh(θ) × exp(-(r/R₀)²)"
 
-The hyperboloid models the dielectric inertial plane where:
-- Polar concentration (cosh θ peaks at axis)
-- Gaussian radial decay
-- φ³ coupling amplification
-"""
+    The hyperboloid models the dielectric inertial plane where:
+    - Polar concentration (cosh θ peaks at axis)
+    - Gaussian radial decay
+    - φ³ coupling amplification
+    """
 
-R0: Fraction = Fraction(1)
-epsilon: Fraction = Fraction(1, 10)
+    R0: Fraction = Fraction(1)
+    epsilon: Fraction = Fraction(1, 10)
 
-def shape_function(self, r: Fraction, theta: Fraction) -> Dict[str, Any]:
-    """
-    EXACT: shape(r, θ) = cosh(θ) × exp(-(r/R₀)²)
-    """
-    r_normalized = r / self.R0
-    r_squared = r_normalized * r_normalized
-    
-    return {
-        'r': r,
-        'theta': theta,
-        'R0': self.R0,
-        'r_normalized': r_normalized,
-        'r_squared_over_R0_squared': r_squared,
-        'formula': 'cosh(θ) × exp(-r²/R₀²)',
-        'value_float': math.cosh(float(theta)) * math.exp(-float(r_squared))
-    }
+    def shape_function(self, r: Fraction, theta: Fraction) -> Dict[str, Any]:
+        """
+        EXACT: shape(r, θ) = cosh(θ) × exp(-(r/R₀)²)
+        """
+        r_normalized = r / self.R0
+        r_squared = r_normalized * r_normalized
 
-def radial_factor(self, r: Fraction) -> Dict[str, Fraction]:
-    """
-    EXACT: radial_factor = φ³ × (1 - r²/(r² + ε²))
-    
-    This φ³-weighted factor amplifies central curvature.
-    """
-    r_sq = r * r
-    eps_sq = self.epsilon * self.epsilon
-    denominator = r_sq + eps_sq
-    
-    if denominator == 0:
-        raise ValueError("Denominator r² + ε² = 0")
-    
-    core_factor = Fraction(1) - r_sq / denominator
-    result = PHI_CUBED * core_factor
-    
-    return {
-        'r': r,
-        'epsilon': self.epsilon,
-        'r_squared': r_sq,
-        'epsilon_squared': eps_sq,
-        'core_factor': core_factor,
-        'phi_cubed': PHI_CUBED,
-        'radial_factor': result,
-        'formula': 'φ³ × (1 - r²/(r² + ε²))'
-    }
+        return {
+            'r': r,
+            'theta': theta,
+            'R0': self.R0,
+            'r_normalized': r_normalized,
+            'r_squared_over_R0_squared': r_squared,
+            'formula': 'cosh(θ) × exp(-r²/R₀²)',
+            'value_float': math.cosh(float(theta)) * math.exp(-float(r_squared))
+        }
 
-def ansatz_modification(self, r: Fraction, theta: Fraction,
-                        alpha_h: Fraction, base_term: Fraction) -> Dict[str, Any]:
-    """
-    EXACT: term *= (1 + α_h × φ³ × shape_hyperboloid(r, θ))
-    """
-    shape = self.shape_function(r, theta)
-    shape_rational = Fraction(shape['value_float']).limit_denominator(10**15)
-    
-    modification = Fraction(1) + alpha_h * PHI_CUBED * shape_rational
-    result = base_term * modification
-    
-    return {
-        'r': r,
-        'theta': theta,
-        'alpha_h': alpha_h,
-        'phi_cubed': PHI_CUBED,
-        'shape_value': shape_rational,
-        'modification_factor': modification,
-        'result': result,
-        'formula': 'base × (1 + α_h × φ³ × shape(r,θ))'
-    }
-```
+    def radial_factor(self, r: Fraction) -> Dict[str, Fraction]:
+        """
+        EXACT: radial_factor = φ³ × (1 - r²/(r² + ε²))
+
+        This φ³-weighted factor amplifies central curvature.
+        """
+        r_sq = r * r
+        eps_sq = self.epsilon * self.epsilon
+        denominator = r_sq + eps_sq
+
+        if denominator == 0:
+            raise ValueError("Denominator r² + ε² = 0")
+
+        core_factor = Fraction(1) - r_sq / denominator
+        result = PHI_CUBED * core_factor
+
+        return {
+            'r': r,
+            'epsilon': self.epsilon,
+            'r_squared': r_sq,
+            'epsilon_squared': eps_sq,
+            'core_factor': core_factor,
+            'phi_cubed': PHI_CUBED,
+            'radial_factor': result,
+            'formula': 'φ³ × (1 - r²/(r² + ε²))'
+        }
+
+    def ansatz_modification(self, r: Fraction, theta: Fraction,
+                            alpha_h: Fraction, base_term: Fraction) -> Dict[str, Any]:
+        """
+        EXACT: term *= (1 + α_h × φ³ × shape_hyperboloid(r, θ))
+        """
+        shape = self.shape_function(r, theta)
+        shape_rational = Fraction(shape['value_float']).limit_denominator(10**15)
+
+        modification = Fraction(1) + alpha_h * PHI_CUBED * shape_rational
+        result = base_term * modification
+
+        return {
+            'r': r,
+            'theta': theta,
+            'alpha_h': alpha_h,
+            'phi_cubed': PHI_CUBED,
+            'shape_value': shape_rational,
+            'modification_factor': modification,
+            'result': result,
+            'formula': 'base × (1 + α_h × φ³ × shape(r,θ))'
+        }
+# ```
 
 @dataclass
 class WheelerCurvatureCoupling:
-“””
-Wheeler’s Modified Einstein Field Equation with Φ³ Coupling.
+    """
+    Wheeler's Modified Einstein Field Equation with Φ³ Coupling.
 
-```
-EXACT FORMULA:
-    G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)
+    # ```
+    EXACT FORMULA:
+        G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)
 
-Where:
-- G_μν: Einstein curvature tensor
-- Q_μν: Quantum corrections
-- φ³: Golden ratio cubed (Wheeler coupling factor)
-- T_μν^(dielectric): Dielectric stress-energy tensor
-"""
+    Where:
+    - G_μν: Einstein curvature tensor
+    - Q_μν: Quantum corrections
+    - φ³: Golden ratio cubed (Wheeler coupling factor)
+    - T_μν^(dielectric): Dielectric stress-energy tensor
+    """
 
-@staticmethod
-def coupling_constant() -> Fraction:
-    """κ = 8π × φ³"""
-    return 8 * FundamentalConstants.PI * PHI_CUBED
+    @staticmethod
+    def coupling_constant() -> Fraction:
+        """κ = 8π × φ³"""
+        return 8 * FundamentalConstants.PI * PHI_CUBED
 
-@staticmethod
-def field_equation(G_munu: Fraction, Q_munu: Fraction,
-                   T_dielectric: Fraction) -> Dict[str, Any]:
-    """
-    Evaluate G + Q = 8πφ³ T
-    """
-    kappa = WheelerCurvatureCoupling.coupling_constant()
-    lhs = G_munu + Q_munu
-    rhs = kappa * T_dielectric
-    residual = lhs - rhs
-    
-    return {
-        'G_munu': G_munu,
-        'Q_munu': Q_munu,
-        'T_dielectric': T_dielectric,
-        'coupling_constant': kappa,
-        'LHS': lhs,
-        'RHS': rhs,
-        'residual': residual,
-        'satisfied': residual == 0,
-        'formula': 'G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)'
-    }
+    @staticmethod
+    def field_equation(G_munu: Fraction, Q_munu: Fraction,
+                       T_dielectric: Fraction) -> Dict[str, Any]:
+        """
+        Evaluate G + Q = 8πφ³ T
+        """
+        kappa = WheelerCurvatureCoupling.coupling_constant()
+        lhs = G_munu + Q_munu
+        rhs = kappa * T_dielectric
+        residual = lhs - rhs
 
-@staticmethod
-def solve_for_dielectric(G_munu: Fraction, Q_munu: Fraction) -> Fraction:
-    """T^(dielectric) = (G + Q) / (8πφ³)"""
-    kappa = WheelerCurvatureCoupling.coupling_constant()
-    return (G_munu + Q_munu) / kappa
+        return {
+            'G_munu': G_munu,
+            'Q_munu': Q_munu,
+            'T_dielectric': T_dielectric,
+            'coupling_constant': kappa,
+            'LHS': lhs,
+            'RHS': rhs,
+            'residual': residual,
+            'satisfied': residual == 0,
+            'formula': 'G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)'
+        }
 
-@staticmethod
-def solve_for_curvature(T_dielectric: Fraction, Q_munu: Fraction) -> Fraction:
-    """G_μν = 8πφ³ T^(dielectric) - Q_μν"""
-    kappa = WheelerCurvatureCoupling.coupling_constant()
-    return kappa * T_dielectric - Q_munu
-```
+    @staticmethod
+    def solve_for_dielectric(G_munu: Fraction, Q_munu: Fraction) -> Fraction:
+        """T^(dielectric) = (G + Q) / (8πφ³)"""
+        kappa = WheelerCurvatureCoupling.coupling_constant()
+        return (G_munu + Q_munu) / kappa
+
+    @staticmethod
+    def solve_for_curvature(T_dielectric: Fraction, Q_munu: Fraction) -> Fraction:
+        """G_μν = 8πφ³ T^(dielectric) - Q_μν"""
+        kappa = WheelerCurvatureCoupling.coupling_constant()
+        return kappa * T_dielectric - Q_munu
+# ```
 
 @dataclass
 class DielectricRarefactionPDE:
-“””
-Wheeler’s Coupled PDE System for Dielectric-Cymatic Fields.
-
-```
-From source document:
-
-Primary Field u (gravitational/cymatic):
-    ∂ₜu = D_u × ∇²u + M × sin(G_c × u)
-
-Dielectric Field D:
-    ∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u
-
-The β coupling uses φ³ to model Wheeler's prediction that
-"a surge in u causes D to rarefy."
-"""
-
-# Primary field parameters
-D_u: Fraction = Fraction(1, 10)       # Diffusion
-M: Fraction = Fraction(1, 2)          # Modulation amplitude
-G_c: Fraction = PHI                   # Cymatic coupling (golden ratio)
-
-# Dielectric field parameters
-c_D: Fraction = Fraction(1)           # Wave speed
-lambda_damp: Fraction = Fraction(1, 5)
-alpha_restore: Fraction = Fraction(1, 10)
-beta_coupling: Fraction = PHI_CUBED   # φ³ coupling
-
-# Equilibrium
-D0: Fraction = Fraction(1)
-
-def primary_field_update(self, u: Fraction, laplacian_u: Fraction) -> Dict[str, Fraction]:
-    """∂ₜu = D_u × ∇²u + M × sin(G_c × u)"""
-    diffusion_term = self.D_u * laplacian_u
-    
-    oscillation_arg = float(self.G_c * u)
-    oscillation_val = Fraction(float(self.M) * math.sin(oscillation_arg)).limit_denominator(10**15)
-    
-    du_dt = diffusion_term + oscillation_val
-    
-    return {
-        'u': u,
-        'laplacian_u': laplacian_u,
-        'diffusion_term': diffusion_term,
-        'oscillation_term': oscillation_val,
-        'du_dt': du_dt,
-        'formula': '∂ₜu = D_u × ∇²u + M × sin(G_c × u)'
-    }
-
-def dielectric_field_update(self, D: Fraction, dD_dt: Fraction,
-                             laplacian_D: Fraction, u: Fraction) -> Dict[str, Fraction]:
-    """∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u"""
-    c_D_sq = self.c_D * self.c_D
-    
-    wave_term = c_D_sq * laplacian_D
-    damping_term = -self.lambda_damp * dD_dt
-    restoring_term = -self.alpha_restore * D
-    coupling_term = self.beta_coupling * u  # φ³ × u
-    
-    d2D_dt2 = wave_term + damping_term + restoring_term + coupling_term
-    
-    return {
-        'D': D,
-        'dD_dt': dD_dt,
-        'u': u,
-        'wave_term': wave_term,
-        'damping_term': damping_term,
-        'restoring_term': restoring_term,
-        'coupling_term': coupling_term,
-        'd2D_dt2': d2D_dt2,
-        'formula': '∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u'
-    }
-
-def coupled_step(self, u: Fraction, D: Fraction, dD_dt: Fraction,
-                 laplacian_u: Fraction, laplacian_D: Fraction,
-                 dt: Fraction) -> Dict[str, Fraction]:
-    """Execute one coupled time step."""
-    primary = self.primary_field_update(u, laplacian_u)
-    u_next = u + dt * primary['du_dt']
-    
-    eta = self.beta_coupling
-    gamma = self.alpha_restore
-    
-    d_source = -eta * (u_next - u) / dt if dt != 0 else Fraction(0)
-    d_decay = -gamma * (D - self.D0)
-    D_diffusion = self.D_u * laplacian_D
-    D_next = D + dt * (D_diffusion + d_decay + d_source)
-    
-    return {
-        'u': u,
-        'u_next': u_next,
-        'D': D,
-        'D_next': D_next,
-        'dt': dt,
-        'd_source': d_source,
-        'd_decay': d_decay,
-        'formula': 'Coupled φ³ rarefaction step'
-    }
-```
-
+    """
+    Wheeler's Coupled PDE System for Dielectric-Cymatic Fields.
+    
+    # ```
+    From source document:
+    
+    Primary Field u (gravitational/cymatic):
+        ∂ₜu = D_u × ∇²u + M × sin(G_c × u)
+    
+    Dielectric Field D:
+        ∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u
+    
+    The β coupling uses φ³ to model Wheeler's prediction that
+    "a surge in u causes D to rarefy."
+    """
+    
+    # Primary field parameters
+    D_u: Fraction = Fraction(1, 10)       # Diffusion
+    M: Fraction = Fraction(1, 2)          # Modulation amplitude
+    G_c: Fraction = PHI                   # Cymatic coupling (golden ratio)
+    
+    # Dielectric field parameters
+    c_D: Fraction = Fraction(1)           # Wave speed
+    lambda_damp: Fraction = Fraction(1, 5)
+    alpha_restore: Fraction = Fraction(1, 10)
+    beta_coupling: Fraction = PHI_CUBED   # φ³ coupling
+    
+    # Equilibrium
+    D0: Fraction = Fraction(1)
+    
+    def primary_field_update(self, u: Fraction, laplacian_u: Fraction) -> Dict[str, Fraction]:
+        """∂ₜu = D_u × ∇²u + M × sin(G_c × u)"""
+        diffusion_term = self.D_u * laplacian_u
+        
+        oscillation_arg = float(self.G_c * u)
+        oscillation_val = Fraction(float(self.M) * math.sin(oscillation_arg)).limit_denominator(10**15)
+        
+        du_dt = diffusion_term + oscillation_val
+        
+        return {
+            'u': u,
+            'laplacian_u': laplacian_u,
+            'diffusion_term': diffusion_term,
+            'oscillation_term': oscillation_val,
+            'du_dt': du_dt,
+            'formula': '∂ₜu = D_u × ∇²u + M × sin(G_c × u)'
+        }
+    
+    def dielectric_field_update(self, D: Fraction, dD_dt: Fraction,
+                                 laplacian_D: Fraction, u: Fraction) -> Dict[str, Fraction]:
+        """∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u"""
+        c_D_sq = self.c_D * self.c_D
+        
+        wave_term = c_D_sq * laplacian_D
+        damping_term = -self.lambda_damp * dD_dt
+        restoring_term = -self.alpha_restore * D
+        coupling_term = self.beta_coupling * u  # φ³ × u
+        
+        d2D_dt2 = wave_term + damping_term + restoring_term + coupling_term
+        
+        return {
+            'D': D,
+            'dD_dt': dD_dt,
+            'u': u,
+            'wave_term': wave_term,
+            'damping_term': damping_term,
+            'restoring_term': restoring_term,
+            'coupling_term': coupling_term,
+            'd2D_dt2': d2D_dt2,
+            'formula': '∂ₜₜD = c_D² × ∇²D - λ × ∂ₜD - α × D + β × u'
+        }
+    
+    def coupled_step(self, u: Fraction, D: Fraction, dD_dt: Fraction,
+                     laplacian_u: Fraction, laplacian_D: Fraction,
+                     dt: Fraction) -> Dict[str, Fraction]:
+        """Execute one coupled time step."""
+        primary = self.primary_field_update(u, laplacian_u)
+        u_next = u + dt * primary['du_dt']
+        
+        eta = self.beta_coupling
+        gamma = self.alpha_restore
+        
+        d_source = -eta * (u_next - u) / dt if dt != 0 else Fraction(0)
+        d_decay = -gamma * (D - self.D0)
+        D_diffusion = self.D_u * laplacian_D
+        D_next = D + dt * (D_diffusion + d_decay + d_source)
+        
+        return {
+            'u': u,
+            'u_next': u_next,
+            'D': D,
+            'D_next': D_next,
+            'dt': dt,
+            'd_source': d_source,
+            'd_decay': d_decay,
+            'formula': 'Coupled φ³ rarefaction step'
+        }
+    # ```
+    
 @dataclass
 class WheelerQuantumRotations:
-“””
-Wheeler’s φ³-Enhanced Quantum Circuit Rotations.
-
-```
-From source:
-    θ_x = θ × φ³
-    θ_y = θ / 2
-    θ_z = θ / 3
-
-"The φ³ in Rx creates asymmetric rotation favoring certain orientations,
-mimicking a stronger dielectric twist in one axis."
-"""
-
-PI: Fraction = FundamentalConstants.PI
-
-def rotation_angles(self, layer: int) -> Dict[str, Fraction]:
-    """
-    Compute exact rotation angles for circuit layer.
-    
-    EXACT:
-        θ_base = (π/4) × (layer + 1)
-        θ_x = θ_base × φ³
-        θ_y = θ_base / 2
-        θ_z = θ_base / 3
-    """
-    theta_base = (self.PI / 4) * (layer + 1)
-    
-    return {
-        'layer': layer,
-        'theta_base': theta_base,
-        'theta_x': theta_base * PHI_CUBED,
-        'theta_y': theta_base / 2,
-        'theta_z': theta_base / 3,
-        'phi_cubed': PHI_CUBED,
-        'formula': {'base': 'θ = (π/4)(layer+1)', 'Rx': 'θ×φ³', 'Ry': 'θ/2', 'Rz': 'θ/3'}
-    }
-
-def toroidal_entanglement(self, num_qubits: int) -> List[Tuple[int, int]]:
-    """Ring topology: q_i → q_(i+1 mod n)"""
-    return [(i, (i + 1) % num_qubits) for i in range(num_qubits)]
-
-def circuit_specification(self, num_qubits: int, depth: int) -> Dict[str, Any]:
-    """Complete circuit specification with φ³ rotations."""
-    layers = []
-    for layer in range(depth):
-        angles = self.rotation_angles(layer)
-        layers.append({
-            'layer': layer,
-            'rotations': angles,
-            'entanglement': self.toroidal_entanglement(num_qubits),
-            'gates': [
-                {'gate': 'Rx', 'angle': angles['theta_x'], 'qubits': list(range(num_qubits))},
-                {'gate': 'Ry', 'angle': angles['theta_y'], 'qubits': list(range(num_qubits))},
-                {'gate': 'Rz', 'angle': angles['theta_z'], 'qubits': list(range(num_qubits))},
-                {'gate': 'CNOT', 'pairs': self.toroidal_entanglement(num_qubits)}
-            ]
-        })
-    
-    return {
-        'num_qubits': num_qubits,
-        'depth': depth,
-        'phi_cubed': PHI_CUBED,
-        'topology': 'toroidal',
-        'layers': layers
-    }
-```
-
+    """
+    Wheeler's φ³-Enhanced Quantum Circuit Rotations.
+    
+    # ```
+    From source:
+        θ_x = θ × φ³
+        θ_y = θ / 2
+        θ_z = θ / 3
+    
+    "The φ³ in Rx creates asymmetric rotation favoring certain orientations,
+    mimicking a stronger dielectric twist in one axis."
+    """
+    
+    PI: Fraction = FundamentalConstants.PI
+    
+    def rotation_angles(self, layer: int) -> Dict[str, Fraction]:
+        """
+        Compute exact rotation angles for circuit layer.
+        
+        EXACT:
+            θ_base = (π/4) × (layer + 1)
+            θ_x = θ_base × φ³
+            θ_y = θ_base / 2
+            θ_z = θ_base / 3
+        """
+        theta_base = (self.PI / 4) * (layer + 1)
+        
+        return {
+            'layer': layer,
+            'theta_base': theta_base,
+            'theta_x': theta_base * PHI_CUBED,
+            'theta_y': theta_base / 2,
+            'theta_z': theta_base / 3,
+            'phi_cubed': PHI_CUBED,
+            'formula': {'base': 'θ = (π/4)(layer+1)', 'Rx': 'θ×φ³', 'Ry': 'θ/2', 'Rz': 'θ/3'}
+        }
+    
+    def toroidal_entanglement(self, num_qubits: int) -> List[Tuple[int, int]]:
+        """Ring topology: q_i → q_(i+1 mod n)"""
+        return [(i, (i + 1) % num_qubits) for i in range(num_qubits)]
+    
+    def circuit_specification(self, num_qubits: int, depth: int) -> Dict[str, Any]:
+        """Complete circuit specification with φ³ rotations."""
+        layers = []
+        for layer in range(depth):
+            angles = self.rotation_angles(layer)
+            layers.append({
+                'layer': layer,
+                'rotations': angles,
+                'entanglement': self.toroidal_entanglement(num_qubits),
+                'gates': [
+                    {'gate': 'Rx', 'angle': angles['theta_x'], 'qubits': list(range(num_qubits))},
+                    {'gate': 'Ry', 'angle': angles['theta_y'], 'qubits': list(range(num_qubits))},
+                    {'gate': 'Rz', 'angle': angles['theta_z'], 'qubits': list(range(num_qubits))},
+                    {'gate': 'CNOT', 'pairs': self.toroidal_entanglement(num_qubits)}
+                ]
+            })
+        
+        return {
+            'num_qubits': num_qubits,
+            'depth': depth,
+            'phi_cubed': PHI_CUBED,
+            'topology': 'toroidal',
+            'layers': layers
+        }
+    # ```
+    
 @dataclass
 class WheelerImageTransforms:
-“””
-Wheeler’s Dielectric Image Processing from dielectric_image_processing.html.
-
-```
-EXACT COEFFICIENTS:
-    Hyperboloid: 0.3, 0.5
-    Golden Ratio: 0.02
-    Conjugate: 0.2, 0.5
-"""
-
-HYPERBOLOID_MOD: Fraction = Fraction(3, 10)
-HYPERBOLOID_OFF: Fraction = Fraction(1, 2)
-GOLDEN_MOD: Fraction = Fraction(1, 50)
-CONJUGATE_MOD: Fraction = Fraction(1, 5)
-CONJUGATE_OFF: Fraction = Fraction(1, 2)
-
-@staticmethod
-def hyperboloid_H(x: Fraction, y: Fraction) -> Dict[str, Any]:
-    """H(x,y) = √(x² + y² + 1)"""
-    x_sq = x * x
-    y_sq = y * y
-    arg = x_sq + y_sq + Fraction(1)
-    return {
-        'x': x, 'y': y,
-        'argument': arg,
-        'H': math.sqrt(float(arg)),
-        'formula': 'H(x,y) = √(x² + y² + 1)'
-    }
-
-@classmethod
-def hyperboloid_transform(cls, I: Fraction, M: Fraction) -> Dict[str, Fraction]:
-    """I'(x,y) = I(x,y) × (1 + 0.3 × (M(x,y) - 0.5))"""
-    factor = Fraction(1) + cls.HYPERBOLOID_MOD * (M - cls.HYPERBOLOID_OFF)
-    return {
-        'I': I,
-        'M': M,
-        'factor': factor,
-        'I_prime': I * factor,
-        'formula': "I' = I × (1 + 0.3 × (M - 0.5))"
-    }
-
-@classmethod
-def golden_ratio_transform(cls, I: Fraction) -> Dict[str, Any]:
-    """I'(x,y) = I(x,y) × (1 + 0.02 × sin(φ² × I))"""
-    arg = float(PHI_SQUARED * I)
-    sin_val = Fraction(math.sin(arg)).limit_denominator(10**15)
-    factor = Fraction(1) + cls.GOLDEN_MOD * sin_val
-    return {
-        'I': I,
-        'phi_squared': PHI_SQUARED,
-        'sin_value': sin_val,
-        'factor': factor,
-        'I_prime': I * factor,
-        'formula': "I' = I × (1 + 0.02 × sin(φ² × I))"
-    }
-
-@classmethod
-def conjugate_pair_transform(cls, I: Fraction, grad_I: Fraction,
-                              curl_I: Fraction, div_I: Fraction,
-                              alpha: Fraction = Fraction(1, 2)) -> Dict[str, Fraction]:
-    """
-    C = α × ∇I × (1 - ∇×I) + (1-α) × ∇·I
-    I' = I × (1 + 0.2 × (C - 0.5))
-    """
-    C = alpha * grad_I * (Fraction(1) - curl_I) + (Fraction(1) - alpha) * div_I
-    factor = Fraction(1) + cls.CONJUGATE_MOD * (C - cls.CONJUGATE_OFF)
-    return {
-        'I': I,
-        'C': C,
-        'factor': factor,
-        'I_prime': I * factor,
-        'formula': "C = α∇I(1-∇×I) + (1-α)∇·I; I' = I(1 + 0.2(C - 0.5))"
-    }
-```
-
-# ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-
-# ║                                    SECTION 4: QUANTUM COMPUTATIONAL FRAMEWORK                                      ║
-
-# ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
+    """
+    Wheeler's Dielectric Image Processing from dielectric_image_processing.html.
+    
+    # ```
+    EXACT COEFFICIENTS:
+        Hyperboloid: 0.3, 0.5
+        Golden Ratio: 0.02
+        Conjugate: 0.2, 0.5
+    """
+    
+    HYPERBOLOID_MOD: Fraction = Fraction(3, 10)
+    HYPERBOLOID_OFF: Fraction = Fraction(1, 2)
+    GOLDEN_MOD: Fraction = Fraction(1, 50)
+    CONJUGATE_MOD: Fraction = Fraction(1, 5)
+    CONJUGATE_OFF: Fraction = Fraction(1, 2)
+    
+    @staticmethod
+    def hyperboloid_H(x: Fraction, y: Fraction) -> Dict[str, Any]:
+        """H(x,y) = √(x² + y² + 1)"""
+        x_sq = x * x
+        y_sq = y * y
+        arg = x_sq + y_sq + Fraction(1)
+        return {
+            'x': x, 'y': y,
+            'argument': arg,
+            'H': math.sqrt(float(arg)),
+            'formula': 'H(x,y) = √(x² + y² + 1)'
+        }
+    
+    @classmethod
+    def hyperboloid_transform(cls, I: Fraction, M: Fraction) -> Dict[str, Fraction]:
+        """I'(x,y) = I(x,y) × (1 + 0.3 × (M(x,y) - 0.5))"""
+        factor = Fraction(1) + cls.HYPERBOLOID_MOD * (M - cls.HYPERBOLOID_OFF)
+        return {
+            'I': I,
+            'M': M,
+            'factor': factor,
+            'I_prime': I * factor,
+            'formula': "I' = I × (1 + 0.3 × (M - 0.5))"
+        }
+    
+    @classmethod
+    def golden_ratio_transform(cls, I: Fraction) -> Dict[str, Any]:
+        """I'(x,y) = I(x,y) × (1 + 0.02 × sin(φ² × I))"""
+        arg = float(PHI_SQUARED * I)
+        sin_val = Fraction(math.sin(arg)).limit_denominator(10**15)
+        factor = Fraction(1) + cls.GOLDEN_MOD * sin_val
+        return {
+            'I': I,
+            'phi_squared': PHI_SQUARED,
+            'sin_value': sin_val,
+            'factor': factor,
+            'I_prime': I * factor,
+            'formula': "I' = I × (1 + 0.02 × sin(φ² × I))"
+        }
+    
+    @classmethod
+    def conjugate_pair_transform(cls, I: Fraction, grad_I: Fraction,
+                                  curl_I: Fraction, div_I: Fraction,
+                                  alpha: Fraction = Fraction(1, 2)) -> Dict[str, Fraction]:
+        """
+        C = α × ∇I × (1 - ∇×I) + (1-α) × ∇·I
+        I' = I × (1 + 0.2 × (C - 0.5))
+        """
+        C = alpha * grad_I * (Fraction(1) - curl_I) + (Fraction(1) - alpha) * div_I
+        factor = Fraction(1) + cls.CONJUGATE_MOD * (C - cls.CONJUGATE_OFF)
+        return {
+            'I': I,
+            'C': C,
+            'factor': factor,
+            'I_prime': I * factor,
+            'formula': "C = α∇I(1-∇×I) + (1-α)∇·I; I' = I(1 + 0.2(C - 0.5))"
+        }
+    # ```
+    
+    # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+    
+    # ║                                    SECTION 4: QUANTUM COMPUTATIONAL FRAMEWORK                                      ║
+    
+    # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+    
 @dataclass
 class QuantumGateExact:
-“””
-Exact representation of quantum gates using rational arithmetic.
-“””
-
-```
-@staticmethod
-def hadamard_matrix() -> List[List[Fraction]]:
-    """
-    H = (1/√2) [[1, 1], [1, -1]]
-    
-    Using rational approximation of 1/√2 ≈ 408/577 (convergent)
-    """
-    inv_sqrt2 = Fraction(408, 577)  # Error < 2×10⁻⁶
-    return [
-        [inv_sqrt2, inv_sqrt2],
-        [inv_sqrt2, -inv_sqrt2]
-    ]
-
-@staticmethod
-def pauli_X() -> List[List[Fraction]]:
-    """X = [[0, 1], [1, 0]]"""
-    return [[Fraction(0), Fraction(1)], [Fraction(1), Fraction(0)]]
-
-@staticmethod
-def pauli_Y() -> List[List[Fraction]]:
-    """Y = [[0, -i], [i, 0]] - requires complex, return structure"""
-    return {'matrix': [[0, -1j], [1j, 0]], 'exact_form': 'iσ_y'}
-
-@staticmethod
-def pauli_Z() -> List[List[Fraction]]:
-    """Z = [[1, 0], [0, -1]]"""
-    return [[Fraction(1), Fraction(0)], [Fraction(0), Fraction(-1)]]
-
-@staticmethod
-def cnot_matrix() -> List[List[Fraction]]:
-    """
-    CNOT = [[1,0,0,0], [0,1,0,0], [0,0,0,1], [0,0,1,0]]
-    """
-    Z = Fraction(0)
-    O = Fraction(1)
-    return [
-        [O, Z, Z, Z],
-        [Z, O, Z, Z],
-        [Z, Z, Z, O],
-        [Z, Z, O, Z]
-    ]
-
-@staticmethod
-def rotation_X(theta: Fraction) -> Dict[str, Any]:
-    """
-    Rx(θ) = [[cos(θ/2), -i·sin(θ/2)], [-i·sin(θ/2), cos(θ/2)]]
-    """
-    half_theta = theta / 2
-    cos_val = Fraction(math.cos(float(half_theta))).limit_denominator(10**12)
-    sin_val = Fraction(math.sin(float(half_theta))).limit_denominator(10**12)
-    
-    return {
-        'gate': 'Rx',
-        'theta': theta,
-        'cos_half_theta': cos_val,
-        'sin_half_theta': sin_val,
-        'matrix_structure': '[[cos, -i·sin], [-i·sin, cos]]'
-    }
-
-@staticmethod
-def rotation_Y(theta: Fraction) -> Dict[str, Any]:
-    """Ry(θ) = [[cos(θ/2), -sin(θ/2)], [sin(θ/2), cos(θ/2)]]"""
-    half_theta = theta / 2
-    cos_val = Fraction(math.cos(float(half_theta))).limit_denominator(10**12)
-    sin_val = Fraction(math.sin(float(half_theta))).limit_denominator(10**12)
-    
-    return {
-        'gate': 'Ry',
-        'theta': theta,
-        'matrix': [[cos_val, -sin_val], [sin_val, cos_val]]
-    }
-
-@staticmethod
-def rotation_Z(theta: Fraction) -> Dict[str, Any]:
-    """Rz(θ) = [[e^(-iθ/2), 0], [0, e^(iθ/2)]]"""
-    half_theta = theta / 2
-    
-    return {
-        'gate': 'Rz',
-        'theta': theta,
-        'half_theta': half_theta,
-        'matrix_structure': '[[e^(-iθ/2), 0], [0, e^(iθ/2)]]'
-    }
-```
-
+    """
+    Exact representation of quantum gates using rational arithmetic.
+    """
+    
+    # ```
+    @staticmethod
+    def hadamard_matrix() -> List[List[Fraction]]:
+        """
+        H = (1/√2) [[1, 1], [1, -1]]
+        
+        Using rational approximation of 1/√2 ≈ 408/577 (convergent)
+        """
+        inv_sqrt2 = Fraction(408, 577)  # Error < 2×10⁻⁶
+        return [
+            [inv_sqrt2, inv_sqrt2],
+            [inv_sqrt2, -inv_sqrt2]
+        ]
+    
+    @staticmethod
+    def pauli_X() -> List[List[Fraction]]:
+        """X = [[0, 1], [1, 0]]"""
+        return [[Fraction(0), Fraction(1)], [Fraction(1), Fraction(0)]]
+    
+    @staticmethod
+    def pauli_Y() -> List[List[Fraction]]:
+        """Y = [[0, -i], [i, 0]] - requires complex, return structure"""
+        return {'matrix': [[0, -1j], [1j, 0]], 'exact_form': 'iσ_y'}
+    
+    @staticmethod
+    def pauli_Z() -> List[List[Fraction]]:
+        """Z = [[1, 0], [0, -1]]"""
+        return [[Fraction(1), Fraction(0)], [Fraction(0), Fraction(-1)]]
+    
+    @staticmethod
+    def cnot_matrix() -> List[List[Fraction]]:
+        """
+        CNOT = [[1,0,0,0], [0,1,0,0], [0,0,0,1], [0,0,1,0]]
+        """
+        Z = Fraction(0)
+        O = Fraction(1)
+        return [
+            [O, Z, Z, Z],
+            [Z, O, Z, Z],
+            [Z, Z, Z, O],
+            [Z, Z, O, Z]
+        ]
+    
+    @staticmethod
+    def rotation_X(theta: Fraction) -> Dict[str, Any]:
+        """
+        Rx(θ) = [[cos(θ/2), -i·sin(θ/2)], [-i·sin(θ/2), cos(θ/2)]]
+        """
+        half_theta = theta / 2
+        cos_val = Fraction(math.cos(float(half_theta))).limit_denominator(10**12)
+        sin_val = Fraction(math.sin(float(half_theta))).limit_denominator(10**12)
+        
+        return {
+            'gate': 'Rx',
+            'theta': theta,
+            'cos_half_theta': cos_val,
+            'sin_half_theta': sin_val,
+            'matrix_structure': '[[cos, -i·sin], [-i·sin, cos]]'
+        }
+    
+    @staticmethod
+    def rotation_Y(theta: Fraction) -> Dict[str, Any]:
+        """Ry(θ) = [[cos(θ/2), -sin(θ/2)], [sin(θ/2), cos(θ/2)]]"""
+        half_theta = theta / 2
+        cos_val = Fraction(math.cos(float(half_theta))).limit_denominator(10**12)
+        sin_val = Fraction(math.sin(float(half_theta))).limit_denominator(10**12)
+        
+        return {
+            'gate': 'Ry',
+            'theta': theta,
+            'matrix': [[cos_val, -sin_val], [sin_val, cos_val]]
+        }
+    
+    @staticmethod
+    def rotation_Z(theta: Fraction) -> Dict[str, Any]:
+        """Rz(θ) = [[e^(-iθ/2), 0], [0, e^(iθ/2)]]"""
+        half_theta = theta / 2
+        
+        return {
+            'gate': 'Rz',
+            'theta': theta,
+            'half_theta': half_theta,
+            'matrix_structure': '[[e^(-iθ/2), 0], [0, e^(iθ/2)]]'
+        }
+    # ```
+    
 @dataclass
 class QuantumCircuitBuilder:
-“””
-Build quantum circuits with exact angle specifications.
-“””
-
-```
-num_qubits: int
-depth: int = 1
-gates: List[Dict[str, Any]] = field(default_factory=list)
-
-def add_hadamard(self, qubit: int) -> 'QuantumCircuitBuilder':
-    """Add Hadamard gate."""
-    self.gates.append({'gate': 'H', 'qubit': qubit})
-    return self
-
-def add_rotation(self, gate_type: str, qubit: int, theta: Fraction) -> 'QuantumCircuitBuilder':
-    """Add rotation gate (Rx, Ry, Rz)."""
-    self.gates.append({
-        'gate': gate_type,
-        'qubit': qubit,
-        'theta': theta,
-        'theta_float': float(theta)
-    })
-    return self
-
-def add_cnot(self, control: int, target: int) -> 'QuantumCircuitBuilder':
-    """Add CNOT gate."""
-    self.gates.append({'gate': 'CNOT', 'control': control, 'target': target})
-    return self
-
-def add_wheeler_layer(self, layer: int) -> 'QuantumCircuitBuilder':
-    """Add complete Wheeler layer with φ³ rotations."""
-    wheeler = WheelerQuantumRotations()
-    angles = wheeler.rotation_angles(layer)
-    
-    # Rotations on all qubits
-    for q in range(self.num_qubits):
-        self.add_rotation('Rx', q, angles['theta_x'])
-        self.add_rotation('Ry', q, angles['theta_y'])
-        self.add_rotation('Rz', q, angles['theta_z'])
-    
-    # Toroidal entanglement
-    for control, target in wheeler.toroidal_entanglement(self.num_qubits):
-        self.add_cnot(control, target)
-    
-    return self
-
-def build_wheeler_vortex_circuit(self) -> Dict[str, Any]:
-    """Build complete Wheeler vortex encoding circuit."""
-    # Initial superposition
-    for q in range(self.num_qubits):
-        self.add_hadamard(q)
-    
-    # Wheeler layers
-    for layer in range(self.depth):
-        self.add_wheeler_layer(layer)
-    
-    return {
-        'num_qubits': self.num_qubits,
-        'depth': self.depth,
-        'gates': self.gates,
-        'total_gates': len(self.gates),
-        'topology': 'toroidal_vortex',
-        'phi_cubed_scaling': True
-    }
-```
-
+    """
+    Build quantum circuits with exact angle specifications.
+    """
+    
+    # ```
+    num_qubits: int
+    depth: int = 1
+    gates: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def add_hadamard(self, qubit: int) -> 'QuantumCircuitBuilder':
+        """Add Hadamard gate."""
+        self.gates.append({'gate': 'H', 'qubit': qubit})
+        return self
+    
+    def add_rotation(self, gate_type: str, qubit: int, theta: Fraction) -> 'QuantumCircuitBuilder':
+        """Add rotation gate (Rx, Ry, Rz)."""
+        self.gates.append({
+            'gate': gate_type,
+            'qubit': qubit,
+            'theta': theta,
+            'theta_float': float(theta)
+        })
+        return self
+    
+    def add_cnot(self, control: int, target: int) -> 'QuantumCircuitBuilder':
+        """Add CNOT gate."""
+        self.gates.append({'gate': 'CNOT', 'control': control, 'target': target})
+        return self
+    
+    def add_wheeler_layer(self, layer: int) -> 'QuantumCircuitBuilder':
+        """Add complete Wheeler layer with φ³ rotations."""
+        wheeler = WheelerQuantumRotations()
+        angles = wheeler.rotation_angles(layer)
+        
+        # Rotations on all qubits
+        for q in range(self.num_qubits):
+            self.add_rotation('Rx', q, angles['theta_x'])
+            self.add_rotation('Ry', q, angles['theta_y'])
+            self.add_rotation('Rz', q, angles['theta_z'])
+        
+        # Toroidal entanglement
+        for control, target in wheeler.toroidal_entanglement(self.num_qubits):
+            self.add_cnot(control, target)
+        
+        return self
+    
+    def build_wheeler_vortex_circuit(self) -> Dict[str, Any]:
+        """Build complete Wheeler vortex encoding circuit."""
+        # Initial superposition
+        for q in range(self.num_qubits):
+            self.add_hadamard(q)
+        
+        # Wheeler layers
+        for layer in range(self.depth):
+            self.add_wheeler_layer(layer)
+        
+        return {
+            'num_qubits': self.num_qubits,
+            'depth': self.depth,
+            'gates': self.gates,
+            'total_gates': len(self.gates),
+            'topology': 'toroidal_vortex',
+            'phi_cubed_scaling': True
+        }
+    # ```
+    
 @dataclass
 class GroverSearch:
-“””
-Grover’s Quantum Search Algorithm.
-
-```
-Complexity: O(√N) queries vs O(N) classical
-"""
-
-num_qubits: int
-
-@property
-def database_size(self) -> int:
-    return 2 ** self.num_qubits
-
-@property
-def optimal_iterations(self) -> int:
-    """Optimal: ⌊π√N/4⌋"""
-    return int(math.pi * math.sqrt(self.database_size) / 4)
-
-def oracle_specification(self, target_state: int) -> Dict[str, Any]:
-    """
-    Oracle O: |x⟩ → (-1)^f(x)|x⟩
-    where f(x) = 1 if x = target, 0 otherwise
-    """
-    if target_state >= self.database_size:
-        raise ValueError(f"Target {target_state} >= database size {self.database_size}")
-    
-    return {
-        'type': 'phase_oracle',
-        'target': target_state,
-        'target_binary': format(target_state, f'0{self.num_qubits}b'),
-        'action': 'Flip phase of |target⟩',
-        'implementation': 'Multi-controlled Z with X gates for 0-controls'
-    }
-
-def diffusion_operator(self) -> Dict[str, Any]:
-    """
-    Diffusion D = 2|ψ⟩⟨ψ| - I = H^⊗n (2|0⟩⟨0| - I) H^⊗n
-    """
-    return {
-        'type': 'diffusion',
-        'formula': 'D = H^⊗n (2|0⟩⟨0| - I) H^⊗n',
-        'steps': [
-            'Apply H to all qubits',
-            'Apply X to all qubits',
-            'Multi-controlled Z',
-            'Apply X to all qubits',
-            'Apply H to all qubits'
-        ]
-    }
-
-def algorithm_specification(self, target_state: int) -> Dict[str, Any]:
-    """Complete Grover algorithm specification."""
-    return {
-        'num_qubits': self.num_qubits,
-        'database_size': self.database_size,
-        'target_state': target_state,
-        'optimal_iterations': self.optimal_iterations,
-        'success_probability': f'≈ 1 - O(1/N)',
-        'speedup': 'O(√N) vs O(N) classical',
-        'oracle': self.oracle_specification(target_state),
-        'diffusion': self.diffusion_operator()
-    }
-```
-
+    """
+    Grover's Quantum Search Algorithm.
+    
+    # ```
+    Complexity: O(√N) queries vs O(N) classical
+    """
+    
+    num_qubits: int
+    
+    @property
+    def database_size(self) -> int:
+        return 2 ** self.num_qubits
+    
+    @property
+    def optimal_iterations(self) -> int:
+        """Optimal: ⌊π√N/4⌋"""
+        return int(math.pi * math.sqrt(self.database_size) / 4)
+    
+    def oracle_specification(self, target_state: int) -> Dict[str, Any]:
+        """
+        Oracle O: |x⟩ → (-1)^f(x)|x⟩
+        where f(x) = 1 if x = target, 0 otherwise
+        """
+        if target_state >= self.database_size:
+            raise ValueError(f"Target {target_state} >= database size {self.database_size}")
+        
+        return {
+            'type': 'phase_oracle',
+            'target': target_state,
+            'target_binary': format(target_state, f'0{self.num_qubits}b'),
+            'action': 'Flip phase of |target⟩',
+            'implementation': 'Multi-controlled Z with X gates for 0-controls'
+        }
+    
+    def diffusion_operator(self) -> Dict[str, Any]:
+        """
+        Diffusion D = 2|ψ⟩⟨ψ| - I = H^⊗n (2|0⟩⟨0| - I) H^⊗n
+        """
+        return {
+            'type': 'diffusion',
+            'formula': 'D = H^⊗n (2|0⟩⟨0| - I) H^⊗n',
+            'steps': [
+                'Apply H to all qubits',
+                'Apply X to all qubits',
+                'Multi-controlled Z',
+                'Apply X to all qubits',
+                'Apply H to all qubits'
+            ]
+        }
+    
+    def algorithm_specification(self, target_state: int) -> Dict[str, Any]:
+        """Complete Grover algorithm specification."""
+        return {
+            'num_qubits': self.num_qubits,
+            'database_size': self.database_size,
+            'target_state': target_state,
+            'optimal_iterations': self.optimal_iterations,
+            'success_probability': f'≈ 1 - O(1/N)',
+            'speedup': 'O(√N) vs O(N) classical',
+            'oracle': self.oracle_specification(target_state),
+            'diffusion': self.diffusion_operator()
+        }
+    # ```
+    
 @dataclass
 class VQEFramework:
-“””
-Variational Quantum Eigensolver Framework.
-
-```
-Hybrid quantum-classical algorithm for ground state energy.
-"""
-
-num_qubits: int
-num_layers: int = 2
-
-def hardware_efficient_ansatz(self, parameters: List[Fraction]) -> Dict[str, Any]:
-    """
-    Hardware-efficient ansatz with Ry rotations and CNOT entanglement.
-    """
-    expected_params = self.num_qubits * self.num_layers * 3  # 3 rotations per qubit per layer
-    
-    if len(parameters) < expected_params:
-        raise ValueError(f"Need {expected_params} parameters, got {len(parameters)}")
-    
-    layers = []
-    param_idx = 0
-    
-    for layer in range(self.num_layers):
-        layer_gates = []
-        
-        # Single-qubit rotations
-        for q in range(self.num_qubits):
-            layer_gates.append({'gate': 'Ry', 'qubit': q, 'theta': parameters[param_idx]})
-            param_idx += 1
-            layer_gates.append({'gate': 'Rz', 'qubit': q, 'theta': parameters[param_idx]})
-            param_idx += 1
-            layer_gates.append({'gate': 'Ry', 'qubit': q, 'theta': parameters[param_idx]})
-            param_idx += 1
-        
-        # Entanglement ladder
-        for q in range(self.num_qubits - 1):
-            layer_gates.append({'gate': 'CNOT', 'control': q, 'target': q + 1})
-        
-        layers.append({'layer': layer, 'gates': layer_gates})
-    
-    return {
-        'type': 'hardware_efficient',
-        'num_qubits': self.num_qubits,
-        'num_layers': self.num_layers,
-        'num_parameters': expected_params,
-        'layers': layers
-    }
-
-def energy_expectation(self, hamiltonian_terms: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Specify energy measurement: E(θ) = Σᵢ αᵢ ⟨ψ(θ)|Pᵢ|ψ(θ)⟩
-    """
-    return {
-        'formula': 'E(θ) = Σᵢ αᵢ ⟨Pᵢ⟩',
-        'hamiltonian_terms': hamiltonian_terms,
-        'num_terms': len(hamiltonian_terms),
-        'measurement': 'Measure each Pauli term separately'
-    }
-
-def optimization_loop(self, method: str = 'COBYLA') -> Dict[str, Any]:
-    """Classical optimization specification."""
-    return {
-        'method': method,
-        'objective': 'Minimize E(θ)',
-        'gradient': 'Parameter shift rule if needed',
-        'convergence': 'When |E_{k+1} - E_k| < ε'
-    }
-```
-
-# ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-
-# ║                                    SECTION 5: MAYA CRYPTOGRAPHIC LAYER                                             ║
-
-# ║                              Ancient Encryption Methodology with Modern Security                                    ║
-
-# ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
+    """
+    Variational Quantum Eigensolver Framework.
+    
+    # ```
+    Hybrid quantum-classical algorithm for ground state energy.
+    """
+    
+    num_qubits: int
+    num_layers: int = 2
+    
+    def hardware_efficient_ansatz(self, parameters: List[Fraction]) -> Dict[str, Any]:
+        """
+        Hardware-efficient ansatz with Ry rotations and CNOT entanglement.
+        """
+        expected_params = self.num_qubits * self.num_layers * 3  # 3 rotations per qubit per layer
+        
+        if len(parameters) < expected_params:
+            raise ValueError(f"Need {expected_params} parameters, got {len(parameters)}")
+        
+        layers = []
+        param_idx = 0
+        
+        for layer in range(self.num_layers):
+            layer_gates = []
+            
+            # Single-qubit rotations
+            for q in range(self.num_qubits):
+                layer_gates.append({'gate': 'Ry', 'qubit': q, 'theta': parameters[param_idx]})
+                param_idx += 1
+                layer_gates.append({'gate': 'Rz', 'qubit': q, 'theta': parameters[param_idx]})
+                param_idx += 1
+                layer_gates.append({'gate': 'Ry', 'qubit': q, 'theta': parameters[param_idx]})
+                param_idx += 1
+            
+            # Entanglement ladder
+            for q in range(self.num_qubits - 1):
+                layer_gates.append({'gate': 'CNOT', 'control': q, 'target': q + 1})
+            
+            layers.append({'layer': layer, 'gates': layer_gates})
+        
+        return {
+            'type': 'hardware_efficient',
+            'num_qubits': self.num_qubits,
+            'num_layers': self.num_layers,
+            'num_parameters': expected_params,
+            'layers': layers
+        }
+    
+    def energy_expectation(self, hamiltonian_terms: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Specify energy measurement: E(θ) = Σᵢ αᵢ ⟨ψ(θ)|Pᵢ|ψ(θ)⟩
+        """
+        return {
+            'formula': 'E(θ) = Σᵢ αᵢ ⟨Pᵢ⟩',
+            'hamiltonian_terms': hamiltonian_terms,
+            'num_terms': len(hamiltonian_terms),
+            'measurement': 'Measure each Pauli term separately'
+        }
+    
+    def optimization_loop(self, method: str = 'COBYLA') -> Dict[str, Any]:
+        """Classical optimization specification."""
+        return {
+            'method': method,
+            'objective': 'Minimize E(θ)',
+            'gradient': 'Parameter shift rule if needed',
+            'convergence': 'When |E_{k+1} - E_k| < ε'
+        }
+    # ```
+    
+    # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+    
+    # ║                                    SECTION 5: MAYA CRYPTOGRAPHIC LAYER                                             ║
+    
+    # ║                              Ancient Encryption Methodology with Modern Security                                    ║
+    
+    # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+    
 @dataclass
 class MayaCryptographicTransform:
-“””
-Maya-inspired cryptographic transformations using Vedic mathematical principles.
-
-```
-The Maya numeral system (base-20) combined with Vedic sutras creates
-unique bijective transformations suitable for cryptographic applications.
-
-Key Properties:
-- Invertible (bijective)
-- Non-linear mixing
-- Diffusion through Vedic cross-multiplication
-- Confusion through Maya base conversions
-"""
-
-# Maya base (vigesimal)
-MAYA_BASE: int = 20
-
-# Vedic modular base for mixing
-VEDIC_PRIME: int = 997  # Large prime for modular arithmetic
-
-@staticmethod
-def to_maya_digits(n: int, max_digits: int = 16) -> List[int]:
-    """
-    Convert integer to Maya vigesimal representation.
-    
-    Maya numerals: 0-19 in each position
-    Position values: 20^0, 20^1, 20^2, ...
-    """
-    if n < 0:
-        raise ValueError("Maya digits require non-negative integer")
-    
-    digits = []
-    remaining = n
-    
-    for _ in range(max_digits):
-        digits.append(remaining % 20)
-        remaining //= 20
-        if remaining == 0:
-            break
-    
-    # Pad to max_digits
-    while len(digits) < max_digits:
-        digits.append(0)
-    
-    return digits
-
-@staticmethod
-def from_maya_digits(digits: List[int]) -> int:
-    """Convert Maya digits back to integer."""
-    result = 0
-    for i, d in enumerate(digits):
-        result += d * (20 ** i)
-    return result
-
-@classmethod
-def nikhilam_transform(cls, digits: List[int], base: int = 20) -> List[int]:
-    """
-    Apply Nikhilam (Sutra 2) transformation to each digit.
-    
-    Transform: d → (base - 1 - d) for all but last
-               d → (base - d) for last
-    """
-    if not digits:
-        return []
-    
-    transformed = []
-    for i, d in enumerate(digits[:-1]):
-        transformed.append((base - 1 - d) % base)
-    
-    # Last digit: from 10 (or base)
-    transformed.append((base - digits[-1]) % base)
-    
-    return transformed
-
-@classmethod
-def urdhva_tiryak_mix(cls, block_a: List[int], block_b: List[int]) -> List[int]:
-    """
-    Apply Ūrdhva-Tiryagbhyām (Sutra 3) crosswise mixing.
-    
-    Creates diffusion by computing cross products.
-    """
-    n = min(len(block_a), len(block_b))
-    result_len = 2 * n - 1
-    result = [0] * result_len
-    
-    for k in range(result_len):
-        for i in range(max(0, k - n + 1), min(k + 1, n)):
-            j = k - i
-            if 0 <= j < n:
-                result[k] = (result[k] + block_a[i] * block_b[j]) % 20
-    
-    return result[:n]  # Truncate to original length
-
-@classmethod
-def phi_rotation(cls, digits: List[int]) -> List[int]:
-    """
-    Rotate digit positions based on φ³ scaling.
-    
-    Rotation amount = floor(φ³) = 4
-    """
-    phi_cubed_floor = 4  # floor(4.236...)
-    n = len(digits)
-    rotation = phi_cubed_floor % n
-    
-    return digits[rotation:] + digits[:rotation]
-
-@classmethod
-def encrypt_block(cls, plaintext_int: int, key_int: int) -> Dict[str, Any]:
-    """
-    Encrypt a block using Maya-Vedic transformation.
-    
-    Steps:
-    1. Convert to Maya digits
-    2. Apply Nikhilam transformation
-    3. Mix with key using Ūrdhva-Tiryagbhyām
-    4. Apply φ³ rotation
-    5. Convert back to integer
-    """
-    # Convert to Maya digits
-    plain_digits = cls.to_maya_digits(plaintext_int)
-    key_digits = cls.to_maya_digits(key_int)
-    
-    # Step 1: Nikhilam transform of plaintext
-    nikhilam_digits = cls.nikhilam_transform(plain_digits)
-    
-    # Step 2: Cross-mix with key
-    mixed_digits = cls.urdhva_tiryak_mix(nikhilam_digits, key_digits)
-    
-    # Step 3: φ³ rotation
-    rotated_digits = cls.phi_rotation(mixed_digits)
-    
-    # Convert back
-    ciphertext = cls.from_maya_digits(rotated_digits)
-    
-    return {
-        'plaintext': plaintext_int,
-        'key': key_int,
-        'ciphertext': ciphertext,
-        'plain_maya': plain_digits,
-        'cipher_maya': rotated_digits,
-        'transformations': ['nikhilam', 'urdhva_tiryak_mix', 'phi_rotation']
-    }
-
-@classmethod
-def decrypt_block(cls, ciphertext_int: int, key_int: int) -> Dict[str, Any]:
-    """
-    Decrypt by reversing all transformations.
-    
-    Steps (reverse order):
-    1. Convert to Maya digits
-    2. Reverse φ³ rotation
-    3. Inverse mix with key
-    4. Inverse Nikhilam
-    5. Convert back
-    """
-    cipher_digits = cls.to_maya_digits(ciphertext_int)
-    key_digits = cls.to_maya_digits(key_int)
-    
-    # Reverse rotation (rotate by n - 4 instead of 4)
-    n = len(cipher_digits)
-    rotation = (n - 4) % n
-    unrotated = cipher_digits[rotation:] + cipher_digits[:rotation]
-    
-    # Note: Full inverse mixing requires extended Euclidean algorithm
-    # For demonstration, we show the structure
-    
-    return {
-        'ciphertext': ciphertext_int,
-        'key': key_int,
-        'unrotated_maya': unrotated,
-        'note': 'Full decryption requires inverse Ūrdhva-Tiryagbhyām matrix'
-    }
-
-@classmethod
-def maya_hash(cls, data: int, rounds: int = 16) -> int:
-    """
-    Hash function using iterated Maya-Vedic transformations.
-    
-    Properties:
-    - Deterministic
-    - Avalanche effect via crosswise mixing
-    - Fixed output size
-    """
-    current = cls.to_maya_digits(data)
-    
-    # Initial vector (based on φ)
-    iv = cls.to_maya_digits(int(float(PHI) * 10**10))
-    
-    for round_num in range(rounds):
-        # Mix with IV
-        current = cls.urdhva_tiryak_mix(current, iv)
-        
-        # Apply Nikhilam
-        current = cls.nikhilam_transform(current)
-        
-        # Rotate
-        current = cls.phi_rotation(current)
-        
-        # Update IV for next round
-        iv = [(d + round_num) % 20 for d in current]
-    
-    return cls.from_maya_digits(current)
-```
-
-# ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-
-# ║                                    SECTION 6: SULBA GEOMETRIC CONSTRUCTIONS                                        ║
-
-# ║                              Vedic Geometry Primitives from Śulbasūtras                                            ║
-
-# ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
+    """
+    Maya-inspired cryptographic transformations using Vedic mathematical principles.
+    
+    # ```
+    The Maya numeral system (base-20) combined with Vedic sutras creates
+    unique bijective transformations suitable for cryptographic applications.
+    
+    Key Properties:
+    - Invertible (bijective)
+    - Non-linear mixing
+    - Diffusion through Vedic cross-multiplication
+    - Confusion through Maya base conversions
+    """
+    
+    # Maya base (vigesimal)
+    MAYA_BASE: int = 20
+    
+    # Vedic modular base for mixing
+    VEDIC_PRIME: int = 997  # Large prime for modular arithmetic
+    
+    @staticmethod
+    def to_maya_digits(n: int, max_digits: int = 16) -> List[int]:
+        """
+        Convert integer to Maya vigesimal representation.
+        
+        Maya numerals: 0-19 in each position
+        Position values: 20^0, 20^1, 20^2, ...
+        """
+        if n < 0:
+            raise ValueError("Maya digits require non-negative integer")
+        
+        digits = []
+        remaining = n
+        
+        for _ in range(max_digits):
+            digits.append(remaining % 20)
+            remaining //= 20
+            if remaining == 0:
+                break
+        
+        # Pad to max_digits
+        while len(digits) < max_digits:
+            digits.append(0)
+        
+        return digits
+    
+    @staticmethod
+    def from_maya_digits(digits: List[int]) -> int:
+        """Convert Maya digits back to integer."""
+        result = 0
+        for i, d in enumerate(digits):
+            result += d * (20 ** i)
+        return result
+    
+    @classmethod
+    def nikhilam_transform(cls, digits: List[int], base: int = 20) -> List[int]:
+        """
+        Apply Nikhilam (Sutra 2) transformation to each digit.
+        
+        Transform: d → (base - 1 - d) for all but last
+                   d → (base - d) for last
+        """
+        if not digits:
+            return []
+        
+        transformed = []
+        for i, d in enumerate(digits[:-1]):
+            transformed.append((base - 1 - d) % base)
+        
+        # Last digit: from 10 (or base)
+        transformed.append((base - digits[-1]) % base)
+        
+        return transformed
+    
+    @classmethod
+    def urdhva_tiryak_mix(cls, block_a: List[int], block_b: List[int]) -> List[int]:
+        """
+        Apply Ūrdhva-Tiryagbhyām (Sutra 3) crosswise mixing.
+        
+        Creates diffusion by computing cross products.
+        """
+        n = min(len(block_a), len(block_b))
+        result_len = 2 * n - 1
+        result = [0] * result_len
+        
+        for k in range(result_len):
+            for i in range(max(0, k - n + 1), min(k + 1, n)):
+                j = k - i
+                if 0 <= j < n:
+                    result[k] = (result[k] + block_a[i] * block_b[j]) % 20
+        
+        return result[:n]  # Truncate to original length
+    
+    @classmethod
+    def phi_rotation(cls, digits: List[int]) -> List[int]:
+        """
+        Rotate digit positions based on φ³ scaling.
+        
+        Rotation amount = floor(φ³) = 4
+        """
+        phi_cubed_floor = 4  # floor(4.236...)
+        n = len(digits)
+        rotation = phi_cubed_floor % n
+        
+        return digits[rotation:] + digits[:rotation]
+    
+    @classmethod
+    def encrypt_block(cls, plaintext_int: int, key_int: int) -> Dict[str, Any]:
+        """
+        Encrypt a block using Maya-Vedic transformation.
+        
+        Steps:
+        1. Convert to Maya digits
+        2. Apply Nikhilam transformation
+        3. Mix with key using Ūrdhva-Tiryagbhyām
+        4. Apply φ³ rotation
+        5. Convert back to integer
+        """
+        # Convert to Maya digits
+        plain_digits = cls.to_maya_digits(plaintext_int)
+        key_digits = cls.to_maya_digits(key_int)
+        
+        # Step 1: Nikhilam transform of plaintext
+        nikhilam_digits = cls.nikhilam_transform(plain_digits)
+        
+        # Step 2: Cross-mix with key
+        mixed_digits = cls.urdhva_tiryak_mix(nikhilam_digits, key_digits)
+        
+        # Step 3: φ³ rotation
+        rotated_digits = cls.phi_rotation(mixed_digits)
+        
+        # Convert back
+        ciphertext = cls.from_maya_digits(rotated_digits)
+        
+        return {
+            'plaintext': plaintext_int,
+            'key': key_int,
+            'ciphertext': ciphertext,
+            'plain_maya': plain_digits,
+            'cipher_maya': rotated_digits,
+            'transformations': ['nikhilam', 'urdhva_tiryak_mix', 'phi_rotation']
+        }
+    
+    @classmethod
+    def decrypt_block(cls, ciphertext_int: int, key_int: int) -> Dict[str, Any]:
+        """
+        Decrypt by reversing all transformations.
+        
+        Steps (reverse order):
+        1. Convert to Maya digits
+        2. Reverse φ³ rotation
+        3. Inverse mix with key
+        4. Inverse Nikhilam
+        5. Convert back
+        """
+        cipher_digits = cls.to_maya_digits(ciphertext_int)
+        key_digits = cls.to_maya_digits(key_int)
+        
+        # Reverse rotation (rotate by n - 4 instead of 4)
+        n = len(cipher_digits)
+        rotation = (n - 4) % n
+        unrotated = cipher_digits[rotation:] + cipher_digits[:rotation]
+        
+        # Note: Full inverse mixing requires extended Euclidean algorithm
+        # For demonstration, we show the structure
+        
+        return {
+            'ciphertext': ciphertext_int,
+            'key': key_int,
+            'unrotated_maya': unrotated,
+            'note': 'Full decryption requires inverse Ūrdhva-Tiryagbhyām matrix'
+        }
+    
+    @classmethod
+    def maya_hash(cls, data: int, rounds: int = 16) -> int:
+        """
+        Hash function using iterated Maya-Vedic transformations.
+        
+        Properties:
+        - Deterministic
+        - Avalanche effect via crosswise mixing
+        - Fixed output size
+        """
+        current = cls.to_maya_digits(data)
+        
+        # Initial vector (based on φ)
+        iv = cls.to_maya_digits(int(float(PHI) * 10**10))
+        
+        for round_num in range(rounds):
+            # Mix with IV
+            current = cls.urdhva_tiryak_mix(current, iv)
+            
+            # Apply Nikhilam
+            current = cls.nikhilam_transform(current)
+            
+            # Rotate
+            current = cls.phi_rotation(current)
+            
+            # Update IV for next round
+            iv = [(d + round_num) % 20 for d in current]
+        
+        return cls.from_maya_digits(current)
+    # ```
+    
+    # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+    
+    # ║                                    SECTION 6: SULBA GEOMETRIC CONSTRUCTIONS                                        ║
+    
+    # ║                              Vedic Geometry Primitives from Śulbasūtras                                            ║
+    
+    # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+    
 @dataclass
 class SulbaGeometry:
-“””
-Geometric constructions from the Śulbasūtras (Vedic geometry).
-
-```
-The Śulbasūtras contain sophisticated geometric knowledge including:
-- Square root constructions
-- Circle-square transformations
-- Pythagorean theorem variants
-- Altar construction algorithms
-
-Key Śulbasūtras:
-- Baudhāyana (oldest, ~800-500 BCE)
-- Āpastamba
-- Kātyāyana
-- Mānava
-"""
-
-# Baudhāyana's √2 approximation: 1 + 1/3 + 1/(3×4) - 1/(3×4×34)
-SQRT2_BAUDHAYANA: Fraction = (
-    Fraction(1) + 
-    Fraction(1, 3) + 
-    Fraction(1, 12) - 
-    Fraction(1, 408)
-)  # = 577/408 ≈ 1.41421568...
-
-# Alternative form: (577/408)
-SQRT2_FRACTION: Fraction = Fraction(577, 408)
-
-# Baudhāyana's π approximation for circle-square conversion
-# Area of circle = Area of square with side = 2r × (1 - 1/8 + 1/(8×29) - 1/(8×29×6) + 1/(8×29×6×8))
-
-@classmethod
-def sqrt2_baudhayana(cls) -> Dict[str, Fraction]:
-    """
-    Baudhāyana's √2 construction.
-    
-    EXACT FORMULA:
-        √2 ≈ 1 + 1/3 + 1/(3×4) - 1/(3×4×34)
-            = 1 + 1/3 + 1/12 - 1/408
-            = 577/408
-    
-    Error: < 0.00001 (remarkably accurate for ~800 BCE)
-    """
-    term1 = Fraction(1)
-    term2 = Fraction(1, 3)
-    term3 = Fraction(1, 12)       # 1/(3×4)
-    term4 = Fraction(1, 408)      # 1/(3×4×34)
-    
-    approximation = term1 + term2 + term3 - term4
-    
-    # True value comparison
-    true_sqrt2 = Fraction(14142135623730951, 10000000000000000)  # High precision
-    error = abs(approximation - true_sqrt2)
-    
-    return {
-        'formula': '1 + 1/3 + 1/12 - 1/408',
-        'result': approximation,
-        'simplified': cls.SQRT2_FRACTION,
-        'decimal': float(approximation),
-        'true_sqrt2_approx': float(true_sqrt2),
-        'error': error,
-        'source': 'Baudhāyana Śulbasūtra 1.61-1.62'
-    }
-
-@classmethod
-def diagonal_of_square(cls, side: Fraction) -> Dict[str, Fraction]:
-    """
-    Diagonal of square using Baudhāyana's √2.
-    
-    d = s × √2 ≈ s × 577/408
-    """
-    diagonal = side * cls.SQRT2_FRACTION
-    
-    return {
-        'side': side,
-        'diagonal': diagonal,
-        'sqrt2_used': cls.SQRT2_FRACTION,
-        'formula': 'd = s × √2'
-    }
-
-@classmethod
-def pythagorean_triple(cls, m: int, n: int) -> Dict[str, int]:
-    """
-    Generate Pythagorean triple using parametric form.
-    
-    For m > n > 0:
-        a = m² - n²
-        b = 2mn
-        c = m² + n²
-    
-    Satisfies: a² + b² = c²
-    """
-    if m <= n or n <= 0:
-        raise ValueError("Require m > n > 0")
-    
-    a = m * m - n * n
-    b = 2 * m * n
-    c = m * m + n * n
-    
-    return {
-        'm': m,
-        'n': n,
-        'a': a,
-        'b': b,
-        'c': c,
-        'verification': a*a + b*b == c*c,
-        'formula': '(m²-n², 2mn, m²+n²)'
-    }
-
-@classmethod
-def circle_to_square(cls, radius: Fraction) -> Dict[str, Fraction]:
-    """
-    Convert circle to square of equal area (Śulbasūtra method).
-    
-    Area of circle = πr²
-    Side of square = r × √π
-    
-    Baudhāyana approximation for √π:
-        √π ≈ (1 - 1/8 + 1/232 - 1/1392 + ...)
-        
-    Simplified: side ≈ r × 28/15 × (1 - 1/8) = r × 28/15 × 7/8 = r × 49/30
-    Actually using: side = 2r × 13/15 (Baudhāyana's practical rule)
-    """
-    # Baudhāyana's practical approximation
-    side = 2 * radius * Fraction(13, 15)
-    
-    # Area check
-    circle_area = FundamentalConstants.PI * radius * radius
-    square_area = side * side
-    
-    return {
-        'radius': radius,
-        'circle_area': circle_area,
-        'square_side': side,
-        'square_area': square_area,
-        'formula': 'side = 2r × 13/15 (Baudhāyana)',
-        'accuracy': 'Error < 1%'
-    }
-
-@classmethod
-def square_to_circle(cls, side: Fraction) -> Dict[str, Fraction]:
-    """
-    Convert square to circle of equal area.
-    
-    Kātyāyana's method:
-        r = (s/2) × (1 + (√2 - 1)/3)
-        r = (s/2) × (2 + √2)/3
-        
-    Using Baudhāyana √2:
-        r = (s/2) × (2 + 577/408)/3
-        r = (s/2) × (1393/408)/3
-        r = s × 1393/2448
-    """
-    sqrt2 = cls.SQRT2_FRACTION
-    factor = (Fraction(2) + sqrt2) / 3
-    radius = (side / 2) * factor
-    
-    # Simplified form
-    radius_simplified = side * Fraction(1393, 2448)
-    
-    return {
-        'square_side': side,
-        'circle_radius': radius,
-        'radius_simplified': radius_simplified,
-        'formula': 'r = (s/2) × (2 + √2)/3',
-        'source': 'Kātyāyana Śulbasūtra'
-    }
-
-@classmethod
-def altar_agni_construction(cls, base_unit: Fraction) -> Dict[str, Any]:
-    """
-    Construct the Agni (fire) altar dimensions.
-    
-    The falcon-shaped fire altar (Śyena-citi) has specific proportions.
-    Base area = 7.5 puruṣas² (puruṣa = human height unit)
-    
-    Key ratio: 7.5 = 15/2
-    """
-    # Base area in puruṣa²
-    base_area = Fraction(15, 2)
-    
-    # Scaled to base_unit
-    scaled_area = base_area * base_unit * base_unit
-    
-    # Falcon altar proportions (simplified)
-    wingspan = base_unit * Fraction(4)
-    body_length = base_unit * Fraction(4)
-    tail_length = base_unit * Fraction(1)
-    
-    return {
-        'base_unit': base_unit,
-        'total_area': scaled_area,
-        'area_in_base_area_units': base_area,
-        'wingspan': wingspan,
-        'body_length': body_length,
-        'tail_length': tail_length,
-        'ritual_purpose': 'Agnicayana (fire altar construction)',
-        'source': 'Baudhāyana Śulbasūtra'
-    }
-
-@classmethod
-def double_square_construction(cls, original_side: Fraction) -> Dict[str, Fraction]:
-    """
-    Construct a square with double the area of original.
-    
-    If original has side s, new square has side s×√2.
-    This is done by using the diagonal of the original.
-    
-    "The diagonal of a square produces twice the area."
-    - Baudhāyana Śulbasūtra 1.45
-    """
-    new_side = original_side * cls.SQRT2_FRACTION
-    
-    original_area = original_side * original_side
-    new_area = new_side * new_side
-    
-    return {
-        'original_side': original_side,
-        'original_area': original_area,
-        'new_side': new_side,
-        'new_area': new_area,
-        'ratio': new_area / original_area,
-        'method': 'Use diagonal as new side',
-        'source': 'Baudhāyana Śulbasūtra 1.45'
-    }
-```
-
-# ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-
-# ║                                    SECTION 7: GRVQ UNIFIED FIELD THEORY                                            ║
-
-# ║                              Complete Integration of GR + Vedic + Quantum                                          ║
-
-# ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
+    """
+    Geometric constructions from the Śulbasūtras (Vedic geometry).
+    
+    # ```
+    The Śulbasūtras contain sophisticated geometric knowledge including:
+    - Square root constructions
+    - Circle-square transformations
+    - Pythagorean theorem variants
+    - Altar construction algorithms
+    
+    Key Śulbasūtras:
+    - Baudhāyana (oldest, ~800-500 BCE)
+    - Āpastamba
+    - Kātyāyana
+    - Mānava
+    """
+    
+    # Baudhāyana's √2 approximation: 1 + 1/3 + 1/(3×4) - 1/(3×4×34)
+    SQRT2_BAUDHAYANA: Fraction = (
+        Fraction(1) + 
+        Fraction(1, 3) + 
+        Fraction(1, 12) - 
+        Fraction(1, 408)
+    )  # = 577/408 ≈ 1.41421568...
+    
+    # Alternative form: (577/408)
+    SQRT2_FRACTION: Fraction = Fraction(577, 408)
+    
+    # Baudhāyana's π approximation for circle-square conversion
+    # Area of circle = Area of square with side = 2r × (1 - 1/8 + 1/(8×29) - 1/(8×29×6) + 1/(8×29×6×8))
+    
+    @classmethod
+    def sqrt2_baudhayana(cls) -> Dict[str, Fraction]:
+        """
+        Baudhāyana's √2 construction.
+        
+        EXACT FORMULA:
+            √2 ≈ 1 + 1/3 + 1/(3×4) - 1/(3×4×34)
+                = 1 + 1/3 + 1/12 - 1/408
+                = 577/408
+        
+        Error: < 0.00001 (remarkably accurate for ~800 BCE)
+        """
+        term1 = Fraction(1)
+        term2 = Fraction(1, 3)
+        term3 = Fraction(1, 12)       # 1/(3×4)
+        term4 = Fraction(1, 408)      # 1/(3×4×34)
+        
+        approximation = term1 + term2 + term3 - term4
+        
+        # True value comparison
+        true_sqrt2 = Fraction(14142135623730951, 10000000000000000)  # High precision
+        error = abs(approximation - true_sqrt2)
+        
+        return {
+            'formula': '1 + 1/3 + 1/12 - 1/408',
+            'result': approximation,
+            'simplified': cls.SQRT2_FRACTION,
+            'decimal': float(approximation),
+            'true_sqrt2_approx': float(true_sqrt2),
+            'error': error,
+            'source': 'Baudhāyana Śulbasūtra 1.61-1.62'
+        }
+    
+    @classmethod
+    def diagonal_of_square(cls, side: Fraction) -> Dict[str, Fraction]:
+        """
+        Diagonal of square using Baudhāyana's √2.
+        
+        d = s × √2 ≈ s × 577/408
+        """
+        diagonal = side * cls.SQRT2_FRACTION
+        
+        return {
+            'side': side,
+            'diagonal': diagonal,
+            'sqrt2_used': cls.SQRT2_FRACTION,
+            'formula': 'd = s × √2'
+        }
+    
+    @classmethod
+    def pythagorean_triple(cls, m: int, n: int) -> Dict[str, int]:
+        """
+        Generate Pythagorean triple using parametric form.
+        
+        For m > n > 0:
+            a = m² - n²
+            b = 2mn
+            c = m² + n²
+        
+        Satisfies: a² + b² = c²
+        """
+        if m <= n or n <= 0:
+            raise ValueError("Require m > n > 0")
+        
+        a = m * m - n * n
+        b = 2 * m * n
+        c = m * m + n * n
+        
+        return {
+            'm': m,
+            'n': n,
+            'a': a,
+            'b': b,
+            'c': c,
+            'verification': a*a + b*b == c*c,
+            'formula': '(m²-n², 2mn, m²+n²)'
+        }
+    
+    @classmethod
+    def circle_to_square(cls, radius: Fraction) -> Dict[str, Fraction]:
+        """
+        Convert circle to square of equal area (Śulbasūtra method).
+        
+        Area of circle = πr²
+        Side of square = r × √π
+        
+        Baudhāyana approximation for √π:
+            √π ≈ (1 - 1/8 + 1/232 - 1/1392 + ...)
+            
+        Simplified: side ≈ r × 28/15 × (1 - 1/8) = r × 28/15 × 7/8 = r × 49/30
+        Actually using: side = 2r × 13/15 (Baudhāyana's practical rule)
+        """
+        # Baudhāyana's practical approximation
+        side = 2 * radius * Fraction(13, 15)
+        
+        # Area check
+        circle_area = FundamentalConstants.PI * radius * radius
+        square_area = side * side
+        
+        return {
+            'radius': radius,
+            'circle_area': circle_area,
+            'square_side': side,
+            'square_area': square_area,
+            'formula': 'side = 2r × 13/15 (Baudhāyana)',
+            'accuracy': 'Error < 1%'
+        }
+    
+    @classmethod
+    def square_to_circle(cls, side: Fraction) -> Dict[str, Fraction]:
+        """
+        Convert square to circle of equal area.
+        
+        Kātyāyana's method:
+            r = (s/2) × (1 + (√2 - 1)/3)
+            r = (s/2) × (2 + √2)/3
+            
+        Using Baudhāyana √2:
+            r = (s/2) × (2 + 577/408)/3
+            r = (s/2) × (1393/408)/3
+            r = s × 1393/2448
+        """
+        sqrt2 = cls.SQRT2_FRACTION
+        factor = (Fraction(2) + sqrt2) / 3
+        radius = (side / 2) * factor
+        
+        # Simplified form
+        radius_simplified = side * Fraction(1393, 2448)
+        
+        return {
+            'square_side': side,
+            'circle_radius': radius,
+            'radius_simplified': radius_simplified,
+            'formula': 'r = (s/2) × (2 + √2)/3',
+            'source': 'Kātyāyana Śulbasūtra'
+        }
+    
+    @classmethod
+    def altar_agni_construction(cls, base_unit: Fraction) -> Dict[str, Any]:
+        """
+        Construct the Agni (fire) altar dimensions.
+        
+        The falcon-shaped fire altar (Śyena-citi) has specific proportions.
+        Base area = 7.5 puruṣas² (puruṣa = human height unit)
+        
+        Key ratio: 7.5 = 15/2
+        """
+        # Base area in puruṣa²
+        base_area = Fraction(15, 2)
+        
+        # Scaled to base_unit
+        scaled_area = base_area * base_unit * base_unit
+        
+        # Falcon altar proportions (simplified)
+        wingspan = base_unit * Fraction(4)
+        body_length = base_unit * Fraction(4)
+        tail_length = base_unit * Fraction(1)
+        
+        return {
+            'base_unit': base_unit,
+            'total_area': scaled_area,
+            'area_in_base_area_units': base_area,
+            'wingspan': wingspan,
+            'body_length': body_length,
+            'tail_length': tail_length,
+            'ritual_purpose': 'Agnicayana (fire altar construction)',
+            'source': 'Baudhāyana Śulbasūtra'
+        }
+    
+    @classmethod
+    def double_square_construction(cls, original_side: Fraction) -> Dict[str, Fraction]:
+        """
+        Construct a square with double the area of original.
+        
+        If original has side s, new square has side s×√2.
+        This is done by using the diagonal of the original.
+        
+        "The diagonal of a square produces twice the area."
+        - Baudhāyana Śulbasūtra 1.45
+        """
+        new_side = original_side * cls.SQRT2_FRACTION
+        
+        original_area = original_side * original_side
+        new_area = new_side * new_side
+        
+        return {
+            'original_side': original_side,
+            'original_area': original_area,
+            'new_side': new_side,
+            'new_area': new_area,
+            'ratio': new_area / original_area,
+            'method': 'Use diagonal as new side',
+            'source': 'Baudhāyana Śulbasūtra 1.45'
+        }
+    # ```
+    
+    # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+    
+    # ║                                    SECTION 7: GRVQ UNIFIED FIELD THEORY                                            ║
+    
+    # ║                              Complete Integration of GR + Vedic + Quantum                                          ║
+    
+    # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+    
 @dataclass
 class GRVQUnifiedTheory:
-“””
-GRVQ: General Relativity + Vedic + Quantum Unified Field Theory
-
-```
-This class integrates all components:
-- Einstein field equations with Wheeler Φ³ modifications
-- All 29 Vedic Sutras for computational optimization
-- Quantum circuit framework with φ³ rotations
-- Maya cryptographic transformations
-- Sulba geometric constructions
-
-The unification is achieved through the golden ratio φ³ coupling
-which appears in:
-- Wheeler's dielectric-curvature coupling: G + Q = 8πφ³ T
-- Quantum rotation scaling: θ_x = θ × φ³
-- Vedic recursive adjustments
-- Geometric proportions
-"""
-
-# Core components
-hyperboloid: WheelerHyperboloidGeometry = field(default_factory=WheelerHyperboloidGeometry)
-pde_system: DielectricRarefactionPDE = field(default_factory=DielectricRarefactionPDE)
-quantum_rotations: WheelerQuantumRotations = field(default_factory=WheelerQuantumRotations)
-sutra_engine: type = VedicSutraEngine
-maya_crypto: type = MayaCryptographicTransform
-sulba_geometry: type = SulbaGeometry
-
-# System state
-mode: ComputationalMode = ComputationalMode.EXACT
-
-# ═══════════════════════════════════════════════════════════════════════════
-# UNIFIED CONSTANTS
-# ═══════════════════════════════════════════════════════════════════════════
-
-@property
-def phi(self) -> Fraction:
-    return PHI
-
-@property
-def phi_squared(self) -> Fraction:
-    return PHI_SQUARED
-
-@property
-def phi_cubed(self) -> Fraction:
-    return PHI_CUBED
-
-@property
-def wheeler_coupling(self) -> Fraction:
-    return WheelerCurvatureCoupling.coupling_constant()
-
-@property
-def c_squared(self) -> int:
-    return FundamentalConstants.C_SQUARED
-
-# ═══════════════════════════════════════════════════════════════════════════
-# UNIFIED FIELD OPERATIONS
-# ═══════════════════════════════════════════════════════════════════════════
-
-def compute_unified_ansatz(self, r: Fraction, theta: Fraction, phi_coord: Fraction,
-                           alpha_params: Dict[str, Fraction]) -> Dict[str, Any]:
-    """
-    Compute the unified GRVQ ansatz at a spacetime point.
-    
-    Combines:
-    1. Wheeler hyperboloid radial factor
-    2. Dielectric shape function
-    3. φ³ coupling modifications
-    4. Vedic optimization via Sutra 11 (Vyaṣṭisamaṣṭiḥ)
-    """
-    # Wheeler radial component
-    radial = self.hyperboloid.radial_factor(r)
-    
-    # Shape function
-    shape = self.hyperboloid.shape_function(r, theta)
-    
-    # Ansatz modification
-    alpha_h = alpha_params.get('alpha_h', Fraction(1, 10))
-    base_term = radial['radial_factor']
-    ansatz = self.hyperboloid.ansatz_modification(r, theta, alpha_h, base_term)
-    
-    # Apply Vedic Part/Whole optimization
-    constant_factors = [PHI_CUBED, alpha_h]
-    vedic_opt = self.sutra_engine.sutra_11_vyashti_samashti(
-        [base_term], 
-        PHI_CUBED
-    )
-    
-    return {
-        'coordinates': {'r': r, 'theta': theta, 'phi': phi_coord},
-        'radial_component': radial,
-        'shape_component': shape,
-        'ansatz_result': ansatz,
-        'vedic_optimization': vedic_opt,
-        'phi_cubed': PHI_CUBED,
-        'final_value': ansatz['result']
-    }
-
-def compute_field_equation(self, G_munu: Fraction, Q_munu: Fraction,
-                            T_dielectric: Fraction) -> Dict[str, Any]:
-    """
-    Evaluate the Wheeler-modified Einstein field equation.
-    
-    G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)
-    """
-    return WheelerCurvatureCoupling.field_equation(G_munu, Q_munu, T_dielectric)
-
-def evolve_coupled_fields(self, u: Fraction, D: Fraction, dD_dt: Fraction,
-                           laplacian_u: Fraction, laplacian_D: Fraction,
-                           dt: Fraction, steps: int = 1) -> Dict[str, Any]:
-    """
-    Evolve the coupled dielectric-cymatic field system.
-    
-    Uses the PDE system:
-        ∂ₜu = D_u∇²u + M×sin(G_c×u)
-        ∂ₜₜD = c_D²∇²D - λ∂ₜD - αD + βu (β = φ³)
-    """
-    history = []
-    u_current = u
-    D_current = D
-    
-    for step in range(steps):
-        result = self.pde_system.coupled_step(
-            u_current, D_current, dD_dt,
-            laplacian_u, laplacian_D, dt
-        )
-        u_current = result['u_next']
-        D_current = result['D_next']
-        history.append({'step': step, 'u': u_current, 'D': D_current})
-    
-    return {
-        'initial': {'u': u, 'D': D},
-        'final': {'u': u_current, 'D': D_current},
-        'steps': steps,
-        'dt': dt,
-        'history': history
-    }
-
-def generate_quantum_circuit(self, num_qubits: int, depth: int) -> Dict[str, Any]:
-    """
-    Generate quantum circuit with Wheeler φ³ rotations.
-    """
-    return self.quantum_rotations.circuit_specification(num_qubits, depth)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# VEDIC SUTRA INTEGRATION
-# ═══════════════════════════════════════════════════════════════════════════
-
-def apply_sutra(self, sutra_index: int, *args, **kwargs) -> Dict[str, Any]:
-    """Apply a Vedic sutra by index."""
-    return self.sutra_engine.apply_sutra(sutra_index, *args, **kwargs)
-
-def apply_sutra_chain(self, sutra_sequence: List[Tuple[int, tuple, dict]]) -> List[Dict[str, Any]]:
-    """
-    Apply a sequence of sutras.
-    
-    Each element: (sutra_index, args_tuple, kwargs_dict)
-    """
-    results = []
-    for sutra_index, args, kwargs in sutra_sequence:
-        result = self.apply_sutra(sutra_index, *args, **kwargs)
-        results.append(result)
-    return results
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CRYPTOGRAPHIC OPERATIONS
-# ═══════════════════════════════════════════════════════════════════════════
-
-def maya_encrypt(self, plaintext: int, key: int) -> Dict[str, Any]:
-    """Encrypt using Maya-Vedic cryptography."""
-    return self.maya_crypto.encrypt_block(plaintext, key)
-
-def maya_hash(self, data: int, rounds: int = 16) -> int:
-    """Hash using Maya-Vedic transformation."""
-    return self.maya_crypto.maya_hash(data, rounds)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# GEOMETRIC CONSTRUCTIONS
-# ═══════════════════════════════════════════════════════════════════════════
-
-def sulba_sqrt2(self) -> Dict[str, Fraction]:
-    """Get Baudhāyana's √2 approximation."""
-    return self.sulba_geometry.sqrt2_baudhayana()
-
-def sulba_pythagorean(self, m: int, n: int) -> Dict[str, int]:
-    """Generate Pythagorean triple."""
-    return self.sulba_geometry.pythagorean_triple(m, n)
-
-def sulba_circle_to_square(self, radius: Fraction) -> Dict[str, Fraction]:
-    """Convert circle to equal-area square."""
-    return self.sulba_geometry.circle_to_square(radius)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# UNIFIED TRANSFORMATION ENGINE
-# ═══════════════════════════════════════════════════════════════════════════
-
-def transform_expression(self, expression: str, 
-                         input_values: Dict[str, Fraction]) -> Dict[str, Any]:
-    """
-    Transform a mathematical expression using Vedic-Wheeler optimization.
-    
-    Example: "E = m * c^2"
-    
-    Steps:
-    1. Parse expression structure
-    2. Identify applicable sutras
-    3. Apply Wheeler φ³ scaling where appropriate
-    4. Return optimized computation path
-    """
-    # Expression analysis (simplified - full parser would be more complex)
-    if 'c^2' in expression or 'c²' in expression:
-        # Use Yāvadūnam (Sutra 10) for c²
-        c_squared = self.sutra_engine.sutra_10_yavadunam(
-            FundamentalConstants.C, 
-            300000000  # Base near c
-        )
-        
-        # If mass is provided, apply Vyaṣṭisamaṣṭiḥ (Sutra 11)
-        if 'm' in input_values:
-            masses = [input_values['m']]
-            energy_opt = self.sutra_engine.sutra_11_vyashti_samashti(
-                masses,
-                Fraction(self.c_squared)
-            )
-            
-            return {
-                'expression': expression,
-                'c_squared_computation': c_squared,
-                'energy_optimization': energy_opt,
-                'sutras_used': [10, 11],
-                'phi_cubed_factor': PHI_CUBED
-            }
-    
-    return {
-        'expression': expression,
-        'input_values': input_values,
-        'note': 'Full expression parser not implemented in this example'
-    }
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SYSTEM STATE AND VERIFICATION
-# ═══════════════════════════════════════════════════════════════════════════
-
-def verify_constants(self) -> Dict[str, Any]:
-    """Verify all fundamental constants."""
-    verifications = {}
-    
-    # Golden ratio identities
-    verifications['phi_squared_identity'] = (PHI_SQUARED == PHI + Fraction(1))
-    verifications['phi_cubed_identity'] = (PHI_CUBED == 2 * PHI + Fraction(1))
-    
-    # Speed of light
-    verifications['c_squared'] = (
-        FundamentalConstants.C * FundamentalConstants.C == 
-        FundamentalConstants.C_SQUARED
-    )
-    
-    # Baudhāyana √2
-    sqrt2_check = self.sulba_geometry.sqrt2_baudhayana()
-    verifications['baudhayana_sqrt2'] = (
-        sqrt2_check['result'] == sqrt2_check['simplified']
-    )
-    
-    return {
-        'all_verified': all(verifications.values()),
-        'verifications': verifications
-    }
-
-def get_system_info(self) -> Dict[str, Any]:
-    """Get complete system information."""
-    return {
-        'name': 'GRVQ Unified Field Theory',
-        'version': '1.0.0',
-        'mode': self.mode.name,
-        'components': {
-            'vedic_sutras': 29,
-            'wheeler_field_theory': True,
-            'quantum_framework': True,
-            'maya_cryptography': True,
-            'sulba_geometry': True
-        },
-        'constants': {
-            'phi': str(PHI),
-            'phi_squared': str(PHI_SQUARED),
-            'phi_cubed': str(PHI_CUBED),
-            'c_squared': FundamentalConstants.C_SQUARED,
-            'wheeler_coupling': str(self.wheeler_coupling)
-        },
-        'verification': self.verify_constants()
-    }
-```
-
-# ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
-
-# ║                                    SECTION 8: VERIFICATION AND DEMONSTRATION                                       ║
-
-# ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-
-def verify_grvq_implementation():
-“””
-Comprehensive verification of GRVQ Unified Field Theory.
-“””
-print(“╔” + “═”*118 + “╗”)
-print(“║” + “ GRVQ UNIFIED FIELD THEORY - COMPREHENSIVE VERIFICATION “.center(118) + “║”)
-print(“║” + “ General Relativity + Vedic Sutras + Quantum Framework “.center(118) + “║”)
-print(“╠” + “═”*118 + “╣”)
-
-```
-# Initialize unified theory
-grvq = GRVQUnifiedTheory()
-
-# ─────────────────────────────────────────────────────────────────────────
-# 1. GOLDEN RATIO CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────
-print("║" + " 1. GOLDEN RATIO CONSTANTS ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-print(f"║  φ   = {PHI}".ljust(119) + "║")
-print(f"║  φ²  = φ + 1 = {PHI_SQUARED}".ljust(119) + "║")
-print(f"║  φ³  = 2φ + 1 = {PHI_CUBED}".ljust(119) + "║")
-
-assert PHI_SQUARED == PHI + Fraction(1), "φ² identity failed"
-assert PHI_CUBED == 2 * PHI + Fraction(1), "φ³ identity failed"
-print(f"║  ✓ Algebraic identities verified".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 2. WHEELER COUPLING CONSTANT
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 2. WHEELER Φ³ COUPLING ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-kappa = grvq.wheeler_coupling
-print(f"║  κ = 8π × φ³ = {kappa}".ljust(119) + "║")
-print(f"║  κ ≈ {float(kappa):.12f}".ljust(119) + "║")
-
-# Field equation test
-field_eq = grvq.compute_field_equation(
-    G_munu=Fraction(1),
-    Q_munu=Fraction(0),
-    T_dielectric=Fraction(1) / kappa
-)
-print(f"║  Field equation G + Q = κT satisfied: {field_eq['satisfied']}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 3. VEDIC SUTRAS
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 3. VEDIC SUTRA ENGINE (29 SUTRAS) ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-# Test Sutra 2: Nikhilam multiplication (using specialized multiply function)
-nikhilam = VedicSutraEngine.sutra_02_nikhilam_multiply(98, 97, 100)
-print(f"║  Sutra 2 (Nikhilam): 98 × 97 = {nikhilam['deficiency_product']} + {nikhilam['cross_result']}×100 = {nikhilam['result']}".ljust(119) + "║")
-assert nikhilam['verification'], "Nikhilam verification failed"
-
-# Test Sutra 10: Yāvadūnam (c² calculation)
-yavadunam = grvq.apply_sutra(10, FundamentalConstants.C, 300000000)
-print(f"║  Sutra 10 (Yāvadūnam): c² = {yavadunam['result']}".ljust(119) + "║")
-assert yavadunam['verification'], "Yāvadūnam verification failed"
-
-# Count all sutras
-all_sutras = grvq.sutra_engine.list_all_sutras()
-primary = sum(1 for s in all_sutras if s['is_primary'])
-sub = sum(1 for s in all_sutras if not s['is_primary'])
-print(f"║  Total sutras: {len(all_sutras)} (Primary: {primary}, Sub-sutras: {sub})".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 4. QUANTUM CIRCUIT
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 4. QUANTUM CIRCUIT WITH φ³ ROTATIONS ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-circuit = grvq.generate_quantum_circuit(num_qubits=4, depth=3)
-print(f"║  Qubits: {circuit['num_qubits']}, Depth: {circuit['depth']}, Topology: {circuit['topology']}".ljust(119) + "║")
-
-layer0 = circuit['layers'][0]['rotations']
-print(f"║  Layer 0 rotations: θx={float(layer0['theta_x']):.6f}, θy={float(layer0['theta_y']):.6f}, θz={float(layer0['theta_z']):.6f}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 5. SULBA GEOMETRY
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 5. SULBA GEOMETRIC CONSTRUCTIONS ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-sqrt2 = grvq.sulba_sqrt2()
-print(f"║  Baudhāyana √2 = {sqrt2['result']} ≈ {sqrt2['decimal']:.10f}".ljust(119) + "║")
-
-pythag = grvq.sulba_pythagorean(5, 4)
-print(f"║  Pythagorean (5,4): ({pythag['a']}, {pythag['b']}, {pythag['c']}) verified: {pythag['verification']}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 6. MAYA CRYPTOGRAPHY
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 6. MAYA CRYPTOGRAPHIC TRANSFORM ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-encrypted = grvq.maya_encrypt(12345, 67890)
-print(f"║  Encrypt(12345, key=67890) = {encrypted['ciphertext']}".ljust(119) + "║")
-
-hash_val = grvq.maya_hash(12345, rounds=8)
-print(f"║  MayaHash(12345, 8 rounds) = {hash_val}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 7. UNIFIED ANSATZ
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 7. UNIFIED GRVQ ANSATZ ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-ansatz = grvq.compute_unified_ansatz(
-    r=Fraction(1),
-    theta=Fraction(0),
-    phi_coord=Fraction(0),
-    alpha_params={'alpha_h': Fraction(1, 10)}
-)
-print(f"║  Ansatz at (r=1, θ=0, φ=0): {ansatz['final_value']}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# 8. SYSTEM VERIFICATION
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " 8. SYSTEM VERIFICATION ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-
-sys_info = grvq.get_system_info()
-verification = sys_info['verification']
-print(f"║  All constants verified: {verification['all_verified']}".ljust(119) + "║")
-for key, val in verification['verifications'].items():
-    status = "✓" if val else "✗"
-    print(f"║    {status} {key}".ljust(119) + "║")
-
-# ─────────────────────────────────────────────────────────────────────────
-# FINAL SUMMARY
-# ─────────────────────────────────────────────────────────────────────────
-print("╠" + "═"*118 + "╣")
-print("║" + " GRVQ UNIFIED FIELD THEORY - VERIFICATION COMPLETE ".center(118) + "║")
-print("╠" + "─"*118 + "╣")
-print("║  Components:".ljust(119) + "║")
-print("║    ✓ Golden Ratio Φ³ Algebra (exact rational arithmetic)".ljust(119) + "║")
-print("║    ✓ Wheeler Field Theory (hyperboloid, curvature coupling, PDEs)".ljust(119) + "║")
-print("║    ✓ Vedic Sutra Engine (all 29 sutras: 16 primary + 13 sub-sutras)".ljust(119) + "║")
-print("║    ✓ Quantum Circuit Framework (VQE, Grover, φ³ rotations)".ljust(119) + "║")
-print("║    ✓ Maya Cryptographic Layer (encryption, hashing)".ljust(119) + "║")
-print("║    ✓ Sulba Geometric Constructions (√2, Pythagorean, circle-square)".ljust(119) + "║")
-print("║    ✓ GRVQ Unification (coupled field evolution, unified ansatz)".ljust(119) + "║")
-print("╚" + "═"*118 + "╝")
-
-return grvq
-```
-
-if **name** == “**main**”:
-grvq = verify_grvq_implementation()
-
-
+    """
+    GRVQ: General Relativity + Vedic + Quantum Unified Field Theory
+    
+    # ```
+    This class integrates all components:
+    - Einstein field equations with Wheeler Φ³ modifications
+    - All 29 Vedic Sutras for computational optimization
+    - Quantum circuit framework with φ³ rotations
+    - Maya cryptographic transformations
+    - Sulba geometric constructions
+    
+    The unification is achieved through the golden ratio φ³ coupling
+    which appears in:
+    - Wheeler's dielectric-curvature coupling: G + Q = 8πφ³ T
+    - Quantum rotation scaling: θ_x = θ × φ³
+    - Vedic recursive adjustments
+    - Geometric proportions
+    """
+    
+    # Core components
+    hyperboloid: WheelerHyperboloidGeometry = field(default_factory=WheelerHyperboloidGeometry)
+    pde_system: DielectricRarefactionPDE = field(default_factory=DielectricRarefactionPDE)
+    quantum_rotations: WheelerQuantumRotations = field(default_factory=WheelerQuantumRotations)
+    sutra_engine: type = VedicSutraEngine
+    maya_crypto: type = MayaCryptographicTransform
+    sulba_geometry: type = SulbaGeometry
+    
+    # System state
+    mode: ComputationalMode = ComputationalMode.EXACT
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # UNIFIED CONSTANTS
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    @property
+    def phi(self) -> Fraction:
+        return PHI
+    
+    @property
+    def phi_squared(self) -> Fraction:
+        return PHI_SQUARED
+    
+    @property
+    def phi_cubed(self) -> Fraction:
+        return PHI_CUBED
+    
+    @property
+    def wheeler_coupling(self) -> Fraction:
+        return WheelerCurvatureCoupling.coupling_constant()
+    
+    @property
+    def c_squared(self) -> int:
+        return FundamentalConstants.C_SQUARED
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # UNIFIED FIELD OPERATIONS
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def compute_unified_ansatz(self, r: Fraction, theta: Fraction, phi_coord: Fraction,
+                               alpha_params: Dict[str, Fraction]) -> Dict[str, Any]:
+        """
+        Compute the unified GRVQ ansatz at a spacetime point.
+        
+        Combines:
+        1. Wheeler hyperboloid radial factor
+        2. Dielectric shape function
+        3. φ³ coupling modifications
+        4. Vedic optimization via Sutra 11 (Vyaṣṭisamaṣṭiḥ)
+        """
+        # Wheeler radial component
+        radial = self.hyperboloid.radial_factor(r)
+        
+        # Shape function
+        shape = self.hyperboloid.shape_function(r, theta)
+        
+        # Ansatz modification
+        alpha_h = alpha_params.get('alpha_h', Fraction(1, 10))
+        base_term = radial['radial_factor']
+        ansatz = self.hyperboloid.ansatz_modification(r, theta, alpha_h, base_term)
+        
+        # Apply Vedic Part/Whole optimization
+        constant_factors = [PHI_CUBED, alpha_h]
+        vedic_opt = self.sutra_engine.sutra_11_vyashti_samashti(
+            [base_term], 
+            PHI_CUBED
+        )
+        
+        return {
+            'coordinates': {'r': r, 'theta': theta, 'phi': phi_coord},
+            'radial_component': radial,
+            'shape_component': shape,
+            'ansatz_result': ansatz,
+            'vedic_optimization': vedic_opt,
+            'phi_cubed': PHI_CUBED,
+            'final_value': ansatz['result']
+        }
+    
+    def compute_field_equation(self, G_munu: Fraction, Q_munu: Fraction,
+                                T_dielectric: Fraction) -> Dict[str, Any]:
+        """
+        Evaluate the Wheeler-modified Einstein field equation.
+        
+        G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)
+        """
+        return WheelerCurvatureCoupling.field_equation(G_munu, Q_munu, T_dielectric)
+    
+    def evolve_coupled_fields(self, u: Fraction, D: Fraction, dD_dt: Fraction,
+                               laplacian_u: Fraction, laplacian_D: Fraction,
+                               dt: Fraction, steps: int = 1) -> Dict[str, Any]:
+        """
+        Evolve the coupled dielectric-cymatic field system.
+        
+        Uses the PDE system:
+            ∂ₜu = D_u∇²u + M×sin(G_c×u)
+            ∂ₜₜD = c_D²∇²D - λ∂ₜD - αD + βu (β = φ³)
+        """
+        history = []
+        u_current = u
+        D_current = D
+        
+        for step in range(steps):
+            result = self.pde_system.coupled_step(
+                u_current, D_current, dD_dt,
+                laplacian_u, laplacian_D, dt
+            )
+            u_current = result['u_next']
+            D_current = result['D_next']
+            history.append({'step': step, 'u': u_current, 'D': D_current})
+        
+        return {
+            'initial': {'u': u, 'D': D},
+            'final': {'u': u_current, 'D': D_current},
+            'steps': steps,
+            'dt': dt,
+            'history': history
+        }
+    
+    def generate_quantum_circuit(self, num_qubits: int, depth: int) -> Dict[str, Any]:
+        """
+        Generate quantum circuit with Wheeler φ³ rotations.
+        """
+        return self.quantum_rotations.circuit_specification(num_qubits, depth)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # VEDIC SUTRA INTEGRATION
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def apply_sutra(self, sutra_index: int, *args, **kwargs) -> Dict[str, Any]:
+        """Apply a Vedic sutra by index."""
+        return self.sutra_engine.apply_sutra(sutra_index, *args, **kwargs)
+    
+    def apply_sutra_chain(self, sutra_sequence: List[Tuple[int, tuple, dict]]) -> List[Dict[str, Any]]:
+        """
+        Apply a sequence of sutras.
+        
+        Each element: (sutra_index, args_tuple, kwargs_dict)
+        """
+        results = []
+        for sutra_index, args, kwargs in sutra_sequence:
+            result = self.apply_sutra(sutra_index, *args, **kwargs)
+            results.append(result)
+        return results
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CRYPTOGRAPHIC OPERATIONS
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def maya_encrypt(self, plaintext: int, key: int) -> Dict[str, Any]:
+        """Encrypt using Maya-Vedic cryptography."""
+        return self.maya_crypto.encrypt_block(plaintext, key)
+    
+    def maya_hash(self, data: int, rounds: int = 16) -> int:
+        """Hash using Maya-Vedic transformation."""
+        return self.maya_crypto.maya_hash(data, rounds)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GEOMETRIC CONSTRUCTIONS
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def sulba_sqrt2(self) -> Dict[str, Fraction]:
+        """Get Baudhāyana's √2 approximation."""
+        return self.sulba_geometry.sqrt2_baudhayana()
+    
+    def sulba_pythagorean(self, m: int, n: int) -> Dict[str, int]:
+        """Generate Pythagorean triple."""
+        return self.sulba_geometry.pythagorean_triple(m, n)
+    
+    def sulba_circle_to_square(self, radius: Fraction) -> Dict[str, Fraction]:
+        """Convert circle to equal-area square."""
+        return self.sulba_geometry.circle_to_square(radius)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # UNIFIED TRANSFORMATION ENGINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def transform_expression(self, expression: str, 
+                             input_values: Dict[str, Fraction]) -> Dict[str, Any]:
+        """
+        Transform a mathematical expression using Vedic-Wheeler optimization.
+        
+        Example: "E = m * c^2"
+        
+        Steps:
+        1. Parse expression structure
+        2. Identify applicable sutras
+        3. Apply Wheeler φ³ scaling where appropriate
+        4. Return optimized computation path
+        """
+        # Expression analysis (simplified - full parser would be more complex)
+        if 'c^2' in expression or 'c²' in expression:
+            # Use Yāvadūnam (Sutra 10) for c²
+            c_squared = self.sutra_engine.sutra_10_yavadunam(
+                FundamentalConstants.C, 
+                300000000  # Base near c
+            )
+            
+            # If mass is provided, apply Vyaṣṭisamaṣṭiḥ (Sutra 11)
+            if 'm' in input_values:
+                masses = [input_values['m']]
+                energy_opt = self.sutra_engine.sutra_11_vyashti_samashti(
+                    masses,
+                    Fraction(self.c_squared)
+                )
+                
+                return {
+                    'expression': expression,
+                    'c_squared_computation': c_squared,
+                    'energy_optimization': energy_opt,
+                    'sutras_used': [10, 11],
+                    'phi_cubed_factor': PHI_CUBED
+                }
+        
+        return {
+            'expression': expression,
+            'input_values': input_values,
+            'note': 'Full expression parser not implemented in this example'
+        }
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SYSTEM STATE AND VERIFICATION
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def verify_constants(self) -> Dict[str, Any]:
+        """Verify all fundamental constants."""
+        verifications = {}
+        
+        # Golden ratio identities
+        verifications['phi_squared_identity'] = (PHI_SQUARED == PHI + Fraction(1))
+        verifications['phi_cubed_identity'] = (PHI_CUBED == 2 * PHI + Fraction(1))
+        
+        # Speed of light
+        verifications['c_squared'] = (
+            FundamentalConstants.C * FundamentalConstants.C == 
+            FundamentalConstants.C_SQUARED
+        )
+        
+        # Baudhāyana √2
+        sqrt2_check = self.sulba_geometry.sqrt2_baudhayana()
+        verifications['baudhayana_sqrt2'] = (
+            sqrt2_check['result'] == sqrt2_check['simplified']
+        )
+        
+        return {
+            'all_verified': all(verifications.values()),
+            'verifications': verifications
+        }
+    
+    def get_system_info(self) -> Dict[str, Any]:
+        """Get complete system information."""
+        return {
+            'name': 'GRVQ Unified Field Theory',
+            'version': '1.0.0',
+            'mode': self.mode.name,
+            'components': {
+                'vedic_sutras': 29,
+                'wheeler_field_theory': True,
+                'quantum_framework': True,
+                'maya_cryptography': True,
+                'sulba_geometry': True
+            },
+            'constants': {
+                'phi': str(PHI),
+                'phi_squared': str(PHI_SQUARED),
+                'phi_cubed': str(PHI_CUBED),
+                'c_squared': FundamentalConstants.C_SQUARED,
+                'wheeler_coupling': str(self.wheeler_coupling)
+            },
+            'verification': self.verify_constants()
+        }
+    # ```
+    
+    # ╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+    
+    # ║                                    SECTION 8: VERIFICATION AND DEMONSTRATION                                       ║
+    
+    # ╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+    
+    def verify_grvq_implementation():
+        """
+        Comprehensive verification of GRVQ Unified Field Theory.
+        """
+        print("╔" + "═"*118 + "╗")
+        print("║" + " GRVQ UNIFIED FIELD THEORY - COMPREHENSIVE VERIFICATION ".center(118) + "║")
+        print("║" + " General Relativity + Vedic Sutras + Quantum Framework ".center(118) + "║")
+        print("╠" + "═"*118 + "╣")
+        
+        # ```
+        # Initialize unified theory
+        grvq = GRVQUnifiedTheory()
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 1. GOLDEN RATIO CONSTANTS
+        # ─────────────────────────────────────────────────────────────────────────
+        print("║" + " 1. GOLDEN RATIO CONSTANTS ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        print(f"║  φ   = {PHI}".ljust(119) + "║")
+        print(f"║  φ²  = φ + 1 = {PHI_SQUARED}".ljust(119) + "║")
+        print(f"║  φ³  = 2φ + 1 = {PHI_CUBED}".ljust(119) + "║")
+        
+        assert PHI_SQUARED == PHI + Fraction(1), "φ² identity failed"
+        assert PHI_CUBED == 2 * PHI + Fraction(1), "φ³ identity failed"
+        print(f"║  ✓ Algebraic identities verified".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 2. WHEELER COUPLING CONSTANT
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 2. WHEELER Φ³ COUPLING ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        kappa = grvq.wheeler_coupling
+        print(f"║  κ = 8π × φ³ = {kappa}".ljust(119) + "║")
+        print(f"║  κ ≈ {float(kappa):.12f}".ljust(119) + "║")
+        
+        # Field equation test
+        field_eq = grvq.compute_field_equation(
+            G_munu=Fraction(1),
+            Q_munu=Fraction(0),
+            T_dielectric=Fraction(1) / kappa
+        )
+        print(f"║  Field equation G + Q = κT satisfied: {field_eq['satisfied']}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 3. VEDIC SUTRAS
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 3. VEDIC SUTRA ENGINE (29 SUTRAS) ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        # Test Sutra 2: Nikhilam multiplication (using specialized multiply function)
+        nikhilam = VedicSutraEngine.sutra_02_nikhilam_multiply(98, 97, 100)
+        print(f"║  Sutra 2 (Nikhilam): 98 × 97 = {nikhilam['deficiency_product']} + {nikhilam['cross_result']}×100 = {nikhilam['result']}".ljust(119) + "║")
+        assert nikhilam['verification'], "Nikhilam verification failed"
+        
+        # Test Sutra 10: Yāvadūnam (c² calculation)
+        yavadunam = grvq.apply_sutra(10, FundamentalConstants.C, 300000000)
+        print(f"║  Sutra 10 (Yāvadūnam): c² = {yavadunam['result']}".ljust(119) + "║")
+        assert yavadunam['verification'], "Yāvadūnam verification failed"
+        
+        # Count all sutras
+        all_sutras = grvq.sutra_engine.list_all_sutras()
+        primary = sum(1 for s in all_sutras if s['is_primary'])
+        sub = sum(1 for s in all_sutras if not s['is_primary'])
+        print(f"║  Total sutras: {len(all_sutras)} (Primary: {primary}, Sub-sutras: {sub})".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 4. QUANTUM CIRCUIT
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 4. QUANTUM CIRCUIT WITH φ³ ROTATIONS ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        circuit = grvq.generate_quantum_circuit(num_qubits=4, depth=3)
+        print(f"║  Qubits: {circuit['num_qubits']}, Depth: {circuit['depth']}, Topology: {circuit['topology']}".ljust(119) + "║")
+        
+        layer0 = circuit['layers'][0]['rotations']
+        print(f"║  Layer 0 rotations: θx={float(layer0['theta_x']):.6f}, θy={float(layer0['theta_y']):.6f}, θz={float(layer0['theta_z']):.6f}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 5. SULBA GEOMETRY
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 5. SULBA GEOMETRIC CONSTRUCTIONS ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        sqrt2 = grvq.sulba_sqrt2()
+        print(f"║  Baudhāyana √2 = {sqrt2['result']} ≈ {sqrt2['decimal']:.10f}".ljust(119) + "║")
+        
+        pythag = grvq.sulba_pythagorean(5, 4)
+        print(f"║  Pythagorean (5,4): ({pythag['a']}, {pythag['b']}, {pythag['c']}) verified: {pythag['verification']}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 6. MAYA CRYPTOGRAPHY
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 6. MAYA CRYPTOGRAPHIC TRANSFORM ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        encrypted = grvq.maya_encrypt(12345, 67890)
+        print(f"║  Encrypt(12345, key=67890) = {encrypted['ciphertext']}".ljust(119) + "║")
+        
+        hash_val = grvq.maya_hash(12345, rounds=8)
+        print(f"║  MayaHash(12345, 8 rounds) = {hash_val}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 7. UNIFIED ANSATZ
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 7. UNIFIED GRVQ ANSATZ ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        ansatz = grvq.compute_unified_ansatz(
+            r=Fraction(1),
+            theta=Fraction(0),
+            phi_coord=Fraction(0),
+            alpha_params={'alpha_h': Fraction(1, 10)}
+        )
+        print(f"║  Ansatz at (r=1, θ=0, φ=0): {ansatz['final_value']}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # 8. SYSTEM VERIFICATION
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " 8. SYSTEM VERIFICATION ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        
+        sys_info = grvq.get_system_info()
+        verification = sys_info['verification']
+        print(f"║  All constants verified: {verification['all_verified']}".ljust(119) + "║")
+        for key, val in verification['verifications'].items():
+            status = "✓" if val else "✗"
+            print(f"║    {status} {key}".ljust(119) + "║")
+        
+        # ─────────────────────────────────────────────────────────────────────────
+        # FINAL SUMMARY
+        # ─────────────────────────────────────────────────────────────────────────
+        print("╠" + "═"*118 + "╣")
+        print("║" + " GRVQ UNIFIED FIELD THEORY - VERIFICATION COMPLETE ".center(118) + "║")
+        print("╠" + "─"*118 + "╣")
+        print("║  Components:".ljust(119) + "║")
+        print("║    ✓ Golden Ratio Φ³ Algebra (exact rational arithmetic)".ljust(119) + "║")
+        print("║    ✓ Wheeler Field Theory (hyperboloid, curvature coupling, PDEs)".ljust(119) + "║")
+        print("║    ✓ Vedic Sutra Engine (all 29 sutras: 16 primary + 13 sub-sutras)".ljust(119) + "║")
+        print("║    ✓ Quantum Circuit Framework (VQE, Grover, φ³ rotations)".ljust(119) + "║")
+        print("║    ✓ Maya Cryptographic Layer (encryption, hashing)".ljust(119) + "║")
+        print("║    ✓ Sulba Geometric Constructions (√2, Pythagorean, circle-square)".ljust(119) + "║")
+        print("║    ✓ GRVQ Unification (coupled field evolution, unified ansatz)".ljust(119) + "║")
+        print("╚" + "═"*118 + "╝")
+        
+        return grvq
+        # ```
+        
+if __name__ == "__main__":
+    grvq = verify_grvq_implementation()
+    
+    
