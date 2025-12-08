@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Tuple
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
-from maya_cymatic_simulation import encrypt_with_cymatic
+from qiskit_backend import execute_ghz
 
 
 def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:
@@ -230,6 +230,37 @@ def hybrid_ghz_ibmq_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]
     return {"sutra_result": sutra_result, "quantum_counts": quantum_counts}
 
 
+def hybrid_ghz_pipeline(value: Any, num_qubits: int = 29) -> Dict[str, Any]:
+    """Run a hybrid sutra workflow and entangle ``num_qubits`` via Qiskit.
+
+    The provided value is first processed through a representative sutra
+    (``ekadhikena_purvena``) in hybrid mode.  In parallel, a GHZ circuit
+    spanning ``num_qubits`` qubits is constructed and executed using
+    :func:`qiskit_backend.execute_ghz`.  The two results are returned together,
+    enabling subsequent fusion or analysis steps.
+
+    Parameters
+    ----------
+    value:
+        Initial numeric value supplied to the sutra pipeline.
+    num_qubits:
+        Number of qubits for the GHZ circuit. Defaults to 29 to mirror the
+        count of Vedic sutras.
+
+    Returns
+    -------
+    Dict[str, Any]
+        A dictionary containing the final sutra output under ``"sutra_result"``
+        and the GHZ measurement counts under ``"quantum_counts"``.
+    """
+
+    ctx = SutraContext(mode=SutraMode.HYBRID)
+    repo = SutraRepository(ctx)
+    sutra_result = repo.call_sutra("ekadhikena_purvena", value, ctx=ctx)
+    quantum_counts = execute_ghz(num_qubits=num_qubits)
+    return {"sutra_result": sutra_result, "quantum_counts": quantum_counts}
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -256,43 +287,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Run hybrid sutra pipeline combined with a multi-qubit GHZ circuit",
     )
-    parser.add_argument(
-        "--ghz-ibmq",
-        action="store_true",
-        help=(
-            "Run hybrid sutra pipeline with GHZ circuit executed on IBM Quantum "
-            "backend"
-        ),
-    )
-    parser.add_argument(
-        "--maya-cymatic",
-        action="store_true",
-        help="Encrypt a message using Maya cipher and generate cymatic verification",
-    )
-    parser.add_argument(
-        "--message",
-        type=str,
-        default="",
-        help="Message payload for Maya cipher when using --maya-cymatic",
-    )
-    parser.add_argument(
-        "--key",
-        type=lambda x: int(x, 0),
-        default=0xDEADBEEF,
-        help="Integer key for Maya cipher (e.g., 0xDEADBEEF)",
-    )
 
     args = parser.parse_args()
 
     mode = SutraMode[args.mode.upper()]
 
-    if args.maya_cymatic:
-        result = maya_cymatic_pipeline(args.message, key=args.key)
-        print(result)
-    elif args.ghz_ibmq:
-        result = hybrid_ghz_ibmq_pipeline(args.value)
-        print(result)
-    elif args.ghz:
+    if args.ghz:
         result = hybrid_ghz_pipeline(args.value)
         print(result)
     elif args.parallel:

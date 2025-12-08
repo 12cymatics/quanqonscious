@@ -14,16 +14,11 @@ measurement counts suitable for downstream classical-quantum fusion.
 
 from __future__ import annotations
 
+from typing import Dict
+
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit.result import Counts
-from qiskit_ibm_runtime import QiskitRuntimeService
-
-
-# User-provided IBM Quantum API token enabling remote execution on IBM's
-# cloud backends. The key is embedded directly per user request to allow the
-# framework to authenticate without external configuration files.
-IBMQ_API_KEY = "ApiKey-4781ceaa-523c-4404-bc6d-a991cc1d847d"
 
 
 def execute_ghz(num_qubits: int = 29, shots: int = 1024) -> Counts:
@@ -68,54 +63,5 @@ def execute_ghz(num_qubits: int = 29, shots: int = 1024) -> Counts:
     return counts
 
 
-def execute_ghz_ibmq(
-    num_qubits: int = 29,
-    shots: int = 1024,
-    backend_name: str = "ibmq_qasm_simulator",
-) -> Counts:
-    """Execute a GHZ state on an IBM Quantum backend via Qiskit Runtime.
-
-    This routine mirrors :func:`execute_ghz` but targets IBM's cloud
-    infrastructure. It authenticates using the embedded API key, retrieves the
-    requested backend through :class:`qiskit_ibm_runtime.QiskitRuntimeService`,
-    and runs the transpiled circuit.
-
-    Parameters
-    ----------
-    num_qubits:
-        Number of qubits to entangle. Defaults to 29, aligning with the Vedic
-        sutras.
-    shots:
-        Repetition count for backend execution.
-    backend_name:
-        Name of the IBM Quantum backend to use. ``"ibmq_qasm_simulator"`` is
-        selected by default for broad availability.
-
-    Returns
-    -------
-    Counts
-        Mapping of bitstrings to observed frequencies after measurement.
-    """
-
-    if num_qubits < 1:
-        raise ValueError("num_qubits must be positive")
-
-    service = QiskitRuntimeService(channel="ibm_quantum_platform", token=IBMQ_API_KEY)
-    backend = service.backend(backend_name)
-
-    circuit = QuantumCircuit(num_qubits, num_qubits, name="ghz")
-    circuit.h(0)
-    for i in range(1, num_qubits):
-        circuit.cx(0, i)
-    circuit.measure(range(num_qubits), range(num_qubits))
-
-    compiled = transpile(circuit, backend)
-    job = backend.run(compiled, shots=shots)
-    result = job.result()
-    counts: Counts = result.get_counts(circuit)
-    return counts
-
-
 if __name__ == "__main__":  # pragma: no cover - manual execution
-    print("Aer simulator:", execute_ghz())
-    print("IBM Quantum:", execute_ghz_ibmq())
+    print(execute_ghz())
