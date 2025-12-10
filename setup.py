@@ -16,12 +16,10 @@ setup(
         "mpi4py>=3.0.0",
         "qiskit>=0.45.0",
         "qiskit-aer>=0.12.0",
-        "torch>=2.0.0",
-        "matplotlib>=3.7.1",
-        "pillow>=9.0.0",
     ],
     extras_require={
-        "gpu": ["cupy>=9.0.0", "cuda-quantum-cu12>=0.1.0"],
+        # Use precompiled CUDA 11.x wheel to avoid building CuPy from source
+        "gpu": ["cupy-cuda11x>=13.0.0", "cuda-quantum-cu12>=0.1.0"],
         "dev": ["numba>=0.55", "psutil>=5.8"]
     },
     entry_points={

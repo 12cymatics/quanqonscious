@@ -15,20 +15,18 @@ cirq>=0.15.0
 qiskit>=0.45.0
 qiskit-aer>=0.12.0
 
+# GPU array computing (precompiled CUDA 11.x wheels to avoid source builds)
+cupy-cuda11x>=13.0.0
+
 # Cryptography for Maya key encryption
 cryptography>=3.4.8
 blake3>=1.0.8
-
 # JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
 jax>=0.4.10
 jaxlib>=0.4.10+cuda11.cudnn86
 
 # PyTorch for sutra tensor operations
 torch>=2.0.0
-
-# Visualization for cymatic verification animation
-matplotlib>=3.7.1
-pillow>=9.0.0
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest>=7.0.0
