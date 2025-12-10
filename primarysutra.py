@@ -56,6 +56,8 @@ except Exception:  # pragma: no cover - optional dependency
     class torch:
         class Tensor:
             pass
+import matplotlib.pyplot as plt
+import scipy.linalg as la
 try:
     import matplotlib.pyplot as plt
 except Exception:  # pragma: no cover - optional dependency
