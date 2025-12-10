@@ -1,7 +1,10 @@
 # QuanQonscious/cli.py
 
 import argparse
-from QuanQonscious import ansatz, maya_cipher, updater, zpe_solver
+# Import package modules using relative paths so the CLI works even when the
+# repository directory name differs from the package name used in setup.py.
+from . import ansatz, maya_cipher, updater, zpe_solver
+import numpy as np
 
 def main():
     parser = argparse.ArgumentParser(prog="quanqonscious", 
