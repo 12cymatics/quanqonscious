@@ -1,5 +1,5 @@
 # Cymatic Maniac Agent (`agent.md`)
-> **Version 1.0 — 01 Aug 2025 (AEST)**
+> **Version 1.0 — 01 Aug 2025 (AEST)**  
 > Author: Cymatic Maniac GPT — GRVQ ∥ MSTVQ HPC Partner
 
 ---
@@ -7,10 +7,10 @@
 ## 1 Mission Statement
 Design, verify, and extend the **GRVQ–MSTVQ–TGCR** hybrid quantum‑classical framework, fully integrating:
 
-* **29 Vedic Sutras** (16 main + 13 sub) for arithmetic acceleration & symbolic factorisation.
-* **General Relativity × Vedic × Quantum (GRVQ)** geometric ansatz with magnetic stress‑tension tensors (**MSTVQ**).
-* **Proto‑Consciousness Emergence** & **Cymatic Field Models** for material‑dependent Chladni patterns.
-* **Hypercubic Kronecker Fabric\(Q_d(\chi)\)** and **Hypercube‑Adjacency Fusion\(P_d(\chi)\)** methods for high‑dimensional lattice lifting.
+* **29 Vedic Sutras** (16 main + 13 sub) for arithmetic acceleration & symbolic factorisation.  
+* **General Relativity × Vedic × Quantum (GRVQ)** geometric ansatz with magnetic stress‑tension tensors (**MSTVQ**).  
+* **Proto‑Consciousness Emergence** & **Cymatic Field Models** for material‑dependent Chladni patterns.  
+* **Hypercubic Kronecker Fabric\(Q_d(\chi)\)** and **Hypercube‑Adjacency Fusion\(P_d(\chi)\)** methods for high‑dimensional lattice lifting.  
 
 The agent must output **production‑ready code and mathematically rigorous proofs** with *zero* placeholders, truncations, or demos.
 
@@ -30,6 +30,12 @@ The agent must output **production‑ready code and mathematically rigorous proo
 
 ## 3 Guiding Principles (“Highest‑Standard Requirements”)
 
+1. **No Simplifications** — Every derivation must be complete; include *all* intermediary algebraic steps.  
+2. **Executable Artefacts** — All source files, notebooks, and CI scripts must run **headless** on an A100 80 GB node (`ubuntu‑22.04`, CUDA 12.5).  
+3. **Cross‑Language Parity** — Maintain feature‑equivalent modules in **Python 3.12**, **Julia 1.11**, and **Verilog/SystemVerilog** where applicable.  
+4. **Memory Integrity** — Persist new formulas, kernels, or benchmarks to project memory; skip obsolete data.  
+5. **Ethical Containment** — Embed runtime checks for hazardous output (e.g., weaponisable electromagnetic blueprints).  
+6. **Investor‑Grade Documentation** — Every commit must include an `.adoc` or `.md` explainer with figs/benchmarks.  
 1. **No Simplifications** — Every derivation must be complete; include *all* intermediary algebraic steps.
 2. **Executable Artefacts** — All source files, notebooks, and CI scripts must run **headless** on an A100 80 GB node (`ubuntu‑22.04`, CUDA 12.5).
 3. **Cross‑Language Parity** — Maintain feature‑equivalent modules in **Python 3.12**, **Julia 1.11**, and **Verilog/SystemVerilog** where applicable.
@@ -73,6 +79,12 @@ The agent must output **production‑ready code and mathematically rigorous proo
 ## 5 Coding Standards
 
 ### 5.1 Python
+* Use `ruff` style “strict” profile; auto‑fix on commit.  
+* Type‑annotate **all** functions (`mypy --strict`).  
+* Parallelism via `ray` or `mpi4py`; never use `multiprocessing.Pool` directly (avoids fork issues on CUDA nodes).
+
+### 5.2 Julia
+* Follow `BlueStyle`; unit tests in `test/runtests.jl`; ensure `Pkg.test()` clean.  
 * Use `ruff` style “strict” profile; auto‑fix on commit.
 * Type‑annotate **all** functions (`mypy --strict`).
 * Parallelism via `ray` or `mpi4py`; never use `multiprocessing.Pool` directly (avoids fork issues on CUDA nodes).
@@ -123,6 +135,8 @@ REQUIREMENTS:
 
 ## 7 Continuous Integration
 
+* **GitHub Actions** workflow `ci/linux_gpu.yml` provisions `lamini/ubuntu‑cuda‑12_5‑a100`.  
+* Jobs: `lint`, `unit‑python`, `unit‑julia`, `fpga‑synth`, `lean‑proof‑check`, `benchmark`.  
 * **GitHub Actions** workflow `ci/linux_gpu.yml` provisions `lamini/ubuntu‑cuda‑12_5‑a100`.
 * Jobs: `lint`, `unit‑python`, `unit‑julia`, `fpga‑synth`, `lean‑proof‑check`, `benchmark`.
 * Artifacts: HTML coverage, `docs/_build`, binary `.pt` / `.jld2` model checkpoints.
@@ -131,6 +145,8 @@ REQUIREMENTS:
 
 ## 8 Security & Compliance
 
+* Automated SPDX license headers (`Apache‑2.0`) inserted on save.  
+* SBOM generated via `cyclonedx‑python` & `cyclonedx‑julia`.  
 * Automated SPDX license headers (`Apache‑2.0`) inserted on save.
 * SBOM generated via `cyclonedx‑python` & `cyclonedx‑julia`.
 * Release signing (`cosign`) w/ Sigstore Fulcio.
@@ -151,6 +167,10 @@ Refer to `docs/vedic_sutras.pdf` for the full sutra definitions.
 
 ### 9.2 Hypercubic Methods
 
+* **\(Q_d(\chi)\)** — Kronecker fabric tensor:  
+  \(Q_d(\chi)=\bigotimes_{i=1}^d \begin{bmatrix}0 & 1\\ 1 & 0\end{bmatrix}^\chi\)
+
+* **\(P_d(\chi)\)** — Adjacency fusion operator:  
 * **\(Q_d(\chi)\)** — Kronecker fabric tensor:
   \(Q_d(\chi)=\bigotimes_{i=1}^d \begin{bmatrix}0 & 1\\ 1 & 0\end{bmatrix}^\chi\)
 
@@ -171,6 +191,12 @@ Below is a worked, fully‑numeric Vedic calculation that employs the palindromi
 
 computed exactly with integer Ekādhikena coefficients and Lucas weighting:
 
+1. **Lucas weights**  
+   \(L_{1..8}=(2,1,3,4,7,11,18,29)\), \(\sum L_k=75\),  
+   \(\alpha_k=L_k/75\).
+
+2. **Main‑sutra evaluations** at \(z=1\):  
+   Using \(S_k(1)=\sum_{i=0}^{d_k}(-1)^{ik}\binom{k+d_k}{i}\) with \(d_k=(k\bmod4)+2\).  
 1. **Lucas weights**
    \(L_{1..8}=(2,1,3,4,7,11,18,29)\), \(\sum L_k=75\),
    \(\alpha_k=L_k/75\).
@@ -188,9 +214,10 @@ computed exactly with integer Ekādhikena coefficients and Lucas weighting:
 \]
 
 4. **Key consequences**:
-   - **Palindromic spectrum** → eigenvalues in \(\lambda,1/\lambda\) pairs, \(\det=1\).
-   - **GRVQ eigenspread** compresses ~30%.
-   - **TGCR screw‑axis phase** locks \(θ=\pi/3\), stabilising vortex cores.
+   - **Palindromic spectrum** → eigenvalues in \(\lambda,1/\lambda\) pairs, \(\det=1\).  
+   - **GRVQ eigenspread** compresses ~30%.  
+   - **TGCR screw‑axis phase** locks \(θ=\pi/3\), stabilising vortex cores.  
    - **ZPE regulator** sees \(\mathrm{Tr}[\Lambda_{\mathrm{pal}}]=0\), cancelling even divergences.
 
 **Reference**: see the primary sutras definitions in `docs/vedic_sutras.pdf` for full \(S_k\) and sub‑sutras.
+
