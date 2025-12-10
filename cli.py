@@ -2,7 +2,9 @@
 
 import argparse
 import numpy as np
-from QuanQonscious import ansatz, maya_cipher, updater, zpe_solver
+# Import package modules. The package directory is lowercase
+# but some older scripts used a capitalized name.
+from quanqonscious import ansatz, maya_cipher, updater, zpe_solver
 
 def main():
     parser = argparse.ArgumentParser(prog="quanqonscious", 

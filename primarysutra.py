@@ -1,5 +1,42 @@
 from typing import Any
 import numpy as np
+try:
+    import cirq
+except Exception:  # pragma: no cover - optional dependency
+    class _CirqStub:
+        class LineQubit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Circuit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Simulator:
+            def __init__(self, *_, **__):
+                pass
+
+            def run(self, *_, **__):
+                return None
+
+        class H:
+            @staticmethod
+            def on(_):
+                pass
+
+        class X:
+            def __call__(self, *_):
+                return None
+
+        class CNOT:
+            def __call__(self, *_):
+                return None
+
+        class ZPowGate:
+            def __init__(self, *_, **__):
+                pass
+
+    cirq = _CirqStub()
 
 # Optional dependencies
 try:
@@ -11,6 +48,27 @@ try:
     import cudaq
 except Exception:  # pragma: no cover - optional quantum backend
     cudaq = None
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    TORCH_AVAILABLE = False
+    class torch:
+        class Tensor:
+            pass
+try:
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover - optional dependency
+    class plt:
+        @staticmethod
+        def plot(*_, **__):
+            pass
+        @staticmethod
+        def show(*_, **__):
+            pass
+try:
+    import scipy.linalg as la
+except Exception:  # pragma: no cover - optional dependency
 
 try:
     import torch
@@ -46,11 +104,19 @@ except Exception:  # pragma: no cover - use minimal functions if SciPy missing
 from typing import Dict, List, Tuple, Union, Optional, Callable, Any
 import logging
 import time
-import sympy as sp
+try:
+    import sympy as sp
+except Exception:  # pragma: no cover - optional dependency
+    sp = None
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-import pandas as pd
+try:
+    import pandas as pd
+except Exception:  # pragma: no cover - optional dependency
+    class pd:
+        class DataFrame:
+            pass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -94,6 +160,8 @@ class VedicSutras:
         """
         self.context = context if context else SutraContext()
         
+        # Initialize GPU if requested
+        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
         # Initialize GPU if requested and available
         if (
             self.context.use_gpu
@@ -106,6 +174,7 @@ class VedicSutras:
             )
         else:
             self.context.use_gpu = False
+            self.context.device = torch.device("cpu") if TORCH_AVAILABLE else 'cpu'
             if torch is not None:
                 self.context.device = torch.device("cpu")
             else:
