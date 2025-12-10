@@ -17,8 +17,6 @@ from hypothesis.extra.numpy import arrays
 import cupy as cp
 import cudaq
 import cirq
-import qiskit
-from qiskit.quantum_info import state_fidelity, process_fidelity
 from scipy.stats import ks_2samp, chi2_contingency
 from scipy.special import rel_entr
 import matplotlib.pyplot as plt
@@ -1026,7 +1024,7 @@ CMD ["python3", "pcfe_v3_core_engine.py"]
 numpy==1.24.3
 scipy==1.11.3
 torch==2.1.0+cu118
-cupy-cuda11x==12.2.0
+cupy-cuda11x==13.0.0
 numba==0.58.0
 matplotlib==3.7.2
 seaborn==0.12.2

@@ -12,9 +12,9 @@ It provides:
     adaptive constant modulation.
   • A Full Configuration Interaction (FCI) solver with GRVQ corrections.
   • TTGCR hardware driver simulation (frequency setting, sensor feedback, entropy
-    monitoring) without kill-switch routines.
+    monitoring) without kill switch routines.
   • An HPC 4D PDE solver with MPI-based block-cyclic memory management and GPU
-    acceleration (using JAX for CUDA-A100).
+    acceleration (using JAX for CUDA A100).
   • A Bioelectric DNA Encoder module employing fractal Hilbert curve transformation.
   • Extended quantum circuit simulation using Cirq.
   • Automated performance profiling, dynamic dependency updating, and integrated
@@ -43,7 +43,7 @@ Import the main module in your application:
                              hpc_quantum_simulation, BioelectricDNAEncoder,
                              extended_quantum_simulation_cirq, orchestrate_simulation,
                              run_full_benchmark, FutureExtensions)
-                             
+
 Then use the provided classes and functions to build your simulation workflow.
 
 The :class:`SutraRepository` provides a convenient interface to call any of the
@@ -62,6 +62,20 @@ repo.update_context(mode=SutraMode.QUANTUM)
 quantum_result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
 ```
 
+For whole-of-library execution, ``sutra_simulator.HybridQuantumClassicalSimulator``
+offers pre-built serial, concurrent (threaded) and parallel (multi-process)
+drivers.  This simulator ensures deterministic aggregation of all 29 sutras and
+provides structured timing reports:
+
+```python
+from sutra_simulator import HybridQuantumClassicalSimulator
+from primarysutra import SutraMode, SutraContext
+
+simulator = HybridQuantumClassicalSimulator(SutraContext(mode=SutraMode.HYBRID))
+report = simulator.run_parallel(value=108)
+print(report.to_dict())
+```
+
 Documentation:
 --------------
 For detailed API documentation, please refer to the “docs/” folder included in the package.
@@ -69,6 +83,11 @@ This includes:
   - Detailed descriptions of each module and function.
   - Performance optimization guidelines.
   - Examples of integration with HPC and quantum backends.
+For additional resources see `docs/sutraws_new.pdf` and `docs/sutraws_interactive.html`.
+The script `sutra_orchestrator.py` demonstrates how to execute all 29 sutras in
+serial order, concurrently with threads, or in parallel across processes.  It
+automatically inspects each sutra’s signature to provide reasonable default
+arguments so the entire library can be exercised without manual input.
 
 Contact:
 --------

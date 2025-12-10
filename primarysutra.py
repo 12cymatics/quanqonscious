@@ -1,8 +1,52 @@
+from typing import Any
 import numpy as np
-import cirq
+try:
+    import cirq
+except Exception:  # pragma: no cover - optional dependency
+    class _CirqStub:
+        class LineQubit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Circuit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Simulator:
+            def __init__(self, *_, **__):
+                pass
+
+            def run(self, *_, **__):
+                return None
+
+        class H:
+            @staticmethod
+            def on(_):
+                pass
+
+        class X:
+            def __call__(self, *_):
+                return None
+
+        class CNOT:
+            def __call__(self, *_):
+                return None
+
+        class ZPowGate:
+            def __init__(self, *_, **__):
+                pass
+
+    cirq = _CirqStub()
+
+# Optional dependencies
+try:
+    import cirq
+except Exception:  # pragma: no cover - allow running without Cirq
+    cirq = None
+
 try:
     import cudaq
-except ImportError:  # pragma: no cover - optional dependency
+except Exception:  # pragma: no cover - optional quantum backend
     cudaq = None
 try:
     import torch
@@ -14,14 +58,67 @@ except Exception:  # pragma: no cover - optional dependency
             pass
 import matplotlib.pyplot as plt
 import scipy.linalg as la
+try:
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover - optional dependency
+    class plt:
+        @staticmethod
+        def plot(*_, **__):
+            pass
+        @staticmethod
+        def show(*_, **__):
+            pass
+try:
+    import scipy.linalg as la
+except Exception:  # pragma: no cover - optional dependency
+
+try:
+    import torch
+except Exception:  # pragma: no cover - allow running without PyTorch
+    class _TorchPlaceholder:
+        class Tensor:
+            pass
+
+        class cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        @staticmethod
+        def device(name: str) -> str:
+            return name
+
+        @staticmethod
+        def tensor(*args: Any, **kwargs: Any) -> Any:
+            raise ImportError("PyTorch is required for tensor operations")
+
+    torch = _TorchPlaceholder()
+
+try:
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover - plotting optional
+    plt = None
+
+try:
+    import scipy.linalg as la
+except Exception:  # pragma: no cover - use minimal functions if SciPy missing
+    la = None
 from typing import Dict, List, Tuple, Union, Optional, Callable, Any
 import logging
 import time
-import sympy as sp
+try:
+    import sympy as sp
+except Exception:  # pragma: no cover - optional dependency
+    sp = None
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-import pandas as pd
+try:
+    import pandas as pd
+except Exception:  # pragma: no cover - optional dependency
+    class pd:
+        class DataFrame:
+            pass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -67,21 +164,44 @@ class VedicSutras:
         
         # Initialize GPU if requested
         if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
+        # Initialize GPU if requested and available
+        if (
+            self.context.use_gpu
+            and torch is not None
+            and torch.cuda.is_available()
+        ):
             self.context.device = torch.device("cuda")
-            logger.info(f"Using GPU device: {torch.cuda.get_device_name(0)}")
+            logger.info(
+                f"Using GPU device: {torch.cuda.get_device_name(0)}"
+            )
         else:
             self.context.use_gpu = False
             self.context.device = torch.device("cpu") if TORCH_AVAILABLE else 'cpu'
+            if torch is not None:
+                self.context.device = torch.device("cpu")
+            else:
+                self.context.device = "cpu"
             logger.info("Using CPU for computations")
             
-        # Initialize quantum backend if in quantum or hybrid mode
-        if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
+        # Initialize quantum backend if in quantum or hybrid mode and cudaq available
+        if (
+            self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]
+            and cudaq is not None
+        ):
             if self.context.quantum_backend is None:
                 # Default to CUDAQ simulator
                 self.quantum_platform = cudaq.get_platform()
-                logger.info(f"Using CUDAQ platform: {self.quantum_platform.name()}")
+                logger.info(
+                    f"Using CUDAQ platform: {self.quantum_platform.name()}"
+                )
             else:
                 self.quantum_platform = self.context.quantum_backend
+        else:
+            self.quantum_platform = None
+            if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
+                logger.warning(
+                    "CUDA-Quantum not available; falling back to classical mode"
+                )
         
         # Performance tracking
         self.performance_history = []
@@ -108,7 +228,7 @@ class VedicSutras:
     
     def _to_device(self, x):
         """Convert input to appropriate device (GPU tensor or CPU array)"""
-        if self.context.use_gpu:
+        if self.context.use_gpu and torch is not None:
             if isinstance(x, torch.Tensor):
                 return x.to(self.context.device)
             elif isinstance(x, np.ndarray):
@@ -121,7 +241,7 @@ class VedicSutras:
     
     def _from_device(self, x, original_type):
         """Convert result back to original type from device"""
-        if self.context.use_gpu and isinstance(x, torch.Tensor):
+        if self.context.use_gpu and torch is not None and isinstance(x, torch.Tensor):
             if isinstance(original_type, np.ndarray):
                 return x.cpu().numpy()
             elif isinstance(original_type, (int, float, complex)):
@@ -1841,7 +1961,7 @@ class VedicSutras:
             return x - 1
 
     def anurupyena(self, a: Union[float, np.ndarray, torch.Tensor],
-                  b: Union[float, np.ndarray, torch.Tensor],
+                  b: Optional[Union[float, np.ndarray, torch.Tensor]] = None,
                   ratio: float = 0.618,
                   ctx: Optional[SutraContext] = None) -> Union[float, np.ndarray, torch.Tensor]:
         """
@@ -1864,7 +1984,10 @@ class VedicSutras:
         
         Args:
             a: First value or array
-            b: Second value or array
+            b: Second value or array. When omitted, the current
+                :class:`SutraContext` base is used as the proportional
+                partner so the sutra remains invocable with a single
+                positional argument within serial pipelines.
             ratio: Proportionality ratio (default: golden ratio)
             ctx: Optional execution context override
             
@@ -1877,6 +2000,14 @@ class VedicSutras:
         data_size = np.size(a) if hasattr(a, 'size') else 1
         
         try:
+            if b is None:
+                if isinstance(a, torch.Tensor):
+                    b = torch.full_like(a, fill_value=float(context.base))
+                elif isinstance(a, np.ndarray):
+                    b = np.full_like(a, fill_value=context.base)
+                else:
+                    b = context.base
+
             # Convert to device if using GPU
             a_device = self._to_device(a)
             b_device = self._to_device(b)

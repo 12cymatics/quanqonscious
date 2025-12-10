@@ -57,6 +57,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name}")
 
 from .sutra_repository import SutraRepository
+from .sutra_simulator import HybridQuantumClassicalSimulator, SimulationReport, SutraExecution
 
 # Optionally, set a flag or config dict for use in modules (for example, default quantum backend choice)
 DEFAULT_QUANTUM_BACKEND = "cudaq" if _has_cudaq else "cirq"
