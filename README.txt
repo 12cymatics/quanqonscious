@@ -14,6 +14,8 @@ It provides:
   • A Full Configuration Interaction (FCI) solver with GRVQ corrections.
   • TTGCR hardware driver simulation (frequency setting, sensor feedback, entropy
     monitoring) without kill switch routines.
+  • An HPC 4D PDE solver with MPI-based block-cyclic memory management using
+    ``mpi4py`` for parallel processing.
   • An HPC 4D PDE solver with MPI-based block-cyclic memory management and GPU
     acceleration (leveraging CuPy and Numba CUDA kernels for A100).
   • A Bioelectric DNA Encoder module employing fractal Hilbert curve transformation.
@@ -25,6 +27,10 @@ It provides:
 
 Installation:
 -------------
+This package requires **Python 3.12** or later, along with the following
+dependencies:
+
+  - numpy, scipy, mpi4py
 This package requires Python 3.10+, along with the following dependencies:
   - numpy, scipy, cupy, numba
   - mpi4py
@@ -33,6 +39,10 @@ This package requires Python 3.10+, along with the following dependencies:
   - Other standard packages
 
 To install the required dependencies, run:
+
+```
+pip install numpy scipy mpi4py cirq
+```
     pip install numpy scipy cupy numba mpi4py cirq
 
 The ``jaxlib`` entry pins the CPU build (``jaxlib==0.7.0``).  To use GPU
