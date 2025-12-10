@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
 
 # Numerical and scientific computing libraries
@@ -24,3 +25,10 @@ union==0.1.189
 
 # (Optional) If additional testing or benchmarking utilities are required:
 pytest==7.0.0
+
+# GPU acceleration libraries
+cupy>=12.0.0
+numba>=0.59.0
+
+# (Optional) If additional testing or benchmarking utilities are required:
+pytest==8.4.1
