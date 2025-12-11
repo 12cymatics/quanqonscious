@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amplituhedron Calculator - ULTRATHINK v3.0</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            padding: 30px;
+            border: 2px solid #00ff88;
+            margin-bottom: 30px;
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px #00ff88;
+        }
+
+        .header .subtitle {
+            color: #888;
+            font-size: 1.1em;
+        }
+
+        .ascii-art {
+            font-size: 0.6em;
+            line-height: 1.2;
+            color: #00aa66;
+            margin-bottom: 15px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab:hover, .tab.active {
+            background: #00ff88;
+            color: #0a0a0a;
+        }
+
+        .panel {
+            display: none;
+            border: 1px solid #00ff88;
+            padding: 25px;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #006644;
+            background: rgba(0, 255, 136, 0.03);
+        }
+
+        .section h3 {
+            color: #00ffaa;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #006644;
+            padding-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #00cc77;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 15px;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            box-shadow: 0 0 10px #00ff88;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: #00ff88;
+            border: none;
+            color: #0a0a0a;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background: #00cc66;
+            box-shadow: 0 0 20px #00ff88;
+        }
+
+        button.secondary {
+            background: transparent;
+            border: 1px solid #00ff88;
+            color: #00ff88;
+        }
+
+        button.secondary:hover {
+            background: rgba(0, 255, 136, 0.2);
+        }
+
+        .result {
+            background: #0a0a0a;
+            border: 1px solid #00aa66;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-size: 0.95em;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .result.success {
+            border-color: #00ff88;
+        }
+
+        .result.error {
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+
+        .twistor-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .twistor-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .twistor-row label {
+            min-width: 50px;
+            margin-bottom: 0;
+        }
+
+        .twistor-row input {
+            width: 80px;
+            margin-bottom: 0;
+        }
+
+        .formula {
+            background: rgba(0, 255, 136, 0.1);
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 3px solid #00ff88;
+            font-style: italic;
+        }
+
+        .sutra-card {
+            border: 1px solid #006644;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(0, 255, 136, 0.02);
+        }
+
+        .sutra-card h4 {
+            color: #00ffaa;
+            margin-bottom: 5px;
+        }
+
+        .sutra-card .sanskrit {
+            color: #ffaa00;
+            margin-bottom: 5px;
+        }
+
+        .sutra-card .meaning {
+            color: #888;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+
+        .sutra-card .application {
+            color: #00cc77;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #0a0a0a;
+            border-top: 1px solid #00ff88;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+        }
+
+        .status-bar .indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #00ff88;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            .twistor-row input {
+                width: 60px;
+            }
+        }
+
+        .highlight {
+            color: #ffff00;
+        }
+
+        .dim {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <pre class="ascii-art">
+ █████╗ ███╗   ███╗██████╗ ██╗     ██╗████████╗██╗   ██╗██╗  ██╗███████╗██████╗ ██████╗  ██████╗ ███╗   ██╗
+██╔══██╗████╗ ████║██╔══██╗██║     ██║╚══██╔══╝██║   ██║██║  ██║██╔════╝██╔══██╗██╔══██╗██╔═══██╗████╗  ██║
+███████║██╔████╔██║██████╔╝██║     ██║   ██║   ██║   ██║███████║█████╗  ██║  ██║██████╔╝██║   ██║██╔██╗ ██║
+██╔══██║██║╚██╔╝██║██╔═══╝ ██║     ██║   ██║   ██║   ██║██╔══██║██╔══╝  ██║  ██║██╔══██╗██║   ██║██║╚██╗██║
+██║  ██║██║ ╚═╝ ██║██║     ███████╗██║   ██║   ╚██████╔╝██║  ██║███████╗██████╔╝██║  ██║╚██████╔╝██║ ╚████║
+╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+            </pre>
+            <h1>AMPLITUHEDRON CALCULATOR</h1>
+            <div class="subtitle">ULTRATHINK v3.0 | Exact Rational Arithmetic | Zero IEEE-754</div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('calculator')">Calculator</div>
+            <div class="tab" onclick="showTab('brackets')">Four-Brackets</div>
+            <div class="tab" onclick="showTab('amplitudes')">Amplitudes</div>
+            <div class="tab" onclick="showTab('vedic')">29 Vedic Sutras</div>
+            <div class="tab" onclick="showTab('about')">About</div>
+        </div>
+
+        <!-- Calculator Panel -->
+        <div id="calculator" class="panel active">
+            <h2>Exact Arithmetic Calculator</h2>
+
+            <div class="grid-2">
+                <div class="section">
+                    <h3>BigInt Operations</h3>
+                    <label>Number A:</label>
+                    <input type="text" id="bigint-a" value="299792458" placeholder="Enter integer">
+                    <label>Number B:</label>
+                    <input type="text" id="bigint-b" value="299792458" placeholder="Enter integer">
+                    <label>Operation:</label>
+                    <select id="bigint-op">
+                        <option value="add">Addition (+)</option>
+                        <option value="sub">Subtraction (-)</option>
+                        <option value="mul" selected>Multiplication (×)</option>
+                        <option value="div">Division (÷)</option>
+                        <option value="mod">Modulo (%)</option>
+                        <option value="gcd">GCD</option>
+                    </select>
+                    <button onclick="calculateBigInt()">Calculate</button>
+                    <div id="bigint-result" class="result"></div>
+                </div>
+
+                <div class="section">
+                    <h3>Rational Operations</h3>
+                    <label>Fraction A (num/den):</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="rat-a-num" value="22" placeholder="Numerator" style="width: 50%;">
+                        <input type="text" id="rat-a-den" value="7" placeholder="Denominator" style="width: 50%;">
+                    </div>
+                    <label>Fraction B (num/den):</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="rat-b-num" value="355" placeholder="Numerator" style="width: 50%;">
+                        <input type="text" id="rat-b-den" value="113" placeholder="Denominator" style="width: 50%;">
+                    </div>
+                    <label>Operation:</label>
+                    <select id="rat-op">
+                        <option value="add">Addition (+)</option>
+                        <option value="sub" selected>Subtraction (-)</option>
+                        <option value="mul">Multiplication (×)</option>
+                        <option value="div">Division (÷)</option>
+                    </select>
+                    <button onclick="calculateRational()">Calculate</button>
+                    <div id="rat-result" class="result"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Vedic Sutra #2: Nikhilam Verification</h3>
+                <div class="formula">
+                    (base - a)(base - b) = base × (base - a - b) + a × b
+                </div>
+                <div class="grid-2">
+                    <div>
+                        <label>Number A (near base):</label>
+                        <input type="text" id="nikhilam-a" value="98" placeholder="e.g., 98">
+                    </div>
+                    <div>
+                        <label>Number B (near base):</label>
+                        <input type="text" id="nikhilam-b" value="97" placeholder="e.g., 97">
+                    </div>
+                </div>
+                <label>Base:</label>
+                <input type="text" id="nikhilam-base" value="100" placeholder="e.g., 100">
+                <button onclick="calculateNikhilam()">Verify Nikhilam</button>
+                <div id="nikhilam-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Four-Brackets Panel -->
+        <div id="brackets" class="panel">
+            <h2>Four-Bracket Calculator ⟨ijkl⟩</h2>
+
+            <div class="formula">
+                ⟨ijkl⟩ = det(Zᵢ, Zⱼ, Zₖ, Zₗ) = εᴬᴮᶜᴰ ZᵢᴬZⱼᴮZₖᶜZₗᴰ
+            </div>
+
+            <div class="section">
+                <h3>Define Momentum Twistors (Zᵢ ∈ ℚ⁴)</h3>
+                <p class="dim" style="margin-bottom: 15px;">Each twistor has 4 components. Enter integers or fractions (e.g., "3/2").</p>
+
+                <div id="twistor-inputs">
+                    <!-- Generated by JS -->
+                </div>
+
+                <button onclick="addTwistor()">+ Add Twistor</button>
+                <button class="secondary" onclick="removeTwistor()">- Remove Twistor</button>
+                <button class="secondary" onclick="loadPreset('standard')">Load Standard Basis</button>
+                <button class="secondary" onclick="loadPreset('vandermonde')">Load Vandermonde</button>
+            </div>
+
+            <div class="section">
+                <h3>Compute Four-Bracket</h3>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <span>⟨</span>
+                    <input type="number" id="bracket-i" value="1" min="1" style="width: 60px;">
+                    <input type="number" id="bracket-j" value="2" min="1" style="width: 60px;">
+                    <input type="number" id="bracket-k" value="3" min="1" style="width: 60px;">
+                    <input type="number" id="bracket-l" value="4" min="1" style="width: 60px;">
+                    <span>⟩</span>
+                    <button onclick="computeFourBracket()">Compute</button>
+                </div>
+                <div id="bracket-result" class="result"></div>
+            </div>
+
+            <div class="section">
+                <h3>Compute All Consecutive Four-Brackets</h3>
+                <button onclick="computeAllBrackets()">Compute ⟨i,i+1,i+2,i+3⟩ for all i</button>
+                <div id="all-brackets-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Amplitudes Panel -->
+        <div id="amplitudes" class="panel">
+            <h2>Scattering Amplitude Calculator</h2>
+
+            <div class="section">
+                <h3>MHV Amplitude (Parke-Taylor Formula)</h3>
+                <div class="formula">
+                    A_{n,0} = 1 / ∏ᵢ₌₁ⁿ ⟨i, i+1, i+2, i+3⟩
+                </div>
+                <p class="dim">Uses the twistors defined in the Four-Brackets tab.</p>
+                <button onclick="computeMHV()">Compute MHV Amplitude</button>
+                <div id="mhv-result" class="result"></div>
+            </div>
+
+            <div class="section">
+                <h3>R-Invariant (Five-Bracket)</h3>
+                <div class="formula">
+                    [a,b,c,d,e] = 1 / (⟨abcd⟩⟨bcde⟩⟨cdea⟩⟨deab⟩⟨eabc⟩)
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <span>[</span>
+                    <input type="number" id="r-a" value="1" min="1" style="width: 50px;">
+                    <input type="number" id="r-b" value="2" min="1" style="width: 50px;">
+                    <input type="number" id="r-c" value="3" min="1" style="width: 50px;">
+                    <input type="number" id="r-d" value="4" min="1" style="width: 50px;">
+                    <input type="number" id="r-e" value="6" min="1" style="width: 50px;">
+                    <span>]</span>
+                    <button onclick="computeRInvariant()">Compute</button>
+                </div>
+                <div id="r-result" class="result"></div>
+            </div>
+
+            <div class="section">
+                <h3>NMHV Amplitude (6 particles)</h3>
+                <div class="formula">
+                    A_{6,1} = A_{6,0} × ([1,2,3,4,6] + [1,2,4,5,6] + [1,3,4,5,6])
+                </div>
+                <p class="dim">Requires exactly 6 twistors defined.</p>
+                <button onclick="computeNMHV()">Compute 6-Particle NMHV</button>
+                <div id="nmhv-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Vedic Sutras Panel -->
+        <div id="vedic" class="panel">
+            <h2>29 Vedic Sutras & Applications</h2>
+
+            <div class="section">
+                <h3>16 Main Sutras (Sūtra)</h3>
+                <div id="main-sutras"></div>
+            </div>
+
+            <div class="section">
+                <h3>13 Sub-Sutras (Upasūtra)</h3>
+                <div id="sub-sutras"></div>
+            </div>
+        </div>
+
+        <!-- About Panel -->
+        <div id="about" class="panel">
+            <h2>About the Amplituhedron</h2>
+
+            <div class="section">
+                <h3>What is the Amplituhedron?</h3>
+                <p>The <strong>amplituhedron</strong> is a geometric object discovered by Nima Arkani-Hamed and Jaroslav Trnka in 2013. It provides a revolutionary way to compute scattering amplitudes in quantum field theory without reference to spacetime or unitarity.</p>
+
+                <div class="formula">
+                    Scattering Amplitude = Volume of Amplituhedron
+                </div>
+
+                <p style="margin-top: 15px;">Key insights:</p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Locality and unitarity <em>emerge</em> from geometry</li>
+                    <li>No Feynman diagrams needed</li>
+                    <li>Positive Grassmannian structure</li>
+                    <li>Dual conformal symmetry manifest</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h3>Momentum Twistors</h3>
+                <p>Momentum twistors Zᵢ ∈ ℂℙ³ encode the kinematics of massless particles:</p>
+                <div class="formula">
+                    Zᵢ = (λᵢᵅ, μᵢᵅ̇) where μᵢ = xᵢᵅᵅ̇ λᵢₐ
+                </div>
+                <p style="margin-top: 10px;">The four-bracket ⟨ijkl⟩ = det(Zᵢ, Zⱼ, Zₖ, Zₗ) encodes all kinematic invariants.</p>
+            </div>
+
+            <div class="section">
+                <h3>Implementation Details</h3>
+                <ul style="margin-left: 20px;">
+                    <li><strong>Exact Arithmetic:</strong> All computations use arbitrary-precision rational numbers</li>
+                    <li><strong>Zero Floating-Point:</strong> No IEEE-754 contamination</li>
+                    <li><strong>BigInt:</strong> Integers stored in base 10⁹ for efficiency</li>
+                    <li><strong>Auto-Reduction:</strong> Fractions always in lowest terms via GCD</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h3>References</h3>
+                <ul style="margin-left: 20px;">
+                    <li>Arkani-Hamed & Trnka, "The Amplituhedron" (2013)</li>
+                    <li>Arkani-Hamed et al., "Scattering Amplitudes and the Positive Grassmannian"</li>
+                    <li>Penrose, "Twistor Theory: An Approach to the Quantisation of Fields and Space-Time"</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div><span class="indicator"></span>ULTRATHINK v3.0 | Exact Mode Active</div>
+        <div id="twistor-count">Twistors: 0</div>
+    </div>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // EXACT ARITHMETIC: BigInt Class
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    class BigInt {
+        static BASE = 1000000000n;
+
+        constructor(val = 0n) {
+            if (typeof val === 'string') {
+                this.negative = val.startsWith('-');
+                val = val.replace(/^-/, '');
+                this.digits = [];
+                for (let i = val.length; i > 0; i -= 9) {
+                    const start = Math.max(0, i - 9);
+                    this.digits.push(BigInt(val.slice(start, i)));
+                }
+                if (this.digits.length === 0) this.digits = [0n];
+            } else if (typeof val === 'bigint') {
+                this.negative = val < 0n;
+                val = val < 0n ? -val : val;
+                this.digits = [];
+                if (val === 0n) {
+                    this.digits = [0n];
+                } else {
+                    while (val > 0n) {
+                        this.digits.push(val % BigInt.BASE);
+                        val = val / BigInt.BASE;
+                    }
+                }
+            } else if (typeof val === 'number') {
+                return new BigInt(BigInt(Math.floor(val)));
+            } else {
+                this.digits = [0n];
+                this.negative = false;
+            }
+            this.trim();
+        }
+
+        trim() {
+            while (this.digits.length > 1 && this.digits[this.digits.length - 1] === 0n) {
+                this.digits.pop();
+            }
+            if (this.digits.length === 1 && this.digits[0] === 0n) {
+                this.negative = false;
+            }
+        }
+
+        isZero() {
+            return this.digits.length === 1 && this.digits[0] === 0n;
+        }
+
+        clone() {
+            const r = new BigInt();
+            r.digits = [...this.digits];
+            r.negative = this.negative;
+            return r;
+        }
+
+        abs() {
+            const r = this.clone();
+            r.negative = false;
+            return r;
+        }
+
+        negate() {
+            const r = this.clone();
+            if (!r.isZero()) r.negative = !r.negative;
+            return r;
+        }
+
+        compareAbs(other) {
+            if (this.digits.length !== other.digits.length) {
+                return this.digits.length > other.digits.length ? 1 : -1;
+            }
+            for (let i = this.digits.length - 1; i >= 0; i--) {
+                if (this.digits[i] !== other.digits[i]) {
+                    return this.digits[i] > other.digits[i] ? 1 : -1;
+                }
+            }
+            return 0;
+        }
+
+        compare(other) {
+            if (this.negative !== other.negative) {
+                return this.negative ? -1 : 1;
+            }
+            const cmp = this.compareAbs(other);
+            return this.negative ? -cmp : cmp;
+        }
+
+        static addAbs(a, b) {
+            const r = new BigInt();
+            r.digits = [];
+            let carry = 0n;
+            const n = Math.max(a.digits.length, b.digits.length);
+            for (let i = 0; i < n || carry; i++) {
+                let sum = carry;
+                if (i < a.digits.length) sum += a.digits[i];
+                if (i < b.digits.length) sum += b.digits[i];
+                r.digits.push(sum % BigInt.BASE);
+                carry = sum / BigInt.BASE;
+            }
+            return r;
+        }
+
+        static subAbs(a, b) {
+            const r = new BigInt();
+            r.digits = new Array(a.digits.length).fill(0n);
+            let borrow = 0n;
+            for (let i = 0; i < a.digits.length; i++) {
+                let diff = a.digits[i] - borrow;
+                if (i < b.digits.length) diff -= b.digits[i];
+                if (diff < 0n) {
+                    diff += BigInt.BASE;
+                    borrow = 1n;
+                } else {
+                    borrow = 0n;
+                }
+                r.digits[i] = diff;
+            }
+            r.trim();
+            return r;
+        }
+
+        add(other) {
+            if (this.negative === other.negative) {
+                const r = BigInt.addAbs(this, other);
+                r.negative = this.negative;
+                return r;
+            }
+            const cmp = this.compareAbs(other);
+            if (cmp === 0) return new BigInt(0n);
+            if (cmp > 0) {
+                const r = BigInt.subAbs(this, other);
+                r.negative = this.negative;
+                return r;
+            } else {
+                const r = BigInt.subAbs(other, this);
+                r.negative = other.negative;
+                return r;
+            }
+        }
+
+        sub(other) {
+            return this.add(other.negate());
+        }
+
+        mul(other) {
+            if (this.isZero() || other.isZero()) return new BigInt(0n);
+            const r = new BigInt();
+            r.digits = new Array(this.digits.length + other.digits.length).fill(0n);
+            r.negative = this.negative !== other.negative;
+
+            for (let i = 0; i < this.digits.length; i++) {
+                let carry = 0n;
+                for (let j = 0; j < other.digits.length || carry; j++) {
+                    let cur = r.digits[i + j] + carry;
+                    if (j < other.digits.length) {
+                        cur += this.digits[i] * other.digits[j];
+                    }
+                    r.digits[i + j] = cur % BigInt.BASE;
+                    carry = cur / BigInt.BASE;
+                }
+            }
+            r.trim();
+            return r;
+        }
+
+        divmod(other) {
+            if (other.isZero()) throw new Error("Division by zero");
+
+            const dividend = this.abs();
+            const divisor = other.abs();
+
+            if (dividend.compareAbs(divisor) < 0) {
+                return [new BigInt(0n), this.clone()];
+            }
+
+            const q = new BigInt();
+            q.digits = new Array(this.digits.length).fill(0n);
+            let cur = new BigInt(0n);
+
+            for (let i = this.digits.length - 1; i >= 0; i--) {
+                cur.digits.unshift(this.digits[i]);
+                cur.trim();
+
+                let lo = 0n, hi = BigInt.BASE - 1n;
+                while (lo < hi) {
+                    const mid = lo + (hi - lo + 1n) / 2n;
+                    const prod = divisor.mul(new BigInt(mid));
+                    if (prod.compareAbs(cur) <= 0) {
+                        lo = mid;
+                    } else {
+                        hi = mid - 1n;
+                    }
+                }
+
+                q.digits[i] = lo;
+                cur = cur.sub(divisor.mul(new BigInt(lo)));
+            }
+
+            q.negative = this.negative !== other.negative;
+            q.trim();
+
+            if (this.negative && !cur.isZero()) {
+                cur.negative = true;
+            }
+
+            return [q, cur];
+        }
+
+        div(other) {
+            return this.divmod(other)[0];
+        }
+
+        mod(other) {
+            return this.divmod(other)[1];
+        }
+
+        static gcd(a, b) {
+            a = a.abs();
+            b = b.abs();
+            while (!b.isZero()) {
+                const t = b;
+                b = a.mod(b);
+                a = t;
+            }
+            return a;
+        }
+
+        toString() {
+            if (this.isZero()) return "0";
+            let s = this.negative ? "-" : "";
+            s += this.digits[this.digits.length - 1].toString();
+            for (let i = this.digits.length - 2; i >= 0; i--) {
+                s += this.digits[i].toString().padStart(9, '0');
+            }
+            return s;
+        }
+
+        toBigInt() {
+            let result = 0n;
+            let mult = 1n;
+            for (const d of this.digits) {
+                result += d * mult;
+                mult *= BigInt.BASE;
+            }
+            return this.negative ? -result : result;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // EXACT ARITHMETIC: Rational Class
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    class Rational {
+        constructor(num, den = null) {
+            if (den === null) {
+                if (num instanceof Rational) {
+                    this.num = num.num.clone();
+                    this.den = num.den.clone();
+                } else if (num instanceof BigInt) {
+                    this.num = num.clone();
+                    this.den = new BigInt(1n);
+                } else if (typeof num === 'string' && num.includes('/')) {
+                    const parts = num.split('/');
+                    this.num = new BigInt(parts[0].trim());
+                    this.den = new BigInt(parts[1].trim());
+                } else {
+                    this.num = new BigInt(typeof num === 'bigint' ? num : BigInt(num));
+                    this.den = new BigInt(1n);
+                }
+            } else {
+                this.num = num instanceof BigInt ? num.clone() : new BigInt(typeof num === 'bigint' ? num : BigInt(num));
+                this.den = den instanceof BigInt ? den.clone() : new BigInt(typeof den === 'bigint' ? den : BigInt(den));
+            }
+            this.reduce();
+        }
+
+        reduce() {
+            if (this.den.negative) {
+                this.num = this.num.negate();
+                this.den = this.den.abs();
+            }
+            if (this.num.isZero()) {
+                this.den = new BigInt(1n);
+                return;
+            }
+            const g = BigInt.gcd(this.num.abs(), this.den);
+            if (g.compare(new BigInt(1n)) !== 0) {
+                this.num = this.num.div(g);
+                this.den = this.den.div(g);
+            }
+        }
+
+        isZero() {
+            return this.num.isZero();
+        }
+
+        clone() {
+            return new Rational(this.num.clone(), this.den.clone());
+        }
+
+        add(other) {
+            const newNum = this.num.mul(other.den).add(other.num.mul(this.den));
+            const newDen = this.den.mul(other.den);
+            return new Rational(newNum, newDen);
+        }
+
+        sub(other) {
+            const newNum = this.num.mul(other.den).sub(other.num.mul(this.den));
+            const newDen = this.den.mul(other.den);
+            return new Rational(newNum, newDen);
+        }
+
+        mul(other) {
+            return new Rational(this.num.mul(other.num), this.den.mul(other.den));
+        }
+
+        div(other) {
+            if (other.isZero()) throw new Error("Division by zero");
+            return new Rational(this.num.mul(other.den), this.den.mul(other.num));
+        }
+
+        negate() {
+            return new Rational(this.num.negate(), this.den.clone());
+        }
+
+        toString() {
+            if (this.den.compare(new BigInt(1n)) === 0) {
+                return this.num.toString();
+            }
+            return this.num.toString() + "/" + this.den.toString();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // MOMENTUM TWISTORS & DETERMINANTS
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    let twistors = [];
+
+    function parseRational(str) {
+        str = str.trim();
+        if (str.includes('/')) {
+            const parts = str.split('/');
+            return new Rational(BigInt(parts[0].trim()), BigInt(parts[1].trim()));
+        }
+        return new Rational(BigInt(str));
+    }
+
+    function det3(a, b, c, d, e, f, g, h, i) {
+        // aei - afh - bdi + bfg + cdh - ceg
+        const t1 = a.mul(e).mul(i);
+        const t2 = a.mul(f).mul(h);
+        const t3 = b.mul(d).mul(i);
+        const t4 = b.mul(f).mul(g);
+        const t5 = c.mul(d).mul(h);
+        const t6 = c.mul(e).mul(g);
+        return t1.sub(t2).sub(t3).add(t4).add(t5).sub(t6);
+    }
+
+    function det4(r0, r1, r2, r3) {
+        const C00 = det3(r1[1], r1[2], r1[3], r2[1], r2[2], r2[3], r3[1], r3[2], r3[3]);
+        const C01 = det3(r1[0], r1[2], r1[3], r2[0], r2[2], r2[3], r3[0], r3[2], r3[3]);
+        const C02 = det3(r1[0], r1[1], r1[3], r2[0], r2[1], r2[3], r3[0], r3[1], r3[3]);
+        const C03 = det3(r1[0], r1[1], r1[2], r2[0], r2[1], r2[2], r3[0], r3[1], r3[2]);
+
+        return r0[0].mul(C00).sub(r0[1].mul(C01)).add(r0[2].mul(C02)).sub(r0[3].mul(C03));
+    }
+
+    function fourBracket(i, j, k, l) {
+        const n = twistors.length;
+        return det4(
+            twistors[(i - 1 + n) % n],
+            twistors[(j - 1 + n) % n],
+            twistors[(k - 1 + n) % n],
+            twistors[(l - 1 + n) % n]
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // UI FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    function showTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    }
+
+    function updateTwistorInputs() {
+        const container = document.getElementById('twistor-inputs');
+        container.innerHTML = '';
+
+        twistors.forEach((t, idx) => {
+            const row = document.createElement('div');
+            row.className = 'twistor-row';
+            row.innerHTML = `
+                <label>Z<sub>${idx + 1}</sub>:</label>
+                <input type="text" id="t${idx}c0" value="${t[0].toString()}" onchange="updateTwistor(${idx}, 0)">
+                <input type="text" id="t${idx}c1" value="${t[1].toString()}" onchange="updateTwistor(${idx}, 1)">
+                <input type="text" id="t${idx}c2" value="${t[2].toString()}" onchange="updateTwistor(${idx}, 2)">
+                <input type="text" id="t${idx}c3" value="${t[3].toString()}" onchange="updateTwistor(${idx}, 3)">
+            `;
+            container.appendChild(row);
+        });
+
+        document.getElementById('twistor-count').textContent = `Twistors: ${twistors.length}`;
+    }
+
+    function updateTwistor(idx, comp) {
+        const val = document.getElementById(`t${idx}c${comp}`).value;
+        twistors[idx][comp] = parseRational(val);
+    }
+
+    function addTwistor() {
+        twistors.push([new Rational(0), new Rational(0), new Rational(0), new Rational(0)]);
+        updateTwistorInputs();
+    }
+
+    function removeTwistor() {
+        if (twistors.length > 0) {
+            twistors.pop();
+            updateTwistorInputs();
+        }
+    }
+
+    function loadPreset(type) {
+        if (type === 'standard') {
+            twistors = [
+                [new Rational(1), new Rational(0), new Rational(0), new Rational(0)],
+                [new Rational(0), new Rational(1), new Rational(0), new Rational(0)],
+                [new Rational(0), new Rational(0), new Rational(1), new Rational(0)],
+                [new Rational(0), new Rational(0), new Rational(0), new Rational(1)]
+            ];
+        } else if (type === 'vandermonde') {
+            twistors = [];
+            for (let i = 1; i <= 6; i++) {
+                twistors.push([
+                    new Rational(1),
+                    new Rational(i),
+                    new Rational(i * i),
+                    new Rational(i * i * i)
+                ]);
+            }
+        }
+        updateTwistorInputs();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // CALCULATOR FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    function calculateBigInt() {
+        try {
+            const a = new BigInt(document.getElementById('bigint-a').value);
+            const b = new BigInt(document.getElementById('bigint-b').value);
+            const op = document.getElementById('bigint-op').value;
+
+            let result, opSymbol;
+            switch (op) {
+                case 'add': result = a.add(b); opSymbol = '+'; break;
+                case 'sub': result = a.sub(b); opSymbol = '-'; break;
+                case 'mul': result = a.mul(b); opSymbol = '×'; break;
+                case 'div': result = a.div(b); opSymbol = '÷'; break;
+                case 'mod': result = a.mod(b); opSymbol = 'mod'; break;
+                case 'gcd': result = BigInt.gcd(a, b); opSymbol = 'gcd'; break;
+            }
+
+            document.getElementById('bigint-result').innerHTML =
+                `<span class="highlight">${a.toString()} ${opSymbol} ${b.toString()}</span>\n\n= ${result.toString()}`;
+            document.getElementById('bigint-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('bigint-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('bigint-result').className = 'result error';
+        }
+    }
+
+    function calculateRational() {
+        try {
+            const a = new Rational(
+                BigInt(document.getElementById('rat-a-num').value),
+                BigInt(document.getElementById('rat-a-den').value)
+            );
+            const b = new Rational(
+                BigInt(document.getElementById('rat-b-num').value),
+                BigInt(document.getElementById('rat-b-den').value)
+            );
+            const op = document.getElementById('rat-op').value;
+
+            let result, opSymbol;
+            switch (op) {
+                case 'add': result = a.add(b); opSymbol = '+'; break;
+                case 'sub': result = a.sub(b); opSymbol = '-'; break;
+                case 'mul': result = a.mul(b); opSymbol = '×'; break;
+                case 'div': result = a.div(b); opSymbol = '÷'; break;
+            }
+
+            document.getElementById('rat-result').innerHTML =
+                `<span class="highlight">(${a.toString()}) ${opSymbol} (${b.toString()})</span>\n\n= ${result.toString()}`;
+            document.getElementById('rat-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('rat-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('rat-result').className = 'result error';
+        }
+    }
+
+    function calculateNikhilam() {
+        try {
+            const a = new BigInt(document.getElementById('nikhilam-a').value);
+            const b = new BigInt(document.getElementById('nikhilam-b').value);
+            const base = new BigInt(document.getElementById('nikhilam-base').value);
+
+            const defA = base.sub(a);
+            const defB = base.sub(b);
+
+            const nikhilam = a.sub(defB).mul(base).add(defA.mul(defB));
+            const standard = a.mul(b);
+
+            const verified = nikhilam.compare(standard) === 0;
+
+            let output = `VEDIC SUTRA #2: Nikhilam Navataścaramam Daśataḥ
+"All from 9, last from 10"
+
+Inputs:
+  a = ${a.toString()}
+  b = ${b.toString()}
+  base = ${base.toString()}
+
+Deficiencies:
+  deficiency_a = base - a = ${defA.toString()}
+  deficiency_b = base - b = ${defB.toString()}
+
+Nikhilam Formula:
+  (a - def_b) × base + def_a × def_b
+  = (${a.toString()} - ${defB.toString()}) × ${base.toString()} + ${defA.toString()} × ${defB.toString()}
+  = ${a.sub(defB).toString()} × ${base.toString()} + ${defA.mul(defB).toString()}
+  = <span class="highlight">${nikhilam.toString()}</span>
+
+Standard Multiplication:
+  ${a.toString()} × ${b.toString()} = <span class="highlight">${standard.toString()}</span>
+
+✓ VERIFIED: ${verified ? 'PASS' : 'FAIL'}`;
+
+            document.getElementById('nikhilam-result').innerHTML = output;
+            document.getElementById('nikhilam-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('nikhilam-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('nikhilam-result').className = 'result error';
+        }
+    }
+
+    function computeFourBracket() {
+        try {
+            if (twistors.length < 4) {
+                throw new Error("Need at least 4 twistors defined");
+            }
+
+            const i = parseInt(document.getElementById('bracket-i').value);
+            const j = parseInt(document.getElementById('bracket-j').value);
+            const k = parseInt(document.getElementById('bracket-k').value);
+            const l = parseInt(document.getElementById('bracket-l').value);
+
+            const result = fourBracket(i, j, k, l);
+
+            document.getElementById('bracket-result').innerHTML =
+                `<span class="highlight">⟨${i},${j},${k},${l}⟩</span> = det(Z${i}, Z${j}, Z${k}, Z${l})\n\n= ${result.toString()}`;
+            document.getElementById('bracket-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('bracket-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('bracket-result').className = 'result error';
+        }
+    }
+
+    function computeAllBrackets() {
+        try {
+            if (twistors.length < 4) {
+                throw new Error("Need at least 4 twistors defined");
+            }
+
+            const n = twistors.length;
+            let output = `Consecutive Four-Brackets for n=${n} particles:\n\n`;
+
+            for (let i = 1; i <= n; i++) {
+                const j = ((i) % n) + 1;
+                const k = ((i + 1) % n) + 1;
+                const l = ((i + 2) % n) + 1;
+                const result = fourBracket(i, j, k, l);
+                output += `⟨${i},${j},${k},${l}⟩ = ${result.toString()}\n`;
+            }
+
+            document.getElementById('all-brackets-result').innerHTML = output;
+            document.getElementById('all-brackets-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('all-brackets-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('all-brackets-result').className = 'result error';
+        }
+    }
+
+    function computeMHV() {
+        try {
+            if (twistors.length < 4) {
+                throw new Error("Need at least 4 twistors for MHV amplitude");
+            }
+
+            const n = twistors.length;
+            let product = new Rational(1);
+            let output = `MHV Amplitude for n=${n} particles\n\nFormula: A_{n,0} = 1 / ∏ᵢ ⟨i,i+1,i+2,i+3⟩\n\nConsecutive brackets:\n`;
+
+            for (let i = 1; i <= n; i++) {
+                const j = ((i) % n) + 1;
+                const k = ((i + 1) % n) + 1;
+                const l = ((i + 2) % n) + 1;
+                const bracket = fourBracket(i, j, k, l);
+                output += `  ⟨${i},${j},${k},${l}⟩ = ${bracket.toString()}\n`;
+                product = product.mul(bracket);
+            }
+
+            output += `\nProduct: ${product.toString()}\n`;
+
+            const amplitude = new Rational(1).div(product);
+            output += `\n<span class="highlight">A_{${n},0} = ${amplitude.toString()}</span>`;
+
+            document.getElementById('mhv-result').innerHTML = output;
+            document.getElementById('mhv-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('mhv-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('mhv-result').className = 'result error';
+        }
+    }
+
+    function computeRInvariant() {
+        try {
+            if (twistors.length < 5) {
+                throw new Error("Need at least 5 twistors for R-invariant");
+            }
+
+            const a = parseInt(document.getElementById('r-a').value);
+            const b = parseInt(document.getElementById('r-b').value);
+            const c = parseInt(document.getElementById('r-c').value);
+            const d = parseInt(document.getElementById('r-d').value);
+            const e = parseInt(document.getElementById('r-e').value);
+
+            const b1 = fourBracket(a, b, c, d);
+            const b2 = fourBracket(b, c, d, e);
+            const b3 = fourBracket(c, d, e, a);
+            const b4 = fourBracket(d, e, a, b);
+            const b5 = fourBracket(e, a, b, c);
+
+            let output = `R-Invariant [${a},${b},${c},${d},${e}]\n\nFormula: [a,b,c,d,e] = 1 / (⟨abcd⟩⟨bcde⟩⟨cdea⟩⟨deab⟩⟨eabc⟩)\n\nFour-brackets:\n`;
+            output += `  ⟨${a},${b},${c},${d}⟩ = ${b1.toString()}\n`;
+            output += `  ⟨${b},${c},${d},${e}⟩ = ${b2.toString()}\n`;
+            output += `  ⟨${c},${d},${e},${a}⟩ = ${b3.toString()}\n`;
+            output += `  ⟨${d},${e},${a},${b}⟩ = ${b4.toString()}\n`;
+            output += `  ⟨${e},${a},${b},${c}⟩ = ${b5.toString()}\n`;
+
+            const product = b1.mul(b2).mul(b3).mul(b4).mul(b5);
+            output += `\nProduct: ${product.toString()}\n`;
+
+            const R = new Rational(1).div(product);
+            output += `\n<span class="highlight">[${a},${b},${c},${d},${e}] = ${R.toString()}</span>`;
+
+            document.getElementById('r-result').innerHTML = output;
+            document.getElementById('r-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('r-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('r-result').className = 'result error';
+        }
+    }
+
+    function computeNMHV() {
+        try {
+            if (twistors.length !== 6) {
+                throw new Error("Need exactly 6 twistors for 6-particle NMHV");
+            }
+
+            // MHV
+            let product = new Rational(1);
+            let output = `6-Particle NMHV Amplitude\n\n`;
+            output += `Formula: A_{6,1} = A_{6,0} × ([1,2,3,4,6] + [1,2,4,5,6] + [1,3,4,5,6])\n\n`;
+            output += `═══════════════════════════════════════════════════════════════\n`;
+            output += `STEP 1: Compute MHV (the "Whole")\n`;
+            output += `═══════════════════════════════════════════════════════════════\n\n`;
+
+            for (let i = 1; i <= 6; i++) {
+                const j = (i % 6) + 1;
+                const k = ((i + 1) % 6) + 1;
+                const l = ((i + 2) % 6) + 1;
+                const bracket = fourBracket(i, j, k, l);
+                output += `⟨${i},${j},${k},${l}⟩ = ${bracket.toString()}\n`;
+                product = product.mul(bracket);
+            }
+
+            const mhv = new Rational(1).div(product);
+            output += `\nA_{6,0} = 1/${product.toString()}\n       = ${mhv.toString()}\n\n`;
+
+            output += `═══════════════════════════════════════════════════════════════\n`;
+            output += `STEP 2: Compute R-Invariants (the "Parts")\n`;
+            output += `═══════════════════════════════════════════════════════════════\n\n`;
+
+            // R-invariants (1-indexed: [1,2,3,4,6], [1,2,4,5,6], [1,3,4,5,6])
+            function computeR(a, b, c, d, e) {
+                const b1 = fourBracket(a, b, c, d);
+                const b2 = fourBracket(b, c, d, e);
+                const b3 = fourBracket(c, d, e, a);
+                const b4 = fourBracket(d, e, a, b);
+                const b5 = fourBracket(e, a, b, c);
+                return new Rational(1).div(b1.mul(b2).mul(b3).mul(b4).mul(b5));
+            }
+
+            const R1 = computeR(1, 2, 3, 4, 6);
+            const R2 = computeR(1, 2, 4, 5, 6);
+            const R3 = computeR(1, 3, 4, 5, 6);
+
+            output += `[1,2,3,4,6] = ${R1.toString()}\n`;
+            output += `[1,2,4,5,6] = ${R2.toString()}\n`;
+            output += `[1,3,4,5,6] = ${R3.toString()}\n`;
+
+            const rSum = R1.add(R2).add(R3);
+            output += `\nΣ Rᵢ = ${rSum.toString()}\n\n`;
+
+            output += `═══════════════════════════════════════════════════════════════\n`;
+            output += `STEP 3: NMHV = MHV × Σ R (Vyaṣṭisamaṣṭiḥ)\n`;
+            output += `═══════════════════════════════════════════════════════════════\n\n`;
+
+            const nmhv = mhv.mul(rSum);
+            output += `<span class="highlight">A_{6,1} = ${nmhv.toString()}</span>\n`;
+
+            document.getElementById('nmhv-result').innerHTML = output;
+            document.getElementById('nmhv-result').className = 'result success';
+        } catch (e) {
+            document.getElementById('nmhv-result').innerHTML = `Error: ${e.message}`;
+            document.getElementById('nmhv-result').className = 'result error';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // VEDIC SUTRAS DATA
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    const mainSutras = [
+        { num: 1, name: "Ekādhikena Pūrveṇa", sanskrit: "एकाधिकेन पूर्वेण", meaning: "By one more than the previous one", application: "Incremental bracket computation: ⟨i,i+1,i+2,i+3⟩ shares 3 twistors with next" },
+        { num: 2, name: "Nikhilam Navataścaramam Daśataḥ", sanskrit: "निखिलं नवतश्चरमं दशतः", meaning: "All from 9, last from 10", application: "Complement arithmetic for near-base multiplication" },
+        { num: 3, name: "Ūrdhva-Tiryagbhyām", sanskrit: "ऊर्ध्वतिर्यग्भ्याम्", meaning: "Vertically and Crosswise", application: "Determinant computation via crosswise products" },
+        { num: 4, name: "Parāvartya Yojayet", sanskrit: "परावर्त्य योजयेत्", meaning: "Transpose and adjust", application: "Grassmannian gauge fixing via row operations" },
+        { num: 5, name: "Śūnyam Sāmyasamuccaye", sanskrit: "शून्यं साम्यसमुच्चये", meaning: "When the sum is the same, that sum is zero", application: "Six-term identity for R-invariants" },
+        { num: 6, name: "Ānurūpye Śūnyamanyat", sanskrit: "आनुरूप्ये शून्यमन्यत्", meaning: "If one is in ratio, the other is zero", application: "Singular kinematics detection: Zᵢ = λZⱼ ⟹ ⟨i,j,k,l⟩ = 0" },
+        { num: 7, name: "Saṅkalana-Vyavakalanābhyām", sanskrit: "सङ्कलन-व्यवकलनाभ्याम्", meaning: "By addition and by subtraction", application: "Bracket differences via common sub-expressions" },
+        { num: 8, name: "Pūraṇāpūraṇābhyām", sanskrit: "पूरणापूरणाभ्याम्", meaning: "By completion or non-completion", application: "Soft limit extension of amplitudes" },
+        { num: 9, name: "Calana-Kalanābhyām", sanskrit: "चलन-कलनाभ्याम्", meaning: "Differential calculus", application: "BCFW deformation Z₁ → Z₁ + zZₙ" },
+        { num: 10, name: "Yāvadūnam", sanskrit: "यावदूनम्", meaning: "By the deficiency", application: "Near-square computations: c² = 299792458²" },
+        { num: 11, name: "Vyaṣṭisamaṣṭiḥ", sanskrit: "व्यष्टिसमष्टिः", meaning: "Part and Whole", application: "Amplitude factorization: A_{n,k} = A_{n,0} × Σ[R-invariants]" },
+        { num: 12, name: "Śeṣāṇyaṅkena Careṇa", sanskrit: "शेषाण्यङ्केन चरेण", meaning: "The remainders by the last digit", application: "Divisibility checks in GCD reduction" },
+        { num: 13, name: "Sopāntyadvayamantyam", sanskrit: "सोपान्त्यद्वयमन्त्यम्", meaning: "The ultimate and twice the penultimate", application: "BCFW recursion structure" },
+        { num: 14, name: "Ekanyūnena Pūrveṇa", sanskrit: "एकन्यूनेन पूर्वेण", meaning: "By one less than the previous one", application: "Soft limits in amplitudes" },
+        { num: 15, name: "Guṇitasamuccayaḥ", sanskrit: "गुणितसमुच्चयः", meaning: "The product of the sum", application: "Determinant = product of eigenvalues" },
+        { num: 16, name: "Guṇakasamuccayaḥ", sanskrit: "गुणकसमुच्चयः", meaning: "The factors of the sum", application: "Amplitude = (MHV) × (corrections)" }
+    ];
+
+    const subSutras = [
+        { num: 17, name: "Ānurūpyeṇa", sanskrit: "आनुरूप्येण", meaning: "Proportionality", application: "Scaling of momentum twistors" },
+        { num: 18, name: "Śiṣyate Śeṣasaṁjñaḥ", sanskrit: "शिष्यते शेषसंज्ञः", meaning: "The remainder remains constant", application: "Modular arithmetic in GCD" },
+        { num: 19, name: "Ādyamādyenantyamantyena", sanskrit: "आद्यमाद्येनान्त्यमन्त्येन", meaning: "The first by the first and the last by the last", application: "Endpoint factorization" },
+        { num: 20, name: "Kevalaih Saptakam Guṇyāt", sanskrit: "केवलैः सप्तकं गुण्यात्", meaning: "For 7 the multiplicand is 143", application: "Reciprocal computation" },
+        { num: 21, name: "Veṣṭanam", sanskrit: "वेष्टनम्", meaning: "By osculation", application: "Residue computation at poles" },
+        { num: 22, name: "Yāvadūnam Tāvadūnam", sanskrit: "यावदूनं तावदूनम्", meaning: "Lessen by the deficiency", application: "Deficiency squared" },
+        { num: 23, name: "Yāvadūnam Tāvadūnīkṛtya Vargañca Yojayet", sanskrit: "यावदूनं तावदूनीकृत्य वर्गं च योजयेत्", meaning: "Deficiency reduced by deficiency, and add the square", application: "Completing the square" },
+        { num: 24, name: "Antyayordaśake'pi", sanskrit: "अन्त्ययोर्दशकेऽपि", meaning: "When the last digits add to 10", application: "Product of numbers with complementary endings" },
+        { num: 25, name: "Antyayoreva", sanskrit: "अन्त्ययोरेव", meaning: "Only the last terms", application: "Leading singularity computation" },
+        { num: 26, name: "Samuccayaguṇitaḥ", sanskrit: "समुच्चयगुणितः", meaning: "Sum multiplied", application: "Distribution over sums" },
+        { num: 27, name: "Lopanasthāpanābhyām", sanskrit: "लोपनस्थापनाभ्याम्", meaning: "By elimination and retention", application: "Gauge fixing in Grassmannian" },
+        { num: 28, name: "Vilokanam", sanskrit: "विलोकनम्", meaning: "By mere observation", application: "Pattern recognition in amplitude structure" },
+        { num: 29, name: "Gunitasamuccayaḥ Samuccayagunitaḥ", sanskrit: "गुणितसमुच्चयः समुच्चयगुणितः", meaning: "Product of sum equals sum of products", application: "Amplitude product factorization" }
+    ];
+
+    function renderSutras() {
+        const mainContainer = document.getElementById('main-sutras');
+        const subContainer = document.getElementById('sub-sutras');
+
+        mainSutras.forEach(s => {
+            mainContainer.innerHTML += `
+                <div class="sutra-card">
+                    <h4>#${s.num}: ${s.name}</h4>
+                    <div class="sanskrit">${s.sanskrit}</div>
+                    <div class="meaning">"${s.meaning}"</div>
+                    <div class="application">Application: ${s.application}</div>
+                </div>
+            `;
+        });
+
+        subSutras.forEach(s => {
+            subContainer.innerHTML += `
+                <div class="sutra-card">
+                    <h4>#${s.num}: ${s.name}</h4>
+                    <div class="sanskrit">${s.sanskrit}</div>
+                    <div class="meaning">"${s.meaning}"</div>
+                    <div class="application">Application: ${s.application}</div>
+                </div>
+            `;
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    // INITIALIZATION
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadPreset('standard');
+        renderSutras();
+    });
+    </script>
+</body>
+</html>
