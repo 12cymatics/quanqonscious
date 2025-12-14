@@ -1,34 +1,209 @@
-# SPDX-License-Identifier: Apache-2.0
-# Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
+# ============================================================
+# CORE NUMERIC + SYMBOLIC + EXACT / BIGINT FRIENDS
+# ============================================================
+numpy
+scipy
+sympy
+mpmath
+gmpy2
+python-flint
+sageconf
+numexpr
+bottleneck
 
-# Numerical and scientific computing libraries
-numpy==2.3.2
-scipy==1.16.1
+# ============================================================
+# HPC / PARALLEL / DISTRIBUTED
+# ============================================================
+mpi4py
+dask
+distributed
+ray
+joblib
+loky
+cloudpickle
+multiprocess
 
-# MPI for parallel processing
-mpi4py==4.1.0
+# ============================================================
+# GPU / CUDA / KERNEL TOOLING (pick what matches your stack)
+# ============================================================
+cupy-cuda12x
+cupy-cuda11x
+cuda-python
+pycuda
+numba
+llvmlite
 
-# Quantum circuit simulation using Cirq
-cirq==1.6.0
+# ============================================================
+# QUANTUM STACKS (CIRCUITS / SIMULATORS / TOOLKITS)
+# ============================================================
+cirq
+cirq-core
+cirq-google
+cirq-ionq
+cirq-rigetti
+qsimcirq
 
-# Visualization utility
-matplotlib==3.10.3
+qiskit
+qiskit-aer
+qiskit-ibm-runtime
+qiskit-algorithms
+qiskit-machine-learning
+qiskit-nature
+qiskit-optimization
+qiskit-experiments
 
-# Cryptography for Maya key encryption
-cryptography==45.0.5
+pennylane
+pennylane-lightning
+pennylane-qiskit
+pennylane-cirq
 
+qutip
+qutip-qip
 
-# Additional machine learning and quantum libraries
-torch==2.7.1
-cudaq==0.11.0
-union==0.1.189
+cudaq
+cuda-quantum
 
-# (Optional) If additional testing or benchmarking utilities are required:
-pytest==7.0.0
+amazon-braket-sdk
 
-# GPU acceleration libraries
-cupy>=12.0.0
-numba>=0.59.0
+# Optional (vendor / ecosystem bridges)
+pytket
+pytket-qiskit
+pytket-cirq
 
-# (Optional) If additional testing or benchmarking utilities are required:
-pytest==8.4.1
+# ============================================================
+# DEEP LEARNING / TENSOR OPS (IF YOU WANT IT IN THE PIPELINE)
+# ============================================================
+torch
+torchvision
+torchaudio
+pytorch-lightning
+opt-einsum
+tensornetwork
+
+# ============================================================
+# CRYPTOGRAPHY / HASHING / KEY MGMT (MAYA KEY LAYER)
+# ============================================================
+cryptography
+blake3
+pynacl
+pycryptodome
+argon2-cffi
+keyring
+pyjwt
+
+# ============================================================
+# DATA ENGINEERING / STORAGE / IO (SERIOUS PIPELINES)
+# ============================================================
+pandas
+pyarrow
+polars
+h5py
+zarr
+xarray
+netcdf4
+fastparquet
+tables
+lmdb
+duckdb
+sqlalchemy
+psycopg
+pymongo
+redis
+
+orjson
+ujson
+msgpack
+protobuf
+pyyaml
+tomlkit
+
+# ============================================================
+# SCI/ENG UTILITIES (GEOMETRY / GRAPHS / SIGNALS / IMAGING)
+# ============================================================
+networkx
+shapely
+pyvista
+trimesh
+scikit-image
+opencv-python
+soundfile
+librosa
+
+# ============================================================
+# VISUALISATION / DASHBOARDS (LOCAL + WEB)
+# ============================================================
+matplotlib
+plotly
+bokeh
+altair
+holoviews
+datashader
+panel
+streamlit
+dash
+
+# ============================================================
+# APIS / NETWORK / ASYNC (CONTROL PLANES + SERVICES)
+# ============================================================
+requests
+httpx
+aiohttp
+websockets
+tenacity
+pydantic
+fastapi
+uvicorn
+python-dotenv
+
+# ============================================================
+# LOGGING / UX / CLI
+# ============================================================
+rich
+structlog
+loguru
+tqdm
+typer
+click
+
+# ============================================================
+# TESTING / QUALITY / BENCHMARK / PROFILING
+# ============================================================
+pytest
+pytest-xdist
+pytest-cov
+hypothesis
+coverage
+ruff
+black
+isort
+mypy
+pre-commit
+
+py-spy
+scalene
+yappi
+snakeviz
+line-profiler
+memory-profiler
+
+# ============================================================
+# FORMAL METHODS / SMT (FOR PROOF-ADJACENT CHECKING IN PY)
+# ============================================================
+z3-solver
+pysmt
+lark
+
+# ============================================================
+# DOCS / NOTEBOOKS (FOR REPRODUCIBLE RESEARCH PACKAGES)
+# ============================================================
+jupyterlab
+ipykernel
+notebook
+nbconvert
+jupyter-server
+ipywidgets
+sphinx
+myst-parser
+furo
+mkdocs
+mkdocs-material
