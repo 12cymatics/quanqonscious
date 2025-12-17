@@ -1,3 +1,6 @@
 pcfe-v3/
 __pycache__/
 node_modules/
+
+# Compiled binaries
+amplituhedron_test
