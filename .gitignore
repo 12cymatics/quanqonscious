@@ -5,3 +5,4 @@ node_modules/
 # Compiled binaries
 amplituhedron_test
 test_vedic
+vedic_benchmark
