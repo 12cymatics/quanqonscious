@@ -587,14 +587,28 @@ class VedicCymaticEngine:
 
                 # =====================================================
                 # 5. Final combination - NO NORMALIZATION
-                # Each component contributes with its raw magnitude
+                # Each component AMPLIFIED to preserve variations
                 # =====================================================
-                self.field_grvq[y][x] = grvq_val
-                self.field_sulba[y][x] = sulba_wave * geo_mean
-                self.field_maya[y][x] = maya_val * maya_angular
 
-                # Unified field stores combined value
-                # Using addition and multiplication to preserve all variations
+                # GRVQ with chakra and schumann modulation (like standalone)
+                chakra_wave = math.sin(2 * math.pi * (chakra_freq / 50.0) * r)
+                schumann_wave = math.sin(2 * math.pi * (schumann / 5.0) * r)
+                turyavrtti_spatial = grvq_turyavrtti_modulation(r, theta, phi, 0.6)
+
+                # Amplified GRVQ field - NOT raw, includes all modulations
+                self.field_grvq[y][x] = (grvq_val * (1 + chakra_wave) *
+                                         (1 + 0.5 * schumann_wave) *
+                                         turyavrtti_spatial * 100)  # Amplify by 100
+
+                # Amplified Sulba field with samuccaya contribution
+                self.field_sulba[y][x] = (sulba_wave * geo_mean *
+                                          (1 + cycle_val / schumann) *
+                                          samuccaya_val * 10)  # Amplify by 10
+
+                # Amplified Maya field with deficiency contribution
+                self.field_maya[y][x] = (maya_val * maya_angular *
+                                         (1 + deficiency_val / 100) *
+                                         (filtered_a + filtered_b + 1) * 50)  # Amplify by 50
 
     def generate_image_raw(self, filename: str, mode: str = 'unified') -> bool:
         """
