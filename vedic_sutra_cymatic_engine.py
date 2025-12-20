@@ -267,51 +267,59 @@ def maya_phase_cancellation(x: float, phase_factor: float = 0.5,
 def raw_value_to_rgb_no_normalize(value: float, mode: str = 'vedic') -> Tuple[int, int, int]:
     """
     Convert raw sutra value to RGB WITHOUT any normalization.
-    Uses modular arithmetic to preserve variations.
+    Uses FRACTIONAL PARTS to preserve ALL micro-variations.
     FORBIDS all normalization and flattening.
     """
-    # Use modular arithmetic to wrap values into color space
-    # This preserves ALL variations without flattening
+    # Use fractional parts at different scales to capture ALL variations
+    # This ensures even 0.0001 differences create visible color changes
 
-    # Extract different frequency components from the raw value
-    # Using sisyate_sesasamjnah (remainder) to preserve cyclic structure
-    val_abs = abs(value)
+    val = value  # Keep sign for later
 
-    # Multiple frequency extraction - NO normalization
-    low_freq = sisyate_sesasamjnah(val_abs * 100, 256)
-    mid_freq = sisyate_sesasamjnah(val_abs * 317, 256)  # Using Sulba π * 100
-    high_freq = sisyate_sesasamjnah(val_abs * 528, 256)  # Heart chakra frequency
+    # Extract fractional parts at different decimal scales
+    # This captures variations at every scale without losing information
+    scale1 = abs(val) * 1000
+    scale2 = abs(val) * 3162  # √10 * 1000 (Sulba)
+    scale3 = abs(val) * 5280  # Heart frequency * 10
 
-    # Sign affects color channel assignment
-    if value >= 0:
-        r_base = low_freq
-        g_base = mid_freq
-        b_base = high_freq
-    else:
-        r_base = high_freq
-        g_base = low_freq
-        b_base = mid_freq
+    # Get fractional parts (0.0 to 1.0) - preserves ALL micro-variations
+    frac1 = scale1 - int(scale1)
+    frac2 = scale2 - int(scale2)
+    frac3 = scale3 - int(scale3)
+
+    # Also use integer parts modulo for macro structure
+    int1 = int(scale1) % 256
+    int2 = int(scale2) % 256
+    int3 = int(scale3) % 256
+
+    # Combine fractional (micro) and integer (macro) variations
+    r_base = int(frac1 * 128 + int1 * 0.5) % 256
+    g_base = int(frac2 * 128 + int2 * 0.5) % 256
+    b_base = int(frac3 * 128 + int3 * 0.5) % 256
+
+    # Sign affects channel mixing
+    if val < 0:
+        r_base, b_base = b_base, r_base  # Swap R and B for negative
 
     if mode == 'vedic':
         # Gold/amber to deep purple - sacred colors
-        r = int(abs(r_base) % 256)
-        g = int(abs(g_base * 0.7) % 256)
-        b = int(abs(b_base * 0.9) % 256)
+        r = (r_base + 30) % 256
+        g = int(g_base * 0.7 + 20) % 256
+        b = int(b_base * 0.9 + 40) % 256
     elif mode == 'chakra':
         # Full spectrum chakra colors
-        r = int(abs(r_base) % 256)
-        g = int(abs(g_base) % 256)
-        b = int(abs(b_base) % 256)
+        r = r_base
+        g = g_base
+        b = b_base
     elif mode == 'schumann':
-        # Earth tones
-        r = int(abs(r_base * 0.6 + 80) % 256)
-        g = int(abs(g_base * 0.8 + 60) % 256)
-        b = int(abs(b_base * 0.5 + 100) % 256)
+        # Earth tones with offset
+        r = int(r_base * 0.6 + 80) % 256
+        g = int(g_base * 0.8 + 60) % 256
+        b = int(b_base * 0.5 + 100) % 256
     else:
         # Direct mapping
-        r = int(abs(r_base) % 256)
-        g = int(abs(g_base) % 256)
-        b = int(abs(b_base) % 256)
+        r = r_base
+        g = g_base
+        b = b_base
 
     return (r, g, b)
 
@@ -320,18 +328,29 @@ def multi_component_to_rgb(grvq: float, sulba: float, maya: float) -> Tuple[int,
     """
     Convert multiple sutra components to RGB directly.
     Each sutra type drives a different color channel.
+    Uses FRACTIONAL PARTS to preserve ALL micro-variations.
     NO NORMALIZATION.
     """
-    # GRVQ drives red channel - use remainder to preserve structure
-    r_val = sisyate_sesasamjnah(abs(grvq) * 1000, 256)
+    # Extract fractional parts at high precision to capture micro-variations
+    # GRVQ drives red channel
+    grvq_scaled = abs(grvq) * 1000
+    grvq_frac = grvq_scaled - int(grvq_scaled)
+    grvq_int = int(grvq_scaled) % 256
+    r_val = int(grvq_frac * 128 + grvq_int * 0.5) % 256
 
     # Sulba drives green channel
-    g_val = sisyate_sesasamjnah(abs(sulba) * 1000, 256)
+    sulba_scaled = abs(sulba) * 1000
+    sulba_frac = sulba_scaled - int(sulba_scaled)
+    sulba_int = int(sulba_scaled) % 256
+    g_val = int(sulba_frac * 128 + sulba_int * 0.5) % 256
 
     # Maya drives blue channel
-    b_val = sisyate_sesasamjnah(abs(maya) * 1000, 256)
+    maya_scaled = abs(maya) * 1000
+    maya_frac = maya_scaled - int(maya_scaled)
+    maya_int = int(maya_scaled) % 256
+    b_val = int(maya_frac * 128 + maya_int * 0.5) % 256
 
-    # Apply sign-based modulation
+    # Sign inverts the value (creates contrast)
     if grvq < 0:
         r_val = 255 - r_val
     if sulba < 0:
@@ -339,7 +358,7 @@ def multi_component_to_rgb(grvq: float, sulba: float, maya: float) -> Tuple[int,
     if maya < 0:
         b_val = 255 - b_val
 
-    return (int(r_val) % 256, int(g_val) % 256, int(b_val) % 256)
+    return (r_val, g_val, b_val)
 
 
 # ============================================================================
