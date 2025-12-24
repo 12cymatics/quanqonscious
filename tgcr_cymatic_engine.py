@@ -640,6 +640,134 @@ class GRVQAnsatz:
 # SECTION: TOROIDAL HYPERCUBE (d=4 Tesseract)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class Tesseract4D:
+    """
+    PROPER 4D Tesseract (Hypercube) with REAL projection.
+
+    16 vertices: all combinations of (±1, ±1, ±1, ±1)
+    32 edges: connecting vertices differing in exactly 1 coordinate
+
+    Uses 4D rotation matrices and orthographic projection.
+    """
+
+    def __init__(self, scale: float = 0.35):
+        self.scale = scale
+        # Generate all 16 vertices: (±1, ±1, ±1, ±1)
+        self.vertices_4d = []
+        for i in range(16):
+            x = 1.0 if (i & 1) else -1.0
+            y = 1.0 if (i & 2) else -1.0
+            z = 1.0 if (i & 4) else -1.0
+            w = 1.0 if (i & 8) else -1.0
+            self.vertices_4d.append([x, y, z, w])
+
+        # Generate 32 edges: connect vertices differing by 1 bit
+        self.edges = []
+        for i in range(16):
+            for j in range(i + 1, 16):
+                # Hamming distance = 1 means exactly 1 coordinate differs
+                xor = i ^ j
+                if xor and (xor & (xor - 1)) == 0:  # Power of 2 = single bit
+                    self.edges.append((i, j))
+
+    def rotate_4d(self, vertices: List[List[float]],
+                   angle_xw: float, angle_yw: float, angle_zw: float) -> List[List[float]]:
+        """
+        Apply 4D rotation in XW, YW, ZW planes.
+        This creates the characteristic tesseract animation effect.
+        """
+        cos_xw, sin_xw = math.cos(angle_xw), math.sin(angle_xw)
+        cos_yw, sin_yw = math.cos(angle_yw), math.sin(angle_yw)
+        cos_zw, sin_zw = math.cos(angle_zw), math.sin(angle_zw)
+
+        rotated = []
+        for v in vertices:
+            x, y, z, w = v[0], v[1], v[2], v[3]
+
+            # Rotate in XW plane
+            x1 = x * cos_xw - w * sin_xw
+            w1 = x * sin_xw + w * cos_xw
+
+            # Rotate in YW plane
+            y1 = y * cos_yw - w1 * sin_yw
+            w2 = y * sin_yw + w1 * cos_yw
+
+            # Rotate in ZW plane
+            z1 = z * cos_zw - w2 * sin_zw
+            w3 = z * sin_zw + w2 * cos_zw
+
+            rotated.append([x1, y1, z1, w3])
+
+        return rotated
+
+    def project_4d_to_2d(self, vertices: List[List[float]],
+                          w_distance: float = 3.0) -> List[Tuple[float, float]]:
+        """
+        Project 4D vertices to 2D using perspective projection from W dimension.
+
+        Perspective: scale = w_distance / (w_distance - w)
+        Then orthographic projection of X, Y
+        """
+        projected = []
+        for v in vertices:
+            x, y, z, w = v[0], v[1], v[2], v[3]
+
+            # Perspective projection from 4D (looking along W axis)
+            if abs(w_distance - w) > 0.01:
+                scale = w_distance / (w_distance - w)
+            else:
+                scale = w_distance / 0.01
+
+            # Project to 2D (x, y) with z contributing to depth
+            px = x * scale * self.scale
+            py = y * scale * self.scale
+
+            projected.append((px, py))
+
+        return projected
+
+    def get_projected_tesseract(self, angle_xw: float = 0.0,
+                                  angle_yw: float = 0.0,
+                                  angle_zw: float = 0.0) -> Tuple[List[Tuple[float, float]], List[Tuple[int, int]]]:
+        """
+        Get the full projected tesseract: vertices and edges.
+
+        Returns:
+            vertices_2d: List of (x, y) coordinates in [-1, 1] range
+            edges: List of (vertex_idx1, vertex_idx2) pairs
+        """
+        rotated = self.rotate_4d(self.vertices_4d, angle_xw, angle_yw, angle_zw)
+        projected = self.project_4d_to_2d(rotated)
+        return projected, self.edges
+
+    def distance_to_tesseract(self, x: float, y: float,
+                               vertices_2d: List[Tuple[float, float]],
+                               edges: List[Tuple[int, int]]) -> float:
+        """
+        Compute minimum distance from point (x, y) to any tesseract edge.
+        Used to create edge glow in cymatic pattern.
+        """
+        min_dist = float('inf')
+
+        for i, j in edges:
+            x1, y1 = vertices_2d[i]
+            x2, y2 = vertices_2d[j]
+
+            # Distance from point to line segment
+            dx, dy = x2 - x1, y2 - y1
+            if dx == 0 and dy == 0:
+                dist = math.sqrt((x - x1)**2 + (y - y1)**2)
+            else:
+                t = max(0, min(1, ((x - x1) * dx + (y - y1) * dy) / (dx*dx + dy*dy)))
+                proj_x = x1 + t * dx
+                proj_y = y1 + t * dy
+                dist = math.sqrt((x - proj_x)**2 + (y - proj_y)**2)
+
+            min_dist = min(min_dist, dist)
+
+        return min_dist
+
+
 @dataclass
 class VedicHypercube:
     """
@@ -945,13 +1073,71 @@ def field_to_image(field: List[List[float]], base_color: Tuple[int, int, int]) -
     return img
 
 
+def draw_tesseract_on_image(img: Image.Image,
+                             angle_xw: float = 0.4,
+                             angle_yw: float = 0.25,
+                             angle_zw: float = 0.15,
+                             line_color: Tuple[int, int, int] = (255, 255, 255),
+                             vertex_color: Tuple[int, int, int] = (255, 100, 100),
+                             line_width: int = 2) -> Image.Image:
+    """
+    Draw proper 4D tesseract wireframe on top of cymatic image.
+
+    16 vertices, 32 edges, with 4D rotation and perspective projection.
+    """
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(img)
+    size = img.size[0]
+    cx, cy = size // 2, size // 2  # Center
+
+    # Create tesseract with scale to fit circle
+    tesseract = Tesseract4D(scale=0.25)
+
+    # Get projected vertices and edges
+    vertices_2d, edges = tesseract.get_projected_tesseract(angle_xw, angle_yw, angle_zw)
+
+    # Scale to image coordinates
+    scale = size * 0.4  # 40% of image size
+    screen_vertices = []
+    for vx, vy in vertices_2d:
+        sx = int(cx + vx * scale)
+        sy = int(cy + vy * scale)
+        screen_vertices.append((sx, sy))
+
+    # Draw edges (32 total)
+    for i, j in edges:
+        x1, y1 = screen_vertices[i]
+        x2, y2 = screen_vertices[j]
+
+        # Check if inside circle
+        r1 = math.sqrt((x1 - cx)**2 + (y1 - cy)**2)
+        r2 = math.sqrt((x2 - cx)**2 + (y2 - cy)**2)
+        max_r = size * 0.48
+
+        if r1 < max_r and r2 < max_r:
+            draw.line([(x1, y1), (x2, y2)], fill=line_color, width=line_width)
+
+    # Draw vertices (16 total)
+    vertex_radius = max(3, size // 150)
+    for sx, sy in screen_vertices:
+        r = math.sqrt((sx - cx)**2 + (sy - cy)**2)
+        if r < size * 0.48:
+            draw.ellipse([sx - vertex_radius, sy - vertex_radius,
+                          sx + vertex_radius, sy + vertex_radius],
+                         fill=vertex_color)
+
+    return img
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION: MAIN GENERATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def generate_tgcr_cymatic(freq: int = MAYA_FREQUENCY, size: int = 1200,
-                           output_dir: str = 'tgcr_cymatics') -> str:
-    """Generate TGCR cymatic image for a frequency."""
+                           output_dir: str = 'tgcr_cymatics',
+                           draw_tesseract: bool = True) -> str:
+    """Generate TGCR cymatic image for a frequency with tesseract overlay."""
     os.makedirs(output_dir, exist_ok=True)
 
     print("═" * 70)
@@ -964,7 +1150,7 @@ def generate_tgcr_cymatic(freq: int = MAYA_FREQUENCY, size: int = 1200,
     print("    • R4 Singularity Suppression")
     print("    • GRVQ Ansatz")
     print("    • Toroidal Standing Wave")
-    print("    • Tesseract Hypercube Field")
+    print("    • REAL 4D Tesseract (16 vertices, 32 edges)")
     print("    • Chladni Plate Modes")
     print()
     print(f"  Generating: {freq} Hz @ {size}×{size}")
@@ -978,8 +1164,26 @@ def generate_tgcr_cymatic(freq: int = MAYA_FREQUENCY, size: int = 1200,
     # Generate image
     img = field_to_image(field, base_color)
 
+    # Draw REAL 4D tesseract wireframe
+    if draw_tesseract:
+        # Use frequency-based rotation angles for variation
+        angle_xw = 0.4 + (freq % 100) * 0.01
+        angle_yw = 0.25 + (freq % 50) * 0.005
+        angle_zw = 0.15 + (freq % 30) * 0.003
+
+        img = draw_tesseract_on_image(
+            img,
+            angle_xw=angle_xw,
+            angle_yw=angle_yw,
+            angle_zw=angle_zw,
+            line_color=(255, 255, 255),
+            vertex_color=(255, 100, 100),
+            line_width=max(2, size // 400)
+        )
+        print(f"    → Tesseract: 16 vertices, 32 edges (4D→2D projection)")
+
     # Save
-    filename = f"{output_dir}/tgcr_{freq}Hz_m{m}_n{n}_complete.png"
+    filename = f"{output_dir}/tgcr_{freq}Hz_m{m}_n{n}_tesseract.png"
     img.save(filename)
     print(f"    → Saved: {filename}")
     print("═" * 70)
