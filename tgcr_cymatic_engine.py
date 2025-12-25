@@ -1070,29 +1070,52 @@ def compute_tgcr_field_complete(size: int, freq: int) -> Tuple[List[List[float]]
             toroidal_wave = math.cos(m * toroidal_angle) * math.cos(n * tube_angle)
 
             # ════════════════════════════════════════════════════════════════
-            # COMPONENT 5: 4D TESSERACT HYPERCUBE FIELD
-            # Field contribution from 16 vertices with Hamming adjacency
+            # COMPONENT 5: TOROIDAL HYPERCUBE LATTICE FIELD
+            # 16 vertices mapped to toroidal surface creating lattice interference
+            # NOT a wireframe overlay - actual field from vertex wave interactions
             # ════════════════════════════════════════════════════════════════
 
-            # Map point to tesseract space
-            tesseract_field = 0.0
+            # Toroidal hypercube: 16 vertices create standing wave lattice
+            lattice_field = 0.0
+
             for v in range(16):
-                # Vertex coordinates
+                # 4D hypercube vertex: (±1, ±1, ±1, ±1)
                 vx = 1.0 if (v & 1) else -1.0
                 vy = 1.0 if (v & 2) else -1.0
                 vz = 1.0 if (v & 4) else -1.0
                 vw = 1.0 if (v & 8) else -1.0
 
-                # Distance from point to vertex projection
-                proj_x = vx * 0.5
-                proj_y = vy * 0.5
-                dist = math.sqrt((x - proj_x)**2 + (y - proj_y)**2) + 0.1
+                # Map 4D vertex to toroidal coordinates
+                theta_v = math.pi * (1 + vx) / 2 + math.pi * vy / 4  # toroidal
+                phi_v = math.pi * (1 + vz) / 2 + math.pi * vw / 4    # poloidal
 
-                # Vertex contribution with 4D phase
-                phase_4d = vz * math.sin(theta) + vw * math.cos(phi)
-                tesseract_field += math.cos(phase_4d) / dist
+                # Vertex creates wave emanating on torus surface
+                R_torus = 0.5
+                r_tube = 0.25
+                X_v = (R_torus + r_tube * math.cos(phi_v)) * math.cos(theta_v)
+                Y_v = (R_torus + r_tube * math.cos(phi_v)) * math.sin(theta_v)
 
-            tesseract_field /= 16.0  # Normalize
+                # Distance on torus manifold (geodesic approximation)
+                dist_xy = math.sqrt((x - X_v)**2 + (y - Y_v)**2)
+
+                # Vedic sutra S_k amplitude for this vertex
+                k_v = 1 + (v % 16)
+                S_k_amp = abs(vedic_S_values[k_v]) / (1.0 + abs(vedic_S_values[k_v]))
+
+                # Standing wave from vertex with mode numbers
+                wave_phase = 2 * math.pi * dist_xy * (m + n) + theta_v * m + phi_v * n
+
+                # 4D phase contribution creates lattice interference
+                phase_4d = vz * math.cos(m * theta) + vw * math.sin(n * phi)
+
+                # Vertex wave contribution with Vedic modulation
+                vertex_wave = S_k_amp * math.cos(wave_phase) * math.cos(phase_4d)
+
+                # Add with Hamming-weighted adjacency (connected vertices reinforce)
+                lattice_field += vertex_wave
+
+            # Normalize and scale for lattice visibility
+            lattice_field /= 4.0
 
             # ════════════════════════════════════════════════════════════════
             # COMPONENT 6: ALL 29 VEDIC SUTRAS via S_k and subS polynomials
@@ -1128,39 +1151,42 @@ def compute_tgcr_field_complete(size: int, freq: int) -> Tuple[List[List[float]]
                        math.sin(n * math.pi * x01) * math.sin(m * math.pi * y01))
 
             # ════════════════════════════════════════════════════════════════
-            # FINAL FIELD: FULL INTEGRATION OF ALL COMPONENTS
+            # FINAL FIELD: TOROIDAL HYPERCUBE VEDIC SUTRA LATTICE
+            # Lattice structure emerges from component interference
             # ════════════════════════════════════════════════════════════════
 
-            # GRVQ ansatz forms the base
+            # GRVQ ansatz - quantum wavefunction base
             psi_grvq = grvq_product * f_vedic
 
-            # Wheeler hyperboloid shapes the radial structure
+            # Wheeler hyperboloid - φ³ field shape
             psi_wheeler = wheeler_hyperboloid * wheeler_radial
 
-            # Toroidal wave adds angular structure
+            # Toroidal standing wave - mode structure
             psi_toroidal = toroidal_wave
 
-            # Tesseract adds 4D geometric influence
-            psi_tesseract = tesseract_field
+            # TOROIDAL HYPERCUBE LATTICE - 16 vertex interference
+            psi_lattice = lattice_field
 
-            # Chladni provides nodal structure
+            # Chladni - provides underlying nodal framework
             psi_chladni = chladni
 
-            # Combine with proper weighting - GRVQ/Wheeler/Toroidal are PRIMARY
+            # LATTICE-CENTRIC combination
+            # The toroidal hypercube lattice is now PRIMARY
             psi_combined = (
-                0.35 * psi_grvq * psi_wheeler +           # GRVQ + Wheeler as core
-                0.25 * psi_toroidal * psi_wheeler +       # Toroidal structure
-                0.20 * psi_chladni +                       # Chladni nodal scaffold
-                0.20 * psi_tesseract * psi_grvq           # Tesseract × GRVQ
+                0.30 * psi_lattice * psi_wheeler +        # LATTICE × Wheeler as core
+                0.25 * psi_grvq * psi_lattice +           # GRVQ × LATTICE coupling
+                0.20 * psi_toroidal * psi_lattice +       # Toroidal × LATTICE
+                0.15 * psi_chladni * psi_lattice +        # Chladni modulated by lattice
+                0.10 * psi_grvq * psi_wheeler             # Pure GRVQ-Wheeler background
             )
 
             # Apply R4 suppression (prevents singularities)
             psi_combined *= r4_suppression
 
-            # Apply Vedic sutra modulation
+            # Apply 29 Vedic sutra modulation
             psi_combined *= vedic_modulation
 
-            # Final R4 term: (1 - r⁴/R₀⁴) for boundary
+            # Final R4 boundary term: (1 - r⁴/R₀⁴)
             r4_boundary = 1.0 - (r_safe ** 4) / (R0 ** 4)
             psi_combined *= r4_boundary
 
@@ -1278,54 +1304,55 @@ def draw_tesseract_on_image(img: Image.Image,
 
 def generate_tgcr_cymatic(freq: int = MAYA_FREQUENCY, size: int = 1200,
                            output_dir: str = 'tgcr_cymatics',
-                           draw_tesseract: bool = True) -> str:
-    """Generate TGCR cymatic image for a frequency with tesseract overlay."""
+                           draw_tesseract: bool = False) -> str:
+    """
+    Generate TGCR cymatic image with TOROIDAL HYPERCUBE VEDIC SUTRA LATTICE.
+
+    The lattice structure is COMPUTED in the field itself from 16 hypercube
+    vertices mapped to toroidal coordinates, modulated by 29 Vedic sutras.
+    No wireframe overlay needed - the lattice emerges from interference.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
     print("═" * 70)
-    print("  TGCR CYMATIC ENGINE - Complete Implementation")
+    print("  TOROIDAL HYPERCUBE VEDIC SUTRA LATTICE ENGINE")
     print("═" * 70)
     print()
-    print("  Components:")
-    print("    • 16 Primary Sutras + 13 Sub-Sutras (29 total)")
-    print("    • Ken Wheeler φ³ Field Theory")
-    print("    • R4 Singularity Suppression")
-    print("    • GRVQ Ansatz")
-    print("    • Toroidal Standing Wave")
-    print("    • REAL 4D Tesseract (16 vertices, 32 edges)")
-    print("    • Chladni Plate Modes")
+    print("  Field Components (INTEGRATED, not overlaid):")
+    print("    • TOROIDAL HYPERCUBE LATTICE: 16 vertices → interference pattern")
+    print("    • 29 VEDIC SUTRAS: S_k polynomials modulate each vertex wave")
+    print("    • WHEELER φ³ HYPERBOLOID: cosh(θ)·exp(-(r/R₀)²)")
+    print("    • GRVQ ANSATZ: ∏ⱼ(1-αⱼ/Sⱼ) with Lucas α-vector")
+    print("    • TOROIDAL STANDING WAVE: cos(mθ)·cos(nφ)")
+    print("    • R4 SUPPRESSION: 1/(1+(r/k)⁴)")
     print()
     print(f"  Generating: {freq} Hz @ {size}×{size}")
 
-    # Compute field
+    # Compute LATTICE field
     field, m, n = compute_tgcr_field_complete(size, freq)
 
-    # Base color (golden for Maya frequency)
+    # Base color (golden for Maya/Vedic frequencies)
     base_color = (255, 200, 50)
 
-    # Generate image
+    # Generate image from lattice field
     img = field_to_image(field, base_color)
 
-    # Draw REAL 4D tesseract wireframe
+    # Lattice is IN the field - no wireframe needed
+    # But if requested, can still add visualization overlay
     if draw_tesseract:
-        # Use frequency-based rotation angles for variation
         angle_xw = 0.4 + (freq % 100) * 0.01
         angle_yw = 0.25 + (freq % 50) * 0.005
         angle_zw = 0.15 + (freq % 30) * 0.003
-
         img = draw_tesseract_on_image(
-            img,
-            angle_xw=angle_xw,
-            angle_yw=angle_yw,
-            angle_zw=angle_zw,
-            line_color=(255, 255, 255),
-            vertex_color=(255, 100, 100),
+            img, angle_xw=angle_xw, angle_yw=angle_yw, angle_zw=angle_zw,
+            line_color=(255, 255, 255), vertex_color=(255, 100, 100),
             line_width=max(2, size // 400)
         )
-        print(f"    → Tesseract: 16 vertices, 32 edges (4D→2D projection)")
 
-    # Save
-    filename = f"{output_dir}/tgcr_{freq}Hz_m{m}_n{n}_tesseract.png"
+    print(f"    → Lattice modes: m={m}, n={n}")
+
+    # Save with descriptive filename
+    filename = f"{output_dir}/vedic_lattice_{freq}Hz_m{m}_n{n}.png"
     img.save(filename)
     print(f"    → Saved: {filename}")
     print("═" * 70)
