@@ -1006,23 +1006,25 @@ def compute_tgcr_field_complete(size: int, freq: int) -> Tuple[List[List[float]]
             y01 = (y + 1) / 2
 
             # ════════════════════════════════════════════════════════════════
-            # COMPONENT 1: GRVQ WAVEFUNCTION ANSATZ
-            # Ψ_GRVQ = ∏ⱼ(1-αⱼ/Sⱼ) × f_Vedic
+            # COMPONENT 1: GRVQ WAVEFUNCTION ANSATZ - EXACT FROM DOCUMENTS
+            # Ψ_GRVQ = ∏ⱼ(1 - αⱼ × Sⱼ) × f_Vedic
+            # From vedic_exact_engine.py: S_j = exp(-r²) × r^j × sin(jθ) × cos(jφ)
             # ════════════════════════════════════════════════════════════════
 
-            # Shape functions S₁, S₂ (spherical/toroidal harmonics)
-            S1 = math.sin(theta) * math.cos(phi) * math.exp(-0.1 * r_safe)
-            S2 = math.cos(theta) * math.sin(phi) * math.exp(-0.05 * r_safe * r_safe)
-
-            # GRVQ product terms with Lucas α-vector
-            eps = 1e-6
+            # GRVQ product terms with Lucas α-vector and EXACT shape functions
             grvq_product = 1.0
-            for idx, alpha_j in enumerate(alpha[:8]):
-                if idx % 2 == 0:
-                    S_j = abs(S1) + eps
-                else:
-                    S_j = abs(S2) + eps
-                grvq_product *= (1.0 - float(alpha_j) / S_j)
+            exp_r2 = math.exp(-r_safe * r_safe)
+
+            for j in range(1, 9):  # j = 1 to 8 modes
+                # EXACT shape function from vedic_exact_engine.py line 805:
+                # S_j = exp(-r²) × r^j × sin(jθ) × cos(jφ)
+                S_j = exp_r2 * (r_safe ** j) * math.sin(j * theta) * math.cos(j * phi)
+
+                # Lucas α coefficient
+                alpha_j = float(alpha[j - 1]) if j <= len(alpha) else 0.0
+
+                # CORRECT product form: (1 - α_j × S_j), NOT (1 - α_j / S_j)
+                grvq_product *= (1.0 - alpha_j * S_j)
 
             # Vedic wave function component
             f_vedic = math.sin(r_safe + theta + phi) + 0.5 * math.cos(2 * (r_safe + theta + phi))
@@ -1322,7 +1324,7 @@ def generate_tgcr_cymatic(freq: int = MAYA_FREQUENCY, size: int = 1200,
     print("    • TOROIDAL HYPERCUBE LATTICE: 16 vertices → interference pattern")
     print("    • 29 VEDIC SUTRAS: S_k polynomials modulate each vertex wave")
     print("    • WHEELER φ³ HYPERBOLOID: cosh(θ)·exp(-(r/R₀)²)")
-    print("    • GRVQ ANSATZ: ∏ⱼ(1-αⱼ/Sⱼ) with Lucas α-vector")
+    print("    • GRVQ ANSATZ: ∏ⱼ(1-αⱼ×Sⱼ) with Lucas α-vector")
     print("    • TOROIDAL STANDING WAVE: cos(mθ)·cos(nφ)")
     print("    • R4 SUPPRESSION: 1/(1+(r/k)⁴)")
     print()
