@@ -1015,16 +1015,16 @@ def compute_tgcr_field_complete(size: int, freq: int) -> Tuple[List[List[float]]
             grvq_product = 1.0
             exp_r2 = math.exp(-r_safe * r_safe)
 
-            for j in range(1, 9):  # j = 1 to 8 modes
+            for jj in range(1, 9):  # jj = 1 to 8 modes (use jj to not shadow outer j)
                 # EXACT shape function from vedic_exact_engine.py line 805:
-                # S_j = exp(-r²) × r^j × sin(jθ) × cos(jφ)
-                S_j = exp_r2 * (r_safe ** j) * math.sin(j * theta) * math.cos(j * phi)
+                # S_j = exp(-r²) × r^jj × sin(jj·θ) × cos(jj·φ)
+                S_jj = exp_r2 * (r_safe ** jj) * math.sin(jj * theta) * math.cos(jj * phi)
 
                 # Lucas α coefficient
-                alpha_j = float(alpha[j - 1]) if j <= len(alpha) else 0.0
+                alpha_jj = float(alpha[jj - 1]) if jj <= len(alpha) else 0.0
 
                 # CORRECT product form: (1 - α_j × S_j), NOT (1 - α_j / S_j)
-                grvq_product *= (1.0 - alpha_j * S_j)
+                grvq_product *= (1.0 - alpha_jj * S_jj)
 
             # Vedic wave function component
             f_vedic = math.sin(r_safe + theta + phi) + 0.5 * math.cos(2 * (r_safe + theta + phi))
@@ -1172,14 +1172,14 @@ def compute_tgcr_field_complete(size: int, freq: int) -> Tuple[List[List[float]]
             # Chladni - provides underlying nodal framework
             psi_chladni = chladni
 
-            # LATTICE-CENTRIC combination
-            # The toroidal hypercube lattice is now PRIMARY
+            # BALANCED combination - lattice ADDS to base pattern, not multiplies
+            # This ensures visible structure even when lattice passes through zero
             psi_combined = (
-                0.30 * psi_lattice * psi_wheeler +        # LATTICE × Wheeler as core
-                0.25 * psi_grvq * psi_lattice +           # GRVQ × LATTICE coupling
-                0.20 * psi_toroidal * psi_lattice +       # Toroidal × LATTICE
-                0.15 * psi_chladni * psi_lattice +        # Chladni modulated by lattice
-                0.10 * psi_grvq * psi_wheeler             # Pure GRVQ-Wheeler background
+                0.25 * psi_chladni +                      # Chladni provides nodal framework
+                0.25 * psi_lattice +                      # Lattice ADDS 16-vertex interference
+                0.20 * psi_grvq * psi_wheeler +           # GRVQ × Wheeler field coupling
+                0.15 * psi_toroidal +                     # Toroidal standing wave
+                0.15 * (psi_lattice * psi_wheeler)        # Lattice-Wheeler modulation
             )
 
             # Apply R4 suppression (prevents singularities)
