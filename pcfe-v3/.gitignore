@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+
+# Checkpoints
+checkpoints/
+*.h5
+*.pkl
+*.npz
+
+# Logs
+logs/
+*.log
+
+# Results
+results/
+*.png
+*.gif
+*.mp4
+
+# IDE
+.vscode/
+.idea/
+*.swp

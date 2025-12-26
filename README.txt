@@ -79,6 +79,35 @@ python palindromic_alloy_visual.py
 This prints the numeric value of the alloy and writes the figure to
 `palindromic_alloy.png`. Use `--no-show` to skip opening the plot window or
 `--output PATH` to save it elsewhere.
+The :class:`SutraRepository` provides a convenient interface to call any of the
+29 Vedic sutras. Each sutra automatically selects its classical, quantum or
+hybrid implementation based on the :class:`SutraContext` mode. Example usage:
+
+```python
+from QuanQonscious import SutraRepository, SutraContext, SutraMode
+
+# create repository in classical mode
+repo = SutraRepository(SutraContext(mode=SutraMode.CLASSICAL))
+result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
+
+# switch to quantum mode
+repo.update_context(mode=SutraMode.QUANTUM)
+quantum_result = repo.call_sutra('ekadhikena_purvena', 5, iterations=2)
+```
+
+For whole-of-library execution, ``sutra_simulator.HybridQuantumClassicalSimulator``
+offers pre-built serial, concurrent (threaded) and parallel (multi-process)
+drivers.  This simulator ensures deterministic aggregation of all 29 sutras and
+provides structured timing reports:
+
+```python
+from sutra_simulator import HybridQuantumClassicalSimulator
+from primarysutra import SutraMode, SutraContext
+
+simulator = HybridQuantumClassicalSimulator(SutraContext(mode=SutraMode.HYBRID))
+report = simulator.run_parallel(value=108)
+print(report.to_dict())
+```
 
 Documentation:
 --------------
@@ -87,6 +116,11 @@ This includes:
   - Detailed descriptions of each module and function.
   - Performance optimization guidelines.
   - Examples of integration with HPC and quantum backends.
+For additional resources see `docs/sutraws_new.pdf` and `docs/sutraws_interactive.html`.
+The script `sutra_orchestrator.py` demonstrates how to execute all 29 sutras in
+serial order, concurrently with threads, or in parallel across processes.  It
+automatically inspects each sutra’s signature to provide reasonable default
+arguments so the entire library can be exercised without manual input.
 
 Contact:
 --------

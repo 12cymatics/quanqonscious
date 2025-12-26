@@ -1,0 +1,17 @@
+# PCFE Production Configuration
+grid_size: 512
+grid_dimensions: 3
+coherence_threshold: 0.995
+emergence_threshold: 0.8
+
+# Field parameters
+grvq_coupling: 0.25
+tgcr_frequency: 7.83
+mstvq_coupling: 0.1
+vedic_coupling: 0.5
+vacuum_coupling: 0.0005
+
+evolution_rate: 0.05
+max_iterations: 50000
+use_mixed_precision: true
+checkpoint_interval: 500

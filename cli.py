@@ -5,6 +5,10 @@ import argparse
 # repository directory name differs from the package name used in setup.py.
 from . import ansatz, maya_cipher, updater, zpe_solver
 import numpy as np
+import numpy as np
+# Import package modules. The package directory is lowercase
+# but some older scripts used a capitalized name.
+from quanqonscious import ansatz, maya_cipher, updater, zpe_solver
 
 def main():
     parser = argparse.ArgumentParser(prog="quanqonscious", 

@@ -1,0 +1,20 @@
+# PCFE Default Configuration
+grid_size: 128
+grid_dimensions: 3
+coherence_threshold: 0.99
+emergence_threshold: 0.7
+
+# Field parameters
+grvq_coupling: 0.3
+tgcr_frequency: 7.83
+mstvq_coupling: 0.1
+vedic_coupling: 0.5
+vacuum_coupling: 0.001
+
+# Evolution parameters
+evolution_rate: 0.1
+max_iterations: 10000
+
+# Performance
+use_mixed_precision: true
+checkpoint_interval: 1000

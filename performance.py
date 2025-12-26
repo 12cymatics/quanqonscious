@@ -3,6 +3,7 @@
 import time
 import functools
 import gc
+import numpy as np
 try:
     import numba
 except ImportError:

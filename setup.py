@@ -26,6 +26,16 @@ setup(
     extras_require={
         "gpu": ["cupy>=13.5.1", "cuda-quantum-cu12>=0.11.0"],
         "dev": ["numba>=0.61.2", "psutil>=7.0.0", "pytest>=8.4.1"]
+        "numpy>=1.20.0",
+        "cirq>=0.14.0",
+        "mpi4py>=3.0.0",
+        "qiskit>=0.45.0",
+        "qiskit-aer>=0.12.0",
+    ],
+    extras_require={
+        # Use precompiled CUDA 11.x wheel to avoid building CuPy from source
+        "gpu": ["cupy-cuda11x>=13.0.0", "cuda-quantum-cu12>=0.1.0"],
+        "dev": ["numba>=0.55", "psutil>=5.8"]
     },
     entry_points={
         "console_scripts": [
