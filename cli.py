@@ -1,6 +1,10 @@
 # QuanQonscious/cli.py
 
 import argparse
+# Import package modules using relative paths so the CLI works even when the
+# repository directory name differs from the package name used in setup.py.
+from . import ansatz, maya_cipher, updater, zpe_solver
+import numpy as np
 import numpy as np
 # Import package modules. The package directory is lowercase
 # but some older scripts used a capitalized name.

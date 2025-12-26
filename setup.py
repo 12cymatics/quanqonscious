@@ -11,6 +11,21 @@ setup(
     license="Proprietary",  # Assuming proprietary, adjust if open-source
     packages=find_packages(),
     install_requires=[
+        "numpy>=2.3.2",
+        "scipy>=1.16.1",
+        "mpi4py>=4.1.0",
+        "cirq>=1.6.0",
+        "matplotlib>=3.10.3",
+        "cryptography>=45.0.5",
+        "jax>=0.7.0",
+        "jaxlib>=0.7.0",
+        "torch>=2.7.1",
+        "cudaq>=0.11.0",
+        "union>=0.1.189",
+    ],
+    extras_require={
+        "gpu": ["cupy>=13.5.1", "cuda-quantum-cu12>=0.11.0"],
+        "dev": ["numba>=0.61.2", "psutil>=7.0.0", "pytest>=8.4.1"]
         "numpy>=1.20.0",
         "cirq>=0.14.0",
         "mpi4py>=3.0.0",
@@ -34,5 +49,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     keywords="quantum cirq cuda quantum-computing vedic-math hybrid",
-    python_requires='>=3.8',
+    python_requires='>=3.12',
 )

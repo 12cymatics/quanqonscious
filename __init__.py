@@ -1,5 +1,6 @@
 # QuanQonscious/__init__.py
 
+# Import importlib along with its util submodule for feature detection
 import importlib
 import importlib.util
 import os
@@ -43,6 +44,11 @@ elif _has_cudaq:
 else:
     print("[QuanQonscious] CUDA-Q not available – defaulting to Cirq simulator for quantum circuits.")
 
+# Make key submodules readily accessible via the package namespace
+# Import key submodules using relative imports so the package functions
+# correctly even if the directory name does not match the canonical
+# "QuanQonscious" package name used in setup.py.
+from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
 # Lazy loading: submodules are imported when accessed by name
 __all__ = [
     'ansatz', 'core_engine', 'sulba', 'zpe_solver', 'maya_cipher', 'performance',
