@@ -15,10 +15,12 @@ from dataclasses import dataclass, field as dataclass_field
 from fractions import Fraction
 from typing import Dict, Optional, Callable, Tuple, Union, List, Any
 from enum import Enum
-import math
 import copy
 
 from .lattice import ToroidalHypercube, LatticePoint
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# All operations must use Fraction and Vedic sutra functions ONLY
 
 
 class ArithmeticMode(Enum):
@@ -126,12 +128,24 @@ class RationalComplex:
         return self.real * self.real + self.imag * self.imag
 
     def norm(self) -> float:
-        """Compute |z| (requires float conversion for sqrt)."""
-        return math.sqrt(float(self.norm_squared()))
+        """
+        FORBIDDEN: Uses math.sqrt() which violates exact arithmetic.
+        Use norm_squared() instead for exact Fraction comparisons.
+        """
+        raise NotImplementedError(
+            "norm() forbidden - uses float approximation. "
+            "Use norm_squared() for exact rational arithmetic."
+        )
 
     def phase(self) -> float:
-        """Compute arg(z) (requires float conversion for atan2)."""
-        return math.atan2(float(self.imag), float(self.real))
+        """
+        FORBIDDEN: Uses math.atan2() which violates exact arithmetic.
+        Phase operations must use sutra-based methods only.
+        """
+        raise NotImplementedError(
+            "phase() forbidden - uses float approximation. "
+            "Use Vedic sutra functions for phase operations."
+        )
 
     def to_complex(self) -> complex:
         """Convert to Python complex."""
@@ -274,33 +288,41 @@ class FieldState:
 
     # Derived field accessors
 
-    def amplitude(self, point: LatticePoint) -> float:
-        """Compute |Ψ(x)|."""
-        return self.get(point).norm()
+    def amplitude(self, point: LatticePoint) -> Fraction:
+        """
+        DEPRECATED: Returns intensity |Ψ(x)|² instead of amplitude.
+        Amplitude requires sqrt which violates exact arithmetic.
+        """
+        return self.get(point).norm_squared()
 
-    def phase(self, point: LatticePoint) -> float:
-        """Compute arg(Ψ(x))."""
-        return self.get(point).phase()
+    def phase(self, point: LatticePoint) -> Fraction:
+        """
+        FORBIDDEN: Phase requires atan2 which violates exact arithmetic.
+        Use Vedic sutra functions for phase operations.
+        """
+        raise NotImplementedError("Phase forbidden - use sutra functions")
 
     def intensity(self, point: LatticePoint) -> Fraction:
         """Compute |Ψ(x)|² (exact)."""
         return self.get(point).norm_squared()
 
-    def compute_amplitude_field(self) -> Dict[Tuple[int, ...], float]:
-        """Compute amplitude at all points."""
+    def compute_amplitude_field(self) -> Dict[Tuple[int, ...], Fraction]:
+        """
+        DEPRECATED: Returns intensity field |Ψ|² instead of amplitude.
+        Amplitude requires sqrt which violates exact arithmetic.
+        """
         if self._derived.amplitude is None:
             self._derived.amplitude = {
-                coords: val.norm() for coords, val in self._psi.items()
+                coords: val.norm_squared() for coords, val in self._psi.items()
             }
         return self._derived.amplitude
 
     def compute_phase_field(self) -> Dict[Tuple[int, ...], float]:
-        """Compute phase at all points."""
-        if self._derived.phase is None:
-            self._derived.phase = {
-                coords: val.phase() for coords, val in self._psi.items()
-            }
-        return self._derived.phase
+        """
+        FORBIDDEN: Phase computation requires atan2 which violates exact arithmetic.
+        Use Vedic sutra functions for phase operations.
+        """
+        raise NotImplementedError("Phase field forbidden - use sutra functions")
 
     def compute_intensity_field(self) -> Dict[Tuple[int, ...], Fraction]:
         """Compute intensity at all points (exact)."""
@@ -328,14 +350,20 @@ class FieldState:
         """Compute total ∑|Ψ|² (exact)."""
         return sum(val.norm_squared() for val in self._psi.values())
 
-    def max_amplitude(self) -> float:
-        """Find maximum |Ψ|."""
-        return max(val.norm() for val in self._psi.values())
+    def max_amplitude(self) -> Fraction:
+        """
+        DEPRECATED: Returns max intensity |Ψ|² instead of amplitude.
+        Amplitude requires sqrt which violates exact arithmetic.
+        """
+        return max(val.norm_squared() for val in self._psi.values())
 
-    def mean_amplitude(self) -> float:
-        """Compute mean |Ψ|."""
-        total = sum(val.norm() for val in self._psi.values())
-        return total / len(self._psi)
+    def mean_amplitude(self) -> Fraction:
+        """
+        DEPRECATED: Returns mean intensity |Ψ|² instead of amplitude.
+        Amplitude requires sqrt which violates exact arithmetic.
+        """
+        total = sum(val.norm_squared() for val in self._psi.values())
+        return Fraction(total, len(self._psi))
 
     # Metadata management
 
@@ -454,7 +482,7 @@ def _self_test():
 
     p = lattice.point(1, 2, 3)
     state.set(p, RationalComplex(Fraction(3), Fraction(4)))
-    assert state.get(p).norm() == 5.0
+    assert state.get(p).norm_squared() == Fraction(25)  # 3² + 4² = 25
 
     # Test snapshot roundtrip
     snap = state.snapshot()

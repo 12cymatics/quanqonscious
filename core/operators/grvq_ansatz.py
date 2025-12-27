@@ -18,7 +18,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import List, Tuple, Dict, Optional, Callable
-import math
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# ALL operations must use Vedic sutra functions ONLY
+# Import primarysutra for sutra-based operations
+try:
+    from primarysutra import VedicSutras, SutraContext
+    SUTRAS_AVAILABLE = True
+except ImportError:
+    SUTRAS_AVAILABLE = False
 
 from .base import Operator, OperatorCategory, OperatorContext
 from ..state import FieldState, RationalComplex
@@ -58,86 +66,68 @@ class ShapeFunction:
 
     def _chladni(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
         """
-        Chladni plate mode: sin(mπx)sin(nπy) + sin(nπx)sin(mπy)
+        FORBIDDEN: Chladni patterns require sin/cos which violate exact arithmetic.
+        Must be reimplemented using ONLY Vedic sutra rational operations.
 
-        Creates symmetric nodal patterns characteristic of vibrating plates.
+        Original formula: sin(mπx)sin(nπy) + sin(nπx)sin(mπy)
+
+        TODO: Implement using:
+        - Polynomial rational approximations via Vedic sutras
+        - Discrete lattice symmetries (no continuous trig)
+        - vyashtisamanstih (part/whole) for spatial patterns
         """
-        if len(norm_coords) < 2:
-            return RationalComplex.from_real(0)
-
-        x, y = norm_coords[0], norm_coords[1]
-        m, n = self.mode_numbers[0], self.mode_numbers[1] if len(self.mode_numbers) > 1 else 1
-
-        # sin(mπx)sin(nπy) + sin(nπx)sin(mπy)
-        val = (math.sin(m * math.pi * x) * math.sin(n * math.pi * y) +
-               math.sin(n * math.pi * x) * math.sin(m * math.pi * y))
-
-        return RationalComplex.from_complex(complex(val, 0))
+        raise NotImplementedError(
+            "Chladni patterns forbidden - must use Vedic sutra functions only"
+        )
 
     def _bessel(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
         """
-        Bessel function mode (approximation for circular membrane).
+        FORBIDDEN: Bessel functions require sqrt/cos/atan2 which violate exact arithmetic.
+        Must be reimplemented using ONLY Vedic sutra rational operations.
 
-        Uses the radial distance and angular position.
+        Original: J_n(kr) * cos(nθ) with r=sqrt(x²+y²), θ=atan2(y,x)
+
+        TODO: Implement using:
+        - Rational polynomial approximations for Bessel functions
+        - anurupyena sutra for proportional radial modes
+        - Discrete angular symmetries (no continuous angles)
         """
-        if len(norm_coords) < 2:
-            return RationalComplex.from_real(0)
-
-        # Center and compute radial distance
-        x, y = norm_coords[0] - 0.5, norm_coords[1] - 0.5
-        r = math.sqrt(x*x + y*y) * 2  # Scale to [0, 1]
-        theta = math.atan2(y, x)
-
-        m = self.mode_numbers[0] if self.mode_numbers else 1
-        n = self.mode_numbers[1] if len(self.mode_numbers) > 1 else 0
-
-        # Approximate Bessel J_n (Taylor expansion for small argument)
-        # J_n(x) ≈ (x/2)^n / n! for small x
-        if r < 1e-10:
-            bessel_val = 1.0 if n == 0 else 0.0
-        else:
-            kr = m * math.pi * r
-            # Use recurrence relation approximation
-            bessel_val = math.cos(kr - n * math.pi / 2) / (max(kr, 0.1) ** 0.5)
-
-        # Angular part
-        angular = math.cos(n * theta)
-
-        val = bessel_val * angular
-        return RationalComplex.from_complex(complex(val, 0))
+        raise NotImplementedError(
+            "Bessel functions forbidden - must use Vedic sutra functions only"
+        )
 
     def _harmonic(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
         """
-        Lattice harmonic mode (discrete Fourier mode).
+        FORBIDDEN: Harmonic modes require exp/cos/sin which violate exact arithmetic.
+        Must be reimplemented using ONLY Vedic sutra rational operations.
 
-        exp(2πi * (k · x)) for wave vector k = mode_numbers
+        Original: exp(2πi·k·x) = cos(2πk·x) + i·sin(2πk·x)
+
+        TODO: Implement using:
+        - Rational Fourier modes on discrete lattice
+        - gunitasamuccayah sutra for wave products
+        - Discrete phase steps (no continuous angles)
         """
-        if not self.mode_numbers:
-            return RationalComplex.one()
-
-        # k · x = sum of k_i * x_i
-        phase = 0.0
-        for k, x in zip(self.mode_numbers, norm_coords):
-            phase += 2 * math.pi * k * x
-
-        return RationalComplex.from_complex(complex(math.cos(phase), math.sin(phase)))
+        raise NotImplementedError(
+            "Harmonic modes forbidden - must use Vedic sutra functions only"
+        )
 
     def _radial(self, norm_coords: Tuple[float, ...], lattice: ToroidalHypercube) -> RationalComplex:
         """
-        Radial mode (distance from center).
+        FORBIDDEN: Radial modes require sqrt/cos which violate exact arithmetic.
+        Must be reimplemented using ONLY Vedic sutra rational operations.
 
-        Creates concentric ring patterns.
+        Original: cos(mπr) where r=sqrt((x-x₀)²+(y-y₀)²+...)
+
+        TODO: Implement using:
+        - r² instead of r (exact via norm_squared)
+        - Polynomial approximations for oscillations
+        - nikhilam sutra for complement operations
+        - yavadunam sutra for deficiency-based patterns
         """
-        # Distance from center (normalized)
-        center = tuple(0.5 for _ in norm_coords)
-        r_sq = sum((x - c)**2 for x, c in zip(norm_coords, center))
-        r = math.sqrt(r_sq)
-
-        m = self.mode_numbers[0] if self.mode_numbers else 1
-
-        # Radial oscillation: cos(mπr)
-        val = math.cos(m * math.pi * r)
-        return RationalComplex.from_complex(complex(val, 0))
+        raise NotImplementedError(
+            "Radial modes forbidden - must use Vedic sutra functions only"
+        )
 
 
 @dataclass
@@ -212,30 +202,21 @@ class VedicCarrier:
 
     def evaluate(self, coords: Tuple[int, ...], lattice: ToroidalHypercube,
                  context: OperatorContext) -> RationalComplex:
-        """Evaluate Vedic carrier at given coordinates."""
-        # Normalize coordinates
-        norm_coords = tuple(c / n for c, n in zip(coords, lattice.shape))
+        """
+        FORBIDDEN: Vedic carrier requires cos/sin which violate exact arithmetic.
+        Must be reimplemented using ONLY Vedic sutra rational operations.
 
-        # Base spatial frequency
-        t = context.timestep * float(context.dt)
-        omega = 2 * math.pi * float(self.base_frequency)
+        Original: Sum of cos(ωt + spatial) harmonics
 
-        # Sum of harmonics
-        val = 0.0
-        for i, ratio in enumerate(self.harmonic_ratios):
-            amplitude = 1.0 / (i + 1)  # Decreasing amplitude for higher harmonics
-            freq = omega * float(ratio)
-
-            # Spatial variation: standing wave pattern
-            spatial = sum(math.cos(2 * math.pi * x) for x in norm_coords)
-            spatial /= len(norm_coords)
-
-            val += amplitude * math.cos(freq * t + spatial * math.pi)
-
-        # Normalize
-        val /= len(self.harmonic_ratios)
-
-        return RationalComplex.from_complex(complex(val, 0))
+        TODO: Implement using:
+        - Rational time evolution via sutras
+        - sankalana_vyavakalanabhyam for addition/subtraction
+        - gunitasamuccayah for harmonic products
+        - Discrete rational phases only
+        """
+        raise NotImplementedError(
+            "Vedic carrier forbidden - must use Vedic sutra functions only"
+        )
 
 
 class GRVQAnsatzOperator(Operator):

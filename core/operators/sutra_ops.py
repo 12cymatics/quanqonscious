@@ -21,7 +21,10 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import List, Tuple, Dict, Optional, Any
-import math
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# All 29 Vedic sutra operations MUST use ONLY rational arithmetic
+# NO sqrt, cos, sin, atan2, exp, or other transcendental functions
 
 from .base import Operator, OperatorCategory, OperatorContext
 from ..state import FieldState, RationalComplex
