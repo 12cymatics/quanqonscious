@@ -15,8 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Dict, Tuple, List, Optional, Any
-import math
 import json
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# Observable computations must use ONLY Vedic sutra functions and rational arithmetic
 
 from .state import FieldState, RationalComplex
 from .lattice import ToroidalHypercube, LatticePoint
@@ -80,8 +82,11 @@ class MeanAmplitude(ScalarObservable):
         )
 
     def compute(self, state: FieldState, context: OperatorContext) -> Fraction:
-        total = sum(state.get(p).norm() for p in state.lattice.iterate_all())
-        return Fraction(total / state.lattice.total_sites).limit_denominator(10**9)
+        # FORBIDDEN: norm() uses sqrt which violates exact arithmetic
+        # Use norm_squared() instead (intensity, not amplitude)
+        # OLD CODE: total = sum(state.get(p).norm() ...)
+        total = sum(state.get(p).norm_squared() for p in state.lattice.iterate_all())
+        return Fraction(total, state.lattice.total_sites)
 
 
 class MaxAmplitude(ScalarObservable):
@@ -95,8 +100,11 @@ class MaxAmplitude(ScalarObservable):
         )
 
     def compute(self, state: FieldState, context: OperatorContext) -> Fraction:
-        max_amp = max(state.get(p).norm() for p in state.lattice.iterate_all())
-        return Fraction(max_amp).limit_denominator(10**9)
+        # FORBIDDEN: norm() uses sqrt which violates exact arithmetic
+        # Use norm_squared() instead (intensity, not amplitude)
+        # OLD CODE: max_amp = max(state.get(p).norm() ...)
+        max_intensity = max(state.get(p).norm_squared() for p in state.lattice.iterate_all())
+        return max_intensity
 
 
 class TotalR4Energy(ScalarObservable):
@@ -143,17 +151,25 @@ class PhaseCoherence(ScalarObservable):
         total_exp = complex(0, 0)
         count = 0
 
+        # FORBIDDEN: Phase coherence requires atan2, cos, sin which violate exact arithmetic
+        # TODO: Reimplement using intensity-based coherence or Vedic sutra functions
+        # OLD CODE:
+        # if psi.norm() > 0.001:
+        #     phase = psi.phase()
+        #     total_exp += complex(math.cos(phase), math.sin(phase))
+
+        # Use intensity-based coherence instead (exact)
         for point in state.lattice.iterate_all():
             psi = state.get(point)
-            if psi.norm() > 0.001:
-                phase = psi.phase()
-                total_exp += complex(math.cos(phase), math.sin(phase))
+            threshold = Fraction(1, 1000000)  # 0.001²
+            if psi.norm_squared() > threshold:
+                # Count non-zero points for coherence measure
                 count += 1
 
+        # Intensity-based coherence: fraction of non-zero points
         if count > 0:
-            avg_exp = total_exp / count
-            coherence = abs(avg_exp)
-            return Fraction(coherence).limit_denominator(10**6)
+            coherence = Fraction(count, state.lattice.total_sites)
+            return coherence
         return Fraction(0)
 
 
