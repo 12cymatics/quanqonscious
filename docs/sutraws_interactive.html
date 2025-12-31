@@ -1,1 +1,1525 @@
-<html><body><h1>Sutraws Interactive Placeholder</h1></body></html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R4 हाइपरक्यूब v3 — True 4D Tesseract Cymatic Engine</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#030306;color:#e8e8e8;font-family:'Courier New',monospace;overflow:hidden;height:100vh}
+#canvas{position:absolute;top:0;left:0}
+#hud{position:absolute;top:10px;left:10px;font-size:8px;color:#666;z-index:20;background:rgba(0,0,0,0.85);padding:10px;max-width:280px;border:1px solid #1a1a2e}
+#hud h4{color:#d4af37;font-size:10px;margin-bottom:6px;letter-spacing:1px}
+#trace{max-height:150px;overflow-y:auto;margin-top:6px;font-size:7px}
+.tr{color:#888;padding:2px 0;border-bottom:1px solid #111}
+.tr-sutra{color:#d4af37}.tr-val{color:#4a90d9}.tr-mode{color:#e67e22}
+#state{position:absolute;top:10px;right:10px;font-size:9px;color:#888;z-index:20;background:rgba(0,0,0,0.85);padding:10px;text-align:right;border:1px solid #1a1a2e;min-width:180px}
+#state .lbl{color:#666;font-size:8px}
+#state .val{color:#d4af37;font-size:11px}
+#r4-display{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;z-index:5}
+#r4-main{font-size:20px;color:#d4af37;text-shadow:0 0 20px rgba(212,175,55,0.8)}
+#r4-components{font-size:8px;color:#4a90d9;margin-top:4px}
+#controls{position:absolute;bottom:10px;left:10px;z-index:20;display:flex;gap:4px;flex-wrap:wrap;max-width:400px}
+#controls button{background:rgba(10,10,15,0.95);border:1px solid #222;color:#777;padding:6px 10px;cursor:pointer;font-size:8px;font-family:inherit;transition:all 0.2s}
+#controls button:hover{border-color:#d4af37;color:#d4af37}
+#controls button.active{background:#d4af37;color:#030306;border-color:#d4af37}
+#selected{position:absolute;bottom:10px;right:10px;font-size:9px;z-index:20;background:rgba(0,0,0,0.85);padding:10px;text-align:right;border:1px solid #1a1a2e;min-width:200px}
+#sel-id{color:#d4af37;font-size:12px}
+#sel-name{color:#e67e22;font-size:9px}
+#sel-alg{color:#4a90d9;font-size:10px;margin-top:4px;font-style:italic}
+#sel-formula{color:#9b59b6;font-size:7px;margin-top:4px;line-height:1.3;white-space:pre-wrap}
+#sel-mode{color:#2ecc71;font-size:8px;margin-top:2px}
+#nodal-count{position:absolute;bottom:60px;left:10px;font-size:8px;color:#666;z-index:20}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="r4-display">
+    <div id="r4-main">R⁴</div>
+    <div id="r4-components"></div>
+</div>
+
+<div id="hud">
+    <h4>4D TESSERACT CYMATIC ENGINE</h4>
+    <div style="color:#666;font-size:7px;margin-bottom:4px">16 vertices · 32 edges · 24 faces · 8 cells</div>
+    <div id="trace"></div>
+</div>
+
+<div id="state">
+    <div class="lbl">R⁴ VALUE</div>
+    <div class="val" id="r4-val">—</div>
+    <div class="lbl" style="margin-top:6px">λ PARAMETERS</div>
+    <div class="val" id="l-val" style="font-size:9px">—</div>
+    <div class="lbl" style="margin-top:6px">VORTICITY ω</div>
+    <div class="val" id="w-val">0</div>
+    <div class="lbl" style="margin-top:6px">FIELD ENERGY</div>
+    <div class="val" id="e-val">0</div>
+    <div class="lbl" style="margin-top:6px">CYMATIC MODES</div>
+    <div class="val" id="m-val">0</div>
+</div>
+
+<div id="selected">
+    <div id="sel-id">—</div>
+    <div id="sel-name"></div>
+    <div id="sel-alg"></div>
+    <div id="sel-formula"></div>
+    <div id="sel-mode"></div>
+</div>
+
+<div id="nodal-count">Nodal points: <span id="nodes">0</span></div>
+
+<div id="controls">
+    <button id="btn-reset">RESET FIELD</button>
+    <button id="btn-vortex">IGNITE VORTEX</button>
+    <button id="btn-cascade">CASCADE 29</button>
+    <button id="btn-mode-1">MODE (1,1)</button>
+    <button id="btn-mode-2">MODE (2,3)</button>
+    <button id="btn-mode-3">MODE (3,2)</button>
+    <button id="btn-nodes">SHOW NODES</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// R4 TOROIDAL HYPERCUBE v3
+// True 4D Tesseract with cymatic field coupling
+// Nodal visualization, field-algebra integration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H, cx, cy;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXACT RATIONAL ARITHMETIC
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const gcd = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a,b] = [b,a%b]; return a || 1n; };
+const Rat = {
+    mk: (n, d = 1n) => {
+        if (typeof n !== 'bigint') n = BigInt(Math.floor(Number(n)));
+        if (typeof d !== 'bigint') d = BigInt(Math.floor(Number(d)));
+        if (d === 0n) return {n:0n,d:1n};
+        const g = gcd(n,d), s = d < 0n ? -1n : 1n;
+        return {n: s*n/g, d: s*d/g};
+    },
+    add: (a,b) => Rat.mk(a.n*b.d + b.n*a.d, a.d*b.d),
+    sub: (a,b) => Rat.mk(a.n*b.d - b.n*a.d, a.d*b.d),
+    mul: (a,b) => Rat.mk(a.n*b.n, a.d*b.d),
+    div: (a,b) => b.n === 0n ? Rat.mk(0n) : Rat.mk(a.n*b.d, a.d*b.n),
+    pow: (a,e) => {
+        if (e === 0n) return Rat.mk(1n);
+        let r = Rat.mk(1n), base = {n:a.n,d:a.d}, p = e < 0n ? -e : e;
+        while (p > 0n) { if (p%2n===1n) r = Rat.mul(r,base); base = Rat.mul(base,base); p /= 2n; }
+        return e < 0n ? Rat.mk(r.d,r.n) : r;
+    },
+    str: r => r.d === 1n ? String(r.n) : `${r.n}/${r.d}`,
+    fl: r => Number(r.n) / Number(r.d)
+};
+
+const ratClone = r => Rat.mk(r.n, r.d);
+const ratSum = list => list.reduce((acc, r) => Rat.add(acc, r), Rat.mk(0n));
+const ratAvg = list => Rat.div(ratSum(list), Rat.mk(BigInt(list.length)));
+const ratGt = (a, b) => a.n * b.d > b.n * a.d;
+const ratInv = r => r.n === 0n ? Rat.mk(0n) : Rat.mk(r.d, r.n);
+
+// Taylor trig
+const sin = x => { x = x - Math.floor(x/(2*Math.PI))*2*Math.PI; let s=0,t=x,x2=x*x; for(let i=0;i<12;i++){s+=t;t*=-x2/((2*i+2)*(2*i+3));} return s; };
+const cos = x => { x = x - Math.floor(x/(2*Math.PI))*2*Math.PI; let s=0,t=1,x2=x*x; for(let i=0;i<12;i++){s+=t;t*=-x2/((2*i+1)*(2*i+2));} return s; };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRUE 4D TESSERACT
+// 16 vertices, 32 edges, 24 square faces, 8 cubic cells
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TESSERACT = {
+    vertices: [], // 16 points in 4D
+    edges: [],    // 32 edges
+    faces: [],    // 24 square faces
+    cells: [],    // 8 cubic cells
+    
+    init() {
+        // 16 vertices: all combinations of ±1 in 4D
+        this.vertices = [];
+        for (let i = 0; i < 16; i++) {
+            this.vertices.push({
+                x: (i & 1) ? 1 : -1,
+                y: (i & 2) ? 1 : -1,
+                z: (i & 4) ? 1 : -1,
+                w: (i & 8) ? 1 : -1
+            });
+        }
+        
+        // 32 edges: connect vertices differing in exactly one coordinate
+        this.edges = [];
+        for (let i = 0; i < 16; i++) {
+            for (let bit = 0; bit < 4; bit++) {
+                const j = i ^ (1 << bit);
+                if (i < j) this.edges.push([i, j, bit]); // bit tells which axis
+            }
+        }
+        
+        // 24 faces: squares in each 2D plane
+        this.faces = [];
+        const axes = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+        for (const [a, b] of axes) {
+            // For each combination of fixed coordinates
+            for (let fixed = 0; fixed < 4; fixed++) {
+                const fixedBits = [];
+                let bit = 0;
+                for (let i = 0; i < 4; i++) {
+                    if (i !== a && i !== b) {
+                        fixedBits.push({ idx: i, val: (fixed >> bit) & 1 ? 1 : -1 });
+                        bit++;
+                    }
+                }
+                
+                const faceVerts = [];
+                for (let i = 0; i < 16; i++) {
+                    const v = this.vertices[i];
+                    const coords = [v.x, v.y, v.z, v.w];
+                    let match = true;
+                    for (const fb of fixedBits) {
+                        if (coords[fb.idx] !== fb.val) match = false;
+                    }
+                    if (match) faceVerts.push(i);
+                }
+                
+                if (faceVerts.length === 4) {
+                    // Order vertices for proper face winding
+                    this.faces.push({ verts: faceVerts, axes: [a, b] });
+                }
+            }
+        }
+        
+        // 8 cells: cubes where one coordinate is fixed
+        this.cells = [];
+        for (let axis = 0; axis < 4; axis++) {
+            for (let val = -1; val <= 1; val += 2) {
+                const cellVerts = [];
+                for (let i = 0; i < 16; i++) {
+                    const v = this.vertices[i];
+                    const coords = [v.x, v.y, v.z, v.w];
+                    if (coords[axis] === val) cellVerts.push(i);
+                }
+                this.cells.push({ verts: cellVerts, axis, val });
+            }
+        }
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4D ROTATION MATRICES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function rotate4D(v, angles) {
+    let {x, y, z, w} = v;
+    
+    // XY plane rotation
+    let c = cos(angles.xy), s = sin(angles.xy);
+    [x, y] = [x*c - y*s, x*s + y*c];
+    
+    // XZ plane rotation
+    c = cos(angles.xz); s = sin(angles.xz);
+    [x, z] = [x*c - z*s, x*s + z*c];
+    
+    // XW plane rotation
+    c = cos(angles.xw); s = sin(angles.xw);
+    [x, w] = [x*c - w*s, x*s + w*c];
+    
+    // YZ plane rotation
+    c = cos(angles.yz); s = sin(angles.yz);
+    [y, z] = [y*c - z*s, y*s + z*c];
+    
+    // YW plane rotation
+    c = cos(angles.yw); s = sin(angles.yw);
+    [y, w] = [y*c - w*s, y*s + w*c];
+    
+    // ZW plane rotation
+    c = cos(angles.zw); s = sin(angles.zw);
+    [z, w] = [z*c - w*s, z*s + w*c];
+    
+    return {x, y, z, w};
+}
+
+// Stereographic projection 4D → 3D
+function project4Dto3D(v4, wDist) {
+    const denom = wDist - v4.w;
+    if (Math.abs(denom) < 0.001) return {x: v4.x * 1000, y: v4.y * 1000, z: v4.z * 1000};
+    const scale = wDist / denom;
+    return { x: v4.x * scale, y: v4.y * scale, z: v4.z * scale };
+}
+
+// 3D rotations
+const rotY3D = (p,a) => { const c=cos(a),s=sin(a); return {x:p.x*c+p.z*s,y:p.y,z:-p.x*s+p.z*c}; };
+const rotX3D = (p,a) => { const c=cos(a),s=sin(a); return {x:p.x,y:p.y*c-p.z*s,z:p.y*s+p.z*c}; };
+
+// Perspective projection 3D → 2D
+const project3Dto2D = (p,d) => { const s=500/(d+p.z); return {x:p.x*s,y:p.y*s,z:p.z}; };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CYMATIC FIELD — Wave equation on toroidal manifold
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CYMATIC = {
+    resU: 96,
+    resV: 48,
+    field: null,
+    velocity: null,
+    modes: [],
+    sources: [],
+    vortex: { strength: 0, phase: 0 },
+    showNodes: false,
+    nodalPoints: [],
+    
+    init() {
+        const size = this.resU * this.resV;
+        this.field = new Float64Array(size);
+        this.velocity = new Float64Array(size);
+        this.modes = [];
+        this.sources = [];
+        this.vortex = { strength: 0, phase: 0 };
+    },
+    
+    idx(u, v) {
+        u = ((u % this.resU) + this.resU) % this.resU;
+        v = ((v % this.resV) + this.resV) % this.resV;
+        return u * this.resV + v;
+    },
+    
+    addMode(m, n, amp) { this.modes.push({m, n, amp, phase: Math.random() * Math.PI * 2}); },
+    
+    addSource(theta, phi, amp, freq, decay) {
+        const u = (theta / (2*Math.PI)) * this.resU;
+        const v = (phi / (2*Math.PI)) * this.resV;
+        this.sources.push({u, v, amp, freq: freq || 0.1, decay: decay || 0.99, phase: 0, age: 0});
+    },
+    
+    igniteVortex(strength) {
+        this.vortex.strength = strength;
+        this.vortex.phase = 0;
+    },
+    
+    update(dt) {
+        const c2 = 0.35;
+        const damping = 0.996;
+        
+        const newF = new Float64Array(this.field.length);
+        const newV = new Float64Array(this.velocity.length);
+        
+        // Wave equation with Laplacian
+        for (let u = 0; u < this.resU; u++) {
+            for (let v = 0; v < this.resV; v++) {
+                const i = this.idx(u, v);
+                const f0 = this.field[i];
+                
+                // 5-point Laplacian stencil
+                const lap = this.field[this.idx(u+1,v)] + this.field[this.idx(u-1,v)] +
+                           this.field[this.idx(u,v+1)] + this.field[this.idx(u,v-1)] - 4*f0;
+                
+                // Vortex coupling - spiral injection
+                let vortexF = 0;
+                if (this.vortex.strength > 0.01) {
+                    const theta = (u / this.resU) * 2 * Math.PI;
+                    const phi = (v / this.resV) * 2 * Math.PI;
+                    
+                    // Spiral wave pattern with multiple harmonics
+                    vortexF = this.vortex.strength * (
+                        0.4 * sin(2*theta - 3*phi + this.vortex.phase) +
+                        0.3 * sin(3*theta - 2*phi + this.vortex.phase * 1.5) +
+                        0.2 * sin(theta + phi + this.vortex.phase * 0.7)
+                    ) * 0.1;
+                    
+                    // Rotational advection
+                    const rotU = (u + Math.floor(this.vortex.strength * 0.3)) % this.resU;
+                    vortexF += (this.field[this.idx(rotU, v)] - f0) * this.vortex.strength * 0.05;
+                }
+                
+                newV[i] = (this.velocity[i] + c2 * lap * dt + vortexF) * damping;
+                newF[i] = f0 + newV[i] * dt;
+            }
+        }
+        
+        // Point sources
+        for (let s = this.sources.length - 1; s >= 0; s--) {
+            const src = this.sources[s];
+            const ui = Math.floor(src.u), vi = Math.floor(src.v);
+            
+            for (let du = -4; du <= 4; du++) {
+                for (let dv = -4; dv <= 4; dv++) {
+                    const r2 = du*du + dv*dv;
+                    if (r2 < 20) {
+                        const i = this.idx(ui + du, vi + dv);
+                        newF[i] += src.amp * sin(src.phase) * Math.exp(-r2 * 0.2);
+                    }
+                }
+            }
+            
+            src.phase += src.freq;
+            src.amp *= src.decay;
+            src.age++;
+            if (src.amp < 0.001 || src.age > 500) this.sources.splice(s, 1);
+        }
+        
+        // Standing wave modes
+        for (const mode of this.modes) {
+            for (let u = 0; u < this.resU; u++) {
+                for (let v = 0; v < this.resV; v++) {
+                    const theta = (u / this.resU) * 2 * Math.PI;
+                    const phi = (v / this.resV) * 2 * Math.PI;
+                    const i = this.idx(u, v);
+                    
+                    // Standing wave pattern
+                    const standing = cos(mode.m * theta + mode.phase) * cos(mode.n * phi + mode.phase * 0.6);
+                    newF[i] += mode.amp * standing * 0.015;
+                }
+            }
+            mode.phase += 0.025;
+            mode.amp *= 0.997;
+        }
+        
+        this.modes = this.modes.filter(m => m.amp > 0.003);
+        
+        // Update vortex
+        if (this.vortex.strength > 0.01) {
+            this.vortex.phase += 0.06 * this.vortex.strength;
+            this.vortex.strength *= 0.997;
+        }
+        
+        this.field = newF;
+        this.velocity = newV;
+        
+        // Find nodal points
+        if (this.showNodes) this.findNodalPoints();
+    },
+    
+    sample(theta, phi) {
+        const u = (theta / (2*Math.PI)) * this.resU;
+        const v = (phi / (2*Math.PI)) * this.resV;
+        const u0 = Math.floor(u), v0 = Math.floor(v);
+        const fu = u - u0, fv = v - v0;
+        
+        return this.field[this.idx(u0,v0)] * (1-fu)*(1-fv) +
+               this.field[this.idx(u0+1,v0)] * fu*(1-fv) +
+               this.field[this.idx(u0,v0+1)] * (1-fu)*fv +
+               this.field[this.idx(u0+1,v0+1)] * fu*fv;
+    },
+    
+    gradient(theta, phi) {
+        const eps = 0.05;
+        return {
+            dTheta: (this.sample(theta+eps, phi) - this.sample(theta-eps, phi)) / (2*eps),
+            dPhi: (this.sample(theta, phi+eps) - this.sample(theta, phi-eps)) / (2*eps)
+        };
+    },
+    
+    findNodalPoints() {
+        this.nodalPoints = [];
+        const threshold = 0.015;
+        
+        for (let u = 0; u < this.resU; u += 2) {
+            for (let v = 0; v < this.resV; v += 2) {
+                const f = this.field[this.idx(u, v)];
+                if (Math.abs(f) < threshold) {
+                    // Check for sign change in neighbors
+                    const n = [
+                        this.field[this.idx(u+1, v)],
+                        this.field[this.idx(u-1, v)],
+                        this.field[this.idx(u, v+1)],
+                        this.field[this.idx(u, v-1)]
+                    ];
+                    const hasPos = n.some(x => x > threshold);
+                    const hasNeg = n.some(x => x < -threshold);
+                    
+                    if (hasPos && hasNeg) {
+                        this.nodalPoints.push({
+                            theta: (u / this.resU) * 2 * Math.PI,
+                            phi: (v / this.resV) * 2 * Math.PI
+                        });
+                    }
+                }
+            }
+        }
+    },
+    
+    energy() {
+        let e = 0;
+        for (let i = 0; i < this.field.length; i++) {
+            e += this.field[i] * this.field[i] + this.velocity[i] * this.velocity[i];
+        }
+        return e;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// R4 FIELD — λ parameters coupled to cymatic field
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const R4 = {
+    lambda: [Rat.mk(1n), Rat.mk(2n), Rat.mk(3n), Rat.mk(4n)],
+    r: Rat.mk(1n),
+    value: Rat.mk(0n),
+    
+    // Coupling: cymatic field energy modulates R4
+    fieldCoupling: 0,
+    
+    compute() {
+        const r4 = Rat.pow(this.r, 4n);
+        let prod = Rat.mk(1n);
+        
+        for (let k = 0; k < 4; k++) {
+            const lk4 = Rat.pow(this.lambda[k], 4n);
+            const denom = Rat.add(r4, lk4);
+            if (denom.n !== 0n) {
+                prod = Rat.mul(prod, Rat.div(lk4, denom));
+            }
+        }
+        
+        this.value = prod;
+        
+        // Update field coupling based on cymatic energy
+        this.fieldCoupling = Math.min(1, CYMATIC.energy() * 0.001);
+        
+        return prod;
+    },
+    
+    reset() {
+        this.lambda = [Rat.mk(1n), Rat.mk(2n), Rat.mk(3n), Rat.mk(4n)];
+        this.r = Rat.mk(1n);
+        this.compute();
+    }
+};
+
+const cloneR4State = r4 => ({
+    lambda: r4.lambda.map(ratClone),
+    r: ratClone(r4.r)
+});
+
+const applyR4State = (r4, state) => {
+    r4.lambda = state.lambda.map(ratClone);
+    r4.r = ratClone(state.r);
+};
+
+const rotateLambda = (lambda, shift) => {
+    const s = ((shift % 4) + 4) % 4;
+    return lambda.slice(s).concat(lambda.slice(0, s));
+};
+
+const averageStates = states => {
+    const lambdaAvg = [];
+    for (let i = 0; i < 4; i++) {
+        lambdaAvg.push(ratAvg(states.map(s => s.lambda[i])));
+    }
+    return { lambda: lambdaAvg, r: ratAvg(states.map(s => s.r)) };
+};
+
+const mergeMeta = metas => ({
+    value: ratAvg(metas.map(m => m.value))
+});
+
+const applyModeCore = (coreFn, baseState, mode) => {
+    const apply = state => coreFn({ lambda: state.lambda.map(ratClone), r: ratClone(state.r) });
+
+    if (mode === 0) {
+        return apply(baseState);
+    }
+
+    if (mode === 1) {
+        let working = { lambda: baseState.lambda.map(ratClone), r: ratClone(baseState.r) };
+        let lastMeta = { value: Rat.mk(0n) };
+        for (let step = 0; step < 4; step++) {
+            const result = apply(working);
+            working = result.state;
+            lastMeta = result.meta;
+            working.lambda = rotateLambda(working.lambda, 1);
+            working.r = Rat.add(working.r, Rat.mk(BigInt(step + 1)));
+        }
+        return { state: working, meta: lastMeta };
+    }
+
+    if (mode === 2) {
+        const states = [];
+        const metas = [];
+        for (let rot = 0; rot < 4; rot++) {
+            const rotated = { lambda: rotateLambda(baseState.lambda, rot), r: ratClone(baseState.r) };
+            const result = apply(rotated);
+            states.push({ lambda: rotateLambda(result.state.lambda, 4 - rot), r: result.state.r });
+            metas.push(result.meta);
+        }
+        return { state: averageStates(states), meta: mergeMeta(metas) };
+    }
+
+    if (mode === 3) {
+        const series = applyModeCore(coreFn, baseState, 1);
+        const parallel = applyModeCore(coreFn, baseState, 2);
+        return { state: averageStates([series.state, parallel.state]), meta: mergeMeta([series.meta, parallel.meta]) };
+    }
+
+    if (mode === 4) {
+        const inverted = {
+            lambda: baseState.lambda.map(ratInv),
+            r: ratInv(baseState.r)
+        };
+        const applied = apply(inverted);
+        return {
+            state: { lambda: applied.state.lambda.map(ratInv), r: ratInv(applied.state.r) },
+            meta: applied.meta
+        };
+    }
+
+    const isolated = applyModeCore(coreFn, baseState, 0);
+    const series = applyModeCore(coreFn, baseState, 1);
+    const parallel = applyModeCore(coreFn, baseState, 2);
+    const inverse = applyModeCore(coreFn, baseState, 4);
+    return {
+        state: averageStates([isolated.state, series.state, parallel.state, inverse.state]),
+        meta: mergeMeta([isolated.meta, series.meta, parallel.meta, inverse.meta])
+    };
+};
+
+const MODE_FORMULAS = {
+    ISOLATED: `Independent mode (ISOLATED):
+λ' = F_s(λ, r), r' = G_s(λ, r), with F_s, G_s defined by the sutra base formula below.
+The update is executed once, without inter-lambda mixing or staged feedback.`,
+    SERIES: `Series mode (SERIES):
+Stage 1: (λ^{(1)}, r^{(1)}) = (F_s(λ^{(0)}, r^{(0)}), G_s(λ^{(0)}, r^{(0)}))
+Stage 2: λ^{(2)} = rot(λ^{(1)}), r^{(2)} = r^{(1)} + 2, then apply F_s, G_s again
+Stage 3: λ^{(3)} = rot(λ^{(2)}), r^{(3)} = r^{(2)} + 3, then apply F_s, G_s again
+Stage 4: λ^{(4)} = rot(λ^{(3)}), r^{(4)} = r^{(3)} + 4, then apply F_s, G_s again
+Final: λ' = λ^{(4)}, r' = r^{(4)} (rot is a left rotation of λ indices).`,
+    PARALLEL: `Parallel mode (PARALLEL):
+For rotations ρ ∈ {0,1,2,3}, compute (λ^{[ρ]}, r^{[ρ]}) by applying F_s, G_s to rot_ρ(λ, r).
+Rotate each output back: λ^{[ρ]←} = rot_{-ρ}(λ^{[ρ]}).
+Average across lanes: λ' = (1/4) Σ_{ρ=0}^3 λ^{[ρ]←}, r' = (1/4) Σ_{ρ=0}^3 r^{[ρ]}.`,
+    CONCURRENT: `Concurrent mode (CONCURRENT):
+Compute both SERIES and PARALLEL results, then merge them concurrently:
+λ' = (λ^{series} + λ^{parallel}) / 2, r' = (r^{series} + r^{parallel}) / 2.`,
+    INVERSE: `Inverse mode (INVERSE):
+Invert the state: λ^{inv}_k = 1/λ_k, r^{inv} = 1/r.
+Apply F_s, G_s to the inverted state, then invert the result:
+λ' = 1/λ^{inv, out}, r' = 1/r^{inv, out}.`,
+    COMPOSITE: `Composite mode (COMPOSITE):
+Compute ISOLATED, SERIES, PARALLEL, and INVERSE states.
+Average all four: λ' = (λ^{iso} + λ^{ser} + λ^{par} + λ^{inv}) / 4,
+r' = (r^{iso} + r^{ser} + r^{par} + r^{inv}) / 4.`
+};
+
+const modeFormula = (sutra, mode) => {
+    const modeName = MODES[mode];
+    return `${MODE_FORMULAS[modeName]}\n\nBase formula for S${sutra.id} (${sutra.name}):\n${sutra.formula}`;
+};
+
+const coreResult = (state, value) => ({ state, meta: { value } });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUTRAS — Field operators that transform both R4 and cymatic field
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MODES = ['ISOLATED','SERIES','PARALLEL','CONCURRENT','INVERSE','COMPOSITE'];
+const MODE_COLORS = ['#4a90d9','#2ecc71','#e67e22','#9b59b6','#e74c3c','#f39c12'];
+
+const SUTRAS = [
+    { id:1, name:'Ekādhikena Pūrveṇa', alg:'n(n+1)', color:'#4a90d9',
+      formula: 'λ0\' = λ0(λ0 + 1); λ1\' = λ1; λ2\' = λ2; λ3\' = λ3; r\' = r',
+      core(state) {
+        state.lambda[0] = Rat.mul(state.lambda[0], Rat.add(state.lambda[0], Rat.mk(1n)));
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy, theta, phi) {
+        cy.addMode(1, 0, 0.5);
+        cy.addSource(theta, phi, 0.4, 0.08, 0.99);
+      }
+    },
+    { id:2, name:'Nikhilam', alg:'B-n', color:'#e74c3c',
+      formula: 'λk\' = max(1, 10 - λk) for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        const B = Rat.mk(10n);
+        for (let k = 0; k < 4; k++) {
+            state.lambda[k] = Rat.sub(B, state.lambda[k]);
+            if (state.lambda[k].n <= 0n) state.lambda[k] = Rat.mk(1n);
+        }
+        return coreResult(state, B);
+      },
+      effect(cy, theta, phi) {
+        cy.addMode(2, 2, 0.6);
+        cy.addSource(theta + Math.PI, phi, 0.3, 0.1, 0.98);
+      }
+    },
+    { id:3, name:'Ūrdhva-Tiryagbhyām', alg:'Σaᵢbₖ₋ᵢ', color:'#2ecc71',
+      formula: 'λ0\' = λ0·λ1; λ1\' = λ1; λ2\' = λ2; λ3\' = λ3; r\' = r',
+      core(state) {
+        const cross = Rat.mul(state.lambda[0], state.lambda[1]);
+        state.lambda[0] = cross;
+        return coreResult(state, cross);
+      },
+      effect(cy) {
+        cy.addMode(2, 1, 0.45);
+        cy.addMode(1, 2, 0.45);
+      }
+    },
+    { id:4, name:'Parāvartya Yojayet', alg:'transpose', color:'#9b59b6',
+      formula: 'λ0\' = λ3; λ1\' = λ2; λ2\' = λ1; λ3\' = λ0; r\' = r',
+      core(state) {
+        [state.lambda[0], state.lambda[3]] = [state.lambda[3], state.lambda[0]];
+        [state.lambda[1], state.lambda[2]] = [state.lambda[2], state.lambda[1]];
+        return coreResult(state, Rat.mk(1n));
+      },
+      effect(cy) {
+        for (let i = 0; i < cy.field.length/2; i++) {
+            const j = cy.field.length - 1 - i;
+            [cy.field[i], cy.field[j]] = [cy.field[j], cy.field[i]];
+        }
+      }
+    },
+    { id:5, name:'Śūnyam Sāmyasamuccaye', alg:'=0', color:'#f39c12',
+      formula: 'λk\' = (λ0 + λ1 + λ2 + λ3)/4 for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        let sum = Rat.mk(0n);
+        for (const l of state.lambda) sum = Rat.add(sum, l);
+        const avg = Rat.div(sum, Rat.mk(4n));
+        for (let k = 0; k < 4; k++) state.lambda[k] = avg;
+        return coreResult(state, Rat.mk(0n));
+      },
+      effect(cy) {
+        cy.addMode(0, 3, 0.55);
+      }
+    },
+    { id:6, name:'Ānurūpyeṇa', alg:'kx', color:'#1abc9c',
+      formula: 'λk\' = 2·λk for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.mul(state.lambda[k], Rat.mk(2n));
+        return coreResult(state, Rat.mk(2n));
+      },
+      effect(cy) {
+        for (let i = 0; i < cy.field.length; i++) {
+            cy.field[i] *= 1.4;
+            cy.velocity[i] *= 1.4;
+        }
+      }
+    },
+    { id:7, name:'Saṅkalana-Vyavakalanābhyām', alg:'±', color:'#3498db',
+      formula: 'λk\' = λk + λ(k+1 mod 4) for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        const old = state.lambda.map(ratClone);
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.add(old[k], old[(k+1)%4]);
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy, theta, phi) {
+        cy.addMode(1, 1, 0.5);
+        cy.addSource(theta, phi, 0.45, 0.12, 0.99);
+      }
+    },
+    { id:8, name:'Pūraṇāpūraṇābhyām', alg:'x²+c', color:'#e67e22',
+      formula: 'λk\' = λk² + 1 for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.add(Rat.pow(state.lambda[k], 2n), Rat.mk(1n));
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(4, 2, 0.4);
+      }
+    },
+    { id:9, name:'Calana-Kalanābhyām', alg:'d/dx', color:'#8e44ad',
+      formula: 'λk\' = (k+1)·λk for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.mul(Rat.mk(BigInt(k+1)), state.lambda[k]);
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.vortex.strength += 0.5;
+      }
+    },
+    { id:10, name:'Yāvadūnam', alg:'deficit²', color:'#16a085',
+      formula: 'r\' = r + 1, if r > 10 then r\' = 1; λ\' = λ',
+      core(state) {
+        state.r = Rat.add(state.r, Rat.mk(1n));
+        if (state.r.n > 10n) state.r = Rat.mk(1n);
+        return coreResult(state, state.r);
+      },
+      effect(cy, theta, phi) {
+        cy.addMode(3, 0, 0.45);
+        cy.addSource(theta, phi, 0.5, 0.06, 0.995);
+      }
+    },
+    { id:11, name:'Vyaṣṭisamaṣṭiḥ', alg:'part↔whole', color:'#c0392b',
+      formula: 'g = gcd(λ0, λ1, λ2, λ3); if g > 1 then λk\' = λk/g; r\' = r',
+      core(state) {
+        let g = state.lambda[0].n;
+        for (let k = 1; k < 4; k++) g = gcd(g, state.lambda[k].n);
+        if (g > 1n) {
+            for (let k = 0; k < 4; k++) state.lambda[k] = Rat.mk(state.lambda[k].n / g, state.lambda[k].d);
+        }
+        return coreResult(state, Rat.mk(g));
+      },
+      effect(cy) {
+        cy.addMode(3, 3, 0.45);
+      }
+    },
+    { id:12, name:'Śeṣāṇyaṅkena', alg:'mod', color:'#d35400',
+      formula: 'λk\' = (λk mod (k+2)), if 0 then k+2; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) {
+            const mod = BigInt(k + 2);
+            state.lambda[k] = Rat.mk((state.lambda[k].n % mod) || mod);
+        }
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(2, 3, 0.4);
+      }
+    },
+    { id:13, name:'Sopāntyadvayamantyam', alg:'u+2p', color:'#27ae60',
+      formula: 'λ3\' = λ3 + 2·λ2; λ0\' = λ0; λ1\' = λ1; λ2\' = λ2; r\' = r',
+      core(state) {
+        state.lambda[3] = Rat.add(state.lambda[3], Rat.mul(Rat.mk(2n), state.lambda[2]));
+        return coreResult(state, state.lambda[3]);
+      },
+      effect(cy) {
+        cy.addMode(0, 4, 0.35);
+      }
+    },
+    { id:14, name:'Ekanyūnena Pūrveṇa', alg:'n-1', color:'#7f8c8d',
+      formula: 'λk\' = max(1, λk - 1) for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) {
+            state.lambda[k] = Rat.sub(state.lambda[k], Rat.mk(1n));
+            if (state.lambda[k].n <= 0n) state.lambda[k] = Rat.mk(1n);
+        }
+        return coreResult(state, Rat.mk(-1n));
+      },
+      effect(cy) {
+        for (let i = 0; i < cy.field.length; i++) cy.field[i] *= 0.8;
+      }
+    },
+    { id:15, name:'Guṇitasamuccayaḥ', alg:'Σ×Π', color:'#2980b9',
+      formula: 's = λ0 + λ1 + λ2 + λ3; r\' = r·s (if r\' > 100 then r\' = 1); λ\' = λ',
+      core(state) {
+        let sum = Rat.mk(0n);
+        for (const l of state.lambda) sum = Rat.add(sum, l);
+        state.r = Rat.mul(state.r, sum);
+        if (state.r.n > 100n) state.r = Rat.mk(1n);
+        return coreResult(state, sum);
+      },
+      effect(cy) {
+        cy.addMode(5, 1, 0.35);
+      }
+    },
+    { id:16, name:'Guṇakasamuccayaḥ', alg:'coeff Σ', color:'#8e44ad',
+      formula: 'Find max λm; set λm\' = 1, others unchanged; r\' = r',
+      core(state) {
+        let mi = 0;
+        for (let k = 1; k < 4; k++) if (ratGt(state.lambda[k], state.lambda[mi])) mi = k;
+        const extracted = state.lambda[mi];
+        state.lambda[mi] = Rat.mk(1n);
+        return coreResult(state, extracted);
+      },
+      effect(cy, theta, phi, meta) {
+        cy.addSource(theta, phi, Rat.fl(meta.value) * 0.1, 0.09, 0.99);
+      }
+    },
+    // Sub-sutras 17-29
+    { id:17, name:'Śūnyamanyat', alg:'zero other', color:'#1abc9c',
+      formula: 'λk\' = (λ0 + λ1 + λ2 + λ3)/4 for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        const avg = Rat.div(state.lambda.reduce((s,l) => Rat.add(s,l), Rat.mk(0n)), Rat.mk(4n));
+        for (let k = 0; k < 4; k++) state.lambda[k] = avg;
+        return coreResult(state, avg);
+      },
+      effect(cy) {
+        cy.addMode(1, 1, 0.55);
+      }
+    },
+    { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', alg:'remainder', color:'#e74c3c',
+      formula: 'λk\' = λk mod λ(k-1) (if 0 then 1) for k ∈ {1,2,3}; λ0\' = λ0; r\' = r',
+      core(state) {
+        const old = state.lambda.map(ratClone);
+        for (let k = 1; k < 4; k++) if (old[k-1].n !== 0n) state.lambda[k] = Rat.mk((old[k].n % old[k-1].n) || 1n);
+        return coreResult(state, state.lambda[3]);
+      },
+      effect(cy, theta, phi) {
+        for (let i = 0; i < 3; i++) cy.addSource(theta + i*0.5, phi, 0.25, 0.1 + i*0.02, 0.98);
+      }
+    },
+    { id:19, name:'Ādyamādyenāntyamantyena', alg:'first×last', color:'#3498db',
+      formula: 'λ0\' = λ0·λ3; λ3\' = 1; λ1\' = λ1; λ2\' = λ2; r\' = r',
+      core(state) {
+        const fl = Rat.mul(state.lambda[0], state.lambda[3]);
+        state.lambda[0] = fl;
+        state.lambda[3] = Rat.mk(1n);
+        return coreResult(state, fl);
+      },
+      effect(cy) {
+        cy.addMode(1, 3, 0.45);
+      }
+    },
+    { id:20, name:'Kevala Saptakaṃ', alg:'×7', color:'#9b59b6',
+      formula: 'λk\' = 7·λk for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.mul(state.lambda[k], Rat.mk(7n));
+        return coreResult(state, Rat.mk(7n));
+      },
+      effect(cy) {
+        cy.addMode(7, 0, 0.35);
+      }
+    },
+    { id:21, name:'Veṣṭanam', alg:'osculate', color:'#f39c12',
+      formula: 'λ0\' = λ1; λ1\' = λ2; λ2\' = λ3; λ3\' = λ0; r\' = r',
+      core(state) {
+        const first = state.lambda[0];
+        for (let k = 0; k < 3; k++) state.lambda[k] = state.lambda[k+1];
+        state.lambda[3] = first;
+        return coreResult(state, first);
+      },
+      effect(cy) {
+        cy.vortex.strength += 0.7;
+      }
+    },
+    { id:22, name:'Śeṣāṇyaṅkena Carameṇa', alg:'last digit', color:'#2ecc71',
+      formula: 'λk\' = (λk mod 10) (if 0 then 1) for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) state.lambda[k] = Rat.mk((state.lambda[k].n % 10n) || 1n);
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(0, 1, 0.45);
+      }
+    },
+    { id:23, name:'Vilokanam', alg:'observe', color:'#e67e22',
+      formula: 'Find max λm; set λm\' = 2·λm; others unchanged; r\' = r',
+      core(state) {
+        let mi = 0;
+        for (let k = 1; k < 4; k++) if (ratGt(state.lambda[k], state.lambda[mi])) mi = k;
+        const mv = state.lambda[mi];
+        state.lambda[mi] = Rat.mul(state.lambda[mi], Rat.mk(2n));
+        return coreResult(state, mv);
+      },
+      effect(cy, theta, phi, meta) {
+        cy.addSource(theta, phi, Rat.fl(meta.value) * 0.12, 0.05, 0.995);
+      }
+    },
+    { id:24, name:'Guṇita-Samuccaya²', alg:'(Σ)²', color:'#c0392b',
+      formula: 's = λ0 + λ1 + λ2 + λ3; λ0\' = s²; λ1\' = 1; λ2\' = 1; λ3\' = 1; r\' = r',
+      core(state) {
+        let sum = Rat.mk(0n);
+        for (const l of state.lambda) sum = Rat.add(sum, l);
+        state.lambda[0] = Rat.mul(sum, sum);
+        for (let k = 1; k < 4; k++) state.lambda[k] = Rat.mk(1n);
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(2, 2, 0.55);
+      }
+    },
+    { id:25, name:'Dvandvayoga', alg:'duplex', color:'#16a085',
+      formula: 'λ0\' = λ0·λ1; λ2\' = λ2·λ3; λ1\' = 1; λ3\' = 1; r\' = r',
+      core(state) {
+        state.lambda[0] = Rat.mul(state.lambda[0], state.lambda[1]);
+        state.lambda[2] = Rat.mul(state.lambda[2], state.lambda[3]);
+        state.lambda[1] = Rat.mk(1n);
+        state.lambda[3] = Rat.mk(1n);
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(2, 0, 0.45);
+        cy.addMode(0, 2, 0.45);
+      }
+    },
+    { id:26, name:'Aṅkāyojanā', alg:'digit join', color:'#8e44ad',
+      formula: 'Sort λ ascending by value; r\' = r',
+      core(state) {
+        state.lambda.sort((a,b) => ratGt(a,b) ? 1 : (ratGt(b,a) ? -1 : 0));
+        return coreResult(state, Rat.mk(1n));
+      },
+      effect(cy) {
+        for (let i = 0; i < cy.field.length; i++) {
+            const u = Math.floor(i / cy.resV);
+            cy.field[i] *= cos(u * 0.08);
+        }
+      }
+    },
+    { id:27, name:'Pratyavalokanam', alg:'reverse', color:'#d35400',
+      formula: 'λk\' = 1/λk for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) if (state.lambda[k].n !== 0n) state.lambda[k] = Rat.mk(state.lambda[k].d, state.lambda[k].n);
+        return coreResult(state, Rat.mk(-1n));
+      },
+      effect(cy) {
+        for (let i = 0; i < cy.field.length; i++) cy.field[i] = -cy.field[i];
+      }
+    },
+    { id:28, name:'Samuccaya', alg:'aggregate', color:'#27ae60',
+      formula: 's = λ0 + λ1 + λ2 + λ3; λ\' = λ; r\' = r',
+      core(state) {
+        let sum = Rat.mk(0n);
+        for (const l of state.lambda) sum = Rat.add(sum, l);
+        return coreResult(state, sum);
+      },
+      effect(cy) {
+        cy.addMode(4, 4, 0.35);
+      }
+    },
+    { id:29, name:'Ekādhika Pūrva', alg:'Tₙ', color:'#2980b9',
+      formula: 'λk\' = λk(λk + 1)/2 for k ∈ {0,1,2,3}; r\' = r',
+      core(state) {
+        for (let k = 0; k < 4; k++) {
+            const l = state.lambda[k];
+            state.lambda[k] = Rat.div(Rat.mul(l, Rat.add(l, Rat.mk(1n))), Rat.mk(2n));
+        }
+        return coreResult(state, state.lambda[0]);
+      },
+      effect(cy) {
+        cy.addMode(3, 1, 0.4);
+        cy.addMode(1, 3, 0.4);
+      }
+    }
+];
+
+const applySutra = (sutra, cy, r4, mode, theta, phi) => {
+    const baseState = cloneR4State(r4);
+    const applied = applyModeCore(sutra.core, baseState, mode);
+    applyR4State(r4, applied.state);
+    if (sutra.effect) sutra.effect(cy, theta, phi, applied.meta);
+    return Rat.str(applied.meta.value);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SUTRA CUBE — 4D cell with 6 mode faces, distorted by cymatic field
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class SutraCube {
+    constructor(idx, cellData) {
+        this.idx = idx;
+        this.sutra = SUTRAS[idx];
+        this.cell = cellData;
+        this.selectedFace = 0;
+        this.active = false;
+        this.activeTime = 0;
+        this.pulsePhase = Math.random() * Math.PI * 2;
+    }
+    
+    // Get 4D center of this cube's tesseract cell
+    getCenter4D() {
+        const verts = this.cell.verts;
+        let cx = 0, cy = 0, cz = 0, cw = 0;
+        for (const vi of verts) {
+            const v = TESSERACT.vertices[vi];
+            cx += v.x; cy += v.y; cz += v.z; cw += v.w;
+        }
+        const n = verts.length;
+        return { x: cx/n, y: cy/n, z: cz/n, w: cw/n };
+    }
+    
+    // Map 4D position to torus surface angles
+    toTorusAngles() {
+        const c = this.getCenter4D();
+        return {
+            theta: Math.atan2(c.w, c.x) * 0.5 + (this.idx / 29) * 2 * Math.PI,
+            phi: Math.atan2(c.z, c.y) * 0.5 + Math.PI
+        };
+    }
+    
+    fire(mode) {
+        this.active = true;
+        this.activeTime = Date.now();
+        this.selectedFace = mode;
+        
+        const angles = this.toTorusAngles();
+        const result = applySutra(this.sutra, CYMATIC, R4, mode, angles.theta, angles.phi);
+        
+        return result;
+    }
+    
+    getDistortion() {
+        const angles = this.toTorusAngles();
+        const fieldVal = CYMATIC.sample(angles.theta, angles.phi);
+        const grad = CYMATIC.gradient(angles.theta, angles.phi);
+        
+        // Pulse from activation
+        let pulse = 0;
+        if (this.active) {
+            const elapsed = (Date.now() - this.activeTime) / 1000;
+            pulse = Math.exp(-elapsed * 2) * sin(elapsed * 15 + this.pulsePhase);
+            if (elapsed > 2) this.active = false;
+        }
+        
+        return {
+            scale: 1 + fieldVal * 0.4 + pulse * 0.3,
+            offsetX: grad.dTheta * 10,
+            offsetY: fieldVal * 15 + pulse * 20,
+            offsetZ: grad.dPhi * 10,
+            twist: fieldVal * 0.3
+        };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENGINE STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let cubes = [];
+let time = 0;
+let camRotX = 0.3, camRotY = 0;
+let rot4D = { xy: 0, xz: 0, xw: 0, yz: 0, yw: 0, zw: 0 };
+let isDrag = false, lastM = {x:0,y:0};
+let selectedCube = -1;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TORUS GEOMETRY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TORUS = {
+    majorR: 160,
+    minorR: 55,
+    
+    point(theta, phi, distortion = 0) {
+        const fieldVal = CYMATIC.sample(theta, phi);
+        const R = this.majorR + fieldVal * distortion * 25;
+        const r = this.minorR + fieldVal * distortion * 15;
+        
+        const ct = cos(theta), st = sin(theta);
+        const cp = cos(phi), sp = sin(phi);
+        
+        return {
+            x: (R + r * cp) * ct,
+            y: r * sp + fieldVal * distortion * 10,
+            z: (R + r * cp) * st,
+            fieldVal
+        };
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cx = W / 2;
+    cy = H / 2;
+}
+
+function render() {
+    ctx.fillStyle = '#030306';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Update cymatic field
+    CYMATIC.update(0.5);
+    
+    // Update 4D rotation
+    rot4D.xy += 0.003;
+    rot4D.xw += 0.002;
+    rot4D.zw += 0.0015;
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // DRAW CYMATIC FIELD VISUALIZATION
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    const gridRes = 50;
+    for (let i = 0; i < gridRes; i++) {
+        for (let j = 0; j < gridRes / 2; j++) {
+            const theta = (i / gridRes) * 2 * Math.PI;
+            const phi = (j / (gridRes / 2)) * 2 * Math.PI;
+            
+            const p = TORUS.point(theta + time * 0.004, phi, 1);
+            let p3 = rotY3D(p, camRotY);
+            p3 = rotX3D(p3, camRotX);
+            
+            if (p3.z > -350) {
+                const p2 = project3Dto2D(p3, 550);
+                const fv = p.fieldVal;
+                
+                const intensity = Math.min(255, Math.abs(fv) * 350);
+                const r = fv > 0 ? intensity : 0;
+                const g = intensity * 0.25;
+                const b = fv < 0 ? intensity : 0;
+                
+                ctx.fillStyle = `rgba(${r},${g},${b},${0.25 + Math.abs(fv) * 0.4})`;
+                const sz = Math.max(2, 7 * (450 / (550 + p3.z)));
+                ctx.fillRect(cx + p2.x - sz/2, cy + p2.y - sz/2, sz, sz);
+            }
+        }
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // DRAW NODAL POINTS
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    if (CYMATIC.showNodes && CYMATIC.nodalPoints.length > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        for (const node of CYMATIC.nodalPoints) {
+            const p = TORUS.point(node.theta + time * 0.004, node.phi, 1);
+            let p3 = rotY3D(p, camRotY);
+            p3 = rotX3D(p3, camRotX);
+            
+            if (p3.z > -300) {
+                const p2 = project3Dto2D(p3, 550);
+                ctx.beginPath();
+                ctx.arc(cx + p2.x, cy + p2.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // DRAW VORTEX FIELD LINES
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    if (CYMATIC.vortex.strength > 0.03) {
+        const numArms = 5;
+        const alpha = Math.min(0.8, CYMATIC.vortex.strength * 0.5);
+        
+        for (let arm = 0; arm < numArms; arm++) {
+            ctx.strokeStyle = `rgba(212,175,55,${alpha})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            
+            let started = false;
+            for (let t = 0; t < 25; t += 0.25) {
+                const spiralTheta = t * 0.4 + CYMATIC.vortex.phase + arm * (2 * Math.PI / numArms);
+                const spiralR = 25 + t * 10;
+                const spiralY = sin(t * 0.8 + CYMATIC.vortex.phase) * 20;
+                
+                const sx = spiralR * cos(spiralTheta);
+                const sz = spiralR * sin(spiralTheta);
+                
+                let p3 = rotY3D({x:sx, y:spiralY, z:sz}, camRotY);
+                p3 = rotX3D(p3, camRotX);
+                const p2 = project3Dto2D(p3, 550);
+                
+                if (!started) { ctx.moveTo(cx + p2.x, cy + p2.y); started = true; }
+                else ctx.lineTo(cx + p2.x, cy + p2.y);
+            }
+            ctx.stroke();
+        }
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // DRAW TESSERACT EDGES
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    const scale4D = 70 * (0.6 + R4.fieldCoupling * 0.5);
+    
+    // Transform tesseract vertices
+    const transformedVerts = TESSERACT.vertices.map(v => {
+        // Scale
+        let v4 = { x: v.x * scale4D, y: v.y * scale4D, z: v.z * scale4D, w: v.w * scale4D };
+        
+        // 4D rotation
+        v4 = rotate4D(v4, rot4D);
+        
+        // Project 4D → 3D
+        let v3 = project4Dto3D(v4, 200);
+        
+        // 3D camera rotation
+        v3 = rotY3D(v3, camRotY);
+        v3 = rotX3D(v3, camRotX);
+        
+        // Project 3D → 2D
+        return { ...project3Dto2D(v3, 550), z3: v3.z };
+    });
+    
+    // Draw edges colored by axis
+    const axisColors = ['#4a90d9', '#2ecc71', '#e67e22', '#9b59b6'];
+    
+    for (const [i, j, axis] of TESSERACT.edges) {
+        const p1 = transformedVerts[i], p2 = transformedVerts[j];
+        const avgZ = (p1.z3 + p2.z3) / 2;
+        const alpha = Math.max(0.15, 0.5 - avgZ / 500);
+        
+        ctx.strokeStyle = axisColors[axis] + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx + p1.x, cy + p1.y);
+        ctx.lineTo(cx + p2.x, cy + p2.y);
+        ctx.stroke();
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // DRAW SUTRA CUBES (at tesseract cell centers, distorted by field)
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    // Sort cubes by depth
+    const sortedCubes = cubes.map((cube, i) => {
+        const c4 = cube.getCenter4D();
+        let v4 = { x: c4.x * scale4D, y: c4.y * scale4D, z: c4.z * scale4D, w: c4.w * scale4D };
+        v4 = rotate4D(v4, rot4D);
+        
+        // Apply cymatic distortion
+        const dist = cube.getDistortion();
+        v4.x += dist.offsetX;
+        v4.y += dist.offsetY;
+        v4.z += dist.offsetZ;
+        
+        let v3 = project4Dto3D(v4, 200);
+        v3 = rotY3D(v3, camRotY);
+        v3 = rotX3D(v3, camRotX);
+        
+        return { cube, v3, dist, idx: i };
+    }).sort((a, b) => a.v3.z - b.v3.z);
+    
+    // Draw cubes
+    for (const { cube, v3, dist } of sortedCubes) {
+        const p2 = project3Dto2D(v3, 550);
+        const baseSize = 16 * dist.scale;
+        const size = baseSize * (450 / (550 + v3.z));
+        
+        if (v3.z > -400) {
+            // Draw cube faces (simplified as colored squares for each mode)
+            const faceSize = size * 0.9;
+            
+            for (let f = 0; f < 6; f++) {
+                const faceOffset = (f - 2.5) * 3;
+                const fx = p2.x + faceOffset * (f < 3 ? 1 : -1) * 0.3;
+                const fy = p2.y + faceOffset * (f % 2 ? 0.5 : -0.5);
+                
+                const isSelected = cube.idx === selectedCube && cube.selectedFace === f;
+                const alpha = isSelected ? 0.95 : (cube.active ? 0.8 : 0.5);
+                
+                ctx.fillStyle = MODE_COLORS[f] + Math.floor(alpha * 200).toString(16).padStart(2,'0');
+                ctx.fillRect(cx + fx - faceSize/12, cy + fy - faceSize/12, faceSize/6, faceSize/6);
+            }
+            
+            // Main cube body
+            ctx.fillStyle = cube.sutra.color + (cube.active ? 'cc' : '80');
+            ctx.fillRect(cx + p2.x - size/2, cy + p2.y - size/2, size, size);
+            
+            ctx.strokeStyle = cube.active ? '#d4af37' : '#333';
+            ctx.lineWidth = cube.active ? 2 : 1;
+            ctx.strokeRect(cx + p2.x - size/2, cy + p2.y - size/2, size, size);
+            
+            // Label
+            ctx.fillStyle = '#fff';
+            ctx.font = `${Math.max(7, size * 0.5)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText(String(cube.sutra.id), cx + p2.x, cy + p2.y + 3);
+        }
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // CENTRAL R4 GLOW
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    R4.compute();
+    const r4v = Math.abs(Rat.fl(R4.value));
+    const glowR = 30 + 50 * r4v + CYMATIC.vortex.strength * 25 + R4.fieldCoupling * 20;
+    
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+    grad.addColorStop(0, `rgba(255,220,150,${0.5 + r4v * 0.4})`);
+    grad.addColorStop(0.4, `rgba(255,150,50,${0.2 + r4v * 0.2})`);
+    grad.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // UPDATE UI
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    document.getElementById('r4-val').textContent = Rat.str(R4.value);
+    document.getElementById('l-val').textContent = R4.lambda.map(Rat.str).join(', ');
+    document.getElementById('w-val').textContent = CYMATIC.vortex.strength.toFixed(3);
+    document.getElementById('e-val').textContent = CYMATIC.energy().toFixed(1);
+    document.getElementById('m-val').textContent = CYMATIC.modes.length;
+    document.getElementById('nodes').textContent = CYMATIC.nodalPoints.length;
+    
+    document.getElementById('r4-main').textContent = `R⁴ = ${Rat.str(R4.value)}`;
+    document.getElementById('r4-components').textContent = `λ=[${R4.lambda.map(Rat.str).join(',')}] r=${Rat.str(R4.r)}`;
+    
+    if (selectedCube >= 0) {
+        const cube = cubes[selectedCube];
+        const s = cube.sutra;
+        document.getElementById('sel-id').textContent = `S${s.id}`;
+        document.getElementById('sel-name').textContent = s.name;
+        document.getElementById('sel-alg').textContent = s.alg;
+        document.getElementById('sel-mode').textContent = MODES[cube.selectedFace];
+        document.getElementById('sel-formula').textContent = modeFormula(s, cube.selectedFace);
+    }
+    
+    time++;
+    requestAnimationFrame(render);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HIT TESTING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function hitTest(mx, my) {
+    const scale4D = 70 * (0.6 + R4.fieldCoupling * 0.5);
+    const testX = mx - cx, testY = my - cy;
+    
+    const hits = [];
+    
+    for (let i = 0; i < cubes.length; i++) {
+        const cube = cubes[i];
+        const c4 = cube.getCenter4D();
+        let v4 = { x: c4.x * scale4D, y: c4.y * scale4D, z: c4.z * scale4D, w: c4.w * scale4D };
+        v4 = rotate4D(v4, rot4D);
+        
+        const dist = cube.getDistortion();
+        v4.x += dist.offsetX;
+        v4.y += dist.offsetY;
+        v4.z += dist.offsetZ;
+        
+        let v3 = project4Dto3D(v4, 200);
+        v3 = rotY3D(v3, camRotY);
+        v3 = rotX3D(v3, camRotX);
+        const p2 = project3Dto2D(v3, 550);
+        
+        const size = 16 * dist.scale * (450 / (550 + v3.z));
+        
+        if (testX > p2.x - size && testX < p2.x + size &&
+            testY > p2.y - size && testY < p2.y + size) {
+            
+            // Determine which face was clicked based on position within cube
+            const relX = (testX - p2.x) / size;
+            const relY = (testY - p2.y) / size;
+            let face = 0;
+            if (relX < -0.3) face = 2;
+            else if (relX > 0.3) face = 3;
+            else if (relY < -0.3) face = 4;
+            else if (relY > 0.3) face = 5;
+            else if (relX + relY < 0) face = 0;
+            else face = 1;
+            
+            hits.push({ idx: i, face, z: v3.z });
+        }
+    }
+    
+    if (hits.length > 0) {
+        hits.sort((a, b) => b.z - a.z);
+        return hits[0];
+    }
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INTERACTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+canvas.addEventListener('mousedown', e => {
+    isDrag = true;
+    lastM = { x: e.clientX, y: e.clientY };
+});
+
+canvas.addEventListener('mousemove', e => {
+    if (isDrag) {
+        camRotY += (e.clientX - lastM.x) * 0.005;
+        camRotX += (e.clientY - lastM.y) * 0.005;
+        camRotX = Math.max(-1.3, Math.min(1.3, camRotX));
+        lastM = { x: e.clientX, y: e.clientY };
+    }
+});
+
+canvas.addEventListener('mouseup', e => {
+    if (Math.abs(e.clientX - lastM.x) < 5 && Math.abs(e.clientY - lastM.y) < 5) {
+        const hit = hitTest(e.clientX, e.clientY);
+        if (hit) {
+            selectedCube = hit.idx;
+            const result = cubes[hit.idx].fire(hit.face);
+            addTrace(`<span class="tr-sutra">S${cubes[hit.idx].sutra.id}</span> [<span class="tr-mode">${MODES[hit.face]}</span>] → <span class="tr-val">${result}</span>`);
+        }
+    }
+    isDrag = false;
+});
+
+canvas.addEventListener('wheel', e => {
+    // Scroll modifies 4D rotation
+    rot4D.xw += e.deltaY * 0.001;
+    rot4D.yw += e.deltaX * 0.001;
+    e.preventDefault();
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+    R4.reset();
+    CYMATIC.init();
+    addTrace('— FIELD RESET —');
+});
+
+document.getElementById('btn-vortex').addEventListener('click', () => {
+    CYMATIC.igniteVortex(3);
+    addTrace('— VORTEX IGNITED ω=3 —');
+});
+
+document.getElementById('btn-cascade').addEventListener('click', () => {
+    addTrace('— CASCADE 29 —');
+    let delay = 0;
+    for (let i = 0; i < 29; i++) {
+        setTimeout(() => {
+            cubes[i].fire(cubes[i].selectedFace);
+        }, delay);
+        delay += 70;
+    }
+});
+
+document.getElementById('btn-mode-1').addEventListener('click', () => {
+    CYMATIC.addMode(1, 1, 0.7);
+    addTrace('— CYMATIC (1,1) —');
+});
+
+document.getElementById('btn-mode-2').addEventListener('click', () => {
+    CYMATIC.addMode(2, 3, 0.6);
+    addTrace('— CYMATIC (2,3) —');
+});
+
+document.getElementById('btn-mode-3').addEventListener('click', () => {
+    CYMATIC.addMode(3, 2, 0.6);
+    addTrace('— CYMATIC (3,2) —');
+});
+
+document.getElementById('btn-nodes').addEventListener('click', function() {
+    CYMATIC.showNodes = !CYMATIC.showNodes;
+    this.classList.toggle('active');
+    addTrace(CYMATIC.showNodes ? '— NODES VISIBLE —' : '— NODES HIDDEN —');
+});
+
+function addTrace(msg) {
+    const el = document.getElementById('trace');
+    const div = document.createElement('div');
+    div.className = 'tr';
+    div.innerHTML = msg;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+    while (el.children.length > 30) el.removeChild(el.firstChild);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function init() {
+    TESSERACT.init();
+    CYMATIC.init();
+    R4.compute();
+    
+    // Create 29 sutra cubes distributed across tesseract cells
+    // 8 cells in tesseract, distribute sutras across them
+    for (let i = 0; i < 29; i++) {
+        const cellIdx = i % 8;
+        cubes.push(new SutraCube(i, TESSERACT.cells[cellIdx]));
+    }
+    
+    // Initial cymatic modes
+    CYMATIC.addMode(2, 1, 0.4);
+    CYMATIC.addMode(1, 2, 0.4);
+}
+
+window.addEventListener('resize', resize);
+resize();
+init();
+addTrace('R4 Tesseract Cymatic Engine v3');
+addTrace('True 4D • 16 vertices • 32 edges');
+addTrace('Click cube face → mode + transform');
+addTrace('Scroll → rotate in 4D');
+render();
+</script>
+
+</body>
+</html>
