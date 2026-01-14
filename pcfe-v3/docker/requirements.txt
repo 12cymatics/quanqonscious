@@ -5,8 +5,8 @@ torch==2.1.0+cu118  # CUDA 11.8 version
 matplotlib==3.7.2
 seaborn==0.12.2
 
-# GPU computing
-cupy-cuda11x==12.2.0
+# GPU computing (precompiled CuPy wheels to avoid source builds)
+cupy-cuda11x==13.0.0
 numba==0.58.0
 
 # Quantum computing

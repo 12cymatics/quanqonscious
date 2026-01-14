@@ -1,34 +1,228 @@
-# Requirements for QuanQonscious GRVQ-TTGCR Simulation Framework
+# ============================================================
+# CORE NUMERIC + SYMBOLIC + EXACT / BIGINT FRIENDS
+# ============================================================
+numpy
+scipy
+sympy
+mpmath
+gmpy2
+python-flint
+sageconf
+numexpr
+bottleneck
 
-# Numerical and scientific computing libraries
-numpy>=1.23.5
-scipy>=1.13.1
-sympy>=1.12
+# ============================================================
+# HPC / PARALLEL / DISTRIBUTED
+# ============================================================
+mpi4py
+dask
+distributed
+ray
+joblib
+loky
+cloudpickle
+multiprocess
 
-# MPI for parallel processing
-mpi4py>=3.1.3
+# ============================================================
+# GPU / CUDA / KERNEL TOOLING (pick what matches your stack)
+# ============================================================
+cupy-cuda12x
+cupy-cuda11x
+cuda-python
+pycuda
+numba
+llvmlite
 
-# Quantum circuit simulation using Cirq
-cirq>=0.15.0
+# ============================================================
+# QUANTUM STACKS (CIRCUITS / SIMULATORS / TOOLKITS)
+# ============================================================
+cirq
+cirq-core
+cirq-google
+cirq-ionq
+cirq-rigetti
+qsimcirq
 
-# IBM Quantum Qiskit backend for quantum simulations
-qiskit>=0.45.0
-qiskit-aer>=0.12.0
+qiskit
+qiskit-aer
+qiskit-ibm-runtime
+qiskit-algorithms
+qiskit-machine-learning
+qiskit-nature
+qiskit-optimization
+qiskit-experiments
 
-# Cryptography for Maya key encryption
-cryptography>=3.4.8
-blake3>=1.0.8
+pennylane
+pennylane-lightning
+pennylane-qiskit
+pennylane-cirq
 
-# JAX and JAXLIB for GPU acceleration (with CUDA support for A100)
-jax>=0.4.10
-jaxlib>=0.4.10+cuda11.cudnn86
+qutip
+qutip-qip
 
-# PyTorch for sutra tensor operations
-torch>=2.0.0
+cudaq
+cuda-quantum
 
-# Visualization for cymatic verification animation
-matplotlib>=3.7.1
-pillow>=9.0.0
+amazon-braket-sdk
 
-# (Optional) If additional testing or benchmarking utilities are required:
-pytest>=7.0.0
+# Optional (vendor / ecosystem bridges)
+pytket
+pytket-qiskit
+pytket-cirq
+
+# ============================================================
+# DEEP LEARNING / TENSOR OPS (IF YOU WANT IT IN THE PIPELINE)
+# ============================================================
+torch
+torchvision
+torchaudio
+torch>=2.0.0  # Security: CVE fixes
+torchvision>=0.15.0  # Security: CVE fixes
+torchaudio>=2.0.0
+pytorch-lightning
+opt-einsum
+tensornetwork
+
+# ============================================================
+# CRYPTOGRAPHY / HASHING / KEY MGMT (MAYA KEY LAYER)
+# ============================================================
+cryptography
+cryptography>=46.0.0  # Security: CVE fixes in 46.x
+blake3
+pynacl
+pycryptodome
+argon2-cffi
+keyring
+pyjwt
+
+# ============================================================
+# DATA ENGINEERING / STORAGE / IO (SERIOUS PIPELINES)
+# ============================================================
+pandas
+pyarrow
+polars
+h5py
+zarr
+xarray
+netcdf4
+fastparquet
+tables
+lmdb
+duckdb
+sqlalchemy
+psycopg
+pymongo
+redis
+
+orjson
+ujson
+msgpack
+protobuf
+pyyaml
+protobuf>=5.28.0  # Security: CVE-2024-7254 and others
+pyyaml>=6.0.2  # Security: CVE fixes
+tomlkit
+
+# ============================================================
+# SCI/ENG UTILITIES (GEOMETRY / GRAPHS / SIGNALS / IMAGING)
+# ============================================================
+networkx
+shapely
+pyvista
+trimesh
+scikit-image
+opencv-python
+soundfile
+librosa
+
+# ============================================================
+# VISUALISATION / DASHBOARDS (LOCAL + WEB)
+# ============================================================
+matplotlib
+plotly
+bokeh
+altair
+holoviews
+datashader
+panel
+streamlit
+dash
+
+# ============================================================
+# APIS / NETWORK / ASYNC (CONTROL PLANES + SERVICES)
+# ============================================================
+requests
+httpx
+aiohttp
+websockets
+tenacity
+pydantic
+fastapi
+uvicorn
+requests>=2.32.0  # Security: CVE fixes
+httpx>=0.27.0  # Security: CVE fixes
+aiohttp>=3.10.0  # Security: CVE fixes
+websockets
+tenacity
+pydantic>=2.0.0  # Security improvements
+fastapi>=0.115.0  # Security: CVE fixes
+uvicorn[standard]>=0.32.0  # Security: CVE fixes
+python-dotenv
+
+# ============================================================
+# LOGGING / UX / CLI
+# ============================================================
+rich
+structlog
+loguru
+tqdm
+typer
+click
+
+# ============================================================
+# TESTING / QUALITY / BENCHMARK / PROFILING
+# ============================================================
+pytest
+pytest-xdist
+pytest-cov
+hypothesis
+coverage
+ruff
+black
+isort
+mypy
+pre-commit
+
+py-spy
+scalene
+yappi
+snakeviz
+line-profiler
+memory-profiler
+
+# ============================================================
+# FORMAL METHODS / SMT (FOR PROOF-ADJACENT CHECKING IN PY)
+# ============================================================
+z3-solver
+pysmt
+lark
+
+# ============================================================
+# DOCS / NOTEBOOKS (FOR REPRODUCIBLE RESEARCH PACKAGES)
+# ============================================================
+jupyterlab
+ipykernel
+notebook
+nbconvert
+jupyter-server
+jupyterlab>=4.0.0  # Security: Multiple CVE fixes
+ipykernel
+notebook>=7.0.0  # Security: CVE fixes
+nbconvert>=7.16.0  # Security: CVE fixes
+jupyter-server>=2.14.0  # Security: CVE fixes
+ipywidgets
+sphinx
+myst-parser
+furo
+mkdocs
+mkdocs-material

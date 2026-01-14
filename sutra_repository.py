@@ -2,9 +2,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import importlib
 
+# Support execution both as a package ("QuanQonscious") and as a standalone script
 try:
     from .primarysutra import VedicSutras, SutraContext, SutraMode
-except ImportError:  # pragma: no cover - allow running as a script
+except ImportError:  # pragma: no cover - allow running as script
     from primarysutra import VedicSutras, SutraContext, SutraMode
 
 class SutraRepository:

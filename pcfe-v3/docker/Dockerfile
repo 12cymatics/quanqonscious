@@ -30,8 +30,8 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 # Install CUDA-Quantum (requires specific installation)
 RUN pip3 install cuda-quantum==0.6.0 --extra-index-url https://pypi.nvidia.com
 
-# Install CuPy for CUDA 11.8
-RUN pip3 install cupy-cuda11x
+# Install CuPy for CUDA 11.8 using precompiled wheel
+RUN pip3 install cupy-cuda11x==13.0.0
 
 # Copy source code
 COPY src/ /app/src/
