@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Toroidal-Hypercube v3</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #202842, #05060c 70%);
+      color: #eef2ff;
+      display: grid;
+      grid-template-columns: minmax(260px, 320px) 1fr;
+      min-height: 100vh;
+    }
+
+    aside {
+      padding: 24px;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(6, 8, 18, 0.88);
+      backdrop-filter: blur(12px);
+    }
+
+    main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      padding: 24px;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+
+    .panel {
+      background: rgba(20, 28, 45, 0.85);
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .metric {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 8, 14, 0.9);
+      border-radius: 16px;
+    }
+
+    .stat-block {
+      display: grid;
+      gap: 6px;
+      font-size: 0.85rem;
+    }
+
+    .stat-block span {
+      color: #9bd5ff;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(12, 18, 30, 0.7);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>Toroidal-Hypercube v3</h1>
+    <p>Exact-rational tesseract diagnostics with live shell telemetry and cymatic overlays.</p>
+    <div class="panel">
+      <h2>4-D Rotation Stack</h2>
+      <div class="metric">
+        <label>XY plane</label>
+        <input type="range" min="0" max="360" value="15" data-plane="xy" />
+      </div>
+      <div class="metric">
+        <label>XZ plane</label>
+        <input type="range" min="0" max="360" value="30" data-plane="xz" />
+      </div>
+      <div class="metric">
+        <label>XW plane</label>
+        <input type="range" min="0" max="360" value="45" data-plane="xw" />
+      </div>
+      <div class="metric">
+        <label>YZ plane</label>
+        <input type="range" min="0" max="360" value="20" data-plane="yz" />
+      </div>
+      <div class="metric">
+        <label>YW plane</label>
+        <input type="range" min="0" max="360" value="35" data-plane="yw" />
+      </div>
+      <div class="metric">
+        <label>ZW plane</label>
+        <input type="range" min="0" max="360" value="10" data-plane="zw" />
+      </div>
+      <div class="stat-block" id="tesseract-stats"></div>
+      <div class="status" id="socket-status">WebSocket: idle</div>
+    </div>
+  </aside>
+  <main>
+    <div class="panel">
+      <h2>Curvature + Energy Density</h2>
+      <p>Incoming shell data modulates vertex chroma and cymatic bands for diagnostics.</p>
+    </div>
+    <canvas id="viewport" width="1200" height="800"></canvas>
+  </main>
+
+  <script>
+    class Rat {
+      constructor(numerator, denominator = 1) {
+        if (denominator === 0) {
+          throw new Error("Denominator cannot be zero");
+        }
+        const sign = denominator < 0 ? -1 : 1;
+        this.n = numerator * sign;
+        this.d = Math.abs(denominator);
+        this.#reduce();
+      }
+
+      static gcd(a, b) {
+        let x = Math.abs(a);
+        let y = Math.abs(b);
+        while (y !== 0) {
+          const t = y;
+          y = x % y;
+          x = t;
+        }
+        return x;
+      }
+
+      #reduce() {
+        const g = Rat.gcd(this.n, this.d);
+        this.n /= g;
+        this.d /= g;
+      }
+
+      add(other) {
+        return new Rat(this.n * other.d + other.n * this.d, this.d * other.d);
+      }
+
+      sub(other) {
+        return new Rat(this.n * other.d - other.n * this.d, this.d * other.d);
+      }
+
+      mul(other) {
+        return new Rat(this.n * other.n, this.d * other.d);
+      }
+
+      div(other) {
+        return new Rat(this.n * other.d, this.d * other.n);
+      }
+
+      toFloat() {
+        return this.n / this.d;
+      }
+
+      toString() {
+        return `${this.n}/${this.d}`;
+      }
+    }
+
+    const canvas = document.getElementById("viewport");
+    const ctx = canvas.getContext("2d");
+    const stats = document.getElementById("tesseract-stats");
+    const status = document.getElementById("socket-status");
+
+    const baseVertices = [];
+    const edges = [];
+
+    function generateTesseract() {
+      const coords = [-1, 1];
+      let index = 0;
+      for (const x of coords) {
+        for (const y of coords) {
+          for (const z of coords) {
+            for (const w of coords) {
+              baseVertices.push({
+                id: index,
+                position: [new Rat(x), new Rat(y), new Rat(z), new Rat(w)],
+              });
+              index += 1;
+            }
+          }
+        }
+      }
+      for (let i = 0; i < baseVertices.length; i += 1) {
+        for (let j = i + 1; j < baseVertices.length; j += 1) {
+          const diff = baseVertices[i].position
+            .map((val, idx) => Math.abs(val.n - baseVertices[j].position[idx].n));
+          const distance = diff.reduce((acc, v) => acc + v, 0);
+          if (distance === 2) {
+            edges.push([i, j]);
+          }
+        }
+      }
+    }
+
+    function rotationMatrix(angleDeg, axisA, axisB) {
+      const angle = (angleDeg * Math.PI) / 180;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const matrix = Array.from({ length: 4 }, (_, i) =>
+        Array.from({ length: 4 }, (_, j) => (i === j ? 1 : 0)),
+      );
+      matrix[axisA][axisA] = cos;
+      matrix[axisB][axisB] = cos;
+      matrix[axisA][axisB] = -sin;
+      matrix[axisB][axisA] = sin;
+      return matrix;
+    }
+
+    function applyRotation(vector, matrix) {
+      const output = [0, 0, 0, 0];
+      for (let i = 0; i < 4; i += 1) {
+        output[i] =
+          matrix[i][0] * vector[0] +
+          matrix[i][1] * vector[1] +
+          matrix[i][2] * vector[2] +
+          matrix[i][3] * vector[3];
+      }
+      return output;
+    }
+
+    function stereographicProject([x, y, z, w]) {
+      const denom = 1.0 - w;
+      const scale = denom !== 0 ? 1.0 / denom : 1.0;
+      return [x * scale, y * scale, z * scale];
+    }
+
+    function projectTo2D([x, y, z]) {
+      const depth = 3.5 + z;
+      const scale = 1.0 / depth;
+      return [x * scale, y * scale];
+    }
+
+    const rotationState = {
+      xy: 15,
+      xz: 30,
+      xw: 45,
+      yz: 20,
+      yw: 35,
+      zw: 10,
+    };
+
+    const shellData = {
+      intensity: Array(baseVertices.length).fill(0.4),
+    };
+
+    function updateStats(transformed) {
+      let min = Infinity;
+      let max = -Infinity;
+      let avg = 0;
+      transformed.forEach((v) => {
+        const magnitude = Math.hypot(...v);
+        min = Math.min(min, magnitude);
+        max = Math.max(max, magnitude);
+        avg += magnitude;
+      });
+      avg /= transformed.length;
+      stats.innerHTML = `
+        <div>Vertex span: <span>${min.toFixed(3)} → ${max.toFixed(3)}</span></div>
+        <div>Mean radius: <span>${avg.toFixed(3)}</span></div>
+        <div>Shell intensity: <span>${shellData.intensity[0].toFixed(3)}</span></div>
+      `;
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(canvas.width / 4, canvas.height / 4);
+
+      const matrices = [
+        rotationMatrix(rotationState.xy, 0, 1),
+        rotationMatrix(rotationState.xz, 0, 2),
+        rotationMatrix(rotationState.xw, 0, 3),
+        rotationMatrix(rotationState.yz, 1, 2),
+        rotationMatrix(rotationState.yw, 1, 3),
+        rotationMatrix(rotationState.zw, 2, 3),
+      ];
+
+      const transformed = baseVertices.map((vertex, index) => {
+        let vec = vertex.position.map((rat) => rat.toFloat());
+        matrices.forEach((matrix) => {
+          vec = applyRotation(vec, matrix);
+        });
+        const projected3 = stereographicProject(vec);
+        const projected2 = projectTo2D(projected3);
+        return {
+          index,
+          vec,
+          projected2,
+          depth: projected3[2],
+        };
+      });
+
+      transformed.sort((a, b) => a.depth - b.depth);
+
+      ctx.lineWidth = 0.004;
+      ctx.strokeStyle = "rgba(155, 213, 255, 0.3)";
+      edges.forEach(([a, b]) => {
+        const va = transformed.find((t) => t.index === a);
+        const vb = transformed.find((t) => t.index === b);
+        ctx.beginPath();
+        ctx.moveTo(va.projected2[0], va.projected2[1]);
+        ctx.lineTo(vb.projected2[0], vb.projected2[1]);
+        ctx.stroke();
+      });
+
+      transformed.forEach((t) => {
+        const intensity = shellData.intensity[t.index] ?? 0.4;
+        const hue = 210 + intensity * 90;
+        const radius = 0.015 + intensity * 0.02;
+        ctx.beginPath();
+        ctx.fillStyle = `hsla(${hue}, 80%, 60%, 0.85)`;
+        ctx.arc(t.projected2[0], t.projected2[1], radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+      updateStats(transformed.map((t) => t.vec));
+      requestAnimationFrame(render);
+    }
+
+    function connectWebSocket() {
+      const socket = new WebSocket("ws://localhost:8765");
+      status.textContent = "WebSocket: connecting";
+
+      socket.addEventListener("open", () => {
+        status.textContent = "WebSocket: connected";
+      });
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (Array.isArray(payload.intensity)) {
+            payload.intensity.forEach((value, idx) => {
+              shellData.intensity[idx] = Math.max(0.1, Math.min(1.0, value));
+            });
+          }
+        } catch (error) {
+          console.error("Invalid payload", error);
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        status.textContent = "WebSocket: disconnected";
+        setTimeout(connectWebSocket, 3000);
+      });
+    }
+
+    generateTesseract();
+    connectWebSocket();
+    render();
+
+    document.querySelectorAll("input[type=range]").forEach((slider) => {
+      slider.addEventListener("input", (event) => {
+        const plane = event.target.dataset.plane;
+        rotationState[plane] = Number(event.target.value);
+      });
+    });
+  </script>
+</body>
+</html>
