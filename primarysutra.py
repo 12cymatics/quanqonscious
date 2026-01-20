@@ -162,14 +162,8 @@ class VedicSutras:
         """
         self.context = context if context else SutraContext()
         
-        # Initialize GPU if requested
-        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
         # Initialize GPU if requested and available
-        if (
-            self.context.use_gpu
-            and torch is not None
-            and torch.cuda.is_available()
-        ):
+        if self.context.use_gpu and torch is not None and torch.cuda.is_available():
             self.context.device = torch.device("cuda")
             logger.info(
                 f"Using GPU device: {torch.cuda.get_device_name(0)}"
