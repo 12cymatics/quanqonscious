@@ -71,6 +71,7 @@ except Exception:  # pragma: no cover - optional dependency
 try:
     import scipy.linalg as la
 except Exception:  # pragma: no cover - optional dependency
+    la = None
 
 try:
     import torch
@@ -162,8 +163,6 @@ class VedicSutras:
         """
         self.context = context if context else SutraContext()
         
-        # Initialize GPU if requested
-        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
         # Initialize GPU if requested and available
         if (
             self.context.use_gpu
