@@ -32,6 +32,7 @@ class HybridSimulationBundle:
     """Aggregated results across serial, concurrent, and parallel runs."""
 
     initial_value: Any
+    sutra_names: List[str]
     serial: SimulationReport
     concurrent: SimulationReport
     parallel: SimulationReport
@@ -39,6 +40,7 @@ class HybridSimulationBundle:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "initial_value": self.initial_value,
+            "sutra_names": list(self.sutra_names),
             "serial": self.serial.to_dict(),
             "concurrent": self.concurrent.to_dict(),
             "parallel": self.parallel.to_dict(),
@@ -88,11 +90,13 @@ def run_hybrid_bundle(
             sutra_filter=lambda name: name in _apply_filter(simulator.sutra_names, include=include),
         )
 
+    sutra_names = list(simulator.sutra_names)
     serial_report = simulator.run_serial(value, mode=mode)
     concurrent_report = simulator.run_concurrent(value, mode=mode)
     parallel_report = simulator.run_parallel(value, mode=mode)
     return HybridSimulationBundle(
         initial_value=value,
+        sutra_names=sutra_names,
         serial=serial_report,
         concurrent=concurrent_report,
         parallel=parallel_report,

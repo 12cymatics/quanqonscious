@@ -74,3 +74,8 @@ system/industry alignment tags that explain how each run relates to the wider
 platform and target markets. This directly satisfies onboarding and demo
 requirements for investor or enterprise evaluations while keeping the execution
 path tied to the same sutra engine used in production workflows.
+
+The console also displays the full 29-sutra inventory straight from the
+repository, ensuring users can audit exactly which algorithms are included in
+serial, concurrent, and parallel execution modes without relying on placeholders
+or minimal stand-ins.

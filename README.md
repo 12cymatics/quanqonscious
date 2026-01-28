@@ -16,5 +16,15 @@ complete with system and industry alignment tags:
 python web_server.py
 ```
 
+To use a different port, set `PORT`:
+
+```bash
+PORT=3001 python web_server.py
+```
+
+The web console also lists the full 29-sutra inventory sourced directly from
+the repository so you can verify the complete algorithm set used for serial,
+concurrent, and parallel execution.
+
 Product and revenue details are documented in
 `docs/hybrid_sutra_platform.md`.

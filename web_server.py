@@ -5,6 +5,7 @@ Provides a basic web interface to interact with the quantum simulation framework
 """
 
 import http.server
+import importlib.util
 import socketserver
 import json
 import os
@@ -49,6 +50,11 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(self.get_hsqcp_metadata(), indent=2).encode())
+        elif self.path == '/api/hsqcp/sutras':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(self.get_hsqcp_sutras(), indent=2).encode())
         else:
             super().do_GET()
     
@@ -272,6 +278,11 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
                 <h3>Industry Alignment</h3>
                 <div id="industry-tags"></div>
             </div>
+
+            <div class="card">
+                <h3>29 Sutra Inventory</h3>
+                <ul id="sutra-list" class="module-list"></ul>
+            </div>
         </div>
         
         <div class="execute-section">
@@ -348,6 +359,24 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
                         span.className = 'pill';
                         span.textContent = item;
                         industryTags.appendChild(span);
+                    });
+                });
+
+            fetch('/api/hsqcp/sutras')
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('sutra-list');
+                    list.innerHTML = '';
+                    if (data.error) {
+                        const li = document.createElement('li');
+                        li.textContent = data.error;
+                        list.appendChild(li);
+                        return;
+                    }
+                    data.names.forEach(name => {
+                        const li = document.createElement('li');
+                        li.textContent = name;
+                        list.appendChild(li);
                     });
                 });
         }
@@ -474,6 +503,12 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             return {"success": False, "error": f"Unknown command: {command}"}
 
     def execute_hsqcp(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if importlib.util.find_spec("numpy") is None:
+            return {
+                "success": False,
+                "error": "Missing dependency: numpy. Install requirements.txt to enable sutra execution.",
+            }
+
         from hybrid_sutra_platform import run_hybrid_bundle
         from sutra_repository import SutraMode
 
@@ -532,8 +567,25 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             ],
         }
 
+    def get_hsqcp_sutras(self) -> Dict[str, Any]:
+        if importlib.util.find_spec("numpy") is None:
+            return {
+                "count": 0,
+                "names": [],
+                "error": "Install requirements.txt to load the full 29-sutra inventory.",
+            }
+
+        from sutra_repository import SutraRepository
+
+        repo = SutraRepository()
+        sutra_names = repo.list_sutras()
+        return {
+            "count": len(sutra_names),
+            "names": sutra_names,
+        }
+
 def main():
-    PORT = 3000
+    PORT = int(os.environ.get("PORT", "3000"))
     Handler = QuanQonsciousHandler
     
     try:
