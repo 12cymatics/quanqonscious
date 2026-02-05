@@ -131,6 +131,10 @@ def _to_scalar(value: Any) -> float:
         return float(value)
     if isinstance(value, np.ndarray):
         return float(np.mean(value))
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            return 0.0
+        return float(np.mean([_to_scalar(v) for v in value]))
     try:
         return float(value)
     except (TypeError, ValueError):

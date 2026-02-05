@@ -125,7 +125,7 @@ class HyperCubeAudio:
             phase += 2.0 * math.pi * freq / SAMPLE_RATE
             phases[i] = phase
         op.phase = phase % (2.0 * math.pi)
-        return np.sin(phases, dtype=np.float32) * op.level
+        return np.sin(phases).astype(np.float32) * op.level
 
     def compute_frame(self, n_frames: int) -> np.ndarray:
         out = np.zeros(n_frames, dtype=np.float32)
