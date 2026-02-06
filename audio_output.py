@@ -26,6 +26,8 @@ import time
 from dataclasses import dataclass
 from typing import List, Sequence
 
+if importlib.util.find_spec("numpy") is None:
+    raise ImportError("numpy is required for audio_output.py")
 import numpy as np
 
 SAMPLE_RATE = 48000

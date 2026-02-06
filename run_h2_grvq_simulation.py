@@ -7,12 +7,16 @@ Based on H2_MST_Dashboard_Rank3.py for single-process execution
 using Cirq-based quantum refinement.
 """
 
+import importlib.util
 import math
 import os
-import numpy as np
 import time
 import sys
 import hashlib
+
+if importlib.util.find_spec("numpy") is None:
+    raise ImportError("numpy is required for run_h2_grvq_simulation.py")
+import numpy as np
 from numba import njit
 import cirq
 import plotly.graph_objects as go

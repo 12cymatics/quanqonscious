@@ -1,14 +1,30 @@
+import importlib.util
 import math
 import os
+import sys, time, hashlib
+
+if importlib.util.find_spec("numpy") is None:
+    raise ImportError("numpy is required for H2_MST_Dashboard_Rank2.py")
 import numpy as np
+if importlib.util.find_spec("mpi4py") is None:
+    raise ImportError("mpi4py is required for H2_MST_Dashboard_Rank2.py")
 from mpi4py import MPI
+if importlib.util.find_spec("cirq") is None:
+    raise ImportError("cirq is required for H2_MST_Dashboard_Rank2.py")
 import cirq
+if importlib.util.find_spec("cudaq") is None:
+    raise ImportError("cudaq is required for H2_MST_Dashboard_Rank2.py")
 import cudaq
+if importlib.util.find_spec("plotly") is None:
+    raise ImportError("plotly is required for H2_MST_Dashboard_Rank2.py")
 import plotly.graph_objects as go
 import plotly.subplots as sp
 import plotly.io as pio
-import sys, time, hashlib
+if importlib.util.find_spec("numba") is None:
+    raise ImportError("numba is required for H2_MST_Dashboard_Rank2.py")
 from numba import njit, prange, cuda
+if importlib.util.find_spec("scipy") is None:
+    raise ImportError("scipy is required for H2_MST_Dashboard_Rank2.py")
 from scipy.optimize import minimize_scalar
 from scipy.fft import fft, fftfreq
 

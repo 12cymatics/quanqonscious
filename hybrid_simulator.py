@@ -15,6 +15,8 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
+if importlib.util.find_spec("numpy") is None:
+    raise ImportError("numpy is required for hybrid_simulator.py")
 import numpy as np
 
 from hc_ipc import HcIpcClient
