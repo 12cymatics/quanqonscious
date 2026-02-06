@@ -8,10 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence
 
-import importlib.util
-
-if importlib.util.find_spec("numpy") is None:
-    raise ImportError("numpy is required for hypercube_fm8.py")
 import numpy as np
 
 

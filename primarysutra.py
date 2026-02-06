@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -8,109 +7,16 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import cirq
+import cudaq
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import scipy.linalg as la
+import sympy as sp
+import torch
 
-
-def _optional_import(module: str) -> bool:
-    return importlib.util.find_spec(module) is not None
-
-
-if _optional_import("cirq"):
-    import cirq
-else:
-    class _CirqStub:
-        class LineQubit:
-            def __init__(self, *_, **__):
-                pass
-
-        class Circuit:
-            def __init__(self, *_, **__):
-                pass
-
-        class Simulator:
-            def __init__(self, *_, **__):
-                pass
-
-            def run(self, *_, **__):
-                return None
-
-        class H:
-            @staticmethod
-            def on(_):
-                pass
-
-        class X:
-            def __call__(self, *_):
-                return None
-
-        class CNOT:
-            def __call__(self, *_):
-                return None
-
-        class ZPowGate:
-            def __init__(self, *_, **__):
-                pass
-
-    cirq = _CirqStub()
-
-if _optional_import("cudaq"):
-    import cudaq
-else:
-    cudaq = None
-
-if _optional_import("torch"):
-    import torch
-    TORCH_AVAILABLE = True
-else:
-    TORCH_AVAILABLE = False
-
-    class torch:
-        class Tensor:
-            pass
-
-        class cuda:
-            @staticmethod
-            def is_available() -> bool:
-                return False
-
-        @staticmethod
-        def device(name: str) -> str:
-            return name
-
-        @staticmethod
-        def tensor(*args: Any, **kwargs: Any) -> Any:
-            raise ImportError("PyTorch is required for tensor operations")
-
-if _optional_import("matplotlib"):
-    import matplotlib.pyplot as plt
-else:
-    class _PlotStub:
-        @staticmethod
-        def plot(*_, **__):
-            pass
-
-        @staticmethod
-        def show(*_, **__):
-            pass
-
-    plt = _PlotStub()
-
-if _optional_import("scipy"):
-    import scipy.linalg as la
-else:
-    la = None
-
-if _optional_import("sympy"):
-    import sympy as sp
-else:
-    sp = None
-
-if _optional_import("pandas"):
-    import pandas as pd
-else:
-    class pd:
-        class DataFrame:
-            pass
+TORCH_AVAILABLE = True
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -17,7 +17,6 @@ Message format examples (JSON):
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import socket
@@ -26,31 +25,14 @@ import time
 from dataclasses import dataclass
 from typing import List, Sequence
 
-if importlib.util.find_spec("numpy") is None:
-    raise ImportError("numpy is required for audio_output.py")
 import numpy as np
+import sounddevice as sd
+import simpleaudio as sa
 
 SAMPLE_RATE = 48000
 BLOCKSIZE = 256
 UDP_PORT = 50007
 UDP_ADDR = ("127.0.0.1", UDP_PORT)
-
-
-def _optional_import(module: str) -> bool:
-    return importlib.util.find_spec(module) is not None
-
-
-if _optional_import("sounddevice"):
-    import sounddevice as sd
-    AUDIO_BACKEND = "sounddevice"
-else:
-    sd = None
-    AUDIO_BACKEND = "simpleaudio" if _optional_import("simpleaudio") else "none"
-
-if _optional_import("simpleaudio"):
-    import simpleaudio as sa
-else:
-    sa = None
 
 
 @dataclass
@@ -216,30 +198,19 @@ class HyperCubeAudio:
         listener = threading.Thread(target=self.udp_listener, daemon=True)
         listener.start()
 
-        if AUDIO_BACKEND == "sounddevice" and sd is not None:
-            def callback(outdata, frames, _time_info, _status):
-                block = self.compute_frame(frames)
-                outdata[:] = block.reshape(-1, 1)
+        def callback(outdata, frames, _time_info, _status):
+            block = self.compute_frame(frames)
+            outdata[:] = block.reshape(-1, 1)
 
-            with sd.OutputStream(
-                channels=1,
-                samplerate=SAMPLE_RATE,
-                blocksize=BLOCKSIZE,
-                dtype="float32",
-                callback=callback,
-            ):
-                while self.running:
-                    time.sleep(0.1)
-            return
-
-        while self.running:
-            block = self.compute_frame(BLOCKSIZE)
-            pcm = (block * 32767.0).astype(np.int16)
-            if sa is not None:
-                play = sa.play_buffer(pcm.tobytes(), 1, 2, SAMPLE_RATE)
-                play.wait_done()
-            else:
-                time.sleep(BLOCKSIZE / SAMPLE_RATE)
+        with sd.OutputStream(
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            blocksize=BLOCKSIZE,
+            dtype="float32",
+            callback=callback,
+        ):
+            while self.running:
+                time.sleep(0.1)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ in serial, concurrent, and parallel modes with FM8-style audio control.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import math
 import os
 import sys
@@ -15,23 +14,12 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
-if importlib.util.find_spec("numpy") is None:
-    raise ImportError("numpy is required for hybrid_simulator.py")
 import numpy as np
 
 from hc_ipc import HcIpcClient
 from hypercube_fm8 import HyperCubeFM8
+from qiskit_backend import execute_ghz
 from sutra_repository import SutraContext, SutraMode, SutraRepository
-
-
-def _optional_import(module: str) -> bool:
-    return importlib.util.find_spec(module) is not None
-
-
-if _optional_import("qiskit") and _optional_import("qiskit_aer"):
-    from qiskit_backend import execute_ghz
-else:
-    execute_ghz = None
 
 
 PREFERRED_SUTRAS = [
@@ -157,8 +145,6 @@ def _build_mod_matrix(size: int, base: float) -> List[List[float]]:
 
 
 def _qiskit_input_matrix(num_ops: int) -> List[List[float]]:
-    if execute_ghz is None:
-        return [[0.0] for _ in range(num_ops)]
     counts = execute_ghz(num_qubits=29, shots=256)
     total = sum(counts.values()) if counts else 1
     dominant = max(counts.values()) if counts else 0
