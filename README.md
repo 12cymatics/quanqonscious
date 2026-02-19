@@ -28,3 +28,24 @@ concurrent, and parallel execution.
 
 Product and revenue details are documented in
 `docs/hybrid_sutra_platform.md`.
+
+## Toroid HTML Launcher
+
+Run the Toroid interface and the full 29-sutra hybrid platform (serial, concurrent,
+and parallel) with structured output artifacts:
+
+```bash
+python run_toroid_hybrid.py \
+  --toroid-path "toroid HTML" \
+  --value 1.0 \
+  --mode hybrid \
+  --hybrid-output runs/hybrid_sutra_platform_report.json \
+  --report-path runs/toroid_launcher_report.json
+```
+
+If your branch uses `toroid_HTML`, the launcher auto-detects it. To serve only the
+front-end artifact without launching the simulator:
+
+```bash
+python run_toroid_hybrid.py --skip-hybrid --port 8000
+```
