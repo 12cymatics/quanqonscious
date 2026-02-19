@@ -1,4 +1,99 @@
-from __future__ import annotations
+from typing import Any
+import numpy as np
+try:
+    import cirq
+except Exception:  # pragma: no cover - optional dependency
+    class _CirqStub:
+        class LineQubit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Circuit:
+            def __init__(self, *_, **__):
+                pass
+
+        class Simulator:
+            def __init__(self, *_, **__):
+                pass
+
+            def run(self, *_, **__):
+                return None
+
+        class H:
+            @staticmethod
+            def on(_):
+                pass
+
+        class X:
+            def __call__(self, *_):
+                return None
+
+        class CNOT:
+            def __call__(self, *_):
+                return None
+
+        class ZPowGate:
+            def __init__(self, *_, **__):
+                pass
+
+    cirq = _CirqStub()
+
+# Optional dependencies
+try:
+    import cirq
+except Exception:  # pragma: no cover - allow running without Cirq
+    cirq = None
+
+try:
+    import cudaq
+except Exception:  # pragma: no cover - optional quantum backend
+    cudaq = None
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    TORCH_AVAILABLE = False
+    class torch:
+        class Tensor:
+            pass
+import matplotlib.pyplot as plt
+import scipy.linalg as la
+try:
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover - optional dependency
+    class plt:
+        @staticmethod
+        def plot(*_, **__):
+            pass
+        @staticmethod
+        def show(*_, **__):
+            pass
+try:
+    import scipy.linalg as la
+except Exception:  # pragma: no cover - optional dependency
+    la = None
+
+try:
+    import torch
+except Exception:  # pragma: no cover - allow running without PyTorch
+    class _TorchPlaceholder:
+        class Tensor:
+            pass
+
+        class cuda:
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        @staticmethod
+        def device(name: str) -> str:
+            return name
+
+        @staticmethod
+        def tensor(*args: Any, **kwargs: Any) -> Any:
+            raise ImportError("PyTorch is required for tensor operations")
+
+    torch = _TorchPlaceholder()
 
 import logging
 import time

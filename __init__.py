@@ -48,11 +48,11 @@ else:
 # Import key submodules using relative imports so the package functions
 # correctly even if the directory name does not match the canonical
 # "QuanQonscious" package name used in setup.py.
-from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
+from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater, hybrid_sutra_platform
 # Lazy loading: submodules are imported when accessed by name
 __all__ = [
     'ansatz', 'core_engine', 'sulba', 'zpe_solver', 'maya_cipher', 'performance',
-    'updater', 'SutraRepository'
+    'updater', 'hybrid_sutra_platform', 'SutraRepository'
 ]
 
 def __getattr__(name):
