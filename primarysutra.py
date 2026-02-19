@@ -1,124 +1,22 @@
-from typing import Any
-import numpy as np
-try:
-    import cirq
-except Exception:  # pragma: no cover - optional dependency
-    class _CirqStub:
-        class LineQubit:
-            def __init__(self, *_, **__):
-                pass
+from __future__ import annotations
 
-        class Circuit:
-            def __init__(self, *_, **__):
-                pass
-
-        class Simulator:
-            def __init__(self, *_, **__):
-                pass
-
-            def run(self, *_, **__):
-                return None
-
-        class H:
-            @staticmethod
-            def on(_):
-                pass
-
-        class X:
-            def __call__(self, *_):
-                return None
-
-        class CNOT:
-            def __call__(self, *_):
-                return None
-
-        class ZPowGate:
-            def __init__(self, *_, **__):
-                pass
-
-    cirq = _CirqStub()
-
-# Optional dependencies
-try:
-    import cirq
-except Exception:  # pragma: no cover - allow running without Cirq
-    cirq = None
-
-try:
-    import cudaq
-except Exception:  # pragma: no cover - optional quantum backend
-    cudaq = None
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
-    TORCH_AVAILABLE = False
-    class torch:
-        class Tensor:
-            pass
-import matplotlib.pyplot as plt
-import scipy.linalg as la
-try:
-    import matplotlib.pyplot as plt
-except Exception:  # pragma: no cover - optional dependency
-    class plt:
-        @staticmethod
-        def plot(*_, **__):
-            pass
-        @staticmethod
-        def show(*_, **__):
-            pass
-try:
-    import scipy.linalg as la
-except Exception:  # pragma: no cover - optional dependency
-
-try:
-    import torch
-except Exception:  # pragma: no cover - allow running without PyTorch
-    class _TorchPlaceholder:
-        class Tensor:
-            pass
-
-        class cuda:
-            @staticmethod
-            def is_available() -> bool:
-                return False
-
-        @staticmethod
-        def device(name: str) -> str:
-            return name
-
-        @staticmethod
-        def tensor(*args: Any, **kwargs: Any) -> Any:
-            raise ImportError("PyTorch is required for tensor operations")
-
-    torch = _TorchPlaceholder()
-
-try:
-    import matplotlib.pyplot as plt
-except Exception:  # pragma: no cover - plotting optional
-    plt = None
-
-try:
-    import scipy.linalg as la
-except Exception:  # pragma: no cover - use minimal functions if SciPy missing
-    la = None
-from typing import Dict, List, Tuple, Union, Optional, Callable, Any
 import logging
 import time
-try:
-    import sympy as sp
-except Exception:  # pragma: no cover - optional dependency
-    sp = None
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-try:
-    import pandas as pd
-except Exception:  # pragma: no cover - optional dependency
-    class pd:
-        class DataFrame:
-            pass
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import cirq
+import cudaq
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import scipy.linalg as la
+import sympy as sp
+import torch
+
+TORCH_AVAILABLE = True
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -162,11 +60,10 @@ class VedicSutras:
         """
         self.context = context if context else SutraContext()
         
-        # Initialize GPU if requested
-        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
         # Initialize GPU if requested and available
         if (
             self.context.use_gpu
+            and TORCH_AVAILABLE
             and torch is not None
             and torch.cuda.is_available()
         ):
