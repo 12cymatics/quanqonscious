@@ -259,6 +259,14 @@ const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 const cosh = x => (exp(x) + exp(-x)) / 2;
 const sinh = x => (exp(x) - exp(-x)) / 2;
 
+// ── Critical audit scalars: keep physics pathways explicit + tunable ──
+const PERF_SCALARS = {
+  grvqBetaScale: 1.0,      // cubic damping kept at full operator magnitude
+  grvqGammaScale: 1.0,     // neighbor coupling no hidden 1e-3 suppression
+  engineRebuildInterval: 15,
+  engineDriftThreshold: 0.035
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // §1 EXACT RATIONAL ARITHMETIC — BigInt, zero IEEE-754 in core
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1073,7 +1081,7 @@ const GRVQ = {
   // gauge theory derivation (11N_c - 2N_f)/(48π²). Here it's just cubic drag.
   betaFunction(lam, k) {
     const v = Q.fl(lam[k]);
-    return -this.beta * v * v * v * 0.01; // dt × cubic damping rate
+    return -this.beta * v * v * v * PERF_SCALARS.grvqBetaScale; // audit: no hidden attenuation
   },
 
   // Nearest-neighbor product coupling: f(k) = γ·(λ_{k-1}·λ_k + λ_{k+1}·λ_k)·0.0001
@@ -1084,7 +1092,7 @@ const GRVQ = {
     // Nearest-neighbor coupling (periodic): only adjacent indices
     const prev = Q.fl(lam[((k - 1) % N + N) % N]);
     const next = Q.fl(lam[(k + 1) % N]);
-    return (prev * vk + next * vk) * this.gamma * 0.001; // dt × coupling weight
+    return (prev * vk + next * vk) * this.gamma * PERF_SCALARS.grvqGammaScale; // audit: full-strength nearest-neighbor coupling
   },
 
   // Bounded sigmoid: f(v) = ε·v/(v²+1) — maps ℝ → [-ε/2, ε/2]
@@ -1314,6 +1322,9 @@ const ENGINE = {
   coupling_exact: null, // Rat: exact value
   sutraAccum: null, // per-vertex accumulator: sums sutra displacements per frame
   accumFrames: 0,   // frames since last drain
+  rebuildInterval: 15,
+  lastRebuildCycle: 0,
+  lastLambdaSnapshot: [0, 0, 0, 0],
 
   init() {
     const s2h = Math.SQRT2 / 2;
@@ -1331,6 +1342,9 @@ const ENGINE = {
     this.coupling_exact = Q.mk(1n, 5n); // 1/5 exact
     this.sutraAccum = new Float64Array(8);
     this.accumFrames = 0;
+    this.rebuildInterval = PERF_SCALARS.engineRebuildInterval;
+    this.lastRebuildCycle = 0;
+    this.lastLambdaSnapshot = lambda.map(v => Q.fl(v));
   },
 
   // g_i = ∏_{k=1..4} [1 - r(i)⁴/(r(i)⁴ + λ_k⁴)]  — GRVQ singularity suppression
@@ -1630,9 +1644,20 @@ const ENGINE = {
     }
   },
 
-  rebuild() {
+  shouldRebuild(cycle) {
+    const age = cycle - this.lastRebuildCycle;
+    if (age >= this.rebuildInterval) return true;
+    let drift = 0;
+    for (let i = 0; i < 4; i++) drift += abs(Q.fl(lambda[i]) - this.lastLambdaSnapshot[i]);
+    const psiEnergy = Q.fl(VTX.normSq());
+    return drift > PERF_SCALARS.engineDriftThreshold || psiEnergy > 2.5e5;
+  },
+
+  rebuild(cycle = 0) {
     this.computeGvals();
     this.buildHamiltonian();
+    this.lastRebuildCycle = cycle;
+    this.lastLambdaSnapshot = lambda.map(v => Q.fl(v));
   },
 
   status() {
@@ -3134,7 +3159,7 @@ const USO = {
   },
 
   // G_equiv(x) = x·(1-x) — normalized coupling that peaks at x=0.5
-  G_equiv(x) { return Math.max(0.03, 4 * x * (1 - x)); }, // floor=0.03: no sutra silenced at boundary
+  G_equiv(x) { return Math.max(0, 4 * x * (1 - x)); }, // audit: no artificial boundary floor
 
   // Compute Δᵢ for sutra i given field radius R — EXACT in ℚ via QTaylor
   computeDelta(i, R) {
@@ -5889,7 +5914,7 @@ function frame(t) {
   ENGINE.accumulateSutras();   // (2) accumulate sutra displacements (drains every 10 frames)
   ENGINE.evolve();             // (3) unitary evolution under H
   ENGINE.syncToVTX();          // (4) push ENGINE state back to VTX
-  if (cycle % 15 === 0) ENGINE.rebuild(); // (5) rebuild H every 30 frames (was 60)
+  if (ENGINE.shouldRebuild(cycle)) ENGINE.rebuild(cycle); // adaptive rebuild on drift or interval
 
   // ── JET PROPULSION ──
   JET.update();
