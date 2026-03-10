@@ -2,11 +2,11 @@
 
 This module exposes a :class:`HybridQuantumClassicalSimulator` that can execute
 the entire sutra corpus serially, concurrently (multi-threaded) or in parallel
-across processes.  It wraps :class:`sutra_repository.SutraRepository` and keeps
+across processes. It wraps :class:`sutra_repository.SutraRepository` and keeps
 track of execution timings, intermediate artefacts and aggregation logic so the
 caller can fuse the classical and quantum contributions in a single place.
 
-The implementation is intentionally free of pseudo code.  Every helper is fully
+The implementation is intentionally free of pseudo code. Every helper is fully
 implemented and can be used programmatically or from higher-level CLIs (such as
 ``sutra_orchestrator.py``).
 """
@@ -20,6 +20,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
+
+REPORT_SCHEMA_VERSION = "hsqcp.report.v1"
+DOCTRINE_FIDELITY_TAG = "exact-symbolic-core"
 
 ArgumentResolver = Callable[[str, Any, SutraContext, Any], Tuple[Tuple[Any, ...], Dict[str, Any]]]
 
@@ -60,7 +63,7 @@ class SutraExecution:
 
     name: str
     output: Any
-    elapsed: float
+    elapsed_ns: int
 
 
 @dataclass
@@ -71,18 +74,26 @@ class SimulationReport:
     initial_value: Any
     executions: List[SutraExecution] = field(default_factory=list)
     aggregate: Any = None
-    wall_time: float = 0.0
+    wall_time_ns: int = 0
+    schema_version: str = REPORT_SCHEMA_VERSION
+    doctrine_fidelity: str = DOCTRINE_FIDELITY_TAG
+    generated_at_utc: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise the report to a plain dictionary for logging or storage."""
 
         return {
+            "schema_version": self.schema_version,
+            "doctrine_fidelity": self.doctrine_fidelity,
+            "generated_at_utc": self.generated_at_utc,
             "mode": self.mode.name,
             "initial_value": self.initial_value,
             "aggregate": self.aggregate,
-            "wall_time": self.wall_time,
+            "wall_time_ns": self.wall_time_ns,
             "executions": [
-                {"name": exec.name, "elapsed": exec.elapsed, "output": exec.output}
+                {"name": exec.name, "elapsed_ns": exec.elapsed_ns, "output": exec.output}
                 for exec in self.executions
             ],
         }
@@ -92,7 +103,7 @@ def _build_context(template: SutraContext, *, mode: Optional[SutraMode] = None) 
     """Clone the provided context with optional mode override.
 
     ``SutraContext`` instances carry GPU handles and other non-serialisable
-    attributes.  :func:`dataclasses.replace` is used to avoid mutating the
+    attributes. :func:`dataclasses.replace` is used to avoid mutating the
     original reference while preventing inadvertent sharing of execution state.
     """
 
@@ -100,7 +111,7 @@ def _build_context(template: SutraContext, *, mode: Optional[SutraMode] = None) 
     if mode is not None:
         context.mode = mode
     # Disable nested parallelism inside helpers when higher-level scheduling is
-    # applied.  This avoids recursive thread spawning.
+    # applied. This avoids recursive thread spawning.
     context.parallel = False
     return context
 
@@ -114,17 +125,17 @@ def _execute_sutra(
     """Execute a sutra inside the current process."""
 
     repo = SutraRepository(context)
-    start = perf_counter()
+    start = perf_counter_ns()
     result = repo.call_sutra(name, *args, ctx=context, **kwargs)
-    elapsed = perf_counter() - start
-    return SutraExecution(name=name, output=result, elapsed=elapsed)
+    elapsed_ns = perf_counter_ns() - start
+    return SutraExecution(name=name, output=result, elapsed_ns=elapsed_ns)
 
 
 def _execute_sutra_process(payload: Dict[str, Any]) -> SutraExecution:
     """Execute a sutra in a worker process.
 
     ``SutraContext`` may contain objects that are not picklable (such as CUDA
-    handles).  For multi-processing we rebuild a lightweight context using only
+    handles). For multi-processing we rebuild a lightweight context using only
     primitive fields from the payload.
     """
 
@@ -199,10 +210,10 @@ class HybridQuantumClassicalSimulator:
         initial_value: Any = value
         aggregate_value: Any = value
         report = SimulationReport(mode=context.mode, initial_value=value)
-        wall_start = perf_counter()
+        wall_start = perf_counter_ns()
 
         for name in self._sutra_names:
-            start = perf_counter()
+            start = perf_counter_ns()
             args, call_kwargs = self._resolve_arguments(
                 name, aggregate_value, context, initial_value
             )
@@ -214,12 +225,12 @@ class HybridQuantumClassicalSimulator:
                 ctx=context,
                 **call_kwargs,
             )
-            elapsed = perf_counter() - start
-            execution = SutraExecution(name=name, output=aggregate_value, elapsed=elapsed)
+            elapsed_ns = perf_counter_ns() - start
+            execution = SutraExecution(name=name, output=aggregate_value, elapsed_ns=elapsed_ns)
             report.executions.append(execution)
             report.aggregate = self._aggregation(report.aggregate, execution)
 
-        report.wall_time = perf_counter() - wall_start
+        report.wall_time_ns = perf_counter_ns() - wall_start
         if report.aggregate is None:
             report.aggregate = aggregate_value
         return report
@@ -234,7 +245,7 @@ class HybridQuantumClassicalSimulator:
 
         context = _build_context(self._base_context, mode=mode)
         report = SimulationReport(mode=context.mode, initial_value=value)
-        wall_start = perf_counter()
+        wall_start = perf_counter_ns()
 
         def submit(name: str) -> SutraExecution:
             local_context = _build_context(context, mode=context.mode)
@@ -253,7 +264,7 @@ class HybridQuantumClassicalSimulator:
         report.executions.sort(key=lambda exec: exec.name)
         for execution in report.executions:
             report.aggregate = self._aggregation(report.aggregate, execution)
-        report.wall_time = perf_counter() - wall_start
+        report.wall_time_ns = perf_counter_ns() - wall_start
         return report
 
     def run_parallel(
@@ -266,7 +277,7 @@ class HybridQuantumClassicalSimulator:
 
         context = _build_context(self._base_context, mode=mode)
         report = SimulationReport(mode=context.mode, initial_value=value)
-        wall_start = perf_counter()
+        wall_start = perf_counter_ns()
 
         context_kwargs = {
             "mode": context.mode,
@@ -304,11 +315,13 @@ class HybridQuantumClassicalSimulator:
         report.executions.sort(key=lambda exec: exec.name)
         for execution in report.executions:
             report.aggregate = self._aggregation(report.aggregate, execution)
-        report.wall_time = perf_counter() - wall_start
+        report.wall_time_ns = perf_counter_ns() - wall_start
         return report
 
 
 __all__ = [
+    "DOCTRINE_FIDELITY_TAG",
+    "REPORT_SCHEMA_VERSION",
     "HybridQuantumClassicalSimulator",
     "SimulationReport",
     "SutraExecution",
