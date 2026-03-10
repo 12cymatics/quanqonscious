@@ -88,6 +88,7 @@ def write_benchmark_matrix(
     bundles: Sequence[HybridSimulationBundle],
     path: Path,
 ) -> None:
+    validate_benchmark_bundle_set(bundles)
     matrix = build_benchmark_matrix(bundles)
     path.write_text(json.dumps(matrix, indent=2))
 
@@ -96,8 +97,7 @@ def write_reproducibility_manifest(
     bundles: Sequence[HybridSimulationBundle],
     path: Path,
 ) -> None:
-    if not bundles:
-        raise ValueError("Cannot write manifest for empty benchmark bundle set")
+    validate_benchmark_bundle_set(bundles)
 
     first = bundles[0]
     manifest = {
@@ -227,6 +227,52 @@ def validate_bundle_payload(payload: Dict[str, Any]) -> None:
     if len(payload["sutra_names"]) == 0:
         raise ValueError("Bundle must contain at least one sutra")
 
+    validate_bundle_semantics(payload)
+
+
+
+def validate_bundle_semantics(payload: Dict[str, Any]) -> None:
+    sutra_names = list(payload["sutra_names"])
+    sutra_name_set = set(sutra_names)
+    expected_count = len(sutra_names)
+
+    for report_label in ("serial", "concurrent", "parallel"):
+        report_payload = payload[report_label]
+        if report_payload.get("schema_version") != REPORT_SCHEMA_VERSION:
+            raise ValueError(
+                f"{report_label} report schema mismatch: {report_payload.get('schema_version')}"
+            )
+        if report_payload.get("doctrine_fidelity") != DOCTRINE_FIDELITY_TAG:
+            raise ValueError(
+                f"{report_label} doctrine mismatch: {report_payload.get('doctrine_fidelity')}"
+            )
+
+        executions = report_payload.get("executions", [])
+        if len(executions) != expected_count:
+            raise ValueError(
+                f"{report_label} execution count mismatch: expected {expected_count}, got {len(executions)}"
+            )
+        execution_names = [entry.get("name") for entry in executions]
+        if set(execution_names) != sutra_name_set:
+            raise ValueError(f"{report_label} execution names do not match sutra inventory")
+
+    scalars = payload["runtime_scalars"]
+    parse_exact_rational(str(scalars["grvq_beta_scale"]))
+    parse_exact_rational(str(scalars["grvq_gamma_scale"]))
+    parse_exact_rational(str(scalars["engine_drift_threshold"]))
+
+
+def validate_benchmark_bundle_set(bundles: Sequence[HybridSimulationBundle]) -> None:
+    if not bundles:
+        raise ValueError("Benchmark bundle set cannot be empty")
+
+    inventory_hash = compute_sutra_inventory_hash(bundles[0].sutra_names)
+    for bundle in bundles:
+        validate_bundle_semantics(bundle.to_dict())
+        current_hash = compute_sutra_inventory_hash(bundle.sutra_names)
+        if current_hash != inventory_hash:
+            raise ValueError("Benchmark bundle set contains mixed sutra inventories")
+
 
 def _parse_mode(value: str) -> SutraMode:
     try:
@@ -304,7 +350,7 @@ def run_hybrid_bundle(
     serial_report = simulator.run_serial(value, mode=mode)
     concurrent_report = simulator.run_concurrent(value, mode=mode)
     parallel_report = simulator.run_parallel(value, mode=mode)
-    return HybridSimulationBundle(
+    bundle = HybridSimulationBundle(
         initial_value=value,
         sutra_names=sutra_names,
         serial=serial_report,
@@ -312,6 +358,8 @@ def run_hybrid_bundle(
         parallel=parallel_report,
         runtime_scalars=scalar_config,
     )
+    validate_bundle_semantics(bundle.to_dict())
+    return bundle
 
 
 def run_benchmark_suite(
@@ -364,6 +412,7 @@ def persist_signature_bundle(
         "path": str(bundle_path.name),
         "sutra_count": len(payload["sutra_names"]),
         "initial_value": payload["initial_value"],
+        "sutra_inventory_hash": compute_sutra_inventory_hash(payload["sutra_names"]),
     }
     index_path = vault_dir / "index.jsonl"
     with index_path.open("a", encoding="utf-8") as handle:
@@ -398,11 +447,17 @@ def audit_signature_vault(vault_dir: Path) -> Dict[str, Any]:
     for line in lines:
         entry = json.loads(line)
         bundle_path = vault_dir / entry["path"]
+        payload = load_bundle_payload(bundle_path)
         bundle_id = verify_bundle_file(bundle_path)
         if entry["bundle_id"] != bundle_id:
             raise ValueError(
                 f"Index bundle_id mismatch for {bundle_path.name}: "
                 f"index={entry['bundle_id']} computed={bundle_id}"
+            )
+        inventory_hash = compute_sutra_inventory_hash(payload["sutra_names"])
+        if entry.get("sutra_inventory_hash") != inventory_hash:
+            raise ValueError(
+                f"Index sutra_inventory_hash mismatch for {bundle_path.name}"
             )
         checked += 1
 

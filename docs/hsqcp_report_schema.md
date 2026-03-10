@@ -65,7 +65,8 @@ When persisted with the platform vault writer, each bundle emits an `index.jsonl
 - `generated_at_utc`,
 - `path` (bundle filename),
 - `sutra_count`,
-- `initial_value`.
+- `initial_value`,
+- `sutra_inventory_hash` (sha256 over bundle sutra inventory).
 
 
 ## Vault Audit
@@ -81,3 +82,9 @@ When generated, manifest payloads include:
 - `seeds`,
 - `seed_count`,
 - version and doctrine markers aligned with bundle/report schemas.
+
+
+## Semantic Validation Rules
+Bundle validation enforces that each serial/concurrent/parallel report uses the
+report schema marker, doctrine fidelity marker, execution count equal to sutra
+inventory length, and execution-name set equality against `sutra_names`.

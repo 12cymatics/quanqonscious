@@ -59,3 +59,8 @@ performance comparison and regression checks across seed corpora.
 ## Reproducibility Manifest
 Export a manifest JSON containing runtime environment, scalar governance settings,
 seed list, and sutra inventory hash to guarantee audit-grade replayability.
+
+
+## Benchmark Set Consistency
+A benchmark suite is valid only if all bundles share the same sutra inventory
+hash; mixed inventories are rejected to preserve comparability across seeds.

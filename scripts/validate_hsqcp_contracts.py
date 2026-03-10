@@ -37,6 +37,8 @@ def validate_platform_contract() -> None:
         'def compute_sutra_inventory_hash(sutra_names: Sequence[str]) -> str:',
         'def build_benchmark_matrix(bundles: Sequence[HybridSimulationBundle]) -> Dict[str, Any]:',
         'def write_reproducibility_manifest(',
+        'def validate_bundle_semantics(payload: Dict[str, Any]) -> None:',
+        'def validate_benchmark_bundle_set(bundles: Sequence[HybridSimulationBundle]) -> None:',
     ]
     for token in required:
         _require(text, token, "hybrid_sutra_platform.py")
@@ -67,6 +69,7 @@ def validate_docs_contract() -> None:
         "elapsed_ns",
         "runtime_environment",
         "runtime_scalars",
+        "Semantic Validation Rules",
     ]
     for token in schema_required:
         _require(schema, token, "docs/hsqcp_report_schema.md")
@@ -79,6 +82,7 @@ def validate_docs_contract() -> None:
         "Exact Rationals",
         "Benchmark Matrix Artifact",
         "Reproducibility Manifest",
+        "Benchmark Set Consistency",
     ]
     for token in protocol_required:
         _require(protocol, token, "docs/hsqcp_benchmark_protocol.md")
