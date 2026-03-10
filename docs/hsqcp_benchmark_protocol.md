@@ -49,3 +49,13 @@ This enables longitudinal regression checks and partner-facing audit trails.
 Use `hybrid_sutra_platform.py` with `--benchmark-seeds` and optional `--vault-dir`
 to execute and persist a complete tri-modal benchmark suite with explicit scalar
 settings and indexed artifacts.
+
+
+## Benchmark Matrix Artifact
+For benchmark suites, export a matrix JSON containing per-seed serial/concurrent/parallel
+wall-time nanoseconds and aggregate outputs. This artifact supports deterministic
+performance comparison and regression checks across seed corpora.
+
+## Reproducibility Manifest
+Export a manifest JSON containing runtime environment, scalar governance settings,
+seed list, and sutra inventory hash to guarantee audit-grade replayability.

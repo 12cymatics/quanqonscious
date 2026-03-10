@@ -55,3 +55,10 @@ Static contract validation:
 ```bash
 python scripts/validate_hsqcp_contracts.py
 ```
+
+
+Export benchmark matrix and reproducibility manifest in one run:
+
+```bash
+python hybrid_sutra_platform.py 1 --mode hybrid --benchmark-seeds 1,1618/1000,2,31415926535/10000000000 --benchmark-matrix-output runs/benchmark_matrix.json --manifest-output runs/repro_manifest.json
+```

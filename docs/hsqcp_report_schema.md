@@ -71,3 +71,13 @@ When persisted with the platform vault writer, each bundle emits an `index.jsonl
 ## Vault Audit
 Use `hybrid_sutra_platform.py --audit-vault <path>` to validate that each indexed
 bundle exists, passes schema validation, and matches its canonical payload hash.
+
+
+## Reproducibility Manifest Fields
+When generated, manifest payloads include:
+- `sutra_inventory_hash` (sha256 over sorted sutra names),
+- `runtime_scalars`,
+- `runtime_environment`,
+- `seeds`,
+- `seed_count`,
+- version and doctrine markers aligned with bundle/report schemas.

@@ -34,6 +34,9 @@ def validate_platform_contract() -> None:
         'def persist_signature_bundle(',
         'def audit_signature_vault(vault_dir: Path) -> Dict[str, Any]:',
         'def run_benchmark_suite(',
+        'def compute_sutra_inventory_hash(sutra_names: Sequence[str]) -> str:',
+        'def build_benchmark_matrix(bundles: Sequence[HybridSimulationBundle]) -> Dict[str, Any]:',
+        'def write_reproducibility_manifest(',
     ]
     for token in required:
         _require(text, token, "hybrid_sutra_platform.py")
@@ -74,6 +77,8 @@ def validate_docs_contract() -> None:
         "concurrent mode",
         "parallel mode",
         "Exact Rationals",
+        "Benchmark Matrix Artifact",
+        "Reproducibility Manifest",
     ]
     for token in protocol_required:
         _require(protocol, token, "docs/hsqcp_benchmark_protocol.md")

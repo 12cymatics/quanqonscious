@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from sutra_simulator import (
     DOCTRINE_FIDELITY_TAG,
@@ -53,6 +53,66 @@ def runtime_environment_metadata() -> Dict[str, Any]:
         "platform": platform.platform(),
         "git_commit": _resolve_git_commit(),
     }
+
+
+
+
+def compute_sutra_inventory_hash(sutra_names: Sequence[str]) -> str:
+    canonical = "\n".join(sorted(sutra_names))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_benchmark_matrix(bundles: Sequence[HybridSimulationBundle]) -> Dict[str, Any]:
+    matrix_rows: List[Dict[str, Any]] = []
+    for bundle in bundles:
+        matrix_rows.append(
+            {
+                "seed": str(bundle.initial_value),
+                "sutra_count": len(bundle.sutra_names),
+                "serial_wall_time_ns": bundle.serial.wall_time_ns,
+                "concurrent_wall_time_ns": bundle.concurrent.wall_time_ns,
+                "parallel_wall_time_ns": bundle.parallel.wall_time_ns,
+                "serial_aggregate": str(bundle.serial.aggregate),
+                "concurrent_aggregate": str(bundle.concurrent.aggregate),
+                "parallel_aggregate": str(bundle.parallel.aggregate),
+            }
+        )
+
+    return {
+        "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "rows": matrix_rows,
+    }
+
+
+def write_benchmark_matrix(
+    bundles: Sequence[HybridSimulationBundle],
+    path: Path,
+) -> None:
+    matrix = build_benchmark_matrix(bundles)
+    path.write_text(json.dumps(matrix, indent=2))
+
+
+def write_reproducibility_manifest(
+    bundles: Sequence[HybridSimulationBundle],
+    path: Path,
+) -> None:
+    if not bundles:
+        raise ValueError("Cannot write manifest for empty benchmark bundle set")
+
+    first = bundles[0]
+    manifest = {
+        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "report_schema_version": REPORT_SCHEMA_VERSION,
+        "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "doctrine_fidelity": DOCTRINE_FIDELITY_TAG,
+        "runtime_environment": runtime_environment_metadata(),
+        "runtime_scalars": first.runtime_scalars.to_dict(),
+        "sutra_inventory_hash": compute_sutra_inventory_hash(first.sutra_names),
+        "seed_count": len(bundles),
+        "seeds": [str(bundle.initial_value) for bundle in bundles],
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    path.write_text(json.dumps(manifest, indent=2))
 
 
 def parse_exact_rational(raw: str) -> Fraction:
@@ -442,6 +502,16 @@ def build_cli() -> argparse.ArgumentParser:
         type=Path,
         help="Audit an existing signature vault and verify bundle/index integrity",
     )
+    parser.add_argument(
+        "--benchmark-matrix-output",
+        type=Path,
+        help="Optional path to write benchmark matrix JSON for benchmark suites",
+    )
+    parser.add_argument(
+        "--manifest-output",
+        type=Path,
+        help="Optional path to write reproducibility manifest JSON",
+    )
     return parser
 
 
@@ -482,6 +552,12 @@ def main() -> None:
                     run_label=args.run_label,
                 )
                 print(f"Persisted bundle {persisted.bundle_id} -> {persisted.path}")
+        if args.benchmark_matrix_output:
+            write_benchmark_matrix(bundles, args.benchmark_matrix_output)
+            print(f"Benchmark matrix written to {args.benchmark_matrix_output}")
+        if args.manifest_output:
+            write_reproducibility_manifest(bundles, args.manifest_output)
+            print(f"Reproducibility manifest written to {args.manifest_output}")
         return
 
     bundle = run_hybrid_bundle(
@@ -506,6 +582,10 @@ def main() -> None:
             run_label=args.run_label,
         )
         print(f"Persisted bundle {persisted.bundle_id} -> {persisted.path}")
+
+    if args.manifest_output:
+        write_reproducibility_manifest([bundle], args.manifest_output)
+        print(f"Reproducibility manifest written to {args.manifest_output}")
 
 
 if __name__ == "__main__":
