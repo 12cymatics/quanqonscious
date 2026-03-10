@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Simplified H₂ GRVQ Molecular Dynamics Simulation
-CPU-only version for demonstration purposes
+H₂ GRVQ Molecular Dynamics Simulation
+CPU-only version aligned with the 29-sutra hybrid pipeline.
 
-Based on H2_MST_Dashboard_Rank3.py but simplified to run without:
-- MPI parallelization (single process)
-- CUDA GPU (CPU only)
-- CUDAq quantum simulator (uses Cirq only)
+Based on H2_MST_Dashboard_Rank3.py for single-process execution
+using Cirq-based quantum refinement.
 """
 
 import math
-import numpy as np
+import os
 import time
 import sys
 import hashlib
+
+import numpy as np
 from numba import njit
 import cirq
 import plotly.graph_objects as go
@@ -21,12 +21,63 @@ from plotly.subplots import make_subplots
 import plotly.io as pio
 from scipy.fft import fft, fftfreq
 
+from hc_ipc import HcIpcClient
+from hypercube_fm8 import HyperCubeFM8
+
 print("="*70)
 print("H₂ GRVQ Molecular Dynamics Simulation")
 print("MST-VQ Framework with 29 Vedic Sutras")
 print("="*70)
 
-# Simplified parameters (no MPI)
+# Audio integration (enabled when QUANQONSCIOUS_AUDIO=1)
+AUDIO_ENABLED = os.getenv("QUANQONSCIOUS_AUDIO", "0") == "1"
+AUDIO_CLIENT = HcIpcClient() if AUDIO_ENABLED else None
+AUDIO_CUBE = HyperCubeFM8(num_ops=8, base_frequency=432.0) if AUDIO_ENABLED else None
+AUDIO_STARTED = False
+
+def _init_audio_matrices() -> None:
+    if not AUDIO_ENABLED or AUDIO_CUBE is None:
+        return
+    mod = np.zeros((AUDIO_CUBE.num_ops, AUDIO_CUBE.num_ops), dtype=float)
+    for i in range(AUDIO_CUBE.num_ops):
+        for j in range(AUDIO_CUBE.num_ops):
+            if i == j:
+                mod[i, j] = 0.0
+            else:
+                mod[i, j] = 0.02 / (1.0 + abs(i - j))
+    AUDIO_CUBE.set_modulation_matrix(mod)
+    input_mat = [[0.0] for _ in range(AUDIO_CUBE.num_ops)]
+    AUDIO_CUBE.set_input_matrix(input_mat)
+    AUDIO_CUBE.set_mix_mode("concurrent")
+    AUDIO_CUBE.add_sutra_mapping(
+        "h2_dynamics",
+        operator_indices=range(AUDIO_CUBE.num_ops),
+        freq_scale=0.02,
+        level_scale=0.01,
+        ratio_scale=0.003,
+        detune_scale=0.5,
+    )
+
+def _emit_audio_update(values: np.ndarray) -> None:
+    global AUDIO_STARTED
+    if not AUDIO_ENABLED or AUDIO_CUBE is None or AUDIO_CLIENT is None:
+        return
+    if not AUDIO_STARTED:
+        AUDIO_CLIENT.start()
+        AUDIO_STARTED = True
+    AUDIO_CUBE.apply_sutra_to_operators("h2_dynamics", values.tolist())
+    payload = AUDIO_CUBE.as_update_payload()
+    AUDIO_CLIENT.send_state(
+        payload["base_ops"],
+        payload["levels"],
+        mod_matrix=payload["mod_matrix"],
+        input_matrix=payload["input_matrix"],
+        mix_mode=payload["mix_mode"],
+    )
+
+_init_audio_matrices()
+
+# Simulation parameters (single-process execution)
 rank = 0
 size = 1
 
@@ -197,6 +248,9 @@ def simulate_dynamics(r0, v0, scale_factor, zpe_offset):
         t_series[i] = t
         r_series[i] = r_next
         energy_series[i] = effective_potential(r_next, scale_factor, zpe_offset)
+
+        if AUDIO_ENABLED:
+            _emit_audio_update(np.array([r_next, energy_series[i], scale_factor, zpe_offset]))
 
         # Quantum feedback every step
         q_factor, dq_offset = quantum_refine_cirq(i)

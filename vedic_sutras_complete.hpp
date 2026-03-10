@@ -1,0 +1,2560 @@
+/**
+ * VEDIC SUTRAS COMPLETE IMPLEMENTATION v1.0
+ *
+ * All 29 Sutras (16 Main + 13 Sub-Sutras)
+ * EXACT MODE: Arbitrary-precision rational arithmetic
+ * Zero IEEE-754 contamination
+ *
+ * Requirements: C++17, Boost.Multiprecision
+ * Compile: g++ -std=c++17 -O3 -I/path/to/boost your_code.cpp
+ */
+
+#ifndef VEDIC_SUTRAS_COMPLETE_HPP
+#define VEDIC_SUTRAS_COMPLETE_HPP
+
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/rational.hpp>
+#include <vector>
+#include <string>
+#include <stdexcept>
+#include <algorithm>
+#include <cmath>
+#include <tuple>
+#include <optional>
+#include <functional>
+
+namespace vedic {
+
+// =============================================================================
+// CORE TYPES - Arbitrary Precision
+// =============================================================================
+
+using BigInt = boost::multiprecision::cpp_int;
+using Rational = boost::rational<BigInt>;
+
+// Abs for Rational
+inline Rational abs_rational(const Rational& r) {
+    return r < 0 ? -r : r;
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+namespace util {
+
+    // Extract digits from BigInt
+    inline std::vector<int> to_digits(const BigInt& n) {
+        if (n == 0) return {0};
+        std::vector<int> digits;
+        BigInt temp = boost::multiprecision::abs(n);
+        while (temp > 0) {
+            digits.push_back(static_cast<int>(temp % 10));
+            temp /= 10;
+        }
+        std::reverse(digits.begin(), digits.end());
+        return digits;
+    }
+
+    // Construct BigInt from digits
+    inline BigInt from_digits(const std::vector<int>& digits) {
+        BigInt result = 0;
+        for (int d : digits) {
+            result = result * 10 + d;
+        }
+        return result;
+    }
+
+    // Count digits
+    inline size_t digit_count(const BigInt& n) {
+        if (n == 0) return 1;
+        BigInt temp = boost::multiprecision::abs(n);
+        size_t count = 0;
+        while (temp > 0) {
+            temp /= 10;
+            count++;
+        }
+        return count;
+    }
+
+    // Power of 10
+    inline BigInt pow10(size_t exp) {
+        BigInt result = 1;
+        for (size_t i = 0; i < exp; ++i) {
+            result *= 10;
+        }
+        return result;
+    }
+
+    // Integer power (exact)
+    inline BigInt power(const BigInt& base, size_t exp) {
+        BigInt result = 1;
+        BigInt b = base;
+        size_t e = exp;
+        while (e > 0) {
+            if (e & 1) result *= b;
+            b *= b;
+            e >>= 1;
+        }
+        return result;
+    }
+
+    // GCD using Euclidean algorithm
+    inline BigInt gcd(BigInt a, BigInt b) {
+        a = boost::multiprecision::abs(a);
+        b = boost::multiprecision::abs(b);
+        while (b != 0) {
+            BigInt t = b;
+            b = a % b;
+            a = t;
+        }
+        return a;
+    }
+
+    // LCM
+    inline BigInt lcm(const BigInt& a, const BigInt& b) {
+        if (a == 0 || b == 0) return 0;
+        return boost::multiprecision::abs(a * b) / gcd(a, b);
+    }
+
+    // Check if perfect square
+    inline bool is_perfect_square(const BigInt& n) {
+        if (n < 0) return false;
+        if (n == 0) return true;
+        BigInt root = boost::multiprecision::sqrt(n);
+        return root * root == n;
+    }
+
+    // Integer square root (floor)
+    inline BigInt isqrt(const BigInt& n) {
+        if (n < 0) throw std::domain_error("isqrt of negative");
+        return boost::multiprecision::sqrt(n);
+    }
+
+} // namespace util
+
+// =============================================================================
+// SUTRA S1: Ekādhikena Pūrveṇa (By one more than the previous)
+// =============================================================================
+// Application: Division by numbers ending in 9, recurring decimal computation
+// Example: 1/19 uses multiplier 2 (one more than 1)
+// Example: 1/29 uses multiplier 3 (one more than 2)
+
+namespace S1_Ekadhikena {
+
+    struct RecurringDecimal {
+        std::vector<int> non_recurring;  // Digits before cycle
+        std::vector<int> recurring;       // Repeating cycle
+        bool negative;
+    };
+
+    // Compute 1/n where n ends in 9, using Ekādhikena method
+    // Returns the recurring decimal representation
+    inline RecurringDecimal divide_by_nine_ender(const BigInt& denominator, size_t max_digits = 1000) {
+        RecurringDecimal result;
+        result.negative = (denominator < 0);
+
+        BigInt denom = boost::multiprecision::abs(denominator);
+
+        // Verify denominator ends in 9
+        if (denom % 10 != 9) {
+            throw std::invalid_argument("Denominator must end in 9 for Ekādhikena");
+        }
+
+        // Ekādhikena multiplier: (d + 1) / 10 where d is the denominator
+        // For 19: multiplier = 2, for 29: multiplier = 3, etc.
+        BigInt multiplier = (denom + 1) / 10;
+
+        // Generate decimal digits using the method
+        // Start with 1, repeatedly multiply by multiplier, take last digit
+        std::vector<int> digits;
+        std::vector<BigInt> seen_values;
+        BigInt current = 1;
+
+        for (size_t i = 0; i < max_digits; ++i) {
+            // Check for cycle
+            for (size_t j = 0; j < seen_values.size(); ++j) {
+                if (seen_values[j] == current) {
+                    // Found cycle starting at position j
+                    result.non_recurring.assign(digits.begin(), digits.begin() + j);
+                    result.recurring.assign(digits.begin() + j, digits.end());
+                    return result;
+                }
+            }
+
+            seen_values.push_back(current);
+
+            // Multiply and extract digit
+            current *= multiplier;
+            int digit = static_cast<int>(current % 10);
+            digits.push_back(digit);
+            current = current / 10 + digit;  // Carry forward
+        }
+
+        // No cycle found within max_digits
+        result.recurring = digits;
+        return result;
+    }
+
+    // General division a/b producing recurring decimal
+    inline RecurringDecimal divide_recurring(const BigInt& numerator, const BigInt& denominator, size_t max_digits = 1000) {
+        RecurringDecimal result;
+        result.negative = (numerator < 0) != (denominator < 0);
+
+        BigInt num = boost::multiprecision::abs(numerator);
+        BigInt denom = boost::multiprecision::abs(denominator);
+
+        if (denom == 0) throw std::domain_error("Division by zero");
+
+        // Integer part
+        BigInt integer_part = num / denom;
+        BigInt remainder = num % denom;
+
+        // Convert integer part to digits
+        if (integer_part > 0) {
+            result.non_recurring = util::to_digits(integer_part);
+        }
+
+        // Decimal part using long division
+        std::vector<int> decimal_digits;
+        std::vector<BigInt> remainders;
+
+        while (remainder != 0 && decimal_digits.size() < max_digits) {
+            // Check for cycle
+            for (size_t i = 0; i < remainders.size(); ++i) {
+                if (remainders[i] == remainder) {
+                    // Cycle found
+                    result.recurring.assign(decimal_digits.begin() + i, decimal_digits.end());
+                    decimal_digits.resize(i);
+                    // Append non-recurring decimal to non_recurring
+                    for (int d : decimal_digits) {
+                        result.non_recurring.push_back(d);
+                    }
+                    return result;
+                }
+            }
+
+            remainders.push_back(remainder);
+            remainder *= 10;
+            int digit = static_cast<int>(remainder / denom);
+            decimal_digits.push_back(digit);
+            remainder = remainder % denom;
+        }
+
+        // No cycle found (terminates or exceeds max)
+        for (int d : decimal_digits) {
+            result.non_recurring.push_back(d);
+        }
+        return result;
+    }
+
+    // Test: 1/19 should give recurring period of 18 digits
+    inline bool test() {
+        auto result = divide_recurring(BigInt(1), BigInt(19), 100);
+        // 1/19 = 0.(052631578947368421) recurring
+        return result.recurring.size() == 18;
+    }
+
+} // namespace S1_Ekadhikena
+
+// =============================================================================
+// SUTRA S2: Nikhilam Navataścaramam Daśataḥ (All from 9, last from 10)
+// =============================================================================
+// Application: Multiplication of numbers near a base (power of 10)
+// Example: 98 × 97 near base 100
+//   Deficiencies: 2 and 3
+//   (98 - 3) × 100 + 2 × 3 = 9500 + 6 = 9506
+
+namespace S2_Nikhilam {
+
+    struct NikhilamResult {
+        BigInt product;
+        BigInt base;
+        BigInt deficiency_a;
+        BigInt deficiency_b;
+        BigInt cross_term;      // (a - def_b) * base OR (b - def_a) * base
+        BigInt product_term;    // def_a * def_b
+    };
+
+    // Find optimal base (nearest power of 10)
+    inline BigInt find_base(const BigInt& a, const BigInt& b) {
+        BigInt max_val = std::max(boost::multiprecision::abs(a), boost::multiprecision::abs(b));
+        size_t digits = util::digit_count(max_val);
+        return util::pow10(digits);
+    }
+
+    // Nikhilam multiplication
+    inline NikhilamResult multiply(const BigInt& a, const BigInt& b, const BigInt& base) {
+        NikhilamResult result;
+        result.base = base;
+
+        // Deficiencies (can be negative if number exceeds base)
+        result.deficiency_a = base - a;
+        result.deficiency_b = base - b;
+
+        // Cross subtraction: (a - deficiency_b) = a - (base - b) = a + b - base
+        BigInt cross = a - result.deficiency_b;  // = a + b - base
+        result.cross_term = cross * base;
+
+        // Product of deficiencies
+        result.product_term = result.deficiency_a * result.deficiency_b;
+
+        // Final product
+        result.product = result.cross_term + result.product_term;
+
+        return result;
+    }
+
+    // Auto-detect base version
+    inline NikhilamResult multiply(const BigInt& a, const BigInt& b) {
+        BigInt base = find_base(a, b);
+        return multiply(a, b, base);
+    }
+
+    // Extended Nikhilam for numbers far from base
+    // Works by recursive decomposition
+    inline BigInt multiply_extended(const BigInt& a, const BigInt& b) {
+        // Base cases
+        if (a == 0 || b == 0) return 0;
+        if (a == 1) return b;
+        if (b == 1) return a;
+        if (a < 10 && b < 10) return a * b;  // Single digit
+
+        BigInt base = find_base(a, b);
+
+        // If numbers are close to base, use standard Nikhilam
+        BigInt def_a = base - a;
+        BigInt def_b = base - b;
+
+        // Check if deficiencies are small enough
+        if (boost::multiprecision::abs(def_a) < base / 2 &&
+            boost::multiprecision::abs(def_b) < base / 2) {
+            return multiply(a, b, base).product;
+        }
+
+        // Otherwise, use standard multiplication
+        return a * b;
+    }
+
+    // Test: 98 × 97 = 9506
+    inline bool test() {
+        auto result = multiply(BigInt(98), BigInt(97), BigInt(100));
+        return result.product == 9506 &&
+               result.deficiency_a == 2 &&
+               result.deficiency_b == 3;
+    }
+
+} // namespace S2_Nikhilam
+
+// =============================================================================
+// SUTRA S3: Ūrdhva-Tiryagbhyām (Vertically and Crosswise)
+// =============================================================================
+// Application: General multiplication, convolution, polynomial multiplication
+// Computes products in parallel across digit positions
+
+namespace S3_Urdhva {
+
+    // Multiply two numbers using vertical-crosswise method
+    // Returns intermediate cross products for verification
+    struct UrdhvaResult {
+        BigInt product;
+        std::vector<BigInt> cross_products;  // Products at each position
+    };
+
+    inline UrdhvaResult multiply(const BigInt& a, const BigInt& b) {
+        UrdhvaResult result;
+
+        std::vector<int> digits_a = util::to_digits(a);
+        std::vector<int> digits_b = util::to_digits(b);
+
+        size_t n = digits_a.size();
+        size_t m = digits_b.size();
+
+        // Pad to same length
+        while (digits_a.size() < digits_b.size()) digits_a.insert(digits_a.begin(), 0);
+        while (digits_b.size() < digits_a.size()) digits_b.insert(digits_b.begin(), 0);
+
+        size_t len = digits_a.size();
+
+        // Cross products for each position (2*len - 1 positions)
+        result.cross_products.resize(2 * len - 1, BigInt(0));
+
+        // Compute cross products
+        // Position k gets sum of a[i] * b[j] where i + j = k
+        for (size_t i = 0; i < len; ++i) {
+            for (size_t j = 0; j < len; ++j) {
+                size_t pos = i + j;
+                result.cross_products[pos] += BigInt(digits_a[i]) * BigInt(digits_b[j]);
+            }
+        }
+
+        // Combine with carries (from right to left)
+        BigInt carry = 0;
+        BigInt multiplier = 1;
+        result.product = 0;
+
+        for (int k = static_cast<int>(result.cross_products.size()) - 1; k >= 0; --k) {
+            BigInt total = result.cross_products[k] + carry;
+            BigInt digit = total % 10;
+            carry = total / 10;
+            result.product += digit * multiplier;
+            multiplier *= 10;
+        }
+
+        // Add remaining carry
+        while (carry > 0) {
+            BigInt digit = carry % 10;
+            result.product += digit * multiplier;
+            multiplier *= 10;
+            carry /= 10;
+        }
+
+        return result;
+    }
+
+    // Polynomial multiplication (convolution)
+    // Coefficients in increasing power order: [a0, a1, a2, ...] represents a0 + a1*x + a2*x² + ...
+    inline std::vector<Rational> polynomial_multiply(
+        const std::vector<Rational>& p1,
+        const std::vector<Rational>& p2
+    ) {
+        if (p1.empty() || p2.empty()) return {};
+
+        size_t result_size = p1.size() + p2.size() - 1;
+        std::vector<Rational> result(result_size, Rational(0));
+
+        // Crosswise multiplication
+        for (size_t i = 0; i < p1.size(); ++i) {
+            for (size_t j = 0; j < p2.size(); ++j) {
+                result[i + j] += p1[i] * p2[j];
+            }
+        }
+
+        return result;
+    }
+
+    // Matrix multiplication using Urdhva principle
+    // Matrices stored as row-major vectors
+    inline std::vector<Rational> matrix_multiply(
+        const std::vector<Rational>& A, size_t rowsA, size_t colsA,
+        const std::vector<Rational>& B, size_t rowsB, size_t colsB
+    ) {
+        if (colsA != rowsB) {
+            throw std::invalid_argument("Matrix dimensions incompatible");
+        }
+
+        std::vector<Rational> C(rowsA * colsB, Rational(0));
+
+        // Standard matrix multiplication with exact arithmetic
+        for (size_t i = 0; i < rowsA; ++i) {
+            for (size_t j = 0; j < colsB; ++j) {
+                Rational sum = 0;
+                for (size_t k = 0; k < colsA; ++k) {
+                    sum += A[i * colsA + k] * B[k * colsB + j];
+                }
+                C[i * colsB + j] = sum;
+            }
+        }
+
+        return C;
+    }
+
+    // Test: 123 × 456 = 56088
+    inline bool test() {
+        auto result = multiply(BigInt(123), BigInt(456));
+        return result.product == 56088;
+    }
+
+} // namespace S3_Urdhva
+
+// =============================================================================
+// SUTRA S4: Parāvartya Yojayet (Transpose and Adjust)
+// =============================================================================
+// Application: Division, especially polynomial division
+
+namespace S4_Paravartya {
+
+    struct DivisionResult {
+        BigInt quotient;
+        BigInt remainder;
+        std::vector<BigInt> partial_quotients;  // Step-by-step quotients
+    };
+
+    // Integer division with step tracking
+    inline DivisionResult divide(const BigInt& dividend, const BigInt& divisor) {
+        DivisionResult result;
+
+        if (divisor == 0) throw std::domain_error("Division by zero");
+
+        BigInt abs_dividend = boost::multiprecision::abs(dividend);
+        BigInt abs_divisor = boost::multiprecision::abs(divisor);
+
+        bool negative = (dividend < 0) != (divisor < 0);
+
+        result.quotient = abs_dividend / abs_divisor;
+        result.remainder = abs_dividend % abs_divisor;
+
+        if (negative && result.quotient != 0) {
+            result.quotient = -result.quotient;
+        }
+
+        return result;
+    }
+
+    // Polynomial division
+    // Returns (quotient, remainder) as coefficient vectors
+    struct PolyDivResult {
+        std::vector<Rational> quotient;
+        std::vector<Rational> remainder;
+    };
+
+    inline PolyDivResult polynomial_divide(
+        std::vector<Rational> dividend,  // Copy intentional
+        const std::vector<Rational>& divisor
+    ) {
+        PolyDivResult result;
+
+        if (divisor.empty() || (divisor.size() == 1 && divisor[0] == 0)) {
+            throw std::domain_error("Polynomial division by zero");
+        }
+
+        // Remove trailing zeros
+        while (!dividend.empty() && dividend.back() == 0) dividend.pop_back();
+
+        if (dividend.size() < divisor.size()) {
+            result.remainder = dividend;
+            return result;
+        }
+
+        size_t quotient_size = dividend.size() - divisor.size() + 1;
+        result.quotient.resize(quotient_size, Rational(0));
+
+        // Long division
+        for (int i = static_cast<int>(quotient_size) - 1; i >= 0; --i) {
+            size_t dividend_idx = i + divisor.size() - 1;
+            Rational coeff = dividend[dividend_idx] / divisor.back();
+            result.quotient[i] = coeff;
+
+            // Subtract
+            for (size_t j = 0; j < divisor.size(); ++j) {
+                dividend[i + j] -= coeff * divisor[j];
+            }
+        }
+
+        // Remainder is what's left
+        result.remainder.assign(dividend.begin(), dividend.begin() + divisor.size() - 1);
+
+        // Remove trailing zeros from remainder
+        while (!result.remainder.empty() && result.remainder.back() == 0) {
+            result.remainder.pop_back();
+        }
+
+        return result;
+    }
+
+    // Test: 9506 ÷ 98 = 97 remainder 0
+    inline bool test() {
+        auto result = divide(BigInt(9506), BigInt(98));
+        return result.quotient == 97 && result.remainder == 0;
+    }
+
+} // namespace S4_Paravartya
+
+// =============================================================================
+// SUTRA S5: Śūnyam Sāmyasamuccaye (When the sum is the same, sum is zero)
+// =============================================================================
+// Application: Solving equations where terms sum to equal values
+
+namespace S5_Shunyam {
+
+    // Solve equations of form: (x + a)(x + b) = (x + c)(x + d)
+    // When a + b = c + d, the equation simplifies
+    // Returns x values that satisfy the equation
+    struct EquationResult {
+        std::vector<Rational> solutions;
+        bool sum_equality_applies;  // True if a + b = c + d
+    };
+
+    inline EquationResult solve_product_equality(
+        const Rational& a, const Rational& b,
+        const Rational& c, const Rational& d
+    ) {
+        EquationResult result;
+
+        // Check if sums are equal
+        result.sum_equality_applies = (a + b == c + d);
+
+        if (result.sum_equality_applies) {
+            // (x + a)(x + b) = (x + c)(x + d)
+            // Expanding: x² + (a+b)x + ab = x² + (c+d)x + cd
+            // Since a + b = c + d: ab = cd
+            // If ab ≠ cd, no solution
+            // If ab = cd, equation is identity (infinite solutions represented as empty)
+            if (a * b == c * d) {
+                // Identity - any x works
+                // Return empty to indicate infinite solutions
+            } else {
+                // No solution (contradiction)
+            }
+        } else {
+            // General case: solve quadratic
+            // x² + (a+b)x + ab = x² + (c+d)x + cd
+            // ((a+b) - (c+d))x = cd - ab
+            Rational coeff = (a + b) - (c + d);
+            if (coeff != 0) {
+                Rational x = (c * d - a * b) / coeff;
+                result.solutions.push_back(x);
+            }
+        }
+
+        return result;
+    }
+
+    // Solve linear equations using sum-zero principle
+    // ax + b = cx + d → (a-c)x = d - b
+    inline std::optional<Rational> solve_linear(
+        const Rational& a, const Rational& b,
+        const Rational& c, const Rational& d
+    ) {
+        Rational coeff = a - c;
+        if (coeff == 0) {
+            // No unique solution (either infinite or none)
+            return std::nullopt;
+        }
+        return (d - b) / coeff;
+    }
+
+    // Test: (x+2)(x+3) = (x+1)(x+4) when 2+3 = 1+4 = 5
+    inline bool test() {
+        auto result = solve_product_equality(
+            Rational(2), Rational(3),
+            Rational(1), Rational(4)
+        );
+        // Both sides have same sum (5), and 2*3 = 6 ≠ 1*4 = 4
+        // So no solution exists
+        return result.sum_equality_applies && result.solutions.empty();
+    }
+
+} // namespace S5_Shunyam
+
+// =============================================================================
+// SUTRA S6: Ānurūpye Śūnyamanyat (If one is in ratio, the other is zero)
+// =============================================================================
+// Application: Systems with proportional coefficients
+
+namespace S6_Anurupye {
+
+    // Check if two ratios are equal: a/b = c/d
+    inline bool ratios_equal(const Rational& a, const Rational& b,
+                             const Rational& c, const Rational& d) {
+        if (b == 0 || d == 0) {
+            return b == 0 && d == 0;  // Both denominators zero
+        }
+        return a * d == b * c;
+    }
+
+    // Solve system where one equation is proportional to another
+    // a1*x + b1*y = c1
+    // a2*x + b2*y = c2
+    // If a1/a2 = b1/b2 (proportional), check consistency
+    struct SystemResult {
+        std::optional<Rational> x;
+        std::optional<Rational> y;
+        bool proportional;      // Coefficients are proportional
+        bool consistent;        // System has solution
+        bool infinite;          // Infinite solutions
+    };
+
+    inline SystemResult solve_system_2x2(
+        const Rational& a1, const Rational& b1, const Rational& c1,
+        const Rational& a2, const Rational& b2, const Rational& c2
+    ) {
+        SystemResult result;
+        result.proportional = false;
+        result.consistent = true;
+        result.infinite = false;
+
+        // Determinant
+        Rational det = a1 * b2 - a2 * b1;
+
+        if (det == 0) {
+            // Singular - check proportionality
+            result.proportional = true;
+
+            // Check if equations are consistent (same line)
+            // If a1/a2 = b1/b2 = c1/c2, infinite solutions
+            bool c_proportional = false;
+            if (a2 != 0) {
+                c_proportional = ratios_equal(a1, a2, c1, c2);
+            } else if (b2 != 0) {
+                c_proportional = ratios_equal(b1, b2, c1, c2);
+            } else {
+                c_proportional = (c2 == 0);
+            }
+
+            if (c_proportional) {
+                result.infinite = true;
+                result.consistent = true;
+            } else {
+                result.consistent = false;
+            }
+        } else {
+            // Unique solution via Cramer's rule
+            result.x = (c1 * b2 - c2 * b1) / det;
+            result.y = (a1 * c2 - a2 * c1) / det;
+        }
+
+        return result;
+    }
+
+    // Test: 2x + 4y = 6 and 3x + 6y = 9 (proportional, infinite solutions)
+    inline bool test() {
+        auto result = solve_system_2x2(
+            Rational(2), Rational(4), Rational(6),
+            Rational(3), Rational(6), Rational(9)
+        );
+        return result.proportional && result.infinite;
+    }
+
+} // namespace S6_Anurupye
+
+// =============================================================================
+// SUTRA S7: Saṅkalana-Vyavakalanābhyām (By Addition and Subtraction)
+// =============================================================================
+// Application: Simultaneous equations, Gaussian elimination
+
+namespace S7_Sankalana {
+
+    // Solve 2x2 system by addition/subtraction elimination
+    // a1*x + b1*y = c1
+    // a2*x + b2*y = c2
+    struct EliminationResult {
+        std::optional<Rational> x;
+        std::optional<Rational> y;
+        std::vector<std::string> steps;  // Human-readable elimination steps
+    };
+
+    inline EliminationResult solve_by_elimination(
+        Rational a1, Rational b1, Rational c1,
+        Rational a2, Rational b2, Rational c2
+    ) {
+        EliminationResult result;
+
+        // Strategy: eliminate x by making coefficients equal
+        if (a1 == 0 && a2 == 0) {
+            // Already eliminated x
+            if (b1 == 0 && b2 == 0) {
+                // Degenerate
+                return result;
+            }
+            // Solve for y directly
+            if (b1 != 0) {
+                result.y = c1 / b1;
+            } else if (b2 != 0) {
+                result.y = c2 / b2;
+            }
+            return result;
+        }
+
+        // Multiply equations to make x coefficients equal
+        // Eq1 * a2 - Eq2 * a1 eliminates x
+        Rational new_b = b1 * a2 - b2 * a1;
+        Rational new_c = c1 * a2 - c2 * a1;
+
+        if (new_b == 0) {
+            // x was eliminated but y also cancelled
+            if (new_c != 0) {
+                // Inconsistent
+                return result;
+            }
+            // Dependent equations
+            return result;
+        }
+
+        result.y = new_c / new_b;
+
+        // Back-substitute to find x
+        if (a1 != 0) {
+            result.x = (c1 - b1 * (*result.y)) / a1;
+        } else {
+            result.x = (c2 - b2 * (*result.y)) / a2;
+        }
+
+        return result;
+    }
+
+    // Gaussian elimination for n×n system
+    // Matrix A is n×n, vector b is n×1
+    // Solves Ax = b
+    inline std::optional<std::vector<Rational>> gaussian_eliminate(
+        std::vector<std::vector<Rational>> A,
+        std::vector<Rational> b
+    ) {
+        size_t n = A.size();
+        if (n == 0 || A[0].size() != n || b.size() != n) {
+            throw std::invalid_argument("Invalid matrix dimensions");
+        }
+
+        // Augmented matrix
+        for (size_t i = 0; i < n; ++i) {
+            A[i].push_back(b[i]);
+        }
+
+        // Forward elimination
+        for (size_t col = 0; col < n; ++col) {
+            // Find pivot
+            size_t pivot_row = col;
+            for (size_t row = col + 1; row < n; ++row) {
+                if (abs_rational(A[row][col]) >
+                    abs_rational(A[pivot_row][col])) {
+                    pivot_row = row;
+                }
+            }
+
+            // Swap rows
+            std::swap(A[col], A[pivot_row]);
+
+            // Check for zero pivot
+            if (A[col][col] == 0) {
+                return std::nullopt;  // Singular matrix
+            }
+
+            // Eliminate below
+            for (size_t row = col + 1; row < n; ++row) {
+                Rational factor = A[row][col] / A[col][col];
+                for (size_t j = col; j <= n; ++j) {
+                    A[row][j] -= factor * A[col][j];
+                }
+            }
+        }
+
+        // Back substitution
+        std::vector<Rational> x(n);
+        for (int i = static_cast<int>(n) - 1; i >= 0; --i) {
+            Rational sum = A[i][n];
+            for (size_t j = i + 1; j < n; ++j) {
+                sum -= A[i][j] * x[j];
+            }
+            x[i] = sum / A[i][i];
+        }
+
+        return x;
+    }
+
+    // Test: x + y = 5, x - y = 1 → x = 3, y = 2
+    inline bool test() {
+        auto result = solve_by_elimination(
+            Rational(1), Rational(1), Rational(5),
+            Rational(1), Rational(-1), Rational(1)
+        );
+        return result.x && result.y && *result.x == 3 && *result.y == 2;
+    }
+
+} // namespace S7_Sankalana
+
+// =============================================================================
+// SUTRA S8: Pūraṇāpūraṇābhyām (By Completion and Non-Completion)
+// =============================================================================
+// Application: Completing the square, solving quadratics
+
+namespace S8_Purana {
+
+    // Complete the square for ax² + bx + c
+    // Returns (a, h, k) where ax² + bx + c = a(x - h)² + k
+    struct CompletedSquare {
+        Rational a;          // Leading coefficient
+        Rational h;          // Vertex x-coordinate
+        Rational k;          // Vertex y-coordinate
+        Rational discriminant;
+    };
+
+    inline CompletedSquare complete_the_square(
+        const Rational& a,
+        const Rational& b,
+        const Rational& c
+    ) {
+        if (a == 0) {
+            throw std::invalid_argument("Not a quadratic (a = 0)");
+        }
+
+        CompletedSquare result;
+        result.a = a;
+
+        // ax² + bx + c = a(x² + (b/a)x) + c
+        //              = a(x + b/(2a))² - b²/(4a) + c
+        //              = a(x - h)² + k
+        // where h = -b/(2a), k = c - b²/(4a)
+
+        result.h = -b / (Rational(2) * a);
+        result.k = c - (b * b) / (Rational(4) * a);
+        result.discriminant = b * b - Rational(4) * a * c;
+
+        return result;
+    }
+
+    // Solve quadratic ax² + bx + c = 0
+    // Returns exact rational roots if discriminant is perfect square
+    struct QuadraticRoots {
+        std::optional<Rational> root1;
+        std::optional<Rational> root2;
+        Rational discriminant;
+        bool exact;  // True if roots are rational
+    };
+
+    inline QuadraticRoots solve_quadratic(
+        const Rational& a,
+        const Rational& b,
+        const Rational& c
+    ) {
+        QuadraticRoots result;
+
+        if (a == 0) {
+            // Linear: bx + c = 0
+            if (b != 0) {
+                result.root1 = -c / b;
+                result.exact = true;
+            }
+            return result;
+        }
+
+        result.discriminant = b * b - Rational(4) * a * c;
+
+        if (result.discriminant < 0) {
+            // Complex roots (not representable as rationals)
+            result.exact = false;
+            return result;
+        }
+
+        if (result.discriminant == 0) {
+            // Repeated root
+            result.root1 = -b / (Rational(2) * a);
+            result.root2 = result.root1;
+            result.exact = true;
+            return result;
+        }
+
+        // Check if discriminant is perfect square
+        BigInt disc_num = result.discriminant.numerator();
+        BigInt disc_den = result.discriminant.denominator();
+
+        if (util::is_perfect_square(disc_num) && util::is_perfect_square(disc_den)) {
+            BigInt sqrt_num = util::isqrt(disc_num);
+            BigInt sqrt_den = util::isqrt(disc_den);
+            Rational sqrt_disc = Rational(sqrt_num, sqrt_den);
+
+            result.root1 = (-b + sqrt_disc) / (Rational(2) * a);
+            result.root2 = (-b - sqrt_disc) / (Rational(2) * a);
+            result.exact = true;
+        } else {
+            result.exact = false;
+        }
+
+        return result;
+    }
+
+    // Test: x² - 5x + 6 = 0 → roots at 2 and 3
+    inline bool test() {
+        auto result = solve_quadratic(Rational(1), Rational(-5), Rational(6));
+        return result.exact && result.root1 && result.root2 &&
+               ((*result.root1 == 2 && *result.root2 == 3) ||
+                (*result.root1 == 3 && *result.root2 == 2));
+    }
+
+} // namespace S8_Purana
+
+// =============================================================================
+// SUTRA S9: Calana-Kalanābhyām (Differential Calculus)
+// =============================================================================
+// Application: Differentiation of polynomials
+
+namespace S9_Calana {
+
+    // Polynomial represented as coefficients [a0, a1, a2, ...]
+    // = a0 + a1*x + a2*x² + ...
+
+    // Differentiate polynomial
+    inline std::vector<Rational> differentiate(const std::vector<Rational>& poly) {
+        if (poly.size() <= 1) {
+            return {Rational(0)};
+        }
+
+        std::vector<Rational> derivative(poly.size() - 1);
+        for (size_t i = 1; i < poly.size(); ++i) {
+            derivative[i - 1] = poly[i] * Rational(i);
+        }
+
+        return derivative;
+    }
+
+    // Integrate polynomial (antiderivative, constant = 0)
+    inline std::vector<Rational> integrate(const std::vector<Rational>& poly) {
+        std::vector<Rational> antiderivative(poly.size() + 1);
+        antiderivative[0] = Rational(0);  // Constant of integration
+
+        for (size_t i = 0; i < poly.size(); ++i) {
+            antiderivative[i + 1] = poly[i] / Rational(i + 1);
+        }
+
+        return antiderivative;
+    }
+
+    // Evaluate polynomial at point x
+    inline Rational evaluate(const std::vector<Rational>& poly, const Rational& x) {
+        Rational result = 0;
+        Rational x_power = 1;
+
+        for (const auto& coeff : poly) {
+            result += coeff * x_power;
+            x_power *= x;
+        }
+
+        return result;
+    }
+
+    // Find critical points (where derivative = 0)
+    // For quadratic derivative, solve analytically
+    inline std::vector<Rational> find_critical_points(const std::vector<Rational>& poly) {
+        auto deriv = differentiate(poly);
+
+        if (deriv.size() == 1) {
+            // Constant derivative
+            return {};
+        }
+
+        if (deriv.size() == 2) {
+            // Linear: a0 + a1*x = 0 → x = -a0/a1
+            if (deriv[1] != 0) {
+                return {-deriv[0] / deriv[1]};
+            }
+            return {};
+        }
+
+        if (deriv.size() == 3) {
+            // Quadratic
+            auto roots = S8_Purana::solve_quadratic(deriv[2], deriv[1], deriv[0]);
+            std::vector<Rational> result;
+            if (roots.root1) result.push_back(*roots.root1);
+            if (roots.root2 && roots.root2 != roots.root1) result.push_back(*roots.root2);
+            return result;
+        }
+
+        // Higher degree - would need numerical methods or factorization
+        return {};
+    }
+
+    // Test: d/dx(x³) = 3x²
+    inline bool test() {
+        std::vector<Rational> cubic = {0, 0, 0, 1};  // x³
+        auto deriv = differentiate(cubic);
+        // Should be [0, 0, 3] = 3x²
+        return deriv.size() == 3 && deriv[0] == 0 && deriv[1] == 0 && deriv[2] == 3;
+    }
+
+} // namespace S9_Calana
+
+// =============================================================================
+// SUTRA S10: Yāvadūnam (By the Deficiency)
+// =============================================================================
+// Application: Squaring numbers near a base
+
+namespace S10_Yavadunam {
+
+    struct SquareResult {
+        BigInt square;
+        BigInt base;
+        BigInt deficiency;
+        BigInt left_part;   // (n + deficiency) or (n - deficiency) depending on above/below
+        BigInt right_part;  // deficiency²
+    };
+
+    // Square a number using deficiency from base
+    inline SquareResult square(const BigInt& n, const BigInt& base) {
+        SquareResult result;
+        result.base = base;
+
+        bool above_base = (n > base);
+        result.deficiency = above_base ? (n - base) : (base - n);
+
+        // For n near base:
+        // n² = (n + d)(n - d) + d² = (n² - d²) + d²
+        // Or: n² = (n ± d) * base ± d² where d is deficiency
+
+        if (above_base) {
+            // n = base + d
+            // n² = (n + d) * base + d² = (base + 2d) * base + d²
+            result.left_part = n + result.deficiency;  // base + 2d
+            result.right_part = result.deficiency * result.deficiency;
+
+            // Compute number of digits needed for right part
+            size_t base_digits = util::digit_count(base);
+            BigInt right_padded = result.right_part;
+
+            result.square = result.left_part * base + result.right_part;
+        } else {
+            // n = base - d
+            // n² = (n - d) * base + d² = (base - 2d) * base + d²
+            result.left_part = n - result.deficiency;  // base - 2d
+            result.right_part = result.deficiency * result.deficiency;
+
+            result.square = result.left_part * base + result.right_part;
+        }
+
+        return result;
+    }
+
+    // Auto-detect best base
+    inline SquareResult square(const BigInt& n) {
+        size_t digits = util::digit_count(n);
+        BigInt base = util::pow10(digits);
+
+        // Choose closer base (current or next power of 10)
+        BigInt lower = util::pow10(digits - 1);
+
+        BigInt def_upper = boost::multiprecision::abs(n - base);
+        BigInt def_lower = boost::multiprecision::abs(n - lower);
+
+        if (def_lower < def_upper) {
+            return square(n, lower);
+        }
+        return square(n, base);
+    }
+
+    // Speed of light squared: c² = 299792458² = 89,875,517,873,681,764
+    inline BigInt c_squared() {
+        BigInt c = 299792458;
+        auto result = square(c, BigInt(300000000));
+        return result.square;
+    }
+
+    // Test: c² = 89875517873681764
+    inline bool test() {
+        BigInt expected("89875517873681764");
+        return c_squared() == expected;
+    }
+
+} // namespace S10_Yavadunam
+
+// =============================================================================
+// SUTRA S11: Vyaṣṭisamaṣṭiḥ (Part and Whole)
+// =============================================================================
+// Application: Factoring common operations, batch computation
+
+namespace S11_Vyashti {
+
+    // Factor out common multiplier: Σ(aᵢ × c) = c × Σaᵢ
+    struct FactoredSum {
+        Rational common_factor;
+        Rational sum_of_parts;
+        Rational total;
+    };
+
+    inline FactoredSum factor_common(
+        const std::vector<Rational>& values,
+        const Rational& common_factor
+    ) {
+        FactoredSum result;
+        result.common_factor = common_factor;
+        result.sum_of_parts = 0;
+
+        for (const auto& v : values) {
+            result.sum_of_parts += v;
+        }
+
+        result.total = common_factor * result.sum_of_parts;
+        return result;
+    }
+
+    // E = mc² for multiple masses
+    // Instead of computing m₁c² + m₂c² + m₃c² + ...
+    // Compute c² × (m₁ + m₂ + m₃ + ...)
+    inline Rational total_energy(const std::vector<Rational>& masses) {
+        // c² = 89,875,517,873,681,764 (exact)
+        Rational c_squared(BigInt("89875517873681764"));
+
+        Rational total_mass = 0;
+        for (const auto& m : masses) {
+            total_mass += m;
+        }
+
+        return c_squared * total_mass;
+    }
+
+    // GCD of multiple numbers
+    inline BigInt gcd_multiple(const std::vector<BigInt>& numbers) {
+        if (numbers.empty()) return BigInt(0);
+
+        BigInt result = numbers[0];
+        for (size_t i = 1; i < numbers.size(); ++i) {
+            result = util::gcd(result, numbers[i]);
+            if (result == 1) return BigInt(1);
+        }
+        return result;
+    }
+
+    // Factor out GCD from polynomial coefficients
+    inline std::pair<BigInt, std::vector<Rational>> factor_polynomial_gcd(
+        const std::vector<Rational>& coeffs
+    ) {
+        // Find GCD of numerators
+        std::vector<BigInt> numerators;
+        BigInt lcm_denom = 1;
+
+        for (const auto& c : coeffs) {
+            numerators.push_back(boost::multiprecision::abs(c.numerator()));
+            lcm_denom = util::lcm(lcm_denom, c.denominator());
+        }
+
+        BigInt gcd_num = gcd_multiple(numerators);
+        if (gcd_num == 0) gcd_num = 1;
+
+        std::vector<Rational> factored;
+        for (const auto& c : coeffs) {
+            factored.push_back(c / Rational(gcd_num));
+        }
+
+        return {gcd_num, factored};
+    }
+
+    // Test: sum of E = mc² for masses [1, 2, 3] = c² × 6
+    inline bool test() {
+        std::vector<Rational> masses = {Rational(1), Rational(2), Rational(3)};
+        Rational c_squared(BigInt("89875517873681764"));
+        Rational expected = c_squared * 6;
+        return total_energy(masses) == expected;
+    }
+
+} // namespace S11_Vyashti
+
+// =============================================================================
+// SUTRA S12: Śeṣāṇyaṅkena Carameṇa (Remainders by the Last Digit)
+// =============================================================================
+// Application: Divisibility tests, modular arithmetic
+
+namespace S12_Sesanyankena {
+
+    // Divisibility test by examining last digit(s)
+    struct DivisibilityResult {
+        bool divisible;
+        BigInt remainder;
+        std::string method;
+    };
+
+    // Divisibility by 2 (last digit even)
+    inline bool divisible_by_2(const BigInt& n) {
+        return n % 2 == 0;
+    }
+
+    // Divisibility by 5 (last digit 0 or 5)
+    inline bool divisible_by_5(const BigInt& n) {
+        int last = static_cast<int>(boost::multiprecision::abs(n) % 10);
+        return last == 0 || last == 5;
+    }
+
+    // Divisibility by 4 (last two digits divisible by 4)
+    inline bool divisible_by_4(const BigInt& n) {
+        return n % 4 == 0;
+    }
+
+    // Divisibility by 8 (last three digits divisible by 8)
+    inline bool divisible_by_8(const BigInt& n) {
+        return n % 8 == 0;
+    }
+
+    // Divisibility by 3 (sum of digits divisible by 3)
+    inline bool divisible_by_3(const BigInt& n) {
+        auto digits = util::to_digits(boost::multiprecision::abs(n));
+        int sum = 0;
+        for (int d : digits) sum += d;
+        return sum % 3 == 0;
+    }
+
+    // Divisibility by 9 (sum of digits divisible by 9)
+    inline bool divisible_by_9(const BigInt& n) {
+        auto digits = util::to_digits(boost::multiprecision::abs(n));
+        int sum = 0;
+        for (int d : digits) sum += d;
+        return sum % 9 == 0;
+    }
+
+    // Divisibility by 11 (alternating sum)
+    inline bool divisible_by_11(const BigInt& n) {
+        auto digits = util::to_digits(boost::multiprecision::abs(n));
+        int alt_sum = 0;
+        for (size_t i = 0; i < digits.size(); ++i) {
+            if (i % 2 == 0) {
+                alt_sum += digits[digits.size() - 1 - i];
+            } else {
+                alt_sum -= digits[digits.size() - 1 - i];
+            }
+        }
+        return alt_sum % 11 == 0;
+    }
+
+    // General modular exponentiation: base^exp mod m
+    inline BigInt mod_pow(BigInt base, BigInt exp, const BigInt& mod) {
+        BigInt result = 1;
+        base = base % mod;
+
+        while (exp > 0) {
+            if (exp % 2 == 1) {
+                result = (result * base) % mod;
+            }
+            exp = exp / 2;
+            base = (base * base) % mod;
+        }
+
+        return result;
+    }
+
+    // Test: 1234567890 divisible by 9?
+    inline bool test() {
+        BigInt n("1234567890");
+        // Sum of digits = 1+2+3+4+5+6+7+8+9+0 = 45, divisible by 9
+        return divisible_by_9(n);
+    }
+
+} // namespace S12_Sesanyankena
+
+// =============================================================================
+// SUTRA S13: Sopāntyadvayamantyam (Ultimate and Twice the Penultimate)
+// =============================================================================
+// Application: Continued fractions, convergent sequences
+
+namespace S13_Sopantya {
+
+    // Continued fraction representation [a0; a1, a2, a3, ...]
+    // Represents a0 + 1/(a1 + 1/(a2 + 1/(a3 + ...)))
+
+    struct Convergent {
+        BigInt numerator;
+        BigInt denominator;
+    };
+
+    // Compute nth convergent of continued fraction
+    // Using recurrence: p_n = a_n * p_{n-1} + p_{n-2}
+    //                   q_n = a_n * q_{n-1} + q_{n-2}
+    inline Convergent nth_convergent(
+        const std::vector<BigInt>& cf,
+        size_t n
+    ) {
+        if (n >= cf.size()) {
+            n = cf.size() - 1;
+        }
+
+        // p_{-1} = 1, p_0 = a_0
+        // q_{-1} = 0, q_0 = 1
+        BigInt p_prev2 = 1, p_prev1 = cf[0];
+        BigInt q_prev2 = 0, q_prev1 = 1;
+
+        if (n == 0) {
+            return {p_prev1, q_prev1};
+        }
+
+        BigInt p_curr, q_curr;
+        for (size_t i = 1; i <= n; ++i) {
+            p_curr = cf[i] * p_prev1 + p_prev2;
+            q_curr = cf[i] * q_prev1 + q_prev2;
+
+            p_prev2 = p_prev1;
+            p_prev1 = p_curr;
+            q_prev2 = q_prev1;
+            q_prev1 = q_curr;
+        }
+
+        return {p_curr, q_curr};
+    }
+
+    // All convergents up to n
+    inline std::vector<Convergent> all_convergents(
+        const std::vector<BigInt>& cf,
+        size_t n
+    ) {
+        std::vector<Convergent> result;
+
+        BigInt p_prev2 = 1, p_prev1 = cf[0];
+        BigInt q_prev2 = 0, q_prev1 = 1;
+
+        result.push_back({p_prev1, q_prev1});
+
+        size_t limit = std::min(n, cf.size() - 1);
+        for (size_t i = 1; i <= limit; ++i) {
+            BigInt p_curr = cf[i] * p_prev1 + p_prev2;
+            BigInt q_curr = cf[i] * q_prev1 + q_prev2;
+
+            result.push_back({p_curr, q_curr});
+
+            p_prev2 = p_prev1;
+            p_prev1 = p_curr;
+            q_prev2 = q_prev1;
+            q_prev1 = q_curr;
+        }
+
+        return result;
+    }
+
+    // Convert rational to continued fraction
+    inline std::vector<BigInt> to_continued_fraction(Rational r) {
+        std::vector<BigInt> cf;
+
+        while (true) {
+            // Integer part = floor(r) = floor(num/den)
+            BigInt num = r.numerator();
+            BigInt den = r.denominator();
+            BigInt integer_part = num / den;
+
+            // Adjust for proper floor with negative numbers
+            if (num < 0 && num % den != 0) {
+                integer_part -= 1;
+            }
+            cf.push_back(integer_part);
+
+            Rational frac = r - integer_part;
+            if (frac == Rational(0)) break;
+
+            r = Rational(1) / frac;
+        }
+
+        return cf;
+    }
+
+    // Golden ratio continued fraction [1; 1, 1, 1, ...]
+    inline Convergent golden_ratio_convergent(size_t n) {
+        std::vector<BigInt> cf(n + 1, BigInt(1));
+        return nth_convergent(cf, n);
+    }
+
+    // Test: Golden ratio convergents are Fibonacci ratios
+    // F(n+1)/F(n) converges to φ
+    inline bool test() {
+        auto conv = golden_ratio_convergent(10);
+        // Should be F(12)/F(11) = 144/89
+        return conv.numerator == 144 && conv.denominator == 89;
+    }
+
+} // namespace S13_Sopantya
+
+// =============================================================================
+// SUTRA S14: Ekanyūnena Pūrveṇa (By One Less Than the Previous)
+// =============================================================================
+// Application: Multiplication by numbers consisting of 9s
+
+namespace S14_Ekanyunena {
+
+    // Multiply by 9, 99, 999, etc.
+    // n × 999...9 = n × (10^k - 1) = n × 10^k - n
+    struct NinesResult {
+        BigInt product;
+        BigInt left_part;   // n × 10^k
+        BigInt right_part;  // -n (complement representation)
+    };
+
+    inline NinesResult multiply_by_nines(const BigInt& n, size_t num_nines) {
+        NinesResult result;
+
+        BigInt power = util::pow10(num_nines);
+        result.left_part = n * power;
+        result.right_part = n;
+        result.product = result.left_part - result.right_part;
+
+        return result;
+    }
+
+    // Multiply by number close to 10^k (like 998, 9997, etc.)
+    // n × (10^k - m) = n × 10^k - n × m
+    inline BigInt multiply_near_power(const BigInt& n, const BigInt& multiplier) {
+        // Find nearest power of 10
+        size_t digits = util::digit_count(multiplier);
+        BigInt power = util::pow10(digits);
+        BigInt deficit = power - multiplier;
+
+        return n * power - n * deficit;
+    }
+
+    // Test: 123 × 999 = 122877
+    inline bool test() {
+        auto result = multiply_by_nines(BigInt(123), 3);
+        return result.product == 122877;
+    }
+
+} // namespace S14_Ekanyunena
+
+// =============================================================================
+// SUTRA S15: Guṇitasamuccayaḥ (Product of Sum = Sum of Products)
+// =============================================================================
+// Application: Verification of factorization, distributive property
+
+namespace S15_Gunitasamuccaya {
+
+    // Verify: (a + b)(c + d) = ac + ad + bc + bd
+    struct DistributiveVerification {
+        Rational left_side;   // Product of sums
+        Rational right_side;  // Sum of products
+        bool verified;
+    };
+
+    inline DistributiveVerification verify_distributive(
+        const Rational& a, const Rational& b,
+        const Rational& c, const Rational& d
+    ) {
+        DistributiveVerification result;
+        result.left_side = (a + b) * (c + d);
+        result.right_side = a*c + a*d + b*c + b*d;
+        result.verified = (result.left_side == result.right_side);
+        return result;
+    }
+
+    // Verify polynomial factorization
+    // If p(x) = (x - r1)(x - r2)...(x - rn), then:
+    // - Sum of roots = -coefficient of x^(n-1) / leading coefficient
+    // - Product of roots = (-1)^n * constant term / leading coefficient
+    struct FactorizationVerification {
+        bool sum_verified;
+        bool product_verified;
+        Rational expected_sum;
+        Rational actual_sum;
+        Rational expected_product;
+        Rational actual_product;
+    };
+
+    inline FactorizationVerification verify_roots(
+        const std::vector<Rational>& polynomial,  // Coefficients [a0, a1, ..., an]
+        const std::vector<Rational>& roots
+    ) {
+        FactorizationVerification result;
+
+        size_t n = polynomial.size() - 1;  // Degree
+        if (n == 0 || roots.size() != n) {
+            result.sum_verified = false;
+            result.product_verified = false;
+            return result;
+        }
+
+        Rational leading = polynomial[n];
+
+        // Sum of roots = -a_{n-1} / a_n
+        result.expected_sum = -polynomial[n-1] / leading;
+        result.actual_sum = 0;
+        for (const auto& r : roots) {
+            result.actual_sum += r;
+        }
+        result.sum_verified = (result.expected_sum == result.actual_sum);
+
+        // Product of roots = (-1)^n * a_0 / a_n
+        result.expected_product = polynomial[0] / leading;
+        if (n % 2 == 1) {
+            result.expected_product = -result.expected_product;
+        }
+        result.actual_product = 1;
+        for (const auto& r : roots) {
+            result.actual_product *= r;
+        }
+        result.product_verified = (result.expected_product == result.actual_product);
+
+        return result;
+    }
+
+    // Test: x² - 5x + 6 = (x-2)(x-3)
+    inline bool test() {
+        std::vector<Rational> poly = {Rational(6), Rational(-5), Rational(1)};  // 6 - 5x + x²
+        std::vector<Rational> roots = {Rational(2), Rational(3)};
+        auto result = verify_roots(poly, roots);
+        return result.sum_verified && result.product_verified;
+    }
+
+} // namespace S15_Gunitasamuccaya
+
+// =============================================================================
+// SUTRA S16: Guṇakasamuccayaḥ (Factors of Sum = Sum of Factors)
+// =============================================================================
+// Application: GCD/LCM verification, prime factorization
+
+namespace S16_Gunakasamuccaya {
+
+    // Prime factorization
+    struct PrimeFactor {
+        BigInt prime;
+        size_t exponent;
+    };
+
+    inline std::vector<PrimeFactor> prime_factorize(BigInt n) {
+        std::vector<PrimeFactor> factors;
+
+        n = boost::multiprecision::abs(n);
+        if (n <= 1) return factors;
+
+        // Factor out 2s
+        size_t exp = 0;
+        while (n % 2 == 0) {
+            exp++;
+            n /= 2;
+        }
+        if (exp > 0) {
+            factors.push_back({BigInt(2), exp});
+        }
+
+        // Factor out odd numbers
+        BigInt i = 3;
+        while (i * i <= n) {
+            exp = 0;
+            while (n % i == 0) {
+                exp++;
+                n /= i;
+            }
+            if (exp > 0) {
+                factors.push_back({i, exp});
+            }
+            i += 2;
+        }
+
+        // Remaining prime factor > sqrt(original)
+        if (n > 1) {
+            factors.push_back({n, 1});
+        }
+
+        return factors;
+    }
+
+    // Verify GCD using prime factorization
+    // GCD = product of common primes with minimum exponents
+    inline bool verify_gcd(const BigInt& a, const BigInt& b, const BigInt& claimed_gcd) {
+        BigInt actual_gcd = util::gcd(a, b);
+        return actual_gcd == claimed_gcd;
+    }
+
+    // Verify LCM using prime factorization
+    // LCM = product of all primes with maximum exponents
+    inline bool verify_lcm(const BigInt& a, const BigInt& b, const BigInt& claimed_lcm) {
+        BigInt actual_lcm = util::lcm(a, b);
+        return actual_lcm == claimed_lcm;
+    }
+
+    // Verify: GCD(a,b) × LCM(a,b) = a × b
+    inline bool verify_gcd_lcm_identity(const BigInt& a, const BigInt& b) {
+        BigInt gcd = util::gcd(a, b);
+        BigInt lcm = util::lcm(a, b);
+        return gcd * lcm == boost::multiprecision::abs(a * b);
+    }
+
+    // Test: GCD(12, 18) = 6, LCM(12, 18) = 36, 6 × 36 = 216 = 12 × 18
+    inline bool test() {
+        return verify_gcd(BigInt(12), BigInt(18), BigInt(6)) &&
+               verify_lcm(BigInt(12), BigInt(18), BigInt(36)) &&
+               verify_gcd_lcm_identity(BigInt(12), BigInt(18));
+    }
+
+} // namespace S16_Gunakasamuccaya
+
+// =============================================================================
+// SUB-SUTRA US1: Ānurūpyeṇa (Proportionately)
+// =============================================================================
+
+namespace US1_Anurupyena {
+
+    // Scale by proportion
+    inline Rational scale(const Rational& value, const Rational& factor) {
+        return value * factor;
+    }
+
+    // Linear interpolation: a + t(b - a) for t ∈ [0, 1]
+    inline Rational lerp(const Rational& a, const Rational& b, const Rational& t) {
+        return a + t * (b - a);
+    }
+
+    // Proportional division: divide value in ratio m:n
+    inline std::pair<Rational, Rational> divide_proportionally(
+        const Rational& value,
+        const Rational& m,
+        const Rational& n
+    ) {
+        Rational total = m + n;
+        return {value * m / total, value * n / total};
+    }
+
+    // Test: Divide 100 in ratio 3:7 → 30 and 70
+    inline bool test() {
+        auto [p1, p2] = divide_proportionally(Rational(100), Rational(3), Rational(7));
+        return p1 == 30 && p2 == 70;
+    }
+
+} // namespace US1_Anurupyena
+
+// =============================================================================
+// SUB-SUTRA US2: Śiṣyate Śeṣasaṁjñaḥ (The Remainder Remains Constant)
+// =============================================================================
+
+namespace US2_Shishyate {
+
+    // Cycle detection in sequence using Floyd's algorithm
+    struct CycleInfo {
+        bool has_cycle;
+        size_t cycle_start;   // Index where cycle begins
+        size_t cycle_length;
+    };
+
+    // Detect cycle in modular sequence: f(x) = (ax + b) mod m
+    inline CycleInfo detect_linear_cycle(
+        const BigInt& a, const BigInt& b, const BigInt& m,
+        const BigInt& start, size_t max_iterations = 10000
+    ) {
+        CycleInfo result = {false, 0, 0};
+
+        auto next = [&](const BigInt& x) -> BigInt {
+            return (a * x + b) % m;
+        };
+
+        // Floyd's tortoise and hare
+        BigInt slow = start;
+        BigInt fast = start;
+
+        size_t iterations = 0;
+        do {
+            slow = next(slow);
+            fast = next(next(fast));
+            iterations++;
+        } while (slow != fast && iterations < max_iterations);
+
+        if (iterations >= max_iterations) {
+            return result;
+        }
+
+        result.has_cycle = true;
+
+        // Find cycle start
+        slow = start;
+        result.cycle_start = 0;
+        while (slow != fast) {
+            slow = next(slow);
+            fast = next(fast);
+            result.cycle_start++;
+        }
+
+        // Find cycle length
+        result.cycle_length = 1;
+        fast = next(slow);
+        while (fast != slow) {
+            fast = next(fast);
+            result.cycle_length++;
+        }
+
+        return result;
+    }
+
+    // Test: x_{n+1} = (3x_n + 1) mod 7 starting at 1
+    inline bool test() {
+        auto result = detect_linear_cycle(
+            BigInt(3), BigInt(1), BigInt(7), BigInt(1)
+        );
+        return result.has_cycle && result.cycle_length > 0;
+    }
+
+} // namespace US2_Shishyate
+
+// =============================================================================
+// SUB-SUTRA US3: Ādyamādyenāntyamantyena (First by First, Last by Last)
+// =============================================================================
+
+namespace US3_Adyam {
+
+    // Parallel endpoint computation for ranges
+    struct EndpointResult {
+        Rational first_result;
+        Rational last_result;
+    };
+
+    // Apply function to first and last elements
+    template<typename Func>
+    inline EndpointResult apply_endpoints(
+        const std::vector<Rational>& values,
+        Func f
+    ) {
+        EndpointResult result;
+        if (values.empty()) {
+            result.first_result = Rational(0);
+            result.last_result = Rational(0);
+            return result;
+        }
+        result.first_result = f(values.front());
+        result.last_result = f(values.back());
+        return result;
+    }
+
+    // Quick bounds check using endpoints
+    struct BoundsCheck {
+        Rational min_bound;
+        Rational max_bound;
+        bool sorted_ascending;
+        bool sorted_descending;
+    };
+
+    inline BoundsCheck check_bounds(const std::vector<Rational>& values) {
+        BoundsCheck result;
+        if (values.empty()) {
+            return result;
+        }
+
+        result.min_bound = values.front();
+        result.max_bound = values.front();
+        result.sorted_ascending = true;
+        result.sorted_descending = true;
+
+        for (size_t i = 1; i < values.size(); ++i) {
+            if (values[i] < result.min_bound) result.min_bound = values[i];
+            if (values[i] > result.max_bound) result.max_bound = values[i];
+            if (values[i] < values[i-1]) result.sorted_ascending = false;
+            if (values[i] > values[i-1]) result.sorted_descending = false;
+        }
+
+        return result;
+    }
+
+    // Test
+    inline bool test() {
+        std::vector<Rational> vals = {Rational(1), Rational(2), Rational(3)};
+        auto bounds = check_bounds(vals);
+        return bounds.min_bound == 1 && bounds.max_bound == 3 && bounds.sorted_ascending;
+    }
+
+} // namespace US3_Adyam
+
+// =============================================================================
+// SUB-SUTRA US4: Kevalaih Saptakam Guṇyāt (Multiply by 7 Using Complements)
+// =============================================================================
+
+namespace US4_Kevalaih {
+
+    // Multiply by 7 using complement: 7x = 10x - 3x = 10x - 2x - x
+    inline BigInt multiply_by_7(const BigInt& n) {
+        return BigInt(10) * n - BigInt(3) * n;
+    }
+
+    // Alternative: 7x = 8x - x = (x << 3) - x
+    inline BigInt multiply_by_7_shift(const BigInt& n) {
+        return (n << 3) - n;
+    }
+
+    // Generalized complement multiplication
+    // To multiply by k where k = 10 - m:
+    // kx = 10x - mx
+    inline BigInt multiply_by_complement(const BigInt& n, int k) {
+        int m = 10 - k;
+        return BigInt(10) * n - BigInt(m) * n;
+    }
+
+    // Test: 123 × 7 = 861
+    inline bool test() {
+        return multiply_by_7(BigInt(123)) == 861 &&
+               multiply_by_7_shift(BigInt(123)) == 861;
+    }
+
+} // namespace US4_Kevalaih
+
+// =============================================================================
+// SUB-SUTRA US5: Veṣṭanam (Osculation)
+// =============================================================================
+
+namespace US5_Vestanam {
+
+    // Osculation method for divisibility
+    // For divisor d, osculator k satisfies 10k ≡ 1 (mod d) or 10k ≡ -1 (mod d)
+
+    // Find positive osculator: smallest k where 10k ≡ 1 (mod d)
+    inline std::optional<BigInt> find_positive_osculator(const BigInt& d) {
+        if (d <= 0 || util::gcd(d, BigInt(10)) != 1) {
+            return std::nullopt;  // No osculator exists
+        }
+
+        BigInt k = 1;
+        while (k < d) {
+            if ((BigInt(10) * k) % d == 1) {
+                return k;
+            }
+            k++;
+        }
+        return std::nullopt;
+    }
+
+    // Find negative osculator: smallest k where 10k ≡ -1 (mod d)
+    inline std::optional<BigInt> find_negative_osculator(const BigInt& d) {
+        if (d <= 0 || util::gcd(d, BigInt(10)) != 1) {
+            return std::nullopt;
+        }
+
+        BigInt k = 1;
+        while (k < d) {
+            if ((BigInt(10) * k + 1) % d == 0) {
+                return k;
+            }
+            k++;
+        }
+        return std::nullopt;
+    }
+
+    // Test divisibility using osculation
+    // n = 10a + b is divisible by d iff a + kb is divisible by d (positive osculator)
+    // or a - kb is divisible by d (negative osculator)
+    inline bool divisibility_by_osculation(
+        BigInt n,
+        const BigInt& d,
+        const BigInt& osculator,
+        bool positive
+    ) {
+        n = boost::multiprecision::abs(n);
+
+        while (n >= d) {
+            BigInt last_digit = n % 10;
+            BigInt rest = n / 10;
+
+            if (positive) {
+                n = rest + osculator * last_digit;
+            } else {
+                n = rest - osculator * last_digit;
+                if (n < 0) n = -n;
+            }
+        }
+
+        return n == 0 || n == d;
+    }
+
+    // Test: Divisibility by 7 using osculator 2 (negative)
+    // 10 × 2 + 1 = 21 ≡ 0 (mod 7), so negative osculator is 2
+    inline bool test() {
+        auto osc = find_negative_osculator(BigInt(7));
+        return osc && *osc == 2;
+    }
+
+} // namespace US5_Vestanam
+
+// =============================================================================
+// SUB-SUTRA US6: Yāvadūnam Tāvadūnam (Deficiency Squared)
+// =============================================================================
+
+namespace US6_Yavadunam_Squared {
+
+    // Square using deficiency: (base - d)² = base² - 2×base×d + d²
+    // Or more directly: (base - d)² = base×(base - 2d) + d²
+    struct DeficiencySquare {
+        BigInt result;
+        BigInt base;
+        BigInt deficiency;
+        BigInt first_term;   // base × (base - 2d)
+        BigInt second_term;  // d²
+    };
+
+    inline DeficiencySquare square_by_deficiency(const BigInt& n, const BigInt& base) {
+        DeficiencySquare result;
+        result.base = base;
+        result.deficiency = base - n;
+
+        result.first_term = base * (base - BigInt(2) * result.deficiency);
+        result.second_term = result.deficiency * result.deficiency;
+        result.result = result.first_term + result.second_term;
+
+        return result;
+    }
+
+    // Auto-detect base version
+    inline DeficiencySquare square_by_deficiency(const BigInt& n) {
+        size_t digits = util::digit_count(n);
+        BigInt base = util::pow10(digits);
+        return square_by_deficiency(n, base);
+    }
+
+    // Test: 97² = 100×(100-6) + 9 = 9400 + 9 = 9409
+    inline bool test() {
+        auto result = square_by_deficiency(BigInt(97), BigInt(100));
+        return result.result == 9409;
+    }
+
+} // namespace US6_Yavadunam_Squared
+
+// =============================================================================
+// SUB-SUTRA US7: Yāvadūnam Tāvadūnīkṛtya Vargaṁ ca Yojayet
+// (Decrease by Deficiency and Add the Square)
+// =============================================================================
+
+namespace US7_Yavadunam_Extended {
+
+    // Extended squaring for numbers above base
+    // (base + d)² = (base + 2d) × base + d²
+    struct ExtendedSquare {
+        BigInt result;
+        BigInt base;
+        BigInt excess;
+        BigInt multiplier;    // (base + 2d) for excess, (base - 2d) for deficiency
+        BigInt square_term;   // d² or excess²
+    };
+
+    inline ExtendedSquare square_extended(const BigInt& n, const BigInt& base) {
+        ExtendedSquare result;
+        result.base = base;
+
+        if (n >= base) {
+            // Number above base
+            result.excess = n - base;
+            result.multiplier = n + result.excess;  // base + 2d
+            result.square_term = result.excess * result.excess;
+            result.result = result.multiplier * base + result.square_term;
+        } else {
+            // Number below base (deficiency case)
+            result.excess = base - n;  // Actually deficiency
+            result.multiplier = n - result.excess;  // base - 2d
+            result.square_term = result.excess * result.excess;
+            result.result = result.multiplier * base + result.square_term;
+        }
+
+        return result;
+    }
+
+    // Test: 103² = 106 × 100 + 9 = 10609
+    inline bool test() {
+        auto result = square_extended(BigInt(103), BigInt(100));
+        return result.result == 10609;
+    }
+
+} // namespace US7_Yavadunam_Extended
+
+// =============================================================================
+// SUB-SUTRA US8: Antyayordaśake'pi (When Last Digits Sum to 10)
+// =============================================================================
+
+namespace US8_Antyayor {
+
+    // Special multiplication when:
+    // - Numbers have same "base" part
+    // - Last digits sum to 10
+    // Example: 43 × 47 (both 4X, 3+7=10)
+    // Result: 4 × 5 = 20 (first part), 3 × 7 = 21 (second part) → 2021
+
+    struct AntyayorResult {
+        BigInt product;
+        bool applicable;      // True if the method applies
+        BigInt common_part;   // The common leading part
+        int digit_a;          // Last digit of first number
+        int digit_b;          // Last digit of second number
+    };
+
+    inline AntyayorResult multiply_sum_to_ten(const BigInt& a, const BigInt& b) {
+        AntyayorResult result;
+        result.applicable = false;
+
+        // Extract last digits
+        result.digit_a = static_cast<int>(boost::multiprecision::abs(a) % 10);
+        result.digit_b = static_cast<int>(boost::multiprecision::abs(b) % 10);
+
+        // Check if last digits sum to 10
+        if (result.digit_a + result.digit_b != 10) {
+            result.product = a * b;  // Fall back to normal
+            return result;
+        }
+
+        // Extract common part (remove last digit)
+        BigInt base_a = a / 10;
+        BigInt base_b = b / 10;
+
+        // Check if common parts are equal
+        if (base_a != base_b) {
+            result.product = a * b;  // Fall back to normal
+            return result;
+        }
+
+        result.applicable = true;
+        result.common_part = base_a;
+
+        // First part: common × (common + 1)
+        BigInt first_part = result.common_part * (result.common_part + 1);
+
+        // Second part: digit_a × digit_b
+        BigInt second_part = BigInt(result.digit_a) * BigInt(result.digit_b);
+
+        // Combine: first_part × 100 + second_part (if second_part < 10, pad with 0)
+        result.product = first_part * 100 + second_part;
+
+        return result;
+    }
+
+    // Test: 43 × 47 = 2021
+    inline bool test() {
+        auto result = multiply_sum_to_ten(BigInt(43), BigInt(47));
+        return result.applicable && result.product == 2021;
+    }
+
+} // namespace US8_Antyayor
+
+// =============================================================================
+// SUB-SUTRA US9: Antyayoreva (Only the Last Terms)
+// =============================================================================
+
+namespace US9_Antyayoreva {
+
+    // Last digit arithmetic shortcuts
+    // For multiplication: (a mod 10) × (b mod 10) mod 10 = (ab) mod 10
+
+    inline int last_digit_of_product(const BigInt& a, const BigInt& b) {
+        int last_a = static_cast<int>(boost::multiprecision::abs(a) % 10);
+        int last_b = static_cast<int>(boost::multiprecision::abs(b) % 10);
+        return (last_a * last_b) % 10;
+    }
+
+    // Last digit of power: a^n mod 10
+    inline int last_digit_of_power(const BigInt& base, const BigInt& exp) {
+        int last = static_cast<int>(boost::multiprecision::abs(base) % 10);
+
+        // Pattern repeats with period dividing 4
+        std::vector<int> cycle;
+        int current = last;
+        do {
+            cycle.push_back(current);
+            current = (current * last) % 10;
+        } while (current != last && cycle.size() < 4);
+
+        if (exp == 0) return 1;
+
+        size_t idx = static_cast<size_t>((exp - 1) % cycle.size());
+        return cycle[idx];
+    }
+
+    // Check if number is divisible by examining last digit(s)
+    inline bool quick_divisibility_check(const BigInt& n, int divisor) {
+        int last = static_cast<int>(boost::multiprecision::abs(n) % 10);
+
+        switch (divisor) {
+            case 2: return last % 2 == 0;
+            case 5: return last == 0 || last == 5;
+            case 10: return last == 0;
+            default: return false;  // Not applicable
+        }
+    }
+
+    // Test: Last digit of 7^100
+    inline bool test() {
+        // 7^1=7, 7^2=49(9), 7^3=343(3), 7^4=2401(1), then repeats
+        // 100 mod 4 = 0, so last digit is same as 7^4 = 1
+        return last_digit_of_power(BigInt(7), BigInt(100)) == 1;
+    }
+
+} // namespace US9_Antyayoreva
+
+// =============================================================================
+// SUB-SUTRA US10: Samuccayaguṇitaḥ (Sum Multiplied)
+// =============================================================================
+
+namespace US10_Samuccayagunitah {
+
+    // Aggregate multiplication: multiply sum by factor
+    inline Rational multiply_sum(
+        const std::vector<Rational>& values,
+        const Rational& factor
+    ) {
+        Rational sum = 0;
+        for (const auto& v : values) {
+            sum += v;
+        }
+        return sum * factor;
+    }
+
+    // Batch multiplication with common factor
+    inline std::vector<Rational> multiply_batch(
+        const std::vector<Rational>& values,
+        const Rational& factor
+    ) {
+        std::vector<Rational> result;
+        result.reserve(values.size());
+        for (const auto& v : values) {
+            result.push_back(v * factor);
+        }
+        return result;
+    }
+
+    // Sum of products: Σ(aᵢ × bᵢ) - dot product
+    inline Rational dot_product(
+        const std::vector<Rational>& a,
+        const std::vector<Rational>& b
+    ) {
+        if (a.size() != b.size()) {
+            throw std::invalid_argument("Vector sizes must match");
+        }
+
+        Rational result = 0;
+        for (size_t i = 0; i < a.size(); ++i) {
+            result += a[i] * b[i];
+        }
+        return result;
+    }
+
+    // Test: [1,2,3] · [4,5,6] = 4+10+18 = 32
+    inline bool test() {
+        std::vector<Rational> a = {Rational(1), Rational(2), Rational(3)};
+        std::vector<Rational> b = {Rational(4), Rational(5), Rational(6)};
+        return dot_product(a, b) == 32;
+    }
+
+} // namespace US10_Samuccayagunitah
+
+// =============================================================================
+// SUB-SUTRA US11: Lopanasthāpanābhyām (By Elimination and Retention)
+// =============================================================================
+
+namespace US11_Lopanasthapana {
+
+    // Variable elimination in systems of equations
+    // Eliminate variable at index 'var_idx' from system
+
+    struct EliminationStep {
+        std::vector<std::vector<Rational>> reduced_matrix;
+        std::vector<Rational> reduced_rhs;
+        size_t eliminated_variable;
+    };
+
+    // Eliminate one variable from system using Gaussian-style elimination
+    inline EliminationStep eliminate_variable(
+        const std::vector<std::vector<Rational>>& A,
+        const std::vector<Rational>& b,
+        size_t var_idx
+    ) {
+        EliminationStep result;
+        result.eliminated_variable = var_idx;
+
+        size_t n = A.size();
+        if (n == 0 || var_idx >= A[0].size()) {
+            return result;
+        }
+
+        // Find pivot row (non-zero entry in var_idx column)
+        size_t pivot_row = n;
+        for (size_t i = 0; i < n; ++i) {
+            if (A[i][var_idx] != 0) {
+                pivot_row = i;
+                break;
+            }
+        }
+
+        if (pivot_row == n) {
+            // Variable doesn't appear - return unchanged
+            result.reduced_matrix = A;
+            result.reduced_rhs = b;
+            return result;
+        }
+
+        // Eliminate from other rows
+        for (size_t i = 0; i < n; ++i) {
+            if (i == pivot_row) continue;
+
+            std::vector<Rational> new_row = A[i];
+            Rational new_rhs = b[i];
+
+            if (A[i][var_idx] != 0) {
+                Rational factor = A[i][var_idx] / A[pivot_row][var_idx];
+                for (size_t j = 0; j < A[i].size(); ++j) {
+                    new_row[j] -= factor * A[pivot_row][j];
+                }
+                new_rhs -= factor * b[pivot_row];
+            }
+
+            result.reduced_matrix.push_back(new_row);
+            result.reduced_rhs.push_back(new_rhs);
+        }
+
+        return result;
+    }
+
+    // Test: Eliminate x from {x + y = 3, 2x - y = 0}
+    inline bool test() {
+        std::vector<std::vector<Rational>> A = {
+            {Rational(1), Rational(1)},
+            {Rational(2), Rational(-1)}
+        };
+        std::vector<Rational> b = {Rational(3), Rational(0)};
+
+        auto result = eliminate_variable(A, b, 0);
+        // After eliminating x, should have equation in y only
+        return result.reduced_matrix.size() == 1;
+    }
+
+} // namespace US11_Lopanasthapana
+
+// =============================================================================
+// SUB-SUTRA US12: Vilokanam (By Mere Observation)
+// =============================================================================
+
+namespace US12_Vilokanam {
+
+    // Pattern recognition for immediate simplification
+
+    enum class PatternType {
+        NONE,
+        PERFECT_SQUARE,
+        DIFFERENCE_OF_SQUARES,
+        SUM_OF_CUBES,
+        DIFFERENCE_OF_CUBES,
+        PYTHAGOREAN_TRIPLE,
+        ARITHMETIC_PROGRESSION,
+        GEOMETRIC_PROGRESSION
+    };
+
+    struct PatternResult {
+        PatternType type;
+        std::vector<Rational> parameters;
+    };
+
+    // Check if number is perfect square
+    inline PatternResult check_perfect_square(const BigInt& n) {
+        PatternResult result;
+        result.type = PatternType::NONE;
+
+        if (n < 0) return result;
+
+        BigInt root = util::isqrt(n);
+        if (root * root == n) {
+            result.type = PatternType::PERFECT_SQUARE;
+            result.parameters.push_back(Rational(root));
+        }
+
+        return result;
+    }
+
+    // Check if expression is difference of squares: a² - b²
+    inline PatternResult check_difference_of_squares(const BigInt& n) {
+        PatternResult result;
+        result.type = PatternType::NONE;
+
+        // n = a² - b² = (a+b)(a-b)
+        // For n to be difference of squares:
+        // - If n is odd: always possible (n = ((n+1)/2)² - ((n-1)/2)²)
+        // - If n ≡ 2 (mod 4): never possible
+        // - If n ≡ 0 (mod 4): possible
+
+        if (n % 4 == 2) return result;
+
+        if (n % 2 == 1) {
+            // n = ((n+1)/2)² - ((n-1)/2)²
+            BigInt a = (n + 1) / 2;
+            BigInt b = (n - 1) / 2;
+            result.type = PatternType::DIFFERENCE_OF_SQUARES;
+            result.parameters.push_back(Rational(a));
+            result.parameters.push_back(Rational(b));
+            return result;
+        }
+
+        // Even case - find factorization n = d × e where d, e both even or both odd
+        // Then a = (d+e)/2, b = (e-d)/2
+        for (BigInt d = 2; d * d <= n; ++d) {
+            if (n % d == 0) {
+                BigInt e = n / d;
+                if ((d + e) % 2 == 0) {
+                    BigInt a = (d + e) / 2;
+                    BigInt b = (e - d) / 2;
+                    result.type = PatternType::DIFFERENCE_OF_SQUARES;
+                    result.parameters.push_back(Rational(a));
+                    result.parameters.push_back(Rational(b));
+                    return result;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    // Check for arithmetic progression
+    inline PatternResult check_arithmetic_progression(const std::vector<Rational>& seq) {
+        PatternResult result;
+        result.type = PatternType::NONE;
+
+        if (seq.size() < 2) return result;
+
+        Rational d = seq[1] - seq[0];
+        bool is_ap = true;
+
+        for (size_t i = 2; i < seq.size(); ++i) {
+            if (seq[i] - seq[i-1] != d) {
+                is_ap = false;
+                break;
+            }
+        }
+
+        if (is_ap) {
+            result.type = PatternType::ARITHMETIC_PROGRESSION;
+            result.parameters.push_back(seq[0]);  // First term
+            result.parameters.push_back(d);       // Common difference
+        }
+
+        return result;
+    }
+
+    // Check for geometric progression
+    inline PatternResult check_geometric_progression(const std::vector<Rational>& seq) {
+        PatternResult result;
+        result.type = PatternType::NONE;
+
+        if (seq.size() < 2 || seq[0] == 0) return result;
+
+        Rational r = seq[1] / seq[0];
+        bool is_gp = true;
+
+        for (size_t i = 2; i < seq.size(); ++i) {
+            if (seq[i-1] == 0 || seq[i] / seq[i-1] != r) {
+                is_gp = false;
+                break;
+            }
+        }
+
+        if (is_gp) {
+            result.type = PatternType::GEOMETRIC_PROGRESSION;
+            result.parameters.push_back(seq[0]);  // First term
+            result.parameters.push_back(r);       // Common ratio
+        }
+
+        return result;
+    }
+
+    // Test: 144 is perfect square of 12
+    inline bool test() {
+        auto result = check_perfect_square(BigInt(144));
+        return result.type == PatternType::PERFECT_SQUARE &&
+               result.parameters[0] == 12;
+    }
+
+} // namespace US12_Vilokanam
+
+// =============================================================================
+// SUB-SUTRA US13: Guṇitasamuccayaḥ Samuccayaguṇitaḥ (Product-Sum = Sum-Product)
+// =============================================================================
+
+namespace US13_Gunitasamuccaya_Samuccayagunitah {
+
+    // Verification identity: confirms algebraic consistency
+    // (Σaᵢ) × (Σbⱼ) should equal Σᵢ,ⱼ(aᵢ × bⱼ)
+
+    struct ConsistencyCheck {
+        Rational product_of_sums;
+        Rational sum_of_products;
+        bool consistent;
+    };
+
+    inline ConsistencyCheck verify_consistency(
+        const std::vector<Rational>& a,
+        const std::vector<Rational>& b
+    ) {
+        ConsistencyCheck result;
+
+        // Sum of a
+        Rational sum_a = 0;
+        for (const auto& x : a) sum_a += x;
+
+        // Sum of b
+        Rational sum_b = 0;
+        for (const auto& x : b) sum_b += x;
+
+        result.product_of_sums = sum_a * sum_b;
+
+        // Sum of all products
+        result.sum_of_products = 0;
+        for (const auto& ai : a) {
+            for (const auto& bj : b) {
+                result.sum_of_products += ai * bj;
+            }
+        }
+
+        result.consistent = (result.product_of_sums == result.sum_of_products);
+        return result;
+    }
+
+    // Polynomial coefficient verification
+    // For p(x) × q(x), verify coefficients using this identity
+    inline bool verify_polynomial_product(
+        const std::vector<Rational>& p,
+        const std::vector<Rational>& q,
+        const std::vector<Rational>& product
+    ) {
+        // Sum of coefficients of p(x) = p(1)
+        // Sum of coefficients of q(x) = q(1)
+        // Sum of coefficients of p(x)q(x) = (pq)(1) = p(1)×q(1)
+
+        Rational p_at_1 = 0, q_at_1 = 0, prod_at_1 = 0;
+
+        for (const auto& c : p) p_at_1 += c;
+        for (const auto& c : q) q_at_1 += c;
+        for (const auto& c : product) prod_at_1 += c;
+
+        return prod_at_1 == p_at_1 * q_at_1;
+    }
+
+    // Test: (1+2) × (3+4) = 1×3 + 1×4 + 2×3 + 2×4 = 3 + 4 + 6 + 8 = 21
+    inline bool test() {
+        std::vector<Rational> a = {Rational(1), Rational(2)};
+        std::vector<Rational> b = {Rational(3), Rational(4)};
+        auto result = verify_consistency(a, b);
+        return result.consistent && result.product_of_sums == 21;
+    }
+
+} // namespace US13_Gunitasamuccaya_Samuccayagunitah
+
+// =============================================================================
+// UNIFIED TEST SUITE
+// =============================================================================
+
+namespace tests {
+
+    struct TestResult {
+        std::string name;
+        bool passed;
+    };
+
+    inline std::vector<TestResult> run_all_tests() {
+        std::vector<TestResult> results;
+
+        // Main Sutras
+        results.push_back({"S1_Ekadhikena", S1_Ekadhikena::test()});
+        results.push_back({"S2_Nikhilam", S2_Nikhilam::test()});
+        results.push_back({"S3_Urdhva", S3_Urdhva::test()});
+        results.push_back({"S4_Paravartya", S4_Paravartya::test()});
+        results.push_back({"S5_Shunyam", S5_Shunyam::test()});
+        results.push_back({"S6_Anurupye", S6_Anurupye::test()});
+        results.push_back({"S7_Sankalana", S7_Sankalana::test()});
+        results.push_back({"S8_Purana", S8_Purana::test()});
+        results.push_back({"S9_Calana", S9_Calana::test()});
+        results.push_back({"S10_Yavadunam", S10_Yavadunam::test()});
+        results.push_back({"S11_Vyashti", S11_Vyashti::test()});
+        results.push_back({"S12_Sesanyankena", S12_Sesanyankena::test()});
+        results.push_back({"S13_Sopantya", S13_Sopantya::test()});
+        results.push_back({"S14_Ekanyunena", S14_Ekanyunena::test()});
+        results.push_back({"S15_Gunitasamuccaya", S15_Gunitasamuccaya::test()});
+        results.push_back({"S16_Gunakasamuccaya", S16_Gunakasamuccaya::test()});
+
+        // Sub-Sutras
+        results.push_back({"US1_Anurupyena", US1_Anurupyena::test()});
+        results.push_back({"US2_Shishyate", US2_Shishyate::test()});
+        results.push_back({"US3_Adyam", US3_Adyam::test()});
+        results.push_back({"US4_Kevalaih", US4_Kevalaih::test()});
+        results.push_back({"US5_Vestanam", US5_Vestanam::test()});
+        results.push_back({"US6_Yavadunam_Squared", US6_Yavadunam_Squared::test()});
+        results.push_back({"US7_Yavadunam_Extended", US7_Yavadunam_Extended::test()});
+        results.push_back({"US8_Antyayor", US8_Antyayor::test()});
+        results.push_back({"US9_Antyayoreva", US9_Antyayoreva::test()});
+        results.push_back({"US10_Samuccayagunitah", US10_Samuccayagunitah::test()});
+        results.push_back({"US11_Lopanasthapana", US11_Lopanasthapana::test()});
+        results.push_back({"US12_Vilokanam", US12_Vilokanam::test()});
+        results.push_back({"US13_Gunitasamuccaya_Samuccayagunitah",
+                          US13_Gunitasamuccaya_Samuccayagunitah::test()});
+
+        return results;
+    }
+
+    inline void print_results(const std::vector<TestResult>& results) {
+        int passed = 0, failed = 0;
+
+        for (const auto& r : results) {
+            if (r.passed) {
+                passed++;
+            } else {
+                failed++;
+            }
+        }
+
+        // Results are printed via cout in the test runner
+    }
+
+} // namespace tests
+
+} // namespace vedic
+
+#endif // VEDIC_SUTRAS_COMPLETE_HPP

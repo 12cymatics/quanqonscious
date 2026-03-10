@@ -11,6 +11,8 @@ try:
 except ImportError:
     cudaq = None
 
+# Use relative imports so the module works regardless of the package name on
+# disk.
 # Use relative imports to support package name in lowercase
 from . import core_engine, maya_cipher
 
