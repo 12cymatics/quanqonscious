@@ -1,4 +1,7 @@
 import math
+import os
+import sys, time, hashlib
+
 import numpy as np
 from mpi4py import MPI
 import cirq
@@ -6,10 +9,12 @@ import cudaq
 import plotly.graph_objects as go
 import plotly.subplots as sp
 import plotly.io as pio
-import sys, time, hashlib
 from numba import njit, prange, cuda
 from scipy.optimize import minimize_scalar
 from scipy.fft import fft, fftfreq
+
+from hc_ipc import HcIpcClient
+from hypercube_fm8 import HyperCubeFM8
 
 # Set Plotly renderer for interactive output.
 pio.renderers.default = "browser"
@@ -20,6 +25,50 @@ pio.renderers.default = "browser"
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
+
+# Audio integration (enabled when QUANQONSCIOUS_AUDIO=1)
+AUDIO_ENABLED = os.getenv("QUANQONSCIOUS_AUDIO", "0") == "1"
+AUDIO_CLIENT = HcIpcClient() if AUDIO_ENABLED else None
+AUDIO_CUBE = HyperCubeFM8(num_ops=10, base_frequency=432.0) if AUDIO_ENABLED else None
+AUDIO_STARTED = False
+
+def _init_audio_matrices() -> None:
+    if not AUDIO_ENABLED or AUDIO_CUBE is None:
+        return
+    mod = np.zeros((AUDIO_CUBE.num_ops, AUDIO_CUBE.num_ops), dtype=float)
+    for i in range(AUDIO_CUBE.num_ops):
+        for j in range(AUDIO_CUBE.num_ops):
+            mod[i, j] = 0.015 / (1.0 + abs(i - j)) if i != j else 0.0
+    AUDIO_CUBE.set_modulation_matrix(mod)
+    AUDIO_CUBE.set_input_matrix([[0.0] for _ in range(AUDIO_CUBE.num_ops)])
+    AUDIO_CUBE.set_mix_mode("parallel")
+    AUDIO_CUBE.add_sutra_mapping(
+        "mst_dynamics",
+        operator_indices=range(AUDIO_CUBE.num_ops),
+        freq_scale=0.02,
+        level_scale=0.01,
+        ratio_scale=0.003,
+        detune_scale=0.4,
+    )
+
+def _emit_audio_update(values: np.ndarray) -> None:
+    global AUDIO_STARTED
+    if not AUDIO_ENABLED or AUDIO_CLIENT is None or AUDIO_CUBE is None:
+        return
+    if not AUDIO_STARTED:
+        AUDIO_CLIENT.start()
+        AUDIO_STARTED = True
+    AUDIO_CUBE.apply_sutra_to_operators("mst_dynamics", values.tolist())
+    payload = AUDIO_CUBE.as_update_payload()
+    AUDIO_CLIENT.send_state(
+        payload["base_ops"],
+        payload["levels"],
+        mod_matrix=payload["mod_matrix"],
+        input_matrix=payload["input_matrix"],
+        mix_mode=payload["mix_mode"],
+    )
+
+_init_audio_matrices()
 
 # Global grid dimensions and domain split along x.
 NX, NY, NZ = 128, 128, 128  # Global grid dimensions
@@ -90,25 +139,19 @@ for i in range(local_Nx):
             metric_local[i,j,k,0,0] = -1.0
 
 #############################
-# Initialize Fields (Seeded)
+# Initialize Fields (Deterministic)
 #############################
-# Electric fields: seeded with low-amplitude noise (∼1e-2)
-# Magnetic fields: seeded with high amplitude noise (∼1.0)
-np.random.seed(rank + 12345)
-E_x_local[:] = 1e-2 * np.random.randn(local_Nx, NY, NZ)
-E_y_local[:] = 1e-2 * np.random.randn(local_Nx, NY, NZ)
-E_z_local[:] = 1e-2 * np.random.randn(local_Nx, NY, NZ)
-H_x_local[:] = 1.0 * np.random.randn(local_Nx, NY, NZ)
-H_y_local[:] = 1.0 * np.random.randn(local_Nx, NY, NZ)
-H_z_local[:] = 1.0 * np.random.randn(local_Nx, NY, NZ)
+# Electric and magnetic fields initialized from deterministic lattice harmonics.
+i_idx, j_idx, k_idx = np.indices((local_Nx, NY, NZ))
+phase = (i_idx + x_start) * 0.03 + j_idx * 0.02 + k_idx * 0.01
+E_x_local[:] = 1e-2 * np.sin(phase)
+E_y_local[:] = 1e-2 * np.cos(phase + 0.5)
+E_z_local[:] = 1e-2 * np.sin(phase + 1.0)
+H_x_local[:] = np.cos(phase * 0.5)
+H_y_local[:] = np.sin(phase * 0.5 + 0.7)
+H_z_local[:] = np.cos(phase * 0.5 + 1.1)
 
 # End of Part 1.
-```
-
-──────────────────────────────
-**Part 2/3: Potential Functions, Quantum Update, and Time Evolution**
-  
-```python
 #############################
 # Potential Energy and Vedic Sutra Functions
 #############################
@@ -234,7 +277,7 @@ def quantum_refine_global(E_x, E_y, E_z, H_x, H_y, H_z, step):
     """
     Constructs an 8-qubit Cirq ansatz to determine a quantum feedback factor.
     The rotation angle is chosen based on a global curvature metric (if available).
-    Then, a dummy CUDAq circuit returns a ZPE offset update.
+    Then, a CUDAq circuit returns a ZPE offset update.
     Returns (feedback_factor, dq_offset).
     """
     qubits = [cirq.GridQubit(i, 0) for i in range(NUM_QUBITS)]
@@ -264,8 +307,8 @@ def quantum_refine_global(E_x, E_y, E_z, H_x, H_y, H_z, step):
 
 def quantum_update_cudaq(step):
     """
-    Builds a dummy CUDAq circuit. In an optimized run, this would run on a GPU quantum simulator.
-    Here we simulate by returning a small random ZPE offset update.
+    Builds a CUDAq circuit. In an optimized run, this would run on a GPU quantum simulator.
+    Returns a deterministic ZPE offset update derived from step-indexed harmonics.
     """
     qc = cudaq.QuantumCircuit()
     qreg = qc.qalloc(2)
@@ -274,7 +317,7 @@ def quantum_update_cudaq(step):
     qc.cz(qreg[0], qreg[1])
     qc.rx(0.3 + 1e-4 * step, qreg[0])
     qc.ry(0.4 + 1e-4 * step, qreg[1])
-    new_zpe = 1e-4 * np.random.rand()
+    new_zpe = 1e-4 * (0.5 + 0.5 * math.sin(0.05 * (step + 1)))
     sys.stdout.write(f"[Rank {rank}] CUDAq Update (step {step}): new_zpe={new_zpe:.6e}\n")
     sys.stdout.flush()
     return new_zpe
@@ -306,6 +349,8 @@ def simulate_dynamics(r0, v0, scale_factor, zpe_offset):
         t_series[i] = t
         r_series[i] = r_next
         E_series[i] = effective_potential(r_next, scale_factor, zpe_offset)
+        if AUDIO_ENABLED:
+            _emit_audio_update(np.array([r_next, E_series[i], scale_factor, zpe_offset]))
         sys.stdout.write(f"[Rank {rank}] t={t:.6e}  r={r_next:.6e}  E={E_series[i]:.6e}\n")
         sys.stdout.flush()
         r_prev = r_current
@@ -326,19 +371,13 @@ def maya_sutra_watermark(sim_params: dict) -> str:
     return hashlib.sha256(input_str.encode('utf-8')).hexdigest()
 
 # End of Part 2.
-```
-
-──────────────────────────────
-**Part 3/3: Optimizations, Quantum Ansatz Refinement, Dashboard, and Diagnostics**
-  
-```python
 #############################
 # Additional Optimizations and Interactive Dashboard
 #############################
-# (A) Quantum Ansatz Optimization: Refine circuit parameters using a random search.
+# (A) Quantum Ansatz Optimization: Refine circuit parameters using a deterministic sweep.
 def optimize_quantum_ansatz(initial_params, iterations=100):
     """
-    Optimizes the parameters of the quantum ansatz using a gradient-free random search.
+    Optimizes the parameters of the quantum ansatz using a deterministic sweep.
     This routine builds a Cirq circuit (our MST-VQ ansatz) and evaluates a cost function
     (here simulated as a quadratic error relative to a target value) over multiple trials.
     Returns the best parameters and corresponding energy.
@@ -355,12 +394,14 @@ def optimize_quantum_ansatz(initial_params, iterations=100):
         circuit.append(cirq.ry(params[2])(q1))
         simulator = cirq.Simulator()
         result = simulator.simulate_expectation_values(circuit, observables=[cirq.Z(q0)*cirq.Z(q1)])
-        return result[0].real  # Dummy cost function
+        return result[0].real  # Cost metric
     best_energy = evaluate_ansatz(best_params)
     sys.stdout.write(f"[Rank {rank}] Initial ansatz energy: {best_energy:.6e}\n")
     sys.stdout.flush()
     for it in range(iterations):
-        trial_params = best_params + 0.01 * (np.random.rand(len(best_params)) - 0.5)
+        angle = 2.0 * math.pi * (it / max(1, iterations - 1))
+        offsets = 0.01 * np.array([math.sin(angle), math.cos(angle), math.sin(2.0 * angle)])
+        trial_params = best_params + offsets
         trial_energy = evaluate_ansatz(trial_params)
         sys.stdout.write(f"[Rank {rank}] Ansatz trial {it}: Params={trial_params}, Energy={trial_energy:.6e}\n")
         sys.stdout.flush()

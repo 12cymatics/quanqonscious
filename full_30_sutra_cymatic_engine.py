@@ -47,6 +47,11 @@ import os
 from typing import List, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+
+from hc_ipc import HcIpcClient
+from hypercube_fm8 import HyperCubeFM8
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHAKRA FREQUENCIES AND SCHUMANN RESONANCES
@@ -63,6 +68,50 @@ CHAKRA_FREQUENCIES = {
 }
 
 SCHUMANN_RESONANCES = [7.83, 14.3, 20.8, 27.3, 33.8, 39.0, 45.0]
+
+# Audio integration (enabled when QUANQONSCIOUS_AUDIO=1)
+AUDIO_ENABLED = os.getenv("QUANQONSCIOUS_AUDIO", "0") == "1"
+AUDIO_CLIENT = HcIpcClient() if AUDIO_ENABLED else None
+AUDIO_CUBE = HyperCubeFM8(num_ops=12, base_frequency=432.0) if AUDIO_ENABLED else None
+AUDIO_STARTED = False
+
+def _init_audio_matrices() -> None:
+    if not AUDIO_ENABLED or AUDIO_CUBE is None:
+        return
+    mod = np.zeros((AUDIO_CUBE.num_ops, AUDIO_CUBE.num_ops), dtype=float)
+    for i in range(AUDIO_CUBE.num_ops):
+        for j in range(AUDIO_CUBE.num_ops):
+            mod[i, j] = 0.02 / (1.0 + abs(i - j)) if i != j else 0.0
+    AUDIO_CUBE.set_modulation_matrix(mod)
+    AUDIO_CUBE.set_input_matrix([[0.0] for _ in range(AUDIO_CUBE.num_ops)])
+    AUDIO_CUBE.set_mix_mode("serial")
+    AUDIO_CUBE.add_sutra_mapping(
+        "cymatic_field",
+        operator_indices=range(AUDIO_CUBE.num_ops),
+        freq_scale=0.03,
+        level_scale=0.01,
+        ratio_scale=0.002,
+        detune_scale=0.45,
+    )
+
+def _emit_audio_update(values: List[float]) -> None:
+    global AUDIO_STARTED
+    if not AUDIO_ENABLED or AUDIO_CLIENT is None or AUDIO_CUBE is None:
+        return
+    if not AUDIO_STARTED:
+        AUDIO_CLIENT.start()
+        AUDIO_STARTED = True
+    AUDIO_CUBE.apply_sutra_to_operators("cymatic_field", values)
+    payload = AUDIO_CUBE.as_update_payload()
+    AUDIO_CLIENT.send_state(
+        payload["base_ops"],
+        payload["levels"],
+        mod_matrix=payload["mod_matrix"],
+        input_matrix=payload["input_matrix"],
+        mix_mode=payload["mix_mode"],
+    )
+
+_init_audio_matrices()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -583,17 +632,17 @@ def main():
     # Initialize engine
     engine = Full30SutraCymaticEngine(resolution=1600)
 
-    # Demonstrate sutra chain
-    print("\n[SUTRA CHAIN DEMONSTRATION]")
+    # Sutra chain execution
+    print("\n[SUTRA CHAIN EXECUTION]")
     print("-" * 50)
     test_val = 0.5
     print(f"Input value: {test_val}")
 
-    # Series demonstration
+    # Series execution
     series_out = apply_16_primary_sutras_series(test_val, 400, 400, 800, 528)
     print(f"After 16 PRIMARY SUTRAS (series): {series_out:.6f}")
 
-    # Parallel demonstration
+    # Parallel execution
     parallel_out = apply_14_subsutras_parallel(series_out, 400, 400, 800, 528)
     print(f"After 14 SUB-SUTRAS (parallel): {parallel_out:.6f}")
 
@@ -611,6 +660,8 @@ def main():
 
         # Compute full 30-sutra field
         engine.compute_full_30_sutra_field(freq, schumann)
+        if AUDIO_ENABLED:
+            _emit_audio_update([float(freq), float(schumann), float(idx + 1), float(len(CHAKRA_FREQUENCIES))])
 
         # Save image
         filename = f"{output_dir}/{chakra_name.lower()}_{freq}Hz_30sutra.png"

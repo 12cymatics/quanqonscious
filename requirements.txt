@@ -134,6 +134,8 @@ scikit-image
 opencv-python
 soundfile
 librosa
+sounddevice
+simpleaudio
 
 # ============================================================
 # VISUALISATION / DASHBOARDS (LOCAL + WEB)
