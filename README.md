@@ -29,36 +29,23 @@ concurrent, and parallel execution.
 Product and revenue details are documented in
 `docs/hybrid_sutra_platform.md`.
 
+## Toroid HTML Launcher
 
-## Exact Rational Runtime Usage
-
-Run the hybrid 29-sutra engine with exact rational input:
+Run the Toroid interface and the full 29-sutra hybrid platform (serial, concurrent,
+and parallel) with structured output artifacts:
 
 ```bash
-python hybrid_sutra_platform.py 1618/1000 --mode hybrid --output runs/hsqcp_report.json
+python run_toroid_hybrid.py \
+  --toroid-path "toroid HTML" \
+  --value 1.0 \
+  --mode hybrid \
+  --hybrid-output runs/hybrid_sutra_platform_report.json \
+  --report-path runs/toroid_launcher_report.json
 ```
 
-Run deterministic benchmark seeds with signature-vault persistence:
+If your branch uses `toroid_HTML`, the launcher auto-detects it. To serve only the
+front-end artifact without launching the simulator:
 
 ```bash
-python hybrid_sutra_platform.py 1 --mode hybrid --benchmark-seeds 1,1618/1000,2,31415926535/10000000000 --vault-dir runs/vault --run-label baseline
-```
-
-Audit persisted signature-vault integrity:
-
-```bash
-python hybrid_sutra_platform.py 1 --audit-vault runs/vault
-```
-
-Static contract validation:
-
-```bash
-python scripts/validate_hsqcp_contracts.py
-```
-
-
-Export benchmark matrix and reproducibility manifest in one run:
-
-```bash
-python hybrid_sutra_platform.py 1 --mode hybrid --benchmark-seeds 1,1618/1000,2,31415926535/10000000000 --benchmark-matrix-output runs/benchmark_matrix.json --manifest-output runs/repro_manifest.json
+python run_toroid_hybrid.py --skip-hybrid --port 8000
 ```

@@ -7,20 +7,21 @@ in serial, concurrent, and parallel modes with FM8-style audio control.
 from __future__ import annotations
 
 import argparse
-import math
+import json
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
+from statistics import mean
 from typing import Any, Dict, List, Sequence, Tuple
 
-import numpy as np
+try:
+    import numpy as np
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    np = None
 
-from hc_ipc import HcIpcClient
-from hypercube_fm8 import HyperCubeFM8
 from qiskit_backend import execute_ghz
 from sutra_repository import SutraContext, SutraMode, SutraRepository
-
 
 PREFERRED_SUTRAS = [
     "ekadhikena_purvena",
@@ -119,12 +120,12 @@ def _call_sutra_in_process(name: str, value: float, mode: SutraMode) -> Tuple[st
 def _to_scalar(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
-    if isinstance(value, np.ndarray):
+    if np is not None and isinstance(value, np.ndarray):
         return float(np.mean(value))
     if isinstance(value, (list, tuple)):
         if len(value) == 0:
             return 0.0
-        return float(np.mean([_to_scalar(v) for v in value]))
+        return float(mean(_to_scalar(v) for v in value))
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -195,12 +196,7 @@ def run_parallel(value: float, mode: SutraMode, sutra_names: Sequence[str]) -> H
     return HybridRunSummary(mode="parallel", results=results, final_value=final_value)
 
 
-def apply_audio_updates(
-    cube: HyperCubeFM8,
-    results: Sequence[SutraRunResult],
-    mix_mode: str,
-    ipc: HcIpcClient,
-) -> None:
+def apply_audio_updates(cube: Any, results: Sequence[SutraRunResult], mix_mode: str, ipc: Any) -> None:
     for result in results:
         cube.apply_sutra_to_operators(result.name, [_to_scalar(result.output)])
     cube.set_mix_mode(mix_mode)
@@ -216,6 +212,14 @@ def apply_audio_updates(
     )
 
 
+def _summary_dict(summary: HybridRunSummary) -> Dict[str, Any]:
+    return {
+        "mode": summary.mode,
+        "final_value": summary.final_value,
+        "results": [{"name": r.name, "scalar_output": _to_scalar(r.output)} for r in summary.results],
+    }
+
+
 def main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(description="Hybrid sutra simulator")
     parser.add_argument("value", type=float, help="Base input value")
@@ -227,15 +231,29 @@ def main(argv: Sequence[str]) -> int:
     )
     parser.add_argument("--run-all-modes", action="store_true", help="Run serial+concurrent+parallel")
     parser.add_argument("--enable-audio", action="store_true", help="Send audio updates")
+    parser.add_argument("--sutra-count", type=int, default=29, help="Number of sutras to execute")
+    parser.add_argument(
+        "--report-path",
+        default="runs/hybrid_run_report.json",
+        help="Optional output JSON report path",
+    )
     args = parser.parse_args(argv)
 
     mode = SutraMode[args.mode.upper()]
     repo = SutraRepository(SutraContext(mode=mode))
-    sutra_names = select_sutra_names(repo)
+    sutra_names = select_sutra_names(repo, target_count=args.sutra_count)
+    if len(sutra_names) < args.sutra_count:
+        raise RuntimeError(f"Requested {args.sutra_count} sutras but found {len(sutra_names)}")
 
     audio_enabled = args.enable_audio or os.getenv("QUANQONSCIOUS_AUDIO", "0") == "1"
-    ipc = HcIpcClient() if audio_enabled else None
-    cube = HyperCubeFM8(num_ops=12, base_frequency=432.0)
+    ipc = None
+    cube = None
+    if audio_enabled:
+        from hc_ipc import HcIpcClient
+        from hypercube_fm8 import HyperCubeFM8
+
+        ipc = HcIpcClient()
+        cube = HyperCubeFM8(num_ops=12, base_frequency=432.0)
 
     run_modes = ["serial", "concurrent", "parallel"] if args.run_all_modes else ["serial"]
 
@@ -257,6 +275,18 @@ def main(argv: Sequence[str]) -> int:
         for result in summary.results:
             scalar = _to_scalar(result.output)
             print(f"  {result.name}: {scalar:.6f}")
+
+    os.makedirs(os.path.dirname(args.report_path), exist_ok=True)
+    report_payload = {
+        "input_value": args.value,
+        "mode": args.mode,
+        "sutra_count": args.sutra_count,
+        "run_modes": run_modes,
+        "summaries": [_summary_dict(summary) for summary in summaries],
+    }
+    with open(args.report_path, "w", encoding="utf-8") as f:
+        json.dump(report_payload, f, indent=2)
+    print(f"\nReport written to {args.report_path}")
 
     return 0
 
