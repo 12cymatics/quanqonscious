@@ -1,7 +1,26 @@
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Any, Dict
+import inspect
 
 from sutra_repository import SutraRepository, SutraContext, SutraMode
+
+
+def _prepare_args(func: Any, value: Any) -> list:
+    """Generate default arguments for a sutra function."""
+    sig = inspect.signature(func)
+    args = []
+    for name, param in sig.parameters.items():
+        if name in {"self", "ctx"}:
+            continue
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY,
+                          inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            if param.default is inspect.Parameter.empty:
+                if any(key in name for key in ("coeff", "angles", "values",
+                                               "parts", "list", "vector")):
+                    args.append([value, value])
+                else:
+                    args.append(value)
+    return args
 
 
 def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:
@@ -10,8 +29,13 @@ def serial_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Any:
     repo = SutraRepository(ctx)
     result = value
     for name in repo.list_sutras():
-        result = repo.call_sutra(name, result, ctx=ctx)
-        print(f"{name} -> {result}")
+        func = repo._methods[name]
+        args = _prepare_args(func, result)
+        try:
+            result = repo.call_sutra(name, *args, ctx=ctx)
+            print(f"{name} -> {result}")
+        except Exception as e:
+            print(f"{name} FAILED: {e}")
     return result
 
 
@@ -21,7 +45,13 @@ def concurrent_run(value: Any, mode: SutraMode = SutraMode.CLASSICAL) -> Dict[st
     repo = SutraRepository(ctx)
 
     def run(name: str) -> tuple[str, Any]:
-        return name, repo.call_sutra(name, value, ctx=ctx)
+        func = repo._methods[name]
+        args = _prepare_args(func, value)
+        try:
+            res = repo.call_sutra(name, *args, ctx=ctx)
+        except Exception as e:
+            res = f"FAILED: {e}"
+        return name, res
 
     results: Dict[str, Any] = {}
     with ThreadPoolExecutor() as exe:
@@ -41,7 +71,13 @@ def parallel_hybrid_run(value: Any) -> None:
     def call(name: str, val: Any) -> tuple[str, Any]:
         ctx = SutraContext(mode=SutraMode.HYBRID, parallel=False)
         inner_repo = SutraRepository(ctx)
-        return name, inner_repo.call_sutra(name, val, ctx=ctx)
+        func = inner_repo._methods[name]
+        args = _prepare_args(func, val)
+        try:
+            res = inner_repo.call_sutra(name, *args, ctx=ctx)
+        except Exception as e:
+            res = f"FAILED: {e}"
+        return name, res
 
     with ProcessPoolExecutor() as exe:
         futures = [exe.submit(call, name, value) for name in names]

@@ -2,13 +2,19 @@
 
 import math
 import numpy as np
-import cirq  # Cirq for quantum circuits (will be used if CUDA-Q is unavailable)
+try:
+    import cirq  # Cirq for quantum circuits (will be used if CUDA-Q is unavailable)
+except Exception:  # pragma: no cover - optional dependency
+    cirq = None
 try:
     import cudaq  # NVIDIA CUDA Quantum (for GPU acceleration)
 except ImportError:
     cudaq = None
 
-from QuanQonscious import core_engine, maya_cipher
+# Use relative imports so the module works regardless of the package name on
+# disk.
+# Use relative imports to support package name in lowercase
+from . import core_engine, maya_cipher
 
 class GRVQAnsatz:
     """
