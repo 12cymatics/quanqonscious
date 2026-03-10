@@ -5,15 +5,17 @@ Provides a basic web interface to interact with the quantum simulation framework
 """
 
 import http.server
+import importlib.util
 import socketserver
 import json
-import urllib.parse
 import os
 import sys
-from pathlib import Path
+from typing import Any, Dict, List
 
 # Add current directory to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from maya_cipher import MayaCipher
 
 class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -43,6 +45,16 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             modules = self.get_available_modules()
             self.wfile.write(json.dumps(modules, indent=2).encode())
+        elif self.path == '/api/hsqcp/metadata':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(self.get_hsqcp_metadata(), indent=2).encode())
+        elif self.path == '/api/hsqcp/sutras':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(self.get_hsqcp_sutras(), indent=2).encode())
         else:
             super().do_GET()
     
@@ -53,6 +65,22 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 data = json.loads(post_data.decode())
                 result = self.execute_command(data)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                error_response = {"error": str(e), "success": False}
+                self.wfile.write(json.dumps(error_response).encode())
+        elif self.path == '/api/hsqcp/run':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode())
+                result = self.execute_hsqcp(data)
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
@@ -148,6 +176,9 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             padding: 20px;
             margin-top: 20px;
         }
+        .section-title {
+            margin-top: 0;
+        }
         .form-group {
             margin-bottom: 15px;
         }
@@ -197,6 +228,30 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             opacity: 0.8;
             font-size: 0.9em;
         }
+        .btn.secondary {
+            background: #2196F3;
+        }
+        .btn.secondary:hover {
+            background: #1e88e5;
+        }
+        .pill {
+            display: inline-block;
+            padding: 4px 10px;
+            margin: 4px 6px 0 0;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+            font-size: 0.85em;
+        }
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+        .result-card {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 12px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -215,49 +270,67 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             </div>
             
             <div class="card">
-                <h3>Available Modules</h3>
-                <ul class="module-list">
-                    <li>🔬 GRVQ Ansatz Construction</li>
-                    <li>🔐 Maya Cipher Cryptography</li>
-                    <li>⚡ ZPE Field Solver</li>
-                    <li>🧮 Vedic Sutra Library</li>
-                    <li>🌐 Core Engine</li>
-                    <li>📊 Performance Analysis</li>
-                </ul>
+                <h3>Systems & Domains</h3>
+                <div id="system-tags"></div>
             </div>
             
             <div class="card">
-                <h3>Framework Features</h3>
-                <ul class="module-list">
-                    <li>General Relativity Integration</li>
-                    <li>Vedic Mathematics (29 Sutras)</li>
-                    <li>Quantum Circuit Simulation</li>
-                    <li>HPC GPU Acceleration</li>
-                    <li>Bioelectric DNA Encoding</li>
-                    <li>TTGCR Hardware Simulation</li>
-                </ul>
+                <h3>Industry Alignment</h3>
+                <div id="industry-tags"></div>
+            </div>
+
+            <div class="card">
+                <h3>29 Sutra Inventory</h3>
+                <ul id="sutra-list" class="module-list"></ul>
             </div>
         </div>
         
         <div class="execute-section">
-            <h3>Quick Commands</h3>
+            <h3 class="section-title">One-Click Sutra Engine</h3>
+            <p>Launch the full 29-sutra hybrid run (serial, concurrent, parallel) in one click and see how it maps to the platform systems and industries.</p>
             <div class="form-group">
-                <label for="command">Select Command:</label>
-                <select id="command" onchange="updateCommandParams()">
-                    <option value="info">System Information</option>
-                    <option value="encrypt">Maya Cipher Encrypt</option>
-                    <option value="decrypt">Maya Cipher Decrypt</option>
-                    <option value="simulate">ZPE Field Simulation</option>
+                <label for="hsqcp-value">Input Seed Value</label>
+                <input type="number" id="hsqcp-value" value="1.618" step="0.001">
+            </div>
+            <div class="form-group">
+                <label for="hsqcp-mode">Execution Mode</label>
+                <select id="hsqcp-mode">
+                    <option value="hybrid">Hybrid</option>
+                    <option value="classical">Classical</option>
+                    <option value="quantum">Quantum</option>
+                    <option value="maya_illusion">Maya Illusion</option>
+                    <option value="sulba">Sulba</option>
                 </select>
             </div>
-            
-            <div id="command-params">
-                <!-- Dynamic parameters will be inserted here -->
+            <div class="form-group">
+                <label for="hsqcp-include">Filter Sutras (optional substring)</label>
+                <input type="text" id="hsqcp-include" placeholder="e.g. maya, zpe, sulba">
             </div>
-            
-            <button class="btn" onclick="executeCommand()">Execute Command</button>
-            
-            <div id="output" class="output" style="display: none;"></div>
+            <div class="form-group">
+                <label for="hsqcp-precision">Precision</label>
+                <input type="number" id="hsqcp-precision" value="64">
+            </div>
+            <div class="form-group">
+                <label for="hsqcp-iterations">Max Iterations</label>
+                <input type="number" id="hsqcp-iterations" value="128">
+            </div>
+            <button class="btn secondary" onclick="runHybridBundle()">Run Hybrid Sutra Bundle</button>
+            <div id="hsqcp-output" class="output" style="display: none;"></div>
+        </div>
+
+        <div class="execute-section">
+            <h3 class="section-title">Maya Cipher Operations</h3>
+            <div class="form-group">
+                <label for="cipher-key">Cipher Key (integer)</label>
+                <input type="number" id="cipher-key" value="123456">
+            </div>
+            <div class="form-group">
+                <label for="cipher-message">Message (UTF-8)</label>
+                <textarea id="cipher-message" placeholder="Enter message"></textarea>
+            </div>
+            <button class="btn" onclick="encryptMessage()">Encrypt Message</button>
+            <button class="btn secondary" onclick="decryptMessage()">Decrypt Ciphertext</button>
+            <div id="cipher-output" class="output" style="display: none;"></div>
         </div>
         
         <div class="footer">
@@ -267,87 +340,62 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
     </div>
 
     <script>
-        function updateCommandParams() {
-            const command = document.getElementById('command').value;
-            const paramsDiv = document.getElementById('command-params');
-            
-            let html = '';
-            
-            switch(command) {
-                case 'encrypt':
-                    html = `
-                        <div class="form-group">
-                            <label for="key">Encryption Key (integer):</label>
-                            <input type="number" id="key" placeholder="123456" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="message">Message to Encrypt:</label>
-                            <textarea id="message" placeholder="Enter your message here..." required></textarea>
-                        </div>
-                    `;
-                    break;
-                case 'decrypt':
-                    html = `
-                        <div class="form-group">
-                            <label for="key">Decryption Key (integer):</label>
-                            <input type="number" id="key" placeholder="123456" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="ciphertext">Ciphertext (hex):</label>
-                            <textarea id="ciphertext" placeholder="Enter hex ciphertext..." required></textarea>
-                        </div>
-                    `;
-                    break;
-                case 'simulate':
-                    html = `
-                        <div class="form-group">
-                            <label for="grid_size">Grid Size (NxNxN):</label>
-                            <input type="number" id="grid_size" placeholder="20" value="20">
-                        </div>
-                        <div class="form-group">
-                            <label for="steps">Time Steps:</label>
-                            <input type="number" id="steps" placeholder="1" value="1">
-                        </div>
-                    `;
-                    break;
-                default:
-                    html = '<p>No additional parameters required.</p>';
-            }
-            
-            paramsDiv.innerHTML = html;
+        function populateMetadata() {
+            fetch('/api/hsqcp/metadata')
+                .then(response => response.json())
+                .then(data => {
+                    const systemTags = document.getElementById('system-tags');
+                    const industryTags = document.getElementById('industry-tags');
+                    systemTags.innerHTML = '';
+                    industryTags.innerHTML = '';
+                    data.systems.forEach(item => {
+                        const span = document.createElement('span');
+                        span.className = 'pill';
+                        span.textContent = item;
+                        systemTags.appendChild(span);
+                    });
+                    data.industries.forEach(item => {
+                        const span = document.createElement('span');
+                        span.className = 'pill';
+                        span.textContent = item;
+                        industryTags.appendChild(span);
+                    });
+                });
+
+            fetch('/api/hsqcp/sutras')
+                .then(response => response.json())
+                .then(data => {
+                    const list = document.getElementById('sutra-list');
+                    list.innerHTML = '';
+                    if (data.error) {
+                        const li = document.createElement('li');
+                        li.textContent = data.error;
+                        list.appendChild(li);
+                        return;
+                    }
+                    data.names.forEach(name => {
+                        const li = document.createElement('li');
+                        li.textContent = name;
+                        list.appendChild(li);
+                    });
+                });
         }
-        
-        function executeCommand() {
-            const command = document.getElementById('command').value;
-            const outputDiv = document.getElementById('output');
-            
-            let params = {command: command};
-            
-            // Collect parameters based on command type
-            switch(command) {
-                case 'encrypt':
-                    params.key = document.getElementById('key').value;
-                    params.message = document.getElementById('message').value;
-                    break;
-                case 'decrypt':
-                    params.key = document.getElementById('key').value;
-                    params.ciphertext = document.getElementById('ciphertext').value;
-                    break;
-                case 'simulate':
-                    params.grid_size = document.getElementById('grid_size').value;
-                    params.steps = document.getElementById('steps').value;
-                    break;
-            }
-            
+
+        function runHybridBundle() {
+            const outputDiv = document.getElementById('hsqcp-output');
+            const payload = {
+                value: parseFloat(document.getElementById('hsqcp-value').value),
+                mode: document.getElementById('hsqcp-mode').value,
+                include: document.getElementById('hsqcp-include').value,
+                precision: parseInt(document.getElementById('hsqcp-precision').value, 10),
+                max_iterations: parseInt(document.getElementById('hsqcp-iterations').value, 10)
+            };
             outputDiv.style.display = 'block';
-            outputDiv.textContent = 'Executing command...';
-            
-            fetch('/api/execute', {
+            outputDiv.textContent = 'Running full hybrid bundle...';
+            fetch('/api/hsqcp/run', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params)
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
             })
             .then(response => response.json())
             .then(data => {
@@ -357,19 +405,54 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
                 outputDiv.textContent = 'Error: ' + error.message;
             });
         }
-        
-        // Initialize page
-        updateCommandParams();
-        
-        // Load system info on page load
-        fetch('/api/info')
+
+        function encryptMessage() {
+            const outputDiv = document.getElementById('cipher-output');
+            const payload = {
+                command: 'encrypt',
+                key: document.getElementById('cipher-key').value,
+                message: document.getElementById('cipher-message').value
+            };
+            outputDiv.style.display = 'block';
+            outputDiv.textContent = 'Encrypting...';
+            fetch('/api/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
             .then(response => response.json())
             .then(data => {
-                console.log('System Info:', data);
+                outputDiv.textContent = JSON.stringify(data, null, 2);
             })
             .catch(error => {
-                console.error('Failed to load system info:', error);
+                outputDiv.textContent = 'Error: ' + error.message;
             });
+        }
+
+        function decryptMessage() {
+            const outputDiv = document.getElementById('cipher-output');
+            const payload = {
+                command: 'decrypt',
+                key: document.getElementById('cipher-key').value,
+                ciphertext: document.getElementById('cipher-message').value
+            };
+            outputDiv.style.display = 'block';
+            outputDiv.textContent = 'Decrypting...';
+            fetch('/api/execute', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                outputDiv.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                outputDiv.textContent = 'Error: ' + error.message;
+            });
+        }
+
+        populateMetadata();
     </script>
 </body>
 </html>
@@ -403,39 +486,106 @@ class QuanQonsciousHandler(http.server.SimpleHTTPRequestHandler):
             }
         
         elif command == 'encrypt':
-            try:
-                key = int(data.get('key', 0))
-                message = data.get('message', '')
-                # Simple encryption placeholder since we can't import the actual module
-                result = f"Encrypted message with key {key}: {message.encode().hex()}"
-                return {"success": True, "result": result}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
+            key = int(data.get('key', 0))
+            message = data.get('message', '').encode('utf-8')
+            cipher = MayaCipher(key=key, rounds=4, use_time=False)
+            ciphertext = cipher.encrypt_message(message, t=0.0).hex()
+            return {"success": True, "ciphertext_hex": ciphertext}
         
         elif command == 'decrypt':
-            try:
-                key = int(data.get('key', 0))
-                ciphertext = data.get('ciphertext', '')
-                # Simple decryption placeholder
-                result = f"Decrypted with key {key}: {bytes.fromhex(ciphertext).decode('utf-8', errors='ignore')}"
-                return {"success": True, "result": result}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-        
-        elif command == 'simulate':
-            try:
-                grid_size = int(data.get('grid_size', 20))
-                steps = int(data.get('steps', 1))
-                result = f"ZPE Field Simulation: Grid={grid_size}x{grid_size}x{grid_size}, Steps={steps} - Simulation completed successfully (placeholder result)"
-                return {"success": True, "result": result}
-            except Exception as e:
-                return {"success": False, "error": str(e)}
+            key = int(data.get('key', 0))
+            ciphertext = bytes.fromhex(data.get('ciphertext', ''))
+            cipher = MayaCipher(key=key, rounds=4, use_time=False)
+            plaintext = cipher.decrypt_message(ciphertext, t=0.0).decode('utf-8')
+            return {"success": True, "plaintext": plaintext}
         
         else:
             return {"success": False, "error": f"Unknown command: {command}"}
 
+    def execute_hsqcp(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if importlib.util.find_spec("numpy") is None:
+            return {
+                "success": False,
+                "error": "Missing dependency: numpy. Install requirements.txt to enable sutra execution.",
+            }
+
+        from hybrid_sutra_platform import run_hybrid_bundle
+        from sutra_repository import SutraMode
+
+        value = float(data.get('value', 1.618))
+        mode_value = str(data.get('mode', 'hybrid')).upper()
+        include = data.get('include') or None
+        precision = int(data.get('precision', 64))
+        max_iterations = int(data.get('max_iterations', 128))
+        max_workers = data.get('max_workers')
+        mode = SutraMode[mode_value]
+        bundle = run_hybrid_bundle(
+            value,
+            mode=mode,
+            precision=precision,
+            max_iterations=max_iterations,
+            include=include,
+            max_workers=max_workers,
+        )
+        return {
+            "success": True,
+            "bundle": bundle.to_dict(),
+            "summary": {
+                "serial": {
+                    "aggregate": bundle.serial.aggregate,
+                    "wall_time": bundle.serial.wall_time,
+                },
+                "concurrent": {
+                    "aggregate": bundle.concurrent.aggregate,
+                    "wall_time": bundle.concurrent.wall_time,
+                },
+                "parallel": {
+                    "aggregate": bundle.parallel.aggregate,
+                    "wall_time": bundle.parallel.wall_time,
+                },
+            },
+            "systems": self.get_hsqcp_metadata()["systems"],
+            "industries": self.get_hsqcp_metadata()["industries"],
+        }
+
+    def get_hsqcp_metadata(self) -> Dict[str, List[str]]:
+        return {
+            "systems": [
+                "Sutra Execution Engine (29 sutras)",
+                "Hybrid Quantum-Classical Simulator",
+                "GRVQ / TGCR / ZPE Pipeline",
+                "Maya Cipher Cryptography",
+                "Performance & Timing Analytics",
+            ],
+            "industries": [
+                "Quantum Computing & Simulation",
+                "Defense & Secure Communications",
+                "Financial Optimization & Trading",
+                "Advanced Materials & Physics",
+                "Healthcare Signal Modeling",
+                "Energy Grid Optimization",
+            ],
+        }
+
+    def get_hsqcp_sutras(self) -> Dict[str, Any]:
+        if importlib.util.find_spec("numpy") is None:
+            return {
+                "count": 0,
+                "names": [],
+                "error": "Install requirements.txt to load the full 29-sutra inventory.",
+            }
+
+        from sutra_repository import SutraRepository
+
+        repo = SutraRepository()
+        sutra_names = repo.list_sutras()
+        return {
+            "count": len(sutra_names),
+            "names": sutra_names,
+        }
+
 def main():
-    PORT = 3000
+    PORT = int(os.environ.get("PORT", "3000"))
     Handler = QuanQonsciousHandler
     
     try:

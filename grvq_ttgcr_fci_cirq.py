@@ -36,6 +36,7 @@ from mpi4py import MPI
 from scipy.linalg import eigh
 import cirq
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 
 # Global constants
 G0 = 6.67430e-11            # gravitational constant [m^3 kg^-1 s^-2]
@@ -473,6 +474,97 @@ class ExtendedVedicUtilities(VedicSutraLibrary):
         final = self.sutra_17(part4, part3)
         return final
 
+    def dynamic_modulation(self, density, sutra_series):
+        base_sum = compute_urdhva_sum(sutra_series)
+        grav_term = G0 * pow(1 + density / rho_crit, -1)
+        oscillation = 0.005 * math.sin(density)
+        return grav_term + 0.02 * base_sum + oscillation
+
+
+class SutraExecutionPipeline:
+    """
+    Executes all 29 sutras across serial, parallel, and hybrid lanes.
+    This pipeline is used to drive hybrid quantum-classical synchronization.
+    """
+    def __init__(self, vedic_lib: VedicSutraLibrary, max_workers=12):
+        self.vedic = vedic_lib
+        self.max_workers = max_workers
+
+    def _sutra_input(self, sutra_id):
+        if sutra_id in [1, 3, 11, 14, 17]:
+            return (123, 456)
+        if sutra_id in [2, 13]:
+            return (123, 456, 0.75)
+        if sutra_id in [4, 10, 16]:
+            return (789, 3)
+        if sutra_id in [5, 9, 15, 28]:
+            return (10, 5)
+        if sutra_id in [6, 27]:
+            return (7,)
+        if sutra_id in [7, 19]:
+            return (100, 4)
+        if sutra_id in [8]:
+            return (57, 43)
+        if sutra_id in [12, 29]:
+            return (15, -15)
+        if sutra_id in [20, 21]:
+            return (12345,)
+        if sutra_id in [22]:
+            return (35241,)
+        if sutra_id in [23]:
+            return (99, 88)
+        if sutra_id in [24]:
+            return (360,)
+        if sutra_id in [25]:
+            return (12, 34)
+        if sutra_id in [26]:
+            return (8, 16)
+        return ()
+
+    def _invoke_sutra(self, sutra_id):
+        func = getattr(self.vedic, f"sutra_{sutra_id}")
+        args = self._sutra_input(sutra_id)
+        return func(*args)
+
+    def run_serial(self):
+        results = {}
+        for sutra_id in range(1, 30):
+            results[f"sutra_{sutra_id}"] = self._invoke_sutra(sutra_id)
+        return results
+
+    def run_parallel(self):
+        results = {}
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(self._invoke_sutra, sutra_id): sutra_id
+                for sutra_id in range(1, 30)
+            }
+            for future, sutra_id in futures.items():
+                results[f"sutra_{sutra_id}"] = future.result()
+        return results
+
+    def run_hybrid(self):
+        serial_results = self.run_serial()
+        parallel_results = self.run_parallel()
+        sutra_vector = [
+            serial_results[f"sutra_{i}"] if isinstance(serial_results[f"sutra_{i}"], (int, float))
+            else len(str(serial_results[f"sutra_{i}"]))
+            for i in range(1, 30)
+        ]
+        modulation = compute_urdhva_sum(sutra_vector)
+        return {
+            "serial": serial_results,
+            "parallel": parallel_results,
+            "modulation": modulation
+        }
+
+
+def compute_urdhva_sum(values):
+    total = 0.0
+    for val in values:
+        total += abs(float(val)) * 1.3
+    return total
+
 # =============================================================================
 # 9. Extended Quantum Circuit Simulation using Cirq
 # =============================================================================
@@ -541,6 +633,10 @@ def orchestrate_simulation():
         except Exception as e:
             sutra_tests[f"sutra_{i}"] = f"Error: {e}"
     report["vedic_sutra_tests"] = sutra_tests
+    sutra_pipeline = SutraExecutionPipeline(vedic_lib=vedic_lib, max_workers=12)
+    report["sutra_pipeline_serial"] = sutra_pipeline.run_serial()
+    report["sutra_pipeline_parallel"] = sutra_pipeline.run_parallel()
+    report["sutra_pipeline_hybrid"] = sutra_pipeline.run_hybrid()
 
     # GRVQ Ansatz Evaluation
     ansatz = GRVQAnsatz(vedic_lib=vedic_lib, num_modes=12)
@@ -647,6 +743,10 @@ def run_full_benchmark():
     future_ext = ExtendedVedicUtilities(base=BASE)
     modulated_G = future_ext.dynamic_modulation(1e22, [0.5, 0.6, 0.7, 0.8])
     benchmark_report["dynamic_modulation"] = modulated_G
+    sutra_pipeline = SutraExecutionPipeline(vedic_lib=vedic_lib, max_workers=12)
+    benchmark_report["sutra_pipeline_serial"] = sutra_pipeline.run_serial()
+    benchmark_report["sutra_pipeline_parallel"] = sutra_pipeline.run_parallel()
+    benchmark_report["sutra_pipeline_hybrid"] = sutra_pipeline.run_hybrid()
 
     return benchmark_report
 
