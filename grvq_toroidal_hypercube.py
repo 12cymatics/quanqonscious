@@ -24,17 +24,22 @@ Based on methods from:
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
+import logging
 import math
 import numpy as np
+import primarysutra
 from fractions import Fraction
 from typing import List, Tuple, Dict, Any, Union, Optional
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field, replace
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from primarysutra import SutraContext, SutraMode, VedicSutras
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 1: FUNDAMENTAL CONSTANTS (EXACT ARITHMETIC)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+logger = logging.getLogger("GRVQToroidalHypercube")
 
 class FundamentalConstants:
     """Exact fundamental constants using Fraction arithmetic."""
@@ -340,9 +345,18 @@ class VedicSutraEngine:
         return result
 
     @classmethod
-    def apply_subsutras_parallel(cls, params: np.ndarray,
-                                  max_workers: int = 8) -> np.ndarray:
-        """Apply all 13 sub-sutras in parallel and average results."""
+    def apply_subsutras_serial(cls, params: np.ndarray) -> np.ndarray:
+        """Apply all 13 sub-sutras sequentially and average results."""
+        results = []
+        for sub in cls.SUB_SUTRAS:
+            results.append(sub(params))
+        stacked = np.vstack(results)
+        return np.mean(stacked, axis=0)
+
+    @classmethod
+    def apply_subsutras_concurrent(cls, params: np.ndarray,
+                                   max_workers: int = 8) -> np.ndarray:
+        """Apply all 13 sub-sutras concurrently with threads and average results."""
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(sub, params) for sub in cls.SUB_SUTRAS]
             results = [f.result() for f in futures]
@@ -351,9 +365,21 @@ class VedicSutraEngine:
         return np.mean(stacked, axis=0)
 
     @classmethod
+    def apply_subsutras_parallel(cls, params: np.ndarray,
+                                 max_workers: int = 8) -> np.ndarray:
+        """Apply all 13 sub-sutras in parallel with processes and average results."""
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(sub, params) for sub in cls.SUB_SUTRAS]
+            results = [f.result() for f in futures]
+
+        stacked = np.vstack(results)
+        return np.mean(stacked, axis=0)
+
+    @classmethod
     def apply_all_29_sutras(cls, params: np.ndarray,
-                            max_workers: int = 8) -> np.ndarray:
-        """Apply all 29 sutras: 16 primary (serial) + 13 sub (parallel)."""
+                            max_workers: int = 8,
+                            execution_mode: str = "concurrent") -> np.ndarray:
+        """Apply all 29 sutras with selectable execution strategy."""
         # Sanitize input - replace NaN/Inf with bounded values
         params = np.nan_to_num(params, nan=0.0, posinf=1e6, neginf=-1e6)
         params = np.clip(params, -1e6, 1e6)
@@ -364,12 +390,95 @@ class VedicSutraEngine:
         intermediate = np.nan_to_num(intermediate, nan=0.0, posinf=1e6, neginf=-1e6)
         intermediate = np.clip(intermediate, -1e6, 1e6)
 
-        final = cls.apply_subsutras_parallel(intermediate, max_workers)
+        if execution_mode == "serial":
+            final = cls.apply_subsutras_serial(intermediate)
+        elif execution_mode == "parallel":
+            final = cls.apply_subsutras_parallel(intermediate, max_workers)
+        else:
+            final = cls.apply_subsutras_concurrent(intermediate, max_workers)
 
         # Sanitize output
         final = np.nan_to_num(final, nan=0.0, posinf=1e6, neginf=-1e6)
         return final
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 5B: HYBRID QUANTUM-CLASSICAL SUTRA COORDINATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _quantum_available() -> bool:
+    cirq_module = getattr(primarysutra, "cirq", None)
+    cudaq_module = getattr(primarysutra, "cudaq", None)
+    return (cirq_module is not None and hasattr(cirq_module, "Simulator")) or cudaq_module is not None
+
+
+@dataclass
+class SutraExecutionPlan:
+    """Execution plan for 29-sutra runs with optional quantum augmentation."""
+    context: SutraContext = field(default_factory=SutraContext)
+    execution_mode: str = "concurrent"
+    max_workers: int = 8
+
+    def effective_context(self) -> SutraContext:
+        if self.context.mode in (SutraMode.QUANTUM, SutraMode.HYBRID) and not _quantum_available():
+            logger.warning(
+                "Quantum backend unavailable; downgrading sutra execution to classical mode."
+            )
+            return replace(self.context, mode=SutraMode.CLASSICAL)
+        return self.context
+
+
+class HybridSutraCoordinator:
+    """
+    Apply 29 sutras with serial/concurrent/parallel control and optional
+    quantum-classical augmentation for hybrid simulators.
+    """
+
+    def __init__(self, plan: Optional[SutraExecutionPlan] = None):
+        self.plan = plan or SutraExecutionPlan()
+
+    def _quantum_correction(self, stats: Dict[str, float], context: SutraContext) -> float:
+        """
+        Compute a deterministic correction using quantum-capable sutras.
+        Returns a scalar correction applied to the transformed field.
+        """
+        sutras = VedicSutras(context)
+        mean_val = stats["mean"]
+        spread = stats["std"]
+        energy = stats["l2"]
+        base_val = context.base if context.base != 0 else 10.0
+        divisor = max(1.0, abs(mean_val) + 1.0)
+
+        step1 = sutras.ekadhikena_purvena(mean_val, iterations=2, ctx=context)
+        step2 = sutras.nikhilam_navatashcaramam_dashatah(step1, base=base_val, ctx=context)
+        step3 = sutras.chalana_kalana(step2, steps=3, direction=1, ctx=context)
+        step4 = sutras.sankalana_vyavakalanabhyam(step3, spread, operation="add", ctx=context)
+        step5 = sutras.gunitasamuccayah(step4, energy / divisor, ctx=context)
+
+        return float(step5)
+
+    def apply(self, params: np.ndarray) -> np.ndarray:
+        """
+        Apply the 29 sutras with the configured execution strategy and, when
+        requested, apply a quantum-derived correction to the result.
+        """
+        effective_context = self.plan.effective_context()
+        transformed = VedicSutraEngine.apply_all_29_sutras(
+            params,
+            max_workers=self.plan.max_workers,
+            execution_mode=self.plan.execution_mode,
+        )
+
+        if effective_context.mode == SutraMode.CLASSICAL:
+            return transformed
+
+        stats = {
+            "mean": float(np.mean(transformed)),
+            "std": float(np.std(transformed)),
+            "l2": float(np.linalg.norm(transformed)),
+        }
+        correction = self._quantum_correction(stats, effective_context)
+        return transformed + correction * 1e-3
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTION 6: 4D TESSERACT (HYPERCUBE)
@@ -656,11 +765,13 @@ class GRVQToroidalHypercube:
     """
 
     def __init__(self, R_major: float = 0.6, R_minor: float = 0.3,
-                 tesseract_scale: float = 0.35, R0: float = 1.0):
+                 tesseract_scale: float = 0.35, R0: float = 1.0,
+                 sutra_plan: Optional[SutraExecutionPlan] = None):
         self.torus = ToroidalGeometry(R_major, R_minor)
         self.tesseract = Tesseract4D(scale=tesseract_scale)
         self.ansatz = GRVQAnsatz(R0=R0)
-        self.vedic_engine = VedicSutraEngine()
+        self.sutra_plan = sutra_plan or SutraExecutionPlan()
+        self.sutra_coordinator = HybridSutraCoordinator(self.sutra_plan)
 
         # Wheeler coupling constant
         self.kappa = float(FundamentalConstants.wheeler_coupling())
@@ -739,13 +850,17 @@ class GRVQToroidalHypercube:
             'metric_tensor': g
         }
 
-    def apply_vedic_transformation(self, field_values: np.ndarray) -> np.ndarray:
-        """Apply all 29 Vedic sutras to field values."""
-        return self.vedic_engine.apply_all_29_sutras(field_values)
+    def apply_vedic_transformation(self, field_values: np.ndarray,
+                                   sutra_plan: Optional[SutraExecutionPlan] = None) -> np.ndarray:
+        """Apply all 29 Vedic sutras to field values with execution control."""
+        if sutra_plan is not None:
+            return HybridSutraCoordinator(sutra_plan).apply(field_values)
+        return self.sutra_coordinator.apply(field_values)
 
     def compute_full_system(self, n_points: int = 50,
                              m: int = 3, n: int = 5,
-                             angle_xw: float = 0.4) -> Dict[str, Any]:
+                             angle_xw: float = 0.4,
+                             sutra_plan: Optional[SutraExecutionPlan] = None) -> Dict[str, Any]:
         """
         Compute the complete GRVQ toroidal hypercube system.
 
@@ -764,7 +879,7 @@ class GRVQToroidalHypercube:
 
         # Apply Vedic transformation
         flat_field = field_grid.flatten()
-        transformed = self.apply_vedic_transformation(flat_field)
+        transformed = self.apply_vedic_transformation(flat_field, sutra_plan=sutra_plan)
         field_transformed = transformed.reshape((n_points, n_points))
 
         # Tesseract vertex fields
