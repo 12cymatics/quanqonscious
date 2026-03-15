@@ -220,9 +220,18 @@ def _summary_dict(summary: HybridRunSummary) -> Dict[str, Any]:
     }
 
 
+def _sanitize_ipykernel_value(raw: Any) -> float:
+    if raw is None:
+        return 1.0
+    text = str(raw).strip()
+    if text.endswith(".json") and "jupyter/runtime/kernel-" in text:
+        return 1.0
+    return float(text)
+
+
 def main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(description="Hybrid sutra simulator")
-    parser.add_argument("value", type=float, help="Base input value")
+    parser.add_argument("value", nargs="?", default="1.0", help="Base input value")
     parser.add_argument(
         "--mode",
         choices=["classical", "quantum", "hybrid", "maya_illusion", "sulba"],
@@ -237,8 +246,24 @@ def main(argv: Sequence[str]) -> int:
         default="runs/hybrid_run_report.json",
         help="Optional output JSON report path",
     )
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        filtered_unknown = []
+        skip_next = False
+        for token in unknown:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "-f":
+                skip_next = True
+                continue
+            if token.endswith(".json") and "jupyter/runtime/kernel-" in token:
+                continue
+            filtered_unknown.append(token)
+        if filtered_unknown:
+            parser.error(f"Unrecognized arguments: {' '.join(filtered_unknown)}")
 
+    input_value = _sanitize_ipykernel_value(args.value)
     mode = SutraMode[args.mode.upper()]
     repo = SutraRepository(SutraContext(mode=mode))
     sutra_names = select_sutra_names(repo, target_count=args.sutra_count)
@@ -260,11 +285,11 @@ def main(argv: Sequence[str]) -> int:
     summaries = []
     for run_mode in run_modes:
         if run_mode == "serial":
-            summary = run_serial(args.value, mode, sutra_names)
+            summary = run_serial(input_value, mode, sutra_names)
         elif run_mode == "concurrent":
-            summary = run_concurrent(args.value, mode, sutra_names)
+            summary = run_concurrent(input_value, mode, sutra_names)
         else:
-            summary = run_parallel(args.value, mode, sutra_names)
+            summary = run_parallel(input_value, mode, sutra_names)
         summaries.append(summary)
         if ipc is not None:
             ipc.start()
@@ -278,7 +303,7 @@ def main(argv: Sequence[str]) -> int:
 
     os.makedirs(os.path.dirname(args.report_path), exist_ok=True)
     report_payload = {
-        "input_value": args.value,
+        "input_value": input_value,
         "mode": args.mode,
         "sutra_count": args.sutra_count,
         "run_modes": run_modes,

@@ -500,6 +500,15 @@ def _parse_benchmark_seeds(raw: str) -> List[Fraction]:
     return [parse_exact_rational(item) for item in values]
 
 
+def _sanitize_ipykernel_value(raw: Optional[str]) -> str:
+    if raw is None:
+        return "1"
+    candidate = str(raw).strip()
+    if candidate.endswith(".json") and "jupyter/runtime/kernel-" in candidate:
+        return "1"
+    return candidate
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -507,7 +516,13 @@ def build_cli() -> argparse.ArgumentParser:
             "for hybrid quantum-classical simulation workflows."
         )
     )
-    parser.add_argument("value", type=str, help="Input rational value to feed into sutras (e.g. 1618/1000)")
+    parser.add_argument(
+        "value",
+        type=str,
+        nargs="?",
+        default="1",
+        help="Input rational value to feed into sutras (e.g. 1618/1000)",
+    )
     parser.add_argument(
         "--mode",
         default="hybrid",
@@ -572,7 +587,22 @@ def build_cli() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = build_cli()
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        filtered_unknown = []
+        skip_next = False
+        for token in unknown:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "-f":
+                skip_next = True
+                continue
+            if token.endswith(".json") and "jupyter/runtime/kernel-" in token:
+                continue
+            filtered_unknown.append(token)
+        if filtered_unknown:
+            parser.error(f"Unrecognized arguments: {' '.join(filtered_unknown)}")
 
     if args.audit_vault:
         audit = audit_signature_vault(args.audit_vault)
@@ -615,8 +645,10 @@ def main() -> None:
             print(f"Reproducibility manifest written to {args.manifest_output}")
         return
 
+    sanitized_value = _sanitize_ipykernel_value(args.value)
+
     bundle = run_hybrid_bundle(
-        parse_exact_rational(args.value),
+        parse_exact_rational(sanitized_value),
         mode=mode,
         precision=args.precision,
         max_iterations=args.max_iterations,

@@ -52,6 +52,8 @@ def _prepare_args_for_sutra(func: Callable[..., Any], value: Any) -> List[Any]:
                     )
                 ):
                     args.append([value, value])
+                elif any(key in name for key in ("denominator", "divisor", "modulus", "base")) and value == 0:
+                    args.append(1)
                 else:
                     args.append(value)
     return args
@@ -185,6 +187,12 @@ class HybridQuantumClassicalSimulator:
         context: SutraContext,
         initial_value: Any,
     ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        func = self._repository._methods.get(name)
+        if func is None:
+            return (current_value,), {}
+        positional = tuple(_prepare_args_for_sutra(func, current_value))
+        if positional:
+            return positional, {}
         return (current_value,), {}
 
     def _resolve_arguments(
