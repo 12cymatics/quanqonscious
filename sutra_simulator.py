@@ -14,8 +14,8 @@ implemented and can be used programmatically or from higher-level CLIs (such as
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from time import perf_counter_ns
+import inspect
+from time import perf_counter
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
@@ -25,6 +25,36 @@ REPORT_SCHEMA_VERSION = "hsqcp.report.v1"
 DOCTRINE_FIDELITY_TAG = "exact-symbolic-core"
 
 ArgumentResolver = Callable[[str, Any, SutraContext, Any], Tuple[Tuple[Any, ...], Dict[str, Any]]]
+
+
+def _prepare_args_for_sutra(func: Callable[..., Any], value: Any) -> List[Any]:
+    """Generate default positional arguments for a sutra function."""
+
+    sig = inspect.signature(func)
+    args: List[Any] = []
+    for name, param in sig.parameters.items():
+        if name in {"self", "ctx"}:
+            continue
+        if param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            if param.default is inspect.Parameter.empty:
+                if any(
+                    key in name
+                    for key in (
+                        "coeff",
+                        "angles",
+                        "values",
+                        "parts",
+                        "list",
+                        "vector",
+                    )
+                ):
+                    args.append([value, value])
+                else:
+                    args.append(value)
+    return args
 
 
 @dataclass
@@ -187,6 +217,8 @@ class HybridQuantumClassicalSimulator:
             args, call_kwargs = self._resolve_arguments(
                 name, aggregate_value, context, initial_value
             )
+            if not args and not call_kwargs:
+                args = tuple(_prepare_args_for_sutra(repo._methods[name], aggregate_value))
             aggregate_value = repo.call_sutra(
                 name,
                 *args,
@@ -220,6 +252,8 @@ class HybridQuantumClassicalSimulator:
             args, call_kwargs = self._resolve_arguments(
                 name, value, local_context, value
             )
+            if not args and not call_kwargs:
+                args = tuple(_prepare_args_for_sutra(self._repository._methods[name], value))
             return _execute_sutra(name, args, call_kwargs, local_context)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
@@ -262,6 +296,8 @@ class HybridQuantumClassicalSimulator:
         payloads = []
         for name in self._sutra_names:
             args, call_kwargs = self._resolve_arguments(name, value, context, value)
+            if not args and not call_kwargs:
+                args = tuple(_prepare_args_for_sutra(self._repository._methods[name], value))
             payloads.append(
                 {
                     "name": name,
