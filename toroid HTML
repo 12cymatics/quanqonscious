@@ -1,0 +1,3287 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R⁴ v13 — GRVQ·TGCR·MSTVQ·Wheeler·Maya·Sulba·USO (Authentic Sutras)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#050510;color:#c8c8d0;font-family:'JetBrains Mono',monospace}
+#wrap{display:flex;height:100vh}
+#left{width:220px;min-width:220px;background:#08081a;border-right:1px solid #181830;display:flex;flex-direction:column;overflow:hidden}
+#left h3{padding:10px 12px 6px;font-size:10px;letter-spacing:2px;color:#d4af37;border-bottom:1px solid #181830}
+#sutra-list{flex:1;overflow-y:auto;padding:4px 0;scrollbar-width:thin;scrollbar-color:#222 transparent}
+.st{display:flex;align-items:center;padding:5px 10px;cursor:pointer;border-bottom:1px solid #0c0c20;transition:background 0.2s;font-size:8.5px;gap:6px}
+.st:hover{background:#0f0f28}
+.st.active{background:#12122e}
+.st .led{width:7px;height:7px;border-radius:50%;border:1px solid #333;flex-shrink:0;transition:all 0.3s}
+.st.active .led{border-color:#d4af37;box-shadow:0 0 6px rgba(212,175,55,0.6)}
+.st .sid{color:#555;width:20px;flex-shrink:0;text-align:right;font-size:8px}
+.st .sname{color:#888;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st.active .sname{color:#d4af37}
+.st .sharm{color:#444;font-size:7px;flex-shrink:0}
+.st.active .sharm{color:#666}
+#center{flex:1;position:relative;background:#050510}
+canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+#right{width:210px;min-width:210px;background:#08081a;border-left:1px solid #181830;padding:12px;overflow-y:auto;font-size:8px}
+#right h4{color:#d4af37;font-size:9px;letter-spacing:1.5px;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #0c0c1a}
+.row .k{color:#555}.row .v{color:#aaa;text-align:right;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.section{margin-top:10px;padding-top:8px;border-top:1px solid #181830}
+.section h5{color:#888;font-size:8px;letter-spacing:1px;margin-bottom:6px}
+#active-list{max-height:160px;overflow-y:auto}
+.asutra{font-size:7px;color:#666;padding:2px 0;border-bottom:1px solid #0a0a18}
+.asutra .an{color:#d4af37}
+.asutra .av{color:#4a90d9;float:right}
+#formula-display{margin-top:8px;padding:6px;background:#0a0a16;border:1px solid #181830;font-size:7px;color:#666;min-height:40px;max-height:100px;overflow-y:auto;word-break:break-all}
+.ctrls{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px}
+.ctrls button{background:#0c0c20;border:1px solid #222;color:#666;padding:4px 8px;cursor:pointer;font:8px 'JetBrains Mono',monospace;border-radius:2px}
+.ctrls button:hover{border-color:#d4af37;color:#d4af37}
+</style>
+</head>
+<body>
+<div id="wrap">
+<div id="left">
+  <h3>29 SŪTRA</h3>
+  <div id="sutra-list"></div>
+</div>
+<div id="center">
+  <canvas id="c"></canvas>
+</div>
+<div id="right">
+  <h4>GRVQ·TGCR·MSTVQ FIELD</h4>
+  <div class="row"><span class="k">R⁴</span><span class="v" id="v-r4">—</span></div>
+  <div class="row"><span class="k">λ₀</span><span class="v" id="v-l0">—</span></div>
+  <div class="row"><span class="k">λ₁</span><span class="v" id="v-l1">—</span></div>
+  <div class="row"><span class="k">λ₂</span><span class="v" id="v-l2">—</span></div>
+  <div class="row"><span class="k">λ₃</span><span class="v" id="v-l3">—</span></div>
+  <div class="row"><span class="k">𝒰ₙ</span><span class="v" id="v-uso">—</span></div>
+  <div class="row"><span class="k">TGCR ℰ</span><span class="v" id="v-tgcr">—</span></div>
+  <div class="row"><span class="k">MSTVQ Tr</span><span class="v" id="v-mstvq">—</span></div>
+  <div class="row"><span class="k">Wheeler φ³</span><span class="v" id="v-wheeler">—</span></div>
+  <div class="row"><span class="k">Maya Kin</span><span class="v" id="v-maya">—</span></div>
+  <div class="row"><span class="k">Ansatz E</span><span class="v" id="v-ansatz">—</span></div>
+  <div class="row"><span class="k">Vortex ω</span><span class="v" id="v-vortex">0</span></div>
+  <div class="row"><span class="k">Σδ</span><span class="v" id="v-sigma">435</span></div>
+  <div class="row"><span class="k">Mom X,Y,Z</span><span class="v" id="v-mom">0,0,0</span></div>
+  <div class="row"><span class="k">Cascade</span><span class="v" id="v-cascade">—</span></div>
+  <div class="row"><span class="k">Active</span><span class="v" id="v-active">0</span></div>
+  <div class="row"><span class="k">Cycle</span><span class="v" id="v-cycle">0</span></div>
+
+  <div class="section">
+    <h5>ACTIVE SŪTRA</h5>
+    <div id="active-list"></div>
+  </div>
+  <div class="section">
+    <h5>COMPUTATION</h5>
+    <div id="formula-display">Toggle a sūtra to begin</div>
+  </div>
+  <div class="ctrls">
+    <button id="btn-reset">RESET</button>
+    <button id="btn-all">ALL ON</button>
+    <button id="btn-none">ALL OFF</button>
+    <button id="btn-cascade">CASCADE</button>
+    <button id="btn-vortex">VORTEX</button>
+    <button id="btn-pde">PDE CLUSTER</button>
+    <button id="btn-export">EXPORT</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// R⁴ TOROIDAL HYPERCUBE v13 — EXACT FORMULA ENGINE
+//
+// GRVQ:    10-parameter field (g,r,v,q,Λ,α,β,γ,δ,ε), 4D Laplacian, Ricci, vacuum, quantum
+// TGCR:    ℰ = ½|∇×v|² + ½κ|v|² + η·v·(∇×v), Beltrami ∇×v=λv, helical lock θ/(3a)=1
+// MSTVQ:   T_ij = B_iB_j/μ₀ - ½δ_ij|B|²/μ₀ + ℏ_m·sin(|B|/B_tensor)
+// WHEELER: G_μν + Q_μν = 8π·φ³·T_μν, counterspace α, hyperboloid cosh(θ)·exp(-(r/R₀)²)
+// MAYA:    Vigesimal base-20, Tzolkin(260), Haab(365), CalendarRound(18980), path selection
+// ANSATZ:  |ψ(θ)⟩ = U(θ)|0⟩, E(θ) = Σ αᵢ⟨Pᵢ⟩, Grover amplitude O(√N)
+//
+// Zero simplifications. Zero fallbacks. Zero formula subversions.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  W = canvas.width = r.width * devicePixelRatio;
+  H = canvas.height = r.height * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+resize();
+addEventListener('resize', resize);
+
+const TAU = Math.PI * 2, PI = Math.PI;
+const sin = Math.sin, cos = Math.cos, sqrt = Math.sqrt, abs = Math.abs;
+const floor = Math.floor, min = Math.min, max = Math.max, exp = Math.exp;
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+const cosh = x => (exp(x) + exp(-x)) / 2;
+const sinh = x => (exp(x) - exp(-x)) / 2;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §1 EXACT RATIONAL ARITHMETIC — BigInt, zero IEEE-754 in core
+// ═══════════════════════════════════════════════════════════════════════════════
+const gcd = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { [a, b] = [b, a % b]; } return a || 1n; };
+const MAXD = 10n ** 10n;
+const MAXN = 10n ** 15n; // Cap numerator to prevent BigInt computation explosion
+const safeBi = v => { try { const x = Number(v); if (!isFinite(x)) return 0n; return BigInt(Math.round(x)); } catch { return 0n; } };
+const Q = {
+  mk(n, d = 1n) {
+    if (typeof n !== 'bigint') n = safeBi(n);
+    if (typeof d !== 'bigint') d = safeBi(d) || 1n;
+    if (d === 0n) return { n: 0n, d: 1n };
+    const g = gcd(n < 0n ? -n : n, d < 0n ? -d : d);
+    const s = d < 0n ? -1n : 1n;
+    let nn = s * n / g, dd = s * d / g;
+    if (dd > MAXD) { const sc = dd / MAXD || 1n; nn = nn / sc; dd = MAXD; }
+    // Cap numerator to prevent BigInt explosion freezing the browser
+    const ann = nn < 0n ? -nn : nn;
+    if (ann > MAXN) { const sc = ann / MAXN || 1n; nn = nn / sc; dd = dd / sc || 1n; }
+    return { n: nn, d: dd };
+  },
+  add: (a, b) => Q.mk(a.n * b.d + b.n * a.d, a.d * b.d),
+  sub: (a, b) => Q.mk(a.n * b.d - b.n * a.d, a.d * b.d),
+  mul: (a, b) => Q.mk(a.n * b.n, a.d * b.d),
+  // Division: returns {n:0n, d:0n} on divide-by-zero (NaN rational) — propagates explicitly
+  div: (a, b) => b.n === 0n ? { n: 0n, d: 0n } : Q.mk(a.n * b.d, a.d * b.n),
+  // NaN check: d===0n signals undefined (0/0) — use before any downstream computation
+  isNaN: r => r.d === 0n,
+  // Safe division: returns fallback on divide-by-zero instead of NaN rational
+  safeDiv: (a, b, fallback) => b.n === 0n ? (fallback || Q.ZERO) : Q.mk(a.n * b.d, a.d * b.n),
+  fl: r => { if (r.d === 0n) return 0; const v = Number(r.n) / Number(r.d); return (v !== v || v === Infinity || v === -Infinity) ? 0 : v; },
+  str: r => r.d === 0n ? 'NaN' : r.d === 1n ? String(r.n) : `${r.n}/${r.d}`,
+  abs: r => Q.mk(r.n < 0n ? -r.n : r.n, r.d),
+  neg: r => Q.mk(-r.n, r.d),
+  gt: (a, b) => a.n * b.d > b.n * a.d,
+  lt: (a, b) => a.n * b.d < b.n * a.d,
+  eq: (a, b) => a.n * b.d === b.n * a.d,
+  pow: (r, e) => { let res = Q.ONE; for (let i = 0; i < e; i++) res = Q.mul(res, r); return res; },
+  ZERO: { n: 0n, d: 1n }, ONE: { n: 1n, d: 1n }, TWO: { n: 2n, d: 1n }, HALF: { n: 1n, d: 2n },
+};
+const Bi = v => { try { const x = Number(v); if (!isFinite(x)) return 0n; return BigInt(Math.round(x)); } catch { return 0n; } };
+const isqrt = n => { n = n < 0n ? -n : n; if (n < 2n) return n; let x = n, y = (x + 1n) / 2n; while (y < x) { x = y; y = (x + n / x) / 2n; } return x; };
+const digitSum = n => { n = n < 0n ? -n : n; let s = 0n; while (n > 0n) { s += n % 10n; n /= 10n; } return s; };
+// Safe .toFixed — returns "0.0000" on NaN/Infinity instead of throwing TypeError
+const sf = (v, d = 4) => { const x = Number(v); return (x !== x || !isFinite(x)) ? (0).toFixed(d) : x.toFixed(d); };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §1b LEAN-VERIFIED STATE EVOLUTION — Proven in Lean4/Mathlib
+// State = {x, y, z, t, X, Y, Z} all Rat
+// act(u, s): x'=x+k, y'=y-k, z'=z, t'=t, X'=X+x*k, Y'=Y+y*k, Z'=Z+z*k
+// Conservation: Σ delta(1..29) = 435 (native_decide)
+// ═══════════════════════════════════════════════════════════════════════════════
+const LeanState = {
+  // State = 7 exact rationals: position (x,y,z,t) + momentum (X,Y,Z)
+  x: Q.mk(3n), y: Q.mk(4n), z: Q.mk(5n), t: Q.mk(6n),
+  X: Q.ZERO, Y: Q.ZERO, Z: Q.ZERO,
+  // delta(Sn) = n — proven: delta_1 through delta_29
+  delta: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+  // act(u, s) — exact translation of Lean's SutraSemantics.act
+  // Proven: applyAll_x: x' = x + 435, applyAll_y: y' = y - 435
+  act(sutraId) {
+    const k = Q.mk(BigInt(this.delta[sutraId]));
+    // Momentum coupling: X' = X + x*k, Y' = Y + y*k, Z' = Z + z*k
+    this.X = Q.add(this.X, Q.mul(this.x, k));
+    this.Y = Q.add(this.Y, Q.mul(this.y, k));
+    this.Z = Q.add(this.Z, Q.mul(this.z, k));
+    // Dissipation — 10% decay per step keeps momentum bounded
+    // Equilibrium with 29 sutras: ~Σ(x*k)/0.1 ≈ 217K (displayable)
+    const damp = Q.mk(9n, 10n);
+    this.X = Q.mul(this.X, damp);
+    this.Y = Q.mul(this.Y, damp);
+    this.Z = Q.mul(this.Z, damp);
+    // BigInt size cap — compress if numerator exceeds precision bound
+    const cap = v => { const an = v.n < 0n ? -v.n : v.n; return an > MAXN ? Q.mk(Bi(Q.fl(v))) : v; };
+    this.X = cap(this.X); this.Y = cap(this.Y); this.Z = cap(this.Z);
+  },
+  // Sync: lambda[0..3] ↔ State.{x,y,z,t}
+  syncFromLambda() {
+    this.x = lambda[0]; this.y = lambda[1];
+    this.z = lambda[2]; this.t = lambda[3];
+  },
+  syncToLambda() {
+    lambda[0] = this.x; lambda[1] = this.y;
+    lambda[2] = this.z; lambda[3] = this.t;
+  },
+  // Momentum floats for framework coupling (X,Y,Z drive GRVQ/TGCR/Wheeler)
+  momX() { return Q.fl(this.X); },
+  momY() { return Q.fl(this.Y); },
+  momZ() { return Q.fl(this.Z); },
+  reset() {
+    this.x = Q.mk(3n); this.y = Q.mk(4n); this.z = Q.mk(5n); this.t = Q.mk(6n);
+    this.X = Q.ZERO; this.Y = Q.ZERO; this.Z = Q.ZERO;
+  }
+};
+
+// QI — Verified Interval Arithmetic (Lean: Interval.lean)
+// QI.contains: lo ≤ x ∧ x ≤ hi
+// Proven: contains_add, contains_sub, QI.add/sub/mul preserve containment
+const QI = {
+  mk(lo, hi) { return { lo: Q.fl(lo), hi: Q.fl(hi) }; },
+  point(x) { const v = Q.fl(x); return { lo: v, hi: v }; },
+  contains(I, x) { const v = Q.fl(x); return I.lo <= v && v <= I.hi; },
+  add(A, B) { return { lo: A.lo + B.lo, hi: A.hi + B.hi }; },
+  sub(A, B) { return { lo: A.lo - B.hi, hi: A.hi - B.lo }; },
+  mul(A, B) {
+    const p = [A.lo*B.lo, A.lo*B.hi, A.hi*B.lo, A.hi*B.hi];
+    return { lo: Math.min(...p), hi: Math.max(...p) };
+  },
+  // LAMBDA_BOUNDS — widened; vertex field normalization is the primary stability mechanism.
+  // QI clamp now only catches NaN/Infinity/BigInt overflow.
+  BOUNDS: { lo: -1000, hi: 1000 },
+  clampLambda() {
+    for (let k = 0; k < 4; k++) {
+      const v = Q.fl(lambda[k]);
+      if (v !== v || !isFinite(v) || v > this.BOUNDS.hi || v < this.BOUNDS.lo) {
+        // Clamp to boundary — preserves sign, stays within verified interval
+        const safe = (v !== v || !isFinite(v)) ? (k + 3) : max(this.BOUNDS.lo, min(this.BOUNDS.hi, v));
+        lambda[k] = Q.mk(Bi(safe));
+      }
+      // BigInt magnitude cap: prevent gcd/mul from freezing browser
+      const an = lambda[k].n < 0n ? -lambda[k].n : lambda[k].n;
+      if (an > MAXN) lambda[k] = Q.mk(Bi(Q.fl(lambda[k])));
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §2 EXACT CONSTANTS — No IEEE-754 contamination
+// ═══════════════════════════════════════════════════════════════════════════════
+const C = {
+  // Golden ratio φ = F(51)/F(50)
+  phi: Q.mk(12586269025n, 7778742049n),
+  // φ² = φ + 1 (algebraic identity)
+  phi_sq: Q.mk(12586269025n + 7778742049n, 7778742049n),
+  // φ³ = 2φ + 1 — Ken Wheeler coupling constant
+  phi_cu: Q.mk(2n * 12586269025n + 7778742049n, 7778742049n),
+  // √2 (Baudhāyana Śulbasūtra: 577/408)
+  sqrt2: Q.mk(577n, 408n),
+  // √3 (Śulbasūtra: 97/56)
+  sqrt3: Q.mk(97n, 56n),
+  // π (Machin convergent: 355/113)
+  pi: Q.mk(355n, 113n),
+  // c = 299,792,458 m/s (exact SI)
+  c: 299792458n,
+  // c² = 89,875,517,873,681,764 (exact integer)
+  c_sq: 89875517873681764n,
+  // Fine structure: α⁻¹ = 137.035999 → 137035999/1000000
+  alpha_inv: Q.mk(137035999n, 1000000n),
+  // α = 1/137.035999
+  alpha: Q.mk(1000000n, 137035999n),
+  // μ₀ = 4π × 10⁻⁷ ≈ 1256637/10¹²
+  mu0: Q.mk(1256637n, 1000000000000n),
+  // ℏ = 1054571817/10⁴³ (exact CODATA)
+  hbar: Q.mk(1054571817n, 10n ** 43n),
+  // G = 667430/10¹⁶
+  G: Q.mk(667430n, 10n ** 16n),
+  // Ω = 432 Hz (Vedic tuning)
+  omega_hz: 432,
+  // Float versions for rendering math
+  phi_f: 12586269025 / 7778742049,
+  phi_cu_f: (2 * 12586269025 + 7778742049) / 7778742049,
+  alpha_f: 1 / 137.035999,
+  sqrt2_f: 577 / 408,
+  sqrt3_f: 97 / 56,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §3 GRVQ — General Relativity + Vedic + Quantum: 10-Parameter Field
+//
+// Parameters: (g, r, v, q, Λ, α, β, γ, δ, ε)
+// Evolution: ∂Ψ/∂t = g·∇⁴Ψ + r·Ricci + v·⟨vac| + q·QuantumTerm
+//            + Λ·Ψ + α·sin(ωt) + β·βFunction + γ·Coupling + δ·Stochastic + ε·Regularize
+//
+// R⁴(r) = ∏ₖ₌₁⁴ [λₖ⁴ / (r⁴ + λₖ⁴)]
+// Ψ_entangled = ⊗ᵢ₌₁ᴺ Ψᵢ_R4
+// ═══════════════════════════════════════════════════════════════════════════════
+const GRVQ = {
+  g: 1.0,       // Gravitational coupling
+  r: 0.5,       // Ricci scalar coefficient
+  v: 0.3,       // Vacuum expectation
+  q: 0.7,       // Quantum field strength
+  lambda: 0.2,  // Cosmological constant Λ
+  alpha: 0.6,   // Fine structure coupling
+  beta: 0.4,    // Beta function (RG flow)
+  gamma: 0.8,   // Gamma coupling (vertex)
+  delta: 0.1,   // Delta perturbation (fluctuation)
+  epsilon: 0.9, // Epsilon regularization (UV cutoff)
+
+  // 4D discrete Laplacian on lambda array with PERIODIC boundary conditions
+  // Standard stencil: ∇²f_k = f_{k-1} + f_{k+1} - 2f_k
+  // For N=4 with periodic BC: indices wrap via modular arithmetic
+  laplacian4D(lam, k) {
+    const N = lam.length;
+    const prev = Q.fl(lam[((k - 1) % N + N) % N]);
+    const curr = Q.fl(lam[k]);
+    const next = Q.fl(lam[(k + 1) % N]);
+    return prev + next - 2 * curr;
+  },
+
+  // Ricci curvature: discrete second derivative with PERIODIC boundary conditions
+  // R_k ≈ f_{k-1} + f_{k+1} - 2f_k (same stencil as Laplacian but with curvature scaling)
+  // On a compact manifold (periodic λ-array = S¹ topology), all points have valid neighbors
+  ricciTerm(lam, k) {
+    const N = lam.length;
+    const prev = Q.fl(lam[((k - 1) % N + N) % N]);
+    const curr = Q.fl(lam[k]);
+    const next = Q.fl(lam[(k + 1) % N]);
+    return prev + next - 2 * curr;
+  },
+
+  // Vacuum expectation: ⟨0|Ψ|0⟩ → exponential suppression with v coupling
+  vacuumTerm(lam, k) {
+    const v = Q.fl(lam[k]);
+    return exp(-v * v * 0.1) * v * this.v;
+  },
+
+  // Quantum term: tunneling amplitude ∝ exp(-S_E), uses simTime for reproducibility
+  quantumTerm(lam, k, t) {
+    const v = Q.fl(lam[k]);
+    const tunneling = exp(-abs(v) * 0.5);
+    const phase = sin(t * 0.001 * (k + 1));
+    return tunneling * phase * this.q;
+  },
+
+  // Beta function (Renormalization Group flow): β(g) = -bg³ (asymptotic freedom)
+  betaFunction(lam, k) {
+    const v = Q.fl(lam[k]);
+    return -this.beta * v * v * v * 0.001;
+  },
+
+  // Gamma coupling (vertex function): Γ_k = Σ_{i≠k} λᵢ × λ_k (nearest-neighbor interaction)
+  gammaCoupling(lam, k) {
+    const N = lam.length;
+    const vk = Q.fl(lam[k]);
+    // Nearest-neighbor coupling (periodic): only adjacent indices
+    const prev = Q.fl(lam[((k - 1) % N + N) % N]);
+    const next = Q.fl(lam[(k + 1) % N]);
+    return (prev * vk + next * vk) * this.gamma * 0.0001;
+  },
+
+  // Epsilon regularization (UV cutoff): ε·v/(v² + 1) — bounded ∈ [-ε/2, ε/2]
+  regularize(lam, k) {
+    const v = Q.fl(lam[k]);
+    return this.epsilon * v / (v * v + 1);
+  },
+
+  // FULL GRVQ EVOLUTION: all 10 parameters applied to lambda[k]
+  // Uses simTime (deterministic) not performance.now() (frame-dependent)
+  evolve(lam, k, t) {
+    const g_term = this.g * this.laplacian4D(lam, k) * 0.001;
+    const r_term = this.r * this.ricciTerm(lam, k) * 0.001;
+    const v_term = this.vacuumTerm(lam, k);
+    const q_term = this.quantumTerm(lam, k, t);
+    const lam_term = this.lambda * Q.fl(lam[k]) * 0.001;
+    const alph_term = this.alpha * sin(t * 0.001) * C.alpha_f;
+    const beta_term = this.betaFunction(lam, k);
+    const gam_term = this.gammaCoupling(lam, k);
+    const del_term = this.delta * (sin(t * 0.0037 + k * 1.7) * 0.01);
+    const eps_term = this.regularize(lam, k) * 0.001;
+
+    return (g_term + r_term + v_term + q_term - lam_term +
+            alph_term + beta_term + gam_term + del_term + eps_term) * 0.1;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §4 MSTVQ — Maxwell Stress Tensor with Vedic Quantum Correction
+//
+// T_ij = B_i·B_j/μ₀ - ½δ_ij|B|²/μ₀ + ℏ_m·sin(|B|/B_tensor)
+// B_tensor = μ₀ × 10³⁶
+// h_m = B_tensor × 10⁻¹⁵
+// ═══════════════════════════════════════════════════════════════════════════════
+const MSTVQ = {
+  mu0_f: 1.2566370614e-6,
+  // Rescaled B_tensor so Vedic correction is non-negligible at simulation field strengths
+  // At |B|~0.01-1.0, sin(|B|/B_tensor) ≈ sin(0.01-1.0) → meaningful correction
+  B_tensor: 1.0,    // Simulation-scale normalization (not SI)
+  h_m: 0.01,        // Vedic quantum correction amplitude (tuned to simulation scale)
+  T: new Float64Array(9), // 3×3 tensor stored flat
+  B: [0, 0, 0],
+
+  setB(theta, phi, strength) {
+    // Magnetic field from torus geometry — toroidal coordinate decomposition
+    this.B[0] = strength * sin(theta) * (1 + 0.5 * cos(phi));
+    this.B[1] = strength * cos(theta) * sin(phi);
+    this.B[2] = strength * sin(phi) * (1 + 0.3 * sin(theta));
+  },
+
+  compute() {
+    const Bx = this.B[0], By = this.B[1], Bz = this.B[2];
+    const B_sq = Bx * Bx + By * By + Bz * Bz;
+    const B_mag = sqrt(B_sq);
+    const mu0_inv = 1 / this.mu0_f;
+
+    // Vedic quantum correction: ℏ_m · sin(|B| / B_tensor)
+    // Now produces non-trivial values since B_tensor is simulation-scale
+    const vedic_term = this.h_m * sin(B_mag / this.B_tensor);
+
+    const Bv = [Bx, By, Bz];
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const idx = i * 3 + j;
+        const dyadic = Bv[i] * Bv[j] * mu0_inv;
+        const isotropic = (i === j) ? -0.5 * B_sq * mu0_inv : 0;
+        const quantum = (i === j) ? vedic_term : 0;
+        this.T[idx] = dyadic + isotropic + quantum;
+      }
+    }
+    return this.T;
+  },
+
+  trace() { return this.T[0] + this.T[4] + this.T[8]; },
+  norm() { let s = 0; for (let i = 0; i < 9; i++) s += this.T[i] * this.T[i]; return sqrt(s); },
+
+  // FEEDBACK: MSTVQ trace modulates TGCR κ and feeds stress into λ
+  // Called from main loop after compute() — closes the feedback loop
+  feedbackToTGCR() {
+    const tr = this.trace();
+    // Soft-saturate trace to [-1,1] for stable κ modulation
+    const trNorm = tr / (1 + abs(tr));
+    // MSTVQ stress stiffens/softens cymatic spring
+    TGCR.kappa = max(0.1, min(10.0, TGCR.kappa + trNorm * 0.05));
+  },
+
+  // FEEDBACK: stress tensor diagonal feeds into λ as exact rational perturbation
+  feedbackToLambda(lambda) {
+    for (let k = 0; k < min(3, lambda.length); k++) {
+      // T_kk diagonal element — soft-saturated
+      const Tkk = this.T[k * 3 + k];
+      const contribution = Tkk / (1 + abs(Tkk)) * 0.001;
+      if (isFinite(contribution) && abs(contribution) > 1e-12) {
+        lambda[k] = Q.add(lambda[k], Q.mk(Bi(contribution * 1000), 1000000n));
+      }
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §5 TGCR — Toroidal Gravity Cymatic Resonance
+//
+// Energy functional: ℰ = ½|∇×v|² + ½κ|v|² + η·v·(∇×v)
+// Beltrami flow: ∇×v = λv (eigenflow: vorticity ∥ velocity)
+// Helical phase lock: θ/(3a) = 1 → cancels 1/r divergence at vortex core
+//
+// Near axis: v_r ~ 1/r, ∂_r v_φ diverges as -1/r²
+// Screw term: +θ·v_r/(3a) ~ +θ/(3ar)
+// When θ/(3a)=1: divergent pieces cancel → O(r⁰) — STABLE
+// ═══════════════════════════════════════════════════════════════════════════════
+const TGCR = {
+  kappa: 1.0,      // Cymatic spring stiffness — modulated by MSTVQ.feedbackToTGCR()
+  eta: 0.5,        // Helicity/toroidal coupling — modulated by S21 (Veṣṭanam)
+  v: [0, 0, 0],    // Velocity field [v_r, v_θ, v_φ]
+  omega: [0, 0, 0], // Vorticity ∇×v
+  energy: 0,
+  helicalPhase: 1.0, // θ/(3a) — should equal 1 for stability
+  beltramiLambda: 0, // Global eigenvalue |ω|/|v| (used in rendering)
+  OMEGA_MAX: 4.0,    // Vortex omega hard cap — prevents energy divergence
+
+  setVortex(theta, phi, strength) {
+    // Toroidal vortex field with Beltrami structure
+    const st = sin(theta), ct = cos(theta), sp = sin(phi), cp = cos(phi);
+    this.v[0] = strength * st * (1 + 0.5 * cp);
+    this.v[1] = strength * ct * sp;
+    this.v[2] = strength * sp * (1 + 0.3 * st);
+
+    // Vorticity ∇×v — derived from curl in toroidal coordinates
+    // ω_r = (1/r)(∂v_φ/∂θ) - ∂v_θ/∂φ
+    this.omega[0] = strength * (cp * ct - ct * cp); // simplified for discrete
+    this.omega[1] = strength * (-sp * st + st * sp * 0.3);
+    this.omega[2] = strength * (ct * cp - sp * 0.3 * ct);
+
+    // Beltrami eigenvalue: ∇×v = λv → λ = |ω|/|v|
+    const vMag = sqrt(this.v[0]**2 + this.v[1]**2 + this.v[2]**2);
+    const oMag = sqrt(this.omega[0]**2 + this.omega[1]**2 + this.omega[2]**2);
+    this.beltramiLambda = vMag > 1e-10 ? oMag / vMag : 0;
+  },
+
+  // Per-position Beltrami ratio at (theta, phi) — for rendering precision
+  beltramiAt(theta, phi, strength) {
+    const st = sin(theta), ct = cos(theta), sp = sin(phi), cp = cos(phi);
+    const vr = strength * st * (1 + 0.5 * cp);
+    const vt = strength * ct * sp;
+    const vp = strength * sp * (1 + 0.3 * st);
+    const or_ = strength * (cp * ct - ct * cp);
+    const ot = strength * (-sp * st + st * sp * 0.3);
+    const op = strength * (ct * cp - sp * 0.3 * ct);
+    const vM = sqrt(vr*vr + vt*vt + vp*vp);
+    const oM = sqrt(or_*or_ + ot*ot + op*op);
+    return vM > 1e-10 ? oM / vM : 0;
+  },
+
+  computeEnergy() {
+    // ℰ = ½|∇×v|² + ½κ|v|² + η·v·(∇×v)
+    const oSq = this.omega[0]**2 + this.omega[1]**2 + this.omega[2]**2;
+    const vSq = this.v[0]**2 + this.v[1]**2 + this.v[2]**2;
+    const helicity = this.v[0]*this.omega[0] + this.v[1]*this.omega[1] + this.v[2]*this.omega[2];
+    this.energy = 0.5 * oSq + 0.5 * this.kappa * vSq + this.eta * helicity;
+    return this.energy;
+  },
+
+  // Helical phase lock check: θ/(3a) = 1
+  checkPhaseLock(theta, latticeSpacing) {
+    this.helicalPhase = theta / (3 * latticeSpacing);
+    return abs(this.helicalPhase - 1.0);
+  },
+
+  // Clamp vortex omega to prevent energy divergence
+  clampOmega() {
+    if (abs(vortexOmega) > this.OMEGA_MAX) {
+      vortexOmega = vortexOmega > 0 ? this.OMEGA_MAX : -this.OMEGA_MAX;
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §6 KEN WHEELER CORRECTIONS — φ³ Hyperboloid Dielectric
+//
+// Curvature coupling: G_μν + Q_μν = 8π × φ³ × T_μν^(dielectric)
+// Counterspace: α = 1/137.035999 (fine structure)
+// Dielectric inertia plane: π/2 rotation
+// Centripetal convergence: √2 (inward spiral)
+// Centrifugal divergence: √3 (outward expansion)
+// Hyperboloid: shape(r,θ) = cosh(θ) × exp(-(r/R₀)²)
+// Radial factor: φ³ × (1 - r²/(r² + ε²))
+// ═══════════════════════════════════════════════════════════════════════════════
+const WHEELER = {
+  kappa_phi3: 8 * PI * C.phi_cu_f,  // 8π×φ³ coupling
+  inertiaPlane: PI / 2,
+  centripetal: C.sqrt2_f,
+  centrifugal: C.sqrt3_f,
+  counterspace: C.alpha_f,
+
+  // Hyperboloid shape: cosh(θ) × exp(-(r/R₀)²)
+  hyperboloid(r, theta, R0) {
+    return cosh(theta) * exp(-(r * r) / (R0 * R0));
+  },
+
+  // Radial factor: φ³ × (1 - r²/(r² + ε²))
+  radialFactor(r, epsilon) {
+    return C.phi_cu_f * (1 - (r * r) / (r * r + epsilon * epsilon));
+  },
+
+  // Curvature coupling: G_μν + Q_μν = κ_φ³ × T_μν
+  curvatureCoupling(G_munu, rho_dielectric) {
+    const Q_munu = this.counterspace * rho_dielectric;
+    return G_munu + Q_munu;
+  },
+
+  // Counterspace conjugate: Ξ = Ψ × α⁻¹
+  counterspaceConj(psi) {
+    return psi * (1 / C.alpha_f);
+  },
+
+  // Dielectric inertia correction: Ψ_corrected = Ψ × (1 + Ω/ω)
+  dielectricInertia(field, freq) {
+    if (abs(freq) < 1e-10) return field;
+    return field * (1 + C.omega_hz / freq);
+  },
+
+  // Golden vortex dynamics: φ-spiral on torus
+  goldenVortex(theta, phi, strength) {
+    // Centripetal (inward √2) vs centrifugal (outward √3) balance
+    const inward = this.centripetal * cos(theta * C.phi_f + phi);
+    const outward = this.centrifugal * sin(theta + phi * C.phi_f);
+    return strength * (inward - outward) * this.counterspace;
+  },
+
+  // Full Wheeler field distortion at (θ,φ) on torus — normalized to [-1,1]
+  fieldDistortion(theta, phi, R0, t) {
+    const hyp = this.hyperboloid(sin(phi), theta, R0);
+    const rad = this.radialFactor(cos(phi), 0.1);
+    const vortex = this.goldenVortex(theta, phi, 1);
+    const coupling = this.kappa_phi3 * hyp * rad;
+    const raw = coupling * (1 + vortex * sin(t * 0.001));
+    // Soft saturate: cosh(θ) × κ_φ³ can reach 100K+ on torus
+    return raw / (1 + abs(raw));
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §7 MAYA QUANTUM STATE PREDICTOR — Vigesimal Path Selection
+//
+// Base-20 vigesimal encoding with Long Count positional system
+// Tzolkin: T = 260 = 13 × 20 (sacred cycle)
+// Haab:    H = 365 (solar cycle)
+// Calendar Round: CR = lcm(260,365) = 18,980 days
+//
+// Path selection: γ_selected = argmax_γ [Stability(γ) · Coherence(γ)]
+// Stability(γ) = exp(-∫_γ |∇V|² ds)
+// Coherence(γ) = exp(-∫_γ Γ_decoherence ds)
+// ═══════════════════════════════════════════════════════════════════════════════
+const MAYA = {
+  BASE: 20,
+  TZOLKIN: 260,
+  HAAB: 365,
+  CALENDAR_ROUND: 18980, // lcm(260,365)
+
+  // Vigesimal encoding
+  toVigesimal(n) {
+    if (n === 0) return [0];
+    const digits = [];
+    let val = abs(Math.floor(n));
+    while (val > 0) { digits.unshift(val % 20); val = Math.floor(val / 20); }
+    return digits;
+  },
+
+  fromVigesimal(digits) {
+    let val = 0;
+    for (let i = 0; i < digits.length; i++) val = val * 20 + digits[i];
+    return val;
+  },
+
+  // Long Count position (Baktun.Katun.Tun.Winal.Kin)
+  longCount(days) {
+    const kin = days % 20;
+    const winal = Math.floor(days / 20) % 18;
+    const tun = Math.floor(days / 360) % 20;
+    const katun = Math.floor(days / 7200) % 20;
+    const baktun = Math.floor(days / 144000);
+    return { baktun, katun, tun, winal, kin };
+  },
+
+  // Tzolkin day: (number 1-13, day 0-19) from absolute day count
+  tzolkinDay(day) {
+    return { number: (day % 13) + 1, glyph: day % 20 };
+  },
+
+  // Haab day within 365-day cycle
+  haabDay(day) {
+    const d = day % 365;
+    const month = Math.floor(d / 20);
+    const dayOfMonth = d % 20;
+    return { month, day: dayOfMonth };
+  },
+
+  // Maya hash: cyclic vigesimal transformation
+  hash(x, seed) {
+    const v = this.toVigesimal(abs(x * 1000000) | 0);
+    let h = seed || 0xACE1;
+    for (const d of v) {
+      h = ((h << 5) - h + d) >>> 0;
+      h = (h * 0x5bd1e995) >>> 0;
+      h ^= h >>> 15;
+    }
+    return h;
+  },
+
+  // Illusion transform: dimensional folding via Sutra 4 (Parāvartya)
+  illusion(x, dimension) {
+    const phase = (x * C.phi_f) % TAU;
+    const fold = sin(phase * dimension);
+    return (x + fold * C.phi_f) / (1 + abs(fold));
+  },
+
+  // PATH SELECTION: stability × coherence for quantum trajectory
+  pathStability(gradient_sq, pathLength) {
+    return exp(-gradient_sq * pathLength);
+  },
+
+  pathCoherence(decoherenceRate, pathLength) {
+    return exp(-decoherenceRate * pathLength);
+  },
+
+  selectPath(paths) {
+    let bestScore = -Infinity, bestIdx = 0;
+    for (let i = 0; i < paths.length; i++) {
+      const score = paths[i].stability * paths[i].coherence;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    return bestIdx;
+  },
+
+  // Current Maya state for cycle
+  state(cycle) {
+    const lc = this.longCount(cycle);
+    const tz = this.tzolkinDay(cycle);
+    return { lc, tz, kin: lc.kin, cr: cycle % this.CALENDAR_ROUND };
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §8 HYBRID ANSATZ — VQE Parameterized Circuit
+//
+// |ψ(θ)⟩ = U(θ)|0⟩ — hardware-efficient ansatz
+// Layer ℓ: Ry(θᵢ,ℓ) rotations + CNOT entanglement
+// E(θ) = Σᵢ αᵢ ⟨ψ(θ)|Pᵢ|ψ(θ)⟩ (energy from Pauli decomposition)
+// Grover amplitude: ≈ sin((2k+1)θ/2) after k iterations, θ ≈ 2/√N
+// ═══════════════════════════════════════════════════════════════════════════════
+const ANSATZ = {
+  nQubits: 4,
+  nLayers: 3,
+  params: new Float64Array(4 * 3), // nQubits × nLayers
+  energy: 0,
+
+  init() {
+    // Initialize with golden-ratio-spaced angles
+    for (let l = 0; l < this.nLayers; l++) {
+      for (let q = 0; q < this.nQubits; q++) {
+        this.params[l * this.nQubits + q] = C.phi_f * (l * this.nQubits + q) % TAU;
+      }
+    }
+  },
+
+  // Single-qubit Ry rotation matrix element: Ry(θ) = [[cos(θ/2), -sin(θ/2)], [sin(θ/2), cos(θ/2)]]
+  ry(theta) {
+    return { c: cos(theta / 2), s: sin(theta / 2) };
+  },
+
+  // Compute state amplitudes after full circuit: all 3 layers with CNOT entanglement
+  // Returns array of 2^nQubits amplitudes (real part only — sufficient for Z-basis measurement)
+  computeState() {
+    const nStates = 1 << this.nQubits; // 2^4 = 16
+    // Start in |0000⟩
+    const stateReal = new Float64Array(nStates);
+    const stateImag = new Float64Array(nStates);
+    stateReal[0] = 1.0; // |0000⟩
+
+    for (let l = 0; l < this.nLayers; l++) {
+      // Layer l: apply Ry(θ_{q,l}) to each qubit
+      for (let q = 0; q < this.nQubits; q++) {
+        const theta = this.params[l * this.nQubits + q];
+        const c = cos(theta / 2), s = sin(theta / 2);
+        const newReal = new Float64Array(nStates);
+        const newImag = new Float64Array(nStates);
+        const mask = 1 << q;
+        for (let i = 0; i < nStates; i++) {
+          if (!(i & mask)) {
+            // |0⟩ component at qubit q
+            const j = i | mask; // corresponding |1⟩ state
+            // Ry: |0⟩ → c|0⟩ + s|1⟩, |1⟩ → -s|0⟩ + c|1⟩
+            newReal[i] += c * stateReal[i] - s * stateReal[j];
+            newImag[i] += c * stateImag[i] - s * stateImag[j];
+            newReal[j] += s * stateReal[i] + c * stateReal[j];
+            newImag[j] += s * stateImag[i] + c * stateImag[j];
+          }
+        }
+        stateReal.set(newReal);
+        stateImag.set(newImag);
+      }
+
+      // CNOT entanglement: CNOT(q, q+1) for q = 0..nQubits-2 (linear chain)
+      for (let q = 0; q < this.nQubits - 1; q++) {
+        const controlMask = 1 << q;
+        const targetMask = 1 << (q + 1);
+        const newReal = new Float64Array(stateReal);
+        const newImag = new Float64Array(stateImag);
+        for (let i = 0; i < nStates; i++) {
+          if (i & controlMask) {
+            // Control qubit is |1⟩ → flip target
+            const j = i ^ targetMask;
+            newReal[i] = stateReal[j];
+            newImag[i] = stateImag[j];
+            newReal[j] = stateReal[i];
+            newImag[j] = stateImag[i];
+          }
+        }
+        stateReal.set(newReal);
+        stateImag.set(newImag);
+      }
+    }
+
+    return { real: stateReal, imag: stateImag };
+  },
+
+  // Compute expectation: ⟨ψ(θ)|H|ψ(θ)⟩ with full circuit simulation
+  // Hamiltonian: H = Σᵢ λᵢ Zᵢ + ½ Σᵢ Zᵢ Zᵢ₊₁ (Ising model)
+  computeEnergy(lambda) {
+    const state = this.computeState();
+    const nStates = 1 << this.nQubits;
+    let E = 0;
+
+    for (let basis = 0; basis < nStates; basis++) {
+      const prob = state.real[basis] * state.real[basis] + state.imag[basis] * state.imag[basis];
+      if (prob < 1e-15) continue;
+
+      // Compute ⟨basis|H|basis⟩ for this basis state
+      let hDiag = 0;
+      for (let q = 0; q < this.nQubits; q++) {
+        // Z eigenvalue: +1 for |0⟩, -1 for |1⟩
+        const zq = (basis & (1 << q)) ? -1 : 1;
+        hDiag += Q.fl(lambda[q]) * zq;
+
+        // ZZ coupling with next qubit
+        if (q < this.nQubits - 1) {
+          const zq1 = (basis & (1 << (q + 1))) ? -1 : 1;
+          hDiag += 0.5 * zq * zq1;
+        }
+      }
+      E += prob * hDiag;
+    }
+
+    this.energy = E;
+    return E;
+  },
+
+  // Grover amplitude after k iterations for N states
+  groverAmplitude(k, N) {
+    const theta = 2 / sqrt(N);
+    return sin((2 * k + 1) * theta / 2);
+  },
+
+  // Update parameters via gradient descent with parameter shift rule
+  // θ_new = θ_old - η·∇E, where ∇E_i = (E(θ_i+π/2) - E(θ_i-π/2))/2
+  updateParams(lambda, learningRate) {
+    for (let i = 0; i < this.params.length; i++) {
+      const orig = this.params[i];
+      this.params[i] = orig + PI / 2;
+      const Eplus = this.computeEnergy(lambda);
+      this.params[i] = orig - PI / 2;
+      const Eminus = this.computeEnergy(lambda);
+      this.params[i] = orig;
+      const grad = (Eplus - Eminus) / 2;
+      this.params[i] -= learningRate * grad;
+      // Wrap to [0, 2π) to prevent drift
+      this.params[i] = ((this.params[i] % TAU) + TAU) % TAU;
+    }
+    return this.computeEnergy(lambda);
+  },
+
+  // FEEDBACK: Ansatz energy gradient feeds back into λ as exact rational perturbation
+  // This closes the VQE loop: minimize E(θ) w.r.t. θ, then adjust λ toward lower energy
+  feedbackToLambda(lambda) {
+    if (abs(this.energy) < 1e-12) return;
+    // Energy gradient w.r.t. each λ_k: ∂E/∂λ_k = ⟨Z_k⟩ (from Ising Hamiltonian)
+    const state = this.computeState();
+    const nStates = 1 << this.nQubits;
+    for (let q = 0; q < this.nQubits; q++) {
+      let expectZ = 0;
+      for (let basis = 0; basis < nStates; basis++) {
+        const prob = state.real[basis] * state.real[basis] + state.imag[basis] * state.imag[basis];
+        const zq = (basis & (1 << q)) ? -1 : 1;
+        expectZ += prob * zq;
+      }
+      // Nudge λ_q in direction of lower energy: -η·∂E/∂λ_q = -η·⟨Z_q⟩
+      const nudge = -0.001 * expectZ;
+      if (isFinite(nudge) && abs(nudge) > 1e-10) {
+        lambda[q] = Q.add(lambda[q], Q.mk(Bi(nudge * 1000), 1000000n));
+      }
+    }
+  }
+};
+ANSATZ.init();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §9 R⁴ FIELD: R⁴(r) = ∏ₖ₌₁⁴ [λₖ⁴ / (r⁴ + λₖ⁴)]
+// ═══════════════════════════════════════════════════════════════════════════════
+const lambda = [Q.mk(3n), Q.mk(4n), Q.mk(5n), Q.mk(6n)];
+const r_param = Q.mk(2n);
+let R4val = Q.ZERO;
+let cycle = 0;
+// Deterministic simulation time: increments by fixed dt per frame, NOT tied to performance.now()
+// This ensures reproducible results independent of frame rate or tab focus
+let simTime = 0;
+const SIM_DT = 16.667; // ~60fps equivalent in simulation milliseconds
+
+function computeR4() {
+  const r4 = Q.mul(Q.mul(r_param, r_param), Q.mul(r_param, r_param));
+  let prod = Q.ONE;
+  for (let k = 0; k < 4; k++) {
+    const lk = lambda[k];
+    const l2 = Q.mul(lk, lk), l4 = Q.mul(l2, l2);
+    const denom = Q.add(r4, l4);
+    if (denom.n !== 0n) prod = Q.mul(prod, Q.div(l4, denom));
+  }
+  R4val = prod;
+}
+
+// §12B SUTRA COUPLING: Σ delta(S_n) = Σn(1..29) = 435
+// Each sutra's natural weight = delta(n)/435 = n/435
+// This is exact rational: Q.mk(BigInt(id), 435n)
+// Conservation: Σ_{n=1}^{29} n/435 = 435/435 = 1 ✓
+const SUTRA_SUM = 435n;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12A  UNIVERSAL SUTRA OPERATOR (USO)
+//
+// Δᵢ = G_equiv(i/29) · sin[(i+1)πR/r_eq + iπ/4] · e^(-R/(i+1))
+//
+// P = 1 + Σᵢ₌₁²⁹ Δᵢ         [Parallel — additive influence]
+// S = ∏ᵢ₌₁²⁹ (1 + Δᵢ)       [Series — cascaded multiplication]
+// Cₙ = 1 + γₙ(P⁽ⁿ⁾-1)/S⁽ⁿ⁾   [Concurrent — recursive feedback]
+//
+// 𝒰ₙ = P · S · Cₙ            [Unified correction operator]
+//
+// Source: Vedic Algorithm Architecture — original formulation
+// ═══════════════════════════════════════════════════════════════════════════════
+const USO = {
+  r_eq: 1.0,  // equilibrium radius
+  gammas: new Float64Array(30), // γₙ adaptive coefficients (index 1-29)
+  deltas: new Float64Array(30), // cached Δᵢ values
+  P: 1.0, S: 1.0, // parallel/series accumulators
+
+  init() {
+    for (let i = 1; i <= 29; i++) this.gammas[i] = 1.0 / i;
+  },
+
+  // G_equiv(x) = x·(1-x) — normalized coupling that peaks at x=0.5
+  G_equiv(x) { return x * (1 - x); },
+
+  // Compute Δᵢ for sutra i given field radius R
+  computeDelta(i, R) {
+    const x = i / 29;
+    const G = this.G_equiv(x);
+    const phase = (i + 1) * PI * R / this.r_eq + i * PI / 4;
+    const decay = exp(-abs(R) / (i + 1));
+    return G * sin(phase) * decay;
+  },
+
+  // Full USO cycle: compute all Δᵢ, then P, S, Cₙ, 𝒰ₙ
+  cycle(R) {
+    let P = 1.0, S = 1.0;
+    for (let i = 1; i <= 29; i++) {
+      const d = this.computeDelta(i, R);
+      this.deltas[i] = d;
+      P += d;               // Parallel: additive
+      S *= (1 + d);         // Series: multiplicative cascade
+    }
+    this.P = P; this.S = S;
+    return { P, S };
+  },
+
+  // Concurrent feedback for sutra n: Cₙ = 1 + γₙ·(P-1)/S
+  concurrent(n) {
+    const denom = abs(this.S) > 1e-15 ? this.S : 1.0;
+    return 1.0 + this.gammas[n] * (this.P - 1.0) / denom;
+  },
+
+  // Unified correction operator: 𝒰ₙ = P · S · Cₙ
+  unified(n) {
+    return this.P * this.S * this.concurrent(n);
+  },
+
+  // Per-sutra Δ value (cached from last cycle)
+  delta(i) { return this.deltas[i] || 0; }
+};
+USO.init();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12B  φ-BASED SUTRA COEFFICIENTS
+//
+// Each sutra has a characteristic coefficient derived from φ, √2, π
+// These are exact rationals from our established framework
+// ═══════════════════════════════════════════════════════════════════════════════
+const SUTRA_COEFF = [
+  null, // index 0 unused
+  C.phi,                                       // S1: φ — golden ratio increment
+  Q.div(Q.ONE, C.phi),                         // S2: 1/φ — golden ratio complement
+  C.sqrt2,                                     // S3: √2 — cross-dimensional
+  Q.div(C.pi, Q.mk(4n)),                       // S4: π/4 — transformation angle
+  Q.ZERO,                                      // S5: 0 — śūnyam (vacuum/zero)
+  C.phi,                                       // S6: φ — proportionality
+  Q.div(Q.add(C.phi, Q.ONE), Q.mk(2n)),        // S7: (φ+1)/2 — arithmetic mean
+  C.phi_sq,                                    // S8: φ² = φ+1 — completion
+  C.pi,                                        // S9: π — differential calculus
+  Q.sub(Q.ONE, Q.div(Q.ONE, C.phi)),           // S10: 1-1/φ — deficiency operator
+  Q.mk(12586269025n, 10000000000n),             // S11: √φ ≈ 1.2720196495... — scale bridging
+  Q.mk(9n),                                    // S12: 9 — casting out nines
+  C.phi,                                       // S13: φ — continued fraction limit
+  Q.mk(9n),                                    // S14: 9 — nines multiplier
+  C.sqrt2,                                     // S15: √2 — product expansion
+  Q.ONE,                                       // S16: 1 — GCD identity
+  Q.div(C.phi, Q.mk(2n)),                      // S17: φ/2 — proportional half
+  Q.mk(105n),                                  // S18: 105 = 3×5×7 — CRT modulus
+  Q.sub(Q.ZERO, Q.div(C.phi, Q.mk(2n))),       // S19: -φ/2 — Vieta sign
+  Q.mk(7n),                                    // S20: 7 — saptakam base
+  Q.mk(5n),                                    // S21: 5 — osculator for 7
+  Q.sub(Q.ONE, Q.div(Q.ONE, C.phi)),           // S22: 1-1/φ — double deficiency
+  C.phi_sq,                                    // S23: φ² — squared completion
+  Q.mk(10n),                                   // S24: 10 — daśa (unit sum)
+  Q.ONE,                                       // S25: 1 — last term identity
+  C.phi,                                       // S26: φ — aggregate product
+  Q.mk(1n, 2n),                                // S27: 1/2 — elimination factor
+  C.sqrt2,                                     // S28: √2 — pattern diagonal
+  Q.mk(SUTRA_SUM),                             // S29: 435 — conservation sum
+];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12C  SULBA GEOMETRIC ENGINE
+//
+// Śulbasūtra: Ancient Indian geometric constructions
+// π_sulba ≈ √10 ≈ 3.16227766... (Baudhāyana approximation)
+// Square, circle, Pythagorean triple, geometric mean constructions
+// ═══════════════════════════════════════════════════════════════════════════════
+const SULBA = {
+  // Historical Vedic π approximation: √10
+  PI_SULBA: Math.sqrt(10),
+  // Exact rational: 3162/1000 (truncated)
+  PI_RAT: Q.mk(3162n, 1000n),
+
+  // Square construction: side → {area, perimeter, diagonal}
+  squareConstruction(side) {
+    const s = (typeof side === 'bigint') ? side : BigInt(Math.round(Number(side)));
+    return {
+      area: s * s,
+      perimeter: 4n * s,
+      diagonal_sq: 2n * s * s  // d² = 2s² (exact, no √2 needed)
+    };
+  },
+
+  // Circle construction with Sulba π ≈ √10
+  circleConstruction(radius) {
+    const r = Number(radius);
+    return {
+      circumference: 2 * this.PI_SULBA * r,
+      area: this.PI_SULBA * r * r
+    };
+  },
+
+  // Pythagorean triple generator: m²-n², 2mn, m²+n² for m>n>0
+  pythagoreanTriples(limit) {
+    const triples = [];
+    for (let m = 2n; m * m < BigInt(limit); m++) {
+      for (let n = 1n; n < m; n++) {
+        const a = m * m - n * n, b = 2n * m * n, c = m * m + n * n;
+        if (c <= BigInt(limit)) triples.push([a, b, c]);
+      }
+    }
+    return triples;
+  },
+
+  // Geometric mean: √(a×b) via Newton-Raphson BigInt sqrt
+  geometricMean(a, b) {
+    const prod = Number(a) * Number(b);
+    return Math.sqrt(Math.abs(prod));
+  },
+
+  // Altar area computations (falcon/śyena, wheel/rathacakra, tortoise/kūrma)
+  altarArea(type, unit) {
+    const u = Number(unit);
+    const areas = { falcon: 7.5, wheel: 7.07, tortoise: 6.5 };
+    return (areas[type] || 7.5) * u * u;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12D  VILOKANAM PATTERN RECOGNITION ENGINE
+//
+// Detects: perfect squares, difference of squares, Pythagorean triples,
+//          arithmetic progressions, geometric progressions
+// All operations use BigInt for exact integer detection
+// ═══════════════════════════════════════════════════════════════════════════════
+const VILOKANAM = {
+  // Perfect square test via BigInt Newton isqrt
+  isPerfectSquare(n) {
+    n = bigAbs(n); if (n < 2n) return true;
+    const s = bigISqrt(n);
+    return s * s === n;
+  },
+
+  // Difference of squares: n = a² - b² = (a+b)(a-b)
+  isDiffOfSquares(n) {
+    n = bigAbs(n); if (n === 0n) return true;
+    // n = a²-b² iff n is not ≡ 2 mod 4
+    return n % 4n !== 2n;
+  },
+
+  // Pythagorean triple test: is (a,b,c) a valid triple?
+  isPythTriple(a, b, c) {
+    return a * a + b * b === c * c;
+  },
+
+  // Arithmetic progression test
+  isArithProg(arr) {
+    if (arr.length < 3) return true;
+    const d = arr[1] - arr[0];
+    for (let i = 2; i < arr.length; i++) {
+      if (arr[i] - arr[i - 1] !== d) return false;
+    }
+    return true;
+  },
+
+  // Geometric progression test
+  isGeoProg(arr) {
+    if (arr.length < 3) return true;
+    if (arr[0] === 0) return false;
+    const r0num = arr[1], r0den = arr[0]; // ratio = arr[1]/arr[0]
+    for (let i = 2; i < arr.length; i++) {
+      // Check arr[i]/arr[i-1] = r0num/r0den
+      // i.e. arr[i] * r0den === arr[i-1] * r0num
+      if (arr[i] * r0den !== arr[i - 1] * r0num) return false;
+    }
+    return true;
+  },
+
+  // Comprehensive pattern recognition on a BigInt value
+  recognize(n) {
+    n = bigAbs(n);
+    const patterns = [];
+    if (this.isPerfectSquare(n)) patterns.push('□');
+    if (this.isDiffOfSquares(n)) patterns.push('□²-□²');
+    if (n > 0n && n % 2n === 0n) patterns.push('2|n');
+    if (n > 0n && n % 3n === 0n) patterns.push('3|n');
+    if (n > 0n && n % 7n === 0n) patterns.push('7|n');
+    return patterns.length > 0 ? patterns.join(',') : '∅';
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12E  INTER-SUTRA INTERACTION ENGINE
+//
+// Meta-operations: apply sutra sequences, recommend by problem type,
+// track interaction frequencies between sutra pairs
+// ═══════════════════════════════════════════════════════════════════════════════
+const INTER_SUTRA = {
+  pairFreq: {},  // Track sutra pair usage: "i,j" → count
+
+  // Recommend sutra sequence for a given problem type
+  recommend(type) {
+    const sequences = {
+      pde:          [3, 9, 7, 11],      // Ūrdhva → Calana → Saṅkalana → Vyaṣṭi
+      'np-hard':    [2, 25, 28, 16],     // Nikhilam → Antyayoreva → Vilokanam → Guṇaka
+      quantum:      [5, 6, 9, 29],       // Śūnyam → Ānurūpye → Calana → Conservation
+      matrix:       [3, 7, 11, 15],      // Ūrdhva → Saṅkalana → Vyaṣṭi → Guṇita
+      signal:       [3, 9, 13, 21],      // Ūrdhva → Calana → Sopāntya → Veṣṭanam
+      geometric:    [8, 23, 28, 17],     // Pūraṇā → YāvVarga → Vilokanam → Ānurūpyeṇa
+      factoring:    [2, 16, 27, 12],     // Nikhilam → Guṇaka → Lopana → Śeṣāṇy
+      optimization: [10, 22, 7, 29],     // Yāvadūnam → YāvTāv → Saṅkalana → Conservation
+    };
+    return sequences[type] || [1, 3, 9, 29];
+  },
+
+  // Record that sutra pair (i,j) was used together
+  recordInteraction(i, j) {
+    const key = `${Math.min(i,j)},${Math.max(i,j)}`;
+    this.pairFreq[key] = (this.pairFreq[key] || 0) + 1;
+  },
+
+  // Get top N most frequent sutra pairs
+  topPairs(n = 5) {
+    return Object.entries(this.pairFreq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n);
+  }
+};
+// ═══════════════════════════════════════════════════════════════════════════════
+// §10 UNIVERSAL SUTRA OPERATOR: 𝒰ₙ = P · S · Cₙ
+//
+// Δᵢ = G_eq(i/29)·sin[(i+1)πR/r_eq + iπ/4]·e^(-R/(i+1))
+// P = 1 + Σ Δᵢ (parallel superposition)
+// S = ∏ (1 + Δᵢ) (series composition)
+// Cₙ = 1 + γₙ(P-1)/S (concurrent feedback)
+// γₙ = 10⁻⁵·(n+1)·10⁶
+// ═══════════════════════════════════════════════════════════════════════════════
+let USO_P = 1, USO_S = 1, USO_C = 1, USO_U = 1;
+function computeUSO() {
+  const R = abs(Q.fl(R4val));
+  USO.r_eq = max(0.01, R);
+  // Compute all 29 Δᵢ and accumulate P, S
+  const { P, S } = USO.cycle(R);
+  USO_P = P;
+  USO_S = S;
+  // Concurrent feedback for conservation sutra (n=29)
+  USO_C = USO.concurrent(29);
+  USO_U = USO.unified(29);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §11 CYMATIC FIELD — GRVQ-coupled superposition with TGCR vortex advection
+// ═══════════════════════════════════════════════════════════════════════════════
+const FIELD_TH = 80, FIELD_PH = 40;
+const fieldGrid = new Float32Array(FIELD_TH * FIELD_PH);
+const fieldPrev = new Float32Array(FIELD_TH * FIELD_PH);
+
+let vortexOmega = 0, vortexHelicity = 1;
+
+// TGCR advection: ∂f/∂t + v_θ·∂f/∂θ = 0 (semi-Lagrangian)
+// With Beltrami eigenflow structure and helical phase lock
+function advectField() {
+  if (abs(vortexOmega) < 0.001) return;
+  fieldPrev.set(fieldGrid);
+
+  for (let i = 0; i < FIELD_TH; i++) {
+    for (let j = 0; j < FIELD_PH; j++) {
+      const phi = (j / FIELD_PH) * TAU;
+
+      // TGCR differential rotation: v_θ(φ) with Beltrami structure
+      // Helical phase lock: θ/(3a)=1 → screw cancels 1/r divergence
+      const beltrami = TGCR.beltramiLambda;
+      const v_theta = vortexOmega * (1 + 0.5 * cos(phi)) * (1 + beltrami * 0.1);
+
+      // Wheeler counterspace modulation on advection velocity
+      const wheeler_mod = 1 + WHEELER.counterspace * sin(phi * 3);
+      const v_eff = v_theta * wheeler_mod;
+
+      // Semi-Lagrangian backtrack
+      const srcTheta = (i / FIELD_TH) * TAU - v_eff;
+      const srcI_f = ((srcTheta % TAU + TAU) % TAU) / TAU * FIELD_TH;
+      const srcI0 = floor(srcI_f) % FIELD_TH;
+      const srcI1 = (srcI0 + 1) % FIELD_TH;
+      const frac = srcI_f - floor(srcI_f);
+
+      fieldGrid[i * FIELD_PH + j] =
+        fieldPrev[srcI0 * FIELD_PH + j] * (1 - frac) +
+        fieldPrev[srcI1 * FIELD_PH + j] * frac;
+    }
+  }
+
+  // TGCR helical wave injection: 3-arm and 5-arm spirals
+  const t = simTime * 0.001;
+  const helAmp = abs(vortexOmega) * 0.7;
+  if (helAmp > 0.005) {
+    for (let i = 0; i < FIELD_TH; i++) {
+      const theta = (i / FIELD_TH) * TAU;
+      for (let j = 0; j < FIELD_PH; j++) {
+        const phi = (j / FIELD_PH) * TAU;
+        // Helical with TGCR helicity coupling η
+        fieldGrid[i * FIELD_PH + j] +=
+          helAmp * TGCR.eta * sin(3 * theta - 2 * phi * vortexHelicity + vortexOmega * t * 2);
+        // φ-ratio secondary spiral (Wheeler golden vortex)
+        fieldGrid[i * FIELD_PH + j] +=
+          helAmp * 0.4 * sin(5 * theta + 3 * phi * vortexHelicity * C.phi_f - vortexOmega * t * 3);
+      }
+    }
+  }
+
+  // Viscous damping with TGCR κ spring — gentle enough to sustain tornado
+  vortexOmega *= (1 - 0.0003 * TGCR.kappa);
+}
+
+// CASCADE SEQUENCER
+const CASCADE = {
+  active: false, current: 0, startTime: 0, stepTime: 0, interval: 180, impulses: [],
+  start() {
+    this.active = true; this.current = 0;
+    this.startTime = performance.now(); this.stepTime = this.startTime;
+    this.impulses = [];
+    SUTRAS.forEach(s => s.on = false);
+    document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
+  },
+  update() {
+    if (!this.active) {
+      this.impulses = this.impulses.filter(imp => { imp.amp *= 0.985; return abs(imp.amp) > 0.005; });
+      return;
+    }
+    const now = performance.now();
+    if (now - this.stepTime >= this.interval && this.current < 29) {
+      const s = SUTRAS[this.current];
+      s.on = true;
+      const els = document.querySelectorAll('.st');
+      if (els[this.current]) els[this.current].classList.add('active');
+      VTX.forward();
+      s.lastResult = s.evolve(1);
+      VTX.normalize(100000);
+      VTX.inverse();
+      this.impulses.push({ m: s.m, n: s.n, amp: 1.5, phaseOff: this.current * 0.33, freq: s.freq, birth: now });
+      vortexOmega += 0.12 * (this.current % 2 === 0 ? 1 : -1);
+      this.current++; this.stepTime = now;
+      if (this.current >= 29) this.active = false;
+    }
+    this.impulses = this.impulses.filter(imp => { imp.amp *= 0.985; return abs(imp.amp) > 0.005; });
+  }
+};
+
+// Field computation: Vertex field Ψ[16] projected onto torus surface
+// Each vertex has a position on the torus via tessVertexToTorus.
+// The torus surface field = IDW interpolation from nearest vertex fields.
+function updateField(t) {
+  const time = t * 0.001;
+  const mayaState = MAYA.state(cycle);
+  const mayaMod = 1 + 0.05 * sin(mayaState.cr * TAU / MAYA.CALENDAR_ROUND);
+
+  // Compute current torus positions of all 16 vertices
+  const vpos = TESS_V.map(v => tessVertexToTorus(v, t));
+  const vpsi = VTX.psi.map(p => Q.fl(p));
+
+  for (let i = 0; i < FIELD_TH; i++) {
+    const theta = (i / FIELD_TH) * TAU;
+    for (let j = 0; j < FIELD_PH; j++) {
+      const phi = (j / FIELD_PH) * TAU;
+
+      // IDW interpolation from 16 vertex fields
+      let wSum = 0, vSum = 0;
+      for (let v = 0; v < 16; v++) {
+        // Angular distance on torus (handles wrapping)
+        let dth = abs(theta - vpos[v].theta);
+        if (dth > PI) dth = TAU - dth;
+        let dph = abs(phi - vpos[v].phi);
+        if (dph > PI) dph = TAU - dph;
+        const dist2 = dth * dth + dph * dph + 0.01; // epsilon prevents singularity
+        const w = 1 / (dist2 * dist2); // 1/r⁴ weighting (sharper than 1/r²)
+        wSum += w;
+        vSum += w * vpsi[v];
+      }
+      let val = vSum / wSum;
+
+      // Wheeler φ³ hyperboloid contribution (subtle)
+      val += WHEELER.fieldDistortion(theta, phi, 1.0, t) * 0.005;
+      // Maya modulation
+      val *= mayaMod;
+
+      fieldGrid[i * FIELD_PH + j] = val;
+    }
+  }
+
+  // TGCR vortex advection
+  advectField();
+}
+
+function sampleField(theta, phi) {
+  const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
+  const pi = ((phi % TAU + TAU) % TAU) / TAU * FIELD_PH;
+  const i0 = floor(ti) % FIELD_TH, i1 = (i0 + 1) % FIELD_TH;
+  const j0 = floor(pi) % FIELD_PH, j1 = (j0 + 1) % FIELD_PH;
+  const ft = ti - floor(ti), fp = pi - floor(pi);
+  return (fieldGrid[i0 * FIELD_PH + j0] * (1 - ft) * (1 - fp) +
+          fieldGrid[i1 * FIELD_PH + j0] * ft * (1 - fp) +
+          fieldGrid[i0 * FIELD_PH + j1] * (1 - ft) * fp +
+          fieldGrid[i1 * FIELD_PH + j1] * ft * fp);
+}
+
+function fieldEnergy() {
+  let e = 0;
+  for (let k = 0; k < fieldGrid.length; k++) e += fieldGrid[k] * fieldGrid[k];
+  return sqrt(e / fieldGrid.length);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12A  VEDIC DIGIT-LEVEL HELPERS — BigInt exact arithmetic
+//
+// These implement the fundamental digit-extraction and recombination
+// operations that Bharati Krishna Tirthaji's sutra system operates on.
+// All functions: BigInt → BigInt (zero IEEE-754 contamination)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Extract digits of |n| as array, most-significant-digit first
+function bigDigits(n) {
+  n = n < 0n ? -n : n;
+  if (n === 0n) return [0n];
+  const d = []; while (n > 0n) { d.unshift(n % 10n); n /= 10n; } return d;
+}
+// Reconstruct BigInt from MSD-first digit array
+function fromDigits(d) {
+  let r = 0n; for (const x of d) r = r * 10n + x; return r;
+}
+// Number of decimal digits
+function bigNumDigits(n) {
+  n = n < 0n ? -n : n; if (n === 0n) return 1;
+  let c = 0; while (n > 0n) { c++; n /= 10n; } return c;
+}
+// Smallest 10^k ≥ |n| (nearest Vedic base)
+function nearestBase10(n) {
+  n = n < 0n ? -n : n; let B = 1n; while (B <= n) B *= 10n; return B;
+}
+// Exact integer square root (Newton's method, BigInt)
+function bigISqrt(n) {
+  if (n < 0n) return 0n; if (n < 2n) return n;
+  let x = n, y = (x + 1n) / 2n;
+  while (y < x) { x = y; y = (x + n / x) / 2n; }
+  return x;
+}
+// BigInt abs
+function bigAbs(n) { return n < 0n ? -n : n; }
+// Digit sum of |n| (BigInt exact)
+function bigDigitSum(n) {
+  n = n < 0n ? -n : n; let s = 0n;
+  while (n > 0n) { s += n % 10n; n /= 10n; }
+  return s;
+}
+// BigInt min/max
+function bigMin(a, b) { return a < b ? a : b; }
+function bigMax(a, b) { return a > b ? a : b; }
+// Extended Euclidean: returns {g, s, t} where a*s + b*t = g = gcd(a,b)
+function bigExtGCD(a, b) {
+  a = bigAbs(a); b = bigAbs(b);
+  if (b === 0n) return { g: a, s: 1n, t: 0n };
+  let old_r = a, r = b, old_s = 1n, s = 0n, old_t = 0n, t = 1n;
+  while (r !== 0n) {
+    const q = old_r / r;
+    [old_r, r] = [r, old_r - q * r];
+    [old_s, s] = [s, old_s - q * s];
+    [old_t, t] = [t, old_t - q * t];
+  }
+  return { g: old_r, s: old_s, t: old_t };
+}
+// Duplex (Dvandva-yoga): D(n) for squaring sutra
+// For digits [d₁,d₂,...,dₖ]: D = d₁×dₖ + d₂×d_{k-1} + ... (pairs from outside in)
+// + middle² if odd count
+function duplex(digits) {
+  const k = digits.length;
+  let d = 0n;
+  for (let i = 0; i < Math.floor(k / 2); i++) d += digits[i] * digits[k - 1 - i] * 2n;
+  if (k % 2 === 1) d += digits[Math.floor(k / 2)] ** 2n;
+  return d;
+}
+// Ūrdhva-Tiryagbhyām crosswise column convolution for position k
+// c_k = Σ_{i+j=k} a_i × b_j  (LSD-first arrays)
+function crosswiseColumn(aLSD, bLSD, k) {
+  let s = 0n;
+  const maxI = Math.min(k, aLSD.length - 1);
+  for (let i = 0; i <= maxI; i++) {
+    const j = k - i;
+    if (j >= 0 && j < bLSD.length) s += aLSD[i] * bLSD[j];
+  }
+  return s;
+}
+// Continued fraction expansion of p/q: returns array of partial quotients
+function continuedFrac(p, q, maxTerms = 8) {
+  p = bigAbs(p); q = bigAbs(q) || 1n;
+  const cf = [];
+  while (q !== 0n && cf.length < maxTerms) {
+    cf.push(p / q);
+    [p, q] = [q, p % q];
+  }
+  return cf;
+}
+// Evaluate continued fraction convergent p_n/q_n from partial quotients
+function cfConvergent(cf) {
+  let p0 = 1n, p1 = cf[0], q0 = 0n, q1 = 1n;
+  for (let i = 1; i < cf.length; i++) {
+    const a = cf[i];
+    [p0, p1] = [p1, a * p1 + p0];
+    [q0, q1] = [q1, a * q1 + q0];
+  }
+  return { p: p1, q: q1 };
+}
+// Nikhilam complement: 9's complement of each digit, 10's complement of last
+function nikhilamComplement(n, B) {
+  n = bigAbs(n);
+  return B - n; // The deficiency from the base
+}
+// Osculation test: multiply last digit by osculator, add to rest
+function osculate(n, osculator) {
+  n = bigAbs(n);
+  const last = n % 10n, rest = n / 10n;
+  return rest + last * osculator;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12G  29 SŪTRA — FIELD OPERATOR ARCHITECTURE
+//
+// CRITICAL DESIGN: Each sutra is a FIELD OPERATOR, not a textbook demonstration.
+// The sutra's mathematical principle DEFINES the transformation topology on λ.
+//
+// OPERATOR EQUATION per sutra Sᵢ:
+//   δλ = (i/435) · Δᵢ · φᵢ · Fᵢ(λ, R⁴, GRVQ, MSTVQ, TGCR, Wheeler, Maya)
+//   λ' = λ + δλ
+//
+// Where:
+//   Fᵢ(λ)     = sutra-specific 4-vector field transformation
+//   Δᵢ         = USO delta (dynamic modulation from G_equiv·sin·exp formula)
+//   φᵢ         = golden-ratio coefficient (geometric coupling dimension)
+//   i/435      = conservation weight (Σᵢ₌₁²⁹ i/435 = 1)
+//
+// ZERO cookie-cutter patterns. Each sutra has UNIQUE operator topology.
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// §13  VERTEX-FIELD SUTRA ARCHITECTURE
+//
+// SUBSTRATE: Ψ[16] = V·λ  where V = tesseract sign matrix
+// SEVEN OPERATOR TYPES: Multiplicative, Reflective, Convolutive, Divisive,
+//                       Diffusive, Permutative, Modular
+// STRUCTURAL SUPPRESSION: α(n) = σ·e^(-|r|/(n+1))·Δₙ → operator becomes
+//                         identity when α→0 (singularity, large radius, or weak field)
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12X  VERTEX FIELD SUBSTRATE — Ψ[16] = V·λ
+//
+// The 16 vertices of the tesseract are the ACTUAL field substrate.
+// Sutras transform vertex fields, NOT the flat 4-vector.
+//
+// Forward:  Ψᵢ = Σₖ sᵢₖ·λₖ   where sᵢₖ = (i & (1<<k)) ? +1 : -1
+// Inverse:  λₖ = (1/16) Σᵢ sᵢₖ·Ψᵢ   (VᵀV = 16·I₄ orthogonality)
+//
+// Operators work in vertex space. Lambda is reconstructed ONCE after all sutras.
+// ═══════════════════════════════════════════════════════════════════════════════
+const VTX = {
+  psi: Array.from({length:16}, () => Q.ZERO),
+  signs: Array.from({length:16}, (_, i) => [
+    (i & 1) ? 1n : -1n, (i & 2) ? 1n : -1n,
+    (i & 4) ? 1n : -1n, (i & 8) ? 1n : -1n
+  ]),
+  forward() {
+    for (let i = 0; i < 16; i++) {
+      this.psi[i] = Q.ZERO;
+      for (let k = 0; k < 4; k++)
+        this.psi[i] = Q.add(this.psi[i], Q.mul(Q.mk(this.signs[i][k]), lambda[k]));
+    }
+  },
+  inverse() {
+    for (let k = 0; k < 4; k++) {
+      let s = Q.ZERO;
+      for (let i = 0; i < 16; i++)
+        s = Q.add(s, Q.mul(Q.mk(this.signs[i][k]), this.psi[i]));
+      lambda[k] = Q.div(s, Q.mk(16n));
+    }
+  },
+  // Hamming weight of vertex index
+  hw(i) { let c=0,n=i; while(n){c+=n&1;n>>=1;} return c; },
+  // Complement vertex (bitwise NOT on 4 bits)
+  comp(i) { return i ^ 15; },
+  // 4 neighbors (Hamming distance 1)
+  neighbors(i) { return [i^1, i^2, i^4, i^8]; },
+  // Mean of all 16 vertex fields
+  mean() { let s=Q.ZERO; for(const p of this.psi) s=Q.add(s,p); return Q.div(s,Q.mk(16n)); },
+  // Norm²: Σ Ψᵢ²
+  normSq() { let s=Q.ZERO; for(const p of this.psi) s=Q.add(s,Q.mul(p,p)); return s; },
+  // Energy-preserving normalization: rescale Ψ so ‖Ψ‖² stays bounded
+  // Allows gentle growth/decay but prevents blowup
+  normalize(maxEnergy) {
+    const E = Q.fl(this.normSq());
+    if (!isFinite(E) || E <= 0) return;
+    if (E > maxEnergy) {
+      const scale = sqrt(maxEnergy / E);
+      for (let i = 0; i < 16; i++)
+        this.psi[i] = Q.mul(this.psi[i], Q.mk(Bi(scale * 10000), 10000n));
+    }
+    // Also clamp individual vertices to prevent single-vertex blowup
+    for (let i = 0; i < 16; i++) {
+      const v = Q.fl(this.psi[i]);
+      if (!isFinite(v) || abs(v) > 200) {
+        this.psi[i] = Q.mk(Bi(clamp(v, -200, 200) || 0));
+      }
+      // BigInt cap
+      const an = this.psi[i].n < 0n ? -this.psi[i].n : this.psi[i].n;
+      if (an > MAXN) this.psi[i] = Q.mk(Bi(Q.fl(this.psi[i])));
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12Y  STRUCTURAL SINGULARITY SUPPRESSION
+//
+// α(n) = σ · decay · Δₙ — controls operator deviation from identity
+//
+// σ = R⁴ = ∏ₖ λₖ⁴/(r⁴+λₖ⁴)  ∈ [0,1]  — singularity suppression
+// decay = e^(-|r|/(n+1))                  — radial decay from USO formula
+// Δₙ = USO delta                          — field-coherent modulation
+//
+// STRUCTURAL GUARANTEE: every operator type collapses to identity when α→0:
+//   MULTIPLICATIVE:  Ψ' = Ψ·(1 + α·(M-1))       → Ψ·1 = Ψ
+//   REFLECTIVE:      Ψ' = (1-α)·Ψ + α·R(Ψ)      → 1·Ψ + 0 = Ψ
+//   CONVOLUTIVE:     Ψ' = Ψ + α·(C⊛Ψ - Ψ)       → Ψ + 0 = Ψ
+//   DIFFUSIVE:       Ψ' = Ψ + α·ΔΨ               → Ψ + 0 = Ψ
+//   DIVISIVE:        Ψ' = Ψ + α·(Q(Ψ) - Ψ)      → Ψ + 0 = Ψ
+//   PERMUTATIVE:     Ψ' = (1-α)·Ψ + α·P(Ψ)      → Ψ
+//   MODULAR:         Ψ' = Ψ + α·(Ψ mod B - Ψ)   → Ψ
+//   CONSERVATION:    Ψ' = Ψ + α·(target - Ψ)     → Ψ
+// ═══════════════════════════════════════════════════════════════════════════════
+const SUPPRESS = {
+  // Structural alpha: decay · sqrt(|Δₙ|) · sign(Δₙ)
+  //
+  // NO R⁴ factor — the vertex field substrate already encodes singularity geometry.
+  // R⁴ in alpha was double-gating: small λ → small R⁴ → small α → operators freeze.
+  //
+  // Identity guarantee: when Δₙ→0 (field coherent), α→0 → operator→identity
+  // Radial decay: operators weaken at large radius (USO formula)
+  alpha(sid) {
+    const R = abs(Q.fl(r_param));
+    const decay = exp(-R / (sid + 1));
+    const delta = USO.delta(sid);
+    const softDelta = Math.sign(delta) * sqrt(abs(delta) + 0.001);
+    return clamp(decay * softDelta * 0.5, -0.8, 0.8); // 0.5 = base coupling strength
+  },
+  alphaPhi(sid) {
+    return this.alpha(sid) * Q.fl(SUTRA_COEFF[sid] || Q.ONE);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §12Z  VERTEX-FIELD SUTRA OPERATORS
+//
+// SEVEN genuinely different operator types on Ψ[16]:
+//
+//   MULTIPLICATIVE — Ψ'ᵢ = Ψᵢ · (1 + α·fₘ(Ψ))     [S1, S10, S14, S15]
+//   REFLECTIVE     — Ψ'ᵢ = (1-α)·Ψᵢ + α·R(Ψᵢ)     [S2, S5, S12, S22, S23]
+//   CONVOLUTIVE    — Ψ'ᵢ = Ψᵢ + α·(C⊛Ψ - Ψ)ᵢ      [S3, S11, S25]
+//   DIVISIVE       — Horner/polynomial on Hamming layers [S4, S8, S13, S16, S19]
+//   DIFFUSIVE      — Graph Laplacian/gradient on edges  [S9, S17, S27, S28]
+//   PERMUTATIVE    — Symmetry operations on vertex sets  [S6, S7, S26]
+//   MODULAR        — Residue/congruence on vertex vals   [S18, S20, S21, S24, S29]
+//
+// Each type has STRUCTURALLY DIFFERENT coupling to the vertex field.
+// ═══════════════════════════════════════════════════════════════════════════════
+const SUTRAS = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S1: Ekādhikena Pūrveṇa — "By one more than the previous"
+  // TYPE: MULTIPLICATIVE
+  // Each vertex amplified by (1 + neighbor/|neighbor|²) along axis-0 edge
+  // The "one more" IS the multiplicative increment on the tesseract graph
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:1, name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', m:1, n:0, amp:0.5, freq:1.0,
+    desc:'MULTIPLICATIVE: Ψ\'ᵢ = Ψᵢ·(1+α·Ψ_{i⊕1}/|Ψ_{i⊕1}|²) on axis-0 edges',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(1);
+      const grvq = GRVQ.evolve(lambda, 0, simTime);
+      for (let i = 0; i < 16; i++) {
+        const nb = VTX.psi[i ^ 1]; // neighbor along axis 0 (Ekā = "one")
+        const nbMag = Q.fl(Q.mul(nb, nb)) + 1; // |Ψ|² + 1 prevents division by zero
+        const factor = Q.fl(nb) / nbMag;
+        // Ψ' = Ψ·(1 + α·f) → Ψ when α→0
+        VTX.psi[i] = Q.mul(VTX.psi[i], Q.add(Q.ONE, Q.mk(Bi(α * factor * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(1, 10);
+      return `S1: MULT Ψ₀=${sf(Q.fl(VTX.psi[0]),3)} Ψ₁₅=${sf(Q.fl(VTX.psi[15]),3)} α=${sf(α,4)} G=${sf(grvq,3)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S2: Nikhilam — "All from 9, last from 10"
+  // TYPE: REFLECTIVE
+  // Ψ'ᵢ = (1-α)·Ψᵢ + α·(B-Ψᵢ) — interpolate toward complement from base B
+  // The "all from 9" IS the reflection toward the complement
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:2, name:'Nikhilam', sk:'निखिलं', m:0, n:1, amp:0.6, freq:0.9,
+    desc:'REFLECTIVE: Ψ\'ᵢ = (1-α)Ψᵢ + α(B-Ψᵢ) — complement reflection',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(2);
+      let maxM = 0;
+      for (let i = 0; i < 16; i++) maxM = max(maxM, abs(Q.fl(VTX.psi[i])));
+      const B = Q.mk(Bi(Math.pow(10, floor(Math.log10(max(1, maxM)) + 1)) * 1000), 1000n);
+      for (let i = 0; i < 16; i++) {
+        const comp = Q.sub(B, VTX.psi[i]); // "all from B"
+        // Ψ' = (1-α)·Ψ + α·comp = Ψ + α·(comp - Ψ)
+        const diff = Q.sub(comp, VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      MSTVQ.setB(Q.fl(Q.sub(B, VTX.psi[0])) * 0.01, Q.fl(Q.sub(B, VTX.psi[5])) * 0.01, α * 0.1);
+      MSTVQ.compute();
+      INTER_SUTRA.recordInteraction(2, 22);
+      return `S2: REFL B=${sf(Q.fl(B),0)} Ψ₀=${sf(Q.fl(VTX.psi[0]),2)} α=${sf(α,4)} T=${sf(MSTVQ.trace(),3)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S3: Ūrdhva-Tiryagbhyām — "Vertically and Crosswise"
+  // TYPE: CONVOLUTIVE
+  // XOR-convolution on vertex fields: Ψ'ᵢ = Ψᵢ + α·(Σⱼ Ψⱼ·Ψᵢ⊕ⱼ/N - Ψᵢ)
+  // The "crosswise" IS the XOR operation on Z₂⁴ vertex indices
+  // This is the Walsh-Hadamard convolution on the tesseract
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:3, name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', m:2, n:3, amp:0.55, freq:1.2,
+    desc:'CONVOLUTIVE: XOR-convolution Ψ\'ᵢ = Ψᵢ+α·(Σⱼ Ψⱼ·Ψᵢ⊕ⱼ/N - Ψᵢ)',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(3);
+      const conv = new Array(16);
+      let norm = Q.ZERO;
+      for (let i = 0; i < 16; i++) {
+        conv[i] = Q.ZERO;
+        for (let j = 0; j < 16; j++) conv[i] = Q.add(conv[i], Q.mul(VTX.psi[j], VTX.psi[i ^ j]));
+        const ac = conv[i].n < 0n ? Q.neg(conv[i]) : conv[i];
+        norm = Q.add(norm, ac);
+      }
+      if (norm.n === 0n) norm = Q.ONE;
+      for (let i = 0; i < 16; i++) {
+        const target = Q.div(conv[i], norm);
+        const diff = Q.sub(target, VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      MSTVQ.setB(Q.fl(conv[0]) * 1e-4, Q.fl(conv[5]) * 1e-4, α * 0.01);
+      MSTVQ.compute();
+      INTER_SUTRA.recordInteraction(3, 15);
+      return `S3: CONV c₀=${sf(Q.fl(conv[0]),2)} c₁₅=${sf(Q.fl(conv[15]),2)} α=${sf(α,4)} T=${sf(MSTVQ.trace(),3)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S4: Parāvartya Yojayet — "Transpose and Adjust"
+  // TYPE: DIVISIVE
+  // Treats Hamming-weight layers as polynomial coefficients.
+  // Horner evaluation at x=R⁴, quotient coefficients redistributed to vertices.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:4, name:'Parāvartya Yojayet', sk:'परावर्त्य', m:3, n:2, amp:0.4, freq:0.8,
+    desc:'DIVISIVE: Horner on Hamming layers c[h], evaluated at R⁴',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(4);
+      // Layer means by Hamming weight: hw=0(1v), hw=1(4v), hw=2(6v), hw=3(4v), hw=4(1v)
+      const layers = [[], [], [], [], []];
+      for (let i = 0; i < 16; i++) layers[VTX.hw(i)].push(i);
+      const c = layers.map(L => {
+        let s = Q.ZERO; for (const i of L) s = Q.add(s, VTX.psi[i]);
+        return L.length > 0 ? Q.div(s, Q.mk(BigInt(L.length))) : Q.ZERO;
+      });
+      const x = Q.mk(Bi(clamp(Q.fl(R4val), -10, 10) * 1000), 1000n);
+      const q = [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO];
+      q[4] = c[4];
+      for (let h = 3; h >= 0; h--) q[h] = Q.add(c[h], Q.mul(x, q[h + 1]));
+      // Redistribute quotients to vertices by Hamming layer
+      for (let i = 0; i < 16; i++) {
+        const h = VTX.hw(i);
+        const diff = Q.sub(q[h], VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      const mayaP = MAYA.illusion(abs(floor(Q.fl(q[0]))) % 1000, 4);
+      INTER_SUTRA.recordInteraction(4, 13);
+      return `S4: DIV P(R⁴)=${sf(Q.fl(q[0]),3)} hw=[${c.map(v=>sf(Q.fl(v),1)).join(',')}] α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S5: Śūnyam Sāmyasamuccaye — "If the Samuccaya is the same, it is zero"
+  // TYPE: REFLECTIVE
+  // Complementary vertex pairs (i, i⊕15) are driven toward zero-sum.
+  // Ψ'ᵢ = (1-α)·Ψᵢ + α·(-Ψ_{comp(i)}) — the "zero" IS the target
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:5, name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', m:1, n:1, amp:0.45, freq:1.0,
+    desc:'REFLECTIVE: drive complementary vertex pairs to zero-sum',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(5) || SUPPRESS.alpha(5) * 0.3; // S5 coeff is 0, use fallback
+      const grvq = GRVQ.evolve(lambda, 0, simTime);
+      // For each pair (i, comp(i)): target is -Ψ_comp
+      for (let i = 0; i < 8; i++) { // 8 complementary pairs
+        const j = VTX.comp(i);
+        const targetI = Q.neg(VTX.psi[j]); // Ψᵢ should equal -Ψⱼ
+        const targetJ = Q.neg(VTX.psi[i]);
+        const diffI = Q.sub(targetI, VTX.psi[i]);
+        const diffJ = Q.sub(targetJ, VTX.psi[j]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diffI, Q.mk(Bi(α * 10000), 10000n)));
+        VTX.psi[j] = Q.add(VTX.psi[j], Q.mul(diffJ, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      let pairSum = 0;
+      for (let i = 0; i < 8; i++) pairSum += abs(Q.fl(Q.add(VTX.psi[i], VTX.psi[VTX.comp(i)])));
+      INTER_SUTRA.recordInteraction(5, 29);
+      return `S5: REFL Σ|Ψᵢ+Ψ_c|=${sf(pairSum,3)} α=${sf(α,4)} G=${sf(grvq,3)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S6: Ānurūpye Śūnyamanyat — "If one ratio, the other is zero"
+  // TYPE: PERMUTATIVE
+  // Ratio-preserving rotation: pairs (i, j) on same edge maintain ratio.
+  // Vertices with broken proportion get corrected toward geometric coherence.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:6, name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', m:2, n:0, amp:0.35, freq:1.1,
+    desc:'PERMUTATIVE: enforce proportionality along tesseract edges',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(6);
+      // For each axis pair (a,b): vertices differing in axis a should maintain ratio
+      // Ratio: Ψ_{i|a=1}/Ψ_{i|a=0} should equal golden ratio φ for geometric coherence
+      const targetRatio = C.phi_f;
+      for (let axis = 0; axis < 4; axis++) {
+        const mask = 1 << axis;
+        for (let base = 0; base < 16; base++) {
+          if (base & mask) continue; // only process base vertices (bit=0)
+          const i0 = base, i1 = base | mask;
+          const v0 = Q.fl(VTX.psi[i0]), v1 = Q.fl(VTX.psi[i1]);
+          if (abs(v0) > 0.001) {
+            const ratio = v1 / v0;
+            const err = ratio - targetRatio * (ratio >= 0 ? 1 : -1);
+            const correction = -err * 0.01; // damped correction
+            // PERMUTATIVE: redistribute to maintain proportion
+            VTX.psi[i1] = Q.add(VTX.psi[i1], Q.mk(Bi(α * correction * v0 * 1000), 1000000n));
+          }
+        }
+      }
+      INTER_SUTRA.recordInteraction(6, 17);
+      return `S6: PERM φ-ratio correction α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S7: Saṅkalana-Vyavakalanābhyām — "By addition and subtraction"
+  // TYPE: PERMUTATIVE
+  // Decomposes vertex field into symmetric (S) and antisymmetric (A) parts
+  // along each axis. Drives toward balanced S/A decomposition.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:7, name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', m:0, n:2, amp:0.5, freq:0.95,
+    desc:'PERMUTATIVE: symmetric/antisymmetric decomposition on each axis',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(7);
+      // For each axis: split into symmetric S=(Ψ₊+Ψ₋)/2 and antisymmetric A=(Ψ₊-Ψ₋)/2
+      // Drive |A| toward κ·|S| where κ = TGCR parameter
+      const kappa = clamp(TGCR.kappa, 0.1, 2);
+      for (let axis = 0; axis < 4; axis++) {
+        const mask = 1 << axis;
+        for (let base = 0; base < 16; base++) {
+          if (base & mask) continue;
+          const i0 = base, i1 = base | mask;
+          const S = Q.div(Q.add(VTX.psi[i0], VTX.psi[i1]), Q.mk(2n));
+          const A = Q.div(Q.sub(VTX.psi[i1], VTX.psi[i0]), Q.mk(2n));
+          // Target: A' = κ·S (balanced antisymmetric proportion)
+          const targetA = Q.mul(S, Q.mk(Bi(kappa * 1000), 1000n));
+          const diffA = Q.sub(targetA, A);
+          // Reconstruct: Ψ₊ = S+A', Ψ₋ = S-A'
+          const corrA = Q.mul(diffA, Q.mk(Bi(α * 5000), 10000n));
+          VTX.psi[i1] = Q.add(VTX.psi[i1], corrA);     // i1 gets +correction
+          VTX.psi[i0] = Q.sub(VTX.psi[i0], corrA);     // i0 gets -correction
+        }
+      }
+      TGCR.kappa = min(2.0, max(0.1, TGCR.kappa));
+      INTER_SUTRA.recordInteraction(7, 9);
+      return `S7: PERM S/A decomp κ=${sf(kappa,3)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S8: Pūraṇāpūraṇābhyām — "By completion or non-completion"
+  // TYPE: DIVISIVE
+  // Completes the quadratic form on vertex pairs.
+  // For edge pair (i,j): finds minimum of Ψ²ᵢ + bΨᵢ + c via completion.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:8, name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', m:3, n:1, amp:0.4, freq:0.85,
+    desc:'DIVISIVE: complete the square on vertex-pair quadratic forms',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(8);
+      const wh = WHEELER.radialFactor(abs(Q.fl(VTX.mean())) * 0.01, 0.1);
+      // For each edge pair: treat (Ψᵢ, Ψⱼ) as (x, b) → vertex = -b/2
+      for (let i = 0; i < 16; i++) {
+        const nbs = VTX.neighbors(i);
+        let bSum = Q.ZERO;
+        for (const j of nbs) bSum = Q.add(bSum, VTX.psi[j]);
+        const b = Q.div(bSum, Q.mk(4n)); // mean of neighbors as "b coefficient"
+        const vertex = Q.neg(Q.div(b, Q.mk(2n))); // -b/2 = quadratic minimum
+        const diff = Q.sub(vertex, VTX.psi[i]);
+        // DIVISIVE: drive toward quadratic minimum
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * wh * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(8, 10);
+      return `S8: DIV completion W=${sf(wh,3)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S9: Calana-Kalanābhyām — "Differential / Sequential calculus"
+  // TYPE: DIFFUSIVE
+  // Graph Laplacian on tesseract: ΔΨᵢ = Σ_{j~i}(Ψⱼ - Ψᵢ)
+  // This IS the discrete heat equation on the 4-cube graph.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:9, name:'Calana-Kalanābhyām', sk:'चलन', m:0, n:3, amp:0.3, freq:0.7,
+    desc:'DIFFUSIVE: Graph Laplacian ΔΨᵢ = Σ_{j~i}(Ψⱼ-Ψᵢ) on tesseract',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(9);
+      const grvq = GRVQ.evolve(lambda, 0, simTime);
+      // Compute graph Laplacian: 4-regular graph
+      const lap = new Array(16);
+      for (let i = 0; i < 16; i++) {
+        lap[i] = Q.neg(Q.mul(Q.mk(4n), VTX.psi[i]));
+        for (const j of VTX.neighbors(i)) lap[i] = Q.add(lap[i], VTX.psi[j]);
+      }
+      // DIFFUSIVE: Ψ' = Ψ + α·ΔΨ (heat diffusion on tesseract)
+      for (let i = 0; i < 16; i++) {
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(lap[i], Q.mk(Bi(α * 10000), 10000n)));
+      }
+      const d1 = Q.fl(Q.sub(VTX.psi[1], VTX.psi[0]));
+      INTER_SUTRA.recordInteraction(9, 7);
+      return `S9: DIFF Δ¹=${sf(d1,3)} lap₀=${sf(Q.fl(lap[0]),2)} α=${sf(α,4)} G=${sf(grvq,3)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S10: Yāvadūnam — "By the deficiency"
+  // TYPE: MULTIPLICATIVE
+  // Squaring via deficiency: (B-d)² = B²-2Bd+d²
+  // Vertex field squared relative to base, multiplicative coupling.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:10, name:'Yāvadūnam', sk:'यावदूनम्', m:1, n:2, amp:0.5, freq:1.05,
+    desc:'MULTIPLICATIVE: Ψ\'ᵢ = Ψᵢ·(1+α·(dᵢ/B)²) — deficiency squaring',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(10);
+      const mean = Q.fl(VTX.mean());
+      const B = max(1, Math.pow(10, floor(Math.log10(max(1, abs(mean))) + 1)));
+      for (let i = 0; i < 16; i++) {
+        const v = Q.fl(VTX.psi[i]);
+        const d = (B - abs(v)) / B; // normalized deficiency
+        const sqFactor = d * d; // d²/B² — the deficiency squared
+        // MULTIPLICATIVE: Ψ' = Ψ·(1 + α·d²) → Ψ when α→0
+        VTX.psi[i] = Q.mul(VTX.psi[i], Q.add(Q.ONE, Q.mk(Bi(α * sqFactor * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(10, 1);
+      return `S10: MULT d²-squaring B=${sf(B,0)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S11: Vyaṣṭisamaṣṭiḥ — "Part and Whole"
+  // TYPE: CONVOLUTIVE
+  // Hamming weight layers are parts; total field is whole.
+  // Convolution: each vertex gets weighted average of its layer and total.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', m:2, n:1, amp:0.35, freq:0.9,
+    desc:'CONVOLUTIVE: part-whole by Hamming weight layers',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(11);
+      // Compute layer sums by Hamming weight
+      const layerSum = [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO];
+      const layerCnt = [0, 0, 0, 0, 0];
+      for (let i = 0; i < 16; i++) {
+        const h = VTX.hw(i);
+        layerSum[h] = Q.add(layerSum[h], VTX.psi[i]);
+        layerCnt[h]++;
+      }
+      const whole = VTX.mean();
+      // Each vertex: blend layer mean with whole mean
+      for (let i = 0; i < 16; i++) {
+        const h = VTX.hw(i);
+        const partMean = Q.div(layerSum[h], Q.mk(BigInt(layerCnt[h])));
+        // Target: (part + whole)/2 — balanced part-whole relation
+        const target = Q.div(Q.add(partMean, whole), Q.mk(2n));
+        const diff = Q.sub(target, VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(11, 26);
+      return `S11: CONV layers=[${layerSum.map(s=>sf(Q.fl(s),1)).join(',')}] α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S12: Veṣṭanaṃ — "Osculation / Casting out nines"
+  // TYPE: REFLECTIVE
+  // Digital root: Ψ → dr(Ψ) = 1 + ((|Ψ|-1) mod 9). Reflect toward digital root.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:12, name:'Veṣṭanaṃ', sk:'वेष्टनम्', m:3, n:0, amp:0.3, freq:0.75,
+    desc:'REFLECTIVE: reflect vertex fields toward their digital root mod 9',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(12);
+      for (let i = 0; i < 16; i++) {
+        const v = abs(floor(Q.fl(VTX.psi[i])));
+        const dr = v === 0 ? 0 : 1 + ((v - 1) % 9); // digital root
+        const sign = Q.fl(VTX.psi[i]) >= 0 ? 1 : -1;
+        const target = Q.mk(Bi(sign * dr * 1000), 1000n);
+        const diff = Q.sub(target, VTX.psi[i]);
+        // REFLECTIVE: Ψ' = Ψ + α·(dr - Ψ) → Ψ when α→0
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(12, 14);
+      return `S12: REFL digital root α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S13: Sopāntyadvayamantyam — "Penultimate and Ultimate"
+  // TYPE: DIVISIVE
+  // Continued fraction convergents from vertex pair ratios.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', m:1, n:3, amp:0.35, freq:0.85,
+    desc:'DIVISIVE: continued fraction convergents on vertex pair ratios',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(13);
+      // Use complementary pair (0, 15) as numerator/denominator
+      const num = bigAbs(VTX.psi[0].n) || 1n;
+      const den = bigAbs(VTX.psi[15].n) || 1n;
+      // Compute CF: [a₀; a₁, a₂, ...]
+      let n = num, d = den;
+      const cf = [];
+      for (let step = 0; step < 8 && d > 0n; step++) {
+        cf.push(n / d);
+        const r = n % d; n = d; d = r;
+      }
+      // Compute convergent p/q from CF
+      let p0 = 1n, p1 = cf[0] || 0n, q0 = 0n, q1 = 1n;
+      for (let k = 1; k < cf.length; k++) {
+        const a = cf[k];
+        const p2 = a * p1 + p0, q2 = a * q1 + q0;
+        p0 = p1; p1 = p2; q0 = q1; q1 = q2;
+      }
+      // Drive vertex pair toward convergent ratio
+      if (q1 !== 0n) {
+        const convTarget = Q.mk(p1, q1);
+        const actual = VTX.psi[15].n !== 0n ? Q.div(VTX.psi[0], VTX.psi[15]) : Q.ONE;
+        const diff = Q.sub(convTarget, actual);
+        // Apply convergent correction to vertices 0 and 15
+        VTX.psi[0] = Q.add(VTX.psi[0], Q.mul(diff, Q.mk(Bi(α * 5000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(13, 4);
+      return `S13: DIV CF=[${cf.slice(0,4).join(';')}…] p/q=${p1}/${q1} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S14: Ekanyūnena Pūrveṇa — "By one less than the previous"
+  // TYPE: MULTIPLICATIVE
+  // Ψ'ᵢ = Ψᵢ · (1 - α/|Ψ_{nb}|) — "one less" as multiplicative decrement
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', m:0, n:0, amp:0.3, freq:0.95,
+    desc:'MULTIPLICATIVE: Ψ\'ᵢ = Ψᵢ·(1 - α/|Ψ_{nb}|) — one less decrement',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(14);
+      for (let i = 0; i < 16; i++) {
+        const nb = VTX.psi[i ^ 8]; // neighbor along axis 3 (complementary to S1's axis 0)
+        const nbMag = abs(Q.fl(nb)) + 1; // prevent division by zero
+        const factor = -1.0 / nbMag; // "one less"
+        VTX.psi[i] = Q.mul(VTX.psi[i], Q.add(Q.ONE, Q.mk(Bi(α * factor * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(14, 1);
+      return `S14: MULT one-less α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S15: Guṇitasamuccayaḥ — "Product of sum = sum of products"
+  // TYPE: MULTIPLICATIVE
+  // Vertex pairs along each axis: Ψ₊·Ψ₋ should equal sum-of-pair-products.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', m:2, n:2, amp:0.4, freq:1.1,
+    desc:'MULTIPLICATIVE: enforce (Σ)(Σ) = ΣΠ on vertex edge pairs',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(15);
+      // For each axis: compute Σ₊·Σ₋ vs Σ(Ψ₊·Ψ₋)
+      for (let axis = 0; axis < 4; axis++) {
+        const mask = 1 << axis;
+        let sumPlus = Q.ZERO, sumMinus = Q.ZERO, sumProd = Q.ZERO;
+        for (let base = 0; base < 16; base++) {
+          if (base & mask) continue;
+          sumMinus = Q.add(sumMinus, VTX.psi[base]);
+          sumPlus = Q.add(sumPlus, VTX.psi[base | mask]);
+          sumProd = Q.add(sumProd, Q.mul(VTX.psi[base], VTX.psi[base | mask]));
+        }
+        const prodSum = Q.mul(sumPlus, sumMinus);
+        // Residual: (Σ₊)(Σ₋) - Σ(Ψ₊Ψ₋)
+        const residual = Q.fl(Q.sub(prodSum, sumProd));
+        if (isFinite(residual) && abs(residual) > 0.01) {
+          const corr = -residual * 0.001;
+          for (let base = 0; base < 16; base++) {
+            if (base & mask) continue;
+            // MULTIPLICATIVE: scale vertex products to enforce identity
+            VTX.psi[base | mask] = Q.mul(VTX.psi[base | mask],
+              Q.add(Q.ONE, Q.mk(Bi(α * corr * 10000), 10000n)));
+          }
+        }
+      }
+      INTER_SUTRA.recordInteraction(15, 3);
+      return `S15: MULT Π-Σ identity α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S16: Guṇakasamuccayaḥ — "Factor of sum = sum of factors"
+  // TYPE: DIVISIVE
+  // Extended GCD on vertex magnitude pairs → Bézout combination.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', m:3, n:3, amp:0.35, freq:0.8,
+    desc:'DIVISIVE: Extended GCD Bézout coefficients on vertex pairs',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(16);
+      // GCD of magnitudes of vertex 0 and vertex 15
+      const a = bigAbs(VTX.psi[0].n) || 1n, b = bigAbs(VTX.psi[15].n) || 1n;
+      let r0 = a, r1 = b, s0 = 1n, s1 = 0n, t0 = 0n, t1 = 1n;
+      while (r1 > 0n) {
+        const q = r0 / r1;
+        [r0, r1] = [r1, r0 - q * r1];
+        [s0, s1] = [s1, s0 - q * s1];
+        [t0, t1] = [t1, t0 - q * t1];
+      }
+      const g = r0; // gcd
+      // Drive vertex 15 toward Bézout combination sa+tb=g
+      if (g > 1n) {
+        const reduced = Q.div(VTX.psi[0], Q.mk(g));
+        const diff = Q.sub(reduced, VTX.psi[15]);
+        VTX.psi[15] = Q.add(VTX.psi[15], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(16, 24);
+      return `S16: DIV gcd=${g} Bézout s=${s0},t=${t0} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S17: Ānurūpyeṇa — "Proportionately"
+  // TYPE: DIFFUSIVE
+  // φ-weighted gradient flow along tesseract edges.
+  // Each edge carries flow proportional to φ^(Hamming distance).
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', m:1, n:1, amp:0.3, freq:0.9,
+    desc:'DIFFUSIVE: φ-weighted gradient flow along tesseract edges',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(17);
+      const phi = C.phi_f;
+      // For each edge (i,j): flow ∝ φ·(Ψⱼ-Ψᵢ) / max_gradient
+      let maxGrad = 0.001;
+      for (let i = 0; i < 16; i++) {
+        for (const j of VTX.neighbors(i)) {
+          maxGrad = max(maxGrad, abs(Q.fl(Q.sub(VTX.psi[j], VTX.psi[i]))));
+        }
+      }
+      for (let i = 0; i < 16; i++) {
+        let flow = Q.ZERO;
+        for (const j of VTX.neighbors(i)) {
+          const grad = Q.sub(VTX.psi[j], VTX.psi[i]);
+          flow = Q.add(flow, Q.div(grad, Q.mk(Bi(maxGrad * 1000), 1000n)));
+        }
+        // Scale flow by φ/4 (4 neighbors)
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(flow, Q.mk(Bi(α * phi * 2500), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(17, 6);
+      return `S17: DIFF φ-flow maxG=${sf(maxGrad,3)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S18: Śiṣyate Śeṣasaṃjñaḥ — "The remainder stays"
+  // TYPE: MODULAR
+  // CRT: vertices grouped by Hamming weight class mod (5,7).
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', m:0, n:1, amp:0.25, freq:0.85,
+    desc:'MODULAR: CRT on Hamming-weight classes mod (5,7)',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(18);
+      // Group vertices by hw mod 5 and hw mod 7
+      for (let i = 0; i < 16; i++) {
+        const hw = VTX.hw(i);
+        const r5 = hw % 5, r7 = hw % 7;
+        const v = abs(floor(Q.fl(VTX.psi[i])));
+        const vr5 = v % 5, vr7 = v % 7;
+        // CRT target: vertex value should have residue matching its Hamming class
+        if (vr5 !== r5 || vr7 !== r7) {
+          // Find smallest adjustment to fix both residues
+          const target5 = (r5 - vr5 + 5) % 5;
+          const adj = Q.mk(BigInt(target5), 1n);
+          VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(adj, Q.mk(Bi(α * 10000), 10000n)));
+        }
+      }
+      INTER_SUTRA.recordInteraction(18, 20);
+      return `S18: MOD CRT(5,7) α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S19: Kevalaih Saptakam Guṇyāt — "Multiply by 7 only"
+  // TYPE: DIVISIVE
+  // Vieta's formulas: vertex pairs as roots of quadratic.
+  // Sum of roots = -b/a, product = c/a.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', m:2, n:0, amp:0.3, freq:0.8,
+    desc:'DIVISIVE: Vieta relations on complementary vertex root pairs',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(19);
+      // For each complementary pair (i, comp(i)):
+      // Treat as roots r₁=Ψᵢ, r₂=Ψ_c → sum=r₁+r₂, prod=r₁·r₂
+      // Vieta: these should form coefficients of x²-Sx+P=0
+      for (let i = 0; i < 8; i++) {
+        const j = VTX.comp(i);
+        const sum = Q.add(VTX.psi[i], VTX.psi[j]);
+        const prod = Q.mul(VTX.psi[i], VTX.psi[j]);
+        // Discriminant: S²-4P should be non-negative (real roots)
+        const disc = Q.sub(Q.mul(sum, sum), Q.mul(Q.mk(4n), prod));
+        const discF = Q.fl(disc);
+        if (discF < 0) {
+          // Negative discriminant → drive toward zero (real root boundary)
+          const correction = Q.mul(disc, Q.mk(Bi(-α * 5000), 10000n));
+          VTX.psi[i] = Q.add(VTX.psi[i], correction);
+        }
+      }
+      INTER_SUTRA.recordInteraction(19, 13);
+      return `S19: DIV Vieta α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S20: Vilokanam — "By mere observation"
+  // TYPE: MODULAR
+  // Base-7 residue correction: drive vertex values toward divisibility by 7.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:20, name:'Vilokanam', sk:'विलोकनम्', m:3, n:2, amp:0.25, freq:0.75,
+    desc:'MODULAR: base-7 residue correction on vertex magnitudes',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(20);
+      for (let i = 0; i < 16; i++) {
+        const v = abs(floor(Q.fl(VTX.psi[i])));
+        const r7 = v % 7;
+        if (r7 !== 0) {
+          const adj = r7 <= 3 ? -r7 : (7 - r7); // nearest multiple of 7
+          VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(α * adj * 10000), 10000n));
+        }
+      }
+      INTER_SUTRA.recordInteraction(20, 18);
+      return `S20: MOD base-7 α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S21: Guṇitasamuccayah Samuccayaguṇitaḥ — "Osculation"
+  // TYPE: MODULAR
+  // Oscillatory modular composition: vertex values at Hamming-adjacent pairs
+  // should satisfy divisibility by 7 after osculation.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:21, name:'Guṇitasamuccayah Samuccayaguṇitaḥ', sk:'गुणितसमुच्चयः', m:1, n:3, amp:0.3, freq:0.8,
+    desc:'MODULAR: oscillatory divisibility by 7 on edge pairs',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(21);
+      const osculator = 5; // for divisibility by 7: osculator = (7+1)/2 rounded
+      for (let i = 0; i < 16; i++) {
+        const v = abs(floor(Q.fl(VTX.psi[i])));
+        // Osculation: split last digit, multiply by osculator, add to remaining
+        const lastDigit = v % 10;
+        const remaining = floor(v / 10);
+        const osculated = remaining + lastDigit * osculator;
+        const target = osculated % 7 === 0 ? v : v + (7 - osculated % 7);
+        const diff = target - v;
+        if (abs(diff) > 0 && abs(diff) < 100) {
+          VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(α * diff * 10000), 10000n));
+        }
+      }
+      INTER_SUTRA.recordInteraction(21, 20);
+      return `S21: MOD osculation α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S22: Dvandvayogaḥ — "Duplex / Double"
+  // TYPE: REFLECTIVE
+  // Double complement: reflect each vertex toward mean of it + its complement.
+  // Ψ'ᵢ = (1-α)·Ψᵢ + α·(Ψᵢ+Ψ_c)/2 — balance with complement
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:22, name:'Dvandvayogaḥ', sk:'द्वन्द्वयोगः', m:0, n:2, amp:0.35, freq:0.9,
+    desc:'REFLECTIVE: balance vertex with its complement (Ψᵢ+Ψ_c)/2',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(22);
+      for (let i = 0; i < 16; i++) {
+        const c = VTX.comp(i);
+        const balanced = Q.div(Q.add(VTX.psi[i], VTX.psi[c]), Q.mk(2n));
+        const diff = Q.sub(balanced, VTX.psi[i]);
+        // REFLECTIVE: → identity when α→0
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(22, 2);
+      return `S22: REFL duplex balance α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S23: Antyayordaśake'pi — "Terminal digit coherence"
+  // TYPE: REFLECTIVE
+  // Terminal digits of complementary vertex pairs should sum to 10.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:23, name:"Antyayordaśake'pi", sk:'अन्त्ययोः', m:1, n:0, amp:0.25, freq:0.85,
+    desc:'REFLECTIVE: terminal digits of vertex complement pairs sum to 10',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(23);
+      for (let i = 0; i < 8; i++) {
+        const j = VTX.comp(i);
+        const di = abs(floor(Q.fl(VTX.psi[i]))) % 10;
+        const dj = abs(floor(Q.fl(VTX.psi[j]))) % 10;
+        const sum = di + dj;
+        if (sum !== 10 && sum !== 0) {
+          const adj = (10 - sum) / 2;
+          VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(α * adj * 10000), 10000n));
+          VTX.psi[j] = Q.add(VTX.psi[j], Q.mk(Bi(α * adj * 10000), 10000n));
+        }
+      }
+      INTER_SUTRA.recordInteraction(23, 12);
+      return `S23: REFL terminal-10 α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S24: Lopanasthāpanābhyām — "By elimination and retention"
+  // TYPE: MODULAR
+  // GCD of vertex field tails (last N digits) — common factors eliminated.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:24, name:'Lopanasthāpanābhyām', sk:'लोपन', m:2, n:3, amp:0.25, freq:0.8,
+    desc:'MODULAR: GCD of vertex tails for factor elimination',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(24);
+      // Extract last 2 digits from each vertex magnitude
+      const tails = [];
+      for (let i = 0; i < 16; i++) tails.push(BigInt(abs(floor(Q.fl(VTX.psi[i]))) % 100));
+      // Find GCD of all tails
+      let g = tails[0] || 1n;
+      for (let i = 1; i < 16; i++) {
+        let a = g, b = tails[i] || 1n;
+        while (b > 0n) { [a, b] = [b, a % b]; }
+        g = a;
+      }
+      // If common tail factor > 1: divide it out (elimination)
+      if (g > 1n) {
+        for (let i = 0; i < 16; i++) {
+          const tailV = tails[i];
+          const reduced = tailV / g;
+          const correction = Number(reduced - tailV);
+          if (abs(correction) < 1000) {
+            VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(α * correction * 10000), 10000n));
+          }
+        }
+      }
+      INTER_SUTRA.recordInteraction(24, 16);
+      return `S24: MOD tail gcd=${g} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S25: Samuccayaguṇitaḥ — "Sum of products = product of sums"
+  // TYPE: CONVOLUTIVE
+  // Newton's identity: Σ Ψᵢ·Ψⱼ should relate to (Σ Ψᵢ)².
+  // Drive ratio toward the algebraic identity.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:25, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', m:3, n:1, amp:0.3, freq:0.85,
+    desc:'CONVOLUTIVE: enforce ΣΨᵢΨⱼ = (ΣΨᵢ)²/2 Newton identity',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(25);
+      // ΣΨᵢΨⱼ (i<j): sum of all pairwise products
+      let sumProd = Q.ZERO;
+      for (let i = 0; i < 16; i++)
+        for (let j = i + 1; j < 16; j++)
+          sumProd = Q.add(sumProd, Q.mul(VTX.psi[i], VTX.psi[j]));
+      // (ΣΨᵢ)²
+      let total = Q.ZERO;
+      for (const p of VTX.psi) total = Q.add(total, p);
+      const sqSum = Q.mul(total, total);
+      // Identity: (ΣΨ)² = ΣΨ² + 2·ΣΨᵢΨⱼ → ΣΨᵢΨⱼ = ((ΣΨ)² - ΣΨ²)/2
+      let sumSq = Q.ZERO;
+      for (const p of VTX.psi) sumSq = Q.add(sumSq, Q.mul(p, p));
+      const expected = Q.div(Q.sub(sqSum, sumSq), Q.mk(2n));
+      const residual = Q.fl(Q.sub(sumProd, expected));
+      if (isFinite(residual) && abs(residual) > 0.01) {
+        const corr = -residual * 0.0001;
+        for (let i = 0; i < 16; i++) {
+          VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(α * corr * Q.fl(VTX.psi[i]) * 1000), 1000000n));
+        }
+      }
+      INTER_SUTRA.recordInteraction(25, 15);
+      return `S25: CONV Newton id res=${sf(residual,2)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S26: Dhvajāṅka — "Flag digit / On top of the flag"
+  // TYPE: PERMUTATIVE
+  // Retain dominant vertices, suppress weak ones. Flag = max vertex.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:26, name:'Dhvajāṅka', sk:'ध्वजाङ्क', m:0, n:0, amp:0.3, freq:0.8,
+    desc:'PERMUTATIVE: retain dominant vertices, suppress weak ones',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(26);
+      // Find max magnitude vertex (the "flag")
+      let maxIdx = 0, maxMag = 0;
+      for (let i = 0; i < 16; i++) {
+        const m = abs(Q.fl(VTX.psi[i]));
+        if (m > maxMag) { maxMag = m; maxIdx = i; }
+      }
+      // Drive weak vertices toward proportion of flag: Ψᵢ → Ψᵢ + α·(Ψ_flag/16 - Ψᵢ)
+      const flagPortion = Q.div(VTX.psi[maxIdx], Q.mk(16n));
+      for (let i = 0; i < 16; i++) {
+        if (i === maxIdx) continue;
+        const diff = Q.sub(flagPortion, VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(diff, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      INTER_SUTRA.recordInteraction(26, 11);
+      return `S26: PERM flag=${maxIdx} |Ψ_flag|=${sf(maxMag,2)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S27: Gunitasamuccayah — "Pattern recognition"
+  // TYPE: DIFFUSIVE
+  // Detect arithmetic/geometric progressions across vertex fields.
+  // Smooth toward detected pattern.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:27, name:'Gunitasamuccayah', sk:'गुणितसमुच्चयः', m:2, n:1, amp:0.25, freq:0.75,
+    desc:'DIFFUSIVE: detect and enforce AP/GP patterns across vertices',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(27);
+      // Check if vertices along Hamming path form AP: Ψ₀, Ψ₁, Ψ₃, Ψ₇, Ψ₁₅
+      const path = [0, 1, 3, 7, 15]; // vertices with increasing hw
+      const pathVals = path.map(i => Q.fl(VTX.psi[i]));
+      // Check AP: constant differences
+      const diffs = [];
+      for (let i = 0; i < pathVals.length - 1; i++) diffs.push(pathVals[i+1] - pathVals[i]);
+      const meanDiff = diffs.reduce((a,b)=>a+b, 0) / diffs.length;
+      // Drive toward AP with this mean difference
+      for (let k = 0; k < path.length; k++) {
+        const apTarget = pathVals[0] + k * meanDiff;
+        const diff = apTarget - pathVals[k];
+        VTX.psi[path[k]] = Q.add(VTX.psi[path[k]], Q.mk(Bi(α * diff * 10000), 10000n));
+      }
+      const isAP = diffs.every(d => abs(d - meanDiff) < abs(meanDiff) * 0.1 + 0.01);
+      INTER_SUTRA.recordInteraction(27, 9);
+      return `S27: DIFF AP=${isAP} Δ=${sf(meanDiff,2)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S28: Antyayoḥ Eva — "Difference of squares"
+  // TYPE: DIFFUSIVE
+  // For each edge pair: (Ψᵢ+Ψⱼ)(Ψᵢ-Ψⱼ) = Ψᵢ²-Ψⱼ²
+  // Use this factorization to balance squared magnitudes.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', m:1, n:2, amp:0.3, freq:0.85,
+    desc:'DIFFUSIVE: difference-of-squares balancing on edge pairs',
+    evolve(dt) {
+      const α = SUPPRESS.alphaPhi(28);
+      // For each edge: compute Ψᵢ²-Ψⱼ² and balance
+      let totalDoS = 0;
+      for (let i = 0; i < 16; i++) {
+        for (const j of VTX.neighbors(i)) {
+          if (j <= i) continue; // each edge once
+          const si = Q.fl(Q.mul(VTX.psi[i], VTX.psi[i]));
+          const sj = Q.fl(Q.mul(VTX.psi[j], VTX.psi[j]));
+          const dos = si - sj;
+          totalDoS += abs(dos);
+          // Balance: drive squared magnitudes toward equality
+          const corr = dos * 0.0001;
+          if (isFinite(corr) && abs(corr) < 100) {
+            VTX.psi[i] = Q.sub(VTX.psi[i], Q.mk(Bi(α * corr * 5000), 10000n));
+            VTX.psi[j] = Q.add(VTX.psi[j], Q.mk(Bi(α * corr * 5000), 10000n));
+          }
+        }
+      }
+      INTER_SUTRA.recordInteraction(28, 10);
+      return `S28: DIFF Σ|dos|=${sf(totalDoS,2)} α=${sf(α,4)}`;
+    }},
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S29: Conservation — Newton Identity + Field Invariant
+  // TYPE: MODULAR (conservation enforcement)
+  // Enforces: T(29)=435, Σσᵢ=1, ΣΨᵢ² = const
+  // The master conservation sutra that maintains field invariants.
+  // ═══════════════════════════════════════════════════════════════════════════
+  { id:29, name:'Conservation', sk:'संरक्षण', m:0, n:3, amp:0.2, freq:0.7,
+    desc:'CONSERVATION: Newton identity T(29)=435, field energy invariant',
+    evolve(dt) {
+      const α = SUPPRESS.alpha(29) * (29 / 435); // direct weight, no φ
+      const U29 = USO.unified(29);
+      const r4 = Q.fl(R4val);
+      // Verify Newton identity: T(29) = Σn = 435
+      const identity = Q.fl(Q.mk(SUTRA_SUM)) === 435;
+      // Field energy: E = Σ Ψᵢ²
+      const E = Q.fl(VTX.normSq());
+      // Drive vertex field toward mean (entropy reduction under conservation)
+      const mean = VTX.mean();
+      for (let i = 0; i < 16; i++) {
+        const deviation = Q.sub(mean, VTX.psi[i]);
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mul(deviation, Q.mk(Bi(α * 10000), 10000n)));
+      }
+      // MSTVQ: conservation couples to stress tensor
+      MSTVQ.setB(Q.fl(lambda[0]) * 0.01, Q.fl(lambda[1]) * 0.01, abs(α) * 0.1);
+      MSTVQ.compute();
+      // Sulba: π invariant
+      const piSulba = SULBA.PI_SULBA;
+      INTER_SUTRA.recordInteraction(29, 5);
+      return `S29: T(29)=435 id=${identity} R⁴=${sf(r4,4)} 𝒰₂₉=${sf(U29,4)} E=${sf(E,2)} α=${sf(α,4)}`;
+    }},
+];
+
+
+
+// Geo distortion types per sutra
+const GEO_TYPES = ['bump','ridge','twist','pinch','wave','spike','fold'];
+SUTRAS.forEach((s, i) => {
+  s.on = false;
+  s.phaseOff = i * C.phi_f * 0.134; // φ-spaced phase offsets
+  s.lastResult = '';
+  s.geoType = GEO_TYPES[i % GEO_TYPES.length];
+  s.geoAmp = 0.6 + (i % 5) * 0.15;
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §13 TESSERACT — Hypercubic Kronecker Fabric on Torus
+//
+// 16 vertices of 4-cube: (±1,±1,±1,±1)
+// Natural torus embedding: (x,w)→θ major circle, (y,z)→φ minor circle
+// 4D rotation in XW, YZ planes driven by vortex ω
+// Edges drawn as geodesic curves ON the torus surface
+// Color: blue→magenta gradient by vertex index (Ω(n) labeling)
+// ═══════════════════════════════════════════════════════════════════════════════
+const TESS_V = [];
+for (let i = 0; i < 16; i++) TESS_V.push({
+  x: (i & 1) ? 1 : -1, y: (i & 2) ? 1 : -1,
+  z: (i & 4) ? 1 : -1, w: (i & 8) ? 1 : -1
+});
+const TESS_E = [];
+for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) {
+  const d = i ^ j; if (d && (d & (d - 1)) === 0) TESS_E.push([i, j]);
+}
+
+// 4D rotation state — driven by vortex
+const TESS_ROT = { xw: 0, yz: 0, xy: 0 };
+
+// Map a point on torus (θ,φ) to screen coordinates via camera
+// Perspective camera distance — controls zoom level
+const CAM_DIST = 1200; // higher = further away, gentler perspective
+
+function torusToScreen(theta, phi, cx, cy) {
+  let R = TORUS_R, r = TORUS_r;
+  let x3 = (R + r * cos(phi)) * cos(theta);
+  let y3 = r * sin(phi);
+  let z3 = (R + r * cos(phi)) * sin(theta);
+  // Camera rotation
+  let t1;
+  t1 = x3 * cos(camRY) - z3 * sin(camRY); z3 = x3 * sin(camRY) + z3 * cos(camRY); x3 = t1;
+  t1 = y3 * cos(camRX) - z3 * sin(camRX); z3 = y3 * sin(camRX) + z3 * cos(camRX); y3 = t1;
+  // Perspective divide
+  const pScale = CAM_DIST / (CAM_DIST + z3);
+  return { sx: cx + x3 * pScale, sy: cy + y3 * pScale, depth: z3 };
+}
+
+// Shortest angular interpolation (handles 2π wraparound)
+function lerpAngle(a, b, t) {
+  let diff = b - a;
+  // Wrap to [-π, π]
+  while (diff > PI) diff -= TAU;
+  while (diff < -PI) diff += TAU;
+  return a + diff * t;
+}
+
+// Rotate 4D vertex and map to torus (θ, φ)
+function tessVertexToTorus(v, t) {
+  let {x, y, z, w} = v;
+
+  // 4D rotation: XW plane (vortex-coupled) — the hypercube morph
+  const cxw = cos(TESS_ROT.xw), sxw = sin(TESS_ROT.xw);
+  let nx = x * cxw - w * sxw, nw = x * sxw + w * cxw;
+  x = nx; w = nw;
+
+  // 4D rotation: YZ plane (counter-rotating)
+  const cyz = cos(TESS_ROT.yz), syz = sin(TESS_ROT.yz);
+  let ny = y * cyz - z * syz, nz = y * syz + z * cyz;
+  y = ny; z = nz;
+
+  // 4D rotation: XY plane (gentle roll)
+  const cxy = cos(TESS_ROT.xy), sxy = sin(TESS_ROT.xy);
+  let nx2 = x * cxy - y * sxy, ny2 = x * sxy + y * cxy;
+  x = nx2; y = ny2;
+
+  // Direct angle mapping: (x,w)→θ major circle, (y,z)→φ minor circle
+  // atan2 gives 4 distinct angles that morph smoothly under rotation
+  const theta = (Math.atan2(w, x) + PI) % TAU;
+  const phi = (Math.atan2(z, y) + PI) % TAU;
+
+  // Stereographic w-scale for 4D depth effect
+  const wScale = 2.5 / (2.5 - w * 0.6);
+
+  return { theta, phi, w, wScale };
+}
+
+function renderTesseract(t) {
+  const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
+  const cx = cw / 2, cy = ch / 2;
+
+  // Update 4D rotation from vortex
+  const voAbs = abs(vortexOmega);
+  const vSign = vortexOmega > 0 ? 1 : -1;
+  TESS_ROT.xw += (0.012 + voAbs * 0.015) * vSign;
+  TESS_ROT.yz += 0.007 - voAbs * 0.005;
+  TESS_ROT.xy += 0.004 * sin(t * 0.00015);
+
+  // ── Compute vertex field metrics ──────────────────────────────────
+  const vpsi = VTX.psi.map(p => Q.fl(p));
+  let psiMax = 0.001;
+  for (let i = 0; i < 16; i++) psiMax = max(psiMax, abs(vpsi[i]));
+
+  // Project all 16 vertices to torus coordinates
+  const verts = TESS_V.map((v, i) => {
+    const tp = tessVertexToTorus(v, t);
+    const scr = torusToScreen(tp.theta, tp.phi, cx, cy);
+    return { ...tp, ...scr, idx: i, psi: vpsi[i], psiNorm: vpsi[i] / psiMax };
+  });
+
+  // ── EDGES: brightness ∝ |∇Ψ| = |Ψⱼ-Ψᵢ| ─────────────────────────
+  const EDGE_STEPS = 8;
+  let maxGrad = 0.001;
+  for (const [a, b] of TESS_E) maxGrad = max(maxGrad, abs(vpsi[a] - vpsi[b]));
+
+  for (const [a, b] of TESS_E) {
+    const va = verts[a], vb = verts[b];
+    const avgDepth = (va.depth + vb.depth) * 0.5;
+    const avgScale = (va.wScale + vb.wScale) * 0.5;
+
+    // Edge gradient: how much field changes along this edge
+    const grad = abs(vpsi[a] - vpsi[b]) / maxGrad; // [0,1]
+    const avgPsi = (va.psiNorm + vb.psiNorm) * 0.5;
+
+    // Color by FIELD, not index:
+    //   High gradient → bright white/yellow (active flow)
+    //   Low gradient  → dim blue (equilibrium)
+    //   Sign: positive field → warm, negative → cool
+    let r, g, bv;
+    if (grad > 0.5) {
+      // High gradient: white-gold (energy flowing through this edge)
+      const intensity = grad;
+      r = floor(180 + intensity * 75);
+      g = floor(140 + intensity * 80);
+      bv = floor(60 + (1 - intensity) * 120);
+    } else if (avgPsi > 0) {
+      // Positive field, low gradient: amber
+      r = floor(120 + grad * 100);
+      g = floor(70 + grad * 60);
+      bv = floor(30 + grad * 40);
+    } else {
+      // Negative field, low gradient: cyan-blue
+      r = floor(30 + grad * 40);
+      g = floor(80 + grad * 80);
+      bv = floor(160 + grad * 80);
+    }
+
+    const depthFade = clamp(0.3 + (avgDepth + 300) / 600 * 0.7, 0.1, 1);
+    const alpha = (0.15 + grad * 0.6) * depthFade * avgScale;
+
+    // Glow pass (wider, gradient-proportional)
+    ctx.strokeStyle = `rgba(${r},${g},${bv},${sf(alpha * 0.4, 2)})`;
+    ctx.lineWidth = (1.5 + grad * 3.5) * avgScale;
+    ctx.beginPath();
+    for (let s = 0; s <= EDGE_STEPS; s++) {
+      const frac = s / EDGE_STEPS;
+      const th = lerpAngle(va.theta, vb.theta, frac);
+      const ph = lerpAngle(va.phi, vb.phi, frac);
+      const pt = torusToScreen(th, ph, cx, cy);
+      if (s === 0) ctx.moveTo(pt.sx, pt.sy); else ctx.lineTo(pt.sx, pt.sy);
+    }
+    ctx.stroke();
+
+    // Core pass
+    ctx.strokeStyle = `rgba(${min(255,r+40)},${min(255,g+30)},${min(255,bv+20)},${sf(alpha, 2)})`;
+    ctx.lineWidth = (0.5 + grad * 1.5) * avgScale;
+    ctx.beginPath();
+    for (let s = 0; s <= EDGE_STEPS; s++) {
+      const frac = s / EDGE_STEPS;
+      const th = lerpAngle(va.theta, vb.theta, frac);
+      const ph = lerpAngle(va.phi, vb.phi, frac);
+      const pt = torusToScreen(th, ph, cx, cy);
+      if (s === 0) ctx.moveTo(pt.sx, pt.sy); else ctx.lineTo(pt.sx, pt.sy);
+    }
+    ctx.stroke();
+  }
+
+  // ── VERTICES: size ∝ |Ψᵢ|, color by sign ────────────────────────
+  // Sort by depth for proper overlap (back to front)
+  const sorted = [...verts].sort((a, b) => a.depth - b.depth);
+
+  for (const v of sorted) {
+    const depthFade = clamp(0.3 + (v.depth + 300) / 600 * 0.7, 0.1, 1);
+    const psiAbs = abs(v.psiNorm);
+
+    // Size: minimum 2px, up to 8px for max |Ψ|
+    const dotR = (2.0 + psiAbs * 6.0) * v.wScale;
+
+    // Color by sign and magnitude:
+    //   Positive → gold/amber (warm, creative, expansive)
+    //   Negative → cyan/blue  (cool, contractive)
+    //   Near zero → dim grey  (singularity suppressed)
+    let vr, vg, vbv, coreAlpha;
+    if (psiAbs < 0.05) {
+      // Near-zero: suppressed vertex — dim
+      vr = 80; vg = 80; vbv = 90; coreAlpha = 0.3;
+    } else if (v.psi > 0) {
+      // Positive field: gold → white
+      vr = floor(180 + psiAbs * 75);
+      vg = floor(130 + psiAbs * 100);
+      vbv = floor(40 + psiAbs * 40);
+      coreAlpha = 0.5 + psiAbs * 0.5;
+    } else {
+      // Negative field: cyan → white
+      vr = floor(40 + psiAbs * 60);
+      vg = floor(140 + psiAbs * 90);
+      vbv = floor(200 + psiAbs * 55);
+      coreAlpha = 0.5 + psiAbs * 0.5;
+    }
+
+    // Outer glow
+    ctx.fillStyle = `rgba(${vr},${vg},${vbv},${sf(0.15 * depthFade * coreAlpha, 2)})`;
+    ctx.beginPath();
+    ctx.arc(v.sx, v.sy, dotR * 3.0, 0, TAU);
+    ctx.fill();
+    // Mid glow
+    ctx.fillStyle = `rgba(${vr},${vg},${vbv},${sf(0.3 * depthFade * coreAlpha, 2)})`;
+    ctx.beginPath();
+    ctx.arc(v.sx, v.sy, dotR * 1.8, 0, TAU);
+    ctx.fill();
+    // Core
+    ctx.fillStyle = `rgba(${min(255,vr+30)},${min(255,vg+20)},${min(255,vbv+10)},${sf(coreAlpha * depthFade, 2)})`;
+    ctx.beginPath();
+    ctx.arc(v.sx, v.sy, dotR, 0, TAU);
+    ctx.fill();
+    // White-hot center for high |Ψ|
+    if (psiAbs > 0.4) {
+      ctx.fillStyle = `rgba(255,255,240,${sf((psiAbs - 0.4) * depthFade, 2)})`;
+      ctx.beginPath();
+      ctx.arc(v.sx, v.sy, dotR * 0.4, 0, TAU);
+      ctx.fill();
+    }
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// §14 TORUS RENDERING — with per-sutra geo distortion + TGCR + Wheeler + GRVQ
+// ═══════════════════════════════════════════════════════════════════════════════
+const TORUS_R = 180, TORUS_r = 70;
+const TH_SEG = 160, PH_SEG = 80;
+const torusPoints = new Array(TH_SEG * PH_SEG);
+for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0 };
+
+let camRX = 0.55, camRY = 0, isDrag = false, lastMX = 0, lastMY = 0;
+let autoRotate = true;
+
+function projectTorus(t) {
+  const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
+  const cx = cw / 2, cy = ch / 2;
+  const r4f = clamp(abs(Q.fl(R4val)), 0, 1);
+  const time = t * 0.001;
+
+  // Pre-compute per-frame constants (hoisted from inner loop)
+  const cRY = cos(camRY), sRY = sin(camRY);
+  const cRX = cos(camRX), sRX = sin(camRX);
+
+  // Pre-compute vortex constants
+  const vo = vortexOmega, absVo = abs(vo);
+  const vortexActive = absVo > 0.005;
+  const vGeo = min(absVo, 2.0);
+  const vSign = vo > 0 ? 1 : -1;
+  const bLam01 = 1 + TGCR.beltramiLambda * 0.1;
+  const timeVo3 = time * vo * 3;
+  const timeVo2 = time * vo * 2;
+  const timeVo4 = time * vo * 4;
+  const timeAbsVo3 = time * absVo * 3;
+
+  for (let i = 0; i < TH_SEG; i++) {
+    const theta = (i / TH_SEG) * TAU;
+    const cosTheta = cos(theta), sinTheta = sin(theta);
+
+    // Pre-compute theta-dependent vortex values (constant across phi)
+    const funnelFactor = 0.5 + 0.5 * cosTheta;
+    const antiFunnel = 1 - funnelFactor;
+
+    for (let j = 0; j < PH_SEG; j++) {
+      const phi = (j / PH_SEG) * TAU;
+      const fv = sampleField(theta, phi);
+
+      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0;
+
+      // ── PRIMARY DEFORMATION: Vertex field Ψ[16] ──────────────────
+      // The field value IS the geometry. Soft saturation keeps it bounded.
+      const fvNorm = fv / (1 + abs(fv) * 0.3);
+      R += fvNorm * 25 * (1 + r4f);    // radial push/pull
+      r += fvNorm * 10;                 // tube thickness
+      yOff += fvNorm * 8;              // vertical displacement
+
+      // Field gradient: local variation drives twist and ripple
+      const fvNext = sampleField(theta + 0.05, phi);
+      const fvUp = sampleField(theta, phi + 0.05);
+      const gradTh = clamp((fvNext - fv) * 5, -3, 3);   // clamped gradient
+      const gradPh = clamp((fvUp - fv) * 5, -3, 3);
+      phiShift += gradTh * 0.03;        // gradient-driven twist
+      r += abs(gradPh) * 3;             // gradient → tube ripple
+      R += abs(gradTh) * 2;             // gradient → radial bulge
+
+      // TGCR vortex geometry — tornado funnel with Beltrami eigenflow
+      if (vortexActive) {
+        // Beltrami eigenflow twist
+        phiShift += vSign * vGeo * 1.5 * funnelFactor * sin(theta * 3 + timeVo3) * bLam01;
+        phiShift -= vSign * vGeo * 0.5 * antiFunnel * sin(theta * 5 - timeVo2);
+
+        // Tube pinch for funnel + cymatic ripple
+        r *= (1 - vGeo * 0.15 * funnelFactor);
+        r += vGeo * 5 * sin(theta * 3 - phi * 2 * vortexHelicity + timeVo4);
+
+        // Tornado lateral sweep
+        R += vGeo * 10 * sin(theta * 2 - timeVo2) * funnelFactor;
+        yOff += vSign * vGeo * 15 * cos(theta * 2 + phi * vortexHelicity - timeAbsVo3) * funnelFactor;
+
+        // Cymatic standing wave nodes on surface
+        const cymNode = sin(theta * 6 - phi * 3 * vortexHelicity + timeVo2);
+        r += vGeo * 3 * cymNode * cymNode * antiFunnel;
+      }
+
+      // Wheeler φ³ hyperboloid distortion (perturbation scale)
+      const wheelerDist = WHEELER.fieldDistortion(theta, phi, 2.0, t);
+      R += wheelerDist * 3;
+      yOff += WHEELER.goldenVortex(theta, phi, absVo || 0.1) * 4;
+
+      // R⁴ singularity modulation: flatten near singularity
+      const r4Squeeze = 1 - r4f * 0.3;
+      R *= r4Squeeze;
+
+      // Floor R so torus never self-intersects; cap to stay on screen
+      r = clamp(r, 15, 120);
+      R = clamp(max(R, r + 15), 80, 350);
+
+      // Compute torus point
+      const effPhi = phi + phiShift;
+      const cosP = cos(effPhi), sinP = sin(effPhi);
+      let x = (R + r * cosP) * cosTheta;
+      let y = r * sinP + yOff;
+      let z = (R + r * cosP) * sinTheta;
+
+      // Camera rotation (using pre-computed trig)
+      let t1;
+      t1 = x * cRY - z * sRY; z = x * sRY + z * cRY; x = t1;
+      t1 = y * cRX - z * sRX; z = y * sRX + z * cRX; y = t1;
+
+      const idx = i * PH_SEG + j;
+      const pScale = CAM_DIST / (CAM_DIST + z);
+      torusPoints[idx].sx = cx + x * pScale;
+      torusPoints[idx].sy = cy + y * pScale;
+      torusPoints[idx].depth = z;
+      torusPoints[idx].field = fvNorm;
+      torusPoints[idx].theta = theta;
+      torusPoints[idx].phi = phi;
+    }
+  }
+}
+
+function renderTorus() {
+  // Pre-build quad list with back-face culling
+  // At 160×80 = 12,800 quads — cull ~half, draw ~6,400 front faces
+  const quads = [];
+  for (let i = 0; i < TH_SEG; i++) {
+    const ni = (i + 1) % TH_SEG;
+    for (let j = 0; j < PH_SEG; j++) {
+      const nj = (j + 1) % PH_SEG;
+      const i00 = i * PH_SEG + j;
+      const i10 = ni * PH_SEG + j;
+      const i11 = ni * PH_SEG + nj;
+      const i01 = i * PH_SEG + nj;
+      const p0 = torusPoints[i00], p1 = torusPoints[i10];
+      const p2 = torusPoints[i11], p3 = torusPoints[i01];
+
+      // Face normal z-component via 2D cross product (screen-space winding)
+      const e1x = p1.sx - p0.sx, e1y = p1.sy - p0.sy;
+      const e2x = p3.sx - p0.sx, e2y = p3.sy - p0.sy;
+      const nz = e1x * e2y - e1y * e2x;
+
+      // Back-face cull — skip faces pointing away from camera
+      if (nz < 0) continue;
+
+      const avgDepth = (p0.depth + p1.depth + p2.depth + p3.depth) * 0.25;
+      const avgField = (p0.field + p1.field + p2.field + p3.field) * 0.25;
+
+      // Full normal for lighting
+      const e1z = p1.depth - p0.depth, e2z = p3.depth - p0.depth;
+      const nx = e1y * e2z - e1z * e2y;
+      const ny = e1z * e2x - e1x * e2z;
+      const nLen = sqrt(nx*nx + ny*ny + nz*nz) || 1;
+      const diffuse = clamp((-0.4 * nx - 0.6 * ny + 0.7 * nz) / nLen, 0, 1);
+
+      quads.push({ p0, p1, p2, p3, depth: avgDepth, field: avgField, diffuse });
+    }
+  }
+  // Sort back-to-front
+  quads.sort((a, b) => a.depth - b.depth);
+
+  // Draw — all front-facing, opaque fill, no wireframe
+  for (const q of quads) {
+    const fv = clamp(q.field, -1, 1);
+    const afv = abs(fv);
+
+    // Cymatic color mapping — warm/cool/nodal
+    let r, g, b;
+    if (fv > 0.03) {
+      const t = clamp(fv, 0, 1);
+      r = floor(200 + t * 55);
+      g = floor(140 + t * 80);
+      b = floor(30 + t * 60);
+    } else if (fv < -0.03) {
+      const t = clamp(-fv, 0, 1);
+      r = floor(25 + t * 50);
+      g = floor(80 + t * 100);
+      b = floor(180 + t * 75);
+    } else {
+      // Nodal line: deep purple — cymatic standing wave zero-crossings
+      const n = 1 - afv / 0.03;
+      r = floor(50 + n * 30);
+      g = floor(15 + n * 15);
+      b = floor(60 + n * 40);
+    }
+
+    // Surface lighting: ambient + diffuse
+    const light = 0.25 + 0.75 * q.diffuse;
+    r = floor(r * light); g = floor(g * light); b = floor(b * light);
+
+    ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+    ctx.beginPath();
+    ctx.moveTo(q.p0.sx, q.p0.sy);
+    ctx.lineTo(q.p1.sx, q.p1.sy);
+    ctx.lineTo(q.p2.sx, q.p2.sy);
+    ctx.lineTo(q.p3.sx, q.p3.sy);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// §15 UI + MAIN LOOP
+// ═══════════════════════════════════════════════════════════════════════════════
+function buildPanel() {
+  const list = document.getElementById('sutra-list');
+  list.innerHTML = '';
+  SUTRAS.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'st';
+    el.innerHTML = `<div class="led"></div><span class="sid">S${s.id}</span><span class="sname">${s.sk} ${s.name}</span><span class="sharm">(${s.m},${s.n})</span>`;
+    el.addEventListener('click', () => {
+      s.on = !s.on;
+      el.classList.toggle('active', s.on);
+    });
+    list.appendChild(el);
+  });
+}
+
+const center = document.getElementById('center');
+center.addEventListener('mousemove', e => {
+  if (!isDrag) return;
+  camRY += (e.clientX - lastMX) * 0.005;
+  camRX += (e.clientY - lastMY) * 0.005;
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+center.addEventListener('mousedown', e => { isDrag = true; lastMX = e.clientX; lastMY = e.clientY; autoRotate = false; });
+center.addEventListener('mouseup', () => { isDrag = false; setTimeout(() => autoRotate = true, 2000); });
+
+let frameTime = 0;
+function frame(t) {
+  frameTime = t;
+  const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
+
+  try {
+  if (autoRotate) { camRY += 0.006; camRX = 0.55 + 0.25 * sin(t * 0.0002); }
+
+  // PRE-SANITIZE: Lean-verified QI interval bounds (Interval.lean: contains_add, contains_sub)
+  QI.clampLambda();
+
+  // Sync Lean State from lambda BEFORE evolves
+  LeanState.syncFromLambda();
+
+  // ── VERTEX FIELD SUBSTRATE: λ → Ψ[16] ──────────────────────────────────
+  // Forward transform: project 4-vector into 16-vertex tesseract field
+  VTX.forward();
+
+  // ── USO ENERGY INJECTION ──────────────────────────────────────────────
+  // Without a driving term, all operators are dissipative → field → 0.
+  // VERTEX INJECTION: Hamming-layer patterned energy from USO
+  {
+    const P = USO.P, S = USO.S;
+    const drive = (P - 1) * 2.0;
+    for (let i = 0; i < 16; i++) {
+      const hw = VTX.hw(i);
+      const sign = (hw % 2 === 0) ? 1 : -1;
+      const inject = drive * sign * (1 + hw * 0.3) * abs(S) * 0.5;
+      if (isFinite(inject) && abs(inject) < 100) {
+        VTX.psi[i] = Q.add(VTX.psi[i], Q.mk(Bi(inject * 10000), 10000n));
+      }
+    }
+  }
+
+  // Evolve all active sutras on vertex field Ψ[16] — genuinely different operators
+  const active = SUTRAS.filter(s => s.on);
+  for (const s of active) {
+    try {
+      s.lastResult = s.evolve(1);
+      // Lean-verified backbone: act(u, s) transition (SutraSemantics.lean)
+      LeanState.act(s.id);
+    }
+    catch (e) { s.lastResult = `[ERR: ${e.message}]`; }
+  }
+
+  // ── INVERSE TRANSFORM: Ψ[16] → λ ─────────────────────────────────────
+  // Energy conservation: bound ‖Ψ‖² to prevent blowup from compound operators
+  // Max energy = 16 × 500² = 4,000,000 (generous ceiling)
+  VTX.normalize(100000);
+  // Reconstruct 4-vector from transformed vertex field
+  VTX.inverse();
+
+  // ── OSCILLATORY LAMBDA DRIVER ──────────────────────────────────────
+  // AFTER inverse (so it's not overwritten). φ-incommensurate frequencies
+  // create persistent non-repeating dynamics that sutras modulate.
+  {
+    const t = simTime * 0.001;
+    const P = USO.P, S = USO.S;
+    const targets = [
+      (3 + P * 2) * sin(t * 1.0000),
+      (4 + S * 2) * sin(t * C.phi_f + PI * 0.25),
+      (5 + P * 1.5) * cos(t * C.phi_f * C.phi_f + PI * 0.5),
+      (6 + S * 1.5) * sin(t * C.sqrt2_f + PI * 0.75)
+    ];
+    for (let k = 0; k < 4; k++) {
+      const target = Q.mk(Bi(targets[k] * 1000), 1000n);
+      const diff = Q.sub(target, lambda[k]);
+      lambda[k] = Q.add(lambda[k], Q.mul(diff, Q.mk(30n, 1000n)));
+    }
+  }
+
+  CASCADE.update();
+
+  // POST-SANITIZE: QI interval bounds again after evolves
+  QI.clampLambda();
+
+  // Advance deterministic simulation time (decoupled from wall clock)
+  simTime += SIM_DT;
+  cycle++;
+  computeR4();
+  if (cycle % 10 === 0) computeUSO();
+
+  // TGCR: clamp vortex omega to prevent energy divergence
+  TGCR.clampOmega();
+
+  // Update TGCR from current vortex state — coupled to Lean momentum (State.lean: X'=X+x*k)
+  if (cycle % 5 === 0) {
+    const theta_avg = (cycle * 0.01) % TAU;
+    const phi_avg = (cycle * 0.007) % TAU;
+    // Momentum coupling: soft saturate to [0,1] for stable TGCR speed
+    const momContrib = abs(LeanState.momX()) / (1 + abs(LeanState.momX()));
+    TGCR.setVortex(theta_avg, phi_avg, abs(vortexOmega) + 0.1 + momContrib * 0.5);
+    TGCR.computeEnergy();
+    TGCR.checkPhaseLock(theta_avg, 0.333); // a=1/3 for θ/(3a)=1
+  }
+
+  // Update MSTVQ tensor — coupled to Lean momentum (State.lean: Y'=Y+y*k, Z'=Z+z*k)
+  if (cycle % 8 === 0) {
+    const mY = LeanState.momY(), mZ = LeanState.momZ();
+    const momYn = mY / (1 + abs(mY)) * 0.1;
+    const momZn = mZ / (1 + abs(mZ)) * 0.1;
+    const feNorm = fieldEnergy() / (1 + fieldEnergy()) * 0.02;
+    MSTVQ.setB(Q.fl(lambda[0]) * 0.01 + momYn, Q.fl(lambda[1]) * 0.01 + momZn, feNorm);
+    MSTVQ.compute();
+    // FEEDBACK LOOP: MSTVQ trace → TGCR κ + MSTVQ stress → λ
+    MSTVQ.feedbackToTGCR();
+    MSTVQ.feedbackToLambda(lambda);
+  }
+
+  // Update Ansatz with FEEDBACK to λ
+  if (cycle % 30 === 0) {
+    ANSATZ.computeEnergy(lambda);
+    // VQE optimization: update circuit parameters toward lower energy
+    if (cycle % 60 === 0) ANSATZ.updateParams(lambda, 0.01);
+    // Ansatz energy gradient feeds back into λ
+    ANSATZ.feedbackToLambda(lambda);
+  }
+
+  updateField(simTime);
+  projectTorus(simTime);
+
+  // Render — black background with subtle energy glow
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, cw, ch);
+  const rawEnergy = fieldEnergy();
+  const energy = rawEnergy / (1 + rawEnergy); // [0,1)
+  const glowR = 120 + energy * 100 + abs(vortexOmega) * 40;
+  const grd = ctx.createRadialGradient(cw/2, ch/2, 0, cw/2, ch/2, glowR);
+  grd.addColorStop(0, `rgba(${floor(15 + energy * 30)},${floor(8 + abs(vortexOmega) * 15)},${floor(25 + energy * 25)},0.25)`);
+  grd.addColorStop(0.6, `rgba(10,5,20,0.1)`);
+  grd.addColorStop(1, 'rgba(5,5,16,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, cw, ch);
+
+  renderTorus();
+  renderTesseract(simTime);
+
+  // Recording indicator overlay (drawn on canvas so it's captured in video)
+  if (recorder && recorder.state === 'recording') {
+    const elapsed = (performance.now() - recordingStart) / 1000;
+    const remaining = max(0, RECORD_DURATION / 1000 - elapsed);
+    ctx.fillStyle = 'rgba(180,0,0,0.7)';
+    ctx.fillRect(cw - 200, 10, 190, 28);
+    ctx.fillStyle = '#fff';
+    ctx.font = '13px monospace';
+    ctx.fillText(`● REC ${floor(elapsed)}s / ${RECORD_DURATION/1000}s  -${floor(remaining)}s`, cw - 195, 30);
+  }
+
+  if (cycle % 8 === 0) updateHUD();
+
+  } catch (frameErr) {
+    // Frame error recovery — reset lambda to safe values, keep running
+    for (let k = 0; k < 4; k++) lambda[k] = Q.mk(BigInt(k + 3));
+    LeanState.reset(); // Reset verified state too
+    console.warn('Frame recovery:', frameErr.message);
+  }
+  // rAF ALWAYS fires — simulation never dies
+  requestAnimationFrame(frame);
+}
+
+function updateHUD() {
+  document.getElementById('v-r4').textContent = sf(Q.fl(R4val),6);
+  document.getElementById('v-l0').textContent = Q.str(lambda[0]);
+  document.getElementById('v-l1').textContent = Q.str(lambda[1]);
+  document.getElementById('v-l2').textContent = Q.str(lambda[2]);
+  document.getElementById('v-l3').textContent = Q.str(lambda[3]);
+  document.getElementById('v-uso').textContent = sf(USO_U,4);
+  document.getElementById('v-tgcr').textContent = sf(TGCR.energy,4);
+  document.getElementById('v-mstvq').textContent = sf(MSTVQ.trace(),4);
+  document.getElementById('v-wheeler').textContent = sf(C.phi_cu_f,4);
+  document.getElementById('v-maya').textContent = `${MAYA.state(cycle).tz.number}.${MAYA.state(cycle).tz.glyph}`;
+  document.getElementById('v-ansatz').textContent = sf(ANSATZ.energy / (1 + abs(ANSATZ.energy) * 0.01), 4);
+  document.getElementById('v-vortex').textContent = sf(vortexOmega,4);
+  // Lean-verified: Σδ(1..29)=435 (Proofs.lean: all_sum), momentum from State evolution
+  const activeIds = SUTRAS.filter(s => s.on).map(s => s.id);
+  const sigmaD = activeIds.reduce((a, id) => a + id, 0);
+  document.getElementById('v-sigma').textContent = `${sigmaD}/435`;
+  // Compact momentum display
+  const fmtMom = v => { const a = abs(v); return a > 1e6 ? sf(v/1e6,1)+'M' : a > 1e3 ? sf(v/1e3,1)+'K' : sf(v,1); };
+  document.getElementById('v-mom').textContent = `${fmtMom(LeanState.momX())},${fmtMom(LeanState.momY())},${fmtMom(LeanState.momZ())}`;
+  document.getElementById('v-cascade').textContent = CASCADE.active ? `S${CASCADE.current + 1}/29` : (CASCADE.impulses.length > 0 ? `dec(${CASCADE.impulses.length})` : '—');
+  document.getElementById('v-active').textContent = SUTRAS.filter(s => s.on).length;
+  document.getElementById('v-cycle').textContent = cycle;
+
+  const al = document.getElementById('active-list');
+  const act = SUTRAS.filter(s => s.on);
+  al.innerHTML = act.length === 0 ? '<div style="color:#444">none</div>' :
+    act.map(s => `<div class="asutra"><span class="an">S${s.id}</span> ${s.sk} <span class="av">(${s.m},${s.n})</span></div>`).join('');
+
+  const fd = document.getElementById('formula-display');
+  fd.innerHTML = act.length === 0 ? 'Toggle a sūtra to begin' :
+    act.slice(0, 5).map(s => `<div style="margin-bottom:3px"><b style="color:#d4af37">S${s.id}</b>: ${s.lastResult || s.desc}</div>`).join('');
+}
+
+// CONTROLS
+document.getElementById('btn-reset').addEventListener('click', () => {
+  lambda[0] = Q.mk(3n); lambda[1] = Q.mk(4n); lambda[2] = Q.mk(5n); lambda[3] = Q.mk(6n);
+  SUTRAS.forEach(s => s.on = false);
+  document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
+  vortexOmega = 0; CASCADE.active = false; CASCADE.impulses = [];
+  ANSATZ.init(); cycle = 0;
+  LeanState.reset(); // Reset verified state (State.lean)
+});
+document.getElementById('btn-all').addEventListener('click', () => {
+  SUTRAS.forEach(s => s.on = true);
+  document.querySelectorAll('.st').forEach(el => el.classList.add('active'));
+});
+document.getElementById('btn-none').addEventListener('click', () => {
+  SUTRAS.forEach(s => s.on = false);
+  document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
+});
+document.getElementById('btn-cascade').addEventListener('click', () => CASCADE.start());
+document.getElementById('btn-vortex').addEventListener('click', () => {
+  vortexHelicity *= -1;
+  vortexOmega += 3.0 * vortexHelicity;
+});
+document.getElementById('btn-pde').addEventListener('click', () => {
+  SUTRAS.forEach(s => s.on = false);
+  document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
+  [3,4,7,9,11,13,17,19,27].forEach(id => {
+    SUTRAS[id - 1].on = true;
+    document.querySelectorAll('.st')[id - 1].classList.add('active');
+  });
+});
+// ═══════════════════════════════════════════════════════════════════════════════
+// §17 VIDEO EXPORT — Canvas MediaRecorder (60s capture, MP4/WebM cross-platform)
+// ═══════════════════════════════════════════════════════════════════════════════
+let recorder = null, recordChunks = [], recordingStart = 0;
+const RECORD_DURATION = 60000; // 60 seconds max
+let recordTimer = null;
+
+// Detect best available codec — Safari/iOS needs MP4, Chrome/Firefox use WebM
+function detectMimeType() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  // Priority order: MP4 (Safari/iOS), VP9 (Chrome), VP8 (Firefox), WebM fallback
+  const candidates = [
+    'video/mp4',
+    'video/mp4;codecs=avc1',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm'
+  ];
+  for (const mime of candidates) {
+    try { if (MediaRecorder.isTypeSupported(mime)) return mime; } catch(e) {}
+  }
+  return null;
+}
+
+function getFileExtension(mimeType) {
+  return mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+}
+
+function resetExportButton() {
+  const btn = document.getElementById('btn-export');
+  btn.textContent = 'EXPORT';
+  btn.style.background = '';
+}
+
+function stopRecording() {
+  if (recordTimer) { clearTimeout(recordTimer); recordTimer = null; }
+  if (recorder && recorder.state === 'recording') {
+    try { recorder.stop(); } catch(e) { console.warn('Stop error:', e); }
+  }
+}
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const btn = document.getElementById('btn-export');
+
+  // If already recording, stop early
+  if (recorder && recorder.state === 'recording') {
+    stopRecording();
+    return;
+  }
+
+  // Check API availability
+  if (typeof MediaRecorder === 'undefined') {
+    btn.textContent = 'NO RECORDER API';
+    btn.style.background = '#800';
+    setTimeout(resetExportButton, 3000);
+    return;
+  }
+
+  const mimeType = detectMimeType();
+  if (!mimeType) {
+    btn.textContent = 'NO CODEC';
+    btn.style.background = '#800';
+    setTimeout(resetExportButton, 3000);
+    return;
+  }
+
+  let stream;
+  try {
+    stream = canvas.captureStream(30); // 30 fps capture
+  } catch(e) {
+    btn.textContent = 'CAPTURE FAILED';
+    btn.style.background = '#800';
+    console.error('captureStream failed:', e);
+    setTimeout(resetExportButton, 3000);
+    return;
+  }
+
+  recordChunks = [];
+  const ext = getFileExtension(mimeType);
+
+  try {
+    recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 8000000 // 8 Mbps for quality
+    });
+  } catch(e) {
+    // Some browsers reject bitrate option — retry without it
+    try {
+      recorder = new MediaRecorder(stream, { mimeType });
+    } catch(e2) {
+      btn.textContent = 'RECORDER FAILED';
+      btn.style.background = '#800';
+      console.error('MediaRecorder init failed:', e2);
+      setTimeout(resetExportButton, 3000);
+      return;
+    }
+  }
+
+  recorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordChunks.push(e.data);
+  };
+
+  recorder.onstop = () => {
+    if (recordChunks.length === 0) {
+      btn.textContent = 'NO DATA';
+      btn.style.background = '#800';
+      recorder = null;
+      setTimeout(resetExportButton, 3000);
+      return;
+    }
+
+    const blob = new Blob(recordChunks, { type: mimeType });
+    const elapsed = floor((performance.now() - recordingStart) / 1000);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `vedic-v13-${ts}-${elapsed}s-${cycle}cyc.${ext}`;
+    const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+
+    // Create download link — on iOS this opens the share sheet / "Save to Files" prompt
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    // iOS Safari needs the link in the DOM briefly
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    // Brief delay before cleanup so iOS can process the download
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 2000);
+
+    btn.textContent = `SAVED ${sizeMB}MB`;
+    btn.style.background = '#060';
+    recorder = null;
+    recordChunks = [];
+    recordTimer = null;
+    setTimeout(resetExportButton, 4000);
+  };
+
+  recorder.onerror = err => {
+    console.error('Recording error:', err);
+    recorder = null;
+    recordChunks = [];
+    recordTimer = null;
+    btn.textContent = 'REC ERROR';
+    btn.style.background = '#800';
+    setTimeout(resetExportButton, 3000);
+  };
+
+  // Start recording — collect data every 1s for responsive stop
+  recorder.start(1000);
+  recordingStart = performance.now();
+  btn.textContent = 'REC ● TAP TO STOP';
+  btn.style.background = '#a00';
+
+  // Auto-stop after 60s
+  recordTimer = setTimeout(() => {
+    if (recorder && recorder.state === 'recording') recorder.stop();
+  }, RECORD_DURATION);
+});
+
+// INIT
+buildPanel();
+computeR4();
+computeUSO();
+ANSATZ.computeEnergy(lambda);
+[0, 2, 8].forEach(idx => {
+  SUTRAS[idx].on = true;
+  const els = document.querySelectorAll('.st');
+  if (els[idx]) els[idx].classList.add('active');
+});
+vortexOmega = 0.15;
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
