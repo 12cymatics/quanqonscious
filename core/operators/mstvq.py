@@ -20,7 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field as dataclass_field
 from fractions import Fraction
 from typing import Dict, Tuple, List, Optional, Any
-import math
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# MSTVQ operations must use ONLY Vedic sutra functions and rational arithmetic
 
 from .base import Operator, OperatorCategory, OperatorContext
 from ..state import FieldState, RationalComplex
@@ -136,16 +138,15 @@ class StressTensorField:
                 gradient = abs(float(neighbor_intensity) - float(center_intensity))
                 stress += weight * Fraction(gradient).limit_denominator(10000)
 
-            # Compute phase curvature (tension)
-            center_phase = state.phase(point)
+            # FORBIDDEN: Phase curvature requires atan2 which violates exact arithmetic
+            # TODO: Reimplement tension using ONLY Vedic sutra functions
+            # - Use norm_squared gradients instead of phase gradients
+            # - Use vyashtisamanstih sutra for part/whole relationships
+            # - Use sankalana_vyavakalanabhyam for neighbor differences
             tension = Fraction(0)
-
-            for neighbor, weight in self.lattice.neighbors(point):
-                neighbor_phase = state.phase(neighbor)
-                phase_diff = abs(neighbor_phase - center_phase)
-                if phase_diff > math.pi:
-                    phase_diff = 2 * math.pi - phase_diff
-                tension += weight * Fraction(phase_diff / math.pi).limit_denominator(10000)
+            # OLD CODE (FORBIDDEN):
+            # center_phase = state.phase(point) - uses atan2
+            # Phase operations cannot exist in exact rational arithmetic
 
             # Apply configuration
             self._stress[coords] = stress * config.stress_coupling
@@ -267,12 +268,14 @@ class MSTVQTensionOperator(Operator):
             # Get local tension
             T = stress_field.get_tension(coords)
 
-            # Tension induces phase rotation: ψ' = ψ * exp(i * T * h_m * dt)
-            phase_shift = float(T * self.config.h_m * context.dt)
-            rotation = RationalComplex.from_complex(
-                complex(math.cos(phase_shift), math.sin(phase_shift))
-            )
-            new_psi = psi * rotation
+            # FORBIDDEN: Phase rotation requires cos/sin which violate exact arithmetic
+            # TODO: Reimplement using ONLY Vedic sutra functions
+            # - Use polynomial rotation approximations
+            # - Use gunitasamuccayah sutra for products
+            # - Avoid trigonometric functions entirely
+            # OLD CODE (FORBIDDEN):
+            # rotation = complex(math.cos(phase_shift), math.sin(phase_shift))
+            new_psi = psi  # No rotation until sutra-based implementation ready
 
             new_state.set(point, new_psi)
 

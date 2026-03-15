@@ -19,7 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field as dataclass_field
 from fractions import Fraction
 from typing import Dict, Tuple, List, Optional, Callable, Any
-import math
+
+# CRITICAL: math module FORBIDDEN - violates exact arithmetic
+# R4 coupling operations must use ONLY Vedic sutra functions and rational arithmetic
 
 from .base import Operator, OperatorCategory, OperatorContext
 from ..state import FieldState, RationalComplex
@@ -111,10 +113,18 @@ class R4CouplingOperator(Operator):
             coupling = diff * RationalComplex.from_real(self.config.coupling_strength * magnitude_sq)
 
         elif self.config.coupling_mode == "exponential":
-            # Exponential coupling: γ * exp(-|diff|/λ) * diff
+            # FORBIDDEN: Exponential requires exp() and norm() which violate exact arithmetic
+            # TODO: Reimplement using ONLY Vedic sutra functions
+            # - Use rational polynomial approximations for decay: 1/(1+x)^n
+            # - Use norm_squared() instead of norm()
+            # - Use nikhilam sutra for complement operations
+            # OLD CODE (FORBIDDEN):
+            # decay = math.exp(-diff.norm() / 0.5)
             diff = avg - center_val
-            decay = math.exp(-diff.norm() / 0.5)
-            coupling = diff * RationalComplex.from_real(self.config.coupling_strength * Fraction(decay).limit_denominator(10000))
+            # Rational polynomial decay instead: 1/(1 + |diff|²)
+            decay_denom = Fraction(1) + diff.norm_squared()
+            decay = Fraction(1) / decay_denom
+            coupling = diff * RationalComplex.from_real(self.config.coupling_strength * decay)
 
         else:
             coupling = RationalComplex.zero()
@@ -237,22 +247,32 @@ class R4CoherenceOperator(Operator):
 
         Returns value in [0, 1] where 1 = perfect coherence.
         """
-        center_phase = state.phase(point)
-        phase_diffs = []
+        # FORBIDDEN: Phase coherence requires atan2 and math.pi which violate exact arithmetic
+        # TODO: Reimplement using ONLY Vedic sutra functions and exact arithmetic
+        # - Use amplitude (norm_squared) coherence instead of phase coherence
+        # - Use vyashtisamanstih sutra for part/whole relationships
+        # - Return exact Fraction instead of float
+        # OLD CODE (FORBIDDEN):
+        # center_phase = state.phase(point) - uses atan2
+        # Phase operations cannot exist in exact rational arithmetic
 
+        # Use amplitude coherence instead (exact)
+        center_intensity = state.intensity(point)
+        if center_intensity == 0:
+            return Fraction(1)
+
+        intensity_diffs = []
         for neighbor, _ in state.lattice.neighbors(point):
-            neighbor_phase = state.phase(neighbor)
-            diff = abs(neighbor_phase - center_phase)
-            if diff > math.pi:
-                diff = 2 * math.pi - diff
-            phase_diffs.append(diff)
+            neighbor_intensity = state.intensity(neighbor)
+            diff_sq = abs(neighbor_intensity - center_intensity)
+            intensity_diffs.append(diff_sq)
 
-        if not phase_diffs:
-            return 1.0
+        if not intensity_diffs:
+            return Fraction(1)
 
-        # Average phase difference, normalized to [0, 1]
-        avg_diff = sum(phase_diffs) / len(phase_diffs)
-        coherence = 1.0 - avg_diff / math.pi
+        avg_diff = sum(intensity_diffs) / len(intensity_diffs)
+        # Normalize to [0, 1] - higher coherence when diffs are small
+        coherence = Fraction(1) / (Fraction(1) + avg_diff)
 
         return coherence
 
@@ -311,11 +331,16 @@ class R4EntanglementOperator(Operator):
             for neighbor, weight in state.lattice.neighbors(point):
                 neighbor_val = state.get(neighbor)
                 if not neighbor_val.is_zero():
-                    # Normalize neighbor value
-                    norm = neighbor_val.norm()
-                    normalized = neighbor_val * RationalComplex.from_real(Fraction(1) / Fraction(norm).limit_denominator(10000)) if norm > 0.01 else neighbor_val
-                    # Weight contribution
-                    contribution = RationalComplex.one() + normalized * RationalComplex.from_real(weight * entanglement_strength)
+                    # FORBIDDEN: Normalization requires norm() which uses sqrt
+                    # TODO: Use unnormalized values or sutra-based scaling
+                    # - Use norm_squared() for threshold checks
+                    # - Avoid division by magnitude (introduces floats)
+                    # OLD CODE (FORBIDDEN):
+                    # norm = neighbor_val.norm()
+                    # normalized = neighbor_val / norm
+
+                    # Use unnormalized contribution (exact)
+                    contribution = RationalComplex.one() + neighbor_val * RationalComplex.from_real(weight * entanglement_strength)
                     neighbor_product = neighbor_product * contribution
 
             # Apply to center
@@ -403,13 +428,25 @@ def compute_r4_correlation_matrix(state: FieldState,
             psi_i = state.get(sample_points[i])
             psi_j = state.get(sample_points[j])
 
-            # Correlation: Re(ψ_i* ψ_j) / (|ψ_i| |ψ_j|)
-            product = psi_i.conjugate() * psi_j
-            norm_i = psi_i.norm()
-            norm_j = psi_j.norm()
+            # FORBIDDEN: Correlation with norm() division violates exact arithmetic
+            # TODO: Use norm_squared() based correlation
+            # - Correlation = Re(ψ_i* ψ_j)² / (|ψ_i|² |ψ_j|²) - all exact
+            # OLD CODE (FORBIDDEN):
+            # norm_i = psi_i.norm() - uses sqrt
+            # corr = product.real / (norm_i * norm_j) - float division
 
-            if norm_i > 0.001 and norm_j > 0.001:
-                corr = float(product.real) / (norm_i * norm_j)
+            # Exact correlation using norm_squared
+            product = psi_i.conjugate() * psi_j
+            norm_sq_i = psi_i.norm_squared()
+            norm_sq_j = psi_j.norm_squared()
+
+            threshold = Fraction(1, 1000000)  # 0.001²
+            if norm_sq_i > threshold and norm_sq_j > threshold:
+                # Exact: Re(ψ_i* ψ_j) / sqrt(|ψ_i|² |ψ_j|²)
+                # But sqrt violates exactness, so use squared version:
+                # corr² = Re(ψ_i* ψ_j)² / (|ψ_i|² |ψ_j|²)
+                corr_sq = (product.real * product.real) / (norm_sq_i * norm_sq_j)
+                corr = float(corr_sq)  # For now, convert only at output
             else:
                 corr = 0.0
 
