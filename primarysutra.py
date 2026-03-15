@@ -71,6 +71,7 @@ except Exception:  # pragma: no cover - optional dependency
 try:
     import scipy.linalg as la
 except Exception:  # pragma: no cover - optional dependency
+    la = None
 
 try:
     import torch
@@ -94,31 +95,23 @@ except Exception:  # pragma: no cover - allow running without PyTorch
 
     torch = _TorchPlaceholder()
 
-try:
-    import matplotlib.pyplot as plt
-except Exception:  # pragma: no cover - plotting optional
-    plt = None
-
-try:
-    import scipy.linalg as la
-except Exception:  # pragma: no cover - use minimal functions if SciPy missing
-    la = None
-from typing import Dict, List, Tuple, Union, Optional, Callable, Any
 import logging
 import time
-try:
-    import sympy as sp
-except Exception:  # pragma: no cover - optional dependency
-    sp = None
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-try:
-    import pandas as pd
-except Exception:  # pragma: no cover - optional dependency
-    class pd:
-        class DataFrame:
-            pass
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import cirq
+import cudaq
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import scipy.linalg as la
+import sympy as sp
+import torch
+
+TORCH_AVAILABLE = True
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -162,14 +155,8 @@ class VedicSutras:
         """
         self.context = context if context else SutraContext()
         
-        # Initialize GPU if requested
-        if TORCH_AVAILABLE and self.context.use_gpu and getattr(torch, 'cuda', None) and torch.cuda.is_available():
         # Initialize GPU if requested and available
-        if (
-            self.context.use_gpu
-            and torch is not None
-            and torch.cuda.is_available()
-        ):
+        if self.context.use_gpu and torch is not None and torch.cuda.is_available():
             self.context.device = torch.device("cuda")
             logger.info(
                 f"Using GPU device: {torch.cuda.get_device_name(0)}"

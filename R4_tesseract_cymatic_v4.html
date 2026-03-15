@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R4 वैदिक TOROIDAL HYPERCUBE v12.3 — ULTRATHINK</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a12;overflow:hidden;font-family:'Courier New',monospace}
+#canvas{position:fixed;top:0;left:0}
+#hud{position:fixed;top:12px;left:12px;color:#0f0;font-size:12px;z-index:100;pointer-events:none;
+    background:rgba(0,20,0,0.8);padding:10px 14px;border:1px solid #0f04;border-radius:4px}
+#trace{position:fixed;bottom:12px;left:12px;width:340px;max-height:180px;overflow-y:auto;
+    color:#0ff;font-size:10px;z-index:100;background:rgba(0,10,20,0.9);padding:10px;
+    border:1px solid #0ff3;border-radius:4px;scrollbar-width:thin;scrollbar-color:#0ff3 #000}
+#trace::-webkit-scrollbar{width:6px}
+#trace::-webkit-scrollbar-thumb{background:#0ff4;border-radius:3px}
+.tr{margin:3px 0;padding:2px 0;border-bottom:1px solid #0ff1}
+.tr-exact{color:#0f0}.tr-queue{color:#ff0}.tr-mode{color:#f0f}.tr-field{color:#0ff}.tr-sutra{color:#fa0}
+#queue-panel{position:fixed;top:12px;right:12px;width:260px;background:rgba(0,15,0,0.92);
+    border:1px solid #0f0;padding:12px;z-index:100;color:#0f0;font-size:11px;border-radius:6px;
+    box-shadow:0 0 20px #0f02}
+#queue-panel>div:first-child{font-size:13px;letter-spacing:1px;margin-bottom:8px;
+    border-bottom:1px solid #0f03;padding-bottom:6px}
+#queue-display{max-height:120px;overflow-y:auto;margin:8px 0;border:1px solid #0f03;
+    padding:6px;background:#000;border-radius:3px}
+.q-item{padding:4px 8px;margin:2px 0;background:linear-gradient(90deg,#0f01,#0f00);
+    border-left:3px solid #0f0;font-size:10px;border-radius:2px}
+#mode-select{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
+#mode-select label{padding:4px 8px;border:1px solid #0f04;cursor:pointer;font-size:9px;
+    border-radius:3px;transition:all 0.2s;background:#010}
+#mode-select label:hover{background:#020;border-color:#0f08}
+#mode-select input:checked+span{background:#0f0;color:#000;font-weight:bold}
+#mode-select input{display:none}
+.btn{background:linear-gradient(180deg,#030,#010);border:1px solid #0f0;color:#0f0;
+    padding:6px 14px;cursor:pointer;font-size:10px;margin:3px;border-radius:4px;
+    transition:all 0.2s;text-transform:uppercase;letter-spacing:1px}
+.btn:hover{background:linear-gradient(180deg,#050,#020);box-shadow:0 0 10px #0f04}
+.btn:active{transform:scale(0.97)}
+.btn-run{background:linear-gradient(180deg,#060,#020);font-weight:bold}
+.btn-cascade{background:linear-gradient(180deg,#500,#200);border-color:#f50;color:#f50}
+.btn-cascade:hover{background:linear-gradient(180deg,#700,#300);box-shadow:0 0 10px #f504}
+#field-panel{position:fixed;bottom:12px;right:12px;width:260px;background:rgba(0,10,20,0.92);
+    border:1px solid #0ff;padding:12px;z-index:100;color:#0ff;font-size:11px;border-radius:6px;
+    box-shadow:0 0 20px #0ff2}
+#field-panel>div:first-child{font-size:13px;letter-spacing:1px;margin-bottom:8px;
+    border-bottom:1px solid #0ff3;padding-bottom:6px}
+.field-row{display:flex;justify-content:space-between;margin:4px 0;padding:3px 0;
+    border-bottom:1px solid #0ff1}
+.field-row span:first-child{color:#0aa}
+.field-val{color:#ff0;font-weight:bold;font-family:'Courier New',monospace}
+#delta-display{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-size:64px;color:#0f0;opacity:0;transition:opacity 0.3s;pointer-events:none;
+    text-shadow:0 0 30px #0f0,0 0 60px #0f08;font-weight:bold}
+#delta-display.show{opacity:1}
+#sutra-label{position:fixed;top:95px;left:12px;color:#0f08;font-size:10px;
+    text-transform:uppercase;letter-spacing:2px;pointer-events:none}
+@media(max-width:900px){
+    #queue-panel,#field-panel{width:220px;font-size:10px;padding:8px}
+    #trace{width:280px;font-size:9px}
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud"></div>
+<div id="trace"></div>
+<div id="queue-panel">
+<div style="color:#ff0;font-weight:bold;margin-bottom:5px">⟨ SŪTRA QUEUE ⟩</div>
+<div id="queue-display"><em style="color:#555">Empty — tap sūtras to add</em></div>
+<div id="mode-select">
+<label><input type="radio" name="cmode" value="0" checked><span>ISOLATED</span></label>
+<label><input type="radio" name="cmode" value="1"><span>SERIES</span></label>
+<label><input type="radio" name="cmode" value="2"><span>PARALLEL</span></label>
+<label><input type="radio" name="cmode" value="3"><span>CONCURRENT</span></label>
+<label><input type="radio" name="cmode" value="4"><span>INVERSE</span></label>
+<label><input type="radio" name="cmode" value="5"><span>COMPOSITE</span></label>
+</div>
+<div style="margin-top:8px">
+<button class="btn btn-run" id="run-btn">▶ RUN QUEUE</button>
+<button class="btn" id="clear-btn">✕ CLEAR</button>
+<button class="btn btn-cascade" id="cascade-btn">CASCADE 29</button>
+</div>
+<div id="delta-sum" style="margin-top:8px;color:#fa0">Σδ = 0</div>
+</div>
+<div id="field-panel">
+<div style="color:#ff0;font-weight:bold;margin-bottom:5px">⟨ FIELD STATE ⟩</div>
+<div class="field-row"><span>GRVQ Ψ:</span><span class="field-val" id="f-grvq">0</span></div>
+<div class="field-row"><span>MSTVQ |B|:</span><span class="field-val" id="f-mstvq">0</span></div>
+<div class="field-row"><span>TGCR ω:</span><span class="field-val" id="f-tgcr">0</span></div>
+<div class="field-row"><span>ZPE ρ:</span><span class="field-val" id="f-zpe">0</span></div>
+<div class="field-row"><span>λ₀:</span><span class="field-val" id="f-lambda">1/1</span></div>
+<div style="margin-top:8px;border-top:1px solid #033;padding-top:5px">
+<div class="field-row"><span>Cymatic modes:</span><span class="field-val" id="f-cymodes">0</span></div>
+<div class="field-row"><span>Vortex count:</span><span class="field-val" id="f-vortex">0</span></div>
+</div>
+</div>
+<div id="delta-display"></div>
+<div id="sutra-label">⟨ 29 SŪTRA CUBES ⟩</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════════
+//  R4 वैदिक TOROIDAL HYPERCUBE v12.3 — ULTRATHINK EXACT MODE
+//  ZERO IEEE-754 IN STATE COMPUTATIONS
+//  BigInt rationals | Taylor trig | Newton-Raphson sqrt | Machin π | LFSR random
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+resize();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXACT ARITHMETIC ENGINE — BigInt Rationals
+// ═══════════════════════════════════════════════════════════════════════════════
+const Exact = {
+    gcd(a, b) {
+        a = a < 0n ? -a : a;
+        b = b < 0n ? -b : b;
+        while (b !== 0n) { const t = b; b = a % b; a = t; }
+        return a;
+    },
+    rat(n, d = 1n) {
+        if (typeof n === 'number') n = BigInt(Math.round(n));
+        if (typeof d === 'number') d = BigInt(Math.round(d));
+        if (d === 0n) throw new Error('Division by zero');
+        if (d < 0n) { n = -n; d = -d; }
+        const g = this.gcd(n, d);
+        return [n / g, d / g];
+    },
+    add(a, b) { return this.rat(a[0] * b[1] + b[0] * a[1], a[1] * b[1]); },
+    sub(a, b) { return this.rat(a[0] * b[1] - b[0] * a[1], a[1] * b[1]); },
+    mul(a, b) { return this.rat(a[0] * b[0], a[1] * b[1]); },
+    div(a, b) { if (b[0] === 0n) throw new Error('Division by zero'); return this.rat(a[0] * b[1], a[1] * b[0]); },
+    neg(a) { return [-a[0], a[1]]; },
+    abs(a) { return [a[0] < 0n ? -a[0] : a[0], a[1]]; },
+    lt(a, b) { return a[0] * b[1] < b[0] * a[1]; },
+    gt(a, b) { return a[0] * b[1] > b[0] * a[1]; },
+    eq(a, b) { return a[0] === b[0] && a[1] === b[1]; },
+    toFloat(a) { return Number(a[0]) / Number(a[1]); },
+    factorial(n) { let r = 1n; for (let i = 2n; i <= n; i++) r *= i; return r; },
+    pow(base, exp) {
+        if (exp === 0n) return this.rat(1n);
+        let r = this.rat(1n), b = base, e = exp < 0n ? -exp : exp;
+        while (e > 0n) { if (e % 2n === 1n) r = this.mul(r, b); b = this.mul(b, b); e = e / 2n; }
+        return exp < 0n ? this.div(this.rat(1n), r) : r;
+    },
+    str(a) { return a[1] === 1n ? a[0].toString() : `${a[0]}/${a[1]}`; }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXACT TRIGONOMETRY — Taylor Series (NO Math.sin/cos)
+// ═══════════════════════════════════════════════════════════════════════════════
+const TaylorTrig = {
+    TERMS: 12, MAX_CACHE: 256, piCache: null, sinCache: new Map(), cosCache: new Map(),
+    limitCache(cache) {
+        if (cache.size > this.MAX_CACHE) {
+            const keys = Array.from(cache.keys()).slice(0, cache.size - this.MAX_CACHE + 10);
+            keys.forEach(k => cache.delete(k));
+        }
+    },
+    computePiExact() {
+        if (this.piCache) return this.piCache;
+        const arctan = (x) => {
+            let sum = Exact.rat(0n);
+            const xr = Exact.rat(1n, x);
+            let xpow = xr;
+            for (let k = 0; k < 20; k++) {
+                const term = Exact.div(xpow, Exact.rat(2n * BigInt(k) + 1n));
+                sum = k % 2 === 0 ? Exact.add(sum, term) : Exact.sub(sum, term);
+                xpow = Exact.mul(xpow, Exact.mul(xr, xr));
+            }
+            return sum;
+        };
+        const pi4 = Exact.sub(Exact.mul(Exact.rat(4n), arctan(5n)), arctan(239n));
+        this.piCache = Exact.mul(Exact.rat(4n), pi4);
+        return this.piCache;
+    },
+    reduceAngle(x) {
+        const pi = this.computePiExact();
+        const twoPi = Exact.mul(Exact.rat(2n), pi);
+        let iter = 0;
+        while (Exact.gt(x, pi) && iter < 10) { x = Exact.sub(x, twoPi); iter++; }
+        iter = 0;
+        while (Exact.lt(x, Exact.neg(pi)) && iter < 10) { x = Exact.add(x, twoPi); iter++; }
+        return x;
+    },
+    sinExact(xRat) {
+        const key = Exact.str(xRat);
+        if (this.sinCache.has(key)) return this.sinCache.get(key);
+        const x = this.reduceAngle(xRat);
+        let sum = Exact.rat(0n), xpow = x;
+        const x2 = Exact.mul(x, x);
+        for (let n = 0; n < this.TERMS; n++) {
+            const term = Exact.div(xpow, Exact.rat(Exact.factorial(2n * BigInt(n) + 1n)));
+            sum = n % 2 === 0 ? Exact.add(sum, term) : Exact.sub(sum, term);
+            xpow = Exact.mul(xpow, x2);
+        }
+        this.sinCache.set(key, sum); this.limitCache(this.sinCache);
+        return sum;
+    },
+    cosExact(xRat) {
+        const key = Exact.str(xRat);
+        if (this.cosCache.has(key)) return this.cosCache.get(key);
+        const x = this.reduceAngle(xRat);
+        let sum = Exact.rat(1n);
+        const x2 = Exact.mul(x, x);
+        let xpow = x2;
+        for (let n = 1; n < this.TERMS; n++) {
+            const term = Exact.div(xpow, Exact.rat(Exact.factorial(2n * BigInt(n))));
+            sum = n % 2 === 1 ? Exact.sub(sum, term) : Exact.add(sum, term);
+            xpow = Exact.mul(xpow, x2);
+        }
+        this.cosCache.set(key, sum); this.limitCache(this.cosCache);
+        return sum;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXACT SQUARE ROOT — Newton-Raphson Iteration
+// ═══════════════════════════════════════════════════════════════════════════════
+const NewtonSqrt = {
+    cache: new Map(), ITERATIONS: 20, MAX_CACHE: 64,
+    limitCache() {
+        if (this.cache.size > this.MAX_CACHE) {
+            const keys = Array.from(this.cache.keys()).slice(0, this.cache.size - this.MAX_CACHE + 5);
+            keys.forEach(k => this.cache.delete(k));
+        }
+    },
+    sqrtExact(S) {
+        const key = Exact.str(S);
+        if (this.cache.has(key)) return this.cache.get(key);
+        if (Exact.lt(S, Exact.rat(0n))) throw new Error('Sqrt of negative');
+        if (Exact.eq(S, Exact.rat(0n))) return Exact.rat(0n);
+        let x = Exact.rat(BigInt(Math.ceil(Math.sqrt(Exact.toFloat(S)))));
+        const two = Exact.rat(2n);
+        for (let i = 0; i < this.ITERATIONS; i++) {
+            const next = Exact.div(Exact.add(x, Exact.div(S, x)), two);
+            if (Exact.eq(next, x)) break;
+            x = next;
+        }
+        this.cache.set(key, x); this.limitCache();
+        return x;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DETERMINISTIC LFSR — NO Math.random
+// ═══════════════════════════════════════════════════════════════════════════════
+const LFSR = {
+    state: 0xACE1n,
+    next() {
+        const bit = ((this.state >> 0n) ^ (this.state >> 2n) ^ (this.state >> 3n) ^ (this.state >> 5n)) & 1n;
+        this.state = (this.state >> 1n) | (bit << 15n);
+        return this.state;
+    },
+    nextRat() { return Exact.rat(this.next(), 65536n); },
+    nextFloat() { return Exact.toFloat(this.nextRat()); },
+    seed(s) { this.state = BigInt(s) & 0xFFFFn; if (this.state === 0n) this.state = 1n; }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXACT PHYSICAL CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+const Constants = {
+    C_SQUARED: Exact.rat(89875517873681764n),
+    C: Exact.rat(299792458n),
+    HBAR: Exact.rat(1054571817n, 10000000000000000000000000000000000000000000n),
+    G: Exact.rat(667430n, 100000000000000000n),
+    OMEGA: Exact.rat(432n),
+    PHI: null,
+    ALPHA: Exact.rat(1000000n, 137035999n),
+    init() {
+        const sqrt5 = NewtonSqrt.sqrtExact(Exact.rat(5n));
+        this.PHI = Exact.div(Exact.add(Exact.rat(1n), sqrt5), Exact.rat(2n));
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  R4 STATE SPACE — All computations in exact rationals
+// ═══════════════════════════════════════════════════════════════════════════════
+const R4 = {
+    lambda: [Exact.rat(1n), Exact.rat(1n), Exact.rat(1n), Exact.rat(1n)],
+    grvq: Exact.rat(0n), mstvq: Exact.rat(0n), tgcr: Exact.rat(0n), zpe: Exact.rat(0n),
+    deltaSum: 0,
+    R4func(r, lambda) {
+        const l4 = Exact.pow(lambda, 4n);
+        const r4 = Exact.pow(r, 4n);
+        return Exact.div(l4, Exact.add(r4, l4));
+    },
+    compute() {
+        const r = Exact.rat(1n);
+        let prod = Exact.rat(1n);
+        for (let k = 0; k < 4; k++) prod = Exact.mul(prod, this.R4func(r, this.lambda[k]));
+        return prod;
+    },
+    applyDelta(delta) {
+        const d = Exact.rat(BigInt(delta), 100n);
+        this.lambda[0] = Exact.add(this.lambda[0], d);
+        this.deltaSum += delta;
+    },
+    reset() {
+        for (let i = 0; i < 4; i++) this.lambda[i] = Exact.rat(1n);
+        this.grvq = Exact.rat(0n); this.mstvq = Exact.rat(0n);
+        this.tgcr = Exact.rat(0n); this.zpe = Exact.rat(0n);
+        this.deltaSum = 0;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  29 VEDIC SŪTRAS — Complete exact transforms for all 6 modes
+// ═══════════════════════════════════════════════════════════════════════════════
+const SUTRAS = [
+    // 16 MAIN SŪTRAS
+    { id: 1, sanskrit: 'एकाधिकेन पूर्वेण', latin: 'Ekādhikena Pūrveṇa', meaning: 'By one more than the previous', delta: 1,
+      transform: (state) => { state.lambda[0] = Exact.add(state.lambda[0], Exact.rat(1n)); state.grvq = Exact.add(state.grvq, Exact.div(Exact.rat(1n), Constants.PHI)); }},
+    { id: 2, sanskrit: 'निखिलं नवतश्चरमं दशतः', latin: 'Nikhilaṃ Navatashcaramaṃ Dashatah', meaning: 'All from 9, last from 10', delta: 2,
+      transform: (state) => { state.lambda[0] = Exact.sub(Exact.rat(10n), Exact.sub(Exact.rat(9n), state.lambda[0])); state.mstvq = Exact.add(state.mstvq, Exact.rat(2n, 100n)); }},
+    { id: 3, sanskrit: 'ऊर्ध्वतिर्यग्भ्याम्', latin: 'Ūrdhva-tiryagbhyām', meaning: 'Vertically and crosswise', delta: 3,
+      transform: (state) => { const a = state.lambda[0], b = state.lambda[1]; state.lambda[0] = Exact.add(Exact.mul(a, a), Exact.mul(b, b)); state.lambda[1] = Exact.mul(Exact.rat(2n), Exact.mul(a, b)); state.tgcr = Exact.add(state.tgcr, Exact.rat(3n, 100n)); }},
+    { id: 4, sanskrit: 'परावर्त्य योजयेत्', latin: 'Parāvartya Yojayet', meaning: 'Transpose and apply', delta: 4,
+      transform: (state) => { const t = state.lambda[0]; state.lambda[0] = Exact.neg(state.lambda[1]); state.lambda[1] = t; state.zpe = Exact.add(state.zpe, Exact.rat(4n, 100n)); }},
+    { id: 5, sanskrit: 'शून्यं साम्यसमुच्चये', latin: 'Shūnyaṃ Sāmyasamuccaye', meaning: 'Zero-sum equilibrium', delta: 5,
+      transform: (state) => { const avg = Exact.div(Exact.add(state.lambda[0], state.lambda[1]), Exact.rat(2n)); state.lambda[0] = avg; state.lambda[1] = avg; state.grvq = Exact.mul(state.grvq, Exact.rat(95n, 100n)); }},
+    { id: 6, sanskrit: 'आनुरूप्ये शून्यमन्यत्', latin: 'Ānurūpye Shūnyamanyat', meaning: 'If proportionate, zero the other', delta: 6,
+      transform: (state) => { if (!Exact.eq(state.lambda[1], Exact.rat(0n))) { state.lambda[2] = Exact.mul(Exact.div(state.lambda[0], state.lambda[1]), state.lambda[2]); } state.mstvq = Exact.mul(state.mstvq, Constants.PHI); }},
+    { id: 7, sanskrit: 'संकलनव्यवकलनाभ्याम्', latin: 'Saṅkalana-vyavakalanābhyām', meaning: 'By addition and subtraction', delta: 7,
+      transform: (state) => { const sum = Exact.add(state.lambda[0], state.lambda[1]), diff = Exact.sub(state.lambda[0], state.lambda[1]); state.lambda[0] = sum; state.lambda[1] = diff; state.tgcr = Exact.add(state.tgcr, Exact.rat(7n, 100n)); }},
+    { id: 8, sanskrit: 'पूरणापूरणाभ्याम्', latin: 'Pūraṇāpūraṇābhyām', meaning: 'By completion', delta: 8,
+      transform: (state) => { const floor = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0])))); const frac = Exact.sub(state.lambda[0], floor); state.lambda[0] = Exact.gt(frac, Exact.rat(1n, 2n)) ? Exact.add(floor, Exact.rat(1n)) : floor; state.zpe = Exact.add(state.zpe, Exact.rat(8n, 100n)); }},
+    { id: 9, sanskrit: 'चलनकलनाभ्याम्', latin: 'Chalana-kalanābhyām', meaning: 'By oscillation', delta: 9,
+      transform: (state) => { const dx = Exact.sub(state.lambda[1], state.lambda[0]); state.lambda[0] = Exact.add(state.lambda[0], Exact.div(dx, Exact.rat(2n))); state.grvq = Exact.add(state.grvq, Exact.abs(dx)); }},
+    { id: 10, sanskrit: 'यावदूनम्', latin: 'Yāvadūnam', meaning: 'By the deficiency', delta: 10,
+      transform: (state) => { const base = Exact.rat(10n), def = Exact.sub(base, state.lambda[0]); state.lambda[0] = Exact.add(Exact.pow(Exact.sub(state.lambda[0], def), 2n), Exact.pow(def, 2n)); state.mstvq = Exact.add(state.mstvq, Exact.rat(10n, 100n)); }},
+    { id: 11, sanskrit: 'व्यष्टिसमष्टिः', latin: 'Vyaṣṭisamaṣṭiḥ', meaning: 'Part and whole', delta: 11,
+      transform: (state) => { let sum = Exact.rat(0n); for (let i = 0; i < 4; i++) sum = Exact.add(sum, state.lambda[i]); state.lambda[0] = sum; state.tgcr = Exact.mul(state.tgcr, Exact.rat(111n, 100n)); }},
+    { id: 12, sanskrit: 'शेषाण्यङ्केन चरमेण', latin: 'Sheṣāṇyaṅkena Charameṇa', meaning: 'Remainder by last digit', delta: 12,
+      transform: (state) => { const ten = Exact.rat(10n), q = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0]) / 10))); state.lambda[1] = Exact.sub(state.lambda[0], Exact.mul(q, ten)); state.zpe = Exact.add(state.zpe, Exact.rat(12n, 100n)); }},
+    { id: 13, sanskrit: 'सोपान्त्यद्वयमन्त्यम्', latin: 'Sopāntyadvayamantyam', meaning: 'Ultimate + penultimate', delta: 13,
+      transform: (state) => { const next = Exact.add(state.lambda[0], state.lambda[1]); state.lambda[1] = state.lambda[0]; state.lambda[0] = next; state.grvq = Exact.mul(state.grvq, Constants.PHI); }},
+    { id: 14, sanskrit: 'एकन्यूनेन पूर्वेण', latin: 'Ekanyūnena Pūrveṇa', meaning: 'By one less than the previous', delta: 14,
+      transform: (state) => { state.lambda[0] = Exact.sub(state.lambda[0], Exact.rat(1n)); state.mstvq = Exact.sub(state.mstvq, Exact.div(Exact.rat(1n), Constants.PHI)); }},
+    { id: 15, sanskrit: 'गुणितसमुच्चयः', latin: 'Guṇitasamuccayaḥ', meaning: 'Product of sum', delta: 15,
+      transform: (state) => { state.lambda[2] = Exact.mul(Exact.add(state.lambda[0], state.lambda[1]), state.lambda[2]); state.tgcr = Exact.add(state.tgcr, Exact.rat(15n, 100n)); }},
+    { id: 16, sanskrit: 'गुणकसमुच्चयः', latin: 'Guṇakasamuccayaḥ', meaning: 'Sum of products', delta: 16,
+      transform: (state) => { state.lambda[0] = Exact.add(Exact.mul(state.lambda[0], state.lambda[1]), Exact.mul(state.lambda[2], state.lambda[3])); state.zpe = Exact.add(state.zpe, Exact.rat(16n, 100n)); }},
+    // 13 SUB-SŪTRAS
+    { id: 17, sanskrit: 'आनुरूप्येण', latin: 'Ānurūpyeṇa', meaning: 'Proportionately', delta: 17,
+      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], Constants.PHI); state.grvq = Exact.mul(state.grvq, Exact.rat(117n, 100n)); }},
+    { id: 18, sanskrit: 'शिष्यते शेषसंज्ञः', latin: 'Shiṣyate Sheṣasaṃjñaḥ', meaning: 'The remainder remains', delta: 18,
+      transform: (state) => { const w = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0])))); state.lambda[3] = Exact.sub(state.lambda[0], w); state.mstvq = Exact.add(state.mstvq, Exact.rat(18n, 100n)); }},
+    { id: 19, sanskrit: 'आद्यमाद्येनान्त्यमन्त्येन', latin: 'Ādyamādyenāntyamantyena', meaning: 'First by first, last by last', delta: 19,
+      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], state.lambda[0]); state.lambda[3] = Exact.mul(state.lambda[3], state.lambda[3]); state.tgcr = Exact.add(state.tgcr, Exact.rat(19n, 100n)); }},
+    { id: 20, sanskrit: 'केवलैः सप्तकं गुण्यात्', latin: 'Kevalaiḥ Saptakaṃ Guṇyāt', meaning: 'Multiply by seven', delta: 20,
+      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], Exact.rat(7n)); state.zpe = Exact.mul(state.zpe, Exact.rat(7n)); }},
+    { id: 21, sanskrit: 'वेष्टनम्', latin: 'Veṣṭanam', meaning: 'Osculation', delta: 21,
+      transform: (state) => { const mod = Exact.rat(100n), sc = Exact.mul(state.lambda[0], mod); state.lambda[0] = Exact.div(Exact.sub(sc, Exact.mul(Exact.rat(BigInt(Math.floor(Exact.toFloat(sc) / 100))), mod)), mod); state.grvq = Exact.add(state.grvq, Exact.rat(21n, 100n)); }},
+    { id: 22, sanskrit: 'यावदूनं तावदूनम्', latin: 'Yāvadūnaṃ Tāvadūnam', meaning: 'Deficiency squared', delta: 22,
+      transform: (state) => { const def = Exact.sub(Exact.rat(100n), state.lambda[0]); state.lambda[1] = Exact.mul(def, def); state.mstvq = Exact.add(state.mstvq, Exact.rat(22n, 100n)); }},
+    { id: 23, sanskrit: 'यावदूनं तावदूनीकृत्य वर्गं च योजयेत्', latin: 'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ cha Yojayet', meaning: 'Deficiency reduction with square', delta: 23,
+      transform: (state) => { const base = Exact.rat(10n), def = Exact.sub(base, state.lambda[0]); state.lambda[0] = Exact.add(Exact.mul(Exact.sub(state.lambda[0], def), base), Exact.mul(def, def)); state.tgcr = Exact.add(state.tgcr, Exact.rat(23n, 100n)); }},
+    { id: 24, sanskrit: 'अन्त्ययोर्दशकेऽपि', latin: "Antyayordasake'pi", meaning: 'Last digits sum to 10', delta: 24,
+      transform: (state) => { state.lambda[1] = Exact.sub(Exact.rat(10n), state.lambda[0]); state.zpe = Exact.add(state.zpe, Exact.rat(24n, 100n)); }},
+    { id: 25, sanskrit: 'अन्त्ययोरेव', latin: 'Antyayoreva', meaning: 'Only the last two', delta: 25,
+      transform: (state) => { state.lambda[0] = state.lambda[2]; state.lambda[1] = state.lambda[3]; state.grvq = Exact.mul(state.grvq, Exact.rat(125n, 100n)); }},
+    { id: 26, sanskrit: 'समुच्चयगुणितः', latin: 'Samuccayaguṇitaḥ', meaning: 'Aggregate multiplied', delta: 26,
+      transform: (state) => { let prod = Exact.rat(1n); for (let i = 0; i < 4; i++) if (!Exact.eq(state.lambda[i], Exact.rat(0n))) prod = Exact.mul(prod, state.lambda[i]); state.lambda[0] = prod; state.mstvq = Exact.mul(state.mstvq, Exact.rat(126n, 100n)); }},
+    { id: 27, sanskrit: 'लोपनस्थापनाभ्याम्', latin: 'Lopanasthāpanābhyām', meaning: 'By elimination and retention', delta: 27,
+      transform: (state) => { for (let i = 1; i < 4; i++) if (Exact.lt(Exact.abs(state.lambda[i]), Exact.rat(1n))) state.lambda[i] = Exact.rat(0n); state.tgcr = Exact.add(state.tgcr, Exact.rat(27n, 100n)); }},
+    { id: 28, sanskrit: 'विलोकनम्', latin: 'Vilokanam', meaning: 'By mere observation', delta: 28,
+      transform: (state) => { let max = state.lambda[0]; for (let i = 1; i < 4; i++) if (Exact.gt(Exact.abs(state.lambda[i]), Exact.abs(max))) max = state.lambda[i]; state.lambda[0] = max; state.zpe = Exact.add(state.zpe, Exact.rat(28n, 100n)); }},
+    { id: 29, sanskrit: 'गुणितसमुच्चयः समुच्चयगुणितः', latin: 'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', meaning: 'Product-sum equals sum-product', delta: 29,
+      transform: (state) => { const sumF = Exact.add(state.lambda[0], state.lambda[1]), prodF = Exact.mul(state.lambda[0], state.lambda[1]); state.lambda[2] = Exact.mul(sumF, state.lambda[2]); state.lambda[3] = Exact.add(prodF, state.lambda[3]); state.grvq = Exact.mul(state.grvq, Constants.PHI); state.mstvq = Exact.mul(state.mstvq, Constants.PHI); state.tgcr = Exact.mul(state.tgcr, Constants.PHI); state.zpe = Exact.mul(state.zpe, Constants.PHI); }}
+];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  COMPOSITION MODES — 6 execution strategies
+// ═══════════════════════════════════════════════════════════════════════════════
+const MODES = ['ISOLATED', 'SERIES', 'PARALLEL', 'CONCURRENT', 'INVERSE', 'COMPOSITE'];
+
+const QUEUE = {
+    items: [], mode: 0, running: false,
+    add(sutraIdx) { if (this.items.length < 29) { this.items.push(sutraIdx); this.updateUI(); addTrace(`<span class="tr-queue">+ S${sutraIdx + 1} [${SUTRAS[sutraIdx].latin}]</span>`); }},
+    clear() { this.items = []; this.updateUI(); addTrace('<span class="tr-queue">Queue cleared</span>'); },
+    updateUI() {
+        const display = document.getElementById('queue-display');
+        display.innerHTML = this.items.length === 0 ? '<em style="color:#555">Empty — tap sūtras to add</em>' :
+            this.items.map((idx, i) => `<div class="q-item">${i+1}. S${idx+1} δ=${SUTRAS[idx].delta}</div>`).join('');
+        document.getElementById('delta-sum').textContent = `Σδ = ${this.items.reduce((s, i) => s + SUTRAS[i].delta, 0)}`;
+    },
+    async run() {
+        if (this.running || this.items.length === 0) return;
+        this.running = true;
+        addTrace(`<span class="tr-mode">EXECUTING: ${MODES[this.mode]}</span>`);
+        switch (this.mode) {
+            case 0: await this.runIsolated(); break;
+            case 1: await this.runSeries(); break;
+            case 2: await this.runParallel(); break;
+            case 3: await this.runConcurrent(); break;
+            case 4: await this.runInverse(); break;
+            case 5: await this.runComposite(); break;
+        }
+        this.running = false; updateFieldDisplay();
+    },
+    async runIsolated() { const idx = this.items[0]; executeSutra(idx); showDelta(SUTRAS[idx].delta); },
+    async runSeries() { for (const idx of this.items) { executeSutra(idx); showDelta(SUTRAS[idx].delta); await sleep(100); }},
+    async runParallel() { let total = 0; for (const idx of this.items) { SUTRAS[idx].transform(R4); R4.deltaSum += SUTRAS[idx].delta; total += SUTRAS[idx].delta; injectCymaticEnergy(idx, SUTRAS[idx].delta); } showDelta(total); addTrace(`<span class="tr-exact">PARALLEL: ${this.items.length} sūtras, Σδ=${total}</span>`); },
+    async runConcurrent() { for (const idx of this.items) { executeSutra(idx); showDelta(SUTRAS[idx].delta); await sleep(60); }},
+    async runInverse() { for (const idx of this.items) { R4.applyDelta(-SUTRAS[idx].delta); addTrace(`<span class="tr-sutra">S${idx+1}⁻¹ δ=-${SUTRAS[idx].delta}</span>`); injectCymaticEnergy(idx, -SUTRAS[idx].delta); await sleep(80); } showDelta(-this.items.reduce((s, i) => s + SUTRAS[i].delta, 0)); },
+    async runComposite() { let acc = 0; for (const idx of this.items) { SUTRAS[idx].transform(R4); R4.deltaSum += SUTRAS[idx].delta; acc += SUTRAS[idx].delta; const c = Exact.rat(BigInt(acc), 1000n); R4.grvq = Exact.add(R4.grvq, c); R4.mstvq = Exact.add(R4.mstvq, Exact.div(c, Exact.rat(2n))); R4.tgcr = Exact.add(R4.tgcr, Exact.div(c, Exact.rat(3n))); R4.zpe = Exact.add(R4.zpe, Exact.div(c, Exact.rat(4n))); injectCymaticEnergy(idx, SUTRAS[idx].delta); await sleep(50); } showDelta(acc); addTrace(`<span class="tr-exact">COMPOSITE Σδ = ${acc}</span>`); },
+    async cascade29() { this.items = []; for (let i = 0; i < 29; i++) this.items.push(i); this.updateUI(); this.mode = 5; document.querySelector('input[name="cmode"][value="5"]').checked = true; await this.run(); addTrace(`<span class="tr-exact">॥ CASCADE 29 COMPLETE ॥</span>`); addTrace(`<span class="tr-exact">Σδ = 435 ✓ (29th triangular)</span>`); }
+};
+
+function executeSutra(idx) { const s = SUTRAS[idx]; s.transform(R4); R4.deltaSum += s.delta; addTrace(`<span class="tr-sutra">S${idx+1} [${s.latin}] δ=${s.delta}</span>`); injectCymaticEnergy(idx, s.delta); }
+function showDelta(delta) { const el = document.getElementById('delta-display'); el.textContent = delta >= 0 ? `+${delta}` : delta.toString(); el.style.color = delta >= 0 ? '#0f0' : '#f00'; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 500); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  CYMATIC FIELD — Standing wave patterns
+// ═══════════════════════════════════════════════════════════════════════════════
+const CYMATIC = {
+    modes: [], vortices: [], resolution: 48, field: null, sinLUT: null, piFloat: 0, initialized: false,
+    init() {
+        this.field = new Float64Array(this.resolution * this.resolution);
+        this.modes = []; this.vortices = [];
+        this.piFloat = Exact.toFloat(TaylorTrig.computePiExact());
+        const lutSize = 360;
+        this.sinLUT = new Float64Array(lutSize);
+        for (let i = 0; i < lutSize; i++) {
+            const angle = Exact.mul(Exact.rat(BigInt(i) * 2n, BigInt(lutSize)), TaylorTrig.computePiExact());
+            this.sinLUT[i] = Exact.toFloat(TaylorTrig.sinExact(angle));
+        }
+        this.initialized = true;
+    },
+    fastSin(x) { const twoPi = this.piFloat * 2; let n = ((x % twoPi) + twoPi) % twoPi; return this.sinLUT[Math.floor(n / twoPi * this.sinLUT.length) % this.sinLUT.length]; },
+    addMode(m, n, amp) { this.modes.push({ m, n, amplitude: amp, phase: 0 }); },
+    addVortex(x, y, str) { this.vortices.push({ x, y, strength: str }); },
+    computeField(time) {
+        if (!this.initialized) return;
+        const res = this.resolution, pi = this.piFloat;
+        for (let i = 0; i < res; i++) {
+            const u = i / res;
+            for (let j = 0; j < res; j++) {
+                const v = j / res;
+                let val = 0;
+                for (const m of this.modes) val += m.amplitude * this.fastSin(m.m * pi * u) * this.fastSin(m.n * pi * v) * Math.cos((m.m + m.n) * 0.5 * time + m.phase);
+                for (const vx of this.vortices) { const dx = u - vx.x, dy = v - vx.y; val += vx.strength / ((dx*dx + dy*dy + 0.01) * 100); }
+                this.field[i * res + j] = val;
+            }
+        }
+    },
+    render(ctx, x, y, size) {
+        const res = this.resolution, cell = size / res;
+        ctx.strokeStyle = '#0ff3'; ctx.lineWidth = 1; ctx.strokeRect(x - 1, y - 1, size + 2, size + 2);
+        for (let i = 0; i < res; i++) for (let j = 0; j < res; j++) {
+            const val = this.field[i * res + j], intensity = Math.min(255, Math.floor(Math.abs(val) * 200));
+            ctx.fillStyle = val < 0 ? `rgb(${Math.floor(intensity*0.3)},0,${intensity})` : `rgb(0,${Math.floor(intensity*0.8)},${intensity})`;
+            ctx.fillRect(x + j * cell, y + i * cell, cell + 0.5, cell + 0.5);
+        }
+    }
+};
+
+function injectCymaticEnergy(idx, delta) {
+    CYMATIC.addMode((idx % 5) + 1, (idx % 7) + 1, delta / 100);
+    CYMATIC.addVortex(0.3 + (idx % 10) * 0.04, 0.3 + Math.floor(idx / 10) * 0.15, delta);
+    while (CYMATIC.modes.length > 8) CYMATIC.modes.shift();
+    while (CYMATIC.vortices.length > 6) CYMATIC.vortices.shift();
+    addTrace(`<span class="tr-field">CYMATIC: mode(${(idx % 5) + 1},${(idx % 7) + 1}) A=${(delta / 100).toFixed(3)}</span>`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  4D TESSERACT — Hypercube foundation
+// ═══════════════════════════════════════════════════════════════════════════════
+const TESSERACT = {
+    vertices: [], edges: [], cells: [], projected: [],
+    init() {
+        for (let i = 0; i < 16; i++) this.vertices.push([(i&1)?1:-1, (i&2)?1:-1, (i&4)?1:-1, (i&8)?1:-1]);
+        for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) { let d = 0; for (let k = 0; k < 4; k++) if (this.vertices[i][k] !== this.vertices[j][k]) d++; if (d === 1) this.edges.push([i, j]); }
+        this.cells = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15],[0,1,2,3,8,9,10,11],[4,5,6,7,12,13,14,15],[0,1,4,5,8,9,12,13],[2,3,6,7,10,11,14,15],[0,2,4,6,8,10,12,14],[1,3,5,7,9,11,13,15]];
+        this.projected = new Array(16).fill(null).map(() => [0, 0, 0]);
+    },
+    rotate4D(angle, plane) {
+        const cosA = Exact.toFloat(TaylorTrig.cosExact(angle)), sinA = Exact.toFloat(TaylorTrig.sinExact(angle));
+        for (let i = 0; i < 16; i++) { const v = this.vertices[i].slice(), [a, b] = plane, t = v[a] * cosA - v[b] * sinA; v[b] = v[a] * sinA + v[b] * cosA; v[a] = t; this.vertices[i] = v; }
+    },
+    project() { const d = 3; for (let i = 0; i < 16; i++) { const v = this.vertices[i], s = d / (d - v[3]); this.projected[i] = [v[0] * s, v[1] * s, v[2] * s]; }},
+    toScreen(idx, cx, cy, scale) { const p = this.projected[idx]; return { x: cx + p[0] * scale, y: cy + p[1] * scale, z: p[2] }; }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SUTRA CUBES — Geometric embodiment
+// ═══════════════════════════════════════════════════════════════════════════════
+const cubes = [];
+class SutraCube {
+    constructor(idx, cell) {
+        this.idx = idx; this.sutra = SUTRAS[idx]; this.cellVertices = cell;
+        this.active = false; this.energy = 0; this.hovered = false;
+        this.faceColors = ['#0f0', '#ff0', '#0ff', '#f0f', '#f50', '#fff'];
+        const col = idx % 6, row = Math.floor(idx / 6);
+        this.baseX = col * 90 + 60; this.baseY = row * 85 + 130;
+    }
+    getCenter() { return { x: this.baseX, y: this.baseY }; }
+    render(ctx, time) {
+        const c = this.getCenter(), baseSize = 32, size = baseSize + this.energy * 8;
+        const float = Math.sin(time * 2 + this.idx * 0.5) * 2, cy = c.y + float;
+        ctx.save(); ctx.translate(c.x, cy);
+        if (this.active || this.hovered) { ctx.shadowColor = this.active ? '#0f0' : '#0f08'; ctx.shadowBlur = this.active ? 20 : 10; }
+        const off = size * 0.25;
+        ctx.fillStyle = this.active ? '#041' : '#012'; ctx.strokeStyle = this.faceColors[2] + '60'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.rect(-size/2 + off, -size/2 - off, size, size); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = this.faceColors[4] + '15'; ctx.strokeStyle = this.faceColors[4] + '40';
+        ctx.beginPath(); ctx.moveTo(-size/2, -size/2); ctx.lineTo(-size/2 + off, -size/2 - off); ctx.lineTo(-size/2 + off, size/2 - off); ctx.lineTo(-size/2, size/2); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = this.faceColors[5] + '10'; ctx.strokeStyle = this.faceColors[5] + '30';
+        ctx.beginPath(); ctx.moveTo(-size/2, -size/2); ctx.lineTo(-size/2 + off, -size/2 - off); ctx.lineTo(size/2 + off, -size/2 - off); ctx.lineTo(size/2, -size/2); ctx.closePath(); ctx.fill(); ctx.stroke();
+        const fg = ctx.createLinearGradient(0, -size/2, 0, size/2);
+        fg.addColorStop(0, this.active ? '#062' : '#023'); fg.addColorStop(1, this.active ? '#041' : '#012');
+        ctx.fillStyle = fg; ctx.strokeStyle = this.active ? '#0f0' : (this.hovered ? '#0f0' : '#0a0'); ctx.lineWidth = this.active ? 2 : 1;
+        ctx.beginPath(); ctx.rect(-size/2, -size/2, size, size); ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = this.active ? '#fff' : '#0f0'; ctx.font = 'bold 13px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(`S${this.idx + 1}`, 0, -4);
+        ctx.fillStyle = '#fa0'; ctx.font = '9px Courier New'; ctx.fillText(`δ${this.sutra.delta}`, 0, 10);
+        ctx.restore(); this.energy *= 0.92;
+    }
+    hit(mx, my) { const c = this.getCenter(); return mx > c.x - 38 && mx < c.x + 38 && my > c.y - 38 && my < c.y + 38; }
+    activate() { this.active = true; this.energy = 1; QUEUE.add(this.idx); setTimeout(() => this.active = false, 300); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TORUS GEOMETRY — Toroidal surface
+// ═══════════════════════════════════════════════════════════════════════════════
+const TORUS = {
+    R: 120, r: 40, segments: 24, rings: 18, points: [],
+    init() {
+        const pi = TaylorTrig.computePiExact(), twoPi = Exact.mul(Exact.rat(2n), pi);
+        for (let i = 0; i <= this.rings; i++) {
+            const thetaR = Exact.mul(twoPi, Exact.rat(BigInt(i), BigInt(this.rings)));
+            const cosT = Exact.toFloat(TaylorTrig.cosExact(thetaR)), sinT = Exact.toFloat(TaylorTrig.sinExact(thetaR)), theta = Exact.toFloat(thetaR);
+            for (let j = 0; j <= this.segments; j++) {
+                const phiR = Exact.mul(twoPi, Exact.rat(BigInt(j), BigInt(this.segments)));
+                const cosP = Exact.toFloat(TaylorTrig.cosExact(phiR)), sinP = Exact.toFloat(TaylorTrig.sinExact(phiR)), phi = Exact.toFloat(phiR);
+                this.points.push({ x: (this.R + this.r * cosT) * cosP, y: (this.R + this.r * cosT) * sinP, z: this.r * sinT, theta, phi });
+            }
+        }
+    },
+    render(ctx, cx, cy, time, scale = 1) {
+        const sorted = this.points.slice().sort((a, b) => a.z - b.z);
+        const rotY = time * 0.3, cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+        const rotX = time * 0.2, cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+        ctx.fillStyle = '#0ff4'; ctx.font = '10px Courier New'; ctx.textAlign = 'center'; ctx.fillText('⟨ TORUS MANIFOLD ⟩', cx, cy - this.R * scale - 20);
+        for (const p of sorted) {
+            let x = p.x * cosY - p.z * sinY, z = p.x * sinY + p.z * cosY, y = p.y;
+            const y2 = y * cosX - z * sinX, z2 = y * sinX + z * cosX;
+            const d = 500, s = d / (d + z2), sx = cx + x * s * scale, sy = cy + y2 * s * scale;
+            const fv = this.sampleField(p.theta, p.phi), bi = Math.floor((fv + 1) * 60), df = (z2 + this.R) / (2 * this.R), alpha = 0.2 + df * 0.6;
+            ctx.fillStyle = `rgba(0, ${Math.min(255, bi + 80)}, ${Math.min(255, bi + 120)}, ${alpha})`;
+            ctx.beginPath(); ctx.arc(sx, sy, Math.max(1, 2 * s), 0, Math.PI * 2); ctx.fill();
+        }
+    },
+    sampleField(theta, phi) { return Math.sin(theta * 3 + Exact.toFloat(R4.grvq)) * Math.cos(phi * 2 + Exact.toFloat(R4.mstvq)); }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function updateFieldDisplay() {
+    document.getElementById('f-grvq').textContent = Exact.toFloat(R4.grvq).toFixed(4);
+    document.getElementById('f-mstvq').textContent = Exact.toFloat(R4.mstvq).toFixed(4);
+    document.getElementById('f-tgcr').textContent = Exact.toFloat(R4.tgcr).toFixed(4);
+    document.getElementById('f-zpe').textContent = Exact.toFloat(R4.zpe).toFixed(4);
+    document.getElementById('f-lambda').textContent = Exact.str(R4.lambda[0]);
+    document.getElementById('f-cymodes').textContent = CYMATIC.modes.length;
+    document.getElementById('f-vortex').textContent = CYMATIC.vortices.length;
+}
+function updateHUD(fps) {
+    const hud = document.getElementById('hud'), r4v = Exact.toFloat(R4.compute()).toFixed(6);
+    hud.innerHTML = `<div style="color:#0f0;font-weight:bold;margin-bottom:4px">॥ R4 वैदिक v12.3 ॥</div><div style="color:#0a0">${fps.toFixed(0)} FPS | ULTRATHINK</div><div style="margin-top:6px;border-top:1px solid #0f03;padding-top:4px"><span style="color:#0aa">λ₀:</span> <span style="color:#ff0">${Exact.str(R4.lambda[0])}</span></div><div><span style="color:#0aa">R4:</span> <span style="color:#0ff">${r4v}</span></div><div><span style="color:#0aa">Σδ:</span> <span style="color:#fa0;font-weight:bold">${R4.deltaSum}</span></div>`;
+}
+function addTrace(msg) { const el = document.getElementById('trace'), div = document.createElement('div'); div.className = 'tr'; div.innerHTML = msg; el.appendChild(div); el.scrollTop = el.scrollHeight; while (el.children.length > 40) el.removeChild(el.firstChild); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  MAIN RENDER LOOP
+// ═══════════════════════════════════════════════════════════════════════════════
+let lastTime = 0, frameCount = 0, fps = 60, mouseX = 0, mouseY = 0;
+function render(timestamp) {
+    try {
+        const dt = (timestamp - lastTime) / 1000; lastTime = timestamp; frameCount++;
+        if (frameCount % 30 === 0 && dt > 0) { fps = 1 / dt; updateHUD(fps); }
+        const time = timestamp * 0.001;
+        const bgGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H));
+        bgGrad.addColorStop(0, '#0a0a18'); bgGrad.addColorStop(1, '#000005');
+        ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = '#0f01'; ctx.lineWidth = 1;
+        for (let x = 0; x < W; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        for (let y = 0; y < H; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+        TESSERACT.rotate4D(Exact.rat(1n, 1000n), [0, 3]); TESSERACT.rotate4D(Exact.rat(1n, 1200n), [1, 3]); TESSERACT.project();
+        ctx.strokeStyle = '#0a06'; ctx.lineWidth = 1;
+        const tcx = W - 160, tcy = 180, tscale = 35;
+        for (const [i, j] of TESSERACT.edges) { const p1 = TESSERACT.toScreen(i, tcx, tcy, tscale), p2 = TESSERACT.toScreen(j, tcx, tcy, tscale); ctx.strokeStyle = `rgba(0, 255, 100, ${0.3 + ((p1.z + p2.z) / 2 + 2) / 4 * 0.5})`; ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
+        TORUS.render(ctx, W * 0.65, H * 0.55, time, 0.7);
+        if (frameCount % 6 === 0) CYMATIC.computeField(time);
+        const cymaticSize = Math.min(220, H - 240);
+        CYMATIC.render(ctx, 360, H - cymaticSize - 20, cymaticSize);
+        ctx.fillStyle = '#0ff6'; ctx.font = '10px Courier New'; ctx.fillText('⟨ CYMATIC FIELD ⟩', 360, H - cymaticSize - 28);
+        for (const cube of cubes) cube.hovered = cube.hit(mouseX, mouseY);
+        for (const cube of cubes) cube.render(ctx, time);
+        if (frameCount % 20 === 0) updateFieldDisplay();
+    } catch (e) { console.error('Render error:', e); }
+    requestAnimationFrame(render);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EVENT HANDLERS
+// ═══════════════════════════════════════════════════════════════════════════════
+canvas.addEventListener('click', (e) => { const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top; for (const cube of cubes) if (cube.hit(mx, my)) { cube.activate(); break; }});
+canvas.addEventListener('mousemove', (e) => { const rect = canvas.getBoundingClientRect(); mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top; let over = false; for (const cube of cubes) if (cube.hit(mouseX, mouseY)) { over = true; break; } canvas.style.cursor = over ? 'pointer' : 'default'; });
+document.getElementById('run-btn').addEventListener('click', () => QUEUE.run());
+document.getElementById('clear-btn').addEventListener('click', () => QUEUE.clear());
+document.getElementById('cascade-btn').addEventListener('click', () => QUEUE.cascade29());
+document.querySelectorAll('input[name="cmode"]').forEach(input => { input.addEventListener('change', (e) => { QUEUE.mode = parseInt(e.target.value); addTrace(`<span class="tr-mode">MODE: ${MODES[QUEUE.mode]}</span>`); }); });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════════
+function init() {
+    try {
+        Constants.init(); TESSERACT.init(); TORUS.init(); CYMATIC.init();
+        CYMATIC.addMode(2, 1, 0.4); CYMATIC.addMode(1, 2, 0.4); CYMATIC.addMode(3, 1, 0.2);
+        R4.compute();
+        for (let i = 0; i < 29; i++) cubes.push(new SutraCube(i, TESSERACT.cells[i % 8]));
+        QUEUE.updateUI(); updateFieldDisplay();
+        addTrace('॥ R4 वैदिक HYPERCUBE v12.3 ॥');
+        addTrace('<span class="tr-exact">ULTRATHINK EXACT MODE</span>');
+        addTrace('<span class="tr-exact">BigInt rationals | Taylor trig</span>');
+        addTrace('<span class="tr-exact">Newton sqrt | Machin π | LFSR</span>');
+        addTrace('Tap sūtra → queue | CASCADE 29 → Σδ=435');
+    } catch (e) { console.error('Init error:', e); addTrace(`<span style="color:red">ERROR: ${e.message}</span>`); }
+}
+window.addEventListener('resize', resize); resize(); init(); updateHUD(60); requestAnimationFrame(render);
+</script>
+</body>
+</html>

@@ -73,6 +73,9 @@ pytket-cirq
 # ============================================================
 # DEEP LEARNING / TENSOR OPS (IF YOU WANT IT IN THE PIPELINE)
 # ============================================================
+torch
+torchvision
+torchaudio
 torch>=2.0.0  # Security: CVE fixes
 torchvision>=0.15.0  # Security: CVE fixes
 torchaudio>=2.0.0
@@ -83,6 +86,7 @@ tensornetwork
 # ============================================================
 # CRYPTOGRAPHY / HASHING / KEY MGMT (MAYA KEY LAYER)
 # ============================================================
+cryptography
 cryptography>=46.0.0  # Security: CVE fixes in 46.x
 blake3
 pynacl
@@ -113,6 +117,8 @@ redis
 orjson
 ujson
 msgpack
+protobuf
+pyyaml
 protobuf>=5.28.0  # Security: CVE-2024-7254 and others
 pyyaml>=6.0.2  # Security: CVE fixes
 tomlkit
@@ -128,6 +134,8 @@ scikit-image
 opencv-python
 soundfile
 librosa
+sounddevice
+simpleaudio
 
 # ============================================================
 # VISUALISATION / DASHBOARDS (LOCAL + WEB)
@@ -145,6 +153,14 @@ dash
 # ============================================================
 # APIS / NETWORK / ASYNC (CONTROL PLANES + SERVICES)
 # ============================================================
+requests
+httpx
+aiohttp
+websockets
+tenacity
+pydantic
+fastapi
+uvicorn
 requests>=2.32.0  # Security: CVE fixes
 httpx>=0.27.0  # Security: CVE fixes
 aiohttp>=3.10.0  # Security: CVE fixes
@@ -196,6 +212,11 @@ lark
 # ============================================================
 # DOCS / NOTEBOOKS (FOR REPRODUCIBLE RESEARCH PACKAGES)
 # ============================================================
+jupyterlab
+ipykernel
+notebook
+nbconvert
+jupyter-server
 jupyterlab>=4.0.0  # Security: Multiple CVE fixes
 ipykernel
 notebook>=7.0.0  # Security: CVE fixes
