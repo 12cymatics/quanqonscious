@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import inspect
-from time import perf_counter
+from time import perf_counter_ns
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
@@ -27,36 +27,53 @@ DOCTRINE_FIDELITY_TAG = "exact-symbolic-core"
 ArgumentResolver = Callable[[str, Any, SutraContext, Any], Tuple[Tuple[Any, ...], Dict[str, Any]]]
 
 
-def _prepare_args_for_sutra(func: Callable[..., Any], value: Any) -> List[Any]:
-    """Generate default positional arguments for a sutra function."""
+def _arg_value_for_param(name: str, value: Any) -> Any:
+    lowered = name.lower()
+    if any(
+        key in lowered
+        for key in (
+            "coeff",
+            "angles",
+            "values",
+            "parts",
+            "list",
+            "vector",
+        )
+    ):
+        return [value, value]
+    if any(key in lowered for key in ("denominator", "divisor", "modulus", "base")):
+        return 1 if value == 0 else value
+    if any(key in lowered for key in ("count", "steps", "degree", "order", "index")):
+        try:
+            parsed = int(abs(float(value)))
+            return parsed if parsed > 0 else 1
+        except (TypeError, ValueError):
+            return 1
+    return value
+
+
+def _prepare_call_for_sutra(func: Callable[..., Any], value: Any) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """Generate required positional/keyword arguments for a sutra function."""
 
     sig = inspect.signature(func)
     args: List[Any] = []
+    kwargs: Dict[str, Any] = {}
     for name, param in sig.parameters.items():
         if name in {"self", "ctx"}:
             continue
+        if param.default is not inspect.Parameter.empty:
+            continue
+        generated = _arg_value_for_param(name, value)
         if param.kind in (
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
         ):
-            if param.default is inspect.Parameter.empty:
-                if any(
-                    key in name
-                    for key in (
-                        "coeff",
-                        "angles",
-                        "values",
-                        "parts",
-                        "list",
-                        "vector",
-                    )
-                ):
-                    args.append([value, value])
-                elif any(key in name for key in ("denominator", "divisor", "modulus", "base")) and value == 0:
-                    args.append(1)
-                else:
-                    args.append(value)
-    return args
+            args.append(generated)
+        elif param.kind is inspect.Parameter.KEYWORD_ONLY:
+            kwargs[name] = generated
+    if not args and not kwargs:
+        args = [value]
+    return tuple(args), kwargs
 
 
 @dataclass
@@ -66,6 +83,7 @@ class SutraExecution:
     name: str
     output: Any
     elapsed_ns: int
+    source_file: Optional[str] = None
 
 
 @dataclass
@@ -95,7 +113,7 @@ class SimulationReport:
             "aggregate": self.aggregate,
             "wall_time_ns": self.wall_time_ns,
             "executions": [
-                {"name": exec.name, "elapsed_ns": exec.elapsed_ns, "output": exec.output}
+                {"name": exec.name, "elapsed_ns": exec.elapsed_ns, "output": exec.output, "source_file": exec.source_file}
                 for exec in self.executions
             ],
         }
@@ -127,10 +145,11 @@ def _execute_sutra(
     """Execute a sutra inside the current process."""
 
     repo = SutraRepository(context)
+    source = inspect.getsourcefile(repo._methods.get(name))
     start = perf_counter_ns()
     result = repo.call_sutra(name, *args, ctx=context, **kwargs)
     elapsed_ns = perf_counter_ns() - start
-    return SutraExecution(name=name, output=result, elapsed_ns=elapsed_ns)
+    return SutraExecution(name=name, output=result, elapsed_ns=elapsed_ns, source_file=source)
 
 
 def _execute_sutra_process(payload: Dict[str, Any]) -> SutraExecution:
@@ -190,9 +209,9 @@ class HybridQuantumClassicalSimulator:
         func = self._repository._methods.get(name)
         if func is None:
             return (current_value,), {}
-        positional = tuple(_prepare_args_for_sutra(func, current_value))
-        if positional:
-            return positional, {}
+        positional, keyword = _prepare_call_for_sutra(func, current_value)
+        if positional or keyword:
+            return positional, keyword
         return (current_value,), {}
 
     def _resolve_arguments(
@@ -226,7 +245,7 @@ class HybridQuantumClassicalSimulator:
                 name, aggregate_value, context, initial_value
             )
             if not args and not call_kwargs:
-                args = tuple(_prepare_args_for_sutra(repo._methods[name], aggregate_value))
+                args, call_kwargs = _prepare_call_for_sutra(repo._methods[name], aggregate_value)
             aggregate_value = repo.call_sutra(
                 name,
                 *args,
@@ -234,7 +253,8 @@ class HybridQuantumClassicalSimulator:
                 **call_kwargs,
             )
             elapsed_ns = perf_counter_ns() - start
-            execution = SutraExecution(name=name, output=aggregate_value, elapsed_ns=elapsed_ns)
+            source = inspect.getsourcefile(repo._methods.get(name))
+            execution = SutraExecution(name=name, output=aggregate_value, elapsed_ns=elapsed_ns, source_file=source)
             report.executions.append(execution)
             report.aggregate = self._aggregation(report.aggregate, execution)
 
@@ -261,7 +281,7 @@ class HybridQuantumClassicalSimulator:
                 name, value, local_context, value
             )
             if not args and not call_kwargs:
-                args = tuple(_prepare_args_for_sutra(self._repository._methods[name], value))
+                args, call_kwargs = _prepare_call_for_sutra(self._repository._methods[name], value)
             return _execute_sutra(name, args, call_kwargs, local_context)
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
@@ -305,7 +325,7 @@ class HybridQuantumClassicalSimulator:
         for name in self._sutra_names:
             args, call_kwargs = self._resolve_arguments(name, value, context, value)
             if not args and not call_kwargs:
-                args = tuple(_prepare_args_for_sutra(self._repository._methods[name], value))
+                args, call_kwargs = _prepare_call_for_sutra(self._repository._methods[name], value)
             payloads.append(
                 {
                     "name": name,
