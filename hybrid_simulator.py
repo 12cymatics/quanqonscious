@@ -14,6 +14,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from statistics import mean
 from typing import Any, Dict, List, Sequence, Tuple
+import inspect
 
 try:
     import numpy as np
@@ -69,24 +70,41 @@ class HybridRunSummary:
     final_value: float
 
 
-def _prepare_args(func: Any, value: Any) -> list:
-    import inspect
+def _arg_value_for_param(name: str, value: Any) -> Any:
+    lowered = name.lower()
+    if any(key in lowered for key in ("coeff", "angles", "values", "parts", "list", "vector")):
+        return [value, value]
+    if any(key in lowered for key in ("denominator", "divisor", "modulus", "base")):
+        return 1 if value == 0 else value
+    if any(key in lowered for key in ("count", "steps", "degree", "order", "index")):
+        try:
+            parsed = int(abs(float(value)))
+            return parsed if parsed > 0 else 1
+        except (TypeError, ValueError):
+            return 1
+    return value
 
+
+def _prepare_call(func: Any, value: Any) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     sig = inspect.signature(func)
     args = []
+    kwargs: Dict[str, Any] = {}
     for name, param in sig.parameters.items():
         if name in {"self", "ctx"}:
             continue
+        if param.default is not inspect.Parameter.empty:
+            continue
+        generated = _arg_value_for_param(name, value)
         if param.kind in (
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
         ):
-            if param.default is inspect.Parameter.empty:
-                if any(key in name for key in ("coeff", "angles", "values", "parts", "list", "vector")):
-                    args.append([value, value])
-                else:
-                    args.append(value)
-    return args
+            args.append(generated)
+        elif param.kind is inspect.Parameter.KEYWORD_ONLY:
+            kwargs[name] = generated
+    if not args and not kwargs:
+        args = [value]
+    return tuple(args), kwargs
 
 
 def _is_candidate(name: str) -> bool:
@@ -112,8 +130,8 @@ def select_sutra_names(repo: SutraRepository, target_count: int = 29) -> List[st
 def _call_sutra_in_process(name: str, value: float, mode: SutraMode) -> Tuple[str, Any]:
     repo = SutraRepository(SutraContext(mode=mode, parallel=False))
     func = repo._methods[name]
-    args = _prepare_args(func, value)
-    output = repo.call_sutra(name, *args, ctx=repo.context)
+    args, kwargs = _prepare_call(func, value)
+    output = repo.call_sutra(name, *args, ctx=repo.context, **kwargs)
     return name, output
 
 
@@ -160,8 +178,8 @@ def run_serial(value: float, mode: SutraMode, sutra_names: Sequence[str]) -> Hyb
     current = value
     for name in sutra_names:
         func = repo._methods[name]
-        args = _prepare_args(func, current)
-        current = repo.call_sutra(name, *args, ctx=ctx)
+        args, kwargs = _prepare_call(func, current)
+        current = repo.call_sutra(name, *args, ctx=ctx, **kwargs)
         results.append(SutraRunResult(name=name, output=current))
     return HybridRunSummary(mode="serial", results=results, final_value=_to_scalar(current))
 
@@ -172,8 +190,8 @@ def run_concurrent(value: float, mode: SutraMode, sutra_names: Sequence[str]) ->
 
     def run(name: str) -> SutraRunResult:
         func = repo._methods[name]
-        args = _prepare_args(func, value)
-        output = repo.call_sutra(name, *args, ctx=ctx)
+        args, kwargs = _prepare_call(func, value)
+        output = repo.call_sutra(name, *args, ctx=ctx, **kwargs)
         return SutraRunResult(name=name, output=output)
 
     results = []
@@ -212,6 +230,18 @@ def apply_audio_updates(cube: Any, results: Sequence[SutraRunResult], mix_mode: 
     )
 
 
+def _called_repo_files(repo: SutraRepository, sutra_names: Sequence[str]) -> List[str]:
+    files = set()
+    for name in sutra_names:
+        func = repo._methods.get(name)
+        if func is None:
+            continue
+        source = inspect.getsourcefile(func)
+        if source:
+            files.add(os.path.relpath(source, os.getcwd()))
+    return sorted(files)
+
+
 def _summary_dict(summary: HybridRunSummary) -> Dict[str, Any]:
     return {
         "mode": summary.mode,
@@ -220,9 +250,18 @@ def _summary_dict(summary: HybridRunSummary) -> Dict[str, Any]:
     }
 
 
+def _sanitize_ipykernel_value(raw: Any) -> float:
+    if raw is None:
+        return 1.0
+    text = str(raw).strip()
+    if text.endswith(".json") and "jupyter/runtime/kernel-" in text:
+        return 1.0
+    return float(text)
+
+
 def main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(description="Hybrid sutra simulator")
-    parser.add_argument("value", type=float, help="Base input value")
+    parser.add_argument("value", nargs="?", default="1.0", help="Base input value")
     parser.add_argument(
         "--mode",
         choices=["classical", "quantum", "hybrid", "maya_illusion", "sulba"],
@@ -237,8 +276,24 @@ def main(argv: Sequence[str]) -> int:
         default="runs/hybrid_run_report.json",
         help="Optional output JSON report path",
     )
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        filtered_unknown = []
+        skip_next = False
+        for token in unknown:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "-f":
+                skip_next = True
+                continue
+            if token.endswith(".json") and "jupyter/runtime/kernel-" in token:
+                continue
+            filtered_unknown.append(token)
+        if filtered_unknown:
+            parser.error(f"Unrecognized arguments: {' '.join(filtered_unknown)}")
 
+    input_value = _sanitize_ipykernel_value(args.value)
     mode = SutraMode[args.mode.upper()]
     repo = SutraRepository(SutraContext(mode=mode))
     sutra_names = select_sutra_names(repo, target_count=args.sutra_count)
@@ -260,11 +315,11 @@ def main(argv: Sequence[str]) -> int:
     summaries = []
     for run_mode in run_modes:
         if run_mode == "serial":
-            summary = run_serial(args.value, mode, sutra_names)
+            summary = run_serial(input_value, mode, sutra_names)
         elif run_mode == "concurrent":
-            summary = run_concurrent(args.value, mode, sutra_names)
+            summary = run_concurrent(input_value, mode, sutra_names)
         else:
-            summary = run_parallel(args.value, mode, sutra_names)
+            summary = run_parallel(input_value, mode, sutra_names)
         summaries.append(summary)
         if ipc is not None:
             ipc.start()
@@ -278,10 +333,12 @@ def main(argv: Sequence[str]) -> int:
 
     os.makedirs(os.path.dirname(args.report_path), exist_ok=True)
     report_payload = {
-        "input_value": args.value,
+        "input_value": input_value,
         "mode": args.mode,
         "sutra_count": args.sutra_count,
         "run_modes": run_modes,
+        "sutra_names": list(sutra_names),
+        "repo_files_called": _called_repo_files(repo, sutra_names),
         "summaries": [_summary_dict(summary) for summary in summaries],
     }
     with open(args.report_path, "w", encoding="utf-8") as f:
