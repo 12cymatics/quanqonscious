@@ -16,6 +16,7 @@ from fractions import Fraction
 from typing import Dict, Optional, Callable, Tuple, Union, List, Any
 from enum import Enum
 import copy
+import math
 
 from .lattice import ToroidalHypercube, LatticePoint
 
@@ -494,4 +495,5 @@ def _self_test():
     assert not state.validate_bounded(Fraction(3))
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()

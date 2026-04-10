@@ -143,6 +143,12 @@ class OperatorTrace:
     entries: List[TraceEntry] = field(default_factory=list)
     initial_state_hash: Optional[str] = None
 
+    @staticmethod
+    def _safe_fraction_repr(value: Fraction) -> str:
+        if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
+            return f"{float(value):.12e}"
+        return str(value)
+
     def log(self,
             operator: 'Operator',
             context: OperatorContext,
@@ -173,8 +179,13 @@ class OperatorTrace:
         sample = []
         for i, (coords, val) in enumerate(sorted(state._psi.items())):
             if i % max(1, len(state._psi) // 100) == 0:
-                sample.append((coords, str(val.real), str(val.imag)))
-        sample.append(('_total', str(state.total_norm_squared())))
+                sample.append((
+                    coords,
+                    self._safe_fraction_repr(val.real),
+                    self._safe_fraction_repr(val.imag),
+                ))
+        total = state.total_norm_squared()
+        sample.append(('_total', self._safe_fraction_repr(total)))
         return hashlib.sha256(str(sample).encode()).hexdigest()[:16]
 
     def verify_determinism(self, other: 'OperatorTrace') -> bool:
@@ -281,6 +292,18 @@ class Operator(ABC):
 
         return invariants, passed
 
+    @staticmethod
+    def _safe_scalar_text(value: Any) -> str:
+        if isinstance(value, Fraction):
+            if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
+                return f"{float(value):.12e}"
+        try:
+            return str(value)
+        except ValueError:
+            if isinstance(value, Fraction):
+                return f"{float(value):.12e}"
+            return repr(value)
+
     def __call__(self, state: FieldState, context: OperatorContext) -> FieldState:
         """
         Apply operator with logging and invariant checking.
@@ -305,9 +328,9 @@ class Operator(ABC):
         if context.trace is not None:
             output_norm = output_state.total_norm_squared()
             delta_summary = {
-                'input_norm_sq': str(input_norm),
-                'output_norm_sq': str(output_norm),
-                'delta_norm_sq': str(output_norm - input_norm),
+                'input_norm_sq': self._safe_scalar_text(input_norm),
+                'output_norm_sq': self._safe_scalar_text(output_norm),
+                'delta_norm_sq': self._safe_scalar_text(output_norm - input_norm),
             }
             context.trace.log(
                 self, context, state, output_state,
@@ -486,4 +509,5 @@ def _self_test():
     assert trace.entries[0].operator_name == "Identity"
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()

@@ -3,9 +3,9 @@
 Test script to verify CUDA-Quantum implementation in PCFE v3.0
 """
 
-import numpy as np
 import pytest
 
+np = pytest.importorskip("numpy")
 torch = pytest.importorskip("torch")
 cudaq = pytest.importorskip("cudaq")
 import time

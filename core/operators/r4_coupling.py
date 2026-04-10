@@ -507,4 +507,5 @@ def _self_test():
     assert final_energy is not None
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()

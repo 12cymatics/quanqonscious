@@ -44,27 +44,42 @@ elif _has_cudaq:
 else:
     print("[QuanQonscious] CUDA-Q not available – defaulting to Cirq simulator for quantum circuits.")
 
-# Make key submodules readily accessible via the package namespace
-# Import key submodules using relative imports so the package functions
-# correctly even if the directory name does not match the canonical
-# "QuanQonscious" package name used in setup.py.
-from . import ansatz, core_engine, sulba, zpe_solver, maya_cipher, performance, updater
-from . import hybrid_grvq_simulation_pipeline
-# Lazy loading: submodules are imported when accessed by name
+# Make key submodules readily accessible via lazy loading so optional
+# dependencies (e.g., numpy/cudaq/cupy) do not break basic package import.
 __all__ = [
     'ansatz', 'core_engine', 'sulba', 'zpe_solver', 'maya_cipher', 'performance',
-    'updater', 'hybrid_grvq_simulation_pipeline', 'SutraRepository'
+    'updater', 'hybrid_grvq_simulation_pipeline', 'SutraRepository',
+    'HybridQuantumClassicalSimulator', 'SimulationReport', 'SutraExecution'
 ]
 
 def __getattr__(name):
+    if name in {
+        'SutraRepository',
+        'HybridQuantumClassicalSimulator',
+        'SimulationReport',
+        'SutraExecution',
+    }:
+        if name == 'SutraRepository':
+            from .sutra_repository import SutraRepository as _SutraRepository
+            globals()[name] = _SutraRepository
+            return _SutraRepository
+        from .sutra_simulator import (
+            HybridQuantumClassicalSimulator as _HybridQuantumClassicalSimulator,
+            SimulationReport as _SimulationReport,
+            SutraExecution as _SutraExecution,
+        )
+        mapping = {
+            'HybridQuantumClassicalSimulator': _HybridQuantumClassicalSimulator,
+            'SimulationReport': _SimulationReport,
+            'SutraExecution': _SutraExecution,
+        }
+        globals().update(mapping)
+        return mapping[name]
     if name in __all__:
         module = __import__(f"{__name__}.{name}", fromlist=[name])
         globals()[name] = module
         return module
     raise AttributeError(f"module {__name__!r} has no attribute {name}")
-
-from .sutra_repository import SutraRepository
-from .sutra_simulator import HybridQuantumClassicalSimulator, SimulationReport, SutraExecution
 
 # Optionally, set a flag or config dict for use in modules (for example, default quantum backend choice)
 DEFAULT_QUANTUM_BACKEND = "cudaq" if _has_cudaq else "cirq"

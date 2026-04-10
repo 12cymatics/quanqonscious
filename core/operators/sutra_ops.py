@@ -1304,4 +1304,5 @@ def _self_test():
     assert result.validate_bounded(Fraction(10000))
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()
