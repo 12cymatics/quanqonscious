@@ -1,0 +1,492 @@
+{
+  "input_value": 1.0,
+  "mode": "hybrid",
+  "sutra_count": 29,
+  "run_modes": [
+    "serial",
+    "concurrent",
+    "parallel"
+  ],
+  "sutra_names": [
+    "ekadhikena_purvena",
+    "nikhilam_navatashcaramam_dashatah",
+    "urdhva_tiryagbhyam",
+    "paravartya_yojayet",
+    "shunyam_samyasamuccaye",
+    "anurupyena",
+    "sankalana_vyavakalanabhyam",
+    "purna_apurna_bhyam",
+    "chalana_kalana",
+    "yavadunam",
+    "vyashtisamanstih",
+    "sesanyankena_caramena",
+    "sopantyadvayamantyam",
+    "ekanyunena_purvena",
+    "gunitasamuccayah",
+    "gunakasamuccayah",
+    "anurupye_sunyamanyat",
+    "sisyate_sesasamjnah",
+    "adyamadyenantyamantyena",
+    "antyayordasakepi",
+    "antyayoreva",
+    "yavadunam_tavadunikrtya",
+    "samuccayagunitah",
+    "ekadhikena",
+    "paravartya",
+    "sankalana_samanantara",
+    "puranapuranabhyam",
+    "vargamula",
+    "gunita_samuccaya"
+  ],
+  "repo_files_called": [
+    "hybrid_simulator.py"
+  ],
+  "palindromic_alloy": {
+    "fraction": "-4723/25",
+    "decimal": -188.92,
+    "lucas_total": 75,
+    "terms": [
+      {
+        "k": 1,
+        "lucas": 2,
+        "weight_fraction": "2/75",
+        "s_k_1": -1,
+        "s_17_minus_k_1": 172,
+        "pair_sum": 171,
+        "term_fraction": "114/25"
+      },
+      {
+        "k": 2,
+        "lucas": 1,
+        "weight_fraction": "1/75",
+        "s_k_1": 57,
+        "s_17_minus_k_1": -11628,
+        "pair_sum": -11571,
+        "term_fraction": "-3857/25"
+      },
+      {
+        "k": 3,
+        "lucas": 3,
+        "weight_fraction": "1/25",
+        "s_k_1": -21,
+        "s_17_minus_k_1": 4048,
+        "pair_sum": 4027,
+        "term_fraction": "4027/25"
+      },
+      {
+        "k": 4,
+        "lucas": 4,
+        "weight_fraction": "4/75",
+        "s_k_1": 22,
+        "s_17_minus_k_1": -455,
+        "pair_sum": -433,
+        "term_fraction": "-1732/75"
+      },
+      {
+        "k": 5,
+        "lucas": 7,
+        "weight_fraction": "7/75",
+        "s_k_1": -35,
+        "s_17_minus_k_1": 106,
+        "pair_sum": 71,
+        "term_fraction": "497/75"
+      },
+      {
+        "k": 6,
+        "lucas": 11,
+        "weight_fraction": "11/75",
+        "s_k_1": 386,
+        "s_17_minus_k_1": -3003,
+        "pair_sum": -2617,
+        "term_fraction": "-28787/75"
+      },
+      {
+        "k": 7,
+        "lucas": 18,
+        "weight_fraction": "6/25",
+        "s_k_1": -462,
+        "s_17_minus_k_1": 1471,
+        "pair_sum": 1009,
+        "term_fraction": "6054/25"
+      },
+      {
+        "k": 8,
+        "lucas": 29,
+        "weight_fraction": "29/75",
+        "s_k_1": 56,
+        "s_17_minus_k_1": -165,
+        "pair_sum": -109,
+        "term_fraction": "-3161/75"
+      }
+    ]
+  },
+  "palindromic_alloy_injected": true,
+  "summaries": [
+    {
+      "mode": "serial",
+      "final_value": -191.74777517704288,
+      "results": [
+        {
+          "name": "ekadhikena_purvena",
+          "scalar_output": 1.0842401794061176
+        },
+        {
+          "name": "nikhilam_navatashcaramam_dashatah",
+          "scalar_output": 1.2818863319836822
+        },
+        {
+          "name": "urdhva_tiryagbhyam",
+          "scalar_output": 1.5583691868553051
+        },
+        {
+          "name": "paravartya_yojayet",
+          "scalar_output": 1.8650456947489247
+        },
+        {
+          "name": "shunyam_samyasamuccaye",
+          "scalar_output": 2.1418163250501796
+        },
+        {
+          "name": "anurupyena",
+          "scalar_output": 2.326396309394505
+        },
+        {
+          "name": "sankalana_vyavakalanabhyam",
+          "scalar_output": 2.3689290131578873
+        },
+        {
+          "name": "purna_apurna_bhyam",
+          "scalar_output": 2.247150015290744
+        },
+        {
+          "name": "chalana_kalana",
+          "scalar_output": 1.9748053369372862
+        },
+        {
+          "name": "yavadunam",
+          "scalar_output": 1.5972480546077543
+        },
+        {
+          "name": "vyashtisamanstih",
+          "scalar_output": 1.1742471387001956
+        },
+        {
+          "name": "sesanyankena_caramena",
+          "scalar_output": 0.7581229928081159
+        },
+        {
+          "name": "sopantyadvayamantyam",
+          "scalar_output": 0.3790027720558779
+        },
+        {
+          "name": "ekanyunena_purvena",
+          "scalar_output": 0.04395045176208806
+        },
+        {
+          "name": "gunitasamuccayah",
+          "scalar_output": -0.2534544388963094
+        },
+        {
+          "name": "gunakasamuccayah",
+          "scalar_output": -0.5225237086229055
+        },
+        {
+          "name": "anurupye_sunyamanyat",
+          "scalar_output": -0.7702480414949019
+        },
+        {
+          "name": "sisyate_sesasamjnah",
+          "scalar_output": -1.0009669389492746
+        },
+        {
+          "name": "adyamadyenantyamantyena",
+          "scalar_output": -1.217461313686273
+        },
+        {
+          "name": "antyayordasakepi",
+          "scalar_output": -1.4216435297341776
+        },
+        {
+          "name": "antyayoreva",
+          "scalar_output": -1.6148584028084338
+        },
+        {
+          "name": "yavadunam_tavadunikrtya",
+          "scalar_output": -1.7980505649372414
+        },
+        {
+          "name": "samuccayagunitah",
+          "scalar_output": -1.9718641843597466
+        },
+        {
+          "name": "ekadhikena",
+          "scalar_output": -2.1367056438789853
+        },
+        {
+          "name": "paravartya",
+          "scalar_output": -2.292783134445339
+        },
+        {
+          "name": "sankalana_samanantara",
+          "scalar_output": -2.4401312542515288
+        },
+        {
+          "name": "puranapuranabhyam",
+          "scalar_output": -2.578624790346426
+        },
+        {
+          "name": "vargamula",
+          "scalar_output": -2.7079843617100505
+        },
+        {
+          "name": "gunita_samuccaya",
+          "scalar_output": -2.8277751770428967
+        }
+      ]
+    },
+    {
+      "mode": "concurrent",
+      "final_value": -190.168515665669,
+      "results": [
+        {
+          "name": "ekadhikena_purvena",
+          "scalar_output": 1.0842401794061176
+        },
+        {
+          "name": "nikhilam_navatashcaramam_dashatah",
+          "scalar_output": 1.203510913470089
+        },
+        {
+          "name": "urdhva_tiryagbhyam",
+          "scalar_output": 1.3030149839354286
+        },
+        {
+          "name": "paravartya_yojayet",
+          "scalar_output": 1.3782001208578512
+        },
+        {
+          "name": "shunyam_samyasamuccaye",
+          "scalar_output": 1.4248584087021285
+        },
+        {
+          "name": "anurupyena",
+          "scalar_output": 1.4392004185823617
+        },
+        {
+          "name": "sankalana_vyavakalanabhyam",
+          "scalar_output": 1.4179238382608748
+        },
+        {
+          "name": "purna_apurna_bhyam",
+          "scalar_output": 1.3582756089544752
+        },
+        {
+          "name": "chalana_kalana",
+          "scalar_output": 1.2581066591086634
+        },
+        {
+          "name": "yavadunam",
+          "scalar_output": 1.115918418388526
+        },
+        {
+          "name": "vyashtisamanstih",
+          "scalar_output": 0.9309003990784244
+        },
+        {
+          "name": "sesanyankena_caramena",
+          "scalar_output": 0.7029582456246641
+        },
+        {
+          "name": "sopantyadvayamantyam",
+          "scalar_output": 0.4327317748189257
+        },
+        {
+          "name": "ekanyunena_purvena",
+          "scalar_output": 0.12160265762374578
+        },
+        {
+          "name": "gunitasamuccayah",
+          "scalar_output": -0.22830847268385762
+        },
+        {
+          "name": "gunakasamuccayah",
+          "scalar_output": -0.6141555641656413
+        },
+        {
+          "name": "anurupye_sunyamanyat",
+          "scalar_output": -1.0323912807304751
+        },
+        {
+          "name": "sisyate_sesasamjnah",
+          "scalar_output": -1.4788015273667177
+        },
+        {
+          "name": "adyamadyenantyamantyena",
+          "scalar_output": -1.9485500283699255
+        },
+        {
+          "name": "antyayordasakepi",
+          "scalar_output": -2.4362324865434664
+        },
+        {
+          "name": "antyayoreva",
+          "scalar_output": -2.9359397220398176
+        },
+        {
+          "name": "yavadunam_tavadunikrtya",
+          "scalar_output": -3.441329066811876
+        },
+        {
+          "name": "samuccayagunitah",
+          "scalar_output": -3.945703176112083
+        },
+        {
+          "name": "ekadhikena",
+          "scalar_output": -4.4420953135768855
+        },
+        {
+          "name": "paravartya",
+          "scalar_output": -4.923360072520925
+        },
+        {
+          "name": "sankalana_samanantara",
+          "scalar_output": -5.3822684143696575
+        },
+        {
+          "name": "puranapuranabhyam",
+          "scalar_output": -5.81160583677065
+        },
+        {
+          "name": "vargamula",
+          "scalar_output": -6.204272429778296
+        },
+        {
+          "name": "gunita_samuccaya",
+          "scalar_output": -6.553383539373439
+        }
+      ]
+    },
+    {
+      "mode": "parallel",
+      "final_value": -190.168515665669,
+      "results": [
+        {
+          "name": "ekadhikena_purvena",
+          "scalar_output": 1.0842401794061176
+        },
+        {
+          "name": "nikhilam_navatashcaramam_dashatah",
+          "scalar_output": 1.203510913470089
+        },
+        {
+          "name": "urdhva_tiryagbhyam",
+          "scalar_output": 1.3030149839354286
+        },
+        {
+          "name": "paravartya_yojayet",
+          "scalar_output": 1.3782001208578512
+        },
+        {
+          "name": "shunyam_samyasamuccaye",
+          "scalar_output": 1.4248584087021285
+        },
+        {
+          "name": "anurupyena",
+          "scalar_output": 1.4392004185823617
+        },
+        {
+          "name": "sankalana_vyavakalanabhyam",
+          "scalar_output": 1.4179238382608748
+        },
+        {
+          "name": "purna_apurna_bhyam",
+          "scalar_output": 1.3582756089544752
+        },
+        {
+          "name": "chalana_kalana",
+          "scalar_output": 1.2581066591086634
+        },
+        {
+          "name": "yavadunam",
+          "scalar_output": 1.115918418388526
+        },
+        {
+          "name": "vyashtisamanstih",
+          "scalar_output": 0.9309003990784244
+        },
+        {
+          "name": "sesanyankena_caramena",
+          "scalar_output": 0.7029582456246641
+        },
+        {
+          "name": "sopantyadvayamantyam",
+          "scalar_output": 0.4327317748189257
+        },
+        {
+          "name": "ekanyunena_purvena",
+          "scalar_output": 0.12160265762374578
+        },
+        {
+          "name": "gunitasamuccayah",
+          "scalar_output": -0.22830847268385762
+        },
+        {
+          "name": "gunakasamuccayah",
+          "scalar_output": -0.6141555641656413
+        },
+        {
+          "name": "anurupye_sunyamanyat",
+          "scalar_output": -1.0323912807304751
+        },
+        {
+          "name": "sisyate_sesasamjnah",
+          "scalar_output": -1.4788015273667177
+        },
+        {
+          "name": "adyamadyenantyamantyena",
+          "scalar_output": -1.9485500283699255
+        },
+        {
+          "name": "antyayordasakepi",
+          "scalar_output": -2.4362324865434664
+        },
+        {
+          "name": "antyayoreva",
+          "scalar_output": -2.9359397220398176
+        },
+        {
+          "name": "yavadunam_tavadunikrtya",
+          "scalar_output": -3.441329066811876
+        },
+        {
+          "name": "samuccayagunitah",
+          "scalar_output": -3.945703176112083
+        },
+        {
+          "name": "ekadhikena",
+          "scalar_output": -4.4420953135768855
+        },
+        {
+          "name": "paravartya",
+          "scalar_output": -4.923360072520925
+        },
+        {
+          "name": "sankalana_samanantara",
+          "scalar_output": -5.3822684143696575
+        },
+        {
+          "name": "puranapuranabhyam",
+          "scalar_output": -5.81160583677065
+        },
+        {
+          "name": "vargamula",
+          "scalar_output": -6.204272429778296
+        },
+        {
+          "name": "gunita_samuccaya",
+          "scalar_output": -6.553383539373439
+        }
+      ]
+    }
+  ]
+}
