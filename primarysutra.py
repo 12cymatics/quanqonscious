@@ -1,176 +1,48 @@
 from typing import Any
-import math
-
-try:
-    import numpy as np
-except Exception:  # pragma: no cover - allow scalar-mode execution without numpy
-    class _NumpyFallback:
-        ndarray = tuple
-        pi = math.pi
-        float32 = float
-
-        @staticmethod
-        def size(x):
-            return len(x) if hasattr(x, "__len__") else 1
-
-        @staticmethod
-        def array(x):
-            if isinstance(x, (list, tuple)):
-                return list(x)
-            return x
-
-        @staticmethod
-        def max(x):
-            return max(x) if hasattr(x, "__iter__") else x
-
-        @staticmethod
-        def min(x):
-            return min(x) if hasattr(x, "__iter__") else x
-
-        @staticmethod
-        def ceil(x):
-            return math.ceil(x)
-
-        @staticmethod
-        def log2(x):
-            return math.log2(x)
-
-        @staticmethod
-        def where(condition, a, b):
-            return a if condition else b
-
-        @staticmethod
-        def abs(x):
-            return abs(x)
-
-        @staticmethod
-        def sign(x):
-            return 1 if x >= 0 else -1
-
-        @staticmethod
-        def zeros_like(x):
-            return 0 if not hasattr(x, "__len__") else [0 for _ in x]
-
-        @staticmethod
-        def ones_like(x):
-            return 1 if not hasattr(x, "__len__") else [1 for _ in x]
-
-        @staticmethod
-        def zeros(shape):
-            if isinstance(shape, int):
-                return [0 for _ in range(shape)]
-            if isinstance(shape, (tuple, list)) and len(shape) == 1:
-                return [0 for _ in range(shape[0])]
-            return 0
-
-        @staticmethod
-        def clip(x, a_min, a_max):
-            return max(a_min, min(a_max, x))
-
-        @staticmethod
-        def sum(x, axis=None):
-            return sum(x)
-
-        @staticmethod
-        def mean(x):
-            if not hasattr(x, "__len__") or len(x) == 0:
-                return x
-            return sum(x) / len(x)
-
-        @staticmethod
-        def all(x):
-            return all(x)
-
-        @staticmethod
-        def arcsin(x):
-            return math.asin(x)
-
-        @staticmethod
-        def exp(x):
-            return math.exp(x)
-
-        @staticmethod
-        def sqrt(x):
-            return math.sqrt(x)
-
-    np = _NumpyFallback()
-
-try:
-    import cirq
-except Exception:  # pragma: no cover - optional dependency
-    cirq = None
-
-try:
-    import cudaq
-except Exception:  # pragma: no cover - optional dependency
-    cudaq = None
-
-try:
-    import matplotlib.pyplot as plt
-except Exception:  # pragma: no cover - optional dependency
-    class plt:
-        @staticmethod
-        def plot(*_, **__):
-            return None
-
-        @staticmethod
-        def show(*_, **__):
-            return None
-
-try:
-    import scipy.linalg as la
-except Exception:  # pragma: no cover - optional dependency
-    la = None
-
-try:
-    import pandas as pd
-except Exception:  # pragma: no cover - optional dependency
-    pd = None
-
-try:
-    import sympy as sp
-except Exception:  # pragma: no cover - optional dependency
-    sp = None
-
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
-    TORCH_AVAILABLE = False
-
-    class _TorchPlaceholder:
-        class Tensor:
-            pass
-
-        class cuda:
-            @staticmethod
-            def is_available() -> bool:
-                return False
-
-            @staticmethod
-            def get_device_name(_idx: int) -> str:
-                return "cpu"
-
-        @staticmethod
-        def device(name: str) -> str:
-            return name
-
-        @staticmethod
-        def tensor(*args: Any, **kwargs: Any) -> Any:
-            return args[0] if args else None
-
-    torch = _TorchPlaceholder()
+import numpy as np
+import cirq
+import cudaq
+import torch
+import matplotlib.pyplot as plt
+import scipy.linalg as la
 
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
+from types import ModuleType
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import pandas as pd
+import sympy as sp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("VedicSutras")
+
+
+def _enforce_heavy_dependencies() -> None:
+    required = {
+        "numpy": np,
+        "pandas": pd,
+        "sympy": sp,
+        "cirq": cirq,
+        "cudaq": cudaq,
+        "torch": torch,
+        "matplotlib.pyplot": plt,
+        "scipy.linalg": la,
+    }
+    missing = [name for name, module in required.items() if not isinstance(module, ModuleType)]
+    if missing:
+        deps = ", ".join(missing)
+        raise ImportError(
+            f"Missing required heavy dependencies for VedicSutras runtime: {deps}. "
+            "Install and configure all dependencies before executing simulations."
+        )
+
+
+_enforce_heavy_dependencies()
 
 class SutraMode(Enum):
     """Enumeration of operation modes for Vedic sutras"""
@@ -211,25 +83,18 @@ class VedicSutras:
         self.context = context if context else SutraContext()
         
         # Initialize GPU if requested and available
-        if self.context.use_gpu and torch is not None and torch.cuda.is_available():
+        if self.context.use_gpu and torch.cuda.is_available():
             self.context.device = torch.device("cuda")
             logger.info(
                 f"Using GPU device: {torch.cuda.get_device_name(0)}"
             )
         else:
             self.context.use_gpu = False
-            self.context.device = torch.device("cpu") if TORCH_AVAILABLE else 'cpu'
-            if torch is not None:
-                self.context.device = torch.device("cpu")
-            else:
-                self.context.device = "cpu"
+            self.context.device = torch.device("cpu")
             logger.info("Using CPU for computations")
             
-        # Initialize quantum backend if in quantum or hybrid mode and cudaq available
-        if (
-            self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]
-            and cudaq is not None
-        ):
+        # Initialize quantum backend if in quantum or hybrid mode
+        if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
             if self.context.quantum_backend is None:
                 # Default to CUDAQ simulator
                 self.quantum_platform = cudaq.get_platform()
@@ -240,11 +105,6 @@ class VedicSutras:
                 self.quantum_platform = self.context.quantum_backend
         else:
             self.quantum_platform = None
-            if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
-                logger.warning(
-                    "CUDA-Quantum not available; falling back to classical mode"
-                )
-                self.context.mode = SutraMode.CLASSICAL
         
         # Performance tracking
         self.performance_history = []
@@ -271,7 +131,7 @@ class VedicSutras:
     
     def _to_device(self, x):
         """Convert input to appropriate device (GPU tensor or CPU array)"""
-        if self.context.use_gpu and torch is not None:
+        if self.context.use_gpu:
             if isinstance(x, torch.Tensor):
                 return x.to(self.context.device)
             elif isinstance(x, np.ndarray):
@@ -284,7 +144,7 @@ class VedicSutras:
     
     def _from_device(self, x, original_type):
         """Convert result back to original type from device"""
-        if self.context.use_gpu and torch is not None and isinstance(x, torch.Tensor):
+        if self.context.use_gpu and isinstance(x, torch.Tensor):
             if isinstance(original_type, np.ndarray):
                 return x.cpu().numpy()
             elif isinstance(original_type, (int, float, complex)):

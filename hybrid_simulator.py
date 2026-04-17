@@ -7,19 +7,18 @@ in serial, concurrent, and parallel modes with FM8-style audio control.
 from __future__ import annotations
 
 import argparse
+import math
 import json
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
+from fractions import Fraction
 from statistics import mean
 from typing import Any, Dict, List, Sequence, Tuple
 import inspect
 
-try:
-    import numpy as np
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    np = None
+import numpy as np
 
 from qiskit_backend import execute_ghz
 from sutra_repository import SutraContext, SutraMode, SutraRepository
@@ -68,6 +67,51 @@ class HybridRunSummary:
     mode: str
     results: List[SutraRunResult]
     final_value: float
+
+
+def compute_palindromic_alloy() -> Dict[str, Any]:
+    """Compute Λ_pal with exact rational arithmetic from integer sutra coefficients."""
+    lucas = (2, 1, 3, 4, 7, 11, 18, 29)
+    lucas_total = sum(lucas)
+
+    def d_k(k: int) -> int:
+        return (k % 4) + 2
+
+    def s_k_at_one(k: int) -> int:
+        degree = d_k(k)
+        total = 0
+        for i in range(degree + 1):
+            sign = -1 if ((i * k) % 2) else 1
+            total += sign * math.comb(k + degree, i)
+        return total
+
+    terms: List[Dict[str, Any]] = []
+    weighted_sum = Fraction(0, 1)
+    for idx, lucas_k in enumerate(lucas, start=1):
+        s_left = s_k_at_one(idx)
+        s_right = s_k_at_one(17 - idx)
+        pair_sum = s_left + s_right
+        weight = Fraction(lucas_k, lucas_total)
+        term_value = weight * pair_sum
+        weighted_sum += term_value
+        terms.append(
+            {
+                "k": idx,
+                "lucas": lucas_k,
+                "weight_fraction": f"{weight.numerator}/{weight.denominator}",
+                "s_k_1": s_left,
+                "s_17_minus_k_1": s_right,
+                "pair_sum": pair_sum,
+                "term_fraction": f"{term_value.numerator}/{term_value.denominator}",
+            }
+        )
+
+    return {
+        "fraction": f"{weighted_sum.numerator}/{weighted_sum.denominator}",
+        "decimal": float(weighted_sum),
+        "lucas_total": lucas_total,
+        "terms": terms,
+    }
 
 
 def _arg_value_for_param(name: str, value: Any) -> Any:
@@ -272,6 +316,11 @@ def main(argv: Sequence[str]) -> int:
     parser.add_argument("--enable-audio", action="store_true", help="Send audio updates")
     parser.add_argument("--sutra-count", type=int, default=29, help="Number of sutras to execute")
     parser.add_argument(
+        "--inject-palindromic-alloy",
+        action="store_true",
+        help="Inject the computed Λ_pal value into each run-mode final scalar",
+    )
+    parser.add_argument(
         "--report-path",
         default="runs/hybrid_run_report.json",
         help="Optional output JSON report path",
@@ -313,6 +362,8 @@ def main(argv: Sequence[str]) -> int:
     run_modes = ["serial", "concurrent", "parallel"] if args.run_all_modes else ["serial"]
 
     summaries = []
+    alloy_payload = compute_palindromic_alloy()
+    alloy_decimal = alloy_payload["decimal"]
     for run_mode in run_modes:
         if run_mode == "serial":
             summary = run_serial(input_value, mode, sutra_names)
@@ -320,6 +371,8 @@ def main(argv: Sequence[str]) -> int:
             summary = run_concurrent(input_value, mode, sutra_names)
         else:
             summary = run_parallel(input_value, mode, sutra_names)
+        if args.inject_palindromic_alloy:
+            summary.final_value += alloy_decimal
         summaries.append(summary)
         if ipc is not None:
             ipc.start()
@@ -335,10 +388,14 @@ def main(argv: Sequence[str]) -> int:
     report_payload = {
         "input_value": input_value,
         "mode": args.mode,
+        "python_executable": sys.executable,
+        "python_version": sys.version,
         "sutra_count": args.sutra_count,
         "run_modes": run_modes,
         "sutra_names": list(sutra_names),
         "repo_files_called": _called_repo_files(repo, sutra_names),
+        "palindromic_alloy": alloy_payload,
+        "palindromic_alloy_injected": args.inject_palindromic_alloy,
         "summaries": [_summary_dict(summary) for summary in summaries],
     }
     with open(args.report_path, "w", encoding="utf-8") as f:
