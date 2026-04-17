@@ -31,7 +31,36 @@ from sutra_repository import SutraContext, SutraMode, SutraRepository
 
 BUNDLE_SCHEMA_VERSION = "hsqcp.bundle.v1"
 BENCHMARK_PROTOCOL_VERSION = "hsqcp.benchmark.v1"
+ROUTING_SCHEMA_VERSION = "hsqcp.routing.v1"
 DEFAULT_BENCHMARK_SEEDS = ("1", "1618/1000", "2", "31415926535/10000000000")
+DEFAULT_GRVQ_BETA_SCALE = Fraction(1, 1)
+DEFAULT_GRVQ_GAMMA_SCALE = Fraction(1, 1)
+DEFAULT_ENGINE_REBUILD_INTERVAL = 64
+DEFAULT_ENGINE_DRIFT_THRESHOLD = Fraction(1, 1_000_000)
+
+FUSION_PROFILES: Dict[str, Dict[str, Any]] = {
+    "throughput": {
+        "grvq_beta_scale": Fraction(6, 5),
+        "grvq_gamma_scale": Fraction(11, 10),
+        "engine_rebuild_interval": 128,
+        "engine_drift_threshold": Fraction(1, 100_000),
+        "max_workers": 16,
+    },
+    "stability": {
+        "grvq_beta_scale": Fraction(1, 1),
+        "grvq_gamma_scale": Fraction(1, 1),
+        "engine_rebuild_interval": 48,
+        "engine_drift_threshold": Fraction(1, 5_000_000),
+        "max_workers": 8,
+    },
+    "quantum_heavy": {
+        "grvq_beta_scale": Fraction(7, 5),
+        "grvq_gamma_scale": Fraction(13, 10),
+        "engine_rebuild_interval": 32,
+        "engine_drift_threshold": Fraction(1, 1_000_000),
+        "max_workers": 12,
+    },
+}
 
 
 def _resolve_git_commit() -> str:
@@ -120,6 +149,17 @@ def parse_exact_rational(raw: str) -> Fraction:
     if not value:
         raise ValueError("Empty rational value is not allowed")
     return Fraction(value)
+
+
+def resolve_fusion_profile(name: Optional[str]) -> Dict[str, Any]:
+    if not name:
+        return {}
+    lowered = name.lower()
+    profile = FUSION_PROFILES.get(lowered)
+    if profile is None:
+        options = ", ".join(sorted(FUSION_PROFILES))
+        raise ValueError(f"Unknown fusion profile '{name}'. Options: {options}")
+    return profile
 
 
 @dataclass(frozen=True)
@@ -509,6 +549,62 @@ def _sanitize_ipykernel_value(raw: Optional[str]) -> str:
     return candidate
 
 
+def assign_backend_stage(sutra_name: str) -> str:
+    lowered = sutra_name.lower()
+    quantum_markers = ("quantum", "entang", "phase", "maya", "grvq")
+    hybrid_markers = ("tgcr", "zpe", "toroid", "hybrid")
+    if any(marker in lowered for marker in quantum_markers):
+        return "quantum"
+    if any(marker in lowered for marker in hybrid_markers):
+        return "hybrid"
+    return "classical"
+
+
+def build_routing_manifest(
+    bundles: Sequence[HybridSimulationBundle],
+    *,
+    fusion_profile: str,
+    max_workers: Optional[int],
+) -> Dict[str, Any]:
+    validate_benchmark_bundle_set(bundles)
+    first = bundles[0]
+    routes = [
+        {"sutra_name": name, "backend": assign_backend_stage(name)}
+        for name in sorted(first.sutra_names)
+    ]
+    backend_counts = {
+        "classical": sum(1 for row in routes if row["backend"] == "classical"),
+        "quantum": sum(1 for row in routes if row["backend"] == "quantum"),
+        "hybrid": sum(1 for row in routes if row["backend"] == "hybrid"),
+    }
+    return {
+        "schema_version": ROUTING_SCHEMA_VERSION,
+        "benchmark_protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "fusion_profile": fusion_profile,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "sutra_inventory_hash": compute_sutra_inventory_hash(first.sutra_names),
+        "sutra_count": len(first.sutra_names),
+        "max_workers": max_workers,
+        "backend_counts": backend_counts,
+        "routes": routes,
+    }
+
+
+def write_routing_manifest(
+    bundles: Sequence[HybridSimulationBundle],
+    path: Path,
+    *,
+    fusion_profile: str,
+    max_workers: Optional[int],
+) -> None:
+    manifest = build_routing_manifest(
+        bundles,
+        fusion_profile=fusion_profile,
+        max_workers=max_workers,
+    )
+    path.write_text(json.dumps(manifest, indent=2))
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -543,6 +639,11 @@ def build_cli() -> argparse.ArgumentParser:
         "--max-workers",
         type=int,
         help="Override the worker count for concurrent/parallel runs",
+    )
+    parser.add_argument(
+        "--fusion-profile",
+        default="stability",
+        help="Scalar/max-worker policy preset: throughput, stability, quantum_heavy",
     )
     parser.add_argument(
         "--output",
@@ -582,6 +683,11 @@ def build_cli() -> argparse.ArgumentParser:
         type=Path,
         help="Optional path to write reproducibility manifest JSON",
     )
+    parser.add_argument(
+        "--routing-manifest-output",
+        type=Path,
+        help="Optional path to write sutra stage routing manifest JSON",
+    )
     return parser
 
 
@@ -610,11 +716,37 @@ def main() -> None:
         return
 
     mode = _parse_mode(args.mode)
+    profile = resolve_fusion_profile(args.fusion_profile)
+    grvq_beta_scale = parse_exact_rational(
+        args.grvq_beta_scale
+        if args.grvq_beta_scale != "1"
+        else str(profile.get("grvq_beta_scale", DEFAULT_GRVQ_BETA_SCALE))
+    )
+    grvq_gamma_scale = parse_exact_rational(
+        args.grvq_gamma_scale
+        if args.grvq_gamma_scale != "1"
+        else str(profile.get("grvq_gamma_scale", DEFAULT_GRVQ_GAMMA_SCALE))
+    )
+    engine_rebuild_interval = (
+        args.engine_rebuild_interval
+        if args.engine_rebuild_interval != DEFAULT_ENGINE_REBUILD_INTERVAL
+        else int(profile.get("engine_rebuild_interval", DEFAULT_ENGINE_REBUILD_INTERVAL))
+    )
+    engine_drift_threshold = parse_exact_rational(
+        args.engine_drift_threshold
+        if args.engine_drift_threshold != "1/1000000"
+        else str(profile.get("engine_drift_threshold", DEFAULT_ENGINE_DRIFT_THRESHOLD))
+    )
+    max_workers = (
+        args.max_workers
+        if args.max_workers is not None
+        else profile.get("max_workers")
+    )
     runtime_scalars = RuntimeScalarConfig(
-        grvq_beta_scale=parse_exact_rational(args.grvq_beta_scale),
-        grvq_gamma_scale=parse_exact_rational(args.grvq_gamma_scale),
-        engine_rebuild_interval=args.engine_rebuild_interval,
-        engine_drift_threshold=parse_exact_rational(args.engine_drift_threshold),
+        grvq_beta_scale=grvq_beta_scale,
+        grvq_gamma_scale=grvq_gamma_scale,
+        engine_rebuild_interval=engine_rebuild_interval,
+        engine_drift_threshold=engine_drift_threshold,
     )
 
     if args.benchmark_seeds:
@@ -626,7 +758,7 @@ def main() -> None:
             seeds=seeds,
             runtime_scalars=runtime_scalars,
             include=args.include,
-            max_workers=args.max_workers,
+            max_workers=max_workers,
         )
         for bundle in bundles:
             print_summary(bundle)
@@ -643,6 +775,14 @@ def main() -> None:
         if args.manifest_output:
             write_reproducibility_manifest(bundles, args.manifest_output)
             print(f"Reproducibility manifest written to {args.manifest_output}")
+        if args.routing_manifest_output:
+            write_routing_manifest(
+                bundles,
+                args.routing_manifest_output,
+                fusion_profile=args.fusion_profile,
+                max_workers=max_workers,
+            )
+            print(f"Routing manifest written to {args.routing_manifest_output}")
         return
 
     sanitized_value = _sanitize_ipykernel_value(args.value)
@@ -654,7 +794,7 @@ def main() -> None:
         max_iterations=args.max_iterations,
         runtime_scalars=runtime_scalars,
         include=args.include,
-        max_workers=args.max_workers,
+        max_workers=max_workers,
     )
     print_summary(bundle)
 
@@ -673,6 +813,14 @@ def main() -> None:
     if args.manifest_output:
         write_reproducibility_manifest([bundle], args.manifest_output)
         print(f"Reproducibility manifest written to {args.manifest_output}")
+    if args.routing_manifest_output:
+        write_routing_manifest(
+            [bundle],
+            args.routing_manifest_output,
+            fusion_profile=args.fusion_profile,
+            max_workers=max_workers,
+        )
+        print(f"Routing manifest written to {args.routing_manifest_output}")
 
 
 if __name__ == "__main__":

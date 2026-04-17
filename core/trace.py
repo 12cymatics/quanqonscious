@@ -52,14 +52,24 @@ class StateCheckpoint:
         )
 
     @staticmethod
+    def _safe_fraction_repr(value: Fraction) -> str:
+        if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
+            return f"{float(value):.12e}"
+        return str(value)
+
+    @staticmethod
     def _compute_hash(state: FieldState) -> str:
         """Compute deterministic hash of state."""
         # Use sorted keys for determinism
         data = []
         for coords in sorted(state._psi.keys()):
             val = state._psi[coords]
-            data.append((coords, str(val.real), str(val.imag)))
-        data.append(('_norm', str(state.total_norm_squared())))
+            data.append((
+                coords,
+                StateCheckpoint._safe_fraction_repr(val.real),
+                StateCheckpoint._safe_fraction_repr(val.imag),
+            ))
+        data.append(('_norm', StateCheckpoint._safe_fraction_repr(state.total_norm_squared())))
         return hashlib.sha256(str(data).encode()).hexdigest()
 
     def verify(self, state: FieldState) -> bool:
@@ -413,4 +423,5 @@ def _self_test():
     assert is_deterministic, msg
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()

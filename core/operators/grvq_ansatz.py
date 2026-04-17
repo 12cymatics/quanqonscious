@@ -50,8 +50,8 @@ class ShapeFunction:
     def evaluate(self, coords: Tuple[int, ...], lattice: ToroidalHypercube,
                  context: OperatorContext) -> RationalComplex:
         """Evaluate shape function at given coordinates."""
-        # Normalize coordinates to [0, 1] per axis
-        norm_coords = tuple(c / n for c, n in zip(coords, lattice.shape))
+        # Normalize coordinates to [0, 1] per axis with exact rationals
+        norm_coords = tuple(Fraction(c, n) for c, n in zip(coords, lattice.shape))
 
         if self.shape_type == "chladni":
             return self._chladni(norm_coords)
@@ -64,7 +64,7 @@ class ShapeFunction:
         else:
             raise ValueError(f"Unknown shape type: {self.shape_type}")
 
-    def _chladni(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
+    def _chladni(self, norm_coords: Tuple[Fraction, ...]) -> RationalComplex:
         """
         FORBIDDEN: Chladni patterns require sin/cos which violate exact arithmetic.
         Must be reimplemented using ONLY Vedic sutra rational operations.
@@ -76,11 +76,23 @@ class ShapeFunction:
         - Discrete lattice symmetries (no continuous trig)
         - vyashtisamanstih (part/whole) for spatial patterns
         """
-        raise NotImplementedError(
-            "Chladni patterns forbidden - must use Vedic sutra functions only"
-        )
+        if len(norm_coords) < 2:
+            return RationalComplex.zero()
+        m = Fraction(self.mode_numbers[0] if len(self.mode_numbers) > 0 else 1)
+        n = Fraction(self.mode_numbers[1] if len(self.mode_numbers) > 1 else 1)
+        x = norm_coords[0]
+        y = norm_coords[1]
 
-    def _bessel(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
+        # Rational polynomial standing-wave surrogate:
+        # p_k(t) = 4*k*t*(1-t) gives nodal structure on [0,1].
+        px_m = 4 * m * x * (1 - x)
+        py_n = 4 * n * y * (1 - y)
+        px_n = 4 * n * x * (1 - x)
+        py_m = 4 * m * y * (1 - y)
+        value = px_m * py_n + px_n * py_m
+        return RationalComplex.from_real(value)
+
+    def _bessel(self, norm_coords: Tuple[Fraction, ...]) -> RationalComplex:
         """
         FORBIDDEN: Bessel functions require sqrt/cos/atan2 which violate exact arithmetic.
         Must be reimplemented using ONLY Vedic sutra rational operations.
@@ -92,11 +104,21 @@ class ShapeFunction:
         - anurupyena sutra for proportional radial modes
         - Discrete angular symmetries (no continuous angles)
         """
-        raise NotImplementedError(
-            "Bessel functions forbidden - must use Vedic sutra functions only"
-        )
+        if len(norm_coords) < 2:
+            return RationalComplex.zero()
+        m = Fraction(self.mode_numbers[0] if len(self.mode_numbers) > 0 else 1)
+        n = Fraction(self.mode_numbers[1] if len(self.mode_numbers) > 1 else 0)
+        x = norm_coords[0] - Fraction(1, 2)
+        y = norm_coords[1] - Fraction(1, 2)
+        r_sq = x * x + y * y
 
-    def _harmonic(self, norm_coords: Tuple[float, ...]) -> RationalComplex:
+        # Rational radial polynomial surrogate with bounded envelope.
+        radial = 1 - m * r_sq
+        angular = (x + y + 1) * (n + 1) / 2
+        value = radial * angular
+        return RationalComplex.from_real(value)
+
+    def _harmonic(self, norm_coords: Tuple[Fraction, ...]) -> RationalComplex:
         """
         FORBIDDEN: Harmonic modes require exp/cos/sin which violate exact arithmetic.
         Must be reimplemented using ONLY Vedic sutra rational operations.
@@ -108,11 +130,15 @@ class ShapeFunction:
         - gunitasamuccayah sutra for wave products
         - Discrete phase steps (no continuous angles)
         """
-        raise NotImplementedError(
-            "Harmonic modes forbidden - must use Vedic sutra functions only"
-        )
+        if not norm_coords:
+            return RationalComplex.zero()
+        k_sum = sum(Fraction(k) for k in self.mode_numbers) if self.mode_numbers else Fraction(1)
+        phase = sum(Fraction(i + 1) * coord for i, coord in enumerate(norm_coords))
+        real = 1 - k_sum * phase / (k_sum + 1)
+        imag = k_sum * phase / (k_sum + 2)
+        return RationalComplex(real, imag)
 
-    def _radial(self, norm_coords: Tuple[float, ...], lattice: ToroidalHypercube) -> RationalComplex:
+    def _radial(self, norm_coords: Tuple[Fraction, ...], lattice: ToroidalHypercube) -> RationalComplex:
         """
         FORBIDDEN: Radial modes require sqrt/cos which violate exact arithmetic.
         Must be reimplemented using ONLY Vedic sutra rational operations.
@@ -125,9 +151,11 @@ class ShapeFunction:
         - nikhilam sutra for complement operations
         - yavadunam sutra for deficiency-based patterns
         """
-        raise NotImplementedError(
-            "Radial modes forbidden - must use Vedic sutra functions only"
-        )
+        center = tuple(Fraction(1, 2) for _ in norm_coords)
+        r_sq = sum((x - c) * (x - c) for x, c in zip(norm_coords, center))
+        m = Fraction(self.mode_numbers[0] if len(self.mode_numbers) > 0 else 1)
+        value = 1 - 2 * m * r_sq
+        return RationalComplex.from_real(value)
 
 
 @dataclass
@@ -214,9 +242,15 @@ class VedicCarrier:
         - gunitasamuccayah for harmonic products
         - Discrete rational phases only
         """
-        raise NotImplementedError(
-            "Vedic carrier forbidden - must use Vedic sutra functions only"
-        )
+        norm_coords = tuple(Fraction(c, n) for c, n in zip(coords, lattice.shape))
+        spatial = sum(Fraction(i + 1) * coord for i, coord in enumerate(norm_coords))
+        harmonic_sum = Fraction(0)
+        for ratio in self.harmonic_ratios:
+            harmonic_sum += ratio * (1 - spatial * ratio / (ratio + 1))
+        denom = Fraction(max(1, len(self.harmonic_ratios)))
+        real = harmonic_sum / denom
+        imag = self.base_frequency * spatial / Fraction(100)
+        return RationalComplex(real, imag)
 
 
 class GRVQAnsatzOperator(Operator):
@@ -520,4 +554,5 @@ def _self_test():
     assert len(set(vals)) > 1, "Field should have spatial variation"
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()

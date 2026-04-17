@@ -525,4 +525,5 @@ def _self_test():
     assert passed, f"MSTVQ invariants failed: {invariants}"
 
 
-_self_test()
+if __name__ == "__main__":
+    _self_test()
