@@ -2,7 +2,7 @@ name: submit-pypi
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
     branches: ["**"]
