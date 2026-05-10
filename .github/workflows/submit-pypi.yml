@@ -22,23 +22,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install build tooling
+      - name: Install build + runtime tooling
         run: |
           python -m pip install --upgrade pip
-          pip install build pytest pydantic pyyaml
+          pip install build pytest pydantic pyyaml numpy
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
 
-      - name: Install torch (CPU)
-        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
-
-      - name: Install numpy
-        run: pip install numpy
-
-      - name: Build sdist + wheel for top-level QuanQonscious package
-        run: |
-          rm -rf dist build *.egg-info
-          python -m build --sdist --wheel .
-
-      - name: Build sdist + wheel for vedic_trainer package
+      - name: Build sdist + wheel for vedic_trainer
         working-directory: vedic_trainer
         run: |
           rm -rf dist build *.egg-info
@@ -56,8 +46,9 @@ jobs:
           PYTHONPATH: .
         run: pytest vedic/kernel/tests vedic/data/tests -q
 
-      - name: Publish to PyPI (tag pushes only)
+      - name: Publish vedic_trainer to PyPI (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: vedic_trainer
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
