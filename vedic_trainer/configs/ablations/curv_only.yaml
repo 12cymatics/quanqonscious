@@ -1,0 +1,35 @@
+seed: 42
+output_dir: checkpoints/ablation_curv_only
+base_model: meta-llama/Llama-3.2-1B-Instruct
+device: mps
+dtype: bf16
+num_train_epochs: 1.0
+gradient_accumulation_steps: 4
+logging_steps: 10
+eval_steps: 100
+save_steps: 500
+
+lora:
+  r: 16
+  lora_alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  lora_dropout: 0.05
+
+loss_weights:
+  alpha_chi: 0.0
+  beta_cons: 0.0
+  gamma_curv: 0.02
+  delta_dual: 0.0
+
+optim:
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+
+data:
+  train_path: data/synthetic_train.jsonl
+  eval_path: data/synthetic_eval.jsonl
+  max_seq_length: 512
+  train_batch_size: 4
+  eval_batch_size: 8
