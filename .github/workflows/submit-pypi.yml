@@ -1,0 +1,70 @@
+name: submit-pypi
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  submit-pypi:
+    name: submit-pypi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pytest pydantic pyyaml
+
+      - name: Install torch (CPU)
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+
+      - name: Install numpy
+        run: pip install numpy
+
+      - name: Build sdist + wheel for top-level QuanQonscious package
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --sdist --wheel .
+
+      - name: Build sdist + wheel for vedic_trainer package
+        working-directory: vedic_trainer
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build --sdist --wheel .
+
+      - name: vedic_trainer bit-exact gate
+        working-directory: vedic_trainer
+        env:
+          PYTHONPATH: .
+        run: python scripts/verify_bit_exact.py
+
+      - name: vedic_trainer kernel + data tests
+        working-directory: vedic_trainer
+        env:
+          PYTHONPATH: .
+        run: pytest vedic/kernel/tests vedic/data/tests -q
+
+      - name: Publish to PyPI (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "PYPI_API_TOKEN secret not configured; skipping upload."
+            exit 0
+          fi
+          pip install twine
+          twine upload --non-interactive dist/*
