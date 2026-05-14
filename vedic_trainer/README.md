@@ -30,6 +30,7 @@ package exposes:
 | Data             | yes         | 5 tests              |
 | Eval             | yes         | requires SCAN/COGS   |
 | Fixtures         | committed   | bit-exact gate ✓     |
+| External sidecar | yes         | 15 tests (1 lean-skip) |
 
 All ℚ-only tests pass on this machine (CPU). The training pipeline runs
 on the user's Mac Pro 2019 (32 GB unified memory, MPS).

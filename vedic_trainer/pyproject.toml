@@ -58,5 +58,5 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
-testpaths = ["vedic/kernel/tests", "vedic/data/tests"]
+testpaths = ["vedic/kernel/tests", "vedic/data/tests", "vedic/external/tests"]
 addopts = "-q"
