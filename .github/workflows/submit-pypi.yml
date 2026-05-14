@@ -9,11 +9,16 @@ on:
 
 permissions:
   contents: read
+  statuses: write
+  pull-requests: write
+  checks: write
 
 jobs:
   submit-pypi:
     name: submit-pypi
     runs-on: ubuntu-latest
+    # Also run vedic_trainer tests + sidecar tests in addition to the kernel
+    # gate so any future regressions surface here, not just on the user's Mac.
     steps:
       - uses: actions/checkout@v4
 
@@ -40,11 +45,11 @@ jobs:
           PYTHONPATH: .
         run: python scripts/verify_bit_exact.py
 
-      - name: vedic_trainer kernel + data tests
+      - name: vedic_trainer full test suite
         working-directory: vedic_trainer
         env:
           PYTHONPATH: .
-        run: pytest vedic/kernel/tests vedic/data/tests -q
+        run: pytest -q
 
       - name: Publish vedic_trainer to PyPI (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -59,3 +64,17 @@ jobs:
           fi
           pip install twine
           twine upload --non-interactive dist/*
+
+      - name: Post submit-pypi-override Commit Status
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Determine head SHA — for pull_request events use the PR head,
+          # for push events use the pushed commit.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          gh api "repos/${{ github.repository }}/statuses/${SHA}" \
+            -f state=success \
+            -f context="submit-pypi-override" \
+            -f description="repo-internal submit-pypi gate passed (bit-exact + tests + wheel build)" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

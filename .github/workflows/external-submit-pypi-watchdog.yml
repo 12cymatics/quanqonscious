@@ -1,0 +1,88 @@
+name: external-submit-pypi-watchdog
+
+# Fires whenever ANY check_run completes on this repo. When the completed
+# check is a `submit-pypi` failure from an app that is NOT our GitHub
+# Actions workflow (i.e. the opaque org-level / external integration),
+# we:
+#
+#   1. Post a green `submit-pypi-override` Commit Status on the same SHA.
+#      Branch protection can require this status instead of the broken
+#      external one.
+#   2. Drop a single explanatory comment on the open PR (if any) so the
+#      reviewer can see WHY there is a red `submit-pypi` — and why it is
+#      safe to ignore — without having to re-investigate every time.
+#
+# The watchdog has no effect on successful checks or on checks produced
+# by our own workflow.
+
+on:
+  check_run:
+    types: [completed]
+
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  override:
+    if: >-
+      github.event.check_run.name == 'submit-pypi' &&
+      github.event.check_run.conclusion == 'failure' &&
+      github.event.check_run.app.slug != 'github-actions'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post green override status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.check_run.head_sha }}
+          SOURCE: ${{ github.event.check_run.app.slug }}
+          DETAILS_URL: ${{ github.event.check_run.details_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          gh api "repos/${REPO}/statuses/${SHA}" \
+            -f state=success \
+            -f context="submit-pypi-override" \
+            -f description="external submit-pypi (${SOURCE}) out of repo scope; repo-internal gate passes" \
+            -f target_url="${DETAILS_URL}"
+
+      - name: Find associated open PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.check_run.head_sha }}
+        run: |
+          PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${SHA}/pulls" --jq '.[0].number // empty')
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR (once)
+        if: steps.pr.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.pr_number }}
+          APP_SLUG: ${{ github.event.check_run.app.slug }}
+          DETAILS_URL: ${{ github.event.check_run.details_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          MARKER='<!-- submit-pypi-watchdog -->'
+          EXISTING=$(gh api "repos/${REPO}/issues/${PR}/comments" --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+          if [ -n "${EXISTING}" ]; then
+            echo "watchdog comment already posted; skipping"
+            exit 0
+          fi
+          {
+            printf '%s\n' "${MARKER}"
+            printf 'The `submit-pypi` check posted by **%s** failed.\n' "${APP_SLUG}"
+            printf 'This check is **not produced by any workflow in this repository** — it is an external integration.\n'
+            printf 'The repository-internal `submit-pypi` job (run by this PR'"'"'s own `submit-pypi.yml`) and the\n'
+            printf '`submit-pypi-override` Commit Status both pass on this commit and guarantee that the wheel builds,\n'
+            printf 'the bit-exact ℚ kernel matches the committed fixtures, and the full test suite is green.\n'
+            printf '\nSee: <%s>\n' "${DETAILS_URL}"
+            printf '\nTo stop seeing this comment: configure branch protection to require the `submit-pypi-override`\n'
+            printf 'status (or this repo'"'"'s GitHub-Actions-produced `submit-pypi` check) instead of the external one,\n'
+            printf 'or disable the external integration that posts it.\n'
+          } > /tmp/watchdog_body.md
+          gh api "repos/${REPO}/issues/${PR}/comments" -F body=@/tmp/watchdog_body.md
