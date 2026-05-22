@@ -142,6 +142,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="row"><span class="k">Vortex ω</span><span class="v" id="v-vortex">0</span></div>
   <div class="row"><span class="k">Σδ</span><span class="v" id="v-sigma">435</span></div>
   <div class="row"><span class="k">Mom X,Y,Z</span><span class="v" id="v-mom">0,0,0</span></div>
+  <div class="row"><span class="k">Exec Mode</span><span class="v" id="v-exec-mode">MANUAL</span></div>
   <div class="row"><span class="k">Cascade</span><span class="v" id="v-cascade">—</span></div>
   <div class="row"><span class="k">Active</span><span class="v" id="v-active">0</span></div>
   <div class="row"><span class="k">Cycle</span><span class="v" id="v-cycle">0</span></div>
@@ -7807,6 +7808,7 @@ function updateHUD() {
   // Compact momentum display
   const fmtMom = v => { const a = abs(v); return a > 1e6 ? sf(v/1e6,1)+'M' : a > 1e3 ? sf(v/1e3,1)+'K' : sf(v,1); };
   document.getElementById('v-mom').textContent = `${fmtMom(LeanState.momX())},${fmtMom(LeanState.momY())},${fmtMom(LeanState.momZ())}`;
+  document.getElementById('v-exec-mode').textContent = `${EXEC_MODE_TAG.mode}${EXEC_MODE_TAG.details ? `:${EXEC_MODE_TAG.details}` : ''}`;
   document.getElementById('v-cascade').textContent = CASCADE.active ? `S${CASCADE.current + 1}/29` : (CASCADE.impulses.length > 0 ? `dec(${CASCADE.impulses.length})` : '—');
   document.getElementById('v-active').textContent = activeNow.length;
   document.getElementById('v-cycle').textContent = cycle;
@@ -8435,12 +8437,14 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   vortexOmega = 0; CASCADE.active = false; CASCADE.impulses = [];
   ANSATZ.init(); cycle = 0;
   LeanState.reset();
+  setExecutionModeTag('MANUAL', 'reset');
 });
 document.getElementById('btn-all').addEventListener('click', () => {
   SUTRAS.forEach(s => { s.on = true; s.strength = 50; });
   document.querySelectorAll('.st').forEach(el => el.classList.add('active'));
   document.querySelectorAll('.st input[type=range]').forEach(sl => { sl.value = 50; });
   document.querySelectorAll('.st .str-val').forEach(v => { v.textContent = '50'; });
+  setExecutionModeTag('MANUAL', 'all-on');
 });
 
 // ── OVERLAY TOGGLE ──
@@ -8454,8 +8458,12 @@ document.getElementById('btn-none').addEventListener('click', () => {
   document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.st input[type=range]').forEach(sl => { sl.value = 0; });
   document.querySelectorAll('.st .str-val').forEach(v => { v.textContent = '0'; });
+  setExecutionModeTag('MANUAL', 'all-off');
 });
-document.getElementById('btn-cascade').addEventListener('click', () => CASCADE.start());
+document.getElementById('btn-cascade').addEventListener('click', () => {
+  CASCADE.start();
+  setExecutionModeTag('SERIES', 'cascade-impulse');
+});
 document.getElementById('btn-vortex').addEventListener('click', () => {
   vortexHelicity *= -1;
   vortexOmega += 3.0 * vortexHelicity;
@@ -8503,6 +8511,11 @@ function activatePreset(sutraIds, options = {}) {
   if (options._btn) options._btn.classList.add('preset-active');
 }
 
+const EXEC_MODE_TAG = {
+  mode: 'MANUAL',
+  details: 'adhoc'
+};
+
 function applySutraStrengthMap(config) {
   for (const [idRaw, strRaw] of Object.entries(config)) {
     const id = Number(idRaw);
@@ -8523,9 +8536,11 @@ function applySutraStrengthMap(config) {
 }
 
 function setExecutionModeTag(mode, details) {
-  const target = document.getElementById('v-cascade');
+  EXEC_MODE_TAG.mode = mode || 'MANUAL';
+  EXEC_MODE_TAG.details = details || 'adhoc';
+  const target = document.getElementById('v-exec-mode');
   if (!target) return;
-  target.textContent = `${mode}${details ? `:${details}` : ''}`;
+  target.textContent = `${EXEC_MODE_TAG.mode}${EXEC_MODE_TAG.details ? `:${EXEC_MODE_TAG.details}` : ''}`;
 }
 
 // PRESET: WORMHOLE — complementary pairing → throat formation
@@ -8534,6 +8549,7 @@ document.getElementById('pre-wormhole').addEventListener('click', function() {
   activatePreset([5, 9, 22, 23, 26, 29], {
     vortex: 0, magfield: false, jet: 0, wormhole: true, _btn: this
   });
+  setExecutionModeTag('CONCURRENT', 'wormhole-topology');
 });
 
 // PRESET: JET PROPULSION — asymmetric thrust
@@ -8542,6 +8558,7 @@ document.getElementById('pre-jet').addEventListener('click', function() {
   activatePreset([1, 3, 6, 10, 17], {
     vortex: 2.0, magfield: false, jet: 2.0, jetMode: 'vedic', wormhole: false, _btn: this
   });
+  setExecutionModeTag('SERIES', 'jet-directed');
 });
 
 // PRESET: DYNAMO — magnetic field generation via cross-vertex mixing
@@ -8550,6 +8567,7 @@ document.getElementById('pre-dynamo').addEventListener('click', function() {
   activatePreset([3, 7, 9, 11, 25, 29], {
     vortex: 1.0, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('CONCURRENT', 'dynamo-self-sustain');
 });
 
 // PRESET: CYMATIC — standing wave patterns (all diffusive operators)
@@ -8558,6 +8576,7 @@ document.getElementById('pre-cymatic').addEventListener('click', function() {
   activatePreset([9, 17, 27, 28], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('PARALLEL', 'cymatic-smooth');
 });
 
 // PRESET: SINGULARITY — multiplicative operators → exponential field growth
@@ -8566,6 +8585,7 @@ document.getElementById('pre-singularity').addEventListener('click', function() 
   activatePreset([1, 10, 14, 15], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('SERIES', 'singular-growth');
 });
 
 // PRESET: SYMMETRY — reflective operators → balanced field structure
@@ -8574,6 +8594,7 @@ document.getElementById('pre-symmetry').addEventListener('click', function() {
   activatePreset([5, 7, 12, 22, 29], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('PARALLEL', 'symmetry-balance');
 });
 
 // PRESET: MAGNETIC — full TGCR magnetic dynamics with MSTVQ feedback
@@ -8582,6 +8603,7 @@ document.getElementById('pre-magnetic').addEventListener('click', function() {
   activatePreset([3, 9, 11, 25, 29], {
     vortex: 1.5, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('COMPOSITE', 'magnetic-generate-lock');
 });
 
 // PRESET: RECONNECTION — anti-parallel B formation → topological change
@@ -8590,6 +8612,7 @@ document.getElementById('pre-reconnect').addEventListener('click', function() {
   activatePreset([5, 9, 22, 26], {
     vortex: 0.5, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('COMPOSITE', 'reconnect-topology-change');
 });
 
 // PRESET: INVERSE CONTROLLED — push-pull equilibrium via opposed operator types
