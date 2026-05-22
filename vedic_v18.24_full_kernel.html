@@ -142,6 +142,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="row"><span class="k">Vortex ω</span><span class="v" id="v-vortex">0</span></div>
   <div class="row"><span class="k">Σδ</span><span class="v" id="v-sigma">435</span></div>
   <div class="row"><span class="k">Mom X,Y,Z</span><span class="v" id="v-mom">0,0,0</span></div>
+  <div class="row"><span class="k">Exec Mode</span><span class="v" id="v-exec-mode">MANUAL</span></div>
   <div class="row"><span class="k">Cascade</span><span class="v" id="v-cascade">—</span></div>
   <div class="row"><span class="k">Active</span><span class="v" id="v-active">0</span></div>
   <div class="row"><span class="k">Cycle</span><span class="v" id="v-cycle">0</span></div>
@@ -232,6 +233,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
       <div style="color:#44ddaa;font-size:7px;width:100%;border-bottom:1px solid #1a1a3a;padding-bottom:2px;margin:4px 0 2px">▸ INVERSE (anti-sutra — negate operator displacement)</div>
       <button id="pre-inverse-growth" title="INVERSE: S1(30)+S5(70)+S14(30)+S29(70) — multiplicative operators at low strength with strong reflective counterbalance. The reflective sutras (S5,S29) dominate, pulling back against S1/S14 amplification. Net effect: controlled oscillation around equilibrium.">⟲ CONTROLLED (push-pull)</button>
       <button id="pre-all29" title="ALL 29 SUTRAS at strength 25 — the full Vedic field with every operator active at quarter-strength. The 7 categories (MULT×4, REFL×5, CONV×3, DIV×5, DIFF×4, PERM×3, MOD×5) interact through the complete coupling network. Conservation identity T(29)=435 is fully active.">✦ ALL 29 (quarter strength)</button>
+      <button id="pre-hybrid-29" title="HYBRID QUANTUM-CLASSICAL PIPELINE: 29 sutras partitioned into serial seed, parallel diffusion fabric, and concurrent feedback closure. Designed for orchestrating all sutras with deterministic activation choreography across modes.">⧉ HYBRID 29 (S/P/C)</button>
       <button id="pre-cancel" title="COMPLETE CANCELLATION: S5(85)→S7(35)→S8(15)→S9(65)→S11(20)→S22(80)→S28(30)→S29(55). Drives Ψ[16]→0 via antisymmetric pairing (S5), complement averaging (S22), heat diffusion (S9), mean convergence (S29), S/A decomposition (S7), magnitude equalization (S28), layer blending (S11), quadratic smoothing (S8). No multiplicative or convolutive sutras — those amplify structure. Watch ‖Ψ‖² decay exponentially in HUD. ΔE column shows per-sutra energy removal rate.">⊘ CANCEL (Ψ→0)</button>
     </div>
   </div>
@@ -7806,6 +7808,7 @@ function updateHUD() {
   // Compact momentum display
   const fmtMom = v => { const a = abs(v); return a > 1e6 ? sf(v/1e6,1)+'M' : a > 1e3 ? sf(v/1e3,1)+'K' : sf(v,1); };
   document.getElementById('v-mom').textContent = `${fmtMom(LeanState.momX())},${fmtMom(LeanState.momY())},${fmtMom(LeanState.momZ())}`;
+  document.getElementById('v-exec-mode').textContent = `${EXEC_MODE_TAG.mode}${EXEC_MODE_TAG.details ? `:${EXEC_MODE_TAG.details}` : ''}`;
   document.getElementById('v-cascade').textContent = CASCADE.active ? `S${CASCADE.current + 1}/29` : (CASCADE.impulses.length > 0 ? `dec(${CASCADE.impulses.length})` : '—');
   document.getElementById('v-active').textContent = activeNow.length;
   document.getElementById('v-cycle').textContent = cycle;
@@ -8434,12 +8437,14 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   vortexOmega = 0; CASCADE.active = false; CASCADE.impulses = [];
   ANSATZ.init(); cycle = 0;
   LeanState.reset();
+  setExecutionModeTag('MANUAL', 'reset');
 });
 document.getElementById('btn-all').addEventListener('click', () => {
   SUTRAS.forEach(s => { s.on = true; s.strength = 50; });
   document.querySelectorAll('.st').forEach(el => el.classList.add('active'));
   document.querySelectorAll('.st input[type=range]').forEach(sl => { sl.value = 50; });
   document.querySelectorAll('.st .str-val').forEach(v => { v.textContent = '50'; });
+  setExecutionModeTag('MANUAL', 'all-on');
 });
 
 // ── OVERLAY TOGGLE ──
@@ -8453,8 +8458,12 @@ document.getElementById('btn-none').addEventListener('click', () => {
   document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.st input[type=range]').forEach(sl => { sl.value = 0; });
   document.querySelectorAll('.st .str-val').forEach(v => { v.textContent = '0'; });
+  setExecutionModeTag('MANUAL', 'all-off');
 });
-document.getElementById('btn-cascade').addEventListener('click', () => CASCADE.start());
+document.getElementById('btn-cascade').addEventListener('click', () => {
+  CASCADE.start();
+  setExecutionModeTag('SERIES', 'cascade-impulse');
+});
 document.getElementById('btn-vortex').addEventListener('click', () => {
   vortexHelicity *= -1;
   vortexOmega += 3.0 * vortexHelicity;
@@ -8502,12 +8511,45 @@ function activatePreset(sutraIds, options = {}) {
   if (options._btn) options._btn.classList.add('preset-active');
 }
 
+const EXEC_MODE_TAG = {
+  mode: 'MANUAL',
+  details: 'adhoc'
+};
+
+function applySutraStrengthMap(config) {
+  for (const [idRaw, strRaw] of Object.entries(config)) {
+    const id = Number(idRaw);
+    const str = Number(strRaw);
+    const idx = id - 1;
+    if (idx < 0 || idx >= SUTRAS.length) continue;
+    const s = SUTRAS[idx];
+    s.on = str > 0;
+    s.strength = str;
+    const el = document.querySelectorAll('.st')[idx];
+    if (!el) continue;
+    el.classList.toggle('active', str > 0);
+    const sl = el.querySelector('input[type=range]');
+    if (sl) sl.value = str;
+    const vl = el.querySelector('.str-val');
+    if (vl) vl.textContent = String(str);
+  }
+}
+
+function setExecutionModeTag(mode, details) {
+  EXEC_MODE_TAG.mode = mode || 'MANUAL';
+  EXEC_MODE_TAG.details = details || 'adhoc';
+  const target = document.getElementById('v-exec-mode');
+  if (!target) return;
+  target.textContent = `${EXEC_MODE_TAG.mode}${EXEC_MODE_TAG.details ? `:${EXEC_MODE_TAG.details}` : ''}`;
+}
+
 // PRESET: WORMHOLE — complementary pairing → throat formation
 // S5(zero-sum) + S9(diffusion) + S22(complement balance) + S23(terminal pairs) + S26(dominant) + S29(conservation)
 document.getElementById('pre-wormhole').addEventListener('click', function() {
   activatePreset([5, 9, 22, 23, 26, 29], {
     vortex: 0, magfield: false, jet: 0, wormhole: true, _btn: this
   });
+  setExecutionModeTag('CONCURRENT', 'wormhole-topology');
 });
 
 // PRESET: JET PROPULSION — asymmetric thrust
@@ -8516,6 +8558,7 @@ document.getElementById('pre-jet').addEventListener('click', function() {
   activatePreset([1, 3, 6, 10, 17], {
     vortex: 2.0, magfield: false, jet: 2.0, jetMode: 'vedic', wormhole: false, _btn: this
   });
+  setExecutionModeTag('SERIES', 'jet-directed');
 });
 
 // PRESET: DYNAMO — magnetic field generation via cross-vertex mixing
@@ -8524,6 +8567,7 @@ document.getElementById('pre-dynamo').addEventListener('click', function() {
   activatePreset([3, 7, 9, 11, 25, 29], {
     vortex: 1.0, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('CONCURRENT', 'dynamo-self-sustain');
 });
 
 // PRESET: CYMATIC — standing wave patterns (all diffusive operators)
@@ -8532,6 +8576,7 @@ document.getElementById('pre-cymatic').addEventListener('click', function() {
   activatePreset([9, 17, 27, 28], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('PARALLEL', 'cymatic-smooth');
 });
 
 // PRESET: SINGULARITY — multiplicative operators → exponential field growth
@@ -8540,6 +8585,7 @@ document.getElementById('pre-singularity').addEventListener('click', function() 
   activatePreset([1, 10, 14, 15], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('SERIES', 'singular-growth');
 });
 
 // PRESET: SYMMETRY — reflective operators → balanced field structure
@@ -8548,6 +8594,7 @@ document.getElementById('pre-symmetry').addEventListener('click', function() {
   activatePreset([5, 7, 12, 22, 29], {
     vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('PARALLEL', 'symmetry-balance');
 });
 
 // PRESET: MAGNETIC — full TGCR magnetic dynamics with MSTVQ feedback
@@ -8556,6 +8603,7 @@ document.getElementById('pre-magnetic').addEventListener('click', function() {
   activatePreset([3, 9, 11, 25, 29], {
     vortex: 1.5, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('COMPOSITE', 'magnetic-generate-lock');
 });
 
 // PRESET: RECONNECTION — anti-parallel B formation → topological change
@@ -8564,23 +8612,15 @@ document.getElementById('pre-reconnect').addEventListener('click', function() {
   activatePreset([5, 9, 22, 26], {
     vortex: 0.5, magfield: true, jet: 0, wormhole: false, _btn: this
   });
+  setExecutionModeTag('COMPOSITE', 'reconnect-topology-change');
 });
 
 // PRESET: INVERSE CONTROLLED — push-pull equilibrium via opposed operator types
 document.getElementById('pre-inverse-growth').addEventListener('click', function() {
   activatePreset([], { vortex: 0, magfield: false, jet: 0, wormhole: false, _btn: this });
   // Custom strengths: multiplicative low, reflective high (opposing forces)
-  const config = { 1: 30, 5: 70, 14: 30, 29: 70 };
-  for (const [id, str] of Object.entries(config)) {
-    const s = SUTRAS[Number(id) - 1];
-    s.on = true; s.strength = str;
-    const el = document.querySelectorAll('.st')[Number(id) - 1];
-    if (el) {
-      el.classList.add('active');
-      const sl = el.querySelector('input[type=range]'); if (sl) sl.value = str;
-      const vl = el.querySelector('.str-val'); if (vl) vl.textContent = str;
-    }
-  }
+  applySutraStrengthMap({ 1: 30, 5: 70, 14: 30, 29: 70 });
+  setExecutionModeTag('SERIES', 'inverse-control');
 });
 
 // PRESET: ALL 29 — every sutra at quarter strength
@@ -8592,8 +8632,24 @@ document.getElementById('pre-all29').addEventListener('click', function() {
     const vl = el.querySelector('.str-val'); if (vl) vl.textContent = '25';
   });
   vortexOmega = 0.5; MAGFIELD.active = true;
+  setExecutionModeTag('PARALLEL', 'all29-quarter');
   document.querySelectorAll('#preset-ctrls button').forEach(b => b.classList.remove('preset-active'));
   this.classList.add('preset-active');
+});
+
+// PRESET: HYBRID 29 — serial seed + parallel fabric + concurrent closure.
+document.getElementById('pre-hybrid-29').addEventListener('click', function() {
+  activatePreset([], { vortex: 0.6, magfield: true, jet: 1.2, jetMode: 'vedic', wormhole: false, _btn: this });
+  const serial =   [1, 3, 6, 10, 14, 15, 25];
+  const parallel = [2, 4, 8, 9, 11, 12, 13, 16, 17, 18, 19, 20, 21, 24, 27, 28];
+  const concurrent = [5, 7, 22, 23, 26, 29];
+  const config = {};
+  for (const id of serial) config[id] = 56;
+  for (const id of parallel) config[id] = 42;
+  for (const id of concurrent) config[id] = 68;
+  applySutraStrengthMap(config);
+  WORMHOLE_PROTO.start();
+  setExecutionModeTag('HYBRID', 'serial|parallel|concurrent');
 });
 
 // PRESET: COMPLETE CANCELLATION — Ψ[16] → 0 via structured operator chain
@@ -8622,7 +8678,7 @@ document.getElementById('pre-cancel').addEventListener('click', function() {
   });
   // Activate cancellation chain with exact calibrated strengths
   // Ratios: 85:80:65:55:35:30:20:15 — derived from operator fixed-point analysis
-  const config = {
+  applySutraStrengthMap({
     5: 85,   // S5  Śūnyam: complement pairs → zero-sum (anchor)
     7: 35,   // S7  Saṅkalana: kill symmetric residual via S/A decomp
     8: 15,   // S8  Pūraṇā: quadratic minimiser smoothing
@@ -8631,22 +8687,12 @@ document.getElementById('pre-cancel').addEventListener('click', function() {
     22: 80,  // S22 Dvandvayoga: complement average → 0 (after S5 antisymmetry)
     28: 30,  // S28 Antyayoḥ: magnitude equalization on edges
     29: 55   // S29 Conservation: direct drive toward mean = 0
-  };
-  for (const [id, str] of Object.entries(config)) {
-    const idx = Number(id) - 1;
-    const s = SUTRAS[idx];
-    s.on = true; s.strength = str;
-    const el = document.querySelectorAll('.st')[idx];
-    if (el) {
-      el.classList.add('active');
-      const sl = el.querySelector('input[type=range]'); if (sl) sl.value = str;
-      const vl = el.querySelector('.str-val'); if (vl) vl.textContent = String(str);
-    }
-  }
+  });
   vortexOmega = 0; vortexHelicity = 1;
   MAGFIELD.active = false;
   JET.active = false;
   WORMHOLE_PROTO.stop();
+  setExecutionModeTag('SERIES', 'cancel-chain');
   document.querySelectorAll('#preset-ctrls button').forEach(b => b.classList.remove('preset-active'));
   this.classList.add('preset-active');
 });
