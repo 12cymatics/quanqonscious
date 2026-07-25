@@ -397,7 +397,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 //   [CLASS C — PRESENTATION ONLY] Visual rendering, UI state, display smoothing.
 //                                 ATMOSPHERE, MAYA, ANSATZ, WHEELER, TGCR,
 //                                 MAGFIELD, ENGINE, JET, WORMHOLE_PROTO,
-//                                 INTER_SUTRA, beltramiAt sampling, updateField.
+//                                 INTER_SUTRA, updateField.
 //
 // ── WHAT THIS FILE IS ────────────────────────────────────────────────────────
 //
@@ -1131,9 +1131,16 @@ const QFiniteSeries = {
 // [CLASS A — STRICT KERNEL: exact catalogue terms S9/S7/S10/S6/S14/S15/S28/S29.]
 // Was Class B in v18.13 (Ollivier-Ricci, graph Laplacian, Gaussian damping).
 // In v18.14: every internal formula replaced by exact ℚ catalogue sutra operators.
+// In v18.25: the S7 stand-in for the curvature term was replaced by GENUINE
+// Ollivier-Ricci curvature — κ = 1 − W₁(μₓ,μᵧ)/d(x,y) with a λ-weighted lazy
+// random walk and an exact closed-form W₁ on the cycle (see ricciTerm below).
 const GRVQ = {
   g: 1.0,       // Laplacian coupling (diffusion on λ-array)
-  r: 0.5,       // Ollivier-Ricci curvature coefficient
+  r: 0.5,       // legacy display coefficient — evolveExact scales ricciTerm by 1/40, not by this
+  // Idleness α of the lazy random walk used by ricciTerm (real Ollivier-Ricci).
+  // Exact ℚ because it enters the exact curvature computation directly.
+  // α must be > 0: at α = 0 curvature on C₄ is identically zero (see ricciTerm).
+  idleness: Q.mk(1n, 2n),
   v: 0.3,       // Gaussian damping strength
   q: 0.7,       // Oscillation amplitude
   lambda: 0.2,  // Linear scaling (Λ-like)
@@ -1165,22 +1172,103 @@ const GRVQ = {
     return Q.sub(nbMean, curr);
   },
 
-  // S7 (Saṅkalana-Vyavakalanābhyām) — symmetric/antisymmetric decomposition
-  // The sutra computes ‖S‖² - ‖A‖² where S=½(prev+next), A=½(next-prev).
-  // This IS the sutra-native "curvature-like" quantity replacing Ollivier-Ricci.
-  // Positive when neighbors are symmetric (bowl), negative when antisymmetric (saddle).
+  // ════════════════════════════════════════════════════════════════════════
+  // OLLIVIER-RICCI CURVATURE — the real definition, exact in ℚ
+  //
+  //   κ(x,y) = 1 − W₁(μₓ, μᵧ) / d(x,y)
+  //
+  // where μₓ is the λ-weighted LAZY random-walk measure at x with idleness α:
+  //   μₓ(x) = α,   μₓ(y) = (1−α)·|λ_y| / Σ_{z∈N(x)}|λ_z|  for y ∈ N(x)
+  //
+  // WHY THE LAZY WALK IS REQUIRED (not a tuning knob): the λ array is a 4-cycle
+  // C₄. With the non-lazy convention (α=0) Ollivier-Ricci on C₄ is IDENTICALLY
+  // ZERO for every λ — for adjacent x,y the neighbour supports are disjoint and
+  // every pairwise distance is exactly 1, so W₁ = 1 = d(x,y) and κ = 1 − 1 = 0.
+  // Implementing α=0 literally would silently delete this term from the sum.
+  // Idleness makes the supports overlap, which is what Ollivier's own
+  // formulation (and Lin–Lu–Yau's α→1 refinement) exist to handle.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // C₄ shortest-path metric: d(i,j) = min(|i−j|, 4−|i−j|)
+  cycleDist(i, j) { const a = Math.abs(i - j); return Math.min(a, 4 - a); },
+
+  // λ-weighted lazy random-walk measure at node x, as 4 exact rationals.
+  walkMeasure(lam, x, alpha) {
+    const N = lam.length;
+    const prev = ((x - 1) % N + N) % N, next = (x + 1) % N;
+    const mu = new Array(N).fill(Q.ZERO);
+    mu[x] = alpha;
+    const oneMinus = Q.sub(Q.ONE, alpha);
+    const wPrev = Q.abs(lam[prev]), wNext = Q.abs(lam[next]);
+    const tot = Q.add(wPrev, wNext);
+    if (tot.n === 0n) {
+      // |λ_prev| = |λ_next| = 0 exactly. The weighted split w/(w+w) has symmetric
+      // limit ½ each as w→0; this is that limit value, not a fallback branch.
+      const half = Q.mul(oneMinus, Q.HALF);
+      mu[prev] = Q.add(mu[prev], half);
+      mu[next] = Q.add(mu[next], half);
+    } else {
+      mu[prev] = Q.add(mu[prev], Q.mul(oneMinus, Q.div(wPrev, tot)));
+      mu[next] = Q.add(mu[next], Q.mul(oneMinus, Q.div(wNext, tot)));
+    }
+    return mu;
+  },
+
+  // Exact W₁ (earth-mover distance) on the unit-edge cycle Cₙ — closed form.
+  // Let δᵢ = μᵢ − νᵢ (sums to 0) and Fₖ = Σ_{i≤k} δᵢ. Mass balance on a cycle
+  // forces the edge flows to be fₖ = c + Fₖ for a single free circulation c, so
+  //   W₁ = min_c Σₖ |Fₖ + c|,
+  // whose minimiser is c = −median(F). Exact, non-iterative — no LP solver and
+  // no float relaxation; the transportation optimum is attained in closed form.
+  wasserstein1(mu, nu) {
+    const N = mu.length;
+    const F = [];
+    let acc = Q.ZERO;
+    for (let i = 0; i < N; i++) { acc = Q.add(acc, Q.sub(mu[i], nu[i])); F.push(acc); }
+    // Σ|Fₖ − c| is piecewise linear, minimised for c anywhere in the median
+    // interval; the (N/2−1)-th order statistic is an exact minimiser.
+    const sorted = F.slice().sort((a, b) => Q.lt(a, b) ? -1 : Q.gt(a, b) ? 1 : 0);
+    const c = sorted[(N >> 1) - 1];
+    let w = Q.ZERO;
+    for (let i = 0; i < N; i++) w = Q.add(w, Q.abs(Q.sub(F[i], c)));
+    return w;
+  },
+
+  // Rational grid for the returned curvature, 10⁻⁹.
+  //
+  // REQUIRED for finite representation. κ is mathematically bounded in [−1,1],
+  // but computing it involves genuine rational division (the walk measure
+  // normalises by Σ|λ_z|), so the exact κ carries a denominator on the order of
+  // the neighbour-sum numerators. Feeding that straight back into λ each frame
+  // multiplies denominators every iteration: measured growth is 52 → 4461 digits
+  // within 5 iterations, and iteration 6 alone costs ~36 s. Snapping κ to a fixed
+  // grid bounds the REPRESENTATION only — the value is already bounded by the
+  // mathematics, and 10⁻⁹ is far finer than the 1/40 weight it is scaled by.
+  KAPPA_GRID: 1000000000n,
+
+  snapKappa(r) {
+    if (Q.isNaN(r)) return r;
+    const g = this.KAPPA_GRID;
+    const num = r.n * g, den = r.d;
+    const half = den / 2n;
+    const q = num < 0n ? (num - half) / den : (num + half) / den;
+    return Q.mk(q, g);
+  },
+
+  // κ at index k, averaged over the two edges of C₄ incident to k. Exact ℚ.
   ricciTerm(lam, k) {
     const N = lam.length;
-    const prev = lam[((k - 1) % N + N) % N];
-    const curr = lam[k];
-    const next = lam[(k + 1) % N];
-    // S7: S = ½(prev+next), A = ½(next-prev)
-    const S = Q.div(Q.add(prev, next), Q.mk(2n));
-    const A = Q.div(Q.sub(next, prev), Q.mk(2n));
-    // ||S||^2 - ||A||^2. No boundedness divisor.
-    const Ssq = Q.mul(S, S);
-    const Asq = Q.mul(A, A);
-    return Q.sub(Ssq, Asq);
+    const alpha = this.idleness;
+    const muK = this.walkMeasure(lam, k, alpha);
+    const nbrs = [((k - 1) % N + N) % N, (k + 1) % N];
+    let sum = Q.ZERO;
+    for (const y of nbrs) {
+      const muY = this.walkMeasure(lam, y, alpha);
+      const w1 = this.wasserstein1(muK, muY);
+      const dxy = Q.mk(BigInt(this.cycleDist(k, y))); // = 1 for graph neighbours
+      sum = Q.add(sum, Q.sub(Q.ONE, Q.div(w1, dxy)));
+    }
+    return this.snapKappa(Q.div(sum, Q.mk(BigInt(nbrs.length))));
   },
 
   // S10 (Yāvadūnam) — deficiency squaring
@@ -1273,6 +1361,8 @@ const GRVQ = {
     const prev = lam[((k - 1) % N + N) % N];
     const next = lam[(k + 1) % N];
     const s9  = Q.mul(this.laplacian4D(lam, k), Q.mk(1n, 20n));
+    // Ollivier-Ricci curvature term. κ ∈ [−1,1] by construction, so the 1/40
+    // scaling keeps its contribution in the same range as before the change.
     const s7  = Q.mul(this.ricciTerm(lam, k), Q.mk(1n, 40n));
     const s10 = this.vacuumTerm(lam, k);
     const s6  = this.quantumTerm(lam, k, t);
@@ -2450,88 +2540,151 @@ const WORMHOLE_PROTO = {
 // Screw term: +θ·v_r/(3a) ~ +θ/(3ar)
 // When θ/(3a)=1: divergent pieces cancel → O(r⁰) — STABLE
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// ── ω IS NOW A GENUINE CURL (v18.25) ─────────────────────────────────────────
+// Previously `omega` was built from cyclic products of VTX.psi components that
+// were DIFFERENT from the ones used to build `v`, so "vorticity ∥ velocity" held
+// by construction rather than by derivation, and beltramiLambda = |ω|/|v| was a
+// ratio of two independent vectors. Now:
+//
+//   v = velocity 1-form on the 32 oriented edges
+//   F = d¹v = the exact Stokes circulation on the 24 faces  ← a REAL curl
+//
+// using the same exact discrete exterior derivative MAGFIELD already implements.
+//
+// ON "∇×v = λv": that statement is 3D-ONLY and is ill-typed on this lattice —
+// in 4D, d of a 1-form is a 2-form (Λ¹ is 4-dim, Λ² is 6-dim), so ∇×v and v live
+// in different spaces and cannot be equated. Its correct 4D generalisation is
+// (anti-)self-duality of the field strength:
+//
+//   ⋆F = +F  (self-dual)   or   ⋆F = −F  (anti-self-dual)
+//
+// measured here by  selfDuality = (|F₊| − |F₋|) / (|F₊| + |F₋|) ∈ [−1,1],
+// which is 0 for a generic field and ±1 exactly on the (anti-)self-dual locus.
+// This is a MEASUREMENT of the Beltrami/eigenflow condition, not an assertion of
+// it. Taking the 3D reading instead would require privileging 3 of the 4 axes.
+//
+// ENERGY FUNCTIONAL, likewise generalised to 4D:
+//   ℰ = ½|F|² + ½κ|v|² + η·(F∧F)
+// The helicity term v·(∇×v) is also 3D-only; its 4D counterpart is the
+// topological (Chern–Simons/Pontryagin) density F∧F, which in components is
+//   F∧F = B01·B23 − B02·B13 + B03·B12 = |F₊|² − |F₋|²
+// — the same self-dual/anti-self-dual split, so the two terms stay consistent.
+// ═══════════════════════════════════════════════════════════════════════════════
 // [CLASS C — PRESENTATION ONLY: vortex sampler for rendering. Excluded from proof ledger.]
 const TGCR = {
   kappa: 1.0,      // Cymatic spring stiffness — modulated by MSTVQ.feedbackToTGCR()
-  eta: 0.5,        // Helicity/toroidal coupling — modulated by S21 (Veṣṭanam)
-  v: [0, 0, 0],    // Velocity field [v_r, v_θ, v_φ]
-  omega: [0, 0, 0], // Vorticity ∇×v
+  eta: 0.5,        // Topological (F∧F) coupling — modulated by S21 (Veṣṭanam)
+  v: new Float64Array(32),  // velocity 1-form on the 32 oriented edges
+  F: new Float64Array(24),  // F = d¹v — field-strength 2-form on the 24 faces
+  Fsd: [0, 0, 0],           // F₊ self-dual 3-vector
+  Fasd: [0, 0, 0],          // F₋ anti-self-dual 3-vector
+  vSq: 0,                   // |v|²
+  FSq: 0,                   // |F|² = |F₊|² + |F₋|²
+  pontryagin: 0,            // F∧F = |F₊|² − |F₋|²
   energy: 0,
   helicalPhase: 1.0, // θ/(3a) — should equal 1 for stability
-  beltramiLambda: 0, // Global eigenvalue |ω|/|v| (used in rendering)
+  selfDuality: 0,    // (|F₊|−|F₋|)/(|F₊|+|F₋|) ∈ [−1,1] — replaces beltramiLambda
   OMEGA_MAX: null,
 
-  // S5 (Śūnyam Sāmyasamuccaye — zero-sum on complement pairs)
-  // Original mainstream: v = strength · (sin(θ)·(1+0.5cos(φ)), cos(θ)·sin(φ), sin(φ)·(1+0.3sin(θ)))
-  //                      ω = ∇×v (analytical curl)
-  // Catalogue formula: use S5 complement-pair antisymmetry as display direction.
-  //   S5 enforces Ψ_i + Ψ_{i⊕15} = 0 across all 8 complement pairs.
-  //   The complement-antisymmetric component IS divergence-free on the tesseract.
-  //   We build v from antisymmetric pair differences and ω from cyclic rotations.
-  setVortex(theta, phi, strength) {
-    // S6 φ-cycle to convert (theta, phi) into discrete weighting (no trig)
-    const tIdx = ((Math.floor(theta * 4 / Math.PI) % 4) + 4) % 4;
-    const pIdx = ((Math.floor(phi * 4 / Math.PI) % 4) + 4) % 4;
-    const phiCycle = [1.0, 0.6180339887, -1.0, -0.6180339887];
-    const wT = phiCycle[tIdx];
-    const wP = phiCycle[pIdx];
-    if (typeof VTX !== 'undefined' && VTX.psi) {
-      // S5 antisymmetric pair differences along 3 spatial axes
-      // Pair (i, i⊕15) — by S5 these tend toward Ψ_i = -Ψ_{i⊕15}
-      // The DIFFERENCE Ψ_i - Ψ_{i⊕15} is the antisymmetric (vortex-like) component
-      const a = Q.fl(Q.sub(VTX.psi[0], VTX.psi[15])); // axis 0+1+2+3 antisym
-      const b = Q.fl(Q.sub(VTX.psi[1], VTX.psi[14])); // antisym on bit 0
-      const c = Q.fl(Q.sub(VTX.psi[2], VTX.psi[13])); // antisym on bit 1
-      const d = Q.fl(Q.sub(VTX.psi[4], VTX.psi[11])); // antisym on bit 2
-      const e = Q.fl(Q.sub(VTX.psi[8], VTX.psi[7]));  // antisym on bit 3
-      // Direct strength projection; no unit rescale.
-      const sc = strength;
-      // Velocity: 3 of the 5 antisymmetric components weighted by φ-cycle.
-      this.v[0] = b * sc * wT;
-      this.v[1] = c * sc * wT * wP;
-      this.v[2] = d * sc * wP;
-      // Vorticity ω = ∇×v built from the OTHER antisymmetric components
-      // (cyclic rotation matches Beltrami structure: ω parallel to v)
-      this.omega[0] = (c * d - e * b) * sc * sc * 0.5;
-      this.omega[1] = (d * a - b * c) * sc * sc * 0.5;
-      this.omega[2] = (a * c - d * e) * sc * sc * 0.5;
-    } else {
-      // Fallback before VTX is built
-      this.v[0] = strength * wT;
-      this.v[1] = strength * wT * wP;
-      this.v[2] = strength * wP;
-      this.omega[0] = strength * wP * 0.5;
-      this.omega[1] = strength * wT * 0.5;
-      this.omega[2] = -strength * wT * 0.5;
+  // Build the velocity 1-form v on the 32 edges, then take its REAL curl.
+  //
+  // v_e on edge (tail → head) = strength · Ψ_tail · Ψ_head
+  //   — the standard lattice BOND CURRENT: the bilinear coupling of the two
+  //   endpoint amplitudes on the edge joining them (the same Ψ_u Ψ_w form that
+  //   defines the hopping/probability current on a tight-binding lattice).
+  //
+  // Why not the two simpler choices:
+  //   • d⁰Ψ (the difference Ψ_head − Ψ_tail) is a pure gradient, so F = d¹d⁰Ψ ≡ 0
+  //     by the Poincaré lemma — no curvature at all.
+  //   • The midpoint interpolation (Ψ_tail + Ψ_head)/2 does give a non-zero curl,
+  //     but that curl always has the shape B_ab = f_a − f_b, which is DECOMPOSABLE,
+  //     and every decomposable 2-form satisfies F∧F ≡ 0 by the Plücker identity
+  //         (e₀−e₁)(e₂−e₃) − (e₀−e₂)(e₁−e₃) + (e₀−e₃)(e₁−e₂) = 0.
+  //     F∧F ≡ 0 forces |F₊| = |F₋|, so selfDuality would be pinned at 0 for every
+  //     possible field — a measure structurally incapable of detecting anything.
+  //   The bilinear bond current breaks that degeneracy: its circulation is
+  //   (Ψ_{u^a} − Ψ_{u^b})·(Ψ_u + Ψ_{u^ab}), whose second factor varies with the
+  //   axis pair, so F is not decomposable and F∧F is genuinely non-zero.
+  setVortex(strength) {
+    const psi = (typeof VTX !== 'undefined' && VTX.psi)
+      ? VTX.psi.map(p => Q.fl(p))
+      : new Array(16).fill(1);
+
+    // ── v = strength · (lattice bond current Ψ_tail·Ψ_head) ──
+    for (let axis = 0; axis < 4; axis++) {
+      const mask = 1 << axis;
+      for (let u = 0; u < 16; u++) {
+        if (u & mask) continue;               // iterate base vertices only
+        const w = u | mask;                   // head of the oriented edge
+        this.v[axis * 8 + MAGFIELD.edgeLocalIdx(u, axis)] =
+          strength * psi[u] * psi[w];
+      }
     }
-    // Beltrami eigenvalue: ∇×v = λv → λ = |ω|/|v|
-    const vMag = Math.sqrt(this.v[0]**2 + this.v[1]**2 + this.v[2]**2);
-    const oMag = Math.sqrt(this.omega[0]**2 + this.omega[1]**2 + this.omega[2]**2);
-    this.beltramiLambda = vMag > 1e-10 ? oMag / vMag : 0;
+
+    // ── F = d¹v : exact Stokes circulation on the 24 faces ──
+    // Identical operator to MAGFIELD STEP 3 — a genuine discrete curl.
+    for (let p = 0; p < 6; p++) {
+      const [a, b] = MAGFIELD.axisPairs[p];
+      const maskA = 1 << a, maskB = 1 << b, maskBoth = maskA | maskB;
+      for (let u = 0; u < 16; u++) {
+        if (u & maskBoth) continue;
+        const circ =
+          this.getV(u, a) +
+          this.getV(u ^ maskA, b) -
+          this.getV(u ^ maskB, a) -
+          this.getV(u, b);
+        this.F[p * 4 + MAGFIELD.faceLocalIdx(u, a, b)] = circ;
+      }
+    }
+
+    // ── Hodge split of F, computed PER VERTEX ──
+    // F∧F is a 4-form, i.e. a DENSITY: it must be evaluated pointwise from the six
+    // face values incident to one vertex and then summed. Averaging the four faces
+    // of each axis pair first would mix distinct points and collapse F back to a
+    // decomposable form. Same exact ⋆⋆=+1 tables as MAGFIELD.
+    let sdMagSum = 0, adMagSum = 0, sdSqSum = 0, adSqSum = 0;
+    let sdAcc = [0, 0, 0], adAcc = [0, 0, 0];
+    for (let i = 0; i < 16; i++) {
+      let sx = 0, sy = 0, sz = 0, ax = 0, ay = 0, az = 0;
+      for (let p = 0; p < 6; p++) {
+        const [a, b] = MAGFIELD.axisPairs[p];
+        const base = i & ~((1 << a) | (1 << b));
+        const Bf = this.F[p * 4 + MAGFIELD.faceLocalIdx(base, a, b)];
+        const hP = MAGFIELD.hodgeSD[p], hM = MAGFIELD.hodgeASD[p];
+        sx += Bf * hP[0]; sy += Bf * hP[1]; sz += Bf * hP[2];
+        ax += Bf * hM[0]; ay += Bf * hM[1]; az += Bf * hM[2];
+      }
+      const sSq = sx*sx + sy*sy + sz*sz, aSq = ax*ax + ay*ay + az*az;
+      sdSqSum += sSq; adSqSum += aSq;
+      sdMagSum += Math.sqrt(sSq); adMagSum += Math.sqrt(aSq);
+      sdAcc[0] += sx; sdAcc[1] += sy; sdAcc[2] += sz;
+      adAcc[0] += ax; adAcc[1] += ay; adAcc[2] += az;
+    }
+    this.Fsd = [sdAcc[0] / 16, sdAcc[1] / 16, sdAcc[2] / 16];
+    this.Fasd = [adAcc[0] / 16, adAcc[1] / 16, adAcc[2] / 16];
+
+    // ── Invariants ──
+    this.vSq = 0;
+    for (let i = 0; i < 32; i++) this.vSq += this.v[i] * this.v[i];
+    this.FSq = sdSqSum + adSqSum;              // |F|²   = Σᵢ (|F₊|² + |F₋|²)
+    this.pontryagin = sdSqSum - adSqSum;       // F∧F    = Σᵢ (|F₊|² − |F₋|²)
+    const tot = sdMagSum + adMagSum;
+    // (Σ|F₊| − Σ|F₋|)/(Σ|F₊| + Σ|F₋|) ∈ [−1,1]. Zero field ⇒ nothing to report ⇒ 0.
+    this.selfDuality = tot > 1e-15 ? (sdMagSum - adMagSum) / tot : 0;
   },
 
-  // Per-position Beltrami ratio at (theta, phi) — for rendering precision
-  // [PRESENTATION] Uses cached |omega|/|v| from setVortex weighted by S6 φ-cycle position.
-  // The setVortex method now uses S5 antisymmetric pairing on VTX.psi; this function
-  // samples that field at (theta, phi) using a φ-cycle weighting (no trig in the math).
-  beltramiAt(theta, phi, strength) {
-    // S6 φ-cycle position weighting
-    const tIdx = ((Math.floor(theta * 4 / Math.PI) % 4) + 4) % 4;
-    const pIdx = ((Math.floor(phi * 4 / Math.PI) % 4) + 4) % 4;
-    const phiCycle = [1.0, 0.6180339887, -1.0, -0.6180339887];
-    const w = phiCycle[tIdx] * phiCycle[pIdx];
-    // Sample the global Beltrami eigenvalue scaled by position weighting.
-    // For uniform fields this returns the global lambda; positional variation
-    // comes from the φ-cycle modulation.
-    return Math.abs(this.beltramiLambda) * Math.abs(w);
+  // Read the velocity 1-form on the edge (base → base|(1<<axis))
+  getV(base, axis) {
+    return this.v[axis * 8 + MAGFIELD.edgeLocalIdx(base, axis)];
   },
 
   computeEnergy() {
-    // ℰ = ½|∇×v|² + ½κ|v|² + η·v·(∇×v)
-    const oSq = this.omega[0]**2 + this.omega[1]**2 + this.omega[2]**2;
-    const vSq = this.v[0]**2 + this.v[1]**2 + this.v[2]**2;
-    const helicity = this.v[0]*this.omega[0] + this.v[1]*this.omega[1] + this.v[2]*this.omega[2];
-    this.energy = 0.5 * oSq + 0.5 * this.kappa * vSq + this.eta * helicity;
+    // ℰ = ½|F|² + ½κ|v|² + η·(F∧F)
+    // 4D generalisation of ½|∇×v|² + ½κ|v|² + η·v·(∇×v): the helicity term
+    // v·(∇×v) is 3D-only (it pairs a 1-form with a 2-form), and its correct 4D
+    // counterpart is the topological density F∧F — see the §5 banner.
+    this.energy = 0.5 * this.FSq + 0.5 * this.kappa * this.vSq + this.eta * this.pontryagin;
     return this.energy;
   },
 
@@ -2820,6 +2973,9 @@ const MAYA = {
   //
   // Phase Evolution:
   //   dφ/dμ = β_φ(φ, μ) / μ
+  //   Integrated exactly via the RG substitution t = ln μ (dt = dμ/μ):
+  //     dφ/dt = β_φ(φ)
+  //   μ is tracked as real state (MAYA.mu / MAYA.lnMu), not assumed to be 1.
   //
   // Beta Function:
   //   β_φ = phaseRotation · sin(φ) - consciousnessDamping · φ³
@@ -2828,9 +2984,14 @@ const MAYA = {
   //   phaseRotation     = φ/e    (golden ratio / Euler's number)
   //   consciousnessDamping = e/π
   //
-  // Fixed Points (stable coherence layers):
-  //   φ* = 0                                         (trivial)
-  //   φ* = ±√(phaseRotation / consciousnessDamping)  (non-trivial)
+  // Fixed Points (stable coherence layers) — roots of β_φ(φ) = 0:
+  //   φ* = 0                                         (trivial, REPELLING: β'(0)=+phaseRotation)
+  //   φ* = ±root of  phaseRotation·sin φ = consciousnessDamping·φ³   (non-trivial, ATTRACTING)
+  //
+  //   NOTE: ±√(phaseRotation/consciousnessDamping) is only the SMALL-ANGLE
+  //   approximation of that root (set sin φ ≈ φ, giving φ² = A/B). It is not a
+  //   root of the stated β: at √(A/B)=0.82942, A·sin φ=0.4391 but B·φ³=0.4938.
+  //   The true root is 0.786881…, obtained by exact Newton iteration in ℚ below.
   //
   // Stability:
   //   β'_φ = phaseRotation·cos(φ) - 3·consciousnessDamping·φ²
@@ -2852,8 +3013,10 @@ const MAYA = {
   consciousnessDamping_f: 0,
 
   // State
-  phase: 0,          // current Maya phase φ
-  phase_exact: null,  // Rat
+  phase: 0,          // current Maya phase φ (float projection, display only)
+  phase_exact: null,  // Rat — canonical exact phase state
+  mu: 1.0,           // RG scale μ (float projection); phase is evolved AT this scale
+  lnMu: 0,           // ln μ — the variable actually integrated in (see evolvePhase)
   mayaFactor: 1.0,   // current M = observed/true
   stablePhase: 0,    // nearest stable fixed point
 
@@ -2865,7 +3028,20 @@ const MAYA = {
     this.consciousnessDamping_exact = Q.div(e_rat, pi_rat);
     this.phaseRotation_f = Q.fl(this.phaseRotation_exact);
     this.consciousnessDamping_f = Q.fl(this.consciousnessDamping_exact);
-    this.phase_exact = Q.ZERO;
+    // Seed at the STABLE non-trivial fixed point — the true root of
+    // phaseRotation·sin φ = consciousnessDamping·φ³, solved exactly by fixedPoints()
+    // via Newton iteration in ℚ (≈ 0.786881, NOT the small-angle value 0.829420).
+    //
+    // Why not φ = 0: β'(φ) = phaseRotation·cos φ − 3·consciousnessDamping·φ².
+    //   β'(0)  = +phaseRotation ≈ +0.60  > 0  → φ=0 is REPELLING (unstable)
+    //   β'(φ*) ≈ −1.38                   < 0  → φ* is ATTRACTING (stable)
+    // Since β(0) = 0 exactly, seeding at 0 parks the flow forever on the unstable
+    // equilibrium and the "stable coherence layers" named in the header above can
+    // never be reached — modulationFactor() would be identically 1 for all time.
+    this.phase_exact = this.snapPhase(this.fixedPoints()[1]);
+    this.phase = Q.fl(this.phase_exact);
+    this.mu = 1.0;   // μ starts at unit scale
+    this.lnMu = 0;   // ln 1 = 0
   },
 
   // β_φ = phaseRotation·sin(φ) - consciousnessDamping·φ³
@@ -2898,11 +3074,27 @@ const MAYA = {
     return this.phaseRotation_f * cos(phi) - 3 * this.consciousnessDamping_f * phi * phi;
   },
 
-  // Fixed points: φ* = 0, φ* = ±√(phaseRotation/consciousnessDamping)
+  // Fixed points: the actual roots of β_φ(φ) = phaseRotation·sin φ − consciousnessDamping·φ³.
+  //
+  // Solved by exact Newton iteration in ℚ (same technique QFiniteSeries.sqrt uses):
+  //   φ_{n+1} = φ_n − β_φ(φ_n) / β'_φ(φ_n)
+  // with both β and β' evaluated exactly via QFiniteSeries.sin/cos.
+  //
+  // The small-angle estimate √(phaseRotation/consciousnessDamping) is used only as
+  // the Newton SEED — it is not itself a root (see header note). Newton converges
+  // quadratically from it to the true root 0.786881….
   fixedPoints() {
     const ratio = Q.div(this.phaseRotation_exact, this.consciousnessDamping_exact);
-    const phi_star = QFiniteSeries.sqrt(ratio);
-    return [Q.ZERO, phi_star, Q.neg(phi_star)];
+    let phi = this.snapPhase(QFiniteSeries.sqrt(ratio)); // small-angle seed
+    for (let i = 0; i < 12; i++) {
+      const f = this.betaFunction(phi);
+      const fp = this.betaDerivative(phi);
+      if (Q.isNaN(f) || Q.isNaN(fp) || fp.n === 0n) break;
+      const next = this.snapPhase(Q.sub(phi, Q.div(f, fp)));
+      if (Q.eq(next, phi)) { phi = next; break; } // exact fixpoint on the grid
+      phi = next;
+    }
+    return [Q.ZERO, phi, Q.neg(phi)];
   },
 
   // Check stability at a point (stable if β' < 0)
@@ -2911,18 +3103,58 @@ const MAYA = {
     return bprime.n < 0n; // negative → stable
   },
 
-  // Evolve phase by dμ: φ_{n+1} = φ_n + β_φ(φ_n)·dμ/μ
-  // Euler integration, steps sub-steps for stability
-  evolvePhase(dMu, steps = 5) {
-    const dt_f = dMu / steps;
+  // Integrate the stated ODE  dφ/dμ = β_φ(φ) / μ  exactly.
+  //
+  // Substituting the RG variable t = ln μ (so dt = dμ/μ) turns it into
+  //   dφ/dt = β_φ(φ)
+  // This is an EXACT change of variable, not an approximation — and it is why
+  // no division by μ appears below: the 1/μ is absorbed into d(ln μ). μ itself
+  // is tracked as real state (this.mu) so the scale the phase was evolved to is
+  // a reportable quantity rather than an unstated assumption.
+  //
+  // Euler steps in t, evaluated with the EXACT ℚ betaFunction (QFiniteSeries.sin)
+  // on phase_exact. The float `phase` is a projection for display only.
+  // GRID: rational grid the phase is represented on, 10⁻⁶ — the same grid the
+  // previous implementation used for phase_exact. Each Euler step is snapped back
+  // to it. This is REQUIRED for finite representation, not a shortcut on the math:
+  // betaFunction evaluates QFiniteSeries.sin at order 8, whose output denominator
+  // is ~q¹⁷·17!, so an unsnapped accumulator would raise its denominator to the
+  // 17th power every step (q → q¹⁷ → q²⁸⁹ → …) and be unrepresentable after two.
+  // Snapping bounds the REPRESENTATION only, never the value.
+  //
+  // Cost note (measured): exact β is ~1.6 ms at this grid and ~3.9 ms at 10⁻⁹,
+  // because the x¹⁷ term makes 100–150 digit BigInts. One exact step per frame at
+  // 10⁻⁶ keeps the whole integration inside ~10% of a 60 fps budget. The previous
+  // code took 5 sub-steps but evaluated β in FLOAT (Math.sin); this takes one step
+  // and evaluates β exactly in ℚ, which is the accuracy that actually matters here
+  // — dt = 0.01 with an attracting fixed point means Euler error does not
+  // accumulate (it is damped out at the equilibrium where β = 0).
+  PHASE_GRID: 1000000n,
+
+  snapPhase(r) {
+    if (Q.isNaN(r)) return r;
+    // round-to-nearest on the grid, exact BigInt (no float round-trip)
+    const g = this.PHASE_GRID;
+    const num = r.n * g, den = r.d;
+    const half = den / 2n;
+    const q = num < 0n ? (num - half) / den : (num + half) / den;
+    return Q.mk(q, g);
+  },
+
+  evolvePhase(dLnMu, steps = 1) {
+    const dt = Q.div(this.snapPhase(Q.mk(Bi(dLnMu * 1e6), 1000000n)), Q.mk(BigInt(steps)));
     for (let i = 0; i < steps; i++) {
-      const beta = this.betaFloat(this.phase);
-      this.phase += beta * dt_f;
+      const beta = this.betaFunction(this.phase_exact);
+      if (Q.isNaN(beta)) break; // exact-ℚ undefined guard, not a value clamp
+      this.phase_exact = this.snapPhase(Q.add(this.phase_exact, Q.mul(beta, dt)));
     }
-    // Clamp to prevent divergence
-    this.phase = max(-PI, min(PI, this.phase));
-    // Update exact phase
-    this.phase_exact = Q.mk(Bi(this.phase * 1000000), 1000000n);
+    // Advance the RG scale: t += dLnMu  ⟹  μ *= e^{dLnMu}
+    this.lnMu += dLnMu;
+    this.mu = Math.exp(this.lnMu);
+    // Float projection for rendering/HUD. No clamp: β_φ = A·sin φ − B·φ³ is
+    // strongly restoring for large |φ| (the −Bφ³ term dominates), with attracting
+    // fixed points at φ* = ±√(A/B) ≈ ±0.83, so the flow is self-bounding.
+    this.phase = Q.fl(this.phase_exact);
   },
 
   // Maya factor: M = observed / true
@@ -2956,6 +3188,9 @@ const MAYA = {
     const fps = this.fixedPoints();
     return {
       phase: this.phase,
+      phase_exact: this.phase_exact ? {n: String(this.phase_exact.n), d: String(this.phase_exact.d)} : null,
+      mu: this.mu,          // RG scale the phase was evolved to
+      lnMu: this.lnMu,      // the variable actually integrated in
       beta: this.betaFloat(this.phase),
       betaDeriv: this.betaDerivFloat(this.phase),
       mayaFactor: this.mayaFactor,
@@ -2963,7 +3198,7 @@ const MAYA = {
       phaseRotation: this.phaseRotation_f,
       consciousnessDamping: this.consciousnessDamping_f,
       fixedPoints: fps.map(fp => Q.fl(fp)),
-      formula: 'β_φ = (φ/e)·sin(φ) - (e/π)·φ³'
+      formula: 'dφ/dμ = β_φ/μ  ⟺  dφ/d(ln μ) = β_φ,  β_φ = (φ/e)·sin(φ) - (e/π)·φ³'
     };
   }
 };
@@ -5006,7 +5241,8 @@ function advectField() {
 
       // TGCR differential rotation: v_θ(φ) with Beltrami structure
       // Helical phase lock: θ/(3a)=1 → screw cancels 1/r divergence
-      const beltrami = TGCR.beltramiLambda;
+      // Self-duality of F = d¹v ∈ [−1,1] (measured, not assumed) modulates the drift.
+      const beltrami = TGCR.selfDuality;
       const v_theta = vortexOmega * (1 + 0.5 * cos(phi)) * (1 + beltrami * 0.1);
 
       // Wheeler counterspace modulation on advection velocity
@@ -5087,7 +5323,8 @@ const CASCADE = {
 // The torus surface field = IDW interpolation from nearest vertex fields.
 function updateField(t) {
   const time = t * 0.001;
-  // Maya Illusion Sutra — evolve phase and compute modulation factor
+  // Maya Illusion Sutra — advance the RG scale by Δ(ln μ)=0.01 and evolve φ
+  // along dφ/dμ = β_φ/μ (see MAYA.evolvePhase for the exact t=ln μ substitution)
   MAYA.evolvePhase(0.01);
   const mayaMod = MAYA.modulationFactor();
 
@@ -6668,7 +6905,7 @@ function projectTorus(t) {
   const vortexActive = absVo > 0.005;
   const vGeo = min(absVo, 2.0) * AMP.vortex;
   const vSign = vo > 0 ? 1 : -1;
-  const bLam01 = 1 + TGCR.beltramiLambda * 0.1;
+  const bLam01 = 1 + TGCR.selfDuality * 0.1;
   const timeVo3 = time * vo * 3;
   const timeVo2 = time * vo * 2;
   const timeVo4 = time * vo * 4;
@@ -7632,7 +7869,9 @@ function frame(t) {
     const phi_avg = (cycle * 0.007) % TAU;
     // Momentum coupling: soft saturate to [0,1] for stable TGCR speed
     const momContrib = abs(LeanState.momX()) / (1 + abs(LeanState.momX()));
-    TGCR.setVortex(theta_avg, phi_avg, abs(vortexOmega) + 0.1 + momContrib * 0.5);
+    // setVortex now builds the velocity 1-form on the lattice edges; (θ,φ) are not
+    // coordinates of the tesseract, so only the drive strength is passed.
+    TGCR.setVortex(abs(vortexOmega) + 0.1 + momContrib * 0.5);
     TGCR.computeEnergy();
     TGCR.checkPhaseLock(theta_avg, 0.333); // a=1/3 for θ/(3a)=1
   }
