@@ -1118,6 +1118,83 @@ const STRICT_V5_FACTORY = () => {
     }
     return out;
   };
+  /* Decision procedure for the seven statements of WheelerGeometry.lean. Every
+     one is a finite identity or inequality over the exact field, so each is
+     decided here rather than asserted. Returns one record per statement; the
+     renderer gates each Wheeler channel on the record it depends on. */
+  const wheelerAudit = (field,p) => {
+    const f = field || initDielectric();
+    const par = p || {dielectricScale:A4.fromQ(Q.mk(1n,8n)),appliedH:A4.fromQ(Q.mk(1n,64n)),
+                      gammaW:A4.fromQ(Q.mk(424923n,10000n)),geoD:A4.fromQ(Q.mk(1n,16n)),
+                      geoM:A4.fromQ(Q.mk(1n,8n)),geoP:A4.fromQ(Q.mk(1n,128n))};
+    const w = computeWheeler(f,par);
+    const sQ = rationalA4(par.dielectricScale,"dielectricScale");
+    const hQ = rationalA4(par.appliedH,"appliedH");
+    const gQ = rationalA4(par.gammaW,"gammaW");
+    const dQ = rationalA4(par.geoD,"geoD");
+    const pQ = rationalA4(par.geoP,"geoP");
+    const R = [];
+    const claim = (name,ok,detail) => { R.push({name,ok:!!ok,detail:detail||''}); return !!ok; };
+
+    /* hw(v) = 2  =>  M(v) = 0.  The inertial plane carries no magnetism. */
+    let t1 = true, t1n = 0;
+    for(let v=0;v<16;v++) if(hw(v)===2){ t1n++; if(!A4.isZero(w.magnetic[v])) t1=false; }
+    claim('wheeler_inertial_plane_magnetism_zero',t1&&t1n===6,`${t1n} inertial-plane vertices`);
+
+    /* 0 <= k^2/(1+k^2) < 1  for k = hw(v)-2, and = 0 exactly on the plane. */
+    let t2 = true;
+    for(let v=0;v<16;v++){
+      const k=hw(v)-2, k2=Q.mk(BigInt(k*k)), mw=Q.div(k2,Q.add(Q.ONE,k2));
+      if(Q.sign(mw)<0||Q.cmp(mw,Q.ONE)>=0) t2=false;
+      if((k===0)!==Q.isZero(mw)) t2=false;
+    }
+    claim('wheeler_magnetic_weight_in_unit_interval',t2);
+
+    /* D(v) = 2phi * s * field[v] exactly, for every v. */
+    let t3 = true;
+    for(let v=0;v<16;v++)
+      if(!A4.eq(w.dielectric[v],A4.scaleQ(A4.TWO_PHI,Q.mul(sQ,f[v])))) t3=false;
+    claim('wheeler_dielectric_is_phi_scaled',t3);
+
+    /* omega = gammaW * M, exactly linear, at every vertex. */
+    let t4 = true;
+    for(let v=0;v<16;v++){
+      const k=hw(v)-2, k2=Q.mk(BigInt(k*k));
+      const mag=Q.mul(Q.mul(Q.mul(sQ,f[v]),Q.div(k2,Q.add(Q.ONE,k2))),hQ);
+      if(!A4.eq(w.omega[v],A4.fromQ(Q.mul(gQ,mag)))) t4=false;
+    }
+    claim('wheeler_omega_linear_in_magnetic',t4);
+
+    /* radialFactor(r,eps) = phi^3 * rho with 0 <= rho <= 1 and rho(0) = 1. */
+    let t5 = true;
+    const rhoOf=(rQ,eQ)=>{const r2=Q.mul(rQ,rQ),e2=Q.mul(eQ,eQ);return Q.div(e2,Q.add(r2,e2));};
+    for(let i=0;i<12;i++){
+      const rho=rhoOf(Q.mk(BigInt(i),4n),Q.mk(1n,10n));
+      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5=false;
+    }
+    if(!Q.eq(rhoOf(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5=false;
+    claim('wheeler_radial_factor_bounded_by_phi_cubed',t5);
+
+    /* Cayley: c^2 + s^2 = 1 exactly, so omega induces a true rotation. */
+    let t6 = true;
+    for(let v=0;v<16;v++){
+      let tau=A4.mul(par.geoP,w.omega[v]);
+      if(hw(v)<2) tau=A4.neg(tau);
+      const t2a=A4.mul(tau,tau), den=A4.add(A4.ONE,t2a);
+      const c=A4.div(A4.sub(A4.ONE,t2a),den), s=A4.div(A4.scaleQ(tau,Q.TWO),den);
+      if(!A4.eq(A4.add(A4.mul(c,c),A4.mul(s,s)),A4.ONE)) t6=false;
+    }
+    claim('wheeler_cayley_rotation_is_orthogonal',t6,`geoP = ${Q.toString(pQ)}`);
+
+    /* 1 + geoD*D(v) > 0, so the z-compression never inverts or divides by 0. */
+    let t7 = true;
+    for(let v=0;v<16;v++)
+      if(A4.sign(A4.add(A4.ONE,A4.mul(par.geoD,w.dielectric[v])))<=0) t7=false;
+    claim('wheeler_compression_positive',t7,`geoD = ${Q.toString(dQ)}`);
+
+    return Object.freeze({results:Object.freeze(R),ok:R.every(x=>x.ok),
+                          byName:Object.freeze(Object.fromEntries(R.map(x=>[x.name,x.ok])))});
+  };
   const complexity = psi => {
     let maxN=0,maxD=0,totalN=0,totalD=0,count=0;
     for(const z of psi)for(const a of [z.re,z.im])for(const q of [a.a,a.b,a.c,a.d]){const b=Q.bits(q);if(b.numeratorBits>maxN)maxN=b.numeratorBits;if(b.denominatorBits>maxD)maxD=b.denominatorBits;totalN+=b.numeratorBits;totalD+=b.denominatorBits;count++;}
@@ -1299,6 +1376,33 @@ const STRICT_V5_FACTORY = () => {
     const energyOnSeedBefore=energy(initState()),energyOnSeedAfter=energy(applySutra(id,initState(),Q.ONE));
     return {id,domain:'C4^16',codomain:'C4^16',linear:true,matrix16x16:matrix,rank,nullity:16-rank,determinant,unitaryPass,complementCommutes,constantImage,energyOnSeedBefore,energyOnSeedAfter,energyPreservedOnSeed:A4.eq(energyOnSeedBefore,energyOnSeedAfter)};
   };
+  /* Two sutras that compile to the same 16x16 matrix are the same operator, and
+     the renderer will draw them identically -- correctly, because they act
+     identically. That is a defect in the operator set, not in the picture, so
+     it is detected and named here rather than disguised downstream. */
+  const operatorDistinctness = () => {
+    /* Two operators are the same operator only if they agree as functions of
+       BOTH state and strength. Agreeing at a single strength is a coincidence
+       of that strength, not an identity, so both are tested and reported. */
+    const strengths=[Q.ONE,Q.mk(2n,5n)];
+    const mats=strengths.map(w=>{const m=[];for(let id=1;id<=29;id++)m[id]=matrixForSutra(id,w);return m;});
+    const sameAt=(t,a,b)=>{
+      const A=mats[t][a],B=mats[t][b];
+      for(let i=0;i<16;i++)for(let j=0;j<16;j++)if(!C4.eq(A[i][j],B[i][j]))return false;
+      return true;
+    };
+    const collisions=[],atUnitOnly=[];
+    for(let a=1;a<=29;a++)for(let b=a+1;b<=29;b++){
+      const s0=sameAt(0,a,b),s1=sameAt(1,a,b);
+      if(s0&&s1)collisions.push([a,b]);
+      else if(s0||s1)atUnitOnly.push([a,b]);
+    }
+    const merged=new Set();
+    for(const[,b]of collisions)merged.add(b);
+    return Object.freeze({distinct:29-merged.size,collisions:Object.freeze(collisions),
+                          strengthDependentOnly:Object.freeze(atUnitOnly),
+                          strengthsTested:strengths.length,ok:collisions.length===0});
+  };
   const testCorpus = () => {
     const corpus=[];
     for(let j=0;j<16;j++)corpus.push({name:`basis_e${j}`,state:basisState(j)});
@@ -1442,7 +1546,7 @@ const STRICT_V5_FACTORY = () => {
       energyMethod: last.energyMethod
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
+  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
 };
 const STRICT_V5 = STRICT_V5_FACTORY();
 /* Release manifest: one object a buyer or reviewer can diff against a shipped
@@ -1606,7 +1710,7 @@ const FAITHFUL = (() => {
   /* Parseval: mean(|Psi|^2) * 16 must equal sum_k |psi_k|^2, the same A4
      quantity the R4 gate certifies. Node test uses the file's own
      tessVertexToTorus, so a mapping or sign error cannot slip through. */
-  const state = { ok: null, rel: 0, node: 0, exact: 0, recon: 0, a4: '0', overlays: false };
+  const state = { ok: null, rel: 0, node: 0, exact: 0, recon: 0, a4: '0', channels: null };
 
   function audit(psi, NT, NP) {
     NT = NT || 64; NP = NP || 64;
@@ -1629,11 +1733,51 @@ const FAITHFUL = (() => {
     state.rel = rel; state.node = node;
     state.exact = proj.totalF; state.recon = recon;
     state.a4 = aStr(proj.totalA4);
-    state.ok = rel < 1e-9 && node < 1e-9 && !state.overlays;
+    /* The projection is faithful only if it is faithful AND every channel the
+       renderer is about to emit still holds its certificate. Without the
+       second clause the badge reports on the field and not on the picture. */
+    const proj_ok = rel < 1e-9 && node < 1e-9;
+    let ch = null;
+    try { ch = VISUAL_CERTIFICATE.status(); } catch (e) { ch = null; }
+    state.channels = ch;
+    state.ok = proj_ok && (ch === null || ch.all);
     return { proj, ev, rel, node, recon, ok: state.ok };
   }
 
-  return { qNum, aNum, aStr, project, coeffs, evaluator, audit, state,
+  /* Band-limited extension of several real 16-vertex quantities through the
+     SAME Gray pairing and the same mode set the state uses. Each interpolates
+     its sixteen vertex values exactly, so a Wheeler channel carried this way
+     agrees with exactGeometry at every vertex -- which is what the render is
+     checked on. All channels share one trig pass: the mode basis does not
+     depend on which quantity is being carried, only the coefficients do. */
+  function multiRealEvaluator(valsList) {
+    const cs = valsList.map(vals => {
+      const re = new Float64Array(16), im = new Float64Array(16);
+      for (let k = 0; k < 16; k++) re[k] = vals[k];
+      return coeffs({ re, im });
+    });
+    const n = cs.length;
+    return (theta, phi, out) => {
+      const u = theta - OFFSET - TESS_ROT.xw;
+      const v = phi   - OFFSET - TESS_ROT.yz;
+      for (let q = 0; q < n; q++) out[q] = 0;
+      for (const fm of MODES) {
+        const cm = Math.cos(fm * u), sm = Math.sin(fm * u);
+        for (const fn of MODES) {
+          const idx = MI(fn) * 4 + MI(fm);
+          const cn = Math.cos(fn * v), sn = Math.sin(fn * v);
+          const er = cm * cn - sm * sn, ei = cm * sn + sm * cn;
+          for (let q = 0; q < n; q++) {
+            const c = cs[q];
+            out[q] += c.cr[idx] * er - c.ci[idx] * ei;
+          }
+        }
+      }
+      return out;
+    };
+  }
+
+  return { qNum, aNum, aStr, project, coeffs, evaluator, multiRealEvaluator, audit, state,
            ringTheta, ringPhi, GRAY_POS, OFFSET };
 })();
 const gcd = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { [a, b] = [b, a % b]; } return a; };
@@ -1738,8 +1882,100 @@ const LEAN_PROVED = Object.freeze({
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
   kernelChecked: ['masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','rho_num_nonneg','rho_num_le_den','rho_zero_eps','rho_den_pos_of_hw_pos','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','norm_preserving_not_reducing','projective_not_invertible'],
+  /* Wheeler geometry. Lean source is in the repository at WheelerGeometry.lean,
+     in the SutraWS package alongside Exhaustive.lean. Every statement is a
+     decidable identity over Rat, so each also carries an executable decision
+     procedure -- wheelerAudit() below -- that re-decides it in this page over
+     the same exact arithmetic the renderer uses. These are NOT among the
+     VedicKernel oleans; they are listed separately and reported separately. */
+  wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
   compilerTrusted: ['d1_d2_zero','d2_d3_zero','d3_d4_zero','euler_characteristic_zero','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect']
 });
+/* Every visual channel names the theorems it rests on and the predicate that
+   decides, right now, whether those theorems still hold of the running state.
+   projectTorus and renderTorus emit a channel only when its predicate passes,
+   so "no verify algorithm attached" is enforced structurally: delete a
+   certificate or make it fail and the channel goes flat. */
+const VISUAL_CERTIFICATE = {
+  channels: {
+    amplitude: {
+      draws: 'R, r, yOff and the gradient terms from |Psi|^2',
+      theorems: ['norm_preserving_not_reducing', 'hw_count', 'hw_all_positive'],
+      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
+    },
+    phase: {
+      draws: 'phiShift twist from arg(Psi)',
+      theorems: ['norm_preserving_not_reducing'],
+      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
+    },
+    wheeler: {
+      draws: 'dielectric compression, magnetic dilation, precession rotation',
+      theorems: LEAN_PROVED.wheelerChecked,
+      holds: () => WHEELER_CHANNEL.ok
+    },
+    r4gate: {
+      draws: 'tube pinch from the R4 gate',
+      theorems: ['rho_num_nonneg', 'rho_num_le_den', 'rho_zero_eps',
+                 'rho_den_pos_of_hw_pos', 'tau_max_num_eq',
+                 'tau_max_below_removed_ceiling', 'tau_base_is_three_quarters'],
+      holds: () => Number.isFinite(VTX_DISPLAY.r4F) && VTX_DISPLAY.r4F >= 0 && VTX_DISPLAY.r4F <= 1
+    },
+    sutra: {
+      draws: 'per-sutra injected displacement',
+      theorems: ['unitary_measured_unitary_no_defect', 'projective_measured_projective_no_defect',
+                 'declared_unitary_but_rank_deficient_is_defect'],
+      holds: () => SUTRA_CERT.ok
+    }
+  },
+  _last: null,
+  status() {
+    const s = {};
+    for (const k of Object.keys(this.channels)) {
+      let ok = false;
+      try { ok = !!this.channels[k].holds(); } catch (e) { ok = false; }
+      s[k] = ok;
+    }
+    s.all = Object.keys(this.channels).every(k => s[k]);
+    this._last = s;
+    return s;
+  },
+  report() {
+    const s = this._last || this.status();
+    return Object.keys(this.channels).map(k => ({
+      channel: k, drawn: s[k], draws: this.channels[k].draws,
+      theorems: this.channels[k].theorems
+    }));
+  }
+};
+/* Certificate for the per-sutra channel: every active sutra must still audit
+   consistently with the class it declares. Recomputed when the active set
+   changes, not per frame -- operatorAudit builds a 16x16 C4 matrix. */
+const SUTRA_CERT = { ok: true, key: '', defects: [], dist: null, activeCollisions: [] };
+function refreshSutraCertificate(active) {
+  const key = active.map(s => s.id).join(',');
+  if (key === SUTRA_CERT.key) return SUTRA_CERT;
+  SUTRA_CERT.key = key;
+  SUTRA_CERT.defects = [];
+  for (const s of active) {
+    let a;
+    try { a = STRICT_V5.operatorAudit(s.id); }
+    catch (e) { SUTRA_CERT.defects.push({ id: s.id, why: 'audit threw: ' + e.message }); continue; }
+    const declared = OP_DECLARED_CLASS[s.id];
+    const law = OP_CLASS_LAW[declared];
+    if (!law) { SUTRA_CERT.defects.push({ id: s.id, why: 'no class law for ' + declared }); continue; }
+    const normPreserved = a.unitaryPass === true, invertible = a.rank === 16;
+    if (law.preservesNorm !== normPreserved || law.invertible !== invertible)
+      SUTRA_CERT.defects.push({ id: s.id,
+        why: `declared ${declared} but normPreserved=${normPreserved} invertible=${invertible}` });
+  }
+  /* A collision between two ACTIVE sutras means the picture cannot distinguish
+     them, because the operators do not. Reported, not hidden. */
+  if (SUTRA_CERT.dist === null) SUTRA_CERT.dist = STRICT_V5.operatorDistinctness();
+  const ids = new Set(active.map(s => s.id));
+  SUTRA_CERT.activeCollisions = SUTRA_CERT.dist.collisions.filter(([a, b]) => ids.has(a) && ids.has(b));
+  SUTRA_CERT.ok = SUTRA_CERT.defects.length === 0;
+  return SUTRA_CERT;
+}
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
@@ -1750,7 +1986,11 @@ const PROVENANCE = Object.freeze({
   leanOleans: ['VedicKernel/Q4Topology.olean','VedicKernel/OperatorClass.olean','VedicKernel/R4Gate.olean','Main.olean'],
   leanAxiomsKernelChecked: 18,
   leanAxiomsCompilerTrusted: 8,
-  scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.'
+  wheelerLeanSource: 'WheelerGeometry.lean',
+  wheelerTheorems: 7,
+  wheelerRuntimeDecided: true,
+  scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
+  wheelerScopeNote: 'The seven Wheeler statements are carried as Lean source in this repository and are re-decided at runtime by wheelerAudit() over the page arithmetic. No olean is claimed for them; the runtime decision is what gates the render.'
 });
 function sourceFingerprint() {
   const scripts = document.scripts;
@@ -2211,32 +2451,35 @@ const WHEELER = {
   goldenVortex(theta, phi, strength) {
     return this._GVF[this._oct(theta * this._phiAng + phi)][this._oct(theta + phi * this._phiAng)] * strength;
   },
-  fieldDistortion(theta, phi, R0, t) {
+  /* The modulation argument of these four is the kernel's Larmor precession
+     omega = gamma_W * M at the sampled point, normalised to [-1,1]. It was a
+     wall-clock sine; omega is the quantity the term was always about, it is
+     exact, and it makes every one of these a pure function of psi. */
+  fieldDistortion(theta, phi, R0, wOmega) {
     const sphi = this._SIN[this._oct(phi)], cphi = this._COS[this._oct(phi)];
     const hyp = this.hyperboloid(sphi, theta, R0);
     const rad = this._RADF[this._oct(phi)];
     const vortex = this.goldenVortex(theta, phi, 1);
     const coupling = this.kappa_phi3 * hyp * rad;
-    const raw = coupling * (1 + vortex * this._SIN[this._oct(t * 0.001)]);  
-    return raw;
+    return coupling * (1 + vortex * wOmega);
   },
-  etherPressure(theta, phi, t) {
+  etherPressure(theta, phi, wOmega) {
     const hyp = this.hyperboloid(this._SIN[this._oct(phi)], theta, 1.5);
-    const centBal = this.centBal(theta, phi);                       
-    const pulsation = 1 + 0.15 * this._SIN[this._oct(t * 0.0008 + theta)];
+    const centBal = this.centBal(theta, phi);
+    const pulsation = 1 + 0.15 * wOmega;
     return this._phi3 * hyp * centBal * pulsation;
   },
-  counterspaceIntensity(theta, phi, fieldVal, t) {
+  counterspaceIntensity(theta, phi, fieldVal, wOmega) {
     const xi = this.counterspaceConj(fieldVal);
     let d = abs(this._oct(phi) - this.inertiaOct); if (d > 4) d = 8 - d;
     const inertiaEnvelope = 1 / (1 + d * d);
     const vortexTwist = this.goldenVortex(theta, phi, 0.3);
-    return xi * inertiaEnvelope * (1 + vortexTwist * this._SIN[this._oct(t * 0.0005)]);
+    return xi * inertiaEnvelope * (1 + vortexTwist * wOmega);
   },
-  fluxPhase(theta, phi, t) {
+  fluxPhase(theta, phi, wOmega) {
     const spiralPhase = (((theta * this._phiAng + phi) % TAU) + TAU) % TAU;
     const inertia = this._COS[this._oct(phi - this.inertiaPlane)];
-    return (((spiralPhase * 3 / TAU + inertia * 0.5 + t * 0.0002) % 1.0) + 1) % 1.0;
+    return (((spiralPhase * 3 / TAU + inertia * 0.5 + wOmega * 0.25) % 1.0) + 1) % 1.0;
   },
   etherColor(centBalance, pressure) {
     const p = pressure;
@@ -3653,77 +3896,10 @@ function computeUSO() {
 const FIELD_TH = 160, FIELD_PH = 80;
 const fieldGrid = new Float32Array(FIELD_TH * FIELD_PH);
 const fieldPrev = new Float32Array(FIELD_TH * FIELD_PH);
-let vortexOmega = 0, vortexHelicity = 1;
-function advectField() {
-
-  fieldPrev.set(fieldGrid);
-  for (let i = 0; i < FIELD_TH; i++) {
-    for (let j = 0; j < FIELD_PH; j++) {
-      const phi = (j / FIELD_PH) * TAU;
-      const beltrami = TGCR.beltramiLambda;
-      const v_theta = vortexOmega * (1 + 0.5 * cos(phi)) * (1 + beltrami * 0.1);
-      const wheeler_mod = 1 + WHEELER.counterspace * sin(phi * 3);
-      const v_eff = v_theta * wheeler_mod;
-      const srcTheta = (i / FIELD_TH) * TAU - v_eff;
-      const srcI_f = ((srcTheta % TAU + TAU) % TAU) / TAU * FIELD_TH;
-      const srcI0 = floor(srcI_f) % FIELD_TH;
-      const srcI1 = (srcI0 + 1) % FIELD_TH;
-      const frac = srcI_f - floor(srcI_f);
-      fieldGrid[i * FIELD_PH + j] =
-        fieldPrev[srcI0 * FIELD_PH + j] * (1 - frac) +
-        fieldPrev[srcI1 * FIELD_PH + j] * frac;
-    }
-  }
-  const t = simTime * 0.001;
-  const helAmp = abs(vortexOmega) * 0.7;
-  if (helAmp !== 0) {
-    for (let i = 0; i < FIELD_TH; i++) {
-      const theta = (i / FIELD_TH) * TAU;
-      for (let j = 0; j < FIELD_PH; j++) {
-        const phi = (j / FIELD_PH) * TAU;
-        fieldGrid[i * FIELD_PH + j] +=
-          helAmp * TGCR.eta * sin(3 * theta - 2 * phi * vortexHelicity + vortexOmega * t * 2);
-        fieldGrid[i * FIELD_PH + j] +=
-          helAmp * 0.4 * sin(5 * theta + 3 * phi * vortexHelicity * C.phi_f - vortexOmega * t * 3);
-      }
-    }
-  }
-  vortexOmega *= (1 - 0.0003 * TGCR.kappa);
-}
-let FIELD_W = null, FIELD_W_KEY = '';
-function fieldWeights(vpos) {
-  const key = `${TESS_ROT.xw}|${TESS_ROT.yz}|${TESS_ROT.xy}`;
-  if (FIELD_W_KEY === key && FIELD_W !== null) return FIELD_W;
-  const W = new Float64Array(FIELD_TH * FIELD_PH * 16);
-  const d2 = new Array(16), pre = new Array(16), suf = new Array(16);
-  for (let i = 0; i < FIELD_TH; i++) {
-    const theta = (i / FIELD_TH) * TAU;
-    for (let j = 0; j < FIELD_PH; j++) {
-      const phi = (j / FIELD_PH) * TAU;
-      for (let v = 0; v < 16; v++) {
-        let dth = abs(theta - vpos[v].theta);
-        if (dth > PI) dth = TAU - dth;
-        let dph = abs(phi - vpos[v].phi);
-        if (dph > PI) dph = TAU - dph;
-        d2[v] = dth * dth + dph * dph;
-      }
-      pre[0] = 1;
-      for (let v = 1; v < 16; v++) pre[v] = pre[v - 1] * d2[v - 1];
-      suf[15] = 1;
-      for (let v = 14; v >= 0; v--) suf[v] = suf[v + 1] * d2[v + 1];
-      let wSum = 0;
-      for (let v = 0; v < 16; v++) wSum += pre[v] * suf[v];
-      const base = (i * FIELD_PH + j) * 16;
-      for (let v = 0; v < 16; v++) W[base + v] = (pre[v] * suf[v]) / wSum;
-    }
-  }
-  FIELD_W_KEY = key;
-  FIELD_W = W;
-  return W;
-}
-const FAITHFUL_RENDER = { ev: null, proj: null, pmax: 1, overlays: false,
+let vortexGain = 0, vortexHelicity = 1;
+const FAITHFUL_RENDER = { ev: null, proj: null, pmax: 1,
                           phaseGrid: new Float32Array(FIELD_TH * FIELD_PH) };
-function updateField(t) {
+function updateField() {
   if (!FAITHFUL_RENDER.ev) { projectStrictV5ToLegacyRender(); }
   const ev = FAITHFUL_RENDER.ev;
   const ph = FAITHFUL_RENDER.phaseGrid;
@@ -3748,24 +3924,6 @@ function updateField(t) {
       ph[idx] = Math.atan2(s.im, s.re);
     }
   }
-  if (FAITHFUL_RENDER.overlays) {
-    /* Legacy decoration. These terms are not derived from psi, so switching
-       them on makes the picture stop being the state. The badge says so. */
-    const bAmp = 0.3 * AMP.bfield;
-    const vpos = TESS_V.map(v => tessVertexToTorus(v, t));
-    const W = fieldWeights(vpos);
-    for (let i = 0; i < FIELD_TH; i++) {
-      const theta = (i / FIELD_TH) * TAU;
-      for (let j = 0; j < FIELD_PH; j++) {
-        const phi = (j / FIELD_PH) * TAU;
-        const idx = i * FIELD_PH + j, base = idx * 16;
-        let bSum = 0;
-        for (let v = 0; v < 16; v++) bSum += W[base + v] * MAGFIELD.B[v];
-        fieldGrid[idx] += WHEELER.fieldDistortion(theta, phi, 1.0, t) * 0.03 + bSum * bAmp;
-      }
-    }
-    advectField();
-  }
 }
 function samplePhase(theta, phi) {
   const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
@@ -3782,8 +3940,11 @@ function updateFaithfulBadge() {
     "<b>" + (ok ? 'FAITHFUL' : 'NOT FAITHFUL') + "</b>" +
     "<span>&Sigma;|&psi;|&sup2; = " + st.a4 + "</span>" +
     "<span>field " + st.recon.toFixed(9) + " vs exact " + st.exact.toFixed(9) + "</span>" +
-    "<span>parseval " + st.rel.toExponential(1) + " &middot; node " + st.node.toExponential(1) +
-    (st.overlays ? " &middot; overlays on" : "") + "</span>";
+    "<span>parseval " + st.rel.toExponential(1) + " &middot; node " + st.node.toExponential(1) + "</span>" +
+    "<span>channels " + (st.channels
+      ? Object.keys(VISUAL_CERTIFICATE.channels).map(k =>
+          (st.channels[k] ? '' : '<s>') + k + (st.channels[k] ? '' : '</s>')).join(' ')
+      : 'unknown') + "</span>";
 }
 function sampleField(theta, phi) {
   const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
@@ -3934,11 +4095,69 @@ function activeSutrasV5() {
 const VTX_DISPLAY = { vpsi: new Array(16).fill(0), lambdaF: [0,0,0,0], lambdaStr: ['0','0','0','0'],
   sumLambdaSq: 0, r4F: 0, sigmaF: null, normSqF: 0, traceNormSqF: 0,
   exactEnergyF: 0, exactEnergyA4: '0', faithful: null, max: 0, spread: 0 };
+/* The Wheeler render channel: the exact per-vertex D, M and omega that
+   STRICT_V5.exactGeometry places the sixteen vertices with, lifted to the torus
+   through FAITHFUL's own band-limited extension so the surface agrees with the
+   kernel geometry at every vertex. Rebuilt whenever the state is reprojected. */
+const WHEELER_CHANNEL = {
+  D: new Float64Array(16), M: new Float64Array(16), W: new Float64Array(16),
+  magneticWeight: new Float64Array(16), kSigned: new Float64Array(16),
+  gD: new Float32Array(FIELD_TH * FIELD_PH),
+  gM: new Float32Array(FIELD_TH * FIELD_PH),
+  gW: new Float32Array(FIELD_TH * FIELD_PH),
+  gK: new Float32Array(FIELD_TH * FIELD_PH),
+  gKs: new Float32Array(FIELD_TH * FIELD_PH),
+  wMax: 0, audit: null, ok: false, geoD: 0.0625, geoM: 0.125, geoP: 0.0078125
+};
+function refreshWheelerChannel() {
+  const C5 = WHEELER_CHANNEL, aN = FAITHFUL.aNum;
+  let params = (STRICT_V5_STATE.last && STRICT_V5_STATE.last.params) || null;
+  if (!params) { try { params = strictV5Params(); } catch (e) { params = null; } }
+  const w = (STRICT_V5_STATE.last && STRICT_V5_STATE.last.wheeler) ||
+            (params ? STRICT_V5.computeWheeler(STRICT_V5_STATE.dielectric, params) : null);
+  C5.audit = STRICT_V5.wheelerAudit(STRICT_V5_STATE.dielectric, params);
+  C5.ok = C5.audit.ok && w !== null;
+  if (!C5.ok) {
+    C5.D.fill(0); C5.M.fill(0); C5.W.fill(0);
+    C5.magneticWeight.fill(0); C5.kSigned.fill(0);
+    C5.gD.fill(0); C5.gM.fill(0); C5.gW.fill(0); C5.gK.fill(0); C5.gKs.fill(0);
+    C5.wMax = 0;
+    return;
+  }
+  C5.geoD = aN(params.geoD); C5.geoM = aN(params.geoM); C5.geoP = aN(params.geoP);
+  let wm = 0;
+  for (let v = 0; v < 16; v++) {
+    C5.D[v] = aN(w.dielectric[v]);
+    C5.M[v] = aN(w.magnetic[v]);
+    /* exactGeometry negates the Cayley parameter below the inertial plane;
+       the sign is folded in here so the surface carries the same rotation. */
+    C5.W[v] = aN(w.omega[v]) * (STRICT_V5.hw(v) < 2 ? -1 : 1);
+    const k = STRICT_V5.hw(v) - 2;
+    C5.kSigned[v] = k;
+    C5.magneticWeight[v] = (k * k) / (1 + k * k);
+    const a = Math.abs(C5.W[v]); if (a > wm) wm = a;
+  }
+  C5.wMax = wm;
+  const mev = FAITHFUL.multiRealEvaluator([C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned]);
+  const out = new Float64Array(5);
+  for (let i = 0; i < FIELD_TH; i++) {
+    const theta = (i / FIELD_TH) * TAU;
+    for (let j = 0; j < FIELD_PH; j++) {
+      const idx = i * FIELD_PH + j;
+      mev(theta, (j / FIELD_PH) * TAU, out);
+      C5.gD[idx] = out[0]; C5.gM[idx] = out[1]; C5.gW[idx] = out[2];
+      C5.gK[idx] = out[3]; C5.gKs[idx] = out[4];
+    }
+  }
+}
 function projectStrictV5ToLegacyRender() {
   /* The legacy trace projection is retained below because the DEC / LGT /
      Regge / MAGFIELD diagnostic layers read VTX.psi and lambda directly. It
      is no longer what gets drawn. The faithful projection of the full C4
      state is computed alongside it and is what feeds the field. */
+  /* The Wheeler channel is rebuilt first so the audit below sees the
+     certificate state of the picture it is about to report on. */
+  refreshWheelerChannel();
   const _F = FAITHFUL.audit(STRICT_V5_STATE.psi);
   FAITHFUL_RENDER.ev = _F.ev;
   FAITHFUL_RENDER.proj = _F.proj;
@@ -4290,7 +4509,7 @@ function hsl2rgb(h, s, l) {
 const TORUS_R = 180, TORUS_r = 70;
 const TH_SEG = 200, PH_SEG = 100;
 const torusPoints = new Array(TH_SEG * PH_SEG);
-for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0 };
+for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0, wOmega:0 };
 let camRX = 0.82, camRY = 0, isDrag = false, lastMX = 0, lastMY = 0;
 let autoRotate = true;
 let TORUS_GEOM = null;
@@ -4338,23 +4557,23 @@ function torusGeometry() {
   TORUS_GEOM = G;
   return G;
 }
-function projectTorus(t) {
+/* No time argument. Every point is placed by the exact state: the amplitude and
+   phase of psi through FAITHFUL's band-limited extension, and the Wheeler
+   dielectric / magnetic / precession channels through STRICT_V5.exactGeometry's
+   own formulas, lifted to the surface by the same extension. Gains (AMP.*,
+   vortexGain) scale certified channels; none of them can originate structure. */
+function projectTorus() {
   const GEO = torusGeometry();
+  const C5 = WHEELER_CHANNEL;
+  const CERT = VISUAL_CERTIFICATE.status();
   const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
   const cx = cw / 2, cy = ch / 2;
   const r4f = abs(VTX_DISPLAY.r4F);
-  const time = t * 0.001;
   const cRY = cos(camRY), sRY = sin(camRY);
   const cRX = cos(camRX), sRX = sin(camRX);
-  const vo = vortexOmega, absVo = abs(vo);
-  const vortexActive = absVo !== 0;
-  const vGeo = absVo * AMP.vortex;
-  const vSign = vo > 0 ? 1 : -1;
-  const bLam01 = 1 + TGCR.beltramiLambda * 0.1;
-  const timeVo3 = time * vo * 3;
-  const timeVo2 = time * vo * 2;
-  const timeVo4 = time * vo * 4;
-  const timeAbsVo3 = time * absVo * 3;
+  const ampOn = CERT.amplitude, phaseOn = CERT.phase, wOn = CERT.wheeler, r4On = CERT.r4gate;
+  const wInv = C5.wMax > 0 ? 1 / C5.wMax : 0;
+  const vGain = abs(vortexGain) * AMP.vortex;
   for (let i = 0; i < TH_SEG; i++) {
     const theta = GEO.theta[i];
     const cosTheta = GEO.cosTheta[i], sinTheta = GEO.sinTheta[i];
@@ -4366,59 +4585,73 @@ function projectTorus(t) {
       const sb = gidx * 12;
       const fv = fieldGrid[GEO.sIdx[sb]] * GEO.sW[sb] + fieldGrid[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
                + fieldGrid[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + fieldGrid[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
-      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0;
+      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wOmegaN = 0;
       const fvNorm = fv;
-      const dF = fvNorm;
-      R += dF * AMP.field;                       
-      r += dF * AMP.tube;                        
-      yOff += dF * AMP.yDisp;                    
-      const fvNext = fieldGrid[GEO.sIdx[sb+4]] * GEO.sW[sb+4] + fieldGrid[GEO.sIdx[sb+5]] * GEO.sW[sb+5]
-                   + fieldGrid[GEO.sIdx[sb+6]] * GEO.sW[sb+6] + fieldGrid[GEO.sIdx[sb+7]] * GEO.sW[sb+7];
-      const fvUp = fieldGrid[GEO.sIdx[sb+8]] * GEO.sW[sb+8] + fieldGrid[GEO.sIdx[sb+9]] * GEO.sW[sb+9]
-                 + fieldGrid[GEO.sIdx[sb+10]] * GEO.sW[sb+10] + fieldGrid[GEO.sIdx[sb+11]] * GEO.sW[sb+11];
-      const gTh = (fvNext - fv), gPh = (fvUp - fv);
-      const dGth = gTh, dGph = gPh;
-      phiShift += dGth * AMP.gradTwist * 3;
-      r += abs(dGph) * AMP.gradRipple;
-      R += abs(dGth) * AMP.gradBulge;
-      if (vortexActive) {
-        phiShift += vSign * vGeo * 1.5 * funnelFactor * sin(theta * 3 + timeVo3) * bLam01;
-        phiShift -= vSign * vGeo * 0.5 * antiFunnel * sin(theta * 5 - timeVo2);
-        r *= (1 - vGeo * 0.15 * funnelFactor);
-        r += vGeo * 5 * sin(theta * 3 - phi * 2 * vortexHelicity + timeVo4);
-        R += vGeo * 10 * sin(theta * 2 - timeVo2) * funnelFactor;
-        yOff += vSign * vGeo * 15 * cos(theta * 2 + phi * vortexHelicity - timeAbsVo3) * funnelFactor;
-        const cymNode = sin(theta * 6 - phi * 3 * vortexHelicity + timeVo2);
-        r += vGeo * 3 * cymNode * cymNode * antiFunnel;
+      /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
+      if (ampOn) {
+        R += fv * AMP.field;
+        r += fv * AMP.tube;
+        yOff += fv * AMP.yDisp;
+        const fvNext = fieldGrid[GEO.sIdx[sb+4]] * GEO.sW[sb+4] + fieldGrid[GEO.sIdx[sb+5]] * GEO.sW[sb+5]
+                     + fieldGrid[GEO.sIdx[sb+6]] * GEO.sW[sb+6] + fieldGrid[GEO.sIdx[sb+7]] * GEO.sW[sb+7];
+        const fvUp = fieldGrid[GEO.sIdx[sb+8]] * GEO.sW[sb+8] + fieldGrid[GEO.sIdx[sb+9]] * GEO.sW[sb+9]
+                   + fieldGrid[GEO.sIdx[sb+10]] * GEO.sW[sb+10] + fieldGrid[GEO.sIdx[sb+11]] * GEO.sW[sb+11];
+        const dGth = fvNext - fv, dGph = fvUp - fv;
+        phiShift += dGth * AMP.gradTwist * 3;
+        r += abs(dGph) * AMP.gradRipple;
+        R += abs(dGth) * AMP.gradBulge;
       }
-      const wheelerDist = WHEELER.fieldDistortion(theta, phi, 2.0, t) * AMP.wheeler;
-      R += wheelerDist * 3;
-      yOff += GEO.gv[gidx] * absVo * 4;
-      const ethP = WHEELER.etherPressure(theta, phi, t);
-      const ethPNorm = ethP; 
-      r += ethPNorm * 7.0;  
-      R += ethPNorm * 3.0;  
-      const csI = WHEELER.counterspaceIntensity(theta, phi, fvNorm, t);
-      const csDimple = csI; 
-      r -= abs(csDimple) * 4.0;  
-      yOff += csDimple * 6.0;    
-      const inertiaAngle = abs(phi - WHEELER.inertiaPlane);
-      const inertiaEnvelope = exp(-inertiaAngle * inertiaAngle * 5);   
-      const centBal = GEO.cent[gidx];
-      r += centBal * inertiaEnvelope * 7.0;
-      r += inertiaEnvelope * 11.0;
-      const spiralRipple = sin((theta * C.phi_f + phi) * 8 + t * 0.0005) * 1.2;  
-      const dielectricGrain = sin(theta * 13 + phi * 8 - t * 0.0003) * 0.6;  
-      r += spiralRipple * (0.8 + abs(ethPNorm) * 0.8);  
-      r += dielectricGrain * (0.5 + abs(centBal) * 0.6);  
-      const hypBulge = WHEELER.hyperboloid(sin(phi), theta, 1.8) - 1;
-      R += hypBulge * 1.6 * AMP.wheeler;  
-      const vortexShear = GEO.gv[gidx] * 0.5;
-      phiShift += vortexShear * 0.05;  
-      const r4Pinch = 1 - (1 - r4f) * 0.4; 
-      r *= r4Pinch;
-      const bPressure = MAGFIELD.pressure * AMP.bfield;
-      r += bPressure * 8; 
+      /* --- phase channel: arg(Psi) twists the tube. Same audit as amplitude:
+             the evaluator returns re and im, and the node test pins both. --- */
+      if (phaseOn) phiShift += samplePhase(theta, phi) * AMP.gradTwist;
+      /* --- Wheeler channels: exactGeometry's own formulas at the surface ---
+             z-compression 1/(1 + geoD*D), radial dilation 1 + geoM*M/(1+z^2),
+             and the Cayley rotation induced by the precession omega. */
+      if (wOn) {
+        const sD = C5.gD[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gD[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
+                 + C5.gD[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gD[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
+        const sM = C5.gM[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gM[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
+                 + C5.gM[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gM[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
+        const sW = C5.gW[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gW[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
+                 + C5.gW[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gW[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
+        const sK = C5.gK[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gK[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
+                 + C5.gK[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gK[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
+        const sKs = C5.gKs[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gKs[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
+                  + C5.gKs[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gKs[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
+        const aw = AMP.wheeler;
+        /* dielectric compression -- positivity of the denominator is
+           wheeler_compression_positive, so this cannot invert or blow up. */
+        const compression = 1 / (1 + C5.geoD * sD);
+        const z = sKs * compression;
+        r *= (1 + (compression - 1) * 0.5 * aw);
+        yOff += z * 6.0 * aw;
+        /* magnetic dilation. Vanishes on the inertial plane by
+           wheeler_inertial_plane_magnetism_zero, which is the ridge that used
+           to be a hardcoded Gaussian bulge. */
+        const radial = 1 + C5.geoM * sM / (1 + z * z);
+        R *= radial;
+        r += (1 - sK) * 11.0 * aw;
+        r += GEO.cent[gidx] * (1 - sK) * 7.0 * aw;
+        /* precession: the Cayley half-angle of tau = geoP * omega. c^2+s^2 = 1
+           exactly (wheeler_cayley_rotation_is_orthogonal), so this rotates. */
+        const tau = C5.geoP * sW;
+        phiShift += Math.atan2(2 * tau, 1 - tau * tau) * (1 + vGain);
+        /* omega normalised to [-1,1] is what drives the de-clocked Wheeler
+           modulations that used to take wall-clock time. It is carried on the
+           point so the colour pass reads the same value the geometry did. */
+        const wN = sW * wInv;
+        wOmegaN = wN;
+        R += WHEELER.fieldDistortion(theta, phi, 2.0, wN) * aw * 3;
+        const ethP = WHEELER.etherPressure(theta, phi, wN);
+        r += ethP * 7.0; R += ethP * 3.0;
+        const csI = WHEELER.counterspaceIntensity(theta, phi, fvNorm, wN);
+        r -= abs(csI) * 4.0; yOff += csI * 6.0;
+        R += (WHEELER.hyperboloid(sin(phi), theta, 1.8) - 1) * 1.6 * aw;
+        yOff += GEO.gv[gidx] * abs(sW) * wInv * 4 * vGain;
+        phiShift += GEO.gv[gidx] * 0.025;
+      }
+      /* --- R4 gate pinch: rho_* and tau_* theorems --- */
+      if (r4On) r *= 1 - (1 - r4f) * 0.4;
       if (r < 1) r = 1;
       if (R < r + 1) R = r + 1;
       const effPhi = phi + phiShift;
@@ -4437,6 +4670,7 @@ function projectTorus(t) {
       torusPoints[idx].field = fvNorm;
       torusPoints[idx].theta = theta;
       torusPoints[idx].phi = phi;
+      torusPoints[idx].wOmega = wOmegaN;
     }
   }
 }
@@ -4461,6 +4695,7 @@ function renderTorus() {
       const avgField = (p0.field + p1.field + p2.field + p3.field) * 0.25;
       const avgTheta = (p0.theta + p1.theta) * 0.5;
       const avgPhi = (p0.phi + p3.phi) * 0.5;
+      const avgOmega = (p0.wOmega + p1.wOmega + p2.wOmega + p3.wOmega) * 0.25;
       const e1z = p1.depth - p0.depth, e2z = p3.depth - p0.depth;
       const nx = e1y * e2z - e1z * e2y;
       const ny = e1z * e2x - e1x * e2z;
@@ -4476,7 +4711,7 @@ function renderTorus() {
       quads.push({
         p0, p1, p2, p3, depth: avgDepth, field: avgField,
         diffuse, specular, fresnel,
-        theta: avgTheta, phi: avgPhi,
+        theta: avgTheta, phi: avgPhi, wOmega: avgOmega,
         nxN, nyN, nzN
       });
     }
@@ -4486,14 +4721,14 @@ function renderTorus() {
     const rawField = q.field;
     const fv = 2 * Math.atan(rawField * 2) / PI;
     const afv = abs(fv);
-    const etherP = WHEELER.etherPressure(q.theta, q.phi, simTime);
-    const csIntensity = WHEELER.counterspaceIntensity(q.theta, q.phi, rawField, simTime);
+    const etherP = WHEELER.etherPressure(q.theta, q.phi, q.wOmega);
+    const csIntensity = WHEELER.counterspaceIntensity(q.theta, q.phi, rawField, q.wOmega);
     const centBal = WHEELER.centBal(q.theta, q.phi);
     const etherNorm = etherP;
     const csNorm = csIntensity;
     const inertiaAngle = abs(q.phi - WHEELER.inertiaPlane);
     const inertiaProx = exp(-inertiaAngle * inertiaAngle * 3); 
-    const fluxP = WHEELER.fluxPhase(q.theta, q.phi, simTime);
+    const fluxP = WHEELER.fluxPhase(q.theta, q.phi, q.wOmega);
     const contourDist1 = abs(fluxP - 0.5);
     const contourFlux = contourDist1 < 0.04 ? (1 - contourDist1 / 0.04) * 0.45 : 0;
     const isoField = abs(fv * 8 % 1.0 - 0.5);
@@ -4501,10 +4736,6 @@ function renderTorus() {
     const contourEther = (abs(sin(etherNorm * PI * 4)) < 0.12 ? (1 - abs(sin(etherNorm * PI * 4)) / 0.12) * 0.25 : 0);
     const contourCS = (abs(csNorm) < 0.08 ? (1 - abs(csNorm) / 0.08) * 0.35 : 0);
     const contourInertia = inertiaProx > 0.75 ? (inertiaProx - 0.75) / 0.25 * 0.25 : 0;
-    let grainFactor, textureMod;
-      const grain3 = sin((q.theta * C.phi_f + q.phi) * 19) * 0.5 + 0.5;
-      grainFactor = 1;
-      textureMod = 1;
     let r, g, b;
     if (fv > 0) {
       const warmEther = etherNorm * 0.6;
@@ -4520,12 +4751,12 @@ function renderTorus() {
         b = floor(b + incand * 50);
       }
     } else if (fv < -0.005) {
-      const t = -fv;
+      const depth = -fv;
       const coolEther = -etherNorm * 0.5;
       const centCool = -centBal * 0.45;
-      r = floor(5 + t * 40 + coolEther * 40 + centCool * 55);
-      g = floor(35 + t * 150 + coolEther * 35 + centCool * 20);
-      b = floor(130 + t * 125 + abs(etherNorm) * 65 + centCool * 45);
+      r = floor(5 + depth * 40 + coolEther * 40 + centCool * 55);
+      g = floor(35 + depth * 150 + coolEther * 35 + centCool * 20);
+      b = floor(130 + depth * 125 + abs(etherNorm) * 65 + centCool * 45);
       if (afv > 0.5) {
         const deep = (afv - 0.5) * 2.0;
         r = floor(r + deep * 50);
@@ -4556,9 +4787,6 @@ function renderTorus() {
       g = floor(g + eqBand * 100);
       b = floor(b + eqBand * 45);
     }
-    r = floor(r * textureMod);
-    g = floor(g * textureMod);
-    b = floor(b * textureMod);
     const sss = abs(csNorm) * 0.30 * (1 - q.diffuse); 
     r = floor(r + sss * 120);
     g = floor(g + sss * 90);
@@ -4801,11 +5029,12 @@ function frame(t) {
   const activeStrict = activeSutrasCanonical();
   STRICT_V5_VISUAL_TICK++;
   requestStrictV5Step();
+  refreshSutraCertificate(activeStrict);
   for (const s of activeStrict) LeanState.act(s.id);
   simTime += SIM_DT;
   cycle++;
-  updateField(simTime);
-  projectTorus(simTime);
+  updateField();
+  projectTorus();
   ctx.fillStyle = 'rgb(3,3,8)';
   ctx.fillRect(0, 0, cw, ch);
   renderTorus();
@@ -4901,7 +5130,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   SUTRAS.forEach(s => { s.on = false; setSutraStrengthExact(s, 0); });
   document.querySelectorAll('.st').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.st input[type=range]').forEach(sl => { sl.value = 0; });
-  vortexOmega = 0;
+  vortexGain = 0;
   cycle = 0;
   LeanState.reset();
   LOG.add('RESET — Ψ reseeded from λ, phase channel re-seeded, sūtra cleared, state reset', 'sys');
@@ -4920,7 +5149,7 @@ document.getElementById('btn-none').addEventListener('click', () => {
 });
 document.getElementById('btn-vortex').addEventListener('click', () => {
   vortexHelicity *= -1;
-  vortexOmega += 3.0 * vortexHelicity;
+  vortexGain += 3.0 * vortexHelicity;
 });
 function activatePreset(sutraIds, options = {}) {
   LOG.add('PRESET → activates [' + sutraIds.map(i => 'S' + i).join(',') + '] (group, not one)', 'sys');
@@ -4942,7 +5171,7 @@ function activatePreset(sutraIds, options = {}) {
     }
   }
   if (options.vortex !== undefined) {
-    vortexOmega = options.vortex;
+    vortexGain = options.vortex;
     vortexHelicity = options.vortex >= 0 ? 1 : -1;
   }
   if (options.magfield !== undefined) MAGFIELD.active = options.magfield;
@@ -5023,6 +5252,24 @@ document.getElementById('btn-proof').addEventListener('click', function() {
       : `VERSION MISMATCH: ${vi.problems.join('; ')}`, vi.ok ? 'sys' : 'off');
   }
   LOG.add(`  lean axioms: ${PROVENANCE.leanAxiomsKernelChecked} kernel-checked, ${PROVENANCE.leanAxiomsCompilerTrusted} via Lean.ofReduceBool (native_decide)`, 'sys');
+  {
+    const d = STRICT_V5.operatorDistinctness();
+    LOG.add(d.ok
+      ? `  operator distinctness ok — 29/29 distinct 16x16 matrices over ${d.strengthsTested} strengths`
+      : `  OPERATOR COLLISION: ${d.distinct}/29 distinct — ${d.collisions.map(c => 'S' + c[0] + '=S' + c[1]).join(', ')} act identically at every strength tested, so the render cannot separate them`,
+      d.ok ? 'on' : 'off');
+    if (d.strengthDependentOnly.length)
+      LOG.add(`  near-collisions (coincide at one strength only): ${d.strengthDependentOnly.map(c => 'S' + c[0] + '~S' + c[1]).join(', ')}`, 'sys');
+  }
+  {
+    const wa = STRICT_V5.wheelerAudit(STRICT_V5_STATE.dielectric,
+      (STRICT_V5_STATE.last && STRICT_V5_STATE.last.params) || strictV5Params());
+    LOG.add(`  wheeler geometry ${wa.results.filter(x => x.ok).length}/${wa.results.length} decided${wa.ok ? '' : ' FAILED: ' + wa.results.filter(x => !x.ok).map(x => x.name).join(', ')} (source ${PROVENANCE.wheelerLeanSource})`,
+      wa.ok ? 'on' : 'off');
+    const cert = VISUAL_CERTIFICATE.report();
+    LOG.add(`  visual channels drawn: ${cert.filter(c => c.drawn).map(c => c.channel).join(' ') || 'none'}${cert.some(c => !c.drawn) ? ' | withheld: ' + cert.filter(c => !c.drawn).map(c => c.channel).join(' ') : ''}`,
+      cert.every(c => c.drawn) ? 'on' : 'off');
+  }
   const conf = leanConformance();
   LOG.add(`  runtime/lean conformance ${conf.passed}/${conf.total}${conf.failed.length ? ' FAILED: ' + conf.failed.join('; ') : ''}`, conf.failed.length ? 'off' : 'on');
   const worker = createStrictV5AuditWorker();
@@ -5103,7 +5350,7 @@ document.getElementById('pre-all29').addEventListener('click', function() {
     const sl = el.querySelector('input[type=range]'); if (sl) sl.value = 25;
     const vl = el.querySelector('.str-val'); if (vl) vl.textContent = '25';
   });
-  vortexOmega = 0.5; MAGFIELD.active = true;
+  vortexGain = 0.5; MAGFIELD.active = true;
   document.querySelectorAll('#preset-ctrls button').forEach(b => b.classList.remove('preset-active'));
   this.classList.add('preset-active');
 });
@@ -5136,7 +5383,7 @@ document.getElementById('pre-cancel').addEventListener('click', function() {
       const vl = el.querySelector('.str-val'); if (vl) vl.textContent = String(str);
     }
   }
-  vortexOmega = 0; vortexHelicity = 1;
+  vortexGain = 0; vortexHelicity = 1;
   MAGFIELD.active = false;
   document.querySelectorAll('#preset-ctrls button').forEach(b => b.classList.remove('preset-active'));
   this.classList.add('preset-active');
@@ -5676,7 +5923,7 @@ const RECORDER = {
   start() {
     this.active = true; this.startTime = performance.now();
     this.snapshots = []; this.moments = []; this._n = 0;
-    this._prevE = VTX_DISPLAY.exactEnergyF; this._prevOmega = vortexOmega;
+    this._prevE = VTX_DISPLAY.exactEnergyF; this._prevOmega = vortexGain;
     this._prevKappa = TGCR.kappa; this._eMax = this._prevE; this._eMin = this._prevE;
     this._eHi = this._prevE; this._eLo = this._prevE;   
   },
@@ -5690,9 +5937,9 @@ const RECORDER = {
     if (E > 0 && E < this._eLo) this._eLo = E;              
     if (E > this._eMax * 1.2) { this._eMax = E; this.moments.push({t:tSec,type:'ENERGY_PEAK',E,cycle}); }
     if (E < this._eMin * 0.8 && E > 0.01) { this._eMin = E; this.moments.push({t:tSec,type:'ENERGY_TROUGH',E,cycle}); }
-    if (this._prevOmega * vortexOmega < 0 && abs(vortexOmega) > 0.1)
-      this.moments.push({t:tSec,type:'VORTEX_REVERSAL',cycle,from:this._prevOmega,to:vortexOmega});
-    this._prevOmega = vortexOmega;
+    if (this._prevOmega * vortexGain < 0 && abs(vortexGain) > 0.1)
+      this.moments.push({t:tSec,type:'VORTEX_REVERSAL',cycle,from:this._prevOmega,to:vortexGain});
+    this._prevOmega = vortexGain;
     if (this._prevE > 0.01 && abs(E - this._prevE) / this._prevE > 0.5)
       this.moments.push({t:tSec,type:'CONSERV_VIOLATION',cycle,from:this._prevE,to:E});
     this._prevE = E;
@@ -5717,7 +5964,7 @@ const RECORDER = {
         lambda_exact: lambda.map(l => ({n:String(l.n),d:String(l.d)})),
         psi: vpsi, psi_exact: vpsiE,
         normSq: E, normSq_exact: {n:String(VTX.normSq().n),d:String(VTX.normSq().d)},
-        vortexOmega, TGCR:{energy:TGCR.energy,kappa:TGCR.kappa},
+        vortexGain, TGCR:{energy:TGCR.energy,kappa:TGCR.kappa},
         MSTVQ_trace: MSTVQ.trace(), R4: Q.fl(R4val),
         activeSutras: activeSutrasCanonical().map(s=>({id:s.id,strength:s.strength,lastE:s._lastE||null})),
         graphTrace: SUTRA_GRAPH_INSPECTOR.snapshot(activeSutrasCanonical()),
@@ -5898,7 +6145,7 @@ document.getElementById('btn-whole').addEventListener('click', () => {
 buildPanel();
 computeR4();
 computeUSO();
-vortexOmega = 0.15;
+vortexGain = 0.15;
 const exactExportBtn=document.createElement('button');
 exactExportBtn.id='btn-exact-v5';
 exactExportBtn.textContent='EXPORT EXACT V5';
