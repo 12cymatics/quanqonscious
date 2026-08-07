@@ -688,7 +688,20 @@ const STRICT_V5_FACTORY = () => {
       case 12:return permuteState(psi,swap03);
       case 13:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.mk(BigInt(2*v+1),16n));o=rotatePairInState(o,v,comp(v),t);}return o;}
       case 14:return phaseState(psi,v=>A4.scaleQ(s,Q.mk((hw(v)&1)?-1n:1n)));
-      case 15:{let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),s);return o;}
+      case 15:{
+        /* Gunitasamuccayah, "product of sum": the distributive law
+           (a+b)(c+d) = ac+ad+bc+bd. Each vertex's Hamming weight is the sum of
+           its bits, and a complement pair's two weights sum to 4, so the angle
+           here is the PRODUCT of the pair's two sums -- (hw+1)(5-hw) -- where
+           S4 "transpose and adjust" uses a uniform one. */
+        let o=cloneState(psi);
+        for(let v=0;v<8;v++){
+          const k=hw(v);
+          const t=A4.scaleQ(s,Q.mk(BigInt((k+1)*(5-k)),16n));
+          o=rotatePairInState(o,v,comp(v),t);
+        }
+        return o;
+      }
       case 16:{let o=cloneState(psi);const ns=A4.neg(s);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),ns);return o;}
       case 17:{
         const c=S17_STENCIL;
@@ -705,7 +718,15 @@ const STRICT_V5_FACTORY = () => {
         for(let v=0;v<8;v++){const u=comp(v);o[v]=C4.mul(p,psi[u]);o[u]=C4.mul(pc,psi[v]);}
         return o;
       }
-      case 24:return permuteState(psi,gray);
+      case 24:{
+        /* Lopanasthapanabhyam, "by elimination and retention": eliminate a
+           variable, act on what remains, then restore it. Transform out with
+           wht, phase only the retained sector (hw >= 2), transform back --
+           the same eliminate/act/restore idiom S27 uses on parity. */
+        let x=wht(psi);
+        x=phaseState(x,v=>hw(v)>=2?s:A4.ZERO);
+        return wht(x);
+      }
       case 25:{let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),A4.ONE);return o;}
       case 26:return permuteState(psi,v=>v^1);
       case 27:{let x=wht(psi);x=phaseState(x,v=>(hw(v)&1)?s:A4.ZERO);return wht(x);}
