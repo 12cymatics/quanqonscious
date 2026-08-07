@@ -1910,6 +1910,11 @@ const LEAN_PROVED = Object.freeze({
      the same exact arithmetic the renderer uses. These are NOT among the
      VedicKernel oleans; they are listed separately and reported separately. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
+  /* GOLDENPYTHAGOREAN identities. Lean source is in the same file as the
+     Wheeler block; the runtime decision is KX's own identity array, which
+     throws at load if any of them fails -- so the page cannot start with a
+     broken phi algebra. */
+  goldenChecked: ['phi_cubed_eq','phi_plus_phi_plus_one','phi_sub_inv','divided_line_sums_to_phi_cubed','phi_cubed_is_two_plus_sqrt5'],
   compilerTrusted: ['d1_d2_zero','d2_d3_zero','d3_d4_zero','euler_characteristic_zero','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect']
 });
 /* Every visual channel names the theorems it rests on and the predicate that
@@ -1933,6 +1938,12 @@ const VISUAL_CERTIFICATE = {
       draws: 'dielectric compression, magnetic dilation, precession rotation',
       theorems: LEAN_PROVED.wheelerChecked,
       holds: () => WHEELER_CHANNEL.ok
+    },
+    golden: {
+      draws: 'phi^3 coupling, radial factor, divided-line sectors',
+      theorems: LEAN_PROVED.goldenChecked,
+      holds: () => KX.verified === KX.checkNames.length &&
+                   A4.eq(C.dividedLine.totalA, KX.PHI_CU)
     },
     r4gate: {
       draws: 'tube pinch from the R4 gate',
@@ -2139,13 +2150,20 @@ const KX = (() => {
     ['diel:mag = 2*phi',        eq(DIEL_MAG, A4.scaleQ(PHI, n(2)))],
     ['phi^2 = phi + 1',         eq(PHI_SQ, A4.add(PHI, A4.ONE))],
     ['phi^3 = phi^2 + phi',     eq(PHI_CU, A4.add(PHI_SQ, PHI))],
-    ['phi_inv = phi - 1',       eq(PHI_INV, A4.sub(PHI, A4.ONE))]
+    ['phi_inv = phi - 1',       eq(PHI_INV, A4.sub(PHI, A4.ONE))],
+    /* GOLDENPYTHAGOREAN: the chart's two headline identities. The divided line
+       Theta:Alpha:Upsilon:Gamma has segments phi:1:1:1/phi, and since
+       phi - 1/phi = 1 their total is exactly 2+sqrt(5) = phi^3. */
+    ['phi + phi + 1 = phi^3',   eq(A4.add(A4.add(PHI, PHI), A4.ONE), PHI_CU)],
+    ['phi - phi_inv = 1',       eq(A4.sub(PHI, PHI_INV), A4.ONE)],
+    ['divided line = phi^3',    eq(A4.add(A4.add(A4.add(PHI, A4.ONE), A4.ONE), PHI_INV), PHI_CU)]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length) throw new Error('KX exact-identity failure: ' + failed.join('; '));
   return Object.freeze({
     PHI, PHI_SQ, PHI_CU, PHI_INV, PHI_SQ_INV, PHI_CU_INV,
     GOLD_ANGLE_DEG, PRECESSION_DEG, MAX_PREC_DEG, DIEL_MAG,
+    checkNames: Object.freeze(checks.map(c => c[0])),
     eq, verified: checks.length,
     f: {
       phi: Quad.toFloat(PHI), phi_sq: Quad.toFloat(PHI_SQ), phi_cu: Quad.toFloat(PHI_CU),
@@ -2157,19 +2175,28 @@ const KX = (() => {
     }
   });
 })();
-C.dividedLine = {
-  total: C.phi_cu_f,                                
-  seg: [C.phi_f, 1, 1, C.phi_inv_f],               
-  frac: [
-    0,
-    C.phi_f / C.phi_cu_f,                           
-    (C.phi_f + 1) / C.phi_cu_f,                     
-    (C.phi_f + 2) / C.phi_cu_f,                     
-    1                                                
-  ],
-  labels: ['Logos/Illumination', 'Being/ONE', 'Water', 'Matter/Earth'],
-  greek: ['Θ', 'Α', 'Υ', 'Γ']
-};
+/* The divided line, exact. Segments phi : 1 : 1 : 1/phi, and since
+   phi + 1/phi = sqrt(5) their total is exactly 2 + sqrt(5) = phi^3 -- the
+   identity the whole phi^3 algebra rests on. Built from KX so the segments and
+   the cumulative fractions are A4 elements; floats appear only at the display
+   boundary, the same rule the rest of the file follows. */
+C.dividedLine = (() => {
+  const segA = [KX.PHI, A4.ONE, A4.ONE, KX.PHI_INV];
+  const cumA = [A4.ZERO];
+  for (const s of segA) cumA.push(A4.add(cumA[cumA.length - 1], s));
+  const totalA = cumA[cumA.length - 1];
+  if (!A4.eq(totalA, KX.PHI_CU))
+    throw new Error('divided line does not sum to phi^3');
+  const fracA = cumA.map(c => A4.div(c, totalA));
+  return {
+    totalA, segA, fracA,
+    total: Quad.toFloat(totalA),
+    seg: segA.map(Quad.toFloat),
+    frac: fracA.map(Quad.toFloat),
+    labels: ['Logos/Illumination', 'Being/ONE', 'Water', 'Matter/Earth'],
+    greek: ['Θ', 'Α', 'Υ', 'Γ']
+  };
+})();
 C.pentagram = {
   angle: TAU / 5,                                   
   innerAngle: PI / 5,                               
@@ -2397,8 +2424,14 @@ const WHEELER = {
   centripetal: Quad.toFloat(Quad.mk(Q.ZERO, Q.ONE)),   
   centrifugal: Q.fl(C.sqrt3),                          
   counterspace: Q.fl(C.alpha),                         
-  kappa_phi3: 8 * PI * KX.f.phi_cu,                    
-  _phi3: KX.f.phi_cu,                                  
+  /* kenmagnetic: G_uv + Q_uv = 8*pi*phi^3*T_uv(dielectric).
+     phi^3 is exact -- KX.PHI_CU = 2+sqrt(5) -- but pi is transcendental and has
+     no representative in A4 at all. The file's rational pi (355/113) is only
+     good to 8.5e-8, so carrying this "exactly" through A4 would be LESS
+     accurate than the double, not more. The honest split is therefore: phi^3
+     exact, pi at double precision, multiplied at the float boundary. */
+  _phi3: Quad.toFloat(KX.PHI_CU),
+  kappa_phi3: 8 * PI * Quad.toFloat(KX.PHI_CU),
   _phiAng: KX.f.phi,                                   
   PHI_CU_EXACT: KX.PHI_CU,                             
   _COS: null, _SIN: null, _CENT: null, _COSQ: null, _SINQ: null, _CENTQ: null, _CENTF: null, _GVF: null, _RADF: null, _INV_ALPHA: 0,
@@ -2439,10 +2472,11 @@ const WHEELER = {
   _oct(a) { return ((Math.round(a / (PI / 4)) % 8) + 8) % 8; },
   centBalQ(theta, phi) { return this._CENTQ[this._oct(theta)][this._oct(phi)]; },
   centBal(theta, phi) { return this._CENTF[this._oct(theta)][this._oct(phi)]; },
-  hyperboloid(r, theta, R0) {
-    const c = this._COS[this._oct(theta)];
-    return (1 + c * c) / (1 + (r * r) / (R0 * R0));
-  },
+  /* The stated shape function cosh(theta)*exp(-(r/R0)^2) has no representative
+     in A4, and the rational stand-in that used to sit here was a silent
+     substitute for it. Wheeler's algebra gives the phi^3-scaled radial form
+     directly -- radialFactorA4 = phi^3 * eps^2/(r^2+eps^2), exact, cached per
+     octant in _RADF -- so that is what the geometry uses. */
   rhoQ(rQ, epsQ) {
     const r2 = Q.mul(rQ, rQ), e2 = Q.mul(epsQ, epsQ);
     const den = Q.add(r2, e2);
@@ -2476,19 +2510,18 @@ const WHEELER = {
      omega = gamma_W * M at the sampled point, normalised to [-1,1]. It was a
      wall-clock sine; omega is the quantity the term was always about, it is
      exact, and it makes every one of these a pure function of psi. */
-  fieldDistortion(theta, phi, R0, wOmega) {
-    const sphi = this._SIN[this._oct(phi)], cphi = this._COS[this._oct(phi)];
-    const hyp = this.hyperboloid(sphi, theta, R0);
+  fieldDistortion(theta, phi, wOmega) {
+    /* 8*pi*phi^3 (the Einstein coupling) times the phi^3-scaled radial factor
+       phi^3*rho, which is what the two stated formulas compose to. */
     const rad = this._RADF[this._oct(phi)];
     const vortex = this.goldenVortex(theta, phi, 1);
-    const coupling = this.kappa_phi3 * hyp * rad;
-    return coupling * (1 + vortex * wOmega);
+    return this.kappa_phi3 * rad * (1 + vortex * wOmega);
   },
   etherPressure(theta, phi, wOmega) {
-    const hyp = this.hyperboloid(this._SIN[this._oct(phi)], theta, 1.5);
+    const rad = this._RADF[this._oct(phi)];
     const centBal = this.centBal(theta, phi);
     const pulsation = 1 + 0.15 * wOmega;
-    return this._phi3 * hyp * centBal * pulsation;
+    return this._phi3 * rad * centBal * pulsation;
   },
   counterspaceIntensity(theta, phi, fieldVal, wOmega) {
     const xi = this.counterspaceConj(fieldVal);
@@ -4592,7 +4625,10 @@ function projectTorus() {
   const r4f = abs(VTX_DISPLAY.r4F);
   const cRY = cos(camRY), sRY = sin(camRY);
   const cRX = cos(camRX), sRX = sin(camRX);
-  const ampOn = CERT.amplitude, phaseOn = CERT.phase, wOn = CERT.wheeler, r4On = CERT.r4gate;
+  /* The Wheeler geometry rides on the phi^3 algebra, so it needs both its own
+     certificate and the golden one. */
+  const ampOn = CERT.amplitude, phaseOn = CERT.phase, r4On = CERT.r4gate;
+  const wOn = CERT.wheeler && CERT.golden;
   const wInv = C5.wMax > 0 ? 1 / C5.wMax : 0;
   const vGain = abs(vortexGain) * AMP.vortex;
   for (let i = 0; i < TH_SEG; i++) {
@@ -4662,12 +4698,11 @@ function projectTorus() {
            point so the colour pass reads the same value the geometry did. */
         const wN = sW * wInv;
         wOmegaN = wN;
-        R += WHEELER.fieldDistortion(theta, phi, 2.0, wN) * aw * 3;
+        R += WHEELER.fieldDistortion(theta, phi, wN) * aw * 3;
         const ethP = WHEELER.etherPressure(theta, phi, wN);
         r += ethP * 7.0; R += ethP * 3.0;
         const csI = WHEELER.counterspaceIntensity(theta, phi, fvNorm, wN);
         r -= abs(csI) * 4.0; yOff += csI * 6.0;
-        R += (WHEELER.hyperboloid(sin(phi), theta, 1.8) - 1) * 1.6 * aw;
         yOff += GEO.gv[gidx] * abs(sW) * wInv * 4 * vGain;
         phiShift += GEO.gv[gidx] * 0.025;
       }

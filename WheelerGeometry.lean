@@ -125,5 +125,70 @@ theorem wheeler_compression_positive_of_nonneg
     (geoD D : Rat) (hg : 0 < geoD) (hD : 0 ≤ D) : 0 < 1 + geoD * D := by
   nlinarith
 
+/-!
+## The golden-Pythagorean identities
+
+`GOLDENPYTHAGOREAN` states `φ + φ + 1 = φ³ = 4.23606` and divides the line into
+four segments `φ : 1 : 1 : 1/φ` whose total is `φ³`.  Both reduce to the same
+algebraic fact, and both are exact in `ℚ(√5)` — which is why the render can
+carry them without a float anywhere.
+
+`φ` itself is irrational, so these are stated over an abstract `φ` pinned by its
+defining equation `φ² = φ + 1` rather than over `Rat`.
+-/
+
+section GoldenPythagorean
+
+variable {K : Type*} [Field K] (φ : K)
+
+/-- The golden ratio's defining relation. -/
+def IsGolden (φ : K) : Prop := φ ^ 2 = φ + 1
+
+variable (h : IsGolden φ)
+include h
+
+/-- `φ ≠ 0`, so `1/φ` is available. -/
+theorem golden_ne_zero : φ ≠ 0 := by
+  intro h0
+  rw [IsGolden, h0] at h
+  norm_num at h
+
+/-- **`φ³ = 2φ + 1`** — the cube in terms of the ratio itself. -/
+theorem phi_cubed_eq : φ ^ 3 = 2 * φ + 1 := by
+  have : φ ^ 3 = φ * φ ^ 2 := by ring
+  rw [this, IsGolden] at *
+  rw [h]; nlinarith [h]
+
+/-- **`φ + φ + 1 = φ³`** — the identity written on the chart. -/
+theorem phi_plus_phi_plus_one : φ + φ + 1 = φ ^ 3 := by
+  rw [phi_cubed_eq φ h]; ring
+
+/-- **`φ + 1/φ = √5`**, in the form that avoids naming `√5`: `φ - 1/φ = 1`. -/
+theorem phi_sub_inv : φ - 1 / φ = 1 := by
+  have hne := golden_ne_zero φ h
+  field_simp
+  nlinarith [h]
+
+/-- **The divided line sums to `φ³`**: `φ + 1 + 1 + 1/φ = φ³`.
+This is the GOLDENPYTHAGOREAN divided line `Θ : Α : Υ : Γ`, and it is what
+`C.dividedLine` is checked against at load time. -/
+theorem divided_line_sums_to_phi_cubed : φ + 1 + 1 + 1 / φ = φ ^ 3 := by
+  have hne := golden_ne_zero φ h
+  rw [phi_cubed_eq φ h]
+  field_simp
+  nlinarith [h]
+
+end GoldenPythagorean
+
+/-- Over `ℚ(√5)` the same statement is a concrete identity: `φ³ = 2 + √5`.
+Represented here on the pair `(a, b) ↦ a + b√5`, where `φ = (1,1)/2`. -/
+def sqrt5Mul (x y : Rat × Rat) : Rat × Rat :=
+  (x.1 * y.1 + 5 * x.2 * y.2, x.1 * y.2 + x.2 * y.1)
+
+/-- `φ³ = 2 + √5` in the `(a, b) ↦ a + b√5` representation. -/
+theorem phi_cubed_is_two_plus_sqrt5 :
+    sqrt5Mul (sqrt5Mul (1/2, 1/2) (1/2, 1/2)) (1/2, 1/2) = (2, 1) := by
+  simp [sqrt5Mul]; norm_num
+
 end Wheeler
 end SutraWS
