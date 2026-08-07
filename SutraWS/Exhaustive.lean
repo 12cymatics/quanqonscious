@@ -5,8 +5,6 @@ import SutraWS.SutraSemantics
 
 namespace SutraWS
 
-open SutraSemantics
-
 
 theorem delta_1 : delta Sutra.S1 = (1 : Rat) := by rfl
 
@@ -36,12 +34,10 @@ theorem y_erase_1 (st : State) : (applyList (Sutra.all.erase Sutra.S1) st).y = s
 theorem all_vs_erase_1_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S1) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S1) st).x = st.x + (434 : Rat) := x_erase_1 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (434 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (434 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (434 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_2 : delta Sutra.S2 = (2 : Rat) := by rfl
@@ -72,12 +68,10 @@ theorem y_erase_2 (st : State) : (applyList (Sutra.all.erase Sutra.S2) st).y = s
 theorem all_vs_erase_2_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S2) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S2) st).x = st.x + (433 : Rat) := x_erase_2 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (433 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (433 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (433 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_3 : delta Sutra.S3 = (3 : Rat) := by rfl
@@ -108,12 +102,10 @@ theorem y_erase_3 (st : State) : (applyList (Sutra.all.erase Sutra.S3) st).y = s
 theorem all_vs_erase_3_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S3) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S3) st).x = st.x + (432 : Rat) := x_erase_3 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (432 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (432 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (432 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_4 : delta Sutra.S4 = (4 : Rat) := by rfl
@@ -144,12 +136,10 @@ theorem y_erase_4 (st : State) : (applyList (Sutra.all.erase Sutra.S4) st).y = s
 theorem all_vs_erase_4_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S4) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S4) st).x = st.x + (431 : Rat) := x_erase_4 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (431 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (431 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (431 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_5 : delta Sutra.S5 = (5 : Rat) := by rfl
@@ -180,12 +170,10 @@ theorem y_erase_5 (st : State) : (applyList (Sutra.all.erase Sutra.S5) st).y = s
 theorem all_vs_erase_5_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S5) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S5) st).x = st.x + (430 : Rat) := x_erase_5 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (430 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (430 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (430 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_6 : delta Sutra.S6 = (6 : Rat) := by rfl
@@ -216,12 +204,10 @@ theorem y_erase_6 (st : State) : (applyList (Sutra.all.erase Sutra.S6) st).y = s
 theorem all_vs_erase_6_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S6) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S6) st).x = st.x + (429 : Rat) := x_erase_6 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (429 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (429 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (429 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_7 : delta Sutra.S7 = (7 : Rat) := by rfl
@@ -252,12 +238,10 @@ theorem y_erase_7 (st : State) : (applyList (Sutra.all.erase Sutra.S7) st).y = s
 theorem all_vs_erase_7_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S7) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S7) st).x = st.x + (428 : Rat) := x_erase_7 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (428 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (428 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (428 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_8 : delta Sutra.S8 = (8 : Rat) := by rfl
@@ -288,12 +272,10 @@ theorem y_erase_8 (st : State) : (applyList (Sutra.all.erase Sutra.S8) st).y = s
 theorem all_vs_erase_8_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S8) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S8) st).x = st.x + (427 : Rat) := x_erase_8 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (427 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (427 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (427 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_9 : delta Sutra.S9 = (9 : Rat) := by rfl
@@ -324,12 +306,10 @@ theorem y_erase_9 (st : State) : (applyList (Sutra.all.erase Sutra.S9) st).y = s
 theorem all_vs_erase_9_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S9) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S9) st).x = st.x + (426 : Rat) := x_erase_9 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (426 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (426 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (426 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_10 : delta Sutra.S10 = (10 : Rat) := by rfl
@@ -360,12 +340,10 @@ theorem y_erase_10 (st : State) : (applyList (Sutra.all.erase Sutra.S10) st).y =
 theorem all_vs_erase_10_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S10) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S10) st).x = st.x + (425 : Rat) := x_erase_10 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (425 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (425 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (425 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_11 : delta Sutra.S11 = (11 : Rat) := by rfl
@@ -396,12 +374,10 @@ theorem y_erase_11 (st : State) : (applyList (Sutra.all.erase Sutra.S11) st).y =
 theorem all_vs_erase_11_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S11) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S11) st).x = st.x + (424 : Rat) := x_erase_11 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (424 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (424 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (424 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_12 : delta Sutra.S12 = (12 : Rat) := by rfl
@@ -432,12 +408,10 @@ theorem y_erase_12 (st : State) : (applyList (Sutra.all.erase Sutra.S12) st).y =
 theorem all_vs_erase_12_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S12) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S12) st).x = st.x + (423 : Rat) := x_erase_12 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (423 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (423 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (423 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_13 : delta Sutra.S13 = (13 : Rat) := by rfl
@@ -468,12 +442,10 @@ theorem y_erase_13 (st : State) : (applyList (Sutra.all.erase Sutra.S13) st).y =
 theorem all_vs_erase_13_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S13) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S13) st).x = st.x + (422 : Rat) := x_erase_13 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (422 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (422 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (422 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_14 : delta Sutra.S14 = (14 : Rat) := by rfl
@@ -504,12 +476,10 @@ theorem y_erase_14 (st : State) : (applyList (Sutra.all.erase Sutra.S14) st).y =
 theorem all_vs_erase_14_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S14) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S14) st).x = st.x + (421 : Rat) := x_erase_14 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (421 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (421 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (421 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_15 : delta Sutra.S15 = (15 : Rat) := by rfl
@@ -540,12 +510,10 @@ theorem y_erase_15 (st : State) : (applyList (Sutra.all.erase Sutra.S15) st).y =
 theorem all_vs_erase_15_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S15) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S15) st).x = st.x + (420 : Rat) := x_erase_15 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (420 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (420 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (420 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_16 : delta Sutra.S16 = (16 : Rat) := by rfl
@@ -576,12 +544,10 @@ theorem y_erase_16 (st : State) : (applyList (Sutra.all.erase Sutra.S16) st).y =
 theorem all_vs_erase_16_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S16) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S16) st).x = st.x + (419 : Rat) := x_erase_16 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (419 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (419 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (419 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_17 : delta Sutra.S17 = (17 : Rat) := by rfl
@@ -612,12 +578,10 @@ theorem y_erase_17 (st : State) : (applyList (Sutra.all.erase Sutra.S17) st).y =
 theorem all_vs_erase_17_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S17) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S17) st).x = st.x + (418 : Rat) := x_erase_17 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (418 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (418 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (418 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_18 : delta Sutra.S18 = (18 : Rat) := by rfl
@@ -648,12 +612,10 @@ theorem y_erase_18 (st : State) : (applyList (Sutra.all.erase Sutra.S18) st).y =
 theorem all_vs_erase_18_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S18) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S18) st).x = st.x + (417 : Rat) := x_erase_18 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (417 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (417 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (417 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_19 : delta Sutra.S19 = (19 : Rat) := by rfl
@@ -684,12 +646,10 @@ theorem y_erase_19 (st : State) : (applyList (Sutra.all.erase Sutra.S19) st).y =
 theorem all_vs_erase_19_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S19) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S19) st).x = st.x + (416 : Rat) := x_erase_19 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (416 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (416 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (416 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_20 : delta Sutra.S20 = (20 : Rat) := by rfl
@@ -720,12 +680,10 @@ theorem y_erase_20 (st : State) : (applyList (Sutra.all.erase Sutra.S20) st).y =
 theorem all_vs_erase_20_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S20) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S20) st).x = st.x + (415 : Rat) := x_erase_20 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (415 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (415 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (415 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_21 : delta Sutra.S21 = (21 : Rat) := by rfl
@@ -756,12 +714,10 @@ theorem y_erase_21 (st : State) : (applyList (Sutra.all.erase Sutra.S21) st).y =
 theorem all_vs_erase_21_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S21) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S21) st).x = st.x + (414 : Rat) := x_erase_21 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (414 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (414 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (414 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_22 : delta Sutra.S22 = (22 : Rat) := by rfl
@@ -792,12 +748,10 @@ theorem y_erase_22 (st : State) : (applyList (Sutra.all.erase Sutra.S22) st).y =
 theorem all_vs_erase_22_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S22) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S22) st).x = st.x + (413 : Rat) := x_erase_22 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (413 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (413 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (413 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_23 : delta Sutra.S23 = (23 : Rat) := by rfl
@@ -828,12 +782,10 @@ theorem y_erase_23 (st : State) : (applyList (Sutra.all.erase Sutra.S23) st).y =
 theorem all_vs_erase_23_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S23) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S23) st).x = st.x + (412 : Rat) := x_erase_23 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (412 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (412 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (412 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_24 : delta Sutra.S24 = (24 : Rat) := by rfl
@@ -864,12 +816,10 @@ theorem y_erase_24 (st : State) : (applyList (Sutra.all.erase Sutra.S24) st).y =
 theorem all_vs_erase_24_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S24) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S24) st).x = st.x + (411 : Rat) := x_erase_24 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (411 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (411 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (411 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_25 : delta Sutra.S25 = (25 : Rat) := by rfl
@@ -900,12 +850,10 @@ theorem y_erase_25 (st : State) : (applyList (Sutra.all.erase Sutra.S25) st).y =
 theorem all_vs_erase_25_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S25) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S25) st).x = st.x + (410 : Rat) := x_erase_25 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (410 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (410 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (410 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_26 : delta Sutra.S26 = (26 : Rat) := by rfl
@@ -936,12 +884,10 @@ theorem y_erase_26 (st : State) : (applyList (Sutra.all.erase Sutra.S26) st).y =
 theorem all_vs_erase_26_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S26) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S26) st).x = st.x + (409 : Rat) := x_erase_26 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (409 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (409 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (409 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_27 : delta Sutra.S27 = (27 : Rat) := by rfl
@@ -972,12 +918,10 @@ theorem y_erase_27 (st : State) : (applyList (Sutra.all.erase Sutra.S27) st).y =
 theorem all_vs_erase_27_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S27) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S27) st).x = st.x + (408 : Rat) := x_erase_27 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (408 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (408 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (408 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_28 : delta Sutra.S28 = (28 : Rat) := by rfl
@@ -1008,12 +952,10 @@ theorem y_erase_28 (st : State) : (applyList (Sutra.all.erase Sutra.S28) st).y =
 theorem all_vs_erase_28_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S28) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S28) st).x = st.x + (407 : Rat) := x_erase_28 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (407 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (407 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (407 : Rat) := by linarith
+  norm_num at h
 
 
 theorem delta_29 : delta Sutra.S29 = (29 : Rat) := by rfl
@@ -1044,12 +986,10 @@ theorem y_erase_29 (st : State) : (applyList (Sutra.all.erase Sutra.S29) st).y =
 theorem all_vs_erase_29_x (st : State) : (applyAll st).x ≠ (applyList (Sutra.all.erase Sutra.S29) st).x := by
   have hx1 : (applyAll st).x = st.x + (435 : Rat) := by simpa [applyAll_x]
   have hx2 : (applyList (Sutra.all.erase Sutra.S29) st).x = st.x + (406 : Rat) := x_erase_29 st
+  rw [hx1, hx2]
   intro hEq
-  have : (st.x + (435 : Rat)) = (st.x + (406 : Rat)) := by simpa [hx1, hx2] using congrArg State.x hEq
-  have : (435 : Rat) = (406 : Rat) := by
-    have := Rat.add_left_cancel this
-    simpa using this
-  native_decide
+  have h : (435 : Rat) = (406 : Rat) := by linarith
+  norm_num at h
 
 
 theorem commute_x_1_1 (st : State) :

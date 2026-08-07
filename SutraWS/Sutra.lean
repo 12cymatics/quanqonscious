@@ -42,6 +42,9 @@ def Sutra.ofFin : Sutra29 → Sutra
 | ⟨26, _⟩ => Sutra.S27
 | ⟨27, _⟩ => Sutra.S28
 | ⟨28, _⟩ => Sutra.S29
+-- `Fin 29` literal patterns are not seen as exhaustive by the match compiler; discharge the
+-- impossible tail explicitly.
+| ⟨_ + 29, h⟩ => absurd h (by omega)
 
 def Sutra.all : List Sutra :=
   [Sutra.S1, Sutra.S2, Sutra.S3, Sutra.S4, Sutra.S5, Sutra.S6, Sutra.S7, Sutra.S8, Sutra.S9, Sutra.S10,

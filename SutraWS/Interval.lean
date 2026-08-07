@@ -1,4 +1,5 @@
-import Mathlib.Data.Rat.Basic
+import Mathlib.Data.Rat.Defs
+import Mathlib.Algebra.Order.Ring.Rat
 import Mathlib.Tactic
 
 namespace SutraWS
@@ -32,17 +33,19 @@ def mul (A B : QI) : QI :=
   let p4 := A.hi * B.hi
   let lo := min (min p1 p2) (min p3 p4)
   let hi := max (max p1 p2) (max p3 p4)
-  have hle : lo ≤ hi := by
-    dsimp [lo, hi]
-    exact le_trans (min_le_left _ _) (le_trans (le_max_left _ _) (le_max_right _ _))
+  -- min over the four corner products ≤ p1 ≤ max over the four corner products
+  have hle : lo ≤ hi :=
+    le_trans (le_trans (min_le_left _ _) (min_le_left p1 p2))
+      (le_trans (le_max_left p1 p2) (le_max_left _ _))
   ⟨lo, hi, hle⟩
 
 def abs (A : QI) : QI :=
   if h0 : 0 ≤ A.lo then A else
   if h1 : A.hi ≤ 0 then neg A else
   ⟨0, max (-A.lo) A.hi, by
-    have : (0:Rat) ≤ max (-A.lo) A.hi := by exact le_trans (le_max_left _ _) (le_of_lt (lt_of_lt_of_le (by linarith) (le_rfl)))
-    exact this⟩
+    -- h1 : ¬ A.hi ≤ 0, hence 0 < A.hi ≤ max (-A.lo) A.hi
+    have hpos : (0:Rat) < A.hi := not_le.mp h1
+    exact le_trans hpos.le (le_max_right _ _)⟩
 
 theorem contains_point (x : Rat) : (point x).contains x := by constructor <;> rfl
 
