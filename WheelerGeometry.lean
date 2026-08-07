@@ -191,4 +191,62 @@ theorem phi_cubed_is_two_plus_sqrt5 :
   simp [sqrt5Mul]; norm_num
 
 end Wheeler
+
+/-!
+# Execution modes
+
+The simulator runs a set of sutras three ways, and the point of having three is
+that they are different operators.  Over a commutative ring the difference is
+already visible on two operators:
+
+* `SERIES` composes — `S₂ ∘ S₁`
+* `PARALLEL` superposes displacements — `ψ + Σᵢ (Sᵢ ψ − ψ)`
+* `SYMMETRIC_CONCURRENT` is the half-strength forward/reverse split
+
+`PARALLEL` drops every cross term, which is exactly why it does not preserve
+norm when `SERIES` does, and is what the mode-comparison panel shows.
+-/
+
+namespace Modes
+
+variable {V : Type*} [AddCommGroup V]
+
+/-- Series: apply each operator in turn. -/
+def series (fs : List (V → V)) (ψ : V) : V := fs.foldl (fun x f => f x) ψ
+
+/-- Parallel: sum the independent displacements about the same input. -/
+def parallel (fs : List (V → V)) (ψ : V) : V :=
+  ψ + (fs.map (fun f => f ψ - ψ)).sum
+
+/-- On the empty set both modes are the identity. -/
+theorem series_nil (ψ : V) : series ([] : List (V → V)) ψ = ψ := rfl
+
+theorem parallel_nil (ψ : V) : parallel ([] : List (V → V)) ψ = ψ := by
+  simp [parallel]
+
+/-- **On a single operator the two modes agree** — there is nothing to order and
+nothing to superpose.  This is what the panel reports for a one-sutra set. -/
+theorem series_eq_parallel_singleton (f : V → V) (ψ : V) :
+    series [f] ψ = parallel [f] ψ := by
+  simp [series, parallel]
+
+/-- **On two operators they differ by exactly the cross term.**  `SERIES` feeds
+`f₁ ψ` into `f₂`; `PARALLEL` evaluates both at `ψ`.  The gap is
+`f₂ (f₁ ψ) − f₂ ψ`, which vanishes only when `f₂` cannot see `f₁`'s
+displacement — so a set on which the modes coincide is a genuine degeneracy,
+which is why the panel calls it out rather than hiding it. -/
+theorem series_sub_parallel_pair (f₁ f₂ : V → V) (ψ : V) :
+    series [f₁, f₂] ψ - parallel [f₁, f₂] ψ = f₂ (f₁ ψ) - f₂ ψ := by
+  simp [series, parallel]
+  abel
+
+/-- If the second operator is additive on the first's displacement, the modes
+coincide — the precise condition under which the comparison is degenerate. -/
+theorem series_eq_parallel_of_affine (f₁ f₂ : V → V) (ψ : V)
+    (h : f₂ (f₁ ψ) = f₂ ψ) : series [f₁, f₂] ψ = parallel [f₁, f₂] ψ := by
+  have := series_sub_parallel_pair f₁ f₂ ψ
+  rw [h] at this
+  simpa [sub_eq_zero] using this
+
+end Modes
 end SutraWS

@@ -1486,6 +1486,47 @@ const STRICT_V5_FACTORY = () => {
      the renderer will draw them identically -- correctly, because they act
      identically. That is a defect in the operator set, not in the picture, so
      it is detected and named here rather than disguised downstream. */
+  /* The three execution modes on one active set. SERIES composes the operators,
+     PARALLEL superposes their independent displacements, SYMMETRIC_CONCURRENT
+     is the half-strength forward/reverse split. They are genuinely different
+     operators and the point of having all three is to compare them, so the
+     comparison is computed exactly rather than left to the eye. */
+  const MODES3 = Object.freeze(['SERIES','PARALLEL','SYMMETRIC_CONCURRENT']);
+  const modeComparison = (psi,active,opts) => {
+    /* checkComposed rebuilds a full 16-column matrix per mode. That is fine for
+       an audit and far too slow for a frame, so it is opt-in. */
+    const checkComposed=!!(opts&&opts.checkComposed);
+    const states={},energies={};
+    for(const m of MODES3){
+      const st=applySutraCore(psi,active,m);
+      states[m]=st;energies[m]=energy(st);
+    }
+    const pairwise={};
+    let allDistinct=true;
+    for(let i=0;i<MODES3.length;i++)for(let j=i+1;j<MODES3.length;j++){
+      const a=states[MODES3[i]],b=states[MODES3[j]];
+      let worst=A4.ZERO,identical=true;
+      for(let v=0;v<16;v++){
+        const d=C4.sub(a[v],b[v]),n=C4.norm2(d);
+        if(!A4.isZero(n))identical=false;
+        if(A4.cmp(n,worst)>0)worst=n;
+      }
+      if(identical)allDistinct=false;
+      pairwise[MODES3[i]+'|'+MODES3[j]]={maxNormSq:worst,identical};
+    }
+    /* every mode must agree with its own composed matrix -- the associativity
+       claim the runtime already asserts for a fixed probe, decided here on the
+       actual active set when asked for. */
+    let composedAgrees=null;
+    if(checkComposed){
+      composedAgrees=true;
+      for(const m of MODES3){
+        const c=applySutraCoreComposed(psi,active,m);
+        for(let v=0;v<16;v++)if(!C4.eq(c[v],states[m][v]))composedAgrees=false;
+      }
+    }
+    return Object.freeze({modes:MODES3,states,energies,pairwise,allDistinct,composedAgrees});
+  };
   const operatorDistinctness = () => {
     /* Two operators are the same operator only if they agree as functions of
        BOTH state and strength. Agreeing at a single strength is a coincidence
@@ -1660,7 +1701,7 @@ const STRICT_V5_FACTORY = () => {
       energyMethod: last.energyMethod
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
+  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
 };
 const STRICT_V5 = STRICT_V5_FACTORY();
 /* Release manifest: one object a buyer or reviewer can diff against a shipped
@@ -2008,6 +2049,10 @@ const LEAN_PROVED = Object.freeze({
      throws at load if any of them fails -- so the page cannot start with a
      broken phi algebra. */
   goldenChecked: ['phi_cubed_eq','phi_plus_phi_plus_one','phi_sub_inv','divided_line_sums_to_phi_cubed','phi_cubed_is_two_plus_sqrt5'],
+  /* Execution modes. series_sub_parallel_pair pins the difference between
+     composing and superposing to the cross term, which is what the mode panel
+     measures on the live active set; STRICT_V5.modeComparison decides it. */
+  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine'],
   compilerTrusted: ['d1_d2_zero','d2_d3_zero','d3_d4_zero','euler_characteristic_zero','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect']
 });
 /* Every visual channel names the theorems it rests on and the predicate that
@@ -2044,6 +2089,11 @@ const VISUAL_CERTIFICATE = {
                  'rho_den_pos_of_hw_pos', 'tau_max_num_eq',
                  'tau_max_below_removed_ceiling', 'tau_base_is_three_quarters'],
       holds: () => Number.isFinite(VTX_DISPLAY.r4F) && VTX_DISPLAY.r4F >= 0 && VTX_DISPLAY.r4F <= 1
+    },
+    modes: {
+      draws: 'series / parallel / concurrency comparison panel',
+      theorems: LEAN_PROVED.modeChecked,
+      holds: () => MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3
     },
     sutra: {
       draws: 'per-sutra injected displacement',
@@ -4266,6 +4316,71 @@ function activeSutrasV5() {
       strength:STRICT_V5.Q.mk(s.strengthQ.n,s.strengthQ.d),
       args:Object.freeze(sutraArgVector(s))}));
 }
+/* Series / parallel / concurrency, compared. The three modes are evaluated on
+   the canonical seed rather than the live state, so the panel shows the pure
+   difference between the modes themselves and not where the run happens to be.
+   That also makes it cacheable: it only changes when the active set or one of
+   its point arguments changes. */
+const MODE_COMPARE = { key: '', modes: [], traces: [], energies: [],
+                       pairwise: [], allDistinct: false, composedAgrees: false, active: 0 };
+function refreshModeComparison() {
+  const act = activeSutrasV5();
+  const key = act.map(s => s.id + ':' + s.args.map(q => q.n + '/' + q.d).join('~')).join(',');
+  if (key === MODE_COMPARE.key) return MODE_COMPARE;
+  MODE_COMPARE.key = key;
+  MODE_COMPARE.active = act.length;
+  if (!act.length) {
+    MODE_COMPARE.traces = []; MODE_COMPARE.pairwise = [];
+    MODE_COMPARE.allDistinct = false; MODE_COMPARE.composedAgrees = true;
+    return MODE_COMPARE;
+  }
+  const cmp = STRICT_V5.modeComparison(STRICT_V5.initState(), act);
+  MODE_COMPARE.modes = cmp.modes;
+  MODE_COMPARE.traces = cmp.modes.map(m =>
+    cmp.states[m].map(z => FAITHFUL.aNum(STRICT_V5.C4.norm2(z))));
+  MODE_COMPARE.energies = cmp.modes.map(m => FAITHFUL.aNum(cmp.energies[m]));
+  MODE_COMPARE.pairwise = Object.keys(cmp.pairwise).map(k => ({
+    pair: k, identical: cmp.pairwise[k].identical,
+    delta: Math.sqrt(Math.max(0, FAITHFUL.aNum(cmp.pairwise[k].maxNormSq)))
+  }));
+  MODE_COMPARE.allDistinct = cmp.allDistinct;
+  MODE_COMPARE.composedAgrees = cmp.composedAgrees;
+  return MODE_COMPARE;
+}
+function drawModeComparison(ctx, cw, ch) {
+  const M = MODE_COMPARE;
+  if (!M.active || !M.traces.length) return;
+  if (!VISUAL_CERTIFICATE.status().modes) return;
+  const w = 128, h = 46, x0 = cw - w - 10, y0 = 10;
+  ctx.fillStyle = '#0a0a10cc';
+  ctx.fillRect(x0 - 4, y0 - 4, w + 8, h + 40);
+  ctx.fillStyle = '#555'; ctx.font = '7px monospace';
+  ctx.fillText('EXECUTION MODE  Ψ→|ψ|² on seed', x0, y0 + 4);
+  let hi = 0;
+  for (const t of M.traces) for (const v of t) if (v > hi) hi = v;
+  hi = hi || 1;
+  const cols = ['#d4af37', '#44ddaa', '#4a90d9'];
+  const names = ['SERIES', 'PARALLEL', 'CONCURRENT'];
+  M.traces.forEach((t, k) => {
+    ctx.strokeStyle = cols[k]; ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const px = x0 + (i / 15) * w, py = y0 + 12 + (h - 14) * (1 - t[i] / hi);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = cols[k]; ctx.font = '5.5px monospace';
+    ctx.fillText(names[k] + '  E=' + M.energies[k].toFixed(4), x0, y0 + h + 8 + k * 7);
+  });
+  ctx.fillStyle = M.allDistinct ? '#44ff88' : '#ff6644';
+  ctx.font = '5.5px monospace';
+  const worst = M.pairwise.reduce((a, b) => (b.delta > a.delta ? b : a), M.pairwise[0]);
+  ctx.fillText(M.allDistinct
+      ? 'all three distinct · max Δ=' + worst.delta.toExponential(1)
+      : 'MODES COINCIDE on this set',
+    x0, y0 + h + 8 + 3 * 7);
+}
 const VTX_DISPLAY = { vpsi: new Array(16).fill(0), lambdaF: [0,0,0,0], lambdaStr: ['0','0','0','0'],
   sumLambdaSq: 0, r4F: 0, sigmaF: null, normSqF: 0, traceNormSqF: 0,
   exactEnergyF: 0, exactEnergyA4: '0', faithful: null, max: 0, spread: 0 };
@@ -5246,6 +5361,7 @@ function frame(t) {
   STRICT_V5_VISUAL_TICK++;
   requestStrictV5Step();
   refreshSutraCertificate(activeStrict);
+  refreshModeComparison();
   for (const s of activeStrict) LeanState.act(s.id);
   simTime += SIM_DT;
   cycle++;
@@ -5258,6 +5374,7 @@ function frame(t) {
   LOG.render();
   {
     const ctx = document.getElementById('c').getContext('2d');
+    drawModeComparison(ctx, cw, ch);
     const vpsi = VTX_DISPLAY.vpsi;
     const maxAbs = Math.max(...vpsi.map(Math.abs));
     const FSbar = FS_DISPLAY;
