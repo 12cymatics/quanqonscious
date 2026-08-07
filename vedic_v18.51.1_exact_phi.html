@@ -671,23 +671,88 @@ const STRICT_V5_FACTORY = () => {
   const rotateBits = v => ((v<<1)&15)|((v>>3)&1);
   const swap03 = v => ((v&1)<<3)|(v&6)|((v&8)>>3);
   const gray = v => v^(v>>1);
-  const applySutra = (id,psi,strengthQ) => {
+  /* Multiple point arguments.
+     Each operator's law already carried literal constants -- Ekadhikena's "one
+     more", Yavadunam's squaring, Sopantyadvaya's "twice", Kevalaih's seven,
+     the retention threshold, the moduli and denominators. Those literals ARE
+     the sutra's operands; they were simply frozen. Exposing them is
+     un-hardcoding, not invention, and it is the axis the simulator exists to
+     explore. args[0] is always strength, so a bare Q still works everywhere. */
+  const SUTRA_ARG_SPEC = Object.freeze({
+    1:  [{name:'increment', role:'"by one more than the previous" — the step k in hw+k', def:Q.ONE, lo:-4, hi:8}],
+    2:  [{name:'iterate',   role:'complement applied k times (k even = identity)', def:Q.ONE, lo:1, hi:4, int:true}],
+    3:  [{name:'crosswise', role:'vertical-and-crosswise order in the transform domain', def:Q.ONE, lo:1, hi:8}],
+    4:  [{name:'divisor',   role:'"transpose and adjust" — the divisor of the adjustment', def:Q.ONE, lo:1, hi:8}],
+    5:  [],
+    6:  [{name:'iterate',   role:'bit rotation applied k times', def:Q.ONE, lo:1, hi:4, int:true}],
+    7:  [{name:'iterate',   role:'bit reversal applied k times', def:Q.ONE, lo:1, hi:4, int:true}],
+    8:  [{name:'scale',     role:'denominator of the (v+1) ramp', def:Q.mk(8n), lo:1, hi:32}],
+    9:  [{name:'rate',      role:'diffusion rate on the 1-neighbour edges', def:Q.mk(1n,8n), lo:1/16, hi:32}],
+    10: [{name:'exponent',  role:'Yavadunam — "deficiency SQUARED"; the power', def:Q.TWO, lo:1, hi:4, int:true}],
+    11: [{name:'blend',     role:'part-and-whole blend weight', def:Q.mk(1n,16n), lo:1/16, hi:32}],
+    12: [{name:'iterate',   role:'axis swap applied k times', def:Q.ONE, lo:1, hi:4, int:true}],
+    13: [{name:'penult',    role:'"ultimate and TWICE penultimate" — the multiplier', def:Q.TWO, lo:1, hi:6}],
+    14: [{name:'decrement', role:'"by one less than the previous" — the step', def:Q.ONE, lo:-4, hi:8}],
+    15: [{name:'termA',     role:'(a+b)(c+d): offset of the first sum', def:Q.ONE, lo:0, hi:6},
+         {name:'termB',     role:'(a+b)(c+d): offset of the second sum', def:Q.mk(5n), lo:0, hi:8}],
+    16: [{name:'divisor',   role:'factor-of-the-sum divisor', def:Q.ONE, lo:1, hi:8}],
+    17: [{name:'proportion',role:'Anurupyena — "proportionately"; N1:N3 ratio', def:Q.mk(3n), lo:1, hi:8}],
+    18: [{name:'iterate',   role:'remainder cycle applied k times', def:Q.ONE, lo:1, hi:4, int:true}],
+    19: [{name:'multiplier',role:'Kevalaih Saptakam Gunyat — "multiply by SEVEN"', def:Q.mk(7n), lo:1, hi:16}],
+    20: [{name:'scale',     role:'observation contrast', def:Q.mk(8n), lo:1, hi:32}],
+    21: [{name:'modulus',   role:'osculation modulus (5 in r+5l)', def:Q.mk(5n), lo:2, hi:9, int:true}],
+    22: [],
+    23: [{name:'tens',      role:"Antyayordasake'pi — last digits summing to ten", def:Q.mk(10n), lo:2, hi:16}],
+    24: [{name:'retain',    role:'elimination/retention threshold on Hamming weight', def:Q.TWO, lo:0, hi:4, int:true}],
+    25: [{name:'angle',     role:'the fixed sum-multiplied angle', def:Q.ONE, lo:1, hi:8}],
+    26: [{name:'flagBit',   role:'Dhvajanka — which bit carries the flag', def:Q.ZERO, lo:0, hi:3, int:true}],
+    27: [{name:'parity',    role:'retained parity class (0 even, 1 odd)', def:Q.ONE, lo:0, hi:1, int:true}],
+    28: [{name:'multiplier',role:'terminal-pair multiplier', def:Q.mk(7n), lo:1, hi:16}],
+    29: []
+  });
+  (() => {
+    const bad=[];
+    for(const id of Object.keys(SUTRA_ARG_SPEC))
+      for(const a of SUTRA_ARG_SPEC[id]){
+        const v=Number(a.def.n)/Number(a.def.d);
+        if(v<a.lo||v>a.hi)bad.push(`S${id}.${a.name} default ${v} outside [${a.lo},${a.hi}]`);
+      }
+    if(bad.length)throw new Error('Sutra argument default out of range: '+bad.join('; '));
+  })();
+  const argIntOf = (q,fallback) => {
+    if(!q||q.d===0n)return fallback;
+    const v=Number(q.n)/Number(q.d);
+    return Number.isFinite(v)?Math.round(v):fallback;
+  };
+  const sutraArgs = (id,arg) => {
+    const spec=SUTRA_ARG_SPEC[id]||[];
+    if(Array.isArray(arg)){
+      const out=[arg[0]];
+      for(let i=0;i<spec.length;i++)out.push(arg[i+1]!==undefined?arg[i+1]:spec[i].def);
+      return out;
+    }
+    return [arg,...spec.map(a=>a.def)];
+  };
+  const iterate = (fn,k) => v => { let u=v; for(let i=0;i<k;i++)u=fn(u); return u; };
+  const applySutra = (id,psi,arg) => {
+    const a=sutraArgs(id,arg);
+    const strengthQ=a[0];
     const s=qToA4(strengthQ);
     switch(id){
-      case 1:return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt(hw(v)+1))));
-      case 2:return permuteState(psi,comp);
-      case 3:return phaseState(wht(psi),v=>A4.scaleQ(s,Q.mk(BigInt(hw(v)+1),16n)));
-      case 4:{let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),s);return o;}
+      case 1:return phaseState(psi,v=>A4.scaleQ(s,Q.add(Q.mk(BigInt(hw(v))),a[1])));
+      case 2:return permuteState(psi,iterate(comp,argIntOf(a[1],1)));
+      case 3:return phaseState(wht(psi),v=>A4.scaleQ(s,Q.mul(Q.mk(BigInt(hw(v)+1),16n),a[1])));
+      case 4:{const t=A4.scaleQ(s,Q.div(Q.ONE,a[1]));let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),t);return o;}
       case 5:return meanFree(psi,strengthQ);
-      case 6:return permuteState(psi,rotateBits);
-      case 7:return permuteState(psi,bitReverse);
-      case 8:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.mk(BigInt(v+1),8n));o=rotatePairInState(o,v,comp(v),t);}return o;}
-      case 9:return edgeRotation(psi,edgesN1,()=>A4.scaleQ(s,Q.mk(1n,8n)));
-      case 10:return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((hw(v)+1)**2),16n)));
-      case 11:{let x=wht(psi);x=phaseState(x,v=>A4.scaleQ(s,Q.mk(BigInt(hw(v)),16n)));return wht(x);}
-      case 12:return permuteState(psi,swap03);
-      case 13:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.mk(BigInt(2*v+1),16n));o=rotatePairInState(o,v,comp(v),t);}return o;}
-      case 14:return phaseState(psi,v=>A4.scaleQ(s,Q.mk((hw(v)&1)?-1n:1n)));
+      case 6:return permuteState(psi,iterate(rotateBits,argIntOf(a[1],1)));
+      case 7:return permuteState(psi,iterate(bitReverse,argIntOf(a[1],1)));
+      case 8:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.div(Q.mk(BigInt(v+1)),a[1]));o=rotatePairInState(o,v,comp(v),t);}return o;}
+      case 9:return edgeRotation(psi,edgesN1,()=>A4.scaleQ(s,a[1]));
+      case 10:{const e=Math.max(1,argIntOf(a[1],2));return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((hw(v)+1)**e),16n)));}
+      case 11:{let x=wht(psi);x=phaseState(x,v=>A4.scaleQ(s,Q.mul(Q.mk(BigInt(hw(v))),a[1])));return wht(x);}
+      case 12:return permuteState(psi,iterate(swap03,argIntOf(a[1],1)));
+      case 13:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.mk(1n,16n));const w=A4.mul(t,A4.fromQ(Q.add(Q.mul(a[1],Q.mk(BigInt(v))),Q.ONE)));o=rotatePairInState(o,v,comp(v),w);}return o;}
+      case 14:return phaseState(psi,v=>A4.scaleQ(s,Q.mul(Q.mk((hw(v)&1)?-1n:1n),a[1])));
       case 15:{
         /* Gunitasamuccayah, "product of sum": the distributive law
            (a+b)(c+d) = ac+ad+bc+bd. Each vertex's Hamming weight is the sum of
@@ -697,24 +762,25 @@ const STRICT_V5_FACTORY = () => {
         let o=cloneState(psi);
         for(let v=0;v<8;v++){
           const k=hw(v);
-          const t=A4.scaleQ(s,Q.mk(BigInt((k+1)*(5-k)),16n));
+          const sumA=Q.add(Q.mk(BigInt(k)),a[1]),sumB=Q.sub(a[2],Q.mk(BigInt(k)));
+          const t=A4.scaleQ(s,Q.mul(Q.mul(sumA,sumB),Q.mk(1n,16n)));
           o=rotatePairInState(o,v,comp(v),t);
         }
         return o;
       }
-      case 16:{let o=cloneState(psi);const ns=A4.neg(s);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),ns);return o;}
+      case 16:{const ns=A4.neg(A4.scaleQ(s,Q.div(Q.ONE,a[1])));let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),ns);return o;}
       case 17:{
         const c=S17_STENCIL;
-        let o=edgeRotation(psi,edgesN1,(u)=>A4.scaleQ(s,Q.mul(Q.mk(3n),c[hw(u)])));
+        let o=edgeRotation(psi,edgesN1,(u)=>A4.scaleQ(s,Q.mul(a[1],c[hw(u)])));
         o=edgeRotation(o,edgesN3,(u)=>A4.scaleQ(s,c[hw(u)]));return o;
       }
-      case 18:return permuteState(psi,affine18);
-      case 19:{let x=wht(psi);x=phaseState(x,v=>A4.scaleQ(s,Q.mk(BigInt(v+1),32n)));return wht(x);}
-      case 20:return phaseState(psi,v=>A4.scaleQ(s,Q.mk((v&1)?-1n:1n,8n)));
-      case 21:return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((v%5)-2),16n)));
+      case 18:return permuteState(psi,iterate(affine18,argIntOf(a[1],1)));
+      case 19:{let x=wht(psi);x=phaseState(x,v=>A4.scaleQ(s,Q.mul(Q.mul(a[1],Q.mk(BigInt(v+1))),Q.mk(1n,224n))));return wht(x);}
+      case 20:return phaseState(psi,v=>A4.scaleQ(s,Q.div(Q.mk((v&1)?-1n:1n),a[1])));
+      case 21:{const m=Math.max(2,argIntOf(a[1],5));return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((v%m)-((m-1)>>1)),16n)));}
       case 22:return complementAverage(psi,strengthQ);
       case 23:{
-        const p=C4.phase(s),pc=C4.conj(p),o=cloneState(psi);
+        const p=C4.phase(A4.scaleQ(s,Q.div(a[1],Q.mk(10n)))),pc=C4.conj(p),o=cloneState(psi);
         for(let v=0;v<8;v++){const u=comp(v);o[v]=C4.mul(p,psi[u]);o[u]=C4.mul(pc,psi[v]);}
         return o;
       }
@@ -724,13 +790,14 @@ const STRICT_V5_FACTORY = () => {
            wht, phase only the retained sector (hw >= 2), transform back --
            the same eliminate/act/restore idiom S27 uses on parity. */
         let x=wht(psi);
-        x=phaseState(x,v=>hw(v)>=2?s:A4.ZERO);
+        const keep=argIntOf(a[1],2);
+        x=phaseState(x,v=>hw(v)>=keep?s:A4.ZERO);
         return wht(x);
       }
-      case 25:{let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),A4.ONE);return o;}
-      case 26:return permuteState(psi,v=>v^1);
-      case 27:{let x=wht(psi);x=phaseState(x,v=>(hw(v)&1)?s:A4.ZERO);return wht(x);}
-      case 28:{let x=wht(psi);x=phaseState(x,v=>A4.neg(A4.scaleQ(s,Q.mk(BigInt(v+1),32n))));return wht(x);}
+      case 25:{const t=A4.fromQ(a[1]);let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),t);return o;}
+      case 26:{const b=1<<Math.min(3,Math.max(0,argIntOf(a[1],0)));return permuteState(psi,v=>v^b);}
+      case 27:{const par=argIntOf(a[1],1)&1;let x=wht(psi);x=phaseState(x,v=>(hw(v)&1)===par?s:A4.ZERO);return wht(x);}
+      case 28:{let x=wht(psi);x=phaseState(x,v=>A4.neg(A4.scaleQ(s,Q.mul(Q.mul(a[1],Q.mk(BigInt(v+1))),Q.mk(1n,224n)))));return wht(x);}
       case 29:return s29(psi,strengthQ);
       default:throw new RangeError(`Unknown sutra S${id}`);
     }
@@ -795,7 +862,13 @@ const STRICT_V5_FACTORY = () => {
     return out;
   };
   let CORE_MATRIX_CACHE=null;
-  const coreMatrixKey = (active,mode) => mode+'|'+active.slice().sort((a,b)=>a.id-b.id).map(s=>s.id+':'+s.strength.n+'/'+s.strength.d).join(',');
+  /* The key must cover EVERY argument. Keying on strength alone would return a
+     stale operator the moment any other point argument moved. */
+  const argKey = s => {
+    const a=sutraArgs(s.id,s.args!==undefined?s.args:s.strength);
+    return s.id+':'+a.map(q=>q.n+'/'+q.d).join('~');
+  };
+  const coreMatrixKey = (active,mode) => mode+'|'+active.slice().sort((a,b)=>a.id-b.id).map(argKey).join(',');
   const coreMatrixOf = (active,mode) => {
     const cols=[];
     for(let j=0;j<16;j++){
@@ -814,7 +887,16 @@ const STRICT_V5_FACTORY = () => {
     }
     return composedMatVecLifted(CORE_MATRIX_CACHE.lift,psi);
   };
-  const scaleActiveByR4 = (active,r4Gain) => active.map(x=>Object.freeze({id:x.id,strength:Q.mul(x.strength,r4Gain)}));
+  /* An active entry may carry a full argument vector or just a strength.
+     scale multiplies the strength only -- the other point arguments are
+     operands of the sutra, not amplitudes, so splitting or gating a step
+     must not touch them. */
+  const argsFor = (s,scale) => {
+    const a=sutraArgs(s.id,s.args!==undefined?s.args:s.strength).slice();
+    if(scale!==undefined)a[0]=Q.mul(a[0],scale);
+    return a;
+  };
+  const scaleActiveByR4 = (active,r4Gain) => active.map(x=>Object.freeze({id:x.id,strength:Q.mul(x.strength,r4Gain),args:x.args!==undefined?Object.freeze([Q.mul(sutraArgs(x.id,x.args)[0],r4Gain),...sutraArgs(x.id,x.args).slice(1)]):undefined}));
   const sutraCoreStages = (psi,active,mode) => {
     const list=active.slice().sort((a,b)=>a.id-b.id);
     if(mode==="SERIES"){
@@ -825,13 +907,13 @@ const STRICT_V5_FACTORY = () => {
     if(mode==="SYMMETRIC_CONCURRENT"){
       let out=cloneState(psi);
       const stages=[];
-      for(const s of list)stages.push(()=>{out=applySutra(s.id,out,Q.mul(s.strength,Q.HALF));});
-      for(let i=list.length-1;i>=0;i--){const s=list[i];stages.push(()=>{out=applySutra(s.id,out,Q.mul(s.strength,Q.HALF));});}
+      for(const s of list)stages.push(()=>{out=applySutra(s.id,out,argsFor(s,Q.HALF));});
+      for(let i=list.length-1;i>=0;i--){const s=list[i];stages.push(()=>{out=applySutra(s.id,out,argsFor(s,Q.HALF));});}
       return {stages,value:()=>out};
     }
     if(mode==="PARALLEL"){
       let displacement=zeroState();
-      const stages=list.map(s=>()=>{displacement=stateAdd(displacement,stateSub(applySutra(s.id,psi,s.strength),psi));});
+      const stages=list.map(s=>()=>{displacement=stateAdd(displacement,stateSub(applySutra(s.id,psi,argsFor(s)),psi));});
       return {stages,value:()=>stateAdd(psi,displacement)};
     }
     throw new RangeError(`Unsupported sutra mode: ${mode}`);
@@ -839,17 +921,17 @@ const STRICT_V5_FACTORY = () => {
   const applySutraCore = (psi,active,mode) => {
     const list=active.slice().sort((a,b)=>a.id-b.id);
     if(mode==="SERIES"){
-      let out=cloneState(psi);for(const s of list)out=applySutra(s.id,out,s.strength);return out;
+      let out=cloneState(psi);for(const s of list)out=applySutra(s.id,out,argsFor(s));return out;
     }
     if(mode==="SYMMETRIC_CONCURRENT"){
       let out=cloneState(psi);
-      for(const s of list)out=applySutra(s.id,out,Q.mul(s.strength,Q.HALF));
-      for(let i=list.length-1;i>=0;i--)out=applySutra(list[i].id,out,Q.mul(list[i].strength,Q.HALF));
+      for(const s of list)out=applySutra(s.id,out,argsFor(s,Q.HALF));
+      for(let i=list.length-1;i>=0;i--)out=applySutra(list[i].id,out,argsFor(list[i],Q.HALF));
       return out;
     }
     if(mode==="PARALLEL"){
       let displacement=zeroState();
-      for(const s of list)displacement=stateAdd(displacement,stateSub(applySutra(s.id,psi,s.strength),psi));
+      for(const s of list)displacement=stateAdd(displacement,stateSub(applySutra(s.id,psi,argsFor(s)),psi));
       return stateAdd(psi,displacement);
     }
     throw new RangeError(`Unsupported sutra mode: ${mode}`);
@@ -1337,8 +1419,8 @@ const STRICT_V5_FACTORY = () => {
   };
   const innerProduct = (x,y) => x.reduce((s,z,i)=>C4.add(s,C4.mul(C4.conj(z),y[i])),C4.ZERO);
   const basisState = j => Array.from({length:16},(_,i)=>i===j?C4.ONE:C4.ZERO);
-  const matrixForSutra = (id,strength=Q.ONE) => {
-    const columns=Array.from({length:16},(_,j)=>applySutra(id,basisState(j),strength));
+  const matrixForSutra = (id,arg=Q.ONE) => {
+    const columns=Array.from({length:16},(_,j)=>applySutra(id,basisState(j),arg));
     return Array.from({length:16},(_,r)=>Array.from({length:16},(_,c)=>columns[c][r]));
   };
   const rankC4 = matrix => {
@@ -1377,8 +1459,11 @@ const STRICT_V5_FACTORY = () => {
     }
     return sign<0?C4.neg(det):det;
   };
-  const operatorAudit = id => {
-    const matrix=matrixForSutra(id,Q.ONE);
+  /* Audits at a given argument vector, defaulting to unit strength with each
+     operand at its declared default. A class claim has to survive the whole
+     argument space, not just the point the sliders happen to start at. */
+  const operatorAudit = (id,arg=Q.ONE) => {
+    const matrix=matrixForSutra(id,arg);
     const columns=Array.from({length:16},(_,c)=>matrix.map(row=>row[c]));
     let unitaryPass=true;
     for(let i=0;i<16&&unitaryPass;i++)for(let j=0;j<16;j++){
@@ -1389,12 +1474,12 @@ const STRICT_V5_FACTORY = () => {
     let complementCommutes=true;
     for(let j=0;j<16&&complementCommutes;j++){
       const e=basisState(j),ce=permuteState(e,comp);
-      const left=applySutra(id,ce,Q.ONE),right=permuteState(applySutra(id,e,Q.ONE),comp);
+      const left=applySutra(id,ce,arg),right=permuteState(applySutra(id,e,arg),comp);
       if(!left.every((z,i)=>C4.eq(z,right[i])))complementCommutes=false;
     }
     const rank=rankC4(matrix),determinant=determinantC4(matrix);
-    const constant=Array.from({length:16},()=>C4.ONE),constantImage=applySutra(id,constant,Q.ONE);
-    const energyOnSeedBefore=energy(initState()),energyOnSeedAfter=energy(applySutra(id,initState(),Q.ONE));
+    const constant=Array.from({length:16},()=>C4.ONE),constantImage=applySutra(id,constant,arg);
+    const energyOnSeedBefore=energy(initState()),energyOnSeedAfter=energy(applySutra(id,initState(),arg));
     return {id,domain:'C4^16',codomain:'C4^16',linear:true,matrix16x16:matrix,rank,nullity:16-rank,determinant,unitaryPass,complementCommutes,constantImage,energyOnSeedBefore,energyOnSeedAfter,energyPreservedOnSeed:A4.eq(energyOnSeedBefore,energyOnSeedAfter)};
   };
   /* Two sutras that compile to the same 16x16 matrix are the same operator, and
@@ -1405,24 +1490,32 @@ const STRICT_V5_FACTORY = () => {
     /* Two operators are the same operator only if they agree as functions of
        BOTH state and strength. Agreeing at a single strength is a coincidence
        of that strength, not an identity, so both are tested and reported. */
-    const strengths=[Q.ONE,Q.mk(2n,5n)];
-    const mats=strengths.map(w=>{const m=[];for(let id=1;id<=29;id++)m[id]=matrixForSutra(id,w);return m;});
+    /* Distinctness must hold across the whole argument space, not one point of
+       it: two operators that agree at their defaults may separate as soon as
+       another operand moves, and vice versa. Each probe is a strength paired
+       with a shift applied to every other argument. */
+    const probes=[{w:Q.ONE,shift:Q.ZERO},{w:Q.mk(2n,5n),shift:Q.ZERO},{w:Q.mk(2n,5n),shift:Q.ONE}];
+    const vecFor=(id,pr)=>{
+      const spec=SUTRA_ARG_SPEC[id]||[];
+      return [pr.w,...spec.map(x=>Q.add(x.def,pr.shift))];
+    };
+    const mats=probes.map(pr=>{const m=[];for(let id=1;id<=29;id++)m[id]=matrixForSutra(id,vecFor(id,pr));return m;});
     const sameAt=(t,a,b)=>{
       const A=mats[t][a],B=mats[t][b];
       for(let i=0;i<16;i++)for(let j=0;j<16;j++)if(!C4.eq(A[i][j],B[i][j]))return false;
       return true;
     };
-    const collisions=[],atUnitOnly=[];
+    const collisions=[],partial=[];
     for(let a=1;a<=29;a++)for(let b=a+1;b<=29;b++){
-      const s0=sameAt(0,a,b),s1=sameAt(1,a,b);
-      if(s0&&s1)collisions.push([a,b]);
-      else if(s0||s1)atUnitOnly.push([a,b]);
+      const hits=probes.map((_,t)=>sameAt(t,a,b));
+      if(hits.every(Boolean))collisions.push([a,b]);
+      else if(hits.some(Boolean))partial.push([a,b]);
     }
     const merged=new Set();
     for(const[,b]of collisions)merged.add(b);
     return Object.freeze({distinct:29-merged.size,collisions:Object.freeze(collisions),
-                          strengthDependentOnly:Object.freeze(atUnitOnly),
-                          strengthsTested:strengths.length,ok:collisions.length===0});
+                          strengthDependentOnly:Object.freeze(partial),
+                          strengthsTested:probes.length,ok:collisions.length===0});
   };
   const testCorpus = () => {
     const corpus=[];
@@ -1567,7 +1660,7 @@ const STRICT_V5_FACTORY = () => {
       energyMethod: last.energyMethod
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
+  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
 };
 const STRICT_V5 = STRICT_V5_FACTORY();
 /* Release manifest: one object a buyer or reviewer can diff against a shipped
@@ -4097,7 +4190,32 @@ function setSutraStrengthExact(s, raw) {
   s.on = q.n !== 0n;
   return q;
 }
-SUTRAS.forEach(s => { setSutraStrengthExact(s, String(s.strength)); });
+/* Each sutra's point arguments beyond strength. Seeded from the kernel's spec
+   so the defaults are the constants the operators always used, and stored as
+   exact rationals -- the sliders are integer-valued and the scale factor is
+   exact, so no float enters. */
+function sutraArgSpec(id) { return STRICT_V5.SUTRA_ARG_SPEC[id] || []; }
+function resetSutraArgs(s) {
+  s.argQ = sutraArgSpec(s.id).map(a => STRICT_V5.Q.mk(a.def.n, a.def.d));
+  s.argUI = sutraArgSpec(s.id).map(a => Number(a.def.n) / Number(a.def.d));
+}
+function setSutraArgExact(s, i, raw) {
+  const spec = sutraArgSpec(s.id)[i];
+  if (!spec) throw new RangeError(`S${s.id} has no argument ${i}`);
+  const text = String(raw).trim();
+  if (!/^-?\d+$/.test(text)) throw new SyntaxError(`Invalid exact argument: ${text}`);
+  const n = BigInt(text);
+  /* integer-valued operands stay integers; the rest carry the slider's
+     sixteenths so a rational operand is still exactly representable */
+  const q = spec.int ? STRICT_V5.Q.mk(n) : STRICT_V5.Q.mk(n, 16n);
+  s.argQ[i] = q;
+  s.argUI[i] = Number(q.n) / Number(q.d);
+  return q;
+}
+function sutraArgVector(s) {
+  return [STRICT_V5.Q.mk(s.strengthQ.n, s.strengthQ.d), ...(s.argQ || [])];
+}
+SUTRAS.forEach(s => { setSutraStrengthExact(s, String(s.strength)); resetSutraArgs(s); });
 /* phaseOff, geoType, geoAmp and lastResult were assigned here and read
    nowhere; the execution path lives entirely in applySutra's switch. */
 let STRICT_V5_STATE = Object.freeze({
@@ -4144,7 +4262,9 @@ function strictV5Params() {
 }
 function activeSutrasV5() {
   return SUTRAS.filter(s => s.on && s.strengthQ && s.strengthQ.n !== 0n)
-    .map(s => Object.freeze({id:s.id,strength:STRICT_V5.Q.mk(s.strengthQ.n,s.strengthQ.d)}));
+    .map(s => Object.freeze({id:s.id,
+      strength:STRICT_V5.Q.mk(s.strengthQ.n,s.strengthQ.d),
+      args:Object.freeze(sutraArgVector(s))}));
 }
 const VTX_DISPLAY = { vpsi: new Array(16).fill(0), lambdaF: [0,0,0,0], lambdaStr: ['0','0','0','0'],
   sumLambdaSq: 0, r4F: 0, sigmaF: null, normSqF: 0, traceNormSqF: 0,
@@ -4981,6 +5101,46 @@ function buildPanel() {
     el.addEventListener('mouseenter', () => { if (window.innerWidth > 600) descRow.style.maxHeight = '16px'; });
     el.addEventListener('mouseleave', () => { if (!s.on) descRow.style.maxHeight = '0'; });
     el.appendChild(row); el.appendChild(descRow);
+    /* One row per point argument beyond strength. These are the sutra's own
+       operands -- the constants its law always carried -- so moving them is
+       the experiment, not a decoration. */
+    const spec = sutraArgSpec(sid);
+    if (spec.length) {
+      const argWrap = document.createElement('div');
+      argWrap.style.cssText = 'padding:0 0 1px 18px;max-height:0;overflow:hidden;transition:max-height 0.15s';
+      spec.forEach((a, i) => {
+        const ar = document.createElement('div');
+        ar.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:5.5px;color:#4a90d9';
+        const lab = document.createElement('span');
+        lab.style.cssText = 'width:46px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        lab.textContent = a.name;
+        lab.title = a.role;
+        const sl = document.createElement('input');
+        sl.type = 'range';
+        sl.min = String(a.int ? a.lo : a.lo * 16);
+        sl.max = String(a.int ? a.hi : a.hi * 16);
+        sl.step = '1';
+        sl.value = String(a.int ? Math.round(s.argUI[i]) : Math.round(s.argUI[i] * 16));
+        sl.style.cssText = 'width:34px;height:7px;flex-shrink:0';
+        const val = document.createElement('span');
+        val.style.cssText = 'width:22px;flex-shrink:0;color:#666';
+        const show = () => { val.textContent = STRICT_V5.Q.toString(s.argQ[i]); };
+        show();
+        sl.addEventListener('input', () => { setSutraArgExact(s, i, sl.value); show(); });
+        sl.addEventListener('change', () => {
+          LOG.add(`S${s.id} ${a.name} → ${STRICT_V5.Q.toString(s.argQ[i])}`, s.on ? 'on' : 'off');
+        });
+        ar.appendChild(lab); ar.appendChild(sl); ar.appendChild(val);
+        argWrap.appendChild(ar);
+      });
+      el.appendChild(argWrap);
+      const showArgs = () => { argWrap.style.maxHeight = (s.on ? spec.length * 10 + 4 : 0) + 'px'; };
+      showArgs();
+      el.addEventListener('mouseenter', () => { if (window.innerWidth > 600) argWrap.style.maxHeight = (spec.length * 10 + 4) + 'px'; });
+      el.addEventListener('mouseleave', showArgs);
+      slider.addEventListener('input', showArgs);
+      nameSpan.addEventListener('click', showArgs);
+    }
     list.appendChild(el);
   });
   const leg = document.createElement('div');
