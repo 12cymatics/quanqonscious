@@ -1,0 +1,8 @@
+torch>=2.2
+numpy>=1.26
+transformers>=4.40
+peft>=0.10
+datasets>=2.18
+accelerate>=0.30
+pydantic>=2.6
+pyyaml>=6.0

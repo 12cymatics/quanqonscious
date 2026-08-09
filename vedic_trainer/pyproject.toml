@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vedic-trainer"
+version = "0.1.0"
+description = "29-sutra LoRA fine-tuning kernel for small open-weights LLMs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "QuanQonscious" }]
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26",
+    "transformers>=4.40",
+    "peft>=0.10",
+    "datasets>=2.18",
+    "accelerate>=0.30",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+fixtures = ["playwright>=1.43"]
+dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.4"]
+
+[project.scripts]
+vedic-train = "scripts.train_lora:main"
+vedic-eval = "scripts.run_eval:main"
+vedic-verify = "scripts.verify_bit_exact:main"
+vedic-export-fixtures = "scripts.export_simulator_fixtures:main"
+vedic-generate = "scripts.generate_synthetic:main"
+
+[tool.setuptools.packages.find]
+include = ["vedic*"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["transformers.*", "peft.*", "datasets.*", "accelerate.*", "playwright.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["vedic/kernel/tests", "vedic/data/tests", "vedic/external/tests"]
+addopts = "-q"
