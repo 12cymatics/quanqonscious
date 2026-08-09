@@ -1,4 +1,5 @@
-import Mathlib.Data.Rat.Basic
+import Mathlib.Data.Rat.Defs
+import Mathlib.Algebra.Order.Ring.Rat
 import Mathlib.Data.List.Basic
 import Mathlib.Tactic
 import SutraWS.Sutra
@@ -57,13 +58,20 @@ def sumDelta : List Sutra → Rat
 | [] => 0
 | u :: us => delta u + sumDelta us
 
+/-- Peeling one operator off the front. Keeping the fold in `applyList` form is what lets the
+induction hypothesis fire; letting `simp` unfold straight to `List.foldl` blocks it. -/
+theorem applyList_cons (u : Sutra) (us : List Sutra) (s : State) :
+    applyList (u :: us) s = applyList us (act u s) := rfl
+
 theorem applyList_x (L : List Sutra) (s : State) :
   (applyList L s).x = s.x + sumDelta L := by
   induction L generalizing s with
   | nil =>
       simp [applyList, sumDelta]
   | cons u us ih =>
-      simp [applyList, sumDelta, act, ih, Rat.add_assoc, Rat.add_left_comm, Rat.add_comm]
+      rw [applyList_cons, ih]
+      simp only [act, sumDelta]
+      ring
 
 theorem applyList_y (L : List Sutra) (s : State) :
   (applyList L s).y = s.y - sumDelta L := by
@@ -71,10 +79,12 @@ theorem applyList_y (L : List Sutra) (s : State) :
   | nil =>
       simp [applyList, sumDelta]
   | cons u us ih =>
-      simp [applyList, sumDelta, act, ih, Rat.sub_eq_add_neg, Rat.add_assoc, Rat.add_left_comm, Rat.add_comm]
+      rw [applyList_cons, ih]
+      simp only [act, sumDelta]
+      ring
 
 theorem sumDelta_all : sumDelta Sutra.all = (435 : Rat) := by native_decide
-theorem applyAll_x (s : State) : (applyAll s).x = s.x + (435 : Rat) := by simpa [applyAll, applyList_x, sumDelta_all]
-theorem applyAll_y (s : State) : (applyAll s).y = s.y - (435 : Rat) := by simpa [applyAll, applyList_y, sumDelta_all]
+theorem applyAll_x (s : State) : (applyAll s).x = s.x + (435 : Rat) := by simp [applyAll, applyList_x, sumDelta_all]
+theorem applyAll_y (s : State) : (applyAll s).y = s.y - (435 : Rat) := by simp [applyAll, applyList_y, sumDelta_all]
 
 end SutraWS

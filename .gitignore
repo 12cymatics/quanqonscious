@@ -7,9 +7,6 @@ amplituhedron_test
 test_vedic
 vedic_benchmark
 
-# Python packaging artefacts
-build/
-dist/
-*.egg-info/
-*.egg
-
+# Lean / Lake build artifacts and fetched dependencies
+# (lake-manifest.json is tracked on purpose: it pins the dependency revisions)
+.lake/

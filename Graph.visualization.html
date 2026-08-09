@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SutraGraph Visualization</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #5d6978;
+      --line: #d7dde5;
+      --primary: #2356a7;
+      --sub: #6c4aa3;
+      --series: #b76e00;
+      --parallel: #b83258;
+      --concurrency: #08786f;
+      --focus: #101828;
+      --shadow: 0 14px 38px rgba(22, 29, 37, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .side {
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      padding: 22px;
+      overflow: auto;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 760;
+    }
+
+    .subtitle {
+      margin: 8px 0 22px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .section {
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+      margin-top: 18px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #364152;
+      font-weight: 760;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 34px;
+      color: #27384b;
+      font-size: 14px;
+    }
+
+    .toggle input {
+      inline-size: 18px;
+      block-size: 18px;
+      accent-color: var(--primary);
+    }
+
+    .swatch {
+      inline-size: 28px;
+      block-size: 3px;
+      border-radius: 3px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+
+    .series { color: var(--series); }
+    .parallel { color: var(--parallel); }
+    .concurrency { color: var(--concurrency); }
+
+    .search-input {
+      inline-size: 100%;
+      min-block-size: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: #fbfcfe;
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(35, 86, 167, 0.12);
+    }
+
+    .search-meta {
+      min-height: 18px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f3f5f8;
+    }
+
+    .mode-button,
+    .sort-button {
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #344054;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .mode-button {
+      min-block-size: 32px;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .mode-button.active {
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: 0 1px 2px rgba(22, 29, 37, 0.12);
+    }
+
+    .axis-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 9px;
+    }
+
+    .axis-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-block-size: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #27384b;
+      background: #fbfcfe;
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .axis-toggle input {
+      inline-size: 15px;
+      block-size: 15px;
+      accent-color: var(--concurrency);
+    }
+
+    .detail {
+      min-height: 252px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+
+    .detail .node-index {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .detail .node-name {
+      overflow-wrap: anywhere;
+      font-size: 16px;
+      font-weight: 760;
+      line-height: 1.3;
+      margin-bottom: 10px;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 7px 8px;
+      color: #2d3b4f;
+      font-size: 13px;
+    }
+
+    .kv dt {
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .kv dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .neighbors {
+      margin-top: 12px;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+    }
+
+    .neighbors h3 {
+      margin: 0 0 8px;
+      color: #344054;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .neighbor-group {
+      margin-top: 8px;
+    }
+
+    .neighbor-kind {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #344054;
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .neighbor-list {
+      display: grid;
+      gap: 5px;
+      margin: 6px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .neighbor-list li {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 6px;
+      color: #2d3b4f;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .neighbor-list b {
+      color: var(--ink);
+    }
+
+    .neighbor-list span {
+      overflow-wrap: anywhere;
+    }
+
+    .source {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      color: #364152;
+      font-size: 12px;
+    }
+
+    .source-list a {
+      color: var(--primary);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    .source-list a:hover {
+      text-decoration: underline;
+    }
+
+    .hash {
+      display: block;
+      margin-top: 8px;
+      color: #364152;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .edge-table-wrap {
+      max-block-size: 292px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .edge-table {
+      inline-size: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .edge-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #eef2f7;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .edge-table td {
+      border-bottom: 1px solid #e7ebf0;
+      color: #2d3b4f;
+      vertical-align: top;
+    }
+
+    .edge-table th,
+    .edge-table td {
+      padding: 7px 6px;
+    }
+
+    .edge-table tbody tr {
+      cursor: pointer;
+    }
+
+    .edge-table tbody tr:hover {
+      background: #edf4ff;
+    }
+
+    .sort-button {
+      color: #344054;
+      font-size: 11px;
+      font-weight: 760;
+      text-align: left;
+      padding: 0;
+    }
+
+    .edge-name {
+      max-inline-size: 114px;
+      overflow-wrap: anywhere;
+    }
+
+    .canvas {
+      position: relative;
+      padding: 20px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .surface {
+      inline-size: 100%;
+      block-size: calc(100vh - 40px);
+      min-block-size: 640px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    svg {
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      background:
+        linear-gradient(#eef2f7 1px, transparent 1px),
+        linear-gradient(90deg, #eef2f7 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .axis-label {
+      fill: #697586;
+      font-size: 12px;
+      font-weight: 650;
+      pointer-events: none;
+    }
+
+    .group-label {
+      fill: #344054;
+      font-size: 15px;
+      font-weight: 760;
+      pointer-events: none;
+    }
+
+    .edge {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.74;
+      transition: opacity 140ms ease, stroke-width 140ms ease;
+    }
+
+    .edge.series {
+      stroke: var(--series);
+      stroke-width: 3;
+      stroke-dasharray: 9 7;
+    }
+
+    .edge.parallel {
+      stroke: var(--parallel);
+      stroke-width: 2.4;
+      opacity: 0.58;
+    }
+
+    .edge.concurrency {
+      stroke: var(--concurrency);
+      stroke-width: 2.6;
+    }
+
+    .edge.dim {
+      opacity: 0.12;
+    }
+
+    .edge.hot {
+      opacity: 1;
+      stroke-width: 5;
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .node circle,
+    .node rect {
+      transition: filter 140ms ease, stroke-width 140ms ease, opacity 140ms ease;
+    }
+
+    .node.primary circle {
+      fill: #edf4ff;
+      stroke: var(--primary);
+      stroke-width: 2.4;
+    }
+
+    .node.sub rect {
+      fill: #f4efff;
+      stroke: var(--sub);
+      stroke-width: 2;
+    }
+
+    .node text {
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .node .index {
+      fill: var(--ink);
+      font-size: 15px;
+      font-weight: 790;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .node .name {
+      fill: #2d3b4f;
+      font-size: 10px;
+      text-anchor: middle;
+      dominant-baseline: hanging;
+    }
+
+    .node.dim {
+      opacity: 0.32;
+    }
+
+    .node.search-dim {
+      opacity: 0.18;
+    }
+
+    .node.match circle,
+    .node.match rect {
+      stroke: #111827;
+      stroke-width: 4;
+    }
+
+    .node.hot circle,
+    .node.hot rect,
+    .node.selected circle,
+    .node.selected rect {
+      filter: drop-shadow(0 8px 12px rgba(16, 24, 40, 0.22));
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .legend-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 920px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        max-height: none;
+      }
+
+      .canvas {
+        padding: 12px;
+      }
+
+      .surface {
+        block-size: 72vh;
+        min-block-size: 540px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <aside class="side">
+      <h1 class="title">SutraGraph.Graph</h1>
+      <p class="subtitle">Recovered graph data from the compiled Lean module.</p>
+
+      <div class="stats" aria-label="Graph totals">
+        <div class="stat"><strong id="nodeCount">29</strong><span>nodes</span></div>
+        <div class="stat"><strong id="edgeCount">60</strong><span>visible edges</span></div>
+        <div class="stat"><strong>16</strong><span>primary sutras</span></div>
+        <div class="stat"><strong>13</strong><span>sub-sutras</span></div>
+      </div>
+
+      <section class="section" aria-label="Search sutras">
+        <h2>Search</h2>
+        <input id="searchBox" class="search-input" type="search" placeholder="Find a sutra or node id">
+        <div id="searchMeta" class="search-meta">29 nodes available</div>
+      </section>
+
+      <section class="section" aria-label="View mode">
+        <h2>View</h2>
+        <div class="segmented" role="group" aria-label="Graph view mode">
+          <button class="mode-button active" type="button" data-mode="full">Full</button>
+          <button class="mode-button" type="button" data-mode="primary">Primary</button>
+          <button class="mode-button" type="button" data-mode="neighborhood">Local</button>
+        </div>
+      </section>
+
+      <section class="section" aria-label="Edge filters">
+        <h2>Edges</h2>
+        <label class="toggle series">
+          <input id="filterSeries" type="checkbox" checked>
+          <span class="swatch"></span>
+          <span>Series <span id="seriesCount">(15)</span></span>
+        </label>
+        <label class="toggle parallel">
+          <input id="filterParallel" type="checkbox" checked>
+          <span class="swatch"></span>
+          <span>Parallel <span id="parallelCount">(13)</span></span>
+        </label>
+        <label class="toggle concurrency">
+          <input id="filterConcurrency" type="checkbox" checked>
+          <span class="swatch"></span>
+          <span>Concurrency <span id="concurrencyCount">(32)</span></span>
+        </label>
+        <div class="axis-grid" aria-label="Concurrency axis filters">
+          <label class="axis-toggle"><input id="axisX" type="checkbox" checked><span>x</span></label>
+          <label class="axis-toggle"><input id="axisY" type="checkbox" checked><span>y</span></label>
+          <label class="axis-toggle"><input id="axisZ" type="checkbox" checked><span>z</span></label>
+          <label class="axis-toggle"><input id="axisW" type="checkbox" checked><span>w</span></label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Selected</h2>
+        <div id="detail" class="detail" aria-live="polite"></div>
+      </section>
+
+      <section class="section">
+        <h2>Edge Table</h2>
+        <div class="edge-table-wrap">
+          <table class="edge-table">
+            <thead>
+              <tr>
+                <th><button class="sort-button" type="button" data-sort="kind">type</button></th>
+                <th><button class="sort-button" type="button" data-sort="source">src</button></th>
+                <th><button class="sort-button" type="button" data-sort="target">dst</button></th>
+                <th><button class="sort-button" type="button" data-sort="weight">w</button></th>
+              </tr>
+            </thead>
+            <tbody id="edgeTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Source</h2>
+        <p class="source">Graph.txt -> Graph.extracted.olean -> Graph.decoded.lean. The visible graph is derived from the recovered Lean structures and the sutra definitions in SutraGraph.Types.</p>
+        <ul class="source-list">
+          <li><a href="../Downloads/vedic_v18.24_full_kernel.html">Open integrated simulator v18.24</a></li>
+          <li><a href="Graph.decoded.lean">Graph.decoded.lean</a></li>
+          <li><a href="Graph.extracted.olean">Graph.extracted.olean</a></li>
+          <li><a href="Graph.extracted.strings.txt">Graph.extracted.strings.txt</a></li>
+        </ul>
+        <span class="hash">Graph.txt SHA-256: c22d4e36404427a973ce65ec45b4583afee8cbcdca8500e5f0b1f6ffa03294d1</span>
+      </section>
+    </aside>
+
+    <section class="canvas" aria-label="Sutra graph canvas">
+      <div class="surface">
+        <svg id="graph" viewBox="0 0 1200 820" role="img" aria-label="Sutra graph visualization"></svg>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sutras = [
+      { id: 0, name: "ekadhikenaPurvena", kind: "primary", coord: [0, 0, 0, 0] },
+      { id: 1, name: "nikhilamNavatashcaramamDashatah", kind: "primary", coord: [0, 0, 0, 1] },
+      { id: 2, name: "urdhvaTiryagbyham", kind: "primary", coord: [0, 0, 1, 0] },
+      { id: 3, name: "paravartyaYojayet", kind: "primary", coord: [0, 0, 1, 1] },
+      { id: 4, name: "shunyamSaamyasamuccaye", kind: "primary", coord: [0, 1, 0, 0] },
+      { id: 5, name: "anurupyeShunyamAnyat", kind: "primary", coord: [0, 1, 0, 1] },
+      { id: 6, name: "sankalanaVyavakalanabhyam", kind: "primary", coord: [0, 1, 1, 0] },
+      { id: 7, name: "puranapuranabhyam", kind: "primary", coord: [0, 1, 1, 1] },
+      { id: 8, name: "chalanaKalanabhyam", kind: "primary", coord: [1, 0, 0, 0] },
+      { id: 9, name: "yavadunam", kind: "primary", coord: [1, 0, 0, 1] },
+      { id: 10, name: "vyashtisamanstih", kind: "primary", coord: [1, 0, 1, 0] },
+      { id: 11, name: "shesanyankenaCharamena", kind: "primary", coord: [1, 0, 1, 1] },
+      { id: 12, name: "sopantyadvayamantyam", kind: "primary", coord: [1, 1, 0, 0] },
+      { id: 13, name: "ekanyunenaPurvena", kind: "primary", coord: [1, 1, 0, 1] },
+      { id: 14, name: "gunitasamuccayah", kind: "primary", coord: [1, 1, 1, 0] },
+      { id: 15, name: "gunakasamuccayah", kind: "primary", coord: [1, 1, 1, 1] },
+      { id: 16, name: "anurupyena", kind: "sub" },
+      { id: 17, name: "sisyateSeshasamjnah", kind: "sub" },
+      { id: 18, name: "adyamadyenantyamantyena", kind: "sub" },
+      { id: 19, name: "kevalaihSaptakamGunyat", kind: "sub" },
+      { id: 20, name: "vestanam", kind: "sub" },
+      { id: 21, name: "yavadunamTavadunikrtyaVargancaYojayet", kind: "sub" },
+      { id: 22, name: "antyaYordasakeApi", kind: "sub" },
+      { id: 23, name: "antyaYoreva", kind: "sub" },
+      { id: 24, name: "samuccayagunitah", kind: "sub" },
+      { id: 25, name: "lopanasthapanabhyam", kind: "sub" },
+      { id: 26, name: "vilokanam", kind: "sub" },
+      { id: 27, name: "ekanyunenaPurvenaSupplement", kind: "sub" },
+      { id: 28, name: "kayadvaYojayet", kind: "sub" }
+    ];
+
+    const axes = ["x", "y", "z", "w"];
+    const edges = [];
+
+    for (let i = 0; i < 15; i += 1) {
+      edges.push({ source: i, target: i + 1, kind: "series", weight: 2, label: "series" });
+    }
+
+    for (let i = 0; i < 13; i += 1) {
+      edges.push({
+        source: i,
+        target: i + 16,
+        kind: "parallel",
+        weight: 1 + i + (i + 16),
+        label: "parallel"
+      });
+    }
+
+    for (let i = 0; i < 16; i += 1) {
+      const source = sutras[i];
+      axes.forEach((axis, axisIndex) => {
+        const coord = source.coord.slice();
+        coord[axisIndex] = coord[axisIndex] ? 0 : 1;
+        const target = sutras.find((node) => node.kind === "primary" && sameCoord(node.coord, coord));
+        if (target && source.id < target.id) {
+          edges.push({
+            source: source.id,
+            target: target.id,
+            kind: "concurrency",
+            weight: 1,
+            axis,
+            label: `axis ${axis}`
+          });
+        }
+      });
+    }
+
+    const graph = document.querySelector("#graph");
+    const detail = document.querySelector("#detail");
+    const searchBox = document.querySelector("#searchBox");
+    const searchMeta = document.querySelector("#searchMeta");
+    const modeButtons = Array.from(document.querySelectorAll("[data-mode]"));
+    const edgeTableBody = document.querySelector("#edgeTableBody");
+    const filters = {
+      series: document.querySelector("#filterSeries"),
+      parallel: document.querySelector("#filterParallel"),
+      concurrency: document.querySelector("#filterConcurrency")
+    };
+    const axisFilters = {
+      x: document.querySelector("#axisX"),
+      y: document.querySelector("#axisY"),
+      z: document.querySelector("#axisZ"),
+      w: document.querySelector("#axisW")
+    };
+    const positions = new Map();
+    const nodeMap = new Map(sutras.map((node) => [node.id, node]));
+    let selectedId = 0;
+    let hoveredId = null;
+    let viewMode = "full";
+    let searchTerm = "";
+    let sortState = { key: "source", dir: "asc" };
+
+    function sameCoord(a, b) {
+      return a.length === b.length && a.every((value, index) => value === b[index]);
+    }
+
+    function pos(node) {
+      if (positions.has(node.id)) return positions.get(node.id);
+      let p;
+      if (node.kind === "primary") {
+        const [x, y, z, w] = node.coord;
+        p = {
+          x: 150 + (x * 2 + z) * 150,
+          y: 128 + (y * 2 + w) * 118
+        };
+      } else {
+        const index = node.id - 16;
+        p = {
+          x: 920,
+          y: 92 + index * 52
+        };
+      }
+      positions.set(node.id, p);
+      return p;
+    }
+
+    function edgeAllowedByFilters(edge) {
+      if (!filters[edge.kind].checked) return false;
+      if (edge.kind === "concurrency" && !axisFilters[edge.axis].checked) return false;
+      return true;
+    }
+
+    function modeNodeIds() {
+      if (viewMode === "primary") {
+        return new Set(sutras.filter((node) => node.kind === "primary").map((node) => node.id));
+      }
+
+      if (viewMode === "neighborhood") {
+        const ids = new Set([selectedId]);
+        edges.filter(edgeAllowedByFilters).forEach((edge) => {
+          if (edge.source === selectedId) ids.add(edge.target);
+          if (edge.target === selectedId) ids.add(edge.source);
+        });
+        return ids;
+      }
+
+      return new Set(sutras.map((node) => node.id));
+    }
+
+    function visibleEdges() {
+      const ids = modeNodeIds();
+      return edges
+        .filter(edgeAllowedByFilters)
+        .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+        .filter((edge) => viewMode !== "neighborhood" || isConnectedTo(edge, selectedId));
+    }
+
+    function visibleNodes() {
+      const ids = modeNodeIds();
+      return sutras.filter((node) => ids.has(node.id));
+    }
+
+    function matchesSearch(node) {
+      const q = searchTerm.trim().toLowerCase();
+      if (!q) return false;
+      return String(node.id) === q || node.name.toLowerCase().includes(q);
+    }
+
+    function searchMatchedIds() {
+      return new Set(sutras.filter(matchesSearch).map((node) => node.id));
+    }
+
+    function edgePath(edge) {
+      const a = pos(nodeMap.get(edge.source));
+      const b = pos(nodeMap.get(edge.target));
+      if (edge.kind === "parallel") {
+        const lift = Math.max(70, Math.abs(b.y - a.y) * 0.18);
+        const cx1 = a.x + 230;
+        const cy1 = a.y - lift;
+        const cx2 = b.x - 170;
+        const cy2 = b.y + lift * 0.35;
+        return `M ${a.x} ${a.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${b.x - 50} ${b.y}`;
+      }
+      if (edge.kind === "series") {
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+        const bend = edge.source % 2 === 0 ? -36 : 36;
+        return `M ${a.x} ${a.y} Q ${midX + bend} ${midY - 18}, ${b.x} ${b.y}`;
+      }
+      return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+    }
+
+    function shortName(name) {
+      if (name.length <= 14) return name;
+      return `${name.slice(0, 12)}...`;
+    }
+
+    function isConnectedTo(edge, nodeId) {
+      return edge.source === nodeId || edge.target === nodeId;
+    }
+
+    function connectedIds(nodeId) {
+      const ids = new Set([nodeId]);
+      visibleEdges().forEach((edge) => {
+        if (edge.source === nodeId) ids.add(edge.target);
+        if (edge.target === nodeId) ids.add(edge.source);
+      });
+      return ids;
+    }
+
+    function render() {
+      graph.replaceChildren();
+      renderDefs();
+      renderLabels();
+      renderEdges();
+      renderNodes();
+      renderDetail(selectedId);
+      renderEdgeTable();
+      updateSearchMeta();
+      updateModeButtons();
+      document.querySelector("#edgeCount").textContent = String(visibleEdges().length);
+    }
+
+    function renderDefs() {
+      const defs = svg("defs");
+      const marker = svg("marker", {
+        id: "arrow",
+        viewBox: "0 0 10 10",
+        refX: "7",
+        refY: "5",
+        markerWidth: "5",
+        markerHeight: "5",
+        orient: "auto-start-reverse"
+      });
+      marker.append(svg("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "currentColor" }));
+      defs.append(marker);
+      graph.append(defs);
+    }
+
+    function renderLabels() {
+      graph.append(svgText(68, 52, "Primary sutras: 4D coordinate projection", "group-label"));
+      graph.append(svgText(852, 52, "Sub-sutras", "group-label"));
+      ["x0 z0", "x0 z1", "x1 z0", "x1 z1"].forEach((label, index) => {
+        graph.append(svgText(150 + index * 150, 78, label, "axis-label", "middle"));
+      });
+      ["y0 w0", "y0 w1", "y1 w0", "y1 w1"].forEach((label, index) => {
+        graph.append(svgText(74, 132 + index * 118, label, "axis-label", "end"));
+      });
+    }
+
+    function renderEdges() {
+      const layer = svg("g", { id: "edges" });
+      const matched = searchMatchedIds();
+      const searching = searchTerm.trim().length > 0;
+      visibleEdges().forEach((edge) => {
+        const hot = hoveredId !== null && isConnectedTo(edge, hoveredId);
+        const searchHit = matched.has(edge.source) || matched.has(edge.target);
+        const dim = (hoveredId !== null && !hot) || (searching && !searchHit);
+        const selected = isConnectedTo(edge, selectedId);
+        const path = svg("path", {
+          d: edgePath(edge),
+          class: `edge ${edge.kind}${hot || selected || searchHit ? " hot" : ""}${dim ? " dim" : ""}`,
+          "data-source": edge.source,
+          "data-target": edge.target,
+          "data-axis": edge.axis || ""
+        });
+        if (edge.kind === "series") {
+          path.setAttribute("marker-end", "url(#arrow)");
+        }
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = `${edge.kind}: ${edge.source} -> ${edge.target}, weight ${edge.weight}${edge.axis ? `, ${edge.label}` : ""}`;
+        path.append(title);
+        layer.append(path);
+      });
+      graph.append(layer);
+    }
+
+    function renderNodes() {
+      const layer = svg("g", { id: "nodes" });
+      const connected = hoveredId === null ? null : connectedIds(hoveredId);
+      const searching = searchTerm.trim().length > 0;
+      visibleNodes().forEach((node) => {
+        const p = pos(node);
+        const hot = hoveredId !== null && connected.has(node.id);
+        const dim = hoveredId !== null && !connected.has(node.id);
+        const match = matchesSearch(node);
+        const selected = node.id === selectedId;
+        const searchDim = searching && !match && !selected;
+        const group = svg("g", {
+          class: `node ${node.kind}${hot ? " hot" : ""}${dim ? " dim" : ""}${match ? " match" : ""}${searchDim ? " search-dim" : ""}${selected ? " selected" : ""}`,
+          transform: `translate(${p.x}, ${p.y})`,
+          tabindex: "0",
+          role: "button",
+          "aria-label": `${node.id} ${node.name}`
+        });
+        if (node.kind === "primary") {
+          group.append(svg("circle", { r: "24" }));
+          group.append(svgText(0, 1, String(node.id), "index"));
+          group.append(svgText(0, 35, shortName(node.name), "name"));
+        } else {
+          group.append(svg("rect", { x: "-50", y: "-18", width: "100", height: "36", rx: "8" }));
+          group.append(svgText(0, 1, String(node.id), "index"));
+          group.append(svgText(0, 24, shortName(node.name), "name"));
+        }
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        title.textContent = node.name;
+        group.append(title);
+        group.addEventListener("mouseenter", () => {
+          hoveredId = node.id;
+          render();
+        });
+        group.addEventListener("mouseleave", () => {
+          hoveredId = null;
+          render();
+        });
+        group.addEventListener("click", () => {
+          selectedId = node.id;
+          render();
+        });
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectedId = node.id;
+            render();
+          }
+        });
+        layer.append(group);
+      });
+      graph.append(layer);
+    }
+
+    function renderDetail(nodeId) {
+      const node = nodeMap.get(nodeId);
+      const incident = edges.filter((edge) => edge.source === nodeId || edge.target === nodeId);
+      const visibleIncident = visibleEdges().filter((edge) => edge.source === nodeId || edge.target === nodeId);
+      const counts = incident.reduce((acc, edge) => {
+        acc[edge.kind] = (acc[edge.kind] || 0) + 1;
+        return acc;
+      }, {});
+      const coord = node.coord ? `[${node.coord.join(", ")}]` : "none";
+      const neighborHtml = ["series", "parallel", "concurrency"].map((kind) => {
+        const rows = visibleIncident.filter((edge) => edge.kind === kind);
+        if (!rows.length) return "";
+        const items = rows.map((edge) => {
+          const otherId = edge.source === nodeId ? edge.target : edge.source;
+          const other = nodeMap.get(otherId);
+          const arrow = edge.source === nodeId ? "to" : "from";
+          const axis = edge.axis ? `, axis ${edge.axis}` : "";
+          return `<li><b>${other.id}</b><span>${arrow} ${escapeHtml(other.name)} - w ${edge.weight}${axis}</span></li>`;
+        }).join("");
+        return `
+          <div class="neighbor-group">
+            <div class="neighbor-kind ${kind}"><span class="swatch"></span>${kind}</div>
+            <ul class="neighbor-list">${items}</ul>
+          </div>
+        `;
+      }).join("");
+      detail.innerHTML = `
+        <div class="node-index">node ${node.id}</div>
+        <div class="node-name">${escapeHtml(node.name)}</div>
+        <dl class="kv">
+          <dt>category</dt><dd>${node.kind}</dd>
+          <dt>coord</dt><dd>${coord}</dd>
+          <dt>degree</dt><dd>${incident.length}</dd>
+          <dt>visible</dt><dd>${visibleIncident.length}</dd>
+          <dt>series</dt><dd>${counts.series || 0}</dd>
+          <dt>parallel</dt><dd>${counts.parallel || 0}</dd>
+          <dt>concurrency</dt><dd>${counts.concurrency || 0}</dd>
+        </dl>
+        <div class="neighbors">
+          <h3>Visible adjacency</h3>
+          ${neighborHtml || "<p class=\"source\">No visible links under the current filters.</p>"}
+        </div>
+      `;
+    }
+
+    function renderEdgeTable() {
+      const rows = sortedEdges(visibleEdges()).map((edge) => {
+        const source = nodeMap.get(edge.source);
+        const target = nodeMap.get(edge.target);
+        const axis = edge.axis ? ` ${edge.axis}` : "";
+        return `
+          <tr data-source="${edge.source}" data-target="${edge.target}">
+            <td class="${edge.kind}">${edge.kind}${axis}</td>
+            <td><div class="edge-name"><b>${source.id}</b> ${escapeHtml(source.name)}</div></td>
+            <td><div class="edge-name"><b>${target.id}</b> ${escapeHtml(target.name)}</div></td>
+            <td>${edge.weight}</td>
+          </tr>
+        `;
+      }).join("");
+      edgeTableBody.innerHTML = rows || `<tr><td colspan="4">No visible edges.</td></tr>`;
+    }
+
+    function sortedEdges(list) {
+      const dir = sortState.dir === "asc" ? 1 : -1;
+      return [...list].sort((a, b) => {
+        const av = sortValue(a, sortState.key);
+        const bv = sortValue(b, sortState.key);
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return (a.source - b.source) || (a.target - b.target);
+      });
+    }
+
+    function sortValue(edge, key) {
+      if (key === "kind") return `${edge.kind}:${edge.axis || ""}`;
+      if (key === "target") return edge.target;
+      if (key === "weight") return edge.weight;
+      return edge.source;
+    }
+
+    function updateSearchMeta() {
+      const q = searchTerm.trim();
+      if (!q) {
+        searchMeta.textContent = `${visibleNodes().length} nodes visible`;
+        return;
+      }
+      const matches = visibleNodes().filter(matchesSearch);
+      searchMeta.textContent = `${matches.length} visible match${matches.length === 1 ? "" : "es"}`;
+    }
+
+    function updateModeButtons() {
+      modeButtons.forEach((button) => {
+        const active = button.dataset.mode === viewMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function svg(tag, attrs = {}) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+      return el;
+    }
+
+    function svgText(x, y, text, className, anchor) {
+      const el = svg("text", { x, y, class: className });
+      if (anchor) el.setAttribute("text-anchor", anchor);
+      el.textContent = text;
+      return el;
+    }
+
+    Object.values(filters).forEach((input) => input.addEventListener("change", render));
+    Object.values(axisFilters).forEach((input) => input.addEventListener("change", render));
+    searchBox.addEventListener("input", () => {
+      searchTerm = searchBox.value;
+      const firstMatch = sutras.find(matchesSearch);
+      if (firstMatch) {
+        selectedId = firstMatch.id;
+        if (viewMode === "primary" && firstMatch.kind !== "primary") viewMode = "full";
+      }
+      render();
+    });
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        viewMode = button.dataset.mode;
+        if (viewMode === "primary" && nodeMap.get(selectedId).kind !== "primary") {
+          selectedId = 0;
+        }
+        render();
+      });
+    });
+    document.querySelectorAll("[data-sort]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.sort;
+        sortState = {
+          key,
+          dir: sortState.key === key && sortState.dir === "asc" ? "desc" : "asc"
+        };
+        render();
+      });
+    });
+    edgeTableBody.addEventListener("click", (event) => {
+      const row = event.target.closest("tr[data-source]");
+      if (!row) return;
+      selectedId = Number(row.dataset.source);
+      if (viewMode === "primary" && nodeMap.get(selectedId).kind !== "primary") {
+        selectedId = 0;
+      }
+      render();
+    });
+    document.querySelector("#nodeCount").textContent = String(sutras.length);
+    document.querySelector("#seriesCount").textContent = `(${edges.filter((edge) => edge.kind === "series").length})`;
+    document.querySelector("#parallelCount").textContent = `(${edges.filter((edge) => edge.kind === "parallel").length})`;
+    document.querySelector("#concurrencyCount").textContent = `(${edges.filter((edge) => edge.kind === "concurrency").length})`;
+    render();
+  </script>
+</body>
+</html>
