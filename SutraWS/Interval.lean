@@ -40,7 +40,7 @@ def mul (A B : QI) : QI :=
   ⟨lo, hi, hle⟩
 
 def abs (A : QI) : QI :=
-  if h0 : 0 ≤ A.lo then A else
+  if _h0 : 0 ≤ A.lo then A else
   if h1 : A.hi ≤ 0 then neg A else
   ⟨0, max (-A.lo) A.hi, by
     -- h1 : ¬ A.hi ≤ 0, hence 0 < A.hi ≤ max (-A.lo) A.hi

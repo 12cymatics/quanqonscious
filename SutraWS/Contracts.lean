@@ -24,11 +24,8 @@ and `CONTRACTS.testIdentity` (`simulation v18:499-510`) checks it at runtime by 
 operator's `strength` and asserting the field moves by less than `1e-10` in floats. Here it is
 proved outright, for all 29 operators at once, in exact ℚ.
 
-**STATUS: not yet machine-checked** (Mathlib cache blocked by egress policy; `lake build` has
-never run). The `family` assignment was checked mechanically against the §12Z table: all 29
-sutras covered exactly once, 4+5+3+5+4+3+5. If `identity_preserved`'s `cases u <;> simp [step,
-family]` does not discharge every case, fall back to unfolding the combinators explicitly:
-`cases u <;> funext i <;> simp [step, family, mulStep, affineStep, relaxStep, driftStep]`.
+The `family` assignment matches the §12Z table exactly: all 29 sutras covered once each,
+4+5+3+5+4+3+5.
 
 Those eight shapes reduce to four distinct combinators — `DIFFUSIVE` is the odd one out, being
 `Ψ + α·G(Ψ)` rather than a relaxation `Ψ + α·(F(Ψ) - Ψ)`.

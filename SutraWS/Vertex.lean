@@ -69,7 +69,7 @@ therefore coincides with the bitwise complement; `comp_val` below records that e
 def comp (i : Vertex) : Vertex := ⟨15 - i.val, by omega⟩
 
 /-- `comp` really is the JS `i ^ 15`. -/
-theorem comp_val (i : Vertex) : (comp i).val = i.val ^^^ 15 := by decide
+theorem comp_val (i : Vertex) : (comp i).val = i.val ^^^ 15 := by revert i; decide
 
 /-- Toggle bit `k` of a vertex index. The `% 16` is a no-op (an xor of two values below 16 is
 below 16) and is present only to make the `Fin` bound hold definitionally. -/
