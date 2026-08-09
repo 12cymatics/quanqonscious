@@ -1,4 +1,5 @@
-import Mathlib.Data.Rat.Basic
+import Mathlib.Data.Rat.Defs
+import Mathlib.Algebra.Order.Ring.Rat
 
 namespace SutraWS
 

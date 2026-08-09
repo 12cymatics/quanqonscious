@@ -9,4 +9,4 @@ require mathlib from git
 
 @[default_target]
 lean_lib SutraWS where
-  globs := #[.submodules `SutraWS]
+  globs := #[.andSubmodules `SutraWS]
