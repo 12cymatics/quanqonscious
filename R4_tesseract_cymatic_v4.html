@@ -3,641 +3,1021 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>R4 वैदिक TOROIDAL HYPERCUBE v12.3 — ULTRATHINK</title>
+<title>R4 वैदिक TOROIDAL HYPERCUBE v4 — SŪTRA COMPOSITION ALGEBRA</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a12;overflow:hidden;font-family:'Courier New',monospace}
+body{background:#08080f;overflow:hidden;font-family:'Courier New',monospace}
 #canvas{position:fixed;top:0;left:0}
-#hud{position:fixed;top:12px;left:12px;color:#0f0;font-size:12px;z-index:100;pointer-events:none;
-    background:rgba(0,20,0,0.8);padding:10px 14px;border:1px solid #0f04;border-radius:4px}
-#trace{position:fixed;bottom:12px;left:12px;width:340px;max-height:180px;overflow-y:auto;
-    color:#0ff;font-size:10px;z-index:100;background:rgba(0,10,20,0.9);padding:10px;
+#hud{position:fixed;top:10px;left:10px;color:#0f0;font-size:11px;z-index:100;pointer-events:none;
+    background:rgba(0,18,0,.85);padding:9px 12px;border:1px solid #0f04;border-radius:4px;min-width:210px}
+#trace{position:fixed;bottom:10px;left:10px;width:330px;max-height:150px;overflow-y:auto;
+    color:#0ff;font-size:9.5px;z-index:100;background:rgba(0,10,20,.92);padding:9px;
     border:1px solid #0ff3;border-radius:4px;scrollbar-width:thin;scrollbar-color:#0ff3 #000}
-#trace::-webkit-scrollbar{width:6px}
-#trace::-webkit-scrollbar-thumb{background:#0ff4;border-radius:3px}
-.tr{margin:3px 0;padding:2px 0;border-bottom:1px solid #0ff1}
-.tr-exact{color:#0f0}.tr-queue{color:#ff0}.tr-mode{color:#f0f}.tr-field{color:#0ff}.tr-sutra{color:#fa0}
-#queue-panel{position:fixed;top:12px;right:12px;width:260px;background:rgba(0,15,0,0.92);
-    border:1px solid #0f0;padding:12px;z-index:100;color:#0f0;font-size:11px;border-radius:6px;
-    box-shadow:0 0 20px #0f02}
-#queue-panel>div:first-child{font-size:13px;letter-spacing:1px;margin-bottom:8px;
-    border-bottom:1px solid #0f03;padding-bottom:6px}
-#queue-display{max-height:120px;overflow-y:auto;margin:8px 0;border:1px solid #0f03;
-    padding:6px;background:#000;border-radius:3px}
-.q-item{padding:4px 8px;margin:2px 0;background:linear-gradient(90deg,#0f01,#0f00);
-    border-left:3px solid #0f0;font-size:10px;border-radius:2px}
-#mode-select{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
-#mode-select label{padding:4px 8px;border:1px solid #0f04;cursor:pointer;font-size:9px;
-    border-radius:3px;transition:all 0.2s;background:#010}
+#trace::-webkit-scrollbar{width:5px}#trace::-webkit-scrollbar-thumb{background:#0ff4;border-radius:3px}
+.tr{margin:2px 0;padding:1px 0;border-bottom:1px solid #0ff1;line-height:1.35}
+.tr-ex{color:#0f0}.tr-q{color:#ff0}.tr-m{color:#f6f}.tr-f{color:#0ff}.tr-s{color:#fa0}.tr-e{color:#f55}
+#queue-panel{position:fixed;top:10px;right:10px;width:268px;background:rgba(0,15,0,.94);
+    border:1px solid #0f0;padding:10px;z-index:100;color:#0f0;font-size:10.5px;border-radius:6px;
+    box-shadow:0 0 18px #0f02}
+.ph{font-size:12px;letter-spacing:1px;margin-bottom:6px;border-bottom:1px solid #0f03;
+    padding-bottom:5px;color:#ff0;font-weight:bold}
+#queue-display{max-height:92px;overflow-y:auto;margin:6px 0;border:1px solid #0f03;
+    padding:5px;background:#000;border-radius:3px}
+.q-item{padding:2px 6px;margin:1px 0;background:linear-gradient(90deg,#0f01,#0f00);
+    border-left:3px solid #0f0;font-size:9.5px;border-radius:2px}
+#mode-select{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0}
+#mode-select label{padding:3px 6px;border:1px solid #0f04;cursor:pointer;font-size:8.5px;
+    border-radius:3px;transition:all .15s;background:#010}
 #mode-select label:hover{background:#020;border-color:#0f08}
-#mode-select input:checked+span{background:#0f0;color:#000;font-weight:bold}
+#mode-select input:checked+span{background:#0f0;color:#000;font-weight:bold;padding:1px 3px;border-radius:2px}
 #mode-select input{display:none}
+#formula{margin:6px 0;padding:6px;background:#000;border:1px solid #0f03;border-radius:3px;
+    font-size:9px;color:#0fa;line-height:1.55;min-height:58px}
+#formula .fl{color:#ff0;font-weight:bold;display:block;margin-bottom:3px}
+#formula .fx{color:#0ff}
+#formula .fn{color:#888;font-size:8.5px;display:block;margin-top:4px}
 .btn{background:linear-gradient(180deg,#030,#010);border:1px solid #0f0;color:#0f0;
-    padding:6px 14px;cursor:pointer;font-size:10px;margin:3px;border-radius:4px;
-    transition:all 0.2s;text-transform:uppercase;letter-spacing:1px}
-.btn:hover{background:linear-gradient(180deg,#050,#020);box-shadow:0 0 10px #0f04}
-.btn:active{transform:scale(0.97)}
+    padding:5px 9px;cursor:pointer;font-size:9.5px;margin:2px;border-radius:4px;
+    transition:all .15s;text-transform:uppercase;letter-spacing:.8px}
+.btn:hover{background:linear-gradient(180deg,#050,#020);box-shadow:0 0 8px #0f04}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
 .btn-run{background:linear-gradient(180deg,#060,#020);font-weight:bold}
-.btn-cascade{background:linear-gradient(180deg,#500,#200);border-color:#f50;color:#f50}
-.btn-cascade:hover{background:linear-gradient(180deg,#700,#300);box-shadow:0 0 10px #f504}
-#field-panel{position:fixed;bottom:12px;right:12px;width:260px;background:rgba(0,10,20,0.92);
-    border:1px solid #0ff;padding:12px;z-index:100;color:#0ff;font-size:11px;border-radius:6px;
-    box-shadow:0 0 20px #0ff2}
-#field-panel>div:first-child{font-size:13px;letter-spacing:1px;margin-bottom:8px;
-    border-bottom:1px solid #0ff3;padding-bottom:6px}
-.field-row{display:flex;justify-content:space-between;margin:4px 0;padding:3px 0;
+.btn-c{background:linear-gradient(180deg,#500,#200);border-color:#f50;color:#f50}
+.btn-c:hover{background:linear-gradient(180deg,#700,#300);box-shadow:0 0 8px #f504}
+.btn-v{background:linear-gradient(180deg,#005,#002);border-color:#66f;color:#88f}
+.btn-v:hover{background:linear-gradient(180deg,#007,#003);box-shadow:0 0 8px #66f4}
+#field-panel{position:fixed;bottom:10px;right:10px;width:268px;background:rgba(0,10,20,.94);
+    border:1px solid #0ff;padding:10px;z-index:100;color:#0ff;font-size:10.5px;border-radius:6px;
+    box-shadow:0 0 18px #0ff2}
+.field-row{display:flex;justify-content:space-between;margin:2px 0;padding:2px 0;
     border-bottom:1px solid #0ff1}
-.field-row span:first-child{color:#0aa}
-.field-val{color:#ff0;font-weight:bold;font-family:'Courier New',monospace}
-#delta-display{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-    font-size:64px;color:#0f0;opacity:0;transition:opacity 0.3s;pointer-events:none;
-    text-shadow:0 0 30px #0f0,0 0 60px #0f08;font-weight:bold}
+.field-row span:first-child{color:#0aa;white-space:nowrap}
+.field-val{color:#ff0;font-weight:bold;max-width:158px;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;text-align:right}
+#delta-display{position:fixed;top:46%;left:50%;transform:translate(-50%,-50%);
+    font-size:56px;color:#0f0;opacity:0;transition:opacity .25s;pointer-events:none;
+    text-shadow:0 0 26px #0f0,0 0 52px #0f08;font-weight:bold;z-index:90}
 #delta-display.show{opacity:1}
-#sutra-label{position:fixed;top:95px;left:12px;color:#0f08;font-size:10px;
+#sutra-label{position:fixed;top:128px;left:10px;color:#0f08;font-size:9px;
     text-transform:uppercase;letter-spacing:2px;pointer-events:none}
-@media(max-width:900px){
-    #queue-panel,#field-panel{width:220px;font-size:10px;padding:8px}
-    #trace{width:280px;font-size:9px}
-}
+.ok{color:#0f0}.bad{color:#f55}
+@media(max-width:1000px){#queue-panel,#field-panel{width:218px;font-size:9.5px;padding:7px}
+    #trace{width:250px;font-size:8.5px}}
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
 <div id="hud"></div>
 <div id="trace"></div>
+
 <div id="queue-panel">
-<div style="color:#ff0;font-weight:bold;margin-bottom:5px">⟨ SŪTRA QUEUE ⟩</div>
-<div id="queue-display"><em style="color:#555">Empty — tap sūtras to add</em></div>
-<div id="mode-select">
-<label><input type="radio" name="cmode" value="0" checked><span>ISOLATED</span></label>
-<label><input type="radio" name="cmode" value="1"><span>SERIES</span></label>
-<label><input type="radio" name="cmode" value="2"><span>PARALLEL</span></label>
-<label><input type="radio" name="cmode" value="3"><span>CONCURRENT</span></label>
-<label><input type="radio" name="cmode" value="4"><span>INVERSE</span></label>
-<label><input type="radio" name="cmode" value="5"><span>COMPOSITE</span></label>
+  <div class="ph">⟨ SŪTRA QUEUE ⟩</div>
+  <div id="queue-display"><em style="color:#555">Empty — tap sūtra cubes</em></div>
+  <div id="mode-select">
+    <label><input type="radio" name="cmode" value="0" checked><span>ISOLATED</span></label>
+    <label><input type="radio" name="cmode" value="1"><span>SERIES</span></label>
+    <label><input type="radio" name="cmode" value="2"><span>PARALLEL</span></label>
+    <label><input type="radio" name="cmode" value="3"><span>CONCURRENT</span></label>
+    <label><input type="radio" name="cmode" value="4"><span>INVERSE</span></label>
+    <label><input type="radio" name="cmode" value="5"><span>COMPOSITE</span></label>
+  </div>
+  <div id="formula"></div>
+  <div>
+    <button class="btn btn-run" id="run-btn">▶ RUN</button>
+    <button class="btn" id="clear-btn">✕ CLEAR</button>
+    <button class="btn" id="reset-btn">↺ RESET</button>
+    <button class="btn btn-c" id="cascade-btn">CASCADE 29</button>
+    <button class="btn btn-v" id="verify-btn">⊨ VERIFY T⁻¹T</button>
+  </div>
+  <div id="delta-sum" style="margin-top:6px;color:#fa0">Σδ = 0</div>
 </div>
-<div style="margin-top:8px">
-<button class="btn btn-run" id="run-btn">▶ RUN QUEUE</button>
-<button class="btn" id="clear-btn">✕ CLEAR</button>
-<button class="btn btn-cascade" id="cascade-btn">CASCADE 29</button>
-</div>
-<div id="delta-sum" style="margin-top:8px;color:#fa0">Σδ = 0</div>
-</div>
+
 <div id="field-panel">
-<div style="color:#ff0;font-weight:bold;margin-bottom:5px">⟨ FIELD STATE ⟩</div>
-<div class="field-row"><span>GRVQ Ψ:</span><span class="field-val" id="f-grvq">0</span></div>
-<div class="field-row"><span>MSTVQ |B|:</span><span class="field-val" id="f-mstvq">0</span></div>
-<div class="field-row"><span>TGCR ω:</span><span class="field-val" id="f-tgcr">0</span></div>
-<div class="field-row"><span>ZPE ρ:</span><span class="field-val" id="f-zpe">0</span></div>
-<div class="field-row"><span>λ₀:</span><span class="field-val" id="f-lambda">1/1</span></div>
-<div style="margin-top:8px;border-top:1px solid #033;padding-top:5px">
-<div class="field-row"><span>Cymatic modes:</span><span class="field-val" id="f-cymodes">0</span></div>
-<div class="field-row"><span>Vortex count:</span><span class="field-val" id="f-vortex">0</span></div>
+  <div class="ph">⟨ FIELD STATE — ℚ EXACT ⟩</div>
+  <div class="field-row"><span>λ₀</span><span class="field-val" id="f-l0">1</span></div>
+  <div class="field-row"><span>λ₁</span><span class="field-val" id="f-l1">1</span></div>
+  <div class="field-row"><span>λ₂</span><span class="field-val" id="f-l2">1</span></div>
+  <div class="field-row"><span>λ₃</span><span class="field-val" id="f-l3">1</span></div>
+  <div class="field-row"><span>GRVQ Ψ</span><span class="field-val" id="f-grvq">0</span></div>
+  <div class="field-row"><span>MSTVQ |B|</span><span class="field-val" id="f-mstvq">0</span></div>
+  <div class="field-row"><span>TGCR ω</span><span class="field-val" id="f-tgcr">0</span></div>
+  <div class="field-row"><span>ZPE ρ</span><span class="field-val" id="f-zpe">0</span></div>
+  <div style="margin-top:5px;border-top:1px solid #033;padding-top:4px">
+    <div class="field-row"><span>R⁴ = Π λₖ⁴/(1+λₖ⁴)</span><span class="field-val" id="f-r4">—</span></div>
+    <div class="field-row"><span>cymatic modes</span><span class="field-val" id="f-cymodes">0</span></div>
+    <div class="field-row"><span>ℚ reductions (state)</span><span class="field-val" id="f-red">0</span></div>
+    <div class="field-row"><span>ℚ reductions (trig)</span><span class="field-val" id="f-redt">0</span></div>
+  </div>
 </div>
-</div>
+
 <div id="delta-display"></div>
-<div id="sutra-label">⟨ 29 SŪTRA CUBES ⟩</div>
+<div id="sutra-label">⟨ 29 SŪTRA CUBES — 16 MUKHYA + 13 UPA ⟩</div>
 
 <script>
 'use strict';
-// ═══════════════════════════════════════════════════════════════════════════════
-//  R4 वैदिक TOROIDAL HYPERCUBE v12.3 — ULTRATHINK EXACT MODE
-//  ZERO IEEE-754 IN STATE COMPUTATIONS
-//  BigInt rationals | Taylor trig | Newton-Raphson sqrt | Machin π | LFSR random
-// ═══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════════════
+   R4 वैदिक TOROIDAL HYPERCUBE v4 — SŪTRA COMPOSITION ALGEBRA
+   ───────────────────────────────────────────────────────────────────────────────
+   SPECIFICATION — single source of truth for the mathematics in this file.
+
+   STATE     S = (λ₀,λ₁,λ₂,λ₃, Ψ_grvq, B_mstvq, ω_tgcr, ρ_zpe) ∈ ℚ⁸
+   SŪTRA     Tₖ : ℚ⁸ → ℚ⁸ — pure, total, and exactly invertible (Tₖ⁻¹ supplied)
+   ALGEBRA   six composition modes over a queue ⟨k₁ … k_N⟩:
+
+     ISOLATED    S′ = T_{k_N}(S₀) ;  ∀k : probeₖ = Tₖ(S₀)          [no chaining]
+     SERIES      S′ = (T_{k_N} ∘ ⋯ ∘ T_{k_1})(S₀)                  [output → input]
+     PARALLEL    S′ = (1/N) Σₖ Tₖ(S₀)                              [fork S₀, 1 join]
+     CONCURRENT  S′ = (Φ_W ∘ ⋯ ∘ Φ₁)(S₀),  Φ_w(S) = (1/|A_w|) Σ_{k∈A_w} Tₖ(S)
+                 W = ⌈√N⌉ waves, A_w = LFSR-scheduled partition    [BSP wavefront]
+     INVERSE     S′ = (T_{k_1}⁻¹ ∘ ⋯ ∘ T_{k_N}⁻¹)(S₀) = (T_{k_N} ∘ ⋯ ∘ T_{k_1})⁻¹(S₀)
+     COMPOSITE   S′ = Σₖ wₖ Tₖ(S₀) + Γ Σ_{j<k} w_j wₖ [T_j,Tₖ](S₀)
+                 wₖ = δₖ/Σδ,  [T_j,Tₖ] = T_j∘Tₖ − Tₖ∘T_j,  Γ = R⁴(S₀)/N
+
+   CONCURRENT strictly interpolates SERIES (W = N) and PARALLEL (W = 1).
+   COMPOSITE = PARALLEL's linear part + first-order BCH commutator coupling.
+   INVERSE is the exact left inverse of SERIES over the same queue (gate below).
+
+   ARITHMETIC — BigInt rationals throughout. No Math.sin, Math.cos, Math.PI,
+   Math.random, Math.sqrt, no float floor/round on state, no truncation.
+     · π       Machin  π = 16·arctan(1/5) − 4·arctan(1/239), rational Taylor
+     · sin/cos exact octant reduction of rational multiples of π, then Taylor
+     · √       exact BigInt ⌊√n⌋ seed + rational Newton–Raphson
+     · random  32-bit Galois LFSR, deterministic and seeded
+     · ℚ bound continued-fraction BEST approximation, applied only at commit
+               boundaries, counted and displayed — never a silent truncation
+   Float appears only at the canvas/pixel boundary, marked ⟨FLOAT BOUNDARY⟩.
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-let W, H;
+let W = 0, H = 0;
 function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
-resize();
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  EXACT ARITHMETIC ENGINE — BigInt Rationals
-// ═══════════════════════════════════════════════════════════════════════════════
-const Exact = {
-    gcd(a, b) {
-        a = a < 0n ? -a : a;
-        b = b < 0n ? -b : b;
-        while (b !== 0n) { const t = b; b = a % b; a = t; }
-        return a;
-    },
-    rat(n, d = 1n) {
-        if (typeof n === 'number') n = BigInt(Math.round(n));
-        if (typeof d === 'number') d = BigInt(Math.round(d));
-        if (d === 0n) throw new Error('Division by zero');
-        if (d < 0n) { n = -n; d = -d; }
-        const g = this.gcd(n, d);
-        return [n / g, d / g];
-    },
-    add(a, b) { return this.rat(a[0] * b[1] + b[0] * a[1], a[1] * b[1]); },
-    sub(a, b) { return this.rat(a[0] * b[1] - b[0] * a[1], a[1] * b[1]); },
-    mul(a, b) { return this.rat(a[0] * b[0], a[1] * b[1]); },
-    div(a, b) { if (b[0] === 0n) throw new Error('Division by zero'); return this.rat(a[0] * b[1], a[1] * b[0]); },
-    neg(a) { return [-a[0], a[1]]; },
-    abs(a) { return [a[0] < 0n ? -a[0] : a[0], a[1]]; },
-    lt(a, b) { return a[0] * b[1] < b[0] * a[1]; },
-    gt(a, b) { return a[0] * b[1] > b[0] * a[1]; },
-    eq(a, b) { return a[0] === b[0] && a[1] === b[1]; },
-    toFloat(a) { return Number(a[0]) / Number(a[1]); },
-    factorial(n) { let r = 1n; for (let i = 2n; i <= n; i++) r *= i; return r; },
-    pow(base, exp) {
-        if (exp === 0n) return this.rat(1n);
-        let r = this.rat(1n), b = base, e = exp < 0n ? -exp : exp;
-        while (e > 0n) { if (e % 2n === 1n) r = this.mul(r, b); b = this.mul(b, b); e = e / 2n; }
-        return exp < 0n ? this.div(this.rat(1n), r) : r;
-    },
-    str(a) { return a[1] === 1n ? a[0].toString() : `${a[0]}/${a[1]}`; }
-};
+/* ══ 1 ══ Q — EXACT RATIONAL ARITHMETIC OVER BigInt ═════════════════════════ */
+const STATS = { reductions: 0, trig: 0 };
+const MAXDEN = 10n ** 26n;          // ℚ commit bound for STATE ≈ 26 significant digits
+const WORKDEN = 10n ** 32n;         // ℚ working precision inside transcendental series
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  EXACT TRIGONOMETRY — Taylor Series (NO Math.sin/cos)
-// ═══════════════════════════════════════════════════════════════════════════════
-const TaylorTrig = {
-    TERMS: 12, MAX_CACHE: 256, piCache: null, sinCache: new Map(), cosCache: new Map(),
-    limitCache(cache) {
-        if (cache.size > this.MAX_CACHE) {
-            const keys = Array.from(cache.keys()).slice(0, cache.size - this.MAX_CACHE + 10);
-            keys.forEach(k => cache.delete(k));
-        }
-    },
-    computePiExact() {
-        if (this.piCache) return this.piCache;
-        const arctan = (x) => {
-            let sum = Exact.rat(0n);
-            const xr = Exact.rat(1n, x);
-            let xpow = xr;
-            for (let k = 0; k < 20; k++) {
-                const term = Exact.div(xpow, Exact.rat(2n * BigInt(k) + 1n));
-                sum = k % 2 === 0 ? Exact.add(sum, term) : Exact.sub(sum, term);
-                xpow = Exact.mul(xpow, Exact.mul(xr, xr));
-            }
-            return sum;
-        };
-        const pi4 = Exact.sub(Exact.mul(Exact.rat(4n), arctan(5n)), arctan(239n));
-        this.piCache = Exact.mul(Exact.rat(4n), pi4);
-        return this.piCache;
-    },
-    reduceAngle(x) {
-        const pi = this.computePiExact();
-        const twoPi = Exact.mul(Exact.rat(2n), pi);
-        let iter = 0;
-        while (Exact.gt(x, pi) && iter < 10) { x = Exact.sub(x, twoPi); iter++; }
-        iter = 0;
-        while (Exact.lt(x, Exact.neg(pi)) && iter < 10) { x = Exact.add(x, twoPi); iter++; }
-        return x;
-    },
-    sinExact(xRat) {
-        const key = Exact.str(xRat);
-        if (this.sinCache.has(key)) return this.sinCache.get(key);
-        const x = this.reduceAngle(xRat);
-        let sum = Exact.rat(0n), xpow = x;
-        const x2 = Exact.mul(x, x);
-        for (let n = 0; n < this.TERMS; n++) {
-            const term = Exact.div(xpow, Exact.rat(Exact.factorial(2n * BigInt(n) + 1n)));
-            sum = n % 2 === 0 ? Exact.add(sum, term) : Exact.sub(sum, term);
-            xpow = Exact.mul(xpow, x2);
-        }
-        this.sinCache.set(key, sum); this.limitCache(this.sinCache);
-        return sum;
-    },
-    cosExact(xRat) {
-        const key = Exact.str(xRat);
-        if (this.cosCache.has(key)) return this.cosCache.get(key);
-        const x = this.reduceAngle(xRat);
-        let sum = Exact.rat(1n);
-        const x2 = Exact.mul(x, x);
-        let xpow = x2;
-        for (let n = 1; n < this.TERMS; n++) {
-            const term = Exact.div(xpow, Exact.rat(Exact.factorial(2n * BigInt(n))));
-            sum = n % 2 === 1 ? Exact.sub(sum, term) : Exact.add(sum, term);
-            xpow = Exact.mul(xpow, x2);
-        }
-        this.cosCache.set(key, sum); this.limitCache(this.cosCache);
-        return sum;
+const Q = {
+  gcd(a, b) { if (a < 0n) a = -a; if (b < 0n) b = -b; while (b) { const t = b; b = a % b; a = t; } return a; },
+  make(n, d = 1n) {
+    if (d === 0n) throw new Error('Q: zero denominator');
+    if (d < 0n) { n = -n; d = -d; }
+    if (n === 0n) return [0n, 1n];
+    const g = this.gcd(n, d);
+    return [n / g, d / g];
+  },
+  int(n) { return [BigInt(n), 1n]; },
+  ZERO: [0n, 1n], ONE: [1n, 1n], TWO: [2n, 1n],
+  add(a, b) { return this.make(a[0] * b[1] + b[0] * a[1], a[1] * b[1]); },
+  sub(a, b) { return this.make(a[0] * b[1] - b[0] * a[1], a[1] * b[1]); },
+  mul(a, b) { return this.make(a[0] * b[0], a[1] * b[1]); },
+  div(a, b) { if (b[0] === 0n) throw new Error('Q: divide by zero'); return this.make(a[0] * b[1], a[1] * b[0]); },
+  neg(a) { return [-a[0], a[1]]; },
+  abs(a) { return a[0] < 0n ? [-a[0], a[1]] : a; },
+  cmp(a, b) { const l = a[0] * b[1], r = b[0] * a[1]; return l < r ? -1 : l > r ? 1 : 0; },
+  sign(a) { return a[0] < 0n ? -1 : a[0] > 0n ? 1 : 0; },
+  isZero(a) { return a[0] === 0n; },
+  eq(a, b) { return a[0] === b[0] && a[1] === b[1]; },
+  /* exact BigInt floor division — true floor, not truncate-toward-zero */
+  fdiv(n, d) { const q = n / d, r = n % d; return (r !== 0n && ((r < 0n) !== (d < 0n))) ? q - 1n : q; },
+  floor(a) { return this.fdiv(a[0], a[1]); },
+  pow(base, e) {
+    if (e === 0n) return this.ONE;
+    let r = this.ONE, b = base, k = e < 0n ? -e : e;
+    while (k > 0n) { if (k & 1n) r = this.mul(r, b); b = this.mul(b, b); k >>= 1n; }
+    return e < 0n ? this.div(this.ONE, r) : r;
+  },
+  /* Continued-fraction BEST rational approximation (Stern–Brocot mediants).
+     |x − p/q| < 1/q², so a bound of q ≤ 10^40 carries error < 1e-80 — 54 orders
+     below the state commit bound and 64 below double precision.
+     Every call is counted, split by bucket, so the cost is visible not hidden. */
+  limitDen(r, maxD, bucket = 'reductions') {
+    let [n, d] = r;
+    if (d <= maxD) return r;
+    STATS[bucket]++;
+    const neg = n < 0n; if (neg) n = -n;
+    let p0 = 0n, q0 = 1n, p1 = 1n, q1 = 0n, N = n, D = d;
+    while (D !== 0n) {
+      const a = N / D;
+      const q2 = q0 + a * q1;
+      if (q2 > maxD) break;
+      const p2 = p0 + a * p1;
+      p0 = p1; q0 = q1; p1 = p2; q1 = q2;
+      const rem = N - a * D; N = D; D = rem;
     }
+    if (q1 === 0n) return r;
+    const k = (maxD - q0) / q1;
+    const cA = [p0 + k * p1, q0 + k * q1], cB = [p1, q1];
+    let eA = n * cA[1] - cA[0] * d; if (eA < 0n) eA = -eA;
+    let eB = n * cB[1] - cB[0] * d; if (eB < 0n) eB = -eB;
+    const best = (eA * cB[1] <= eB * cA[1]) ? cA : cB;
+    return this.make(neg ? -best[0] : best[0], best[1]);
+  },
+  /* ⟨FLOAT BOUNDARY⟩ display / canvas only.
+     Split into integer part + fractional part so the fraction is resolved to the
+     full 53-bit mantissa instead of being clipped at a fixed decimal scale. */
+  f(a) {
+    if (a[1] === 1n) return Number(a[0]);
+    const q = this.fdiv(a[0], a[1]);
+    const r = a[0] - q * a[1];                       // 0 ≤ r < d, since d > 0
+    return Number(q) + Number(r * 1000000000000000000n / a[1]) / 1e18;
+  },
+  str(a, maxLen = 22) {
+    const s = a[1] === 1n ? a[0].toString() : `${a[0]}/${a[1]}`;
+    return s.length <= maxLen ? s : this.f(a).toPrecision(8);
+  }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  EXACT SQUARE ROOT — Newton-Raphson Iteration
-// ═══════════════════════════════════════════════════════════════════════════════
-const NewtonSqrt = {
-    cache: new Map(), ITERATIONS: 20, MAX_CACHE: 64,
-    limitCache() {
-        if (this.cache.size > this.MAX_CACHE) {
-            const keys = Array.from(this.cache.keys()).slice(0, this.cache.size - this.MAX_CACHE + 5);
-            keys.forEach(k => this.cache.delete(k));
-        }
-    },
-    sqrtExact(S) {
-        const key = Exact.str(S);
-        if (this.cache.has(key)) return this.cache.get(key);
-        if (Exact.lt(S, Exact.rat(0n))) throw new Error('Sqrt of negative');
-        if (Exact.eq(S, Exact.rat(0n))) return Exact.rat(0n);
-        let x = Exact.rat(BigInt(Math.ceil(Math.sqrt(Exact.toFloat(S)))));
-        const two = Exact.rat(2n);
-        for (let i = 0; i < this.ITERATIONS; i++) {
-            const next = Exact.div(Exact.add(x, Exact.div(S, x)), two);
-            if (Exact.eq(next, x)) break;
-            x = next;
-        }
-        this.cache.set(key, x); this.limitCache();
-        return x;
+/* ══ 2 ══ EXACT INTEGER SQRT + RATIONAL NEWTON–RAPHSON ═════════════════════ */
+function isqrt(n) {                                    // exact ⌊√n⌋, BigInt only
+  if (n < 0n) throw new Error('isqrt: negative');
+  if (n < 2n) return n;
+  let x = 1n << ((BigInt(n.toString(2).length) + 1n) >> 1n);
+  for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; }
+}
+const Sqrt = {
+  cache: new Map(), ITER: 40,
+  of(S) {                                              // √(p/q) = √(pq)/q, refined in ℚ
+    if (Q.sign(S) < 0) throw new Error('sqrt: negative radicand');
+    if (Q.isZero(S)) return Q.ZERO;
+    const key = `${S[0]}/${S[1]}`;
+    const hit = this.cache.get(key); if (hit) return hit;
+    let x = Q.make(isqrt(S[0] * S[1]) + 1n, S[1]);     // exact integer seed ≥ √S
+    for (let i = 0; i < this.ITER; i++) {
+      const nx = Q.limitDen(Q.div(Q.add(x, Q.div(S, x)), Q.TWO), MAXDEN);
+      if (Q.eq(nx, x)) break;
+      x = nx;
     }
+    if (this.cache.size > 600) this.cache.clear();
+    this.cache.set(key, x);
+    return x;
+  }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  DETERMINISTIC LFSR — NO Math.random
-// ═══════════════════════════════════════════════════════════════════════════════
-const LFSR = {
-    state: 0xACE1n,
-    next() {
-        const bit = ((this.state >> 0n) ^ (this.state >> 2n) ^ (this.state >> 3n) ^ (this.state >> 5n)) & 1n;
-        this.state = (this.state >> 1n) | (bit << 15n);
-        return this.state;
-    },
-    nextRat() { return Exact.rat(this.next(), 65536n); },
-    nextFloat() { return Exact.toFloat(this.nextRat()); },
-    seed(s) { this.state = BigInt(s) & 0xFFFFn; if (this.state === 0n) this.state = 1n; }
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  EXACT PHYSICAL CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════════
-const Constants = {
-    C_SQUARED: Exact.rat(89875517873681764n),
-    C: Exact.rat(299792458n),
-    HBAR: Exact.rat(1054571817n, 10000000000000000000000000000000000000000000n),
-    G: Exact.rat(667430n, 100000000000000000n),
-    OMEGA: Exact.rat(432n),
-    PHI: null,
-    ALPHA: Exact.rat(1000000n, 137035999n),
-    init() {
-        const sqrt5 = NewtonSqrt.sqrtExact(Exact.rat(5n));
-        this.PHI = Exact.div(Exact.add(Exact.rat(1n), sqrt5), Exact.rat(2n));
+/* ══ 3 ══ π (MACHIN) AND EXACT TRIG ON RATIONAL MULTIPLES OF π ════════════ */
+const Tr = {
+  PI: null, sc: new Map(), cc: new Map(), tc: new Map(),
+  arctanRecip(x, terms) {                    // arctan(1/x) = Σ (−1)^k / ((2k+1)·x^(2k+1))
+    const B = 10n ** 60n;                    // series working precision (π is built once)
+    let sum = Q.ZERO;
+    const xr = Q.make(1n, x), x2 = Q.mul(xr, xr);
+    let p = xr;
+    for (let k = 0; k < terms; k++) {
+      const t = Q.div(p, Q.int(2 * k + 1));
+      sum = Q.limitDen((k & 1) ? Q.sub(sum, t) : Q.add(sum, t), B, 'trig');
+      p = Q.limitDen(Q.mul(p, x2), B, 'trig');
     }
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  R4 STATE SPACE — All computations in exact rationals
-// ═══════════════════════════════════════════════════════════════════════════════
-const R4 = {
-    lambda: [Exact.rat(1n), Exact.rat(1n), Exact.rat(1n), Exact.rat(1n)],
-    grvq: Exact.rat(0n), mstvq: Exact.rat(0n), tgcr: Exact.rat(0n), zpe: Exact.rat(0n),
-    deltaSum: 0,
-    R4func(r, lambda) {
-        const l4 = Exact.pow(lambda, 4n);
-        const r4 = Exact.pow(r, 4n);
-        return Exact.div(l4, Exact.add(r4, l4));
-    },
-    compute() {
-        const r = Exact.rat(1n);
-        let prod = Exact.rat(1n);
-        for (let k = 0; k < 4; k++) prod = Exact.mul(prod, this.R4func(r, this.lambda[k]));
-        return prod;
-    },
-    applyDelta(delta) {
-        const d = Exact.rat(BigInt(delta), 100n);
-        this.lambda[0] = Exact.add(this.lambda[0], d);
-        this.deltaSum += delta;
-    },
-    reset() {
-        for (let i = 0; i < 4; i++) this.lambda[i] = Exact.rat(1n);
-        this.grvq = Exact.rat(0n); this.mstvq = Exact.rat(0n);
-        this.tgcr = Exact.rat(0n); this.zpe = Exact.rat(0n);
-        this.deltaSum = 0;
+    return sum;
+  },
+  initPi() {                                 // π = 16·arctan(1/5) − 4·arctan(1/239)
+    const a = Q.mul(Q.int(16), this.arctanRecip(5n, 34));
+    const b = Q.mul(Q.int(4), this.arctanRecip(239n, 14));
+    this.PI = Q.limitDen(Q.sub(a, b), 10n ** 44n);      // ≈ 44 correct digits
+  },
+  /* sinπ(t) = sin(t·π) and cosπ(t) = cos(t·π) for rational t.
+     Argument reduction is EXACT rational reduction of t (mod 2, then octant
+     symmetries). π enters only in the final Taylor evaluation on |x| ≤ π/4,
+     where 16 terms give error < 1e-30. */
+  reduce(t) {
+    const k = Q.floor(Q.div(t, Q.TWO));
+    let u = Q.sub(t, Q.mul(Q.int(k), Q.TWO));                       // u ∈ [0,2)
+    let sS = 1, cS = 1, swap = false;
+    if (Q.cmp(u, Q.ONE) > 0) { u = Q.sub(u, Q.ONE); sS = -sS; cS = -cS; }     // [0,1]
+    const HALF = Q.make(1n, 2n), QTR = Q.make(1n, 4n);
+    if (Q.cmp(u, HALF) > 0) { u = Q.sub(Q.ONE, u); cS = -cS; }               // [0,1/2]
+    if (Q.cmp(u, QTR) > 0) { u = Q.sub(HALF, u); swap = true; }              // [0,1/4]
+    return { u, sS, cS, swap };
+  },
+  /* Taylor on |x| ≤ π/4. The working precision is pinned to WORKDEN on every
+     iteration: without it the intermediate denominators reach ~1400 digits by
+     term 15 and a single evaluation costs ~44ms. Pinned, the operands stay
+     ≈266 bits and the series is ~0.1ms while still carrying < 1e-80 of error. */
+  taylor(x, isSin) {
+    x = Q.limitDen(x, WORKDEN, 'trig');
+    let sum = isSin ? x : Q.ONE;
+    const x2 = Q.limitDen(Q.mul(x, x), WORKDEN, 'trig');
+    let p = sum, f = 1n, m = isSin ? 1n : 0n;
+    for (let k = 1; k < 14; k++) {          // |x| ≤ π/4 ⇒ term 14 < 1e-28
+      p = Q.limitDen(Q.mul(p, x2), WORKDEN, 'trig');
+      f *= (m + 1n) * (m + 2n); m += 2n;
+      const t = Q.div(p, [f, 1n]);
+      if (t[0] === 0n) break;
+      sum = Q.limitDen((k & 1) ? Q.sub(sum, t) : Q.add(sum, t), WORKDEN, 'trig');
     }
+    return sum;
+  },
+  /* Cache the Taylor evaluation on the REDUCED octant angle u ∈ [0,1/4] rather
+     than on the caller's raw t. Every t in a symmetry orbit (t, 1−t, 1+t, 2−t, …)
+     collapses to the same u, so one series evaluation serves 4–8 distinct angles,
+     and a sweep of k/D angles needs only D/4 evaluations. */
+  taylorAt(u, isSin) {
+    const key = `${u[0]}/${u[1]}|${isSin ? 's' : 'c'}`;
+    const h = this.tc.get(key); if (h !== undefined) return h;
+    const v = this.taylor(Q.mul(u, this.PI), isSin);
+    if (this.tc.size > 4096) this.tc.clear();
+    this.tc.set(key, v); return v;
+  },
+  sinPi(t) {
+    const key = `${t[0]}/${t[1]}`; const h = this.sc.get(key); if (h !== undefined) return h;
+    const r = this.reduce(t);
+    let v = this.taylorAt(r.u, !r.swap);
+    if ((r.swap ? r.cS : r.sS) < 0) v = Q.neg(v);
+    if (this.sc.size > 8192) this.sc.clear();
+    this.sc.set(key, v); return v;
+  },
+  cosPi(t) {
+    const key = `${t[0]}/${t[1]}`; const h = this.cc.get(key); if (h !== undefined) return h;
+    const r = this.reduce(t);
+    let v = this.taylorAt(r.u, r.swap);
+    if ((r.swap ? r.sS : r.cS) < 0) v = Q.neg(v);
+    if (this.cc.size > 8192) this.cc.clear();
+    this.cc.set(key, v); return v;
+  }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  29 VEDIC SŪTRAS — Complete exact transforms for all 6 modes
-// ═══════════════════════════════════════════════════════════════════════════════
+/* ══ 4 ══ DETERMINISTIC LFSR (32-bit Galois) — replaces Math.random ════════ */
+const Rand = {
+  s: 0xACE1C0DEn, MASK: 0xFFFFFFFFn, POLY: 0xB4BCD35Cn,
+  seed(v) { this.s = (BigInt(v) & this.MASK) || 1n; },
+  next() { const lsb = this.s & 1n; this.s >>= 1n; if (lsb) this.s ^= this.POLY; this.s &= this.MASK; return this.s; },
+  below(n) { return Number(this.next() % BigInt(n)); },
+  permute(a0) {                              // Fisher–Yates — CONCURRENT wave scheduler
+    const a = a0.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = this.below(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+};
+
+/* ══ 5 ══ EXACT CONSTANTS ═════════════════════════════════════════════════ */
+const K = {
+  PHI: null, INV_PHI: null, PI_F: 0,
+  init() {
+    Tr.initPi();
+    K.PI_F = Q.f(Tr.PI);
+    K.PHI = Q.limitDen(Q.div(Q.add(Q.ONE, Sqrt.of(Q.int(5))), Q.TWO), 10n ** 30n);
+    K.INV_PHI = Q.div(Q.ONE, K.PHI);
+  }
+};
+
+/* ══ 6 ══ STATE ALGEBRA — S ∈ ℚ⁸, immutable ══════════════════════════════ */
+const FIELDS = ['grvq', 'mstvq', 'tgcr', 'zpe'];
+const St = {
+  /* S₀ — the identity configuration the engine starts and resets to. */
+  init() { return { l: [Q.ONE, Q.ONE, Q.ONE, Q.ONE], grvq: Q.ZERO, mstvq: Q.ZERO, tgcr: Q.ZERO, zpe: Q.ZERO }; },
+  /* the additive zero of ℚ⁸ — distinct from init(); required by any Σ accumulator */
+  zero() { return { l: [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO], grvq: Q.ZERO, mstvq: Q.ZERO, tgcr: Q.ZERO, zpe: Q.ZERO }; },
+  clone(s) { return { l: s.l.slice(), grvq: s.grvq, mstvq: s.mstvq, tgcr: s.tgcr, zpe: s.zpe }; },
+  map2(a, b, op) {
+    const r = { l: [op(a.l[0], b.l[0]), op(a.l[1], b.l[1]), op(a.l[2], b.l[2]), op(a.l[3], b.l[3])] };
+    for (const f of FIELDS) r[f] = op(a[f], b[f]);
+    return r;
+  },
+  add(a, b) { return this.map2(a, b, (x, y) => Q.add(x, y)); },
+  sub(a, b) { return this.map2(a, b, (x, y) => Q.sub(x, y)); },
+  scale(a, k) {
+    const r = { l: a.l.map(v => Q.mul(v, k)) };
+    for (const f of FIELDS) r[f] = Q.mul(a[f], k);
+    return r;
+  },
+  mean(list) {
+    if (list.length === 0) return this.init();
+    let acc = list[0];
+    for (let i = 1; i < list.length; i++) acc = this.add(acc, list[i]);
+    return this.reduce(this.scale(acc, Q.make(1n, BigInt(list.length))));
+  },
+  reduce(s) {
+    const r = { l: s.l.map(v => Q.limitDen(v, MAXDEN)) };
+    for (const f of FIELDS) r[f] = Q.limitDen(s[f], MAXDEN);
+    return r;
+  },
+  dist(a, b) {                               // ‖a − b‖₁ in ℚ — the verification residual
+    let acc = Q.ZERO;
+    for (let i = 0; i < 4; i++) acc = Q.add(acc, Q.abs(Q.sub(a.l[i], b.l[i])));
+    for (const f of FIELDS) acc = Q.add(acc, Q.abs(Q.sub(a[f], b[f])));
+    return Q.limitDen(acc, MAXDEN);
+  },
+  R4(s) {                                    // R⁴(S) = Π λₖ⁴/(1 + λₖ⁴)
+    let p = Q.ONE;
+    for (let i = 0; i < 4; i++) {
+      const l4 = Q.pow(s.l[i], 4n), den = Q.add(Q.ONE, l4);
+      p = Q.isZero(den) ? Q.ZERO : Q.mul(p, Q.div(l4, den));
+    }
+    return Q.limitDen(p, MAXDEN);
+  }
+};
+
+/* Guarded division: a vanishing divisor holds the component fixed and REPORTS the
+   instantaneous loss of invertibility rather than silently absorbing it. */
+let SINGULAR = 0;
+function sdiv(a, b) { if (Q.isZero(b)) { SINGULAR++; return a; } return Q.div(a, b); }
+
+/* ══ 7 ══ THE 29 SŪTRAS — Tₖ and Tₖ⁻¹, pure and total ════════════════════ */
+const R = (n, d) => Q.make(BigInt(n), BigInt(d));
+function edit(s, fn) { const t = St.clone(s); fn(t); return St.reduce(t); }
+
 const SUTRAS = [
-    // 16 MAIN SŪTRAS
-    { id: 1, sanskrit: 'एकाधिकेन पूर्वेण', latin: 'Ekādhikena Pūrveṇa', meaning: 'By one more than the previous', delta: 1,
-      transform: (state) => { state.lambda[0] = Exact.add(state.lambda[0], Exact.rat(1n)); state.grvq = Exact.add(state.grvq, Exact.div(Exact.rat(1n), Constants.PHI)); }},
-    { id: 2, sanskrit: 'निखिलं नवतश्चरमं दशतः', latin: 'Nikhilaṃ Navatashcaramaṃ Dashatah', meaning: 'All from 9, last from 10', delta: 2,
-      transform: (state) => { state.lambda[0] = Exact.sub(Exact.rat(10n), Exact.sub(Exact.rat(9n), state.lambda[0])); state.mstvq = Exact.add(state.mstvq, Exact.rat(2n, 100n)); }},
-    { id: 3, sanskrit: 'ऊर्ध्वतिर्यग्भ्याम्', latin: 'Ūrdhva-tiryagbhyām', meaning: 'Vertically and crosswise', delta: 3,
-      transform: (state) => { const a = state.lambda[0], b = state.lambda[1]; state.lambda[0] = Exact.add(Exact.mul(a, a), Exact.mul(b, b)); state.lambda[1] = Exact.mul(Exact.rat(2n), Exact.mul(a, b)); state.tgcr = Exact.add(state.tgcr, Exact.rat(3n, 100n)); }},
-    { id: 4, sanskrit: 'परावर्त्य योजयेत्', latin: 'Parāvartya Yojayet', meaning: 'Transpose and apply', delta: 4,
-      transform: (state) => { const t = state.lambda[0]; state.lambda[0] = Exact.neg(state.lambda[1]); state.lambda[1] = t; state.zpe = Exact.add(state.zpe, Exact.rat(4n, 100n)); }},
-    { id: 5, sanskrit: 'शून्यं साम्यसमुच्चये', latin: 'Shūnyaṃ Sāmyasamuccaye', meaning: 'Zero-sum equilibrium', delta: 5,
-      transform: (state) => { const avg = Exact.div(Exact.add(state.lambda[0], state.lambda[1]), Exact.rat(2n)); state.lambda[0] = avg; state.lambda[1] = avg; state.grvq = Exact.mul(state.grvq, Exact.rat(95n, 100n)); }},
-    { id: 6, sanskrit: 'आनुरूप्ये शून्यमन्यत्', latin: 'Ānurūpye Shūnyamanyat', meaning: 'If proportionate, zero the other', delta: 6,
-      transform: (state) => { if (!Exact.eq(state.lambda[1], Exact.rat(0n))) { state.lambda[2] = Exact.mul(Exact.div(state.lambda[0], state.lambda[1]), state.lambda[2]); } state.mstvq = Exact.mul(state.mstvq, Constants.PHI); }},
-    { id: 7, sanskrit: 'संकलनव्यवकलनाभ्याम्', latin: 'Saṅkalana-vyavakalanābhyām', meaning: 'By addition and subtraction', delta: 7,
-      transform: (state) => { const sum = Exact.add(state.lambda[0], state.lambda[1]), diff = Exact.sub(state.lambda[0], state.lambda[1]); state.lambda[0] = sum; state.lambda[1] = diff; state.tgcr = Exact.add(state.tgcr, Exact.rat(7n, 100n)); }},
-    { id: 8, sanskrit: 'पूरणापूरणाभ्याम्', latin: 'Pūraṇāpūraṇābhyām', meaning: 'By completion', delta: 8,
-      transform: (state) => { const floor = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0])))); const frac = Exact.sub(state.lambda[0], floor); state.lambda[0] = Exact.gt(frac, Exact.rat(1n, 2n)) ? Exact.add(floor, Exact.rat(1n)) : floor; state.zpe = Exact.add(state.zpe, Exact.rat(8n, 100n)); }},
-    { id: 9, sanskrit: 'चलनकलनाभ्याम्', latin: 'Chalana-kalanābhyām', meaning: 'By oscillation', delta: 9,
-      transform: (state) => { const dx = Exact.sub(state.lambda[1], state.lambda[0]); state.lambda[0] = Exact.add(state.lambda[0], Exact.div(dx, Exact.rat(2n))); state.grvq = Exact.add(state.grvq, Exact.abs(dx)); }},
-    { id: 10, sanskrit: 'यावदूनम्', latin: 'Yāvadūnam', meaning: 'By the deficiency', delta: 10,
-      transform: (state) => { const base = Exact.rat(10n), def = Exact.sub(base, state.lambda[0]); state.lambda[0] = Exact.add(Exact.pow(Exact.sub(state.lambda[0], def), 2n), Exact.pow(def, 2n)); state.mstvq = Exact.add(state.mstvq, Exact.rat(10n, 100n)); }},
-    { id: 11, sanskrit: 'व्यष्टिसमष्टिः', latin: 'Vyaṣṭisamaṣṭiḥ', meaning: 'Part and whole', delta: 11,
-      transform: (state) => { let sum = Exact.rat(0n); for (let i = 0; i < 4; i++) sum = Exact.add(sum, state.lambda[i]); state.lambda[0] = sum; state.tgcr = Exact.mul(state.tgcr, Exact.rat(111n, 100n)); }},
-    { id: 12, sanskrit: 'शेषाण्यङ्केन चरमेण', latin: 'Sheṣāṇyaṅkena Charameṇa', meaning: 'Remainder by last digit', delta: 12,
-      transform: (state) => { const ten = Exact.rat(10n), q = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0]) / 10))); state.lambda[1] = Exact.sub(state.lambda[0], Exact.mul(q, ten)); state.zpe = Exact.add(state.zpe, Exact.rat(12n, 100n)); }},
-    { id: 13, sanskrit: 'सोपान्त्यद्वयमन्त्यम्', latin: 'Sopāntyadvayamantyam', meaning: 'Ultimate + penultimate', delta: 13,
-      transform: (state) => { const next = Exact.add(state.lambda[0], state.lambda[1]); state.lambda[1] = state.lambda[0]; state.lambda[0] = next; state.grvq = Exact.mul(state.grvq, Constants.PHI); }},
-    { id: 14, sanskrit: 'एकन्यूनेन पूर्वेण', latin: 'Ekanyūnena Pūrveṇa', meaning: 'By one less than the previous', delta: 14,
-      transform: (state) => { state.lambda[0] = Exact.sub(state.lambda[0], Exact.rat(1n)); state.mstvq = Exact.sub(state.mstvq, Exact.div(Exact.rat(1n), Constants.PHI)); }},
-    { id: 15, sanskrit: 'गुणितसमुच्चयः', latin: 'Guṇitasamuccayaḥ', meaning: 'Product of sum', delta: 15,
-      transform: (state) => { state.lambda[2] = Exact.mul(Exact.add(state.lambda[0], state.lambda[1]), state.lambda[2]); state.tgcr = Exact.add(state.tgcr, Exact.rat(15n, 100n)); }},
-    { id: 16, sanskrit: 'गुणकसमुच्चयः', latin: 'Guṇakasamuccayaḥ', meaning: 'Sum of products', delta: 16,
-      transform: (state) => { state.lambda[0] = Exact.add(Exact.mul(state.lambda[0], state.lambda[1]), Exact.mul(state.lambda[2], state.lambda[3])); state.zpe = Exact.add(state.zpe, Exact.rat(16n, 100n)); }},
-    // 13 SUB-SŪTRAS
-    { id: 17, sanskrit: 'आनुरूप्येण', latin: 'Ānurūpyeṇa', meaning: 'Proportionately', delta: 17,
-      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], Constants.PHI); state.grvq = Exact.mul(state.grvq, Exact.rat(117n, 100n)); }},
-    { id: 18, sanskrit: 'शिष्यते शेषसंज्ञः', latin: 'Shiṣyate Sheṣasaṃjñaḥ', meaning: 'The remainder remains', delta: 18,
-      transform: (state) => { const w = Exact.rat(BigInt(Math.floor(Exact.toFloat(state.lambda[0])))); state.lambda[3] = Exact.sub(state.lambda[0], w); state.mstvq = Exact.add(state.mstvq, Exact.rat(18n, 100n)); }},
-    { id: 19, sanskrit: 'आद्यमाद्येनान्त्यमन्त्येन', latin: 'Ādyamādyenāntyamantyena', meaning: 'First by first, last by last', delta: 19,
-      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], state.lambda[0]); state.lambda[3] = Exact.mul(state.lambda[3], state.lambda[3]); state.tgcr = Exact.add(state.tgcr, Exact.rat(19n, 100n)); }},
-    { id: 20, sanskrit: 'केवलैः सप्तकं गुण्यात्', latin: 'Kevalaiḥ Saptakaṃ Guṇyāt', meaning: 'Multiply by seven', delta: 20,
-      transform: (state) => { state.lambda[0] = Exact.mul(state.lambda[0], Exact.rat(7n)); state.zpe = Exact.mul(state.zpe, Exact.rat(7n)); }},
-    { id: 21, sanskrit: 'वेष्टनम्', latin: 'Veṣṭanam', meaning: 'Osculation', delta: 21,
-      transform: (state) => { const mod = Exact.rat(100n), sc = Exact.mul(state.lambda[0], mod); state.lambda[0] = Exact.div(Exact.sub(sc, Exact.mul(Exact.rat(BigInt(Math.floor(Exact.toFloat(sc) / 100))), mod)), mod); state.grvq = Exact.add(state.grvq, Exact.rat(21n, 100n)); }},
-    { id: 22, sanskrit: 'यावदूनं तावदूनम्', latin: 'Yāvadūnaṃ Tāvadūnam', meaning: 'Deficiency squared', delta: 22,
-      transform: (state) => { const def = Exact.sub(Exact.rat(100n), state.lambda[0]); state.lambda[1] = Exact.mul(def, def); state.mstvq = Exact.add(state.mstvq, Exact.rat(22n, 100n)); }},
-    { id: 23, sanskrit: 'यावदूनं तावदूनीकृत्य वर्गं च योजयेत्', latin: 'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ cha Yojayet', meaning: 'Deficiency reduction with square', delta: 23,
-      transform: (state) => { const base = Exact.rat(10n), def = Exact.sub(base, state.lambda[0]); state.lambda[0] = Exact.add(Exact.mul(Exact.sub(state.lambda[0], def), base), Exact.mul(def, def)); state.tgcr = Exact.add(state.tgcr, Exact.rat(23n, 100n)); }},
-    { id: 24, sanskrit: 'अन्त्ययोर्दशकेऽपि', latin: "Antyayordasake'pi", meaning: 'Last digits sum to 10', delta: 24,
-      transform: (state) => { state.lambda[1] = Exact.sub(Exact.rat(10n), state.lambda[0]); state.zpe = Exact.add(state.zpe, Exact.rat(24n, 100n)); }},
-    { id: 25, sanskrit: 'अन्त्ययोरेव', latin: 'Antyayoreva', meaning: 'Only the last two', delta: 25,
-      transform: (state) => { state.lambda[0] = state.lambda[2]; state.lambda[1] = state.lambda[3]; state.grvq = Exact.mul(state.grvq, Exact.rat(125n, 100n)); }},
-    { id: 26, sanskrit: 'समुच्चयगुणितः', latin: 'Samuccayaguṇitaḥ', meaning: 'Aggregate multiplied', delta: 26,
-      transform: (state) => { let prod = Exact.rat(1n); for (let i = 0; i < 4; i++) if (!Exact.eq(state.lambda[i], Exact.rat(0n))) prod = Exact.mul(prod, state.lambda[i]); state.lambda[0] = prod; state.mstvq = Exact.mul(state.mstvq, Exact.rat(126n, 100n)); }},
-    { id: 27, sanskrit: 'लोपनस्थापनाभ्याम्', latin: 'Lopanasthāpanābhyām', meaning: 'By elimination and retention', delta: 27,
-      transform: (state) => { for (let i = 1; i < 4; i++) if (Exact.lt(Exact.abs(state.lambda[i]), Exact.rat(1n))) state.lambda[i] = Exact.rat(0n); state.tgcr = Exact.add(state.tgcr, Exact.rat(27n, 100n)); }},
-    { id: 28, sanskrit: 'विलोकनम्', latin: 'Vilokanam', meaning: 'By mere observation', delta: 28,
-      transform: (state) => { let max = state.lambda[0]; for (let i = 1; i < 4; i++) if (Exact.gt(Exact.abs(state.lambda[i]), Exact.abs(max))) max = state.lambda[i]; state.lambda[0] = max; state.zpe = Exact.add(state.zpe, Exact.rat(28n, 100n)); }},
-    { id: 29, sanskrit: 'गुणितसमुच्चयः समुच्चयगुणितः', latin: 'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', meaning: 'Product-sum equals sum-product', delta: 29,
-      transform: (state) => { const sumF = Exact.add(state.lambda[0], state.lambda[1]), prodF = Exact.mul(state.lambda[0], state.lambda[1]); state.lambda[2] = Exact.mul(sumF, state.lambda[2]); state.lambda[3] = Exact.add(prodF, state.lambda[3]); state.grvq = Exact.mul(state.grvq, Constants.PHI); state.mstvq = Exact.mul(state.mstvq, Constants.PHI); state.tgcr = Exact.mul(state.tgcr, Constants.PHI); state.zpe = Exact.mul(state.zpe, Constants.PHI); }}
+/* ── 16 MUKHYA SŪTRA (primary) ─────────────────────────────────────────── */
+{ id:1, sk:'एकाधिकेन पूर्वेण', la:'Ekādhikena Pūrveṇa', mn:'By one more than the previous', delta:1,
+  T:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.ONE); t.grvq=Q.add(t.grvq,K.INV_PHI);}),
+  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.ONE); t.grvq=Q.sub(t.grvq,K.INV_PHI);}) },
+
+{ id:2, sk:'निखिलं नवतश्चरमं दशतः', la:'Nikhilaṃ Navataścaramaṃ Daśataḥ', mn:'All from 9, last from 10 · involution', delta:2,
+  T:s=>edit(s,t=>{t.l[0]=Q.sub(Q.int(10),t.l[0]); t.mstvq=Q.add(t.mstvq,R(1,50));}),
+  I:s=>edit(s,t=>{t.mstvq=Q.sub(t.mstvq,R(1,50)); t.l[0]=Q.sub(Q.int(10),t.l[0]);}) },
+
+{ id:3, sk:'ऊर्ध्वतिर्यग्भ्याम्', la:'Ūrdhva-tiryagbhyām', mn:'Vertically and crosswise · z ↦ z²', delta:3,
+  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.sub(Q.mul(a,a),Q.mul(b,b)); t.l[1]=Q.mul(Q.TWO,Q.mul(a,b)); t.tgcr=Q.add(t.tgcr,R(3,100));}),
+  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
+    const r=Sqrt.of(Q.add(Q.mul(a,a),Q.mul(b,b)));
+    const re=Sqrt.of(Q.div(Q.add(r,a),Q.TWO));
+    let im=Sqrt.of(Q.div(Q.abs(Q.sub(r,a)),Q.TWO)); if(Q.sign(b)<0) im=Q.neg(im);
+    t.l[0]=re; t.l[1]=im; t.tgcr=Q.sub(t.tgcr,R(3,100));}), radical:true },
+
+{ id:4, sk:'परावर्त्य योजयेत्', la:'Parāvartya Yojayet', mn:'Transpose and apply · rotation +90°', delta:4,
+  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.neg(t.l[1]); t.l[1]=a; t.zpe=Q.add(t.zpe,R(1,25));}),
+  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=t.l[1]; t.l[1]=Q.neg(a); t.zpe=Q.sub(t.zpe,R(1,25));}) },
+
+{ id:5, sk:'शून्यं साम्यसमुच्चये', la:'Śūnyaṃ Sāmyasamuccaye', mn:'Equilibrium mixing · det = 1/3', delta:5,
+  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.add(Q.mul(R(2,3),a),Q.mul(R(1,3),b));
+    t.l[1]=Q.add(Q.mul(R(1,3),a),Q.mul(R(2,3),b));
+    t.grvq=Q.mul(t.grvq,R(19,20));}),
+  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.sub(Q.mul(Q.TWO,a),b); t.l[1]=Q.sub(Q.mul(Q.TWO,b),a);
+    t.grvq=Q.mul(t.grvq,R(20,19));}) },
+
+{ id:6, sk:'आनुरूप्ये शून्यमन्यत्', la:'Ānurūpye Śūnyamanyat', mn:'If proportionate, zero the other', delta:6,
+  T:s=>edit(s,t=>{t.l[2]=Q.mul(sdiv(t.l[0],t.l[1]),t.l[2]); t.mstvq=Q.mul(t.mstvq,K.PHI);}),
+  I:s=>edit(s,t=>{t.l[2]=Q.mul(sdiv(t.l[1],t.l[0]),t.l[2]); t.mstvq=sdiv(t.mstvq,K.PHI);}) },
+
+{ id:7, sk:'संकलनव्यवकलनाभ्याम्', la:'Saṅkalana-vyavakalanābhyām', mn:'By addition and subtraction · butterfly', delta:7,
+  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=Q.add(a,b); t.l[1]=Q.sub(a,b); t.tgcr=Q.add(t.tgcr,R(7,100));}),
+  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.div(Q.add(a,b),Q.TWO); t.l[1]=Q.div(Q.sub(a,b),Q.TWO); t.tgcr=Q.sub(t.tgcr,R(7,100));}) },
+
+{ id:8, sk:'पूरणापूरणाभ्याम्', la:'Pūraṇāpūraṇābhyām', mn:'By completion to base · λ ↦ (9λ+10)/10', delta:8,
+  T:s=>edit(s,t=>{t.l[0]=Q.div(Q.add(Q.mul(Q.int(9),t.l[0]),Q.int(10)),Q.int(10)); t.zpe=Q.add(t.zpe,R(2,25));}),
+  I:s=>edit(s,t=>{t.l[0]=Q.div(Q.sub(Q.mul(Q.int(10),t.l[0]),Q.int(10)),Q.int(9)); t.zpe=Q.sub(t.zpe,R(2,25));}) },
+
+{ id:9, sk:'चलनकलनाभ्याम्', la:'Calana-kalanābhyām', mn:'Differential · oscillation half-step', delta:9,
+  T:s=>edit(s,t=>{const d=Q.sub(t.l[1],t.l[0]);
+    t.l[0]=Q.add(t.l[0],Q.div(d,Q.TWO)); t.grvq=Q.add(t.grvq,Q.abs(d));}),
+  I:s=>edit(s,t=>{const d=Q.mul(Q.TWO,Q.sub(t.l[1],t.l[0]));
+    t.grvq=Q.sub(t.grvq,Q.abs(d)); t.l[0]=Q.sub(Q.mul(Q.TWO,t.l[0]),t.l[1]);}) },
+
+{ id:10, sk:'यावदूनम्', la:'Yāvadūnam', mn:'By the deficiency · B(λ−d)+d² ≡ λ²', delta:10,
+  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],t.l[0]); t.mstvq=Q.add(t.mstvq,R(1,10));}),
+  I:s=>edit(s,t=>{t.l[0]=Sqrt.of(Q.abs(t.l[0])); t.mstvq=Q.sub(t.mstvq,R(1,10));}), radical:true },
+
+{ id:11, sk:'व्यष्टिसमष्टिः', la:'Vyaṣṭisamaṣṭiḥ', mn:'Part and whole · λ₀ ← Σλ', delta:11,
+  T:s=>edit(s,t=>{t.l[0]=Q.add(Q.add(t.l[0],t.l[1]),Q.add(t.l[2],t.l[3])); t.tgcr=Q.mul(t.tgcr,R(111,100));}),
+  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.add(t.l[1],Q.add(t.l[2],t.l[3]))); t.tgcr=Q.mul(t.tgcr,R(100,111));}) },
+
+{ id:12, sk:'शेषाण्यङ्केन चरमेण', la:'Śeṣāṇyaṅkena Carameṇa', mn:'Remainder by the last digit · shear −10λ₂', delta:12,
+  T:s=>edit(s,t=>{t.l[1]=Q.sub(t.l[1],Q.mul(Q.int(10),t.l[2])); t.zpe=Q.add(t.zpe,R(3,25));}),
+  I:s=>edit(s,t=>{t.l[1]=Q.add(t.l[1],Q.mul(Q.int(10),t.l[2])); t.zpe=Q.sub(t.zpe,R(3,25));}) },
+
+{ id:13, sk:'सोपान्त्यद्वयमन्त्यम्', la:'Sopāntyadvayamantyam', mn:'Ultimate and twice penultimate · Fibonacci', delta:13,
+  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.add(a,t.l[1]); t.l[1]=a; t.grvq=Q.mul(t.grvq,K.PHI);}),
+  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=t.l[1]; t.l[1]=Q.sub(a,t.l[1]); t.grvq=sdiv(t.grvq,K.PHI);}) },
+
+{ id:14, sk:'एकन्यूनेन पूर्वेण', la:'Ekanyūnena Pūrveṇa', mn:'By one less than the previous', delta:14,
+  T:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.ONE); t.mstvq=Q.sub(t.mstvq,K.INV_PHI);}),
+  I:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.ONE); t.mstvq=Q.add(t.mstvq,K.INV_PHI);}) },
+
+{ id:15, sk:'गुणितसमुच्चयः', la:'Guṇitasamuccayaḥ', mn:'The product of the sum', delta:15,
+  T:s=>edit(s,t=>{t.l[2]=Q.mul(Q.add(t.l[0],t.l[1]),t.l[2]); t.tgcr=Q.add(t.tgcr,R(3,20));}),
+  I:s=>edit(s,t=>{t.l[2]=sdiv(t.l[2],Q.add(t.l[0],t.l[1])); t.tgcr=Q.sub(t.tgcr,R(3,20));}) },
+
+{ id:16, sk:'गुणकसमुच्चयः', la:'Guṇakasamuccayaḥ', mn:'The sum of the products', delta:16,
+  T:s=>edit(s,t=>{t.l[0]=Q.add(Q.mul(t.l[0],t.l[1]),Q.mul(t.l[2],t.l[3])); t.zpe=Q.add(t.zpe,R(4,25));}),
+  I:s=>edit(s,t=>{t.l[0]=sdiv(Q.sub(t.l[0],Q.mul(t.l[2],t.l[3])),t.l[1]); t.zpe=Q.sub(t.zpe,R(4,25));}) },
+
+/* ── 13 UPASŪTRA (sub-sūtras) ──────────────────────────────────────────── */
+{ id:17, sk:'आनुरूप्येण', la:'Ānurūpyeṇa', mn:'Proportionately · × φ', delta:17,
+  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],K.PHI); t.grvq=Q.mul(t.grvq,R(117,100));}),
+  I:s=>edit(s,t=>{t.l[0]=sdiv(t.l[0],K.PHI); t.grvq=Q.mul(t.grvq,R(100,117));}) },
+
+{ id:18, sk:'शिष्यते शेषसंज्ञः', la:'Śiṣyate Śeṣasaṃjñaḥ', mn:'The remainder remains · λ₃ ← λ₃ − λ₂', delta:18,
+  T:s=>edit(s,t=>{t.l[3]=Q.sub(t.l[3],t.l[2]); t.mstvq=Q.add(t.mstvq,R(9,50));}),
+  I:s=>edit(s,t=>{t.l[3]=Q.add(t.l[3],t.l[2]); t.mstvq=Q.sub(t.mstvq,R(9,50));}) },
+
+{ id:19, sk:'आद्यमाद्येनान्त्यमन्त्येन', la:'Ādyamādyenāntyamantyena', mn:'First by first, last by last', delta:19,
+  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],t.l[0]); t.l[3]=Q.mul(t.l[3],t.l[3]); t.tgcr=Q.add(t.tgcr,R(19,100));}),
+  I:s=>edit(s,t=>{t.l[0]=Sqrt.of(Q.abs(t.l[0])); t.l[3]=Sqrt.of(Q.abs(t.l[3])); t.tgcr=Q.sub(t.tgcr,R(19,100));}), radical:true },
+
+{ id:20, sk:'केवलैः सप्तकं गुण्यात्', la:'Kevalaiḥ Saptakaṃ Guṇyāt', mn:'Multiply by seven · 1/7 period', delta:20,
+  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],Q.int(7)); t.zpe=Q.mul(t.zpe,Q.int(7));}),
+  I:s=>edit(s,t=>{t.l[0]=Q.div(t.l[0],Q.int(7)); t.zpe=Q.div(t.zpe,Q.int(7));}) },
+
+{ id:21, sk:'वेष्टनम्', la:'Veṣṭanam', mn:'Osculation · λ₀ ← λ₀ + λ₁/10', delta:21,
+  T:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.div(t.l[1],Q.int(10))); t.grvq=Q.add(t.grvq,R(21,100));}),
+  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.div(t.l[1],Q.int(10))); t.grvq=Q.sub(t.grvq,R(21,100));}) },
+
+{ id:22, sk:'यावदूनं तावदूनम्', la:'Yāvadūnaṃ Tāvadūnam', mn:'Deficiency squared, base 100', delta:22,
+  T:s=>edit(s,t=>{const d=Q.sub(Q.int(100),t.l[0]); t.l[1]=Q.add(t.l[1],Q.mul(d,d)); t.mstvq=Q.add(t.mstvq,R(11,50));}),
+  I:s=>edit(s,t=>{const d=Q.sub(Q.int(100),t.l[0]); t.l[1]=Q.sub(t.l[1],Q.mul(d,d)); t.mstvq=Q.sub(t.mstvq,R(11,50));}) },
+
+{ id:23, sk:'यावदूनं तावदूनीकृत्य वर्गं च योजयेत्', la:'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ ca Yojayet', mn:'Reduce by the deficiency, add its square', delta:23,
+  T:s=>edit(s,t=>{const d=Q.sub(Q.int(10),t.l[0]); t.l[3]=Q.add(t.l[3],Q.mul(d,d)); t.tgcr=Q.add(t.tgcr,R(23,100));}),
+  I:s=>edit(s,t=>{const d=Q.sub(Q.int(10),t.l[0]); t.l[3]=Q.sub(t.l[3],Q.mul(d,d)); t.tgcr=Q.sub(t.tgcr,R(23,100));}) },
+
+{ id:24, sk:'अन्त्ययोर्दशकेऽपि', la:"Antyayordaśake'pi", mn:'Last digits summing to ten · involution', delta:24,
+  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.add(t.zpe,R(6,25));}),
+  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.sub(t.zpe,R(6,25));}) },
+
+{ id:25, sk:'अन्त्ययोरेव', la:'Antyayoreva', mn:'Only the last two · (λ₀λ₁) ↔ (λ₂λ₃)', delta:25,
+  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.mul(t.grvq,R(5,4));}),
+  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.mul(t.grvq,R(4,5));}) },
+
+{ id:26, sk:'समुच्चयगुणितः', la:'Samuccayaguṇitaḥ', mn:'The aggregate multiplied · λ₀ ← Πλ', delta:26,
+  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],Q.mul(t.l[1],Q.mul(t.l[2],t.l[3]))); t.mstvq=Q.mul(t.mstvq,R(63,50));}),
+  I:s=>edit(s,t=>{t.l[0]=sdiv(t.l[0],Q.mul(t.l[1],Q.mul(t.l[2],t.l[3]))); t.mstvq=Q.mul(t.mstvq,R(50,63));}) },
+
+{ id:27, sk:'लोपनस्थापनाभ्याम्', la:'Lopanasthāpanābhyām', mn:'By elimination and retention · Gauss step', delta:27,
+  T:s=>edit(s,t=>{t.l[2]=Q.sub(t.l[2],Q.div(t.l[1],Q.TWO)); t.tgcr=Q.add(t.tgcr,R(27,100));}),
+  I:s=>edit(s,t=>{t.l[2]=Q.add(t.l[2],Q.div(t.l[1],Q.TWO)); t.tgcr=Q.sub(t.tgcr,R(27,100));}) },
+
+{ id:28, sk:'विलोकनम्', la:'Vilokanam', mn:'By mere observation · dominant of λ₁₋₃', delta:28,
+  T:s=>edit(s,t=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
+    t.l[0]=Q.add(t.l[0],Q.div(m,Q.int(10))); t.zpe=Q.add(t.zpe,R(7,25));}),
+  I:s=>edit(s,t=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
+    t.l[0]=Q.sub(t.l[0],Q.div(m,Q.int(10))); t.zpe=Q.sub(t.zpe,R(7,25));}) },
+
+{ id:29, sk:'गुणितसमुच्चयः समुच्चयगुणितः', la:'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', mn:'Product-of-sum = sum-of-product', delta:29,
+  T:s=>edit(s,t=>{const p=Q.mul(t.l[0],t.l[1]);
+    t.l[2]=Q.mul(Q.add(t.l[0],t.l[1]),t.l[2]); t.l[3]=Q.add(t.l[3],p);
+    for(const f of FIELDS) t[f]=Q.mul(t[f],K.PHI);}),
+  I:s=>edit(s,t=>{const p=Q.mul(t.l[0],t.l[1]);
+    for(const f of FIELDS) t[f]=sdiv(t[f],K.PHI);
+    t.l[3]=Q.sub(t.l[3],p); t.l[2]=sdiv(t.l[2],Q.add(t.l[0],t.l[1]));}) }
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  COMPOSITION MODES — 6 execution strategies
-// ═══════════════════════════════════════════════════════════════════════════════
-const MODES = ['ISOLATED', 'SERIES', 'PARALLEL', 'CONCURRENT', 'INVERSE', 'COMPOSITE'];
+/* ══ 8 ══ COMPOSITION ALGEBRA — the six modes ════════════════════════════ */
+const MODES = [
+ { n:'ISOLATED',   f:'S′ = T<sub>k</sub>(S₀)',
+   x:'∀k : probe<sub>k</sub> = T<sub>k</sub>(S₀), evaluated against S₀',
+   note:'no chaining — Tⱼ never observes Tᵢ’s output; the last probe is committed' },
+ { n:'SERIES',     f:'S′ = (T<sub>N</sub> ∘ ⋯ ∘ T<sub>1</sub>)(S₀)',
+   x:'S<sub>i</sub> = T<sub>i</sub>(S<sub>i−1</sub>)',
+   note:'output → input; order-dependent because the sūtras do not commute' },
+ { n:'PARALLEL',   f:'S′ = (1/N) Σ<sub>k</sub> T<sub>k</sub>(S₀)',
+   x:'fork on S₀ → private copies → one mean-join barrier',
+   note:'every branch reads the SAME input; no branch sees another’s result' },
+ { n:'CONCURRENT', f:'S′ = (Φ<sub>W</sub> ∘ ⋯ ∘ Φ<sub>1</sub>)(S₀)',
+   x:'Φ<sub>w</sub>(S) = (1/|A<sub>w</sub>|) Σ<sub>k∈A<sub>w</sub></sub> T<sub>k</sub>(S),   W = ⌈√N⌉',
+   note:'BSP wavefront, LFSR-scheduled A_w. W = N → SERIES, W = 1 → PARALLEL' },
+ { n:'INVERSE',    f:'S′ = (T<sub>1</sub><sup>−1</sup> ∘ ⋯ ∘ T<sub>N</sub><sup>−1</sup>)(S₀)',
+   x:'= (T<sub>N</sub> ∘ ⋯ ∘ T<sub>1</sub>)<sup>−1</sup>(S₀)',
+   note:'reverse order — exactly undoes the SERIES run of the same queue' },
+ { n:'COMPOSITE',  f:'S′ = Σ<sub>k</sub> w<sub>k</sub>T<sub>k</sub>(S₀) + Γ Σ<sub>j&lt;k</sub> w<sub>j</sub>w<sub>k</sub>[T<sub>j</sub>,T<sub>k</sub>](S₀)',
+   x:'w<sub>k</sub> = δ<sub>k</sub>/Σδ,  [T<sub>j</sub>,T<sub>k</sub>] = T<sub>j</sub>T<sub>k</sub> − T<sub>k</sub>T<sub>j</sub>,  Γ = R⁴(S₀)/N',
+   note:'linear part + first-order BCH commutator coupling — the combined function' }
+];
 
+const Compose = {
+  /* ISOLATED — independent probes of S₀; nothing chains */
+  isolated(S0, ks) {
+    let out = S0;
+    for (const k of ks) {
+      const p = SUTRAS[k].T(S0);
+      trace(`<span class="tr-s">S${k + 1} ⊥ probe ‖ΔS‖ = ${Q.str(St.dist(p, S0), 12)}</span>`);
+      out = p;
+    }
+    return out;
+  },
+  /* SERIES — strict left fold, output feeds input */
+  series(S0, ks) {
+    let s = S0;
+    for (const k of ks) {
+      s = SUTRAS[k].T(s);
+      trace(`<span class="tr-s">S${k + 1} ∘ → λ₀ = ${Q.str(s.l[0], 14)}</span>`);
+    }
+    return s;
+  },
+  /* PARALLEL — fork on S₀, private evaluation, single mean-join barrier */
+  parallel(S0, ks) {
+    const branches = ks.map(k => SUTRAS[k].T(S0));       // every branch reads S₀
+    trace(`<span class="tr-ex">∥ fork ${ks.length} branches on S₀ → mean-join</span>`);
+    return St.mean(branches);
+  },
+  /* CONCURRENT — BSP wavefront: parallel inside a wave, series across waves */
+  concurrent(S0, ks) {
+    const N = ks.length;
+    const Wv = Math.max(1, Math.ceil(Math.sqrt(N)));      // ⟨wave count — an integer, not state⟩
+    const order = Rand.permute(ks);
+    const waves = Array.from({ length: Wv }, () => []);
+    order.forEach((k, i) => waves[i % Wv].push(k));
+    let s = S0;
+    waves.forEach((A, w) => {
+      if (A.length === 0) return;
+      s = St.mean(A.map(k => SUTRAS[k].T(s)));            // all of A read the same s
+      trace(`<span class="tr-f">Φ${w + 1} ⇉ {${A.map(k => 'S' + (k + 1)).join(',')}}</span>`);
+    });
+    return s;
+  },
+  /* INVERSE — reverse-order inverse composition; exact left inverse of series() */
+  inverse(S0, ks) {
+    let s = S0;
+    for (let i = ks.length - 1; i >= 0; i--) {
+      const k = ks[i];
+      s = SUTRAS[k].I(s);
+      trace(`<span class="tr-s">S${k + 1}⁻¹ ← λ₀ = ${Q.str(s.l[0], 14)}</span>`);
+    }
+    return s;
+  },
+  /* COMPOSITE — weighted linear part + commutator coupling, O(N²) pairs */
+  composite(S0, ks) {
+    const N = ks.length;
+    const tot = ks.reduce((a, k) => a + SUTRAS[k].delta, 0);
+    const w = ks.map(k => Q.make(BigInt(SUTRAS[k].delta), BigInt(tot)));
+    let L = St.scale(SUTRAS[ks[0]].T(S0), w[0]);
+    for (let i = 1; i < N; i++) L = St.add(L, St.scale(SUTRAS[ks[i]].T(S0), w[i]));
+    const Gamma = Q.div(St.R4(S0), Q.int(N));
+    const img = ks.map(k => SUTRAS[k].T(S0));              // cache Tₖ(S₀) for the pairs
+    let C = St.zero(), pairs = 0;                          // Σ accumulator — additive zero, not S₀
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      const comm = St.sub(SUTRAS[ks[i]].T(img[j]), SUTRAS[ks[j]].T(img[i]));   // [Tᵢ,Tⱼ](S₀)
+      C = St.reduce(St.add(C, St.scale(comm, Q.mul(w[i], w[j]))));
+      pairs++;
+    }
+    trace(`<span class="tr-ex">Γ = ${Q.str(Gamma, 12)} · pairs = ${pairs} · ‖C‖ = ${Q.str(St.dist(C, St.zero()), 12)}</span>`);
+    return St.reduce(St.add(L, St.scale(C, Gamma)));
+  }
+};
+
+/* ══ 9 ══ VERIFICATION GATE — T⁻¹ ∘ T = id ══════════════════════════════ */
+function verifyInverses() {
+  let exact = 0, near = 0, fail = 0;
+  const probe = { l: [R(3, 2), R(5, 3), R(7, 4), R(2, 5)],
+                  grvq: R(1, 3), mstvq: R(2, 7), tgcr: R(1, 5), zpe: R(3, 8) };
+  const EPS = Q.make(1n, 10n ** 18n);
+  for (const S of SUTRAS) {
+    let d;
+    try { d = St.dist(S.I(S.T(probe)), probe); }
+    catch (e) { fail++; trace(`<span class="tr-e">S${S.id} T⁻¹T threw: ${e.message}</span>`); continue; }
+    if (Q.isZero(d)) exact++;
+    else if (Q.cmp(d, EPS) < 0) { near++; trace(`<span class="tr-f">S${S.id} T⁻¹T ≈ id · ‖r‖ = ${Q.str(d, 13)}</span>`); }
+    else { fail++; trace(`<span class="tr-e">S${S.id} T⁻¹T ✗ · ‖r‖ = ${Q.str(d, 13)}</span>`); }
+  }
+  let rt = '<span style="color:#888">(queue empty)</span>';
+  if (QUEUE.items.length) {
+    const back = Compose.inverse(Compose.series(probe, QUEUE.items), QUEUE.items);
+    const d = St.dist(back, probe);
+    rt = Q.isZero(d) ? '<span class="ok">EXACT</span>'
+       : Q.cmp(d, EPS) < 0 ? `<span class="ok">≈ ${Q.str(d, 10)}</span>`
+       : `<span class="bad">✗ ${Q.str(d, 10)}</span>`;
+  }
+  trace(`<span class="tr-m">⊨ T⁻¹T : ${exact} exact · ${near} ≈ (√ branch) · ${fail} fail</span>`);
+  trace(`<span class="tr-m">⊨ INVERSE ∘ SERIES over queue = ${rt}</span>`);
+  return { exact, near, fail };
+}
+
+/* ══ 10 ══ QUEUE / RUNTIME ══════════════════════════════════════════════ */
+let STATE = null;
 const QUEUE = {
-    items: [], mode: 0, running: false,
-    add(sutraIdx) { if (this.items.length < 29) { this.items.push(sutraIdx); this.updateUI(); addTrace(`<span class="tr-queue">+ S${sutraIdx + 1} [${SUTRAS[sutraIdx].latin}]</span>`); }},
-    clear() { this.items = []; this.updateUI(); addTrace('<span class="tr-queue">Queue cleared</span>'); },
-    updateUI() {
-        const display = document.getElementById('queue-display');
-        display.innerHTML = this.items.length === 0 ? '<em style="color:#555">Empty — tap sūtras to add</em>' :
-            this.items.map((idx, i) => `<div class="q-item">${i+1}. S${idx+1} δ=${SUTRAS[idx].delta}</div>`).join('');
-        document.getElementById('delta-sum').textContent = `Σδ = ${this.items.reduce((s, i) => s + SUTRAS[i].delta, 0)}`;
-    },
-    async run() {
-        if (this.running || this.items.length === 0) return;
-        this.running = true;
-        addTrace(`<span class="tr-mode">EXECUTING: ${MODES[this.mode]}</span>`);
-        switch (this.mode) {
-            case 0: await this.runIsolated(); break;
-            case 1: await this.runSeries(); break;
-            case 2: await this.runParallel(); break;
-            case 3: await this.runConcurrent(); break;
-            case 4: await this.runInverse(); break;
-            case 5: await this.runComposite(); break;
-        }
-        this.running = false; updateFieldDisplay();
-    },
-    async runIsolated() { const idx = this.items[0]; executeSutra(idx); showDelta(SUTRAS[idx].delta); },
-    async runSeries() { for (const idx of this.items) { executeSutra(idx); showDelta(SUTRAS[idx].delta); await sleep(100); }},
-    async runParallel() { let total = 0; for (const idx of this.items) { SUTRAS[idx].transform(R4); R4.deltaSum += SUTRAS[idx].delta; total += SUTRAS[idx].delta; injectCymaticEnergy(idx, SUTRAS[idx].delta); } showDelta(total); addTrace(`<span class="tr-exact">PARALLEL: ${this.items.length} sūtras, Σδ=${total}</span>`); },
-    async runConcurrent() { for (const idx of this.items) { executeSutra(idx); showDelta(SUTRAS[idx].delta); await sleep(60); }},
-    async runInverse() { for (const idx of this.items) { R4.applyDelta(-SUTRAS[idx].delta); addTrace(`<span class="tr-sutra">S${idx+1}⁻¹ δ=-${SUTRAS[idx].delta}</span>`); injectCymaticEnergy(idx, -SUTRAS[idx].delta); await sleep(80); } showDelta(-this.items.reduce((s, i) => s + SUTRAS[i].delta, 0)); },
-    async runComposite() { let acc = 0; for (const idx of this.items) { SUTRAS[idx].transform(R4); R4.deltaSum += SUTRAS[idx].delta; acc += SUTRAS[idx].delta; const c = Exact.rat(BigInt(acc), 1000n); R4.grvq = Exact.add(R4.grvq, c); R4.mstvq = Exact.add(R4.mstvq, Exact.div(c, Exact.rat(2n))); R4.tgcr = Exact.add(R4.tgcr, Exact.div(c, Exact.rat(3n))); R4.zpe = Exact.add(R4.zpe, Exact.div(c, Exact.rat(4n))); injectCymaticEnergy(idx, SUTRAS[idx].delta); await sleep(50); } showDelta(acc); addTrace(`<span class="tr-exact">COMPOSITE Σδ = ${acc}</span>`); },
-    async cascade29() { this.items = []; for (let i = 0; i < 29; i++) this.items.push(i); this.updateUI(); this.mode = 5; document.querySelector('input[name="cmode"][value="5"]').checked = true; await this.run(); addTrace(`<span class="tr-exact">॥ CASCADE 29 COMPLETE ॥</span>`); addTrace(`<span class="tr-exact">Σδ = 435 ✓ (29th triangular)</span>`); }
-};
-
-function executeSutra(idx) { const s = SUTRAS[idx]; s.transform(R4); R4.deltaSum += s.delta; addTrace(`<span class="tr-sutra">S${idx+1} [${s.latin}] δ=${s.delta}</span>`); injectCymaticEnergy(idx, s.delta); }
-function showDelta(delta) { const el = document.getElementById('delta-display'); el.textContent = delta >= 0 ? `+${delta}` : delta.toString(); el.style.color = delta >= 0 ? '#0f0' : '#f00'; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 500); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  CYMATIC FIELD — Standing wave patterns
-// ═══════════════════════════════════════════════════════════════════════════════
-const CYMATIC = {
-    modes: [], vortices: [], resolution: 48, field: null, sinLUT: null, piFloat: 0, initialized: false,
-    init() {
-        this.field = new Float64Array(this.resolution * this.resolution);
-        this.modes = []; this.vortices = [];
-        this.piFloat = Exact.toFloat(TaylorTrig.computePiExact());
-        const lutSize = 360;
-        this.sinLUT = new Float64Array(lutSize);
-        for (let i = 0; i < lutSize; i++) {
-            const angle = Exact.mul(Exact.rat(BigInt(i) * 2n, BigInt(lutSize)), TaylorTrig.computePiExact());
-            this.sinLUT[i] = Exact.toFloat(TaylorTrig.sinExact(angle));
-        }
-        this.initialized = true;
-    },
-    fastSin(x) { const twoPi = this.piFloat * 2; let n = ((x % twoPi) + twoPi) % twoPi; return this.sinLUT[Math.floor(n / twoPi * this.sinLUT.length) % this.sinLUT.length]; },
-    addMode(m, n, amp) { this.modes.push({ m, n, amplitude: amp, phase: 0 }); },
-    addVortex(x, y, str) { this.vortices.push({ x, y, strength: str }); },
-    computeField(time) {
-        if (!this.initialized) return;
-        const res = this.resolution, pi = this.piFloat;
-        for (let i = 0; i < res; i++) {
-            const u = i / res;
-            for (let j = 0; j < res; j++) {
-                const v = j / res;
-                let val = 0;
-                for (const m of this.modes) val += m.amplitude * this.fastSin(m.m * pi * u) * this.fastSin(m.n * pi * v) * Math.cos((m.m + m.n) * 0.5 * time + m.phase);
-                for (const vx of this.vortices) { const dx = u - vx.x, dy = v - vx.y; val += vx.strength / ((dx*dx + dy*dy + 0.01) * 100); }
-                this.field[i * res + j] = val;
-            }
-        }
-    },
-    render(ctx, x, y, size) {
-        const res = this.resolution, cell = size / res;
-        ctx.strokeStyle = '#0ff3'; ctx.lineWidth = 1; ctx.strokeRect(x - 1, y - 1, size + 2, size + 2);
-        for (let i = 0; i < res; i++) for (let j = 0; j < res; j++) {
-            const val = this.field[i * res + j], intensity = Math.min(255, Math.floor(Math.abs(val) * 200));
-            ctx.fillStyle = val < 0 ? `rgb(${Math.floor(intensity*0.3)},0,${intensity})` : `rgb(0,${Math.floor(intensity*0.8)},${intensity})`;
-            ctx.fillRect(x + j * cell, y + i * cell, cell + 0.5, cell + 0.5);
-        }
+  items: [], mode: 0, running: false,
+  add(i) {
+    if (this.items.length >= 29) return;
+    this.items.push(i); this.ui();
+    trace(`<span class="tr-q">+ S${i + 1} ${SUTRAS[i].la}</span>`);
+  },
+  clear() { this.items = []; this.ui(); trace('<span class="tr-q">queue cleared</span>'); },
+  ui() {
+    const d = document.getElementById('queue-display');
+    d.innerHTML = this.items.length === 0
+      ? '<em style="color:#555">Empty — tap sūtra cubes</em>'
+      : this.items.map((i, n) => `<div class="q-item">${n + 1}. S${i + 1} δ=${SUTRAS[i].delta} ${SUTRAS[i].la.slice(0, 15)}</div>`).join('');
+    const sd = this.items.reduce((s, i) => s + SUTRAS[i].delta, 0);
+    document.getElementById('delta-sum').innerHTML =
+      `Σδ = ${this.mode === 4 ? '−' : ''}${sd}` +
+      (this.items.length === 29 ? ' <span class="ok">(29th triangular ✓)</span>' : '');
+  },
+  async run() {
+    if (this.running || this.items.length === 0) return;
+    this.running = true;
+    document.getElementById('run-btn').disabled = true;
+    const M = MODES[this.mode];
+    SINGULAR = 0;
+    trace(`<span class="tr-m">▶ ${M.n} · N = ${this.items.length}</span>`);
+    await new Promise(r => setTimeout(r, 0));            // let the UI paint before the work
+    const t0 = performance.now();
+    try {
+      const fn = [Compose.isolated, Compose.series, Compose.parallel,
+                  Compose.concurrent, Compose.inverse, Compose.composite][this.mode];
+      STATE = fn.call(Compose, STATE, this.items);
+      const sd = this.items.reduce((s, i) => s + SUTRAS[i].delta, 0);
+      showDelta(this.mode === 4 ? -sd : sd);
+      for (const i of this.items) injectCymatic(i, SUTRAS[i].delta);
+      trace(`<span class="tr-ex">✓ ${M.n} in ${(performance.now() - t0).toFixed(1)}ms · R⁴ = ${Q.str(St.R4(STATE), 12)}</span>`);
+      if (SINGULAR) trace(`<span class="tr-e">⚠ ${SINGULAR} singular divisor(s) — component held fixed</span>`);
+    } catch (e) {
+      trace(`<span class="tr-e">✗ ${M.n}: ${e.message}</span>`);
     }
+    this.running = false;
+    document.getElementById('run-btn').disabled = false;
+    updateFields();
+  },
+  async cascade() {
+    this.items = Array.from({ length: 29 }, (_, i) => i);
+    this.ui();
+    trace('<span class="tr-m">॥ CASCADE 29 · Σδ = 435 ॥</span>');
+    await this.run();
+  }
 };
-
-function injectCymaticEnergy(idx, delta) {
-    CYMATIC.addMode((idx % 5) + 1, (idx % 7) + 1, delta / 100);
-    CYMATIC.addVortex(0.3 + (idx % 10) * 0.04, 0.3 + Math.floor(idx / 10) * 0.15, delta);
-    while (CYMATIC.modes.length > 8) CYMATIC.modes.shift();
-    while (CYMATIC.vortices.length > 6) CYMATIC.vortices.shift();
-    addTrace(`<span class="tr-field">CYMATIC: mode(${(idx % 5) + 1},${(idx % 7) + 1}) A=${(delta / 100).toFixed(3)}</span>`);
+function showDelta(d) {
+  const el = document.getElementById('delta-display');
+  el.textContent = d >= 0 ? `+${d}` : `${d}`;
+  el.style.color = d >= 0 ? '#0f0' : '#f55';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 620);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  4D TESSERACT — Hypercube foundation
-// ═══════════════════════════════════════════════════════════════════════════════
-const TESSERACT = {
-    vertices: [], edges: [], cells: [], projected: [],
-    init() {
-        for (let i = 0; i < 16; i++) this.vertices.push([(i&1)?1:-1, (i&2)?1:-1, (i&4)?1:-1, (i&8)?1:-1]);
-        for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) { let d = 0; for (let k = 0; k < 4; k++) if (this.vertices[i][k] !== this.vertices[j][k]) d++; if (d === 1) this.edges.push([i, j]); }
-        this.cells = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15],[0,1,2,3,8,9,10,11],[4,5,6,7,12,13,14,15],[0,1,4,5,8,9,12,13],[2,3,6,7,10,11,14,15],[0,2,4,6,8,10,12,14],[1,3,5,7,9,11,13,15]];
-        this.projected = new Array(16).fill(null).map(() => [0, 0, 0]);
-    },
-    rotate4D(angle, plane) {
-        const cosA = Exact.toFloat(TaylorTrig.cosExact(angle)), sinA = Exact.toFloat(TaylorTrig.sinExact(angle));
-        for (let i = 0; i < 16; i++) { const v = this.vertices[i].slice(), [a, b] = plane, t = v[a] * cosA - v[b] * sinA; v[b] = v[a] * sinA + v[b] * cosA; v[a] = t; this.vertices[i] = v; }
-    },
-    project() { const d = 3; for (let i = 0; i < 16; i++) { const v = this.vertices[i], s = d / (d - v[3]); this.projected[i] = [v[0] * s, v[1] * s, v[2] * s]; }},
-    toScreen(idx, cx, cy, scale) { const p = this.projected[idx]; return { x: cx + p[0] * scale, y: cy + p[1] * scale, z: p[2] }; }
+/* ══ 11 ══ CYMATIC FIELD — exact separable tables, zero Math trig ═══════ */
+const CY = {
+  res: 46, modes: [], vortices: [], field: null, tbl: new Map(),
+  init() { this.field = new Float32Array(this.res * this.res); this.modes = []; this.vortices = []; },
+  /* Sₘ[i] = sin(m·π·i/res) from exact rational-multiple-of-π Taylor,
+     converted to float ONCE at table build. ⟨FLOAT BOUNDARY⟩ */
+  table(m) {
+    const hit = this.tbl.get(m); if (hit) return hit;
+    const t = new Float32Array(this.res);
+    for (let i = 0; i < this.res; i++) t[i] = Q.f(Tr.sinPi(Q.make(BigInt(m * i), BigInt(this.res))));
+    this.tbl.set(m, t); return t;
+  },
+  addMode(m, n, amp) {
+    this.modes.push({ amp, tx: this.table(m), ty: this.table(n), w: m + n });
+    while (this.modes.length > 9) this.modes.shift();
+  },
+  addVortex(x, y, st) { this.vortices.push({ x, y, st }); while (this.vortices.length > 7) this.vortices.shift(); },
+  compute(frame) {
+    const res = this.res, f = this.field;
+    /* Temporal factor cos(π · ω·frame/480). The numerator is folded mod 960 —
+       cos(πt) has period 2 in t, so with denominator 480 this is an EXACT
+       identity, and it keeps the angle cache to 960 keys instead of growing
+       without bound and missing on every frame forever. */
+    const ct = this.modes.map(md => Q.f(Tr.cosPi(Q.make(BigInt((md.w * frame) % 960), 480n))));
+    f.fill(0);
+    for (let mi = 0; mi < this.modes.length; mi++) {
+      const md = this.modes[mi], a = md.amp * ct[mi];
+      if (a === 0) continue;
+      for (let i = 0; i < res; i++) {
+        const ai = a * md.tx[i];
+        if (ai === 0) continue;
+        const row = i * res;
+        for (let j = 0; j < res; j++) f[row + j] += ai * md.ty[j];
+      }
+    }
+    for (const v of this.vortices)
+      for (let i = 0; i < res; i++) {
+        const dy = i / res - v.y, row = i * res;
+        for (let j = 0; j < res; j++) { const dx = j / res - v.x; f[row + j] += v.st / ((dx * dx + dy * dy + .012) * 260); }
+      }
+  },
+  render(x, y, size) {
+    const res = this.res, cell = size / res;
+    ctx.strokeStyle = '#0ff3'; ctx.lineWidth = 1; ctx.strokeRect(x - 1, y - 1, size + 2, size + 2);
+    for (let i = 0; i < res; i++) for (let j = 0; j < res; j++) {
+      const v = this.field[i * res + j], k = Math.min(255, ((v < 0 ? -v : v) * 210) | 0);
+      ctx.fillStyle = v < 0 ? `rgb(${(k * .32) | 0},0,${k})` : `rgb(0,${(k * .82) | 0},${k})`;
+      ctx.fillRect(x + j * cell, y + i * cell, cell + .6, cell + .6);
+    }
+  }
+};
+function injectCymatic(i, d) {
+  CY.addMode((i % 5) + 1, (i % 7) + 1, d / 110);
+  CY.addVortex(.28 + (i % 10) * .045, .26 + ((i / 10) | 0) * .17, d / 22);
+  document.getElementById('f-cymodes').textContent = CY.modes.length;
+}
+
+/* ══ 12 ══ TESSERACT — exact rotation applied to a fixed base (no drift) ═ */
+const TS = {
+  base: [], edges: [], proj: [],
+  init() {
+    for (let i = 0; i < 16; i++) this.base.push([(i & 1) ? 1 : -1, (i & 2) ? 1 : -1, (i & 4) ? 1 : -1, (i & 8) ? 1 : -1]);
+    for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) {
+      let d = 0; for (let k = 0; k < 4; k++) if (this.base[i][k] !== this.base[j][k]) d++;
+      if (d === 1) this.edges.push([i, j]);
+    }
+    this.proj = Array.from({ length: 16 }, () => [0, 0, 0]);
+  },
+  /* θ = (frame mod P)/Q · π — an exact rational multiple of π. The rotation is
+     applied to the FIXED base each frame, so nothing accumulates and the
+     hypercube never deforms. Both angle caches saturate after one revolution. */
+  update(frame) {
+    const a1 = Q.make(BigInt(frame % 1440), 720n), a2 = Q.make(BigInt(frame % 1152), 576n);
+    const c1 = Q.f(Tr.cosPi(a1)), s1 = Q.f(Tr.sinPi(a1));
+    const c2 = Q.f(Tr.cosPi(a2)), s2 = Q.f(Tr.sinPi(a2));
+    for (let i = 0; i < 16; i++) {
+      const b = this.base[i];
+      const x = b[0] * c1 - b[3] * s1;            // xw-plane
+      let w = b[0] * s1 + b[3] * c1;
+      const y = b[1] * c2 - w * s2;               // yw-plane
+      w = b[1] * s2 + w * c2;
+      const k = 3 / (3 - w);
+      this.proj[i] = [x * k, y * k, b[2] * k];
+    }
+  },
+  screen(i, cx, cy, sc) { const p = this.proj[i]; return { x: cx + p[0] * sc, y: cy + p[1] * sc, z: p[2] }; }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  SUTRA CUBES — Geometric embodiment
-// ═══════════════════════════════════════════════════════════════════════════════
+/* ══ 13 ══ TORUS — exact vertex table ═══════════════════════════════════ */
+const TO = {
+  R: 116, r: 39, seg: 22, rings: 16, pts: [],
+  init() {
+    for (let i = 0; i <= this.rings; i++) {
+      const tt = Q.make(BigInt(2 * i), BigInt(this.rings));
+      const cT = Q.f(Tr.cosPi(tt)), sT = Q.f(Tr.sinPi(tt));
+      for (let j = 0; j <= this.seg; j++) {
+        const tp = Q.make(BigInt(2 * j), BigInt(this.seg));
+        const cP = Q.f(Tr.cosPi(tp)), sP = Q.f(Tr.sinPi(tp));
+        this.pts.push({ x: (this.R + this.r * cT) * cP, y: (this.R + this.r * cT) * sP, z: this.r * sT, ti: i, pj: j });
+      }
+    }
+  },
+  render(cx, cy, frame, sc) {
+    const b1 = Q.make(BigInt(frame % 2000), 1000n), b2 = Q.make(BigInt(frame % 3000), 1500n);
+    const c = Q.f(Tr.cosPi(b1)), s = Q.f(Tr.sinPi(b1));
+    const cx2 = Q.f(Tr.cosPi(b2)), sx2 = Q.f(Tr.sinPi(b2));
+    const gi = (Q.f(STATE.grvq) * 7) | 0, mi = (Q.f(STATE.mstvq) * 5) | 0, res = CY.res;
+    ctx.fillStyle = '#0ff4'; ctx.font = '9px Courier New'; ctx.textAlign = 'center';
+    ctx.fillText('⟨ TORUS MANIFOLD ⟩', cx, cy - this.R * sc - 16);
+    const sorted = this.pts.slice().sort((p, q) => p.z - q.z);
+    for (const p of sorted) {
+      const x = p.x * c - p.z * s, z = p.x * s + p.z * c;
+      const y2 = p.y * cx2 - z * sx2, z2 = p.y * sx2 + z * cx2;
+      const k = 520 / (520 + z2), X = cx + x * k * sc, Y = cy + y2 * k * sc;
+      const fi = ((((p.ti * 3 + gi) % res) + res) % res) * res + ((((p.pj * 2 + mi) % res) + res) % res);
+      const fv = CY.field ? CY.field[fi] : 0;
+      const bi = Math.min(175, Math.max(0, ((fv + 1) * 62) | 0));
+      const a = .18 + (z2 + this.R) / (2 * this.R) * .58;
+      ctx.fillStyle = `rgba(0,${Math.min(255, bi + 80)},${Math.min(255, bi + 120)},${a})`;
+      ctx.beginPath(); ctx.arc(X, Y, Math.max(1, 2 * k), 0, K.PI_F * 2); ctx.fill();
+    }
+  }
+};
+
+/* ══ 14 ══ SŪTRA CUBES ═════════════════════════════════════════════════ */
 const cubes = [];
-class SutraCube {
-    constructor(idx, cell) {
-        this.idx = idx; this.sutra = SUTRAS[idx]; this.cellVertices = cell;
-        this.active = false; this.energy = 0; this.hovered = false;
-        this.faceColors = ['#0f0', '#ff0', '#0ff', '#f0f', '#f50', '#fff'];
-        const col = idx % 6, row = Math.floor(idx / 6);
-        this.baseX = col * 90 + 60; this.baseY = row * 85 + 130;
-    }
-    getCenter() { return { x: this.baseX, y: this.baseY }; }
-    render(ctx, time) {
-        const c = this.getCenter(), baseSize = 32, size = baseSize + this.energy * 8;
-        const float = Math.sin(time * 2 + this.idx * 0.5) * 2, cy = c.y + float;
-        ctx.save(); ctx.translate(c.x, cy);
-        if (this.active || this.hovered) { ctx.shadowColor = this.active ? '#0f0' : '#0f08'; ctx.shadowBlur = this.active ? 20 : 10; }
-        const off = size * 0.25;
-        ctx.fillStyle = this.active ? '#041' : '#012'; ctx.strokeStyle = this.faceColors[2] + '60'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.rect(-size/2 + off, -size/2 - off, size, size); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = this.faceColors[4] + '15'; ctx.strokeStyle = this.faceColors[4] + '40';
-        ctx.beginPath(); ctx.moveTo(-size/2, -size/2); ctx.lineTo(-size/2 + off, -size/2 - off); ctx.lineTo(-size/2 + off, size/2 - off); ctx.lineTo(-size/2, size/2); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = this.faceColors[5] + '10'; ctx.strokeStyle = this.faceColors[5] + '30';
-        ctx.beginPath(); ctx.moveTo(-size/2, -size/2); ctx.lineTo(-size/2 + off, -size/2 - off); ctx.lineTo(size/2 + off, -size/2 - off); ctx.lineTo(size/2, -size/2); ctx.closePath(); ctx.fill(); ctx.stroke();
-        const fg = ctx.createLinearGradient(0, -size/2, 0, size/2);
-        fg.addColorStop(0, this.active ? '#062' : '#023'); fg.addColorStop(1, this.active ? '#041' : '#012');
-        ctx.fillStyle = fg; ctx.strokeStyle = this.active ? '#0f0' : (this.hovered ? '#0f0' : '#0a0'); ctx.lineWidth = this.active ? 2 : 1;
-        ctx.beginPath(); ctx.rect(-size/2, -size/2, size, size); ctx.fill(); ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = this.active ? '#fff' : '#0f0'; ctx.font = 'bold 13px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(`S${this.idx + 1}`, 0, -4);
-        ctx.fillStyle = '#fa0'; ctx.font = '9px Courier New'; ctx.fillText(`δ${this.sutra.delta}`, 0, 10);
-        ctx.restore(); this.energy *= 0.92;
-    }
-    hit(mx, my) { const c = this.getCenter(); return mx > c.x - 38 && mx < c.x + 38 && my > c.y - 38 && my < c.y + 38; }
-    activate() { this.active = true; this.energy = 1; QUEUE.add(this.idx); setTimeout(() => this.active = false, 300); }
+class Cube {
+  constructor(i) {
+    this.i = i; this.s = SUTRAS[i]; this.on = false; this.e = 0; this.hov = false;
+    this.x = (i % 6) * 88 + 56; this.y = ((i / 6) | 0) * 82 + 162;
+    this.prim = i < 16;
+  }
+  draw(frame) {
+    const bob = Q.f(Tr.sinPi(Q.make(BigInt((frame * 2 + this.i * 37) % 720), 360n))) * 2.2;
+    const sz = 30 + this.e * 9, cy = this.y + bob, o = sz * .26;
+    ctx.save(); ctx.translate(this.x, cy);
+    if (this.on || this.hov) { ctx.shadowColor = this.on ? '#0f0' : '#0f08'; ctx.shadowBlur = this.on ? 18 : 9; }
+    ctx.fillStyle = this.on ? '#041' : '#012'; ctx.strokeStyle = '#0ff6'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(-sz / 2 + o, -sz / 2 - o, sz, sz); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f5015'; ctx.strokeStyle = '#f5040';
+    ctx.beginPath(); ctx.moveTo(-sz / 2, -sz / 2); ctx.lineTo(-sz / 2 + o, -sz / 2 - o);
+    ctx.lineTo(-sz / 2 + o, sz / 2 - o); ctx.lineTo(-sz / 2, sz / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff1'; ctx.strokeStyle = '#fff3';
+    ctx.beginPath(); ctx.moveTo(-sz / 2, -sz / 2); ctx.lineTo(-sz / 2 + o, -sz / 2 - o);
+    ctx.lineTo(sz / 2 + o, -sz / 2 - o); ctx.lineTo(sz / 2, -sz / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    const g = ctx.createLinearGradient(0, -sz / 2, 0, sz / 2);
+    g.addColorStop(0, this.on ? '#072' : (this.prim ? '#023' : '#032'));
+    g.addColorStop(1, this.on ? '#041' : '#012');
+    ctx.fillStyle = g;
+    ctx.strokeStyle = this.on ? '#0f0' : (this.hov ? '#0f0' : (this.prim ? '#0a0' : '#aa0'));
+    ctx.lineWidth = this.on ? 2 : 1;
+    ctx.beginPath(); ctx.rect(-sz / 2, -sz / 2, sz, sz); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = this.on ? '#fff' : (this.prim ? '#0f0' : '#dd0');
+    ctx.font = 'bold 12px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`S${this.i + 1}`, 0, -4);
+    ctx.fillStyle = '#fa0'; ctx.font = '8px Courier New'; ctx.fillText(`δ${this.s.delta}`, 0, 9);
+    ctx.restore();
+    this.e *= .9;
+  }
+  hit(mx, my) { return mx > this.x - 34 && mx < this.x + 34 && my > this.y - 34 && my < this.y + 34; }
+  tap() { this.on = true; this.e = 1; QUEUE.add(this.i); setTimeout(() => { this.on = false; }, 280); }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  TORUS GEOMETRY — Toroidal surface
-// ═══════════════════════════════════════════════════════════════════════════════
-const TORUS = {
-    R: 120, r: 40, segments: 24, rings: 18, points: [],
-    init() {
-        const pi = TaylorTrig.computePiExact(), twoPi = Exact.mul(Exact.rat(2n), pi);
-        for (let i = 0; i <= this.rings; i++) {
-            const thetaR = Exact.mul(twoPi, Exact.rat(BigInt(i), BigInt(this.rings)));
-            const cosT = Exact.toFloat(TaylorTrig.cosExact(thetaR)), sinT = Exact.toFloat(TaylorTrig.sinExact(thetaR)), theta = Exact.toFloat(thetaR);
-            for (let j = 0; j <= this.segments; j++) {
-                const phiR = Exact.mul(twoPi, Exact.rat(BigInt(j), BigInt(this.segments)));
-                const cosP = Exact.toFloat(TaylorTrig.cosExact(phiR)), sinP = Exact.toFloat(TaylorTrig.sinExact(phiR)), phi = Exact.toFloat(phiR);
-                this.points.push({ x: (this.R + this.r * cosT) * cosP, y: (this.R + this.r * cosT) * sinP, z: this.r * sinT, theta, phi });
-            }
-        }
-    },
-    render(ctx, cx, cy, time, scale = 1) {
-        const sorted = this.points.slice().sort((a, b) => a.z - b.z);
-        const rotY = time * 0.3, cosY = Math.cos(rotY), sinY = Math.sin(rotY);
-        const rotX = time * 0.2, cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-        ctx.fillStyle = '#0ff4'; ctx.font = '10px Courier New'; ctx.textAlign = 'center'; ctx.fillText('⟨ TORUS MANIFOLD ⟩', cx, cy - this.R * scale - 20);
-        for (const p of sorted) {
-            let x = p.x * cosY - p.z * sinY, z = p.x * sinY + p.z * cosY, y = p.y;
-            const y2 = y * cosX - z * sinX, z2 = y * sinX + z * cosX;
-            const d = 500, s = d / (d + z2), sx = cx + x * s * scale, sy = cy + y2 * s * scale;
-            const fv = this.sampleField(p.theta, p.phi), bi = Math.floor((fv + 1) * 60), df = (z2 + this.R) / (2 * this.R), alpha = 0.2 + df * 0.6;
-            ctx.fillStyle = `rgba(0, ${Math.min(255, bi + 80)}, ${Math.min(255, bi + 120)}, ${alpha})`;
-            ctx.beginPath(); ctx.arc(sx, sy, Math.max(1, 2 * s), 0, Math.PI * 2); ctx.fill();
-        }
-    },
-    sampleField(theta, phi) { return Math.sin(theta * 3 + Exact.toFloat(R4.grvq)) * Math.cos(phi * 2 + Exact.toFloat(R4.mstvq)); }
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  UI HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-function updateFieldDisplay() {
-    document.getElementById('f-grvq').textContent = Exact.toFloat(R4.grvq).toFixed(4);
-    document.getElementById('f-mstvq').textContent = Exact.toFloat(R4.mstvq).toFixed(4);
-    document.getElementById('f-tgcr').textContent = Exact.toFloat(R4.tgcr).toFixed(4);
-    document.getElementById('f-zpe').textContent = Exact.toFloat(R4.zpe).toFixed(4);
-    document.getElementById('f-lambda').textContent = Exact.str(R4.lambda[0]);
-    document.getElementById('f-cymodes').textContent = CYMATIC.modes.length;
-    document.getElementById('f-vortex').textContent = CYMATIC.vortices.length;
+/* ══ 15 ══ UI ══════════════════════════════════════════════════════════ */
+function trace(msg) {
+  const el = document.getElementById('trace'), d = document.createElement('div');
+  d.className = 'tr'; d.innerHTML = msg; el.appendChild(d); el.scrollTop = el.scrollHeight;
+  while (el.children.length > 46) el.removeChild(el.firstChild);
+}
+function updateFields() {
+  for (let i = 0; i < 4; i++) document.getElementById('f-l' + i).textContent = Q.str(STATE.l[i], 20);
+  for (const f of FIELDS) document.getElementById('f-' + f).textContent = Q.str(STATE[f], 20);
+  document.getElementById('f-r4').textContent = Q.str(St.R4(STATE), 18);
+  document.getElementById('f-red').textContent = STATS.reductions;
+  document.getElementById('f-redt').textContent = STATS.trig;
+}
+function updateFormula() {
+  const M = MODES[QUEUE.mode];
+  document.getElementById('formula').innerHTML =
+    `<span class="fl">${M.n}</span><span class="fx">${M.f}</span><br><span class="fx">${M.x}</span>` +
+    `<span class="fn">${M.note}</span>`;
 }
 function updateHUD(fps) {
-    const hud = document.getElementById('hud'), r4v = Exact.toFloat(R4.compute()).toFixed(6);
-    hud.innerHTML = `<div style="color:#0f0;font-weight:bold;margin-bottom:4px">॥ R4 वैदिक v12.3 ॥</div><div style="color:#0a0">${fps.toFixed(0)} FPS | ULTRATHINK</div><div style="margin-top:6px;border-top:1px solid #0f03;padding-top:4px"><span style="color:#0aa">λ₀:</span> <span style="color:#ff0">${Exact.str(R4.lambda[0])}</span></div><div><span style="color:#0aa">R4:</span> <span style="color:#0ff">${r4v}</span></div><div><span style="color:#0aa">Σδ:</span> <span style="color:#fa0;font-weight:bold">${R4.deltaSum}</span></div>`;
-}
-function addTrace(msg) { const el = document.getElementById('trace'), div = document.createElement('div'); div.className = 'tr'; div.innerHTML = msg; el.appendChild(div); el.scrollTop = el.scrollHeight; while (el.children.length > 40) el.removeChild(el.firstChild); }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  MAIN RENDER LOOP
-// ═══════════════════════════════════════════════════════════════════════════════
-let lastTime = 0, frameCount = 0, fps = 60, mouseX = 0, mouseY = 0;
-function render(timestamp) {
-    try {
-        const dt = (timestamp - lastTime) / 1000; lastTime = timestamp; frameCount++;
-        if (frameCount % 30 === 0 && dt > 0) { fps = 1 / dt; updateHUD(fps); }
-        const time = timestamp * 0.001;
-        const bgGrad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H));
-        bgGrad.addColorStop(0, '#0a0a18'); bgGrad.addColorStop(1, '#000005');
-        ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = '#0f01'; ctx.lineWidth = 1;
-        for (let x = 0; x < W; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-        for (let y = 0; y < H; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-        TESSERACT.rotate4D(Exact.rat(1n, 1000n), [0, 3]); TESSERACT.rotate4D(Exact.rat(1n, 1200n), [1, 3]); TESSERACT.project();
-        ctx.strokeStyle = '#0a06'; ctx.lineWidth = 1;
-        const tcx = W - 160, tcy = 180, tscale = 35;
-        for (const [i, j] of TESSERACT.edges) { const p1 = TESSERACT.toScreen(i, tcx, tcy, tscale), p2 = TESSERACT.toScreen(j, tcx, tcy, tscale); ctx.strokeStyle = `rgba(0, 255, 100, ${0.3 + ((p1.z + p2.z) / 2 + 2) / 4 * 0.5})`; ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
-        TORUS.render(ctx, W * 0.65, H * 0.55, time, 0.7);
-        if (frameCount % 6 === 0) CYMATIC.computeField(time);
-        const cymaticSize = Math.min(220, H - 240);
-        CYMATIC.render(ctx, 360, H - cymaticSize - 20, cymaticSize);
-        ctx.fillStyle = '#0ff6'; ctx.font = '10px Courier New'; ctx.fillText('⟨ CYMATIC FIELD ⟩', 360, H - cymaticSize - 28);
-        for (const cube of cubes) cube.hovered = cube.hit(mouseX, mouseY);
-        for (const cube of cubes) cube.render(ctx, time);
-        if (frameCount % 20 === 0) updateFieldDisplay();
-    } catch (e) { console.error('Render error:', e); }
-    requestAnimationFrame(render);
+  document.getElementById('hud').innerHTML =
+    `<div style="color:#0f0;font-weight:bold;margin-bottom:3px">॥ R4 वैदिक HYPERCUBE v4 ॥</div>` +
+    `<div style="color:#0a0">${fps.toFixed(0)} FPS · ℚ-EXACT · ${MODES[QUEUE.mode].n}</div>` +
+    `<div style="margin-top:5px;border-top:1px solid #0f03;padding-top:3px">` +
+    `<span style="color:#0aa">λ₀ =</span> <span style="color:#ff0">${Q.str(STATE.l[0], 24)}</span></div>` +
+    `<div><span style="color:#0aa">R⁴ =</span> <span style="color:#0ff">${Q.str(St.R4(STATE), 18)}</span></div>` +
+    `<div><span style="color:#0aa">π &nbsp;=</span> <span style="color:#8f8">${K.PI_F.toFixed(12)}…</span></div>` +
+    `<div><span style="color:#0aa">φ &nbsp;=</span> <span style="color:#8f8">${Q.f(K.PHI).toFixed(12)}…</span></div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  EVENT HANDLERS
-// ═══════════════════════════════════════════════════════════════════════════════
-canvas.addEventListener('click', (e) => { const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top; for (const cube of cubes) if (cube.hit(mx, my)) { cube.activate(); break; }});
-canvas.addEventListener('mousemove', (e) => { const rect = canvas.getBoundingClientRect(); mouseX = e.clientX - rect.left; mouseY = e.clientY - rect.top; let over = false; for (const cube of cubes) if (cube.hit(mouseX, mouseY)) { over = true; break; } canvas.style.cursor = over ? 'pointer' : 'default'; });
-document.getElementById('run-btn').addEventListener('click', () => QUEUE.run());
-document.getElementById('clear-btn').addEventListener('click', () => QUEUE.clear());
-document.getElementById('cascade-btn').addEventListener('click', () => QUEUE.cascade29());
-document.querySelectorAll('input[name="cmode"]').forEach(input => { input.addEventListener('change', (e) => { QUEUE.mode = parseInt(e.target.value); addTrace(`<span class="tr-mode">MODE: ${MODES[QUEUE.mode]}</span>`); }); });
+/* ══ 16 ══ RENDER LOOP ═════════════════════════════════════════════════ */
+let last = 0, frame = 0, fps = 60, mx = 0, my = 0;
+function render(ts) {
+  try {
+    const dt = (ts - last) / 1000; last = ts; frame++;
+    if (frame % 30 === 0 && dt > 0) { fps = 1 / dt; updateHUD(fps); }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  INITIALIZATION
-// ═══════════════════════════════════════════════════════════════════════════════
+    const bg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H));
+    bg.addColorStop(0, '#0a0a18'); bg.addColorStop(1, '#000004');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#0f01'; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 52) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 52) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    TS.update(frame);
+    const tcx = W - 168, tcy = 196, tsc = 33;
+    for (const [i, j] of TS.edges) {
+      const a = TS.screen(i, tcx, tcy, tsc), b = TS.screen(j, tcx, tcy, tsc);
+      ctx.strokeStyle = `rgba(0,255,110,${(.26 + ((a.z + b.z) / 2 + 2) / 4 * .5).toFixed(3)})`;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    ctx.fillStyle = '#0f06'; ctx.font = '9px Courier New'; ctx.textAlign = 'center';
+    ctx.fillText('⟨ TESSERACT · 16v 32e 8c ⟩', tcx, tcy - 120);
+
+    TO.render(W * .62, H * .52, frame, .66);
+
+    if (frame % 5 === 0) CY.compute(frame);
+    const cs = Math.min(204, H - 258);
+    if (cs > 40) {
+      CY.render(352, H - cs - 18, cs);
+      ctx.fillStyle = '#0ff6'; ctx.font = '9px Courier New'; ctx.textAlign = 'left';
+      ctx.fillText('⟨ CYMATIC FIELD — exact Taylor tables ⟩', 352, H - cs - 26);
+    }
+
+    for (const c of cubes) c.hov = c.hit(mx, my);
+    for (const c of cubes) c.draw(frame);
+    if (frame % 24 === 0) updateFields();
+  } catch (e) { console.error('render:', e); }
+  requestAnimationFrame(render);
+}
+
+/* ══ 17 ══ EVENTS + INIT ═══════════════════════════════════════════════ */
+canvas.addEventListener('click', e => {
+  const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  for (const c of cubes) if (c.hit(x, y)) { c.tap(); break; }
+});
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect(); mx = e.clientX - r.left; my = e.clientY - r.top;
+  let over = false; for (const c of cubes) if (c.hit(mx, my)) { over = true; break; }
+  canvas.style.cursor = over ? 'pointer' : 'default';
+});
+document.getElementById('run-btn').onclick = () => QUEUE.run();
+document.getElementById('clear-btn').onclick = () => QUEUE.clear();
+document.getElementById('cascade-btn').onclick = () => QUEUE.cascade();
+document.getElementById('verify-btn').onclick = () => verifyInverses();
+document.getElementById('reset-btn').onclick = () => {
+  STATE = St.init(); CY.init(); STATS.reductions = 0; Rand.seed(0xACE1C0DEn);
+  CY.addMode(2, 1, .38); CY.addMode(1, 2, .38); CY.addMode(3, 2, .2);
+  updateFields(); trace('<span class="tr-m">↺ reset to S₀ = (1,1,1,1 ; 0,0,0,0)</span>');
+};
+document.querySelectorAll('input[name="cmode"]').forEach(inp => inp.addEventListener('change', e => {
+  QUEUE.mode = parseInt(e.target.value, 10); updateFormula(); QUEUE.ui();
+  trace(`<span class="tr-m">MODE → ${MODES[QUEUE.mode].n}</span>`);
+}));
+window.addEventListener('resize', resize);
+
 function init() {
-    try {
-        Constants.init(); TESSERACT.init(); TORUS.init(); CYMATIC.init();
-        CYMATIC.addMode(2, 1, 0.4); CYMATIC.addMode(1, 2, 0.4); CYMATIC.addMode(3, 1, 0.2);
-        R4.compute();
-        for (let i = 0; i < 29; i++) cubes.push(new SutraCube(i, TESSERACT.cells[i % 8]));
-        QUEUE.updateUI(); updateFieldDisplay();
-        addTrace('॥ R4 वैदिक HYPERCUBE v12.3 ॥');
-        addTrace('<span class="tr-exact">ULTRATHINK EXACT MODE</span>');
-        addTrace('<span class="tr-exact">BigInt rationals | Taylor trig</span>');
-        addTrace('<span class="tr-exact">Newton sqrt | Machin π | LFSR</span>');
-        addTrace('Tap sūtra → queue | CASCADE 29 → Σδ=435');
-    } catch (e) { console.error('Init error:', e); addTrace(`<span style="color:red">ERROR: ${e.message}</span>`); }
+  resize();
+  const t0 = performance.now();
+  K.init();
+  STATE = St.init();
+  TS.init(); TO.init(); CY.init();
+  CY.addMode(2, 1, .38); CY.addMode(1, 2, .38); CY.addMode(3, 2, .2);
+  for (let i = 0; i < 29; i++) cubes.push(new Cube(i));
+  QUEUE.ui(); updateFormula(); updateFields(); updateHUD(60);
+  trace('॥ R4 वैदिक TOROIDAL HYPERCUBE v4 ॥');
+  trace(`<span class="tr-ex">ℚ exact · π Machin = ${K.PI_F.toFixed(10)}… · φ Newton</span>`);
+  trace('<span class="tr-ex">trig = octant-reduced Taylor on rational·π</span>');
+  trace('<span class="tr-ex">29 sūtras, each carrying an exact T⁻¹</span>');
+  trace(`<span class="tr-ex">constants built in ${(performance.now() - t0).toFixed(1)}ms</span>`);
+  const v = verifyInverses();
+  trace(v.fail === 0
+    ? '<span class="tr-ex">⊨ inverse algebra sound</span>'
+    : `<span class="tr-e">⊨ ${v.fail} inverse failure(s)</span>`);
+  trace('Tap cubes → queue · choose a mode · RUN');
+  requestAnimationFrame(render);
 }
-window.addEventListener('resize', resize); resize(); init(); updateHUD(60); requestAnimationFrame(render);
+init();
 </script>
 </body>
 </html>
