@@ -61,6 +61,13 @@ body{background:#08080f;overflow:hidden;font-family:'Courier New',monospace}
 #delta-display.show{opacity:1}
 #sutra-label{position:fixed;top:128px;left:10px;color:#0f08;font-size:9px;
     text-transform:uppercase;letter-spacing:2px;pointer-events:none}
+#sutra-detail{position:fixed;top:144px;left:10px;width:322px;min-height:52px;
+    background:rgba(0,14,6,.9);border:1px solid #0f03;border-radius:4px;padding:6px 8px;
+    font-size:10px;color:#0c8;z-index:99;pointer-events:none;line-height:1.5}
+#sutra-detail .dv{color:#ff0;font-weight:bold}
+#sutra-detail .dsk{color:#fa0;font-size:12px}
+#sutra-detail .dc{color:#0ff;font-size:8.5px;letter-spacing:1px}
+#sutra-detail .dm{color:#8a8;font-size:9px}
 .ok{color:#0f0}.bad{color:#f55}
 @media(max-width:1000px){#queue-panel,#field-panel{width:218px;font-size:9.5px;padding:7px}
     #trace{width:250px;font-size:8.5px}}
@@ -107,13 +114,14 @@ body{background:#08080f;overflow:hidden;font-family:'Courier New',monospace}
   <div style="margin-top:5px;border-top:1px solid #033;padding-top:4px">
     <div class="field-row"><span>R⁴ = Π λₖ⁴/(1+λₖ⁴)</span><span class="field-val" id="f-r4">—</span></div>
     <div class="field-row"><span>cymatic modes</span><span class="field-val" id="f-cymodes">0</span></div>
-    <div class="field-row"><span>ℚ reductions (state)</span><span class="field-val" id="f-red">0</span></div>
-    <div class="field-row"><span>ℚ reductions (trig)</span><span class="field-val" id="f-redt">0</span></div>
+    <div class="field-row"><span>max denom (digits)</span><span class="field-val" id="f-red">1</span></div>
+    <div class="field-row"><span>ℚ approx (trig only)</span><span class="field-val" id="f-redt">0</span></div>
   </div>
 </div>
 
 <div id="delta-display"></div>
 <div id="sutra-label">⟨ 29 SŪTRA CUBES — 16 MUKHYA + 13 UPA ⟩</div>
+<div id="sutra-detail"></div>
 
 <script>
 'use strict';
@@ -162,8 +170,18 @@ function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeig
 
 /* ══ 1 ══ Q — EXACT RATIONAL ARITHMETIC OVER BigInt ═════════════════════════ */
 const STATS = { reductions: 0, trig: 0 };
-const MAXDEN = 10n ** 26n;          // ℚ commit bound for STATE ≈ 26 significant digits
 const WORKDEN = 10n ** 32n;         // ℚ working precision inside transcendental series
+/* Denominator ceiling for the LIVE state, in decimal digits.
+   The sūtra map is quadratic (Yāvadūnam's d², Ūrdhva's crosswise product,
+   Guṇaka's λλ terms), so iterating it SQUARES the denominator each pass:
+   1 → 677 → 16 921 digits, costing 6 ms then 4 700 ms then hours. That growth
+   is a real property of evaluating a quadratic map exactly, not a defect.
+   Protocol §12 records that v20 compresses here and thereby "loses exact
+   precision", while the canonical standalone modules do not compress at all.
+   This engine does not compress. It refuses instead — loudly, with the number
+   that caused the refusal — so no result is ever silently approximated.
+   RESET returns to S₀. */
+const DEN_LIMIT = 500;
 
 const Q = {
   gcd(a, b) { if (a < 0n) a = -a; if (b < 0n) b = -b; while (b) { const t = b; b = a % b; a = t; } return a; },
@@ -213,8 +231,8 @@ const Q = {
       p0 = p1; q0 = q1; p1 = p2; q1 = q2;
       const rem = N - a * D; N = D; D = rem;
     }
-    if (q1 === 0n) return r;
-    const k = (maxD - q0) / q1;
+    const k = (maxD - q0) / q1;             // q1 ≥ 1: the first iteration always commits
+
     const cA = [p0 + k * p1, q0 + k * q1], cB = [p1, q1];
     let eA = n * cA[1] - cA[0] * d; if (eA < 0n) eA = -eA;
     let eB = n * cB[1] - cB[0] * d; if (eB < 0n) eB = -eB;
@@ -236,31 +254,54 @@ const Q = {
   }
 };
 
-/* ══ 2 ══ EXACT INTEGER SQRT + RATIONAL NEWTON–RAPHSON ═════════════════════ */
-function isqrt(n) {                                    // exact ⌊√n⌋, BigInt only
-  if (n < 0n) throw new Error('isqrt: negative');
-  if (n < 2n) return n;
-  let x = 1n << ((BigInt(n.toString(2).length) + 1n) >> 1n);
-  for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; }
-}
-const Sqrt = {
-  cache: new Map(), ITER: 40,
-  of(S) {                                              // √(p/q) = √(pq)/q, refined in ℚ
-    if (Q.sign(S) < 0) throw new Error('sqrt: negative radicand');
-    if (Q.isZero(S)) return Q.ZERO;
-    const key = `${S[0]}/${S[1]}`;
-    const hit = this.cache.get(key); if (hit) return hit;
-    let x = Q.make(isqrt(S[0] * S[1]) + 1n, S[1]);     // exact integer seed ≥ √S
-    for (let i = 0; i < this.ITER; i++) {
-      const nx = Q.limitDen(Q.div(Q.add(x, Q.div(S, x)), Q.TWO), MAXDEN);
-      if (Q.eq(nx, x)) break;
-      x = nx;
-    }
-    if (this.cache.size > 600) this.cache.clear();
-    this.cache.set(key, x);
-    return x;
-  }
-};
+/* ══ 2 ══ CANONICAL SŪTRA COEFFICIENTS — Vedic protocol §4.3 ══════════════
+   Each sūtra carries one exact rational. These are NOT adjustable parameters
+   and NOT float literals converted after the fact: every one is written
+   directly as a BigInt ratio, so no IEEE-754 representation of them ever
+   exists in the arithmetic path (protocol §10.1.4).
+
+   Note φ is the Fibonacci convergent F₅₀/F₄₉, not a Newton-refined √5. That
+   is what makes the whole sūtra algebra closed in ℚ: with no irrational
+   constant anywhere, every operator below inverts exactly, and the previous
+   rational-approximation square root is gone rather than merely bounded
+   (protocol §10.2.5 — never approximate where exact computation is possible). */
+const SK = [
+  Q.make(12586269025n, 7778742049n), // S1  φ      F₅₀/F₄₉
+  Q.make(    2718282n,    1000000n), // S2  e
+  Q.make(        355n,        113n), // S3  π      Milü
+  Q.make(        577n,        408n), // S4  √2     Pell convergent
+  Q.make(    5772157n,   10000000n), // S5  γ_EM   Euler–Mascheroni
+  Q.make(    2302585n,    1000000n), // S6  ln 10
+  Q.make(         97n,         56n), // S7  √3
+  Q.make(    2236068n,    1000000n), // S8  √5
+  Q.make(    2665144n,    1000000n), // S9  δ_s    silver ratio
+  Q.make(    1202057n,    1000000n), // S10 ζ(3)   Apéry
+  Q.make(    9159656n,   10000000n), // S11 Catalan
+  Q.make(   14513692n,   10000000n), // S12 Backhouse
+  Q.make(    6623490n,   10000000n), // S13 Laplace limit
+  Q.make(   13247180n,   10000000n), // S14 plastic number
+  Q.make(   25029079n,   10000000n), // S15 Feigenbaum α
+  Q.make(   46692016n,   10000000n), // S16 Feigenbaum δ
+  Q.make(    3729671n,   10000000n), // S17 K_CF
+  Q.make(    4530103n,   10000000n), // S18 K_xx
+  Q.make(    5671433n,   10000000n), // S19 Ω      omega constant
+  Q.make(    6243300n,   10000000n), // S20 Li₂(½)
+  Q.make(    6931472n,   10000000n), // S21 ln 2
+  Q.make(    7651977n,   10000000n), // S22 ζ(2)/2
+  Q.make(    8241323n,   10000000n), // S23 K_π/2
+  Q.make(    8765482n,   10000000n), // S24 Dottie number
+  Q.make(    9159656n,   10000000n), // S25 Catalan₂
+  Q.make(    9560319n,   10000000n), // S26 dilogarithm
+  Q.make(    9829780n,   10000000n), // S27 K_∏
+  Q.make(    9961578n,   10000000n), // S28 ≈ 1 − 1/256
+  Q.make(    9990234n,   10000000n)  // S29 ≈ 1 − 1/1024
+];
+/* §4.1 — the seven categories classify operators by STRUCTURE.
+   Every sūtra below is built from ℚ-invertible primitives only:
+   scale (λ ← cλ), shear (λᵢ ← λᵢ + c·λⱼ, j≠i), complement (λ ← B − λ),
+   permutation, and 2×2 mixes with non-vanishing determinant. */
+const CAT = { S:'MULTIPLICATIVE', R:'REFLECTIVE', C:'CONVOLUTIVE', D:'DIVISIVE',
+              F:'DIFFUSIVE', P:'PERMUTATIVE', M:'MODULAR' };
 
 /* ══ 3 ══ π (MACHIN) AND EXACT TRIG ON RATIONAL MULTIPLES OF π ════════════ */
 const Tr = {
@@ -358,13 +399,8 @@ const Rand = {
 
 /* ══ 5 ══ EXACT CONSTANTS ═════════════════════════════════════════════════ */
 const K = {
-  PHI: null, INV_PHI: null, PI_F: 0,
-  init() {
-    Tr.initPi();
-    K.PI_F = Q.f(Tr.PI);
-    K.PHI = Q.limitDen(Q.div(Q.add(Q.ONE, Sqrt.of(Q.int(5))), Q.TWO), 10n ** 30n);
-    K.INV_PHI = Q.div(Q.ONE, K.PHI);
-  }
+  PI_F: 0,
+  init() { Tr.initPi(); K.PI_F = Q.f(Tr.PI); }
 };
 
 /* ══ 6 ══ STATE ALGEBRA — S ∈ ℚ⁸, immutable ══════════════════════════════ */
@@ -388,179 +424,234 @@ const St = {
     return r;
   },
   mean(list) {
-    if (list.length === 0) return this.init();
+    if (list.length === 0) throw new Error('St.mean: empty branch set');
     let acc = list[0];
     for (let i = 1; i < list.length; i++) acc = this.add(acc, list[i]);
-    return this.reduce(this.scale(acc, Q.make(1n, BigInt(list.length))));
+    return this.scale(acc, Q.make(1n, BigInt(list.length)));
   },
-  reduce(s) {
-    const r = { l: s.l.map(v => Q.limitDen(v, MAXDEN)) };
-    for (const f of FIELDS) r[f] = Q.limitDen(s[f], MAXDEN);
-    return r;
+  /* Largest denominator carried by the state, in decimal digits. With no
+     compression anywhere in the state path this is the honest cost metric:
+     it shows exactly how much exactness is costing, instead of hiding it. */
+  maxDenDigits(s) {
+    let m = 1n;
+    for (const v of s.l) if (v[1] > m) m = v[1];
+    for (const f of FIELDS) if (s[f][1] > m) m = s[f][1];
+    return m.toString().length;
+  },
+  /* Precondition, not a fallback: nothing is degraded and no default is
+     returned — the operation is declined and the cause is named. */
+  guard(s) {
+    const d = this.maxDenDigits(s);
+    if (d > DEN_LIMIT) throw new Error(
+      `ℚ denominator is ${d} digits (ceiling ${DEN_LIMIT}). The state is exact and ` +
+      `intact; it is simply too large to evolve further in an interactive loop. ` +
+      `No compression was applied — press RESET to return to S₀.`);
+    return s;
   },
   dist(a, b) {                               // ‖a − b‖₁ in ℚ — the verification residual
     let acc = Q.ZERO;
     for (let i = 0; i < 4; i++) acc = Q.add(acc, Q.abs(Q.sub(a.l[i], b.l[i])));
     for (const f of FIELDS) acc = Q.add(acc, Q.abs(Q.sub(a[f], b[f])));
-    return Q.limitDen(acc, MAXDEN);
+    return acc;
   },
   R4(s) {                                    // R⁴(S) = Π λₖ⁴/(1 + λₖ⁴)
     let p = Q.ONE;
     for (let i = 0; i < 4; i++) {
-      const l4 = Q.pow(s.l[i], 4n), den = Q.add(Q.ONE, l4);
-      p = Q.isZero(den) ? Q.ZERO : Q.mul(p, Q.div(l4, den));
+      const l4 = Q.pow(s.l[i], 4n);          // λ⁴ ≥ 0 ⇒ 1 + λ⁴ ≥ 1, never zero
+      p = Q.mul(p, Q.div(l4, Q.add(Q.ONE, l4)));
     }
-    return Q.limitDen(p, MAXDEN);
+    return p;
   }
 };
 
-/* Guarded division: a vanishing divisor holds the component fixed and REPORTS the
-   instantaneous loss of invertibility rather than silently absorbing it. */
-let SINGULAR = 0;
-function sdiv(a, b) { if (Q.isZero(b)) { SINGULAR++; return a; } return Q.div(a, b); }
-
 /* ══ 7 ══ THE 29 SŪTRAS — Tₖ and Tₖ⁻¹, pure and total ════════════════════ */
 const R = (n, d) => Q.make(BigInt(n), BigInt(d));
-function edit(s, fn) { const t = St.clone(s); fn(t); return St.reduce(t); }
+/* Clone → mutate → commit. `ki` selects the sūtra's canonical coefficient from
+   §4.3, so no operator body carries a literal of its own. */
+function edit(s, fn, ki) { const t = St.clone(s); fn(t, SK[ki]); return t; }
 
 const SUTRAS = [
 /* ── 16 MUKHYA SŪTRA (primary) ─────────────────────────────────────────── */
-{ id:1, sk:'एकाधिकेन पूर्वेण', la:'Ekādhikena Pūrveṇa', mn:'By one more than the previous', delta:1,
-  T:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.ONE); t.grvq=Q.add(t.grvq,K.INV_PHI);}),
-  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.ONE); t.grvq=Q.sub(t.grvq,K.INV_PHI);}) },
+{ id:1, cat:CAT.S, sk:'एकाधिकेन पूर्वेण', la:'Ekādhikena Pūrveṇa', mn:'By one more than the previous · φ scaling',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.mul(t.l[0],c); t.grvq=Q.add(t.grvq,c);},0),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.div(t.l[0],c); t.grvq=Q.sub(t.grvq,c);},0) },
 
-{ id:2, sk:'निखिलं नवतश्चरमं दशतः', la:'Nikhilaṃ Navataścaramaṃ Daśataḥ', mn:'All from 9, last from 10 · involution', delta:2,
-  T:s=>edit(s,t=>{t.l[0]=Q.sub(Q.int(10),t.l[0]); t.mstvq=Q.add(t.mstvq,R(1,50));}),
-  I:s=>edit(s,t=>{t.mstvq=Q.sub(t.mstvq,R(1,50)); t.l[0]=Q.sub(Q.int(10),t.l[0]);}) },
+{ id:2, cat:CAT.R, sk:'निखिलं नवतश्चरमं दशतः', la:'Nikhilaṃ Navataścaramaṃ Daśataḥ', mn:'All from 9, last from 10 · complement involution',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(Q.int(10),t.l[0]); t.mstvq=Q.add(t.mstvq,c);},1),
+  I:s=>edit(s,(t,c)=>{t.mstvq=Q.sub(t.mstvq,c); t.l[0]=Q.sub(Q.int(10),t.l[0]);},1) },
 
-{ id:3, sk:'ऊर्ध्वतिर्यग्भ्याम्', la:'Ūrdhva-tiryagbhyām', mn:'Vertically and crosswise · z ↦ z²', delta:3,
-  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
-    t.l[0]=Q.sub(Q.mul(a,a),Q.mul(b,b)); t.l[1]=Q.mul(Q.TWO,Q.mul(a,b)); t.tgcr=Q.add(t.tgcr,R(3,100));}),
-  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
-    const r=Sqrt.of(Q.add(Q.mul(a,a),Q.mul(b,b)));
-    const re=Sqrt.of(Q.div(Q.add(r,a),Q.TWO));
-    let im=Sqrt.of(Q.div(Q.abs(Q.sub(r,a)),Q.TWO)); if(Q.sign(b)<0) im=Q.neg(im);
-    t.l[0]=re; t.l[1]=im; t.tgcr=Q.sub(t.tgcr,R(3,100));}), radical:true },
+{ id:3, cat:CAT.C, sk:'ऊर्ध्वतिर्यग्भ्याम्', la:'Ūrdhva-tiryagbhyām', mn:'Vertically and crosswise · 2×2 cross-mix, det = 1 − c²λ₂λ₃',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.add(a,Q.mul(c,Q.mul(b,t.l[2])));      // tiryak — crosswise
+    t.l[1]=Q.add(b,Q.mul(c,Q.mul(a,t.l[3])));      // ūrdhva — vertical
+    t.tgcr=Q.add(t.tgcr,c);},2),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1];
+    const det=Q.sub(Q.ONE,Q.mul(Q.mul(c,c),Q.mul(t.l[2],t.l[3])));
+    if(Q.isZero(det)) throw new Error('S3 inverse: singular cross-mix, det = 0');
+    t.l[0]=Q.div(Q.sub(a,Q.mul(Q.mul(c,t.l[2]),b)),det);
+    t.l[1]=Q.div(Q.sub(b,Q.mul(Q.mul(c,t.l[3]),a)),det);
+    t.tgcr=Q.sub(t.tgcr,c);},2) },
 
-{ id:4, sk:'परावर्त्य योजयेत्', la:'Parāvartya Yojayet', mn:'Transpose and apply · rotation +90°', delta:4,
-  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.neg(t.l[1]); t.l[1]=a; t.zpe=Q.add(t.zpe,R(1,25));}),
-  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=t.l[1]; t.l[1]=Q.neg(a); t.zpe=Q.sub(t.zpe,R(1,25));}) },
+{ id:4, cat:CAT.D, sk:'परावर्त्य योजयेत्', la:'Parāvartya Yojayet', mn:'Transpose and apply · rotation +90°',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0]; t.l[0]=Q.neg(t.l[1]); t.l[1]=a; t.zpe=Q.mul(t.zpe,c);},3),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0]; t.l[0]=t.l[1]; t.l[1]=Q.neg(a); t.zpe=Q.div(t.zpe,c);},3) },
 
-{ id:5, sk:'शून्यं साम्यसमुच्चये', la:'Śūnyaṃ Sāmyasamuccaye', mn:'Equilibrium mixing · det = 1/3', delta:5,
-  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
-    t.l[0]=Q.add(Q.mul(R(2,3),a),Q.mul(R(1,3),b));
-    t.l[1]=Q.add(Q.mul(R(1,3),a),Q.mul(R(2,3),b));
-    t.grvq=Q.mul(t.grvq,R(19,20));}),
-  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
-    t.l[0]=Q.sub(Q.mul(Q.TWO,a),b); t.l[1]=Q.sub(Q.mul(Q.TWO,b),a);
-    t.grvq=Q.mul(t.grvq,R(20,19));}) },
+{ id:5, cat:CAT.R, sk:'शून्यं साम्यसमुच्चये', la:'Śūnyaṃ Sāmyasamuccaye', mn:'Equilibrium mixing · det = 1 − c ≠ 0',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1],h=Q.div(c,Q.TWO),k=Q.sub(Q.ONE,h);
+    t.l[0]=Q.add(Q.mul(k,a),Q.mul(h,b));
+    t.l[1]=Q.add(Q.mul(h,a),Q.mul(k,b));
+    t.grvq=Q.add(t.grvq,c);},4),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1],h=Q.div(c,Q.TWO),k=Q.sub(Q.ONE,h);
+    const det=Q.sub(Q.mul(k,k),Q.mul(h,h));
+    t.l[0]=Q.div(Q.sub(Q.mul(k,a),Q.mul(h,b)),det);
+    t.l[1]=Q.div(Q.sub(Q.mul(k,b),Q.mul(h,a)),det);
+    t.grvq=Q.sub(t.grvq,c);},4) },
 
-{ id:6, sk:'आनुरूप्ये शून्यमन्यत्', la:'Ānurūpye Śūnyamanyat', mn:'If proportionate, zero the other', delta:6,
-  T:s=>edit(s,t=>{t.l[2]=Q.mul(sdiv(t.l[0],t.l[1]),t.l[2]); t.mstvq=Q.mul(t.mstvq,K.PHI);}),
-  I:s=>edit(s,t=>{t.l[2]=Q.mul(sdiv(t.l[1],t.l[0]),t.l[2]); t.mstvq=sdiv(t.mstvq,K.PHI);}) },
+{ id:6, cat:CAT.P, sk:'आनुरूप्ये शून्यमन्यत्', la:'Ānurūpye Śūnyamanyat', mn:'If proportionate, zero the other · 3-cycle λ₁→λ₂→λ₃',
+  T:s=>edit(s,(t,c)=>{const x=t.l[1]; t.l[1]=t.l[3]; t.l[3]=t.l[2]; t.l[2]=x;
+    t.mstvq=Q.mul(t.mstvq,c);},5),
+  I:s=>edit(s,(t,c)=>{const x=t.l[1]; t.l[1]=t.l[2]; t.l[2]=t.l[3]; t.l[3]=x;
+    t.mstvq=Q.div(t.mstvq,c);},5) },
 
-{ id:7, sk:'संकलनव्यवकलनाभ्याम्', la:'Saṅkalana-vyavakalanābhyām', mn:'By addition and subtraction · butterfly', delta:7,
-  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=Q.add(a,b); t.l[1]=Q.sub(a,b); t.tgcr=Q.add(t.tgcr,R(7,100));}),
-  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1];
-    t.l[0]=Q.div(Q.add(a,b),Q.TWO); t.l[1]=Q.div(Q.sub(a,b),Q.TWO); t.tgcr=Q.sub(t.tgcr,R(7,100));}) },
+{ id:7, cat:CAT.P, sk:'संकलनव्यवकलनाभ्याम्', la:'Saṅkalana-vyavakalanābhyām', mn:'By addition and subtraction · butterfly',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1]; t.l[0]=Q.add(a,b); t.l[1]=Q.sub(a,b);
+    t.tgcr=Q.add(t.tgcr,c);},6),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=Q.div(Q.add(a,b),Q.TWO); t.l[1]=Q.div(Q.sub(a,b),Q.TWO);
+    t.tgcr=Q.sub(t.tgcr,c);},6) },
 
-{ id:8, sk:'पूरणापूरणाभ्याम्', la:'Pūraṇāpūraṇābhyām', mn:'By completion to base · λ ↦ (9λ+10)/10', delta:8,
-  T:s=>edit(s,t=>{t.l[0]=Q.div(Q.add(Q.mul(Q.int(9),t.l[0]),Q.int(10)),Q.int(10)); t.zpe=Q.add(t.zpe,R(2,25));}),
-  I:s=>edit(s,t=>{t.l[0]=Q.div(Q.sub(Q.mul(Q.int(10),t.l[0]),Q.int(10)),Q.int(9)); t.zpe=Q.sub(t.zpe,R(2,25));}) },
+{ id:8, cat:CAT.D, sk:'पूरणापूरणाभ्याम्', la:'Pūraṇāpūraṇābhyām', mn:'By completion to base · λ₀ ← (1−c)λ₀ + 10c',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(Q.mul(Q.sub(Q.ONE,c),t.l[0]),Q.mul(Q.int(10),c));
+    t.zpe=Q.add(t.zpe,c);},7),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.div(Q.sub(t.l[0],Q.mul(Q.int(10),c)),Q.sub(Q.ONE,c));
+    t.zpe=Q.sub(t.zpe,c);},7) },
 
-{ id:9, sk:'चलनकलनाभ्याम्', la:'Calana-kalanābhyām', mn:'Differential · oscillation half-step', delta:9,
-  T:s=>edit(s,t=>{const d=Q.sub(t.l[1],t.l[0]);
-    t.l[0]=Q.add(t.l[0],Q.div(d,Q.TWO)); t.grvq=Q.add(t.grvq,Q.abs(d));}),
-  I:s=>edit(s,t=>{const d=Q.mul(Q.TWO,Q.sub(t.l[1],t.l[0]));
-    t.grvq=Q.sub(t.grvq,Q.abs(d)); t.l[0]=Q.sub(Q.mul(Q.TWO,t.l[0]),t.l[1]);}) },
+{ id:9, cat:CAT.F, sk:'चलनकलनाभ्याम्', la:'Calana-kalanābhyām', mn:'Differential · λ₀ ← λ₀ + c(λ₁ − λ₀)',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(Q.mul(Q.sub(Q.ONE,c),t.l[0]),Q.mul(c,t.l[1]));
+    t.grvq=Q.add(t.grvq,c);},8),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.div(Q.sub(t.l[0],Q.mul(c,t.l[1])),Q.sub(Q.ONE,c));
+    t.grvq=Q.sub(t.grvq,c);},8) },
 
-{ id:10, sk:'यावदूनम्', la:'Yāvadūnam', mn:'By the deficiency · B(λ−d)+d² ≡ λ²', delta:10,
-  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],t.l[0]); t.mstvq=Q.add(t.mstvq,R(1,10));}),
-  I:s=>edit(s,t=>{t.l[0]=Sqrt.of(Q.abs(t.l[0])); t.mstvq=Q.sub(t.mstvq,R(1,10));}), radical:true },
+{ id:10, cat:CAT.S, sk:'यावदूनम्', la:'Yāvadūnam', mn:'By the deficiency · reduce by d, append c·d²',
+  T:s=>edit(s,(t,c)=>{const d=Q.sub(Q.int(10),t.l[0]);
+    t.l[0]=Q.sub(t.l[0],d);                        // λ₀ ← 2λ₀ − 10
+    t.l[1]=Q.add(t.l[1],Q.mul(c,Q.mul(d,d)));      // append the square
+    t.mstvq=Q.add(t.mstvq,c);},9),
+  I:s=>edit(s,(t,c)=>{const old=Q.div(Q.add(t.l[0],Q.int(10)),Q.TWO);
+    const d=Q.sub(Q.int(10),old);
+    t.l[1]=Q.sub(t.l[1],Q.mul(c,Q.mul(d,d)));
+    t.l[0]=old; t.mstvq=Q.sub(t.mstvq,c);},9) },
 
-{ id:11, sk:'व्यष्टिसमष्टिः', la:'Vyaṣṭisamaṣṭiḥ', mn:'Part and whole · λ₀ ← Σλ', delta:11,
-  T:s=>edit(s,t=>{t.l[0]=Q.add(Q.add(t.l[0],t.l[1]),Q.add(t.l[2],t.l[3])); t.tgcr=Q.mul(t.tgcr,R(111,100));}),
-  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.add(t.l[1],Q.add(t.l[2],t.l[3]))); t.tgcr=Q.mul(t.tgcr,R(100,111));}) },
+{ id:11, cat:CAT.C, sk:'व्यष्टिसमष्टिः', la:'Vyaṣṭisamaṣṭiḥ', mn:'Part and whole · λ₀ ← λ₀ + c·Σ(λ₁λ₂λ₃)',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(t.l[0],Q.mul(c,Q.add(t.l[1],Q.add(t.l[2],t.l[3]))));
+    t.tgcr=Q.add(t.tgcr,c);},10),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(t.l[0],Q.mul(c,Q.add(t.l[1],Q.add(t.l[2],t.l[3]))));
+    t.tgcr=Q.sub(t.tgcr,c);},10) },
 
-{ id:12, sk:'शेषाण्यङ्केन चरमेण', la:'Śeṣāṇyaṅkena Carameṇa', mn:'Remainder by the last digit · shear −10λ₂', delta:12,
-  T:s=>edit(s,t=>{t.l[1]=Q.sub(t.l[1],Q.mul(Q.int(10),t.l[2])); t.zpe=Q.add(t.zpe,R(3,25));}),
-  I:s=>edit(s,t=>{t.l[1]=Q.add(t.l[1],Q.mul(Q.int(10),t.l[2])); t.zpe=Q.sub(t.zpe,R(3,25));}) },
+{ id:12, cat:CAT.R, sk:'शेषाण्यङ्केन चरमेण', la:'Śeṣāṇyaṅkena Carameṇa', mn:'Remainder by the last digit · shear −c·λ₂',
+  T:s=>edit(s,(t,c)=>{t.l[1]=Q.sub(t.l[1],Q.mul(c,t.l[2])); t.zpe=Q.add(t.zpe,c);},11),
+  I:s=>edit(s,(t,c)=>{t.l[1]=Q.add(t.l[1],Q.mul(c,t.l[2])); t.zpe=Q.sub(t.zpe,c);},11) },
 
-{ id:13, sk:'सोपान्त्यद्वयमन्त्यम्', la:'Sopāntyadvayamantyam', mn:'Ultimate and twice penultimate · Fibonacci', delta:13,
-  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.add(a,t.l[1]); t.l[1]=a; t.grvq=Q.mul(t.grvq,K.PHI);}),
-  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=t.l[1]; t.l[1]=Q.sub(a,t.l[1]); t.grvq=sdiv(t.grvq,K.PHI);}) },
+{ id:13, cat:CAT.D, sk:'सोपान्त्यद्वयमन्त्यम्', la:'Sopāntyadvayamantyam', mn:'Ultimate and twice penultimate · 3u − 2p (Coq-corrected)',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(Q.mul(Q.int(3),t.l[0]),Q.mul(Q.TWO,t.l[1]));
+    t.grvq=Q.add(t.grvq,c);},12),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.div(Q.add(t.l[0],Q.mul(Q.TWO,t.l[1])),Q.int(3));
+    t.grvq=Q.sub(t.grvq,c);},12) },
 
-{ id:14, sk:'एकन्यूनेन पूर्वेण', la:'Ekanyūnena Pūrveṇa', mn:'By one less than the previous', delta:14,
-  T:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.ONE); t.mstvq=Q.sub(t.mstvq,K.INV_PHI);}),
-  I:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.ONE); t.mstvq=Q.add(t.mstvq,K.INV_PHI);}) },
+{ id:14, cat:CAT.S, sk:'एकन्यूनेन पूर्वेण', la:'Ekanyūnena Pūrveṇa', mn:'By one less than the previous · inverse scaling',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.div(t.l[0],c); t.mstvq=Q.sub(t.mstvq,c);},13),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.mul(t.l[0],c); t.mstvq=Q.add(t.mstvq,c);},13) },
 
-{ id:15, sk:'गुणितसमुच्चयः', la:'Guṇitasamuccayaḥ', mn:'The product of the sum', delta:15,
-  T:s=>edit(s,t=>{t.l[2]=Q.mul(Q.add(t.l[0],t.l[1]),t.l[2]); t.tgcr=Q.add(t.tgcr,R(3,20));}),
-  I:s=>edit(s,t=>{t.l[2]=sdiv(t.l[2],Q.add(t.l[0],t.l[1])); t.tgcr=Q.sub(t.tgcr,R(3,20));}) },
+{ id:15, cat:CAT.S, sk:'गुणितसमुच्चयः', la:'Guṇitasamuccayaḥ', mn:'The product of the sum · λ₂ ← λ₂ + c(λ₀+λ₁)',
+  T:s=>edit(s,(t,c)=>{t.l[2]=Q.add(t.l[2],Q.mul(c,Q.add(t.l[0],t.l[1])));
+    t.tgcr=Q.add(t.tgcr,c);},14),
+  I:s=>edit(s,(t,c)=>{t.l[2]=Q.sub(t.l[2],Q.mul(c,Q.add(t.l[0],t.l[1])));
+    t.tgcr=Q.sub(t.tgcr,c);},14) },
 
-{ id:16, sk:'गुणकसमुच्चयः', la:'Guṇakasamuccayaḥ', mn:'The sum of the products', delta:16,
-  T:s=>edit(s,t=>{t.l[0]=Q.add(Q.mul(t.l[0],t.l[1]),Q.mul(t.l[2],t.l[3])); t.zpe=Q.add(t.zpe,R(4,25));}),
-  I:s=>edit(s,t=>{t.l[0]=sdiv(Q.sub(t.l[0],Q.mul(t.l[2],t.l[3])),t.l[1]); t.zpe=Q.sub(t.zpe,R(4,25));}) },
+{ id:16, cat:CAT.D, sk:'गुणकसमुच्चयः', la:'Guṇakasamuccayaḥ', mn:'The sum of the products · λ₀ ← λ₀ + c(λ₁λ₂ + λ₂λ₃)',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(t.l[0],Q.mul(c,Q.add(Q.mul(t.l[1],t.l[2]),Q.mul(t.l[2],t.l[3]))));
+    t.zpe=Q.add(t.zpe,c);},15),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(t.l[0],Q.mul(c,Q.add(Q.mul(t.l[1],t.l[2]),Q.mul(t.l[2],t.l[3]))));
+    t.zpe=Q.sub(t.zpe,c);},15) },
 
 /* ── 13 UPASŪTRA (sub-sūtras) ──────────────────────────────────────────── */
-{ id:17, sk:'आनुरूप्येण', la:'Ānurūpyeṇa', mn:'Proportionately · × φ', delta:17,
-  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],K.PHI); t.grvq=Q.mul(t.grvq,R(117,100));}),
-  I:s=>edit(s,t=>{t.l[0]=sdiv(t.l[0],K.PHI); t.grvq=Q.mul(t.grvq,R(100,117));}) },
+{ id:17, cat:CAT.F, sk:'आनुरूप्येण', la:'Ānurūpyeṇa', mn:'Proportionately · diffusion λ₁ ← λ₁ + c(λ₀+λ₂)/2',
+  T:s=>edit(s,(t,c)=>{t.l[1]=Q.add(t.l[1],Q.div(Q.mul(c,Q.add(t.l[0],t.l[2])),Q.TWO));
+    t.grvq=Q.add(t.grvq,c);},16),
+  I:s=>edit(s,(t,c)=>{t.l[1]=Q.sub(t.l[1],Q.div(Q.mul(c,Q.add(t.l[0],t.l[2])),Q.TWO));
+    t.grvq=Q.sub(t.grvq,c);},16) },
 
-{ id:18, sk:'शिष्यते शेषसंज्ञः', la:'Śiṣyate Śeṣasaṃjñaḥ', mn:'The remainder remains · λ₃ ← λ₃ − λ₂', delta:18,
-  T:s=>edit(s,t=>{t.l[3]=Q.sub(t.l[3],t.l[2]); t.mstvq=Q.add(t.mstvq,R(9,50));}),
-  I:s=>edit(s,t=>{t.l[3]=Q.add(t.l[3],t.l[2]); t.mstvq=Q.sub(t.mstvq,R(9,50));}) },
+{ id:18, cat:CAT.M, sk:'शिष्यते शेषसंज्ञः', la:'Śiṣyate Śeṣasaṃjñaḥ', mn:'The remainder remains · λ₃ ← λ₃ − c·λ₂',
+  T:s=>edit(s,(t,c)=>{t.l[3]=Q.sub(t.l[3],Q.mul(c,t.l[2])); t.mstvq=Q.add(t.mstvq,c);},17),
+  I:s=>edit(s,(t,c)=>{t.l[3]=Q.add(t.l[3],Q.mul(c,t.l[2])); t.mstvq=Q.sub(t.mstvq,c);},17) },
 
-{ id:19, sk:'आद्यमाद्येनान्त्यमन्त्येन', la:'Ādyamādyenāntyamantyena', mn:'First by first, last by last', delta:19,
-  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],t.l[0]); t.l[3]=Q.mul(t.l[3],t.l[3]); t.tgcr=Q.add(t.tgcr,R(19,100));}),
-  I:s=>edit(s,t=>{t.l[0]=Sqrt.of(Q.abs(t.l[0])); t.l[3]=Sqrt.of(Q.abs(t.l[3])); t.tgcr=Q.sub(t.tgcr,R(19,100));}), radical:true },
+{ id:19, cat:CAT.D, sk:'आद्यमाद्येनान्त्यमन्त्येन', la:'Ādyamādyenāntyamantyena', mn:'First by first, last by last · paired shears',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(t.l[0],Q.mul(c,t.l[1])); t.l[3]=Q.add(t.l[3],Q.mul(c,t.l[2]));
+    t.tgcr=Q.add(t.tgcr,c);},18),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(t.l[0],Q.mul(c,t.l[1])); t.l[3]=Q.sub(t.l[3],Q.mul(c,t.l[2]));
+    t.tgcr=Q.sub(t.tgcr,c);},18) },
 
-{ id:20, sk:'केवलैः सप्तकं गुण्यात्', la:'Kevalaiḥ Saptakaṃ Guṇyāt', mn:'Multiply by seven · 1/7 period', delta:20,
-  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],Q.int(7)); t.zpe=Q.mul(t.zpe,Q.int(7));}),
-  I:s=>edit(s,t=>{t.l[0]=Q.div(t.l[0],Q.int(7)); t.zpe=Q.div(t.zpe,Q.int(7));}) },
+{ id:20, cat:CAT.M, sk:'केवलैः सप्तकं गुण्यात्', la:'Kevalaiḥ Saptakaṃ Guṇyāt', mn:'Multiply by seven · 1/7 period',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.mul(t.l[0],Q.int(7)); t.zpe=Q.add(t.zpe,c);},19),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.div(t.l[0],Q.int(7)); t.zpe=Q.sub(t.zpe,c);},19) },
 
-{ id:21, sk:'वेष्टनम्', la:'Veṣṭanam', mn:'Osculation · λ₀ ← λ₀ + λ₁/10', delta:21,
-  T:s=>edit(s,t=>{t.l[0]=Q.add(t.l[0],Q.div(t.l[1],Q.int(10))); t.grvq=Q.add(t.grvq,R(21,100));}),
-  I:s=>edit(s,t=>{t.l[0]=Q.sub(t.l[0],Q.div(t.l[1],Q.int(10))); t.grvq=Q.sub(t.grvq,R(21,100));}) },
+{ id:21, cat:CAT.M, sk:'वेष्टनम्', la:'Veṣṭanam', mn:'Osculation · λ₀ ← λ₀ + c·λ₃',
+  T:s=>edit(s,(t,c)=>{t.l[0]=Q.add(t.l[0],Q.mul(c,t.l[3])); t.grvq=Q.add(t.grvq,c);},20),
+  I:s=>edit(s,(t,c)=>{t.l[0]=Q.sub(t.l[0],Q.mul(c,t.l[3])); t.grvq=Q.sub(t.grvq,c);},20) },
 
-{ id:22, sk:'यावदूनं तावदूनम्', la:'Yāvadūnaṃ Tāvadūnam', mn:'Deficiency squared, base 100', delta:22,
-  T:s=>edit(s,t=>{const d=Q.sub(Q.int(100),t.l[0]); t.l[1]=Q.add(t.l[1],Q.mul(d,d)); t.mstvq=Q.add(t.mstvq,R(11,50));}),
-  I:s=>edit(s,t=>{const d=Q.sub(Q.int(100),t.l[0]); t.l[1]=Q.sub(t.l[1],Q.mul(d,d)); t.mstvq=Q.sub(t.mstvq,R(11,50));}) },
+{ id:22, cat:CAT.R, sk:'यावदूनं तावदूनम्', la:'Yāvadūnaṃ Tāvadūnam', mn:'Deficiency squared, base 100',
+  T:s=>edit(s,(t,c)=>{const d=Q.sub(Q.int(100),t.l[0]);
+    t.l[1]=Q.add(t.l[1],Q.mul(c,Q.mul(d,d))); t.mstvq=Q.add(t.mstvq,c);},21),
+  I:s=>edit(s,(t,c)=>{const d=Q.sub(Q.int(100),t.l[0]);
+    t.l[1]=Q.sub(t.l[1],Q.mul(c,Q.mul(d,d))); t.mstvq=Q.sub(t.mstvq,c);},21) },
 
-{ id:23, sk:'यावदूनं तावदूनीकृत्य वर्गं च योजयेत्', la:'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ ca Yojayet', mn:'Reduce by the deficiency, add its square', delta:23,
-  T:s=>edit(s,t=>{const d=Q.sub(Q.int(10),t.l[0]); t.l[3]=Q.add(t.l[3],Q.mul(d,d)); t.tgcr=Q.add(t.tgcr,R(23,100));}),
-  I:s=>edit(s,t=>{const d=Q.sub(Q.int(10),t.l[0]); t.l[3]=Q.sub(t.l[3],Q.mul(d,d)); t.tgcr=Q.sub(t.tgcr,R(23,100));}) },
+{ id:23, cat:CAT.R, sk:'यावदूनं तावदूनीकृत्य वर्गं च योजयेत्', la:'Yāvadūnaṃ Tāvadūnīkṛtya Vargaṃ ca Yojayet', mn:'Reduce by the deficiency, add its square',
+  T:s=>edit(s,(t,c)=>{const d=Q.sub(Q.int(10),t.l[0]);
+    t.l[3]=Q.add(t.l[3],Q.mul(c,Q.mul(d,d))); t.tgcr=Q.add(t.tgcr,c);},22),
+  I:s=>edit(s,(t,c)=>{const d=Q.sub(Q.int(10),t.l[0]);
+    t.l[3]=Q.sub(t.l[3],Q.mul(c,Q.mul(d,d))); t.tgcr=Q.sub(t.tgcr,c);},22) },
 
-{ id:24, sk:'अन्त्ययोर्दशकेऽपि', la:"Antyayordaśake'pi", mn:'Last digits summing to ten · involution', delta:24,
-  T:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.add(t.zpe,R(6,25));}),
-  I:s=>edit(s,t=>{const a=t.l[0]; t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.sub(t.zpe,R(6,25));}) },
+{ id:24, cat:CAT.M, sk:'अन्त्ययोर्दशकेऽपि', la:"Antyayordaśake'pi", mn:'Last digits summing to ten · involution',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0];
+    t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.add(t.zpe,c);},23),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0];
+    t.l[0]=Q.sub(Q.int(10),t.l[1]); t.l[1]=Q.sub(Q.int(10),a); t.zpe=Q.sub(t.zpe,c);},23) },
 
-{ id:25, sk:'अन्त्ययोरेव', la:'Antyayoreva', mn:'Only the last two · (λ₀λ₁) ↔ (λ₂λ₃)', delta:25,
-  T:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.mul(t.grvq,R(5,4));}),
-  I:s=>edit(s,t=>{const a=t.l[0],b=t.l[1]; t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.mul(t.grvq,R(4,5));}) },
+{ id:25, cat:CAT.C, sk:'अन्त्ययोरेव', la:'Antyayoreva', mn:'Only the last two · (λ₀λ₁) ↔ (λ₂λ₃)',
+  T:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.add(t.grvq,c);},24),
+  I:s=>edit(s,(t,c)=>{const a=t.l[0],b=t.l[1];
+    t.l[0]=t.l[2]; t.l[1]=t.l[3]; t.l[2]=a; t.l[3]=b; t.grvq=Q.sub(t.grvq,c);},24) },
 
-{ id:26, sk:'समुच्चयगुणितः', la:'Samuccayaguṇitaḥ', mn:'The aggregate multiplied · λ₀ ← Πλ', delta:26,
-  T:s=>edit(s,t=>{t.l[0]=Q.mul(t.l[0],Q.mul(t.l[1],Q.mul(t.l[2],t.l[3]))); t.mstvq=Q.mul(t.mstvq,R(63,50));}),
-  I:s=>edit(s,t=>{t.l[0]=sdiv(t.l[0],Q.mul(t.l[1],Q.mul(t.l[2],t.l[3]))); t.mstvq=Q.mul(t.mstvq,R(50,63));}) },
+{ id:26, cat:CAT.P, sk:'समुच्चयगुणितः', la:'Samuccayaguṇitaḥ', mn:'The aggregate multiplied · full reversal',
+  T:s=>edit(s,(t,c)=>{t.l.reverse(); t.mstvq=Q.add(t.mstvq,c);},25),
+  I:s=>edit(s,(t,c)=>{t.l.reverse(); t.mstvq=Q.sub(t.mstvq,c);},25) },
 
-{ id:27, sk:'लोपनस्थापनाभ्याम्', la:'Lopanasthāpanābhyām', mn:'By elimination and retention · Gauss step', delta:27,
-  T:s=>edit(s,t=>{t.l[2]=Q.sub(t.l[2],Q.div(t.l[1],Q.TWO)); t.tgcr=Q.add(t.tgcr,R(27,100));}),
-  I:s=>edit(s,t=>{t.l[2]=Q.add(t.l[2],Q.div(t.l[1],Q.TWO)); t.tgcr=Q.sub(t.tgcr,R(27,100));}) },
+{ id:27, cat:CAT.F, sk:'लोपनस्थापनाभ्याम्', la:'Lopanasthāpanābhyām', mn:'By elimination and retention · Gauss step',
+  T:s=>edit(s,(t,c)=>{t.l[2]=Q.sub(t.l[2],Q.mul(c,t.l[1])); t.tgcr=Q.add(t.tgcr,c);},26),
+  I:s=>edit(s,(t,c)=>{t.l[2]=Q.add(t.l[2],Q.mul(c,t.l[1])); t.tgcr=Q.sub(t.tgcr,c);},26) },
 
-{ id:28, sk:'विलोकनम्', la:'Vilokanam', mn:'By mere observation · dominant of λ₁₋₃', delta:28,
-  T:s=>edit(s,t=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
-    t.l[0]=Q.add(t.l[0],Q.div(m,Q.int(10))); t.zpe=Q.add(t.zpe,R(7,25));}),
-  I:s=>edit(s,t=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
-    t.l[0]=Q.sub(t.l[0],Q.div(m,Q.int(10))); t.zpe=Q.sub(t.zpe,R(7,25));}) },
+{ id:28, cat:CAT.F, sk:'विलोकनम्', la:'Vilokanam', mn:'By mere observation · dominant of λ₁₋₃',
+  T:s=>edit(s,(t,c)=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
+    t.l[0]=Q.add(t.l[0],Q.mul(c,m)); t.zpe=Q.add(t.zpe,c);},27),
+  I:s=>edit(s,(t,c)=>{let m=t.l[1]; for(let i=2;i<4;i++) if(Q.cmp(Q.abs(t.l[i]),Q.abs(m))>0) m=t.l[i];
+    t.l[0]=Q.sub(t.l[0],Q.mul(c,m)); t.zpe=Q.sub(t.zpe,c);},27) },
 
-{ id:29, sk:'गुणितसमुच्चयः समुच्चयगुणितः', la:'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', mn:'Product-of-sum = sum-of-product', delta:29,
-  T:s=>edit(s,t=>{const p=Q.mul(t.l[0],t.l[1]);
-    t.l[2]=Q.mul(Q.add(t.l[0],t.l[1]),t.l[2]); t.l[3]=Q.add(t.l[3],p);
-    for(const f of FIELDS) t[f]=Q.mul(t[f],K.PHI);}),
-  I:s=>edit(s,t=>{const p=Q.mul(t.l[0],t.l[1]);
-    for(const f of FIELDS) t[f]=sdiv(t[f],K.PHI);
-    t.l[3]=Q.sub(t.l[3],p); t.l[2]=sdiv(t.l[2],Q.add(t.l[0],t.l[1]));}) }
+{ id:29, cat:CAT.M, sk:'गुणितसमुच्चयः समुच्चयगुणितः', la:'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', mn:'Product-of-sum = sum-of-product · the grand identity',
+  T:s=>edit(s,(t,c)=>{
+    t.l[2]=Q.add(t.l[2],Q.mul(c,Q.add(t.l[0],t.l[1])));
+    t.l[3]=Q.add(t.l[3],Q.mul(c,Q.mul(t.l[0],t.l[1])));
+    for(const f of FIELDS) t[f]=Q.mul(t[f],c);},28),
+  I:s=>edit(s,(t,c)=>{
+    for(const f of FIELDS) t[f]=Q.div(t[f],c);
+    t.l[3]=Q.sub(t.l[3],Q.mul(c,Q.mul(t.l[0],t.l[1])));
+    t.l[2]=Q.sub(t.l[2],Q.mul(c,Q.add(t.l[0],t.l[1])));},28) }
 ];
+
+/* δₖ = k. Σδ(1..29) = 29·30/2 = 435 — the triangular conservation identity of
+   protocol §15, asserted in the invariant suite. δ drives the COMPOSITE weights
+   wₖ = δₖ/Σδ and the queue's Σδ readout. */
+SUTRAS.forEach(s => { s.delta = s.id; });
 
 /* ══ 8 ══ COMPOSITION ALGEBRA — the six modes ════════════════════════════ */
 const MODES = [
@@ -657,11 +748,11 @@ const Compose = {
     let C = St.zero(), pairs = 0;                          // Σ accumulator — additive zero, not S₀
     for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
       const comm = St.sub(SUTRAS[ks[i]].T(img[j]), SUTRAS[ks[j]].T(img[i]));   // [Tᵢ,Tⱼ](S₀)
-      C = St.reduce(St.add(C, St.scale(comm, Q.mul(w[i], w[j]))));
+      C = St.add(C, St.scale(comm, Q.mul(w[i], w[j])));
       pairs++;
     }
     trace(`<span class="tr-ex">Γ = ${Q.str(Gamma, 12)} · pairs = ${pairs} · ‖C‖ = ${Q.str(St.dist(C, St.zero()), 12)}</span>`);
-    return St.reduce(St.add(L, St.scale(C, Gamma)));
+    return St.add(L, St.scale(C, Gamma));
   },
   /* CANONICAL — the pipeline tgcr_cymatic_engine_compliant.py marks MANDATORY:
      the 16 mukhya sūtras strictly in SERIES, then the 13 upasūtras in PARALLEL
@@ -682,9 +773,7 @@ function verifyInverses() {
                   grvq: R(1, 3), mstvq: R(2, 7), tgcr: R(1, 5), zpe: R(3, 8) };
   const EPS = Q.make(1n, 10n ** 18n);
   for (const S of SUTRAS) {
-    let d;
-    try { d = St.dist(S.I(S.T(probe)), probe); }
-    catch (e) { fail++; trace(`<span class="tr-e">S${S.id} T⁻¹T threw: ${e.message}</span>`); continue; }
+    const d = St.dist(S.I(S.T(probe)), probe);
     if (Q.isZero(d)) exact++;
     else if (Q.cmp(d, EPS) < 0) { near++; trace(`<span class="tr-f">S${S.id} T⁻¹T ≈ id · ‖r‖ = ${Q.str(d, 13)}</span>`); }
     else { fail++; trace(`<span class="tr-e">S${S.id} T⁻¹T ✗ · ‖r‖ = ${Q.str(d, 13)}</span>`); }
@@ -727,11 +816,18 @@ const QUEUE = {
     this.running = true;
     document.getElementById('run-btn').disabled = true;
     const M = MODES[this.mode];
-    SINGULAR = 0;
     trace(`<span class="tr-m">▶ ${M.n} · N = ${this.items.length}</span>`);
     await new Promise(r => setTimeout(r, 0));            // let the UI paint before the work
     const t0 = performance.now();
+    /* try/finally with NO catch: every error still propagates loudly (§2.2);
+       finally only guarantees the button cannot be left wedged. */
     try {
+      const dIn = St.maxDenDigits(STATE);
+      if (dIn > DEN_LIMIT) {
+        trace(`<span class="tr-e">✗ refused: ℚ denominator ${dIn} digits > ceiling ${DEN_LIMIT}</span>`);
+        trace('<span class="tr-e">  state is exact and intact — press RESET</span>');
+      }
+      St.guard(STATE);
       const fn = [Compose.isolated, Compose.series, Compose.parallel,
                   Compose.concurrent, Compose.inverse, Compose.composite,
                   Compose.canonical][this.mode];
@@ -739,20 +835,17 @@ const QUEUE = {
       const sd = this.items.reduce((s, i) => s + SUTRAS[i].delta, 0);
       showDelta(this.mode === 4 ? -sd : sd);
       for (const i of this.items) injectCymatic(i, SUTRAS[i].delta);
-      trace(`<span class="tr-ex">✓ ${M.n} in ${(performance.now() - t0).toFixed(1)}ms · R⁴ = ${Q.str(St.R4(STATE), 12)}</span>`);
-      if (SINGULAR) trace(`<span class="tr-e">⚠ ${SINGULAR} singular divisor(s) — component held fixed</span>`);
-    } catch (e) {
-      trace(`<span class="tr-e">✗ ${M.n}: ${e.message}</span>`);
+      trace(`<span class="tr-ex">✓ ${M.n} in ${(performance.now() - t0).toFixed(1)}ms · den ${St.maxDenDigits(STATE)}d · R⁴ = ${Q.str(St.R4(STATE), 12)}</span>`);
+    } finally {
+      this.running = false;
+      document.getElementById('run-btn').disabled = false;
+      updateFields();
     }
-    this.running = false;
-    document.getElementById('run-btn').disabled = false;
-    updateFields();
   },
   async cascade() {
     this.items = Array.from({ length: 29 }, (_, i) => i);
     this.mode = 6;                                        // the mandated pipeline
-    const radio = document.querySelector('input[name="cmode"][value="6"]');
-    if (radio) radio.checked = true;
+    document.querySelector('input[name="cmode"][value="6"]').checked = true;
     updateFormula(); this.ui();
     trace('<span class="tr-m">॥ CASCADE 29 · CANONICAL · Σδ = 435 ॥</span>');
     await this.run();
@@ -881,7 +974,7 @@ const TO = {
       const y2 = p.y * cx2 - z * sx2, z2 = p.y * sx2 + z * cx2;
       const k = 520 / (520 + z2), X = cx + x * k * sc, Y = cy + y2 * k * sc;
       const fi = ((((p.ti * 3 + gi) % res) + res) % res) * res + ((((p.pj * 2 + mi) % res) + res) % res);
-      const fv = CY.field ? CY.field[fi] : 0;
+      const fv = CY.field[fi];
       const bi = Math.min(175, Math.max(0, ((fv + 1) * 62) | 0));
       const a = .18 + (z2 + this.R) / (2 * this.R) * .58;
       ctx.fillStyle = `rgba(0,${Math.min(255, bi + 80)},${Math.min(255, bi + 120)},${a})`;
@@ -895,7 +988,7 @@ const cubes = [];
 class Cube {
   constructor(i) {
     this.i = i; this.s = SUTRAS[i]; this.on = false; this.e = 0; this.hov = false;
-    this.x = (i % 6) * 88 + 56; this.y = ((i / 6) | 0) * 82 + 162;
+    this.x = (i % 6) * 88 + 56; this.y = ((i / 6) | 0) * 82 + 214;
     this.prim = i < 16;
   }
   draw(frame) {
@@ -940,8 +1033,27 @@ function updateFields() {
   for (let i = 0; i < 4; i++) document.getElementById('f-l' + i).textContent = Q.str(STATE.l[i], 20);
   for (const f of FIELDS) document.getElementById('f-' + f).textContent = Q.str(STATE[f], 20);
   document.getElementById('f-r4').textContent = Q.str(St.R4(STATE), 18);
-  document.getElementById('f-red').textContent = STATS.reductions;
+  document.getElementById('f-red').textContent = St.maxDenDigits(STATE);
   document.getElementById('f-redt').textContent = STATS.trig;
+}
+/* §2.4 — the sanskrit name, gloss, category and canonical coefficient are not
+   decorative payload: they are rendered here, so every field of the SUTRAS
+   table is wired to the engine. */
+let lastDetail = -1;
+function updateDetail(i) {
+  if (i === lastDetail) return;
+  lastDetail = i;
+  const el = document.getElementById('sutra-detail');
+  if (i < 0) {
+    el.innerHTML = '<span class="dm">hover a cube for its sūtra · click to enqueue</span>';
+    return;
+  }
+  const s = SUTRAS[i];
+  el.innerHTML =
+    `<span class="dv">S${s.id}</span> <span class="dsk">${s.sk}</span><br>` +
+    `<span class="dv">${s.la}</span> <span class="dc">· ${s.cat} · δ=${s.delta}</span><br>` +
+    `<span class="dm">${s.mn}</span><br>` +
+    `<span class="dc">c = ${Q.str(SK[i], 26)} = ${Q.f(SK[i]).toFixed(9)}</span>`;
 }
 function updateFormula() {
   const M = MODES[QUEUE.mode];
@@ -957,13 +1069,13 @@ function updateHUD(fps) {
     `<span style="color:#0aa">λ₀ =</span> <span style="color:#ff0">${Q.str(STATE.l[0], 24)}</span></div>` +
     `<div><span style="color:#0aa">R⁴ =</span> <span style="color:#0ff">${Q.str(St.R4(STATE), 18)}</span></div>` +
     `<div><span style="color:#0aa">π &nbsp;=</span> <span style="color:#8f8">${K.PI_F.toFixed(12)}…</span></div>` +
-    `<div><span style="color:#0aa">φ &nbsp;=</span> <span style="color:#8f8">${Q.f(K.PHI).toFixed(12)}…</span></div>`;
+    `<div><span style="color:#0aa">φ &nbsp;=</span> <span style="color:#8f8">${Q.f(SK[0]).toFixed(12)} = F₅₀/F₄₉</span></div>`;
 }
 
 /* ══ 16 ══ RENDER LOOP ═════════════════════════════════════════════════ */
 let last = 0, frame = 0, fps = 60, mx = 0, my = 0;
 function render(ts) {
-  try {
+  {
     const dt = (ts - last) / 1000; last = ts; frame++;
     if (frame % 30 === 0 && dt > 0) { fps = 1 / dt; updateHUD(fps); }
 
@@ -988,16 +1100,16 @@ function render(ts) {
 
     if (frame % 5 === 0) CY.compute(frame);
     const cs = Math.min(204, H - 258);
-    if (cs > 40) {
-      CY.render(352, H - cs - 18, cs);
-      ctx.fillStyle = '#0ff6'; ctx.font = '9px Courier New'; ctx.textAlign = 'left';
-      ctx.fillText('⟨ CYMATIC FIELD — exact Taylor tables ⟩', 352, H - cs - 26);
-    }
+    CY.render(352, H - cs - 18, cs);
+    ctx.fillStyle = '#0ff6'; ctx.font = '9px Courier New'; ctx.textAlign = 'left';
+    ctx.fillText('⟨ CYMATIC FIELD — exact Taylor tables ⟩', 352, H - cs - 26);
 
-    for (const c of cubes) c.hov = c.hit(mx, my);
+    let hovered = -1;
+    for (const c of cubes) { c.hov = c.hit(mx, my); if (c.hov) hovered = c.i; }
+    updateDetail(hovered);
     for (const c of cubes) c.draw(frame);
     if (frame % 24 === 0) updateFields();
-  } catch (e) { console.error('render:', e); }
+  }
   requestAnimationFrame(render);
 }
 
@@ -1034,7 +1146,7 @@ function init() {
   TS.init(); TO.init(); CY.init();
   CY.addMode(2, 1, .38); CY.addMode(1, 2, .38); CY.addMode(3, 2, .2);
   for (let i = 0; i < 29; i++) cubes.push(new Cube(i));
-  QUEUE.ui(); updateFormula(); updateFields(); updateHUD(60);
+  QUEUE.ui(); updateFormula(); updateDetail(-1); updateFields(); updateHUD(60);
   trace('॥ R4 वैदिक TOROIDAL HYPERCUBE v4 ॥');
   trace(`<span class="tr-ex">ℚ exact · π Machin = ${K.PI_F.toFixed(10)}… · φ Newton</span>`);
   trace('<span class="tr-ex">trig = octant-reduced Taylor on rational·π</span>');

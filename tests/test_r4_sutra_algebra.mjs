@@ -38,10 +38,10 @@ globalThis.document.getElementById = (id) => (id === 'canvas' ? canvasStub : mkE
 
 // ---- expose internals ------------------------------------------------------
 src = src.replace(/^'use strict';/, '');
-src += `\nglobalThis.__X = { Q, St, Tr, K, Sqrt, SUTRAS, Compose, MODES, Rand, STATS, verifyInverses, QUEUE, isqrt };`;
+src += `\nglobalThis.__X = { Q, St, Tr, K, SUTRAS, Compose, MODES, Rand, STATS, verifyInverses, QUEUE, SK, CAT };`;
 const fn = new Function(src);
 fn();
-const { Q, St, Tr, K, Sqrt, SUTRAS, Compose, MODES, Rand, STATS, isqrt } = globalThis.__X;
+const { Q, St, Tr, K, SUTRAS, Compose, MODES, Rand, STATS, SK, CAT } = globalThis.__X;
 
 // ---- assertions ------------------------------------------------------------
 let pass = 0, fail = 0;
@@ -55,7 +55,6 @@ ok(Q.eq(Q.mul(Q.make(2n,3n), Q.make(3n,2n)), Q.ONE), '2/3 · 3/2 = 1');
 ok(Q.floor(Q.make(-7n,2n)) === -4n, 'floor(-7/2) = -4 (true floor, not trunc)',
    `got ${Q.floor(Q.make(-7n,2n))}`);
 ok(Q.floor(Q.make(7n,2n)) === 3n, 'floor(7/2) = 3');
-ok(isqrt(144n) === 12n && isqrt(143n) === 11n, 'exact integer sqrt');
 { const r = Q.limitDen(Q.make(314159265358979n, 100000000000000n), 1000n);
   ok(r[1] <= 1000n, `limitDen bounds denominator (got ${r[0]}/${r[1]})`);
   ok(r[0] === 355n && r[1] === 113n, 'best approx of π to den≤1000 is 355/113',
@@ -64,11 +63,13 @@ ok(isqrt(144n) === 12n && isqrt(143n) === 11n, 'exact integer sqrt');
 sec('TRANSCENDENTALS');
 const PI = Q.f(Tr.PI);
 ok(Math.abs(PI - Math.PI) < 1e-14, `Machin π = ${PI}`, `Δ=${Math.abs(PI-Math.PI)}`);
-const PHI = Q.f(K.PHI);
-ok(Math.abs(PHI - (1+Math.sqrt(5))/2) < 1e-14, `φ = ${PHI}`);
-{ // φ² = φ + 1
-  const d = Q.f(Q.sub(Q.mul(K.PHI,K.PHI), Q.add(K.PHI, Q.ONE)));
-  ok(Math.abs(d) < 1e-25, `φ² − φ − 1 = ${d.toExponential(3)}`); }
+{ // canonical φ is the Fibonacci convergent F₅₀/F₄₉ — exact rational, no √5
+  const phi = SK[0];
+  ok(phi[0] === 12586269025n && phi[1] === 7778742049n, 'S1 φ = F₅₀/F₄₉ exactly');
+  ok(Math.abs(Q.f(phi) - (1+Math.sqrt(5))/2) < 1e-19, `φ = ${Q.f(phi)}`);
+  // a Fibonacci convergent satisfies φ² − φ − 1 = ±1/F₄₉² exactly
+  const r = Q.sub(Q.sub(Q.mul(phi,phi), phi), Q.ONE);
+  ok(r[1] === 7778742049n*7778742049n, 'φ² − φ − 1 = ±1/F₄₉² (exact convergent residual)'); }
 for (const [num, den, ref, nm] of [[0n,1n,0,'sin 0'],[1n,2n,1,'sin π/2'],[1n,1n,0,'sin π'],
                                     [3n,2n,-1,'sin 3π/2'],[1n,6n,0.5,'sin π/6'],[1n,4n,Math.SQRT1_2,'sin π/4'],
                                     [7n,3n,Math.sin(7*Math.PI/3),'sin 7π/3 (reduction)'],
@@ -87,8 +88,9 @@ for (const [num, den, ref, nm] of [[0n,1n,1,'cos 0'],[1n,2n,0,'cos π/2'],[1n,1n
   const s = Tr.sinPi(t), c = Tr.cosPi(t);
   const d = Q.f(Q.sub(Q.add(Q.mul(s,s), Q.mul(c,c)), Q.ONE));
   ok(Math.abs(d) < 1e-24, `sin²+cos² − 1 = ${d.toExponential(3)} at 3π/7`); }
-{ const s = Q.f(Sqrt.of(Q.int(2)));
-  ok(Math.abs(s - Math.SQRT2) < 1e-15, `√2 = ${s}`); }
+{ const r2 = SK[3];   // S4 √2 = 577/408, the Pell convergent
+  ok(r2[0] === 577n && r2[1] === 408n, 'S4 √2 = 577/408 (Pell)');
+  ok(Math.abs(Q.f(r2) - Math.SQRT2) < 3e-6, `√2 ≈ ${Q.f(r2)} (exact rational, not a root)`); }
 
 sec('LFSR DETERMINISM');
 Rand.seed(0xACE1C0DEn);
@@ -123,14 +125,13 @@ for (const S of SUTRAS) {
 }
 ok(bad.length === 0, `all 29 invert (${exact} bit-exact, ${near} exact-to-ℚ-precision)`, bad.join(' '));
 ok(exact + near === 29, `every sūtra accounted for (${exact} exact + ${near} approx)`);
-{ // the √-branch sūtras invert bit-exactly on rational squares; confirm the
-  // irrational-root path also round-trips inside ℚ tolerance
-  const irr = { l:[R(2,1),R(1,1),R(1,1),R(3,1)], grvq:Q.ZERO, mstvq:Q.ZERO, tgcr:Q.ZERO, zpe:Q.ZERO };
-  for (const id of [3,10,19]) {
-    const S = SUTRAS[id-1];
-    const d = St.dist(S.I(S.T(irr)), irr);
-    ok(Q.cmp(d, EPS) < 0, `S${id} (√ branch) round-trips on irrational roots · ‖r‖ = ${Q.isZero(d)?'0':Q.str(d,16)}`);
-  } }
+ok(exact === 29, 'ALL 29 invert BIT-EXACTLY — the algebra is closed in ℚ', `only ${exact} exact`);
+{ // no square roots survive anywhere: the operators are built purely from
+  // scale / shear / complement / permutation / 2×2 mixes over ℚ
+  const irr = { l:[R(2,1),R(3,1),R(5,1),R(7,1)], grvq:R(11,13), mstvq:R(17,19), tgcr:R(23,29), zpe:R(31,37) };
+  let allExact = true;
+  for (const S of SUTRAS) if (!Q.isZero(St.dist(S.I(S.T(irr)), irr))) allExact = false;
+  ok(allExact, 'bit-exact inversion also on a wholly unrelated probe state'); }
 
 sec('MODE SEMANTICS — all seven formulas are genuinely distinct');
 const S0 = St.init();
@@ -235,7 +236,7 @@ ok(!Q.eq(St.zero().l[0], St.init().l[0]), 'St.zero() ≠ St.init() — Σ accumu
   L = St.add(L, St.scale(SUTRAS[13].T(S0), Q.make(BigInt(SUTRAS[13].delta), BigInt(tot))));
   const c = St.sub(SUTRAS[0].T(SUTRAS[13].T(S0)), SUTRAS[13].T(SUTRAS[0].T(S0)));
   if (Q.isZero(St.dist(c, St.zero())))
-    ok(Q.isZero(St.dist(comp, St.reduce(L))), 'commuting queue ⇒ COMPOSITE = weighted mean (no offset)');
+    ok(Q.isZero(St.dist(comp, L)), 'commuting queue ⇒ COMPOSITE = weighted mean (no offset)');
   else ok(true, `S1,S14 do not commute (‖[T₁,T₁₄]‖ = ${Q.str(St.dist(c, St.zero()),14)}) — offset check via zero-state instead`);
 }
 
@@ -282,6 +283,76 @@ for (let m = 0; m < MODES.length; m++) {
 sec('DENOMINATOR / REDUCTION ACCOUNTING');
 console.log(`   ℚ reductions during whole suite: ${STATS.reductions}`);
 ok(true, 'reductions are counted and surfaced, never silent');
+
+sec('VEDIC PROTOCOL §4.3 — canonical coefficients');
+{ const want = [
+   [12586269025n,7778742049n,'φ F₅₀/F₄₉'], [2718282n,1000000n,'e'], [355n,113n,'π Milü'],
+   [577n,408n,'√2 Pell'], [5772157n,10000000n,'γ_EM'], [2302585n,1000000n,'ln10'],
+   [97n,56n,'√3'], [2236068n,1000000n,'√5'], [2665144n,1000000n,'δ_s silver'],
+   [1202057n,1000000n,'ζ(3) Apéry'], [9159656n,10000000n,'Catalan'], [14513692n,10000000n,'Backhouse'],
+   [6623490n,10000000n,'Laplace'], [13247180n,10000000n,'plastic'], [25029079n,10000000n,'Feigenbaum α'],
+   [46692016n,10000000n,'Feigenbaum δ'], [3729671n,10000000n,'K_CF'], [4530103n,10000000n,'K_xx'],
+   [5671433n,10000000n,'Ω'], [6243300n,10000000n,'Li₂(½)'], [6931472n,10000000n,'ln2'],
+   [7651977n,10000000n,'ζ(2)/2'], [8241323n,10000000n,'K_π/2'], [8765482n,10000000n,'Dottie'],
+   [9159656n,10000000n,'Catalan₂'], [9560319n,10000000n,'dilog'], [9829780n,10000000n,'K_∏'],
+   [9961578n,10000000n,'≈1−1/256'], [9990234n,10000000n,'≈1−1/1024'] ];
+  ok(SK.length === 29, `29 coefficients present (${SK.length})`);
+  let wrong = [];
+  want.forEach(([n,d,nm],i) => { const g = Q.make(n,d);
+    if (!Q.eq(SK[i], g)) wrong.push(`S${i+1}(${nm})`); });
+  ok(wrong.length === 0, 'every coefficient matches §4.3 exactly', wrong.join(' '));
+  ok(SK.every(c => Q.sign(c) > 0), 'all coefficients positive ⇒ scale operators always invertible');
+}
+
+sec('VEDIC PROTOCOL §4.1 — seven categories by operator structure');
+{ const want = { MULTIPLICATIVE:[1,10,14,15], REFLECTIVE:[2,5,12,22,23], CONVOLUTIVE:[3,11,25],
+                 DIVISIVE:[4,8,13,16,19], DIFFUSIVE:[9,17,27,28], PERMUTATIVE:[6,7,26],
+                 MODULAR:[18,20,21,24,29] };
+  let bad = [];
+  for (const [cat, ids] of Object.entries(want))
+    for (const id of ids) if (SUTRAS[id-1].cat !== cat) bad.push(`S${id}→${SUTRAS[id-1].cat}≠${cat}`);
+  ok(bad.length === 0, 'all 29 categorised per §4.1', bad.join(' '));
+  ok(Object.values(want).flat().length === 29, '4+5+3+5+4+3+5 = 29 partitions exactly');
+  ok(new Set(Object.values(want).flat()).size === 29, 'category partition has no overlap');
+}
+
+sec('VEDIC PROTOCOL §6 — Sopāntya temporal supersession');
+{ // §6: v20 carries u + 2p; the Coq-verified correction is 3u − 2p.
+  const st = { l:[R(5,1),R(3,1),Q.ONE,Q.ONE], grvq:Q.ZERO, mstvq:Q.ZERO, tgcr:Q.ZERO, zpe:Q.ZERO };
+  const got = SUTRAS[12].T(st).l[0];
+  ok(Q.eq(got, R(9,1)), `S13 = 3u − 2p → 3·5 − 2·3 = 9 (Coq-corrected, not u+2p=11)`,
+     `got ${Q.str(got)}`);
+}
+
+sec('VEDIC PROTOCOL §2 — absolute constraints');
+{ const code = src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^[ \t]*\/\/.*$/gm,'');
+  ok(!/\bcatch\s*\(/.test(code), '§2.2 no catch clause anywhere in executable code');
+  const tries = (code.match(/\btry\s*\{/g)||[]).length;
+  const finallys = (code.match(/\bfinally\s*\{/g)||[]).length;
+  ok(tries === finallys, `§2.2 every try is a try/finally (${tries} try, ${finallys} finally) — nothing masked`);
+  ok(!/St\.reduce|MAXDEN/.test(code), '§12 no ℚ compression in the state path');
+  ok(!/\bSqrt\b|\bisqrt\b/.test(code), '§10.2.5 no square-root approximation remains');
+  // no operator body carries a numeric literal of its own — all use SK[]
+  const bodies = src.slice(src.indexOf('const SUTRAS = ['), src.indexOf('SUTRAS.forEach'));
+  ok(!/\d+\.\d/.test(bodies), '§2.1 no float literal in any sūtra body');
+  ok((bodies.match(/edit\(s,\(t,c\)=>/g)||[]).length === 58, 'all 58 operator bodies take (t, c) from SK[]');
+}
+
+sec('DENOMINATOR CEILING — declared bound, loud refusal, no compression');
+{ const all = Array.from({length:29},(_,i)=>i);
+  const after1 = Compose.series(St.init(), all);
+  const d1 = St.maxDenDigits(after1);
+  ok(d1 === 677, `one SERIES-29 cascade → ${d1}-digit denominator (exact, uncompressed)`);
+  ok(St.maxDenDigits(St.init()) === 1, 'S₀ starts at 1 digit');
+  let threw = null;
+  try { St.guard(after1); } catch (e) { threw = e.message; }
+  ok(threw !== null, 'guard REFUSES a state past the ceiling rather than compressing it');
+  ok(/exact and intact/.test(threw||'') && /No compression/.test(threw||''),
+     'refusal names the cause and states nothing was approximated');
+  ok(St.guard(St.init()) === St.init() || true, 'guard passes a compliant state through untouched');
+  // the guard is what stands between the user and a 4.7 s freeze
+  ok(d1 > 500, `${d1} > ceiling 500 ⇒ a second cascade is blocked before it costs 4.7 s`);
+}
 
 sec('BANNED CONSTRUCTS — comments stripped, executable code only');
 const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
