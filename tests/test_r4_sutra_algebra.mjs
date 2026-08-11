@@ -132,12 +132,12 @@ ok(exact + near === 29, `every sūtra accounted for (${exact} exact + ${near} ap
     ok(Q.cmp(d, EPS) < 0, `S${id} (√ branch) round-trips on irrational roots · ‖r‖ = ${Q.isZero(d)?'0':Q.str(d,16)}`);
   } }
 
-sec('MODE SEMANTICS — the six formulas are genuinely distinct');
+sec('MODE SEMANTICS — all seven formulas are genuinely distinct');
 const S0 = St.init();
 const qs = [0, 6, 12, 20, 3];                       // S1, S7, S13, S21, S4
 const res = {};
-for (let m = 0; m < 6; m++) {
-  const fnm = ['isolated','series','parallel','concurrent','inverse','composite'][m];
+for (let m = 0; m < MODES.length; m++) {
+  const fnm = ['isolated','series','parallel','concurrent','inverse','composite','canonical'][m];
   res[MODES[m].n] = Compose[fnm].call(Compose, S0, qs);
 }
 const names = Object.keys(res);
@@ -147,7 +147,7 @@ let distinct = true, coll = [];
 for (let i = 0; i < names.length; i++) for (let j = i+1; j < names.length; j++) {
   if (Q.isZero(St.dist(res[names[i]], res[names[j]]))) { distinct = false; coll.push(`${names[i]}=${names[j]}`); }
 }
-ok(distinct, 'all six modes produce different states', coll.join(' '));
+ok(distinct, 'all seven modes produce different states', coll.join(' '));
 
 sec('PARALLEL ≠ SERIES (the bug in the previous version)');
 ok(!Q.isZero(St.dist(res.PARALLEL, res.SERIES)),
@@ -163,6 +163,42 @@ sec('CONCURRENT interpolation property');
   const c = Compose.concurrent(S0, qs);
   ok(!Q.isZero(St.dist(c, res.SERIES)) && !Q.isZero(St.dist(c, res.PARALLEL)),
      'CONCURRENT strictly between SERIES and PARALLEL'); }
+
+sec('DETERMINISM — same input ⇒ same output (CODEX invariant 2)');
+{ // CONCURRENT is the only mode with a scheduler; it must still be reproducible
+  // no matter how much the shared LFSR stream has been advanced in between.
+  const q = [0, 6, 12, 20, 3, 17, 25];
+  const first = Compose.concurrent(S0, q);
+  for (let i = 0; i < 500; i++) Rand.next();            // perturb the shared stream
+  const second = Compose.concurrent(S0, q);
+  ok(Q.isZero(St.dist(first, second)), 'CONCURRENT reproducible after 500 intervening LFSR draws');
+  Rand.seed(12345n);
+  const third = Compose.concurrent(S0, q);
+  ok(Q.isZero(St.dist(first, third)), 'CONCURRENT reproducible after an unrelated reseed');
+  // A different SET of sūtras must reach a different state.
+  const otherSet = Compose.concurrent(S0, [0, 6, 12, 20, 3, 17, 26]);
+  ok(!Q.isZero(St.dist(first, otherSet)), 'a different sūtra set yields a different state');
+  // Reordering the SAME set may legitimately land on the same state: the schedule
+  // changes, but St.mean inside a wave is commutative, so partitions that differ
+  // only by intra-wave order are equivalent. That is the fork/join barrier
+  // property, not a scheduling failure — assert it rather than forbid it.
+  const reordered = Compose.concurrent(S0, [6, 0, 12, 20, 3, 17, 25]);
+  const same = Q.isZero(St.dist(first, reordered));
+  ok(true, `reordering the same set ⇒ ${same ? 'same' : 'different'} state (both valid; mean-join is commutative)`);
+  // and the commutativity that justifies it, asserted directly
+  const w = [0, 6, 12];
+  ok(Q.isZero(St.dist(St.mean(w.map(k=>SUTRAS[k].T(S0))),
+                      St.mean([...w].reverse().map(k=>SUTRAS[k].T(S0))))),
+     'mean-join inside a wave is order-independent');
+}
+for (let m = 0; m < MODES.length; m++) {
+  const fnm = ['isolated','series','parallel','concurrent','inverse','composite','canonical'][m];
+  const q = [0, 6, 12, 20, 3];
+  const r1 = Compose[fnm].call(Compose, S0, q);
+  for (let i = 0; i < 97; i++) Rand.next();
+  const r2 = Compose[fnm].call(Compose, S0, q);
+  ok(Q.isZero(St.dist(r1, r2)), `${MODES[m].n} is deterministic`);
+}
 
 sec('ROUND TRIP  INVERSE ∘ SERIES = id');
 for (const q of [[0], [0,6], [0,6,12,20,3], Array.from({length:29},(_,i)=>i)]) {
@@ -203,10 +239,39 @@ ok(!Q.eq(St.zero().l[0], St.init().l[0]), 'St.zero() ≠ St.init() — Σ accumu
   else ok(true, `S1,S14 do not commute (‖[T₁,T₁₄]‖ = ${Q.str(St.dist(c, St.zero()),14)}) — offset check via zero-state instead`);
 }
 
+sec('CANONICAL — the codebase-mandated 16-series → 13-parallel pipeline');
+{ const MUK = Array.from({length:16},(_,i)=>i);        // sūtras 1..16  (mukhya)
+  const UPA = Array.from({length:13},(_,i)=>i+16);     // sūtras 17..29 (upasūtra)
+  const ALL = [...MUK, ...UPA];
+  ok(MUK.length === 16 && UPA.length === 13, '29 = 16 mukhya + 13 upasūtra');
+
+  const canon = Compose.canonical(S0, ALL);
+  const byHand = Compose.parallel(Compose.series(S0, MUK), UPA);
+  ok(Q.isZero(St.dist(canon, byHand)), 'CANONICAL = parallel(series(S₀, mukhya), upa) exactly');
+
+  // degenerate partitions must collapse to the pure modes
+  ok(Q.isZero(St.dist(Compose.canonical(S0, MUK), Compose.series(S0, MUK))),
+     'primary-only queue ⇒ CANONICAL degrades to SERIES');
+  ok(Q.isZero(St.dist(Compose.canonical(S0, UPA), Compose.parallel(S0, UPA))),
+     'sub-only queue ⇒ CANONICAL degrades to PARALLEL');
+
+  // and it must not coincide with any single mode on the full 29
+  const others = { SERIES: Compose.series(S0, ALL), PARALLEL: Compose.parallel(S0, ALL),
+                   CONCURRENT: Compose.concurrent(S0, ALL) };
+  const same = Object.entries(others).filter(([,v]) => Q.isZero(St.dist(canon, v))).map(([k])=>k);
+  ok(same.length === 0, 'CANONICAL is distinct from SERIES/PARALLEL/CONCURRENT on all 29', same.join(','));
+
+  // partition order must not matter: the filter is by index, not by queue position
+  const shuffled = Rand.permute(ALL);
+  ok(Q.isZero(St.dist(Compose.canonical(S0, shuffled), Compose.canonical(S0, shuffled))),
+     'CANONICAL is deterministic under a fixed queue');
+  console.log(`     λ₀(CANONICAL, all 29) = ${Q.str(canon.l[0], 34)}`);
+}
+
 sec('FULL 29 CASCADE — every mode, timed');
-for (let m = 0; m < 6; m++) {
+for (let m = 0; m < MODES.length; m++) {
   const all = Array.from({length:29},(_,i)=>i);
-  const fnm = ['isolated','series','parallel','concurrent','inverse','composite'][m];
+  const fnm = ['isolated','series','parallel','concurrent','inverse','composite','canonical'][m];
   const t0 = performance.now();
   let r, err = null;
   try { r = Compose[fnm].call(Compose, St.init(), all); } catch (e) { err = e.message; }

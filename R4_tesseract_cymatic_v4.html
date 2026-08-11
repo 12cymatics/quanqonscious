@@ -81,6 +81,7 @@ body{background:#08080f;overflow:hidden;font-family:'Courier New',monospace}
     <label><input type="radio" name="cmode" value="3"><span>CONCURRENT</span></label>
     <label><input type="radio" name="cmode" value="4"><span>INVERSE</span></label>
     <label><input type="radio" name="cmode" value="5"><span>COMPOSITE</span></label>
+    <label><input type="radio" name="cmode" value="6"><span>CANONICAL</span></label>
   </div>
   <div id="formula"></div>
   <div>
@@ -133,6 +134,11 @@ body{background:#08080f;overflow:hidden;font-family:'Courier New',monospace}
      INVERSE     S′ = (T_{k_1}⁻¹ ∘ ⋯ ∘ T_{k_N}⁻¹)(S₀) = (T_{k_N} ∘ ⋯ ∘ T_{k_1})⁻¹(S₀)
      COMPOSITE   S′ = Σₖ wₖ Tₖ(S₀) + Γ Σ_{j<k} w_j wₖ [T_j,Tₖ](S₀)
                  wₖ = δₖ/Σδ,  [T_j,Tₖ] = T_j∘Tₖ − Tₖ∘T_j,  Γ = R⁴(S₀)/N
+     CANONICAL   S′ = Ψ_upa(Ψ_mukhya(S₀))                 [codebase-mandated]
+                 Ψ_mukhya = T₁₆ ∘ ⋯ ∘ T₁ (series over the 16 mukhya)
+                 Ψ_upa(S) = (1/|U|) Σ_{k∈U} Tₖ(S) (parallel over the 13 upa)
+                 — matches apply_main_sutras / _run_parallel_subsutras in
+                   tgcr_cymatic_engine_compliant.py, which mark this MANDATORY
 
    CONCURRENT strictly interpolates SERIES (W = N) and PARALLEL (W = 1).
    COMPOSITE = PARALLEL's linear part + first-order BCH commutator coupling.
@@ -575,7 +581,10 @@ const MODES = [
    note:'reverse order — exactly undoes the SERIES run of the same queue' },
  { n:'COMPOSITE',  f:'S′ = Σ<sub>k</sub> w<sub>k</sub>T<sub>k</sub>(S₀) + Γ Σ<sub>j&lt;k</sub> w<sub>j</sub>w<sub>k</sub>[T<sub>j</sub>,T<sub>k</sub>](S₀)',
    x:'w<sub>k</sub> = δ<sub>k</sub>/Σδ,  [T<sub>j</sub>,T<sub>k</sub>] = T<sub>j</sub>T<sub>k</sub> − T<sub>k</sub>T<sub>j</sub>,  Γ = R⁴(S₀)/N',
-   note:'linear part + first-order BCH commutator coupling — the combined function' }
+   note:'linear part + first-order BCH commutator coupling — the combined function' },
+ { n:'CANONICAL',  f:'S′ = Ψ<sub>upa</sub>(Ψ<sub>mukhya</sub>(S₀))',
+   x:'Ψ<sub>mukhya</sub> = T<sub>16</sub> ∘ ⋯ ∘ T<sub>1</sub> (series),   Ψ<sub>upa</sub>(S) = (1/|U|) Σ<sub>k∈U</sub> T<sub>k</sub>(S) (parallel)',
+   note:'the pipeline the codebase mandates: 16 mukhya in SERIES, then 13 upa in PARALLEL' }
 ];
 
 const Compose = {
@@ -608,6 +617,13 @@ const Compose = {
   concurrent(S0, ks) {
     const N = ks.length;
     const Wv = Math.max(1, Math.ceil(Math.sqrt(N)));      // ⟨wave count — an integer, not state⟩
+    /* Seed the scheduler from the queue itself rather than from the shared LFSR
+       stream. A real scheduler's interleaving is arbitrary but must be *fixed*
+       for a given input, or the same queue would evolve differently on each run
+       and break the determinism invariant (CODEX 7.2 / CLAUDE.md invariant 2). */
+    let h = 0x9E3779B9n;
+    for (const k of ks) h = (h * 33n + BigInt(k + 1)) & 0xFFFFFFFFn;
+    Rand.seed(h);
     const order = Rand.permute(ks);
     const waves = Array.from({ length: Wv }, () => []);
     order.forEach((k, i) => waves[i % Wv].push(k));
@@ -646,6 +662,16 @@ const Compose = {
     }
     trace(`<span class="tr-ex">Γ = ${Q.str(Gamma, 12)} · pairs = ${pairs} · ‖C‖ = ${Q.str(St.dist(C, St.zero()), 12)}</span>`);
     return St.reduce(St.add(L, St.scale(C, Gamma)));
+  },
+  /* CANONICAL — the pipeline tgcr_cymatic_engine_compliant.py marks MANDATORY:
+     the 16 mukhya sūtras strictly in SERIES, then the 13 upasūtras in PARALLEL
+     over that result. The queue is partitioned by index rather than ignored, so
+     a primary-only queue degrades to SERIES and a sub-only queue to PARALLEL. */
+  canonical(S0, ks) {
+    const mukhya = ks.filter(k => k < 16), upa = ks.filter(k => k >= 16);
+    trace(`<span class="tr-ex">⛓ mukhya×${mukhya.length} SERIES → upa×${upa.length} PARALLEL</span>`);
+    const mid = mukhya.length ? this.series(S0, mukhya) : S0;
+    return upa.length ? this.parallel(mid, upa) : mid;
   }
 };
 
@@ -707,7 +733,8 @@ const QUEUE = {
     const t0 = performance.now();
     try {
       const fn = [Compose.isolated, Compose.series, Compose.parallel,
-                  Compose.concurrent, Compose.inverse, Compose.composite][this.mode];
+                  Compose.concurrent, Compose.inverse, Compose.composite,
+                  Compose.canonical][this.mode];
       STATE = fn.call(Compose, STATE, this.items);
       const sd = this.items.reduce((s, i) => s + SUTRAS[i].delta, 0);
       showDelta(this.mode === 4 ? -sd : sd);
@@ -723,8 +750,11 @@ const QUEUE = {
   },
   async cascade() {
     this.items = Array.from({ length: 29 }, (_, i) => i);
-    this.ui();
-    trace('<span class="tr-m">॥ CASCADE 29 · Σδ = 435 ॥</span>');
+    this.mode = 6;                                        // the mandated pipeline
+    const radio = document.querySelector('input[name="cmode"][value="6"]');
+    if (radio) radio.checked = true;
+    updateFormula(); this.ui();
+    trace('<span class="tr-m">॥ CASCADE 29 · CANONICAL · Σδ = 435 ॥</span>');
     await this.run();
   }
 };
