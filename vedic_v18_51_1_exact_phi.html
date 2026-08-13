@@ -4656,6 +4656,15 @@ function requestStrictV5Step() {
   if (STRICT_V5_WORKER_UNAVAILABLE) { strictV5SyncStepStaged(); return true; }
   if (STRICT_V5_WORKER_BUSY) return false;
   if (!STRICT_V5_WORKER) {
+    /* The one catch kept deliberately. §2.2 forbids MASKING a failure; this
+       masks nothing — it records the reason on STRICT_V5_WORKER_UNAVAILABLE,
+       mirrors it to window, and writes it to LOG, so the condition is visible
+       the moment it happens. Nor is it an arithmetic fallback: the synchronous
+       path runs the identical exact kernel on the main thread, so no result
+       changes and no precision is lost. Blob-URL Workers are routinely blocked
+       when a single-file build is opened over file://, which is this engine's
+       primary deployment, so letting the throw escape would take down the
+       frame loop in the common case. */
     try {
       STRICT_V5_WORKER = createStrictV5Worker();
     } catch (err) {
@@ -6468,14 +6477,14 @@ window.addEventListener('error', ev => {
     src: String(ev.filename), line: ev.lineno, col: ev.colno,
     stack: ev.error && ev.error.stack ? String(ev.error.stack).slice(0, 600) : '' };
   window._ERRORS.push(rec); if (window._ERRORS.length > 50) window._ERRORS.shift();
-  try { LOG.add(`⛔ UNCAUGHT: ${rec.msg} @${rec.line}:${rec.col}`, 'off'); LOG.render(); } catch (_) {}
+  try { LOG.add(`⛔ UNCAUGHT: ${rec.msg} @${rec.line}:${rec.col}`, 'off'); LOG.render(); } catch (logErr) { console.error('LOG failed while reporting an uncaught error:', logErr, rec); }
 });
 window.addEventListener('unhandledrejection', ev => {
   const m = (ev.reason && (ev.reason.message || String(ev.reason))) || '(no reason)';
   const rec = { t: Date.now(), msg: 'UNHANDLED REJECTION: ' + m,
     stack: ev.reason && ev.reason.stack ? String(ev.reason.stack).slice(0, 600) : '' };
   window._ERRORS.push(rec); if (window._ERRORS.length > 50) window._ERRORS.shift();
-  try { LOG.add(`⛔ ${rec.msg}`, 'off'); LOG.render(); } catch (_) {}
+  try { LOG.add(`⛔ ${rec.msg}`, 'off'); LOG.render(); } catch (logErr) { console.error('LOG failed while reporting a rejection:', logErr, rec); }
 });
 /* Version integrity runs once at load, after every identifier exists. A
    mismatched build is visible the moment the file opens rather than only
@@ -6488,7 +6497,7 @@ try {
     : `⛔ VERSION MISMATCH: ${window._VERSION_INTEGRITY.problems.join('; ')}`,
     window._VERSION_INTEGRITY.ok ? 'sys' : 'off');
   LOG.render();
-} catch (_) {}
+} catch (logErr) { console.error('LOG failed while reporting version integrity:', logErr); }
 if (!window._VERSION_INTEGRITY.ok)
   console.error('VERSION MISMATCH:', window._VERSION_INTEGRITY.problems);
 </script>
