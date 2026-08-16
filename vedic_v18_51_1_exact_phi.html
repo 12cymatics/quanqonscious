@@ -1835,12 +1835,8 @@ const C = {
   mu0: Q.mk(1256637n, 1000000000000n),
   hbar: Q.mk(1054571817n, 10n ** 43n),
   G: Q.mk(667430n, 10n ** 16n),
-  omega_hz: 432,
   phi_f: 12586269025 / 7778742049,
   phi_cu_f: (2 * 12586269025 + 7778742049) / 7778742049,
-  alpha_f: 1 / 137.035999,
-  sqrt2_f: 577 / 408,
-  sqrt3_f: 97 / 56,
 };
 C.phi_inv_f = C.phi_f - 1;                         
 C.phi_sq_f = C.phi_f + 1;                          
@@ -2075,12 +2071,14 @@ const MAGFIELD = {
   },
 };
 const TGCR = {
-  kappa: 1.0,      
-  eta: 0.5,        
+  /* Exact physics scalars. The float mirrors below are derived from these
+     once, never edited independently, and exist only so the per-pixel render
+     loops can read a Number without a Q.fl per pixel (§12 render exit). */
+  kappaQ: Q.mk(1n), etaQ: Q.mk(1n, 2n),
+  kappa: 0, eta: 0,   /* derived from kappaQ/etaQ immediately after this object */
   v: [0, 0, 0], vQ: [Q.ZERO, Q.ZERO, Q.ZERO],
   omega: [0, 0, 0], omegaQ: [Q.ZERO, Q.ZERO, Q.ZERO],
   energy: 0,
-  helicalPhase: 1.0, 
   beltramiLambda: 0, beltramiLambdaSq: Q.ZERO,
   OMEGA_MAX: null,
   setVortex(theta, phi, strength) {
@@ -2126,16 +2124,16 @@ const TGCR = {
     const vSq = this.vQ.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
     const helicity = this.vQ.reduce((t, x, i) => Q.add(t, Q.mul(x, this.omegaQ[i])), Q.ZERO);
     const half = Q.mk(1n, 2n);
-    this.energyQ = Q.add(Q.add(Q.mul(half, oSq), Q.mul(Q.mul(half, qFromFloat(this.kappa)), vSq)), Q.mul(qFromFloat(this.eta), helicity));
+    this.energyQ = Q.add(Q.add(Q.mul(half, oSq), Q.mul(Q.mul(half, this.kappaQ), vSq)), Q.mul(this.etaQ, helicity));
     this.energy = Q.fl(this.energyQ);
     return this.energy;
   },
-  checkPhaseLock(theta, latticeSpacing) {
-    this.helicalPhase = theta / (3 * latticeSpacing);
-    return abs(this.helicalPhase - 1.0);
-  },
   auditOmegaRange() { return { strict: true, mutated: false }; }
 };
+/* Render mirrors, derived once from the exact scalars so the two can never
+   drift. Nothing writes kappa/eta at runtime, so one derivation suffices. */
+TGCR.kappa = Q.fl(TGCR.kappaQ);
+TGCR.eta   = Q.fl(TGCR.etaQ);
 const WHEELER = {
   inertiaPlane: PI / 2,
   inertiaOct: 2,                              
@@ -2341,7 +2339,10 @@ let cycle = 0;
 let simTime = 0;
 let lastFrameT = 0;
 let cw = 0, ch = 0; 
-const SIM_DT = 16.667 / 50; 
+/* 16.667/50 ms exactly. The animation clock is a float accumulator, so the
+   value is floated once here rather than re-derived per frame. */
+const SIM_DT_Q = Q.mk(16667n, 50000n);
+const SIM_DT = Q.fl(SIM_DT_Q); 
 const AMP = {
   field: 60,      
   tube: 35,       
@@ -4394,13 +4395,11 @@ const STRICT_SUTRA_KERNEL = {
     }
     let drive = Q.ZERO;
     for (let i = 0; i < 16; i++) drive = Q.add(drive, Q.abs(Q.sub(VTX.psi[i], old[i])));
-    s._driveLast = Q.fl(drive);
     if (s.id === 24 && VTX.phase) {
       const zf = KConsts.powZeta(1), zb = KConsts.powZeta(7);  
       for (let i = 0; i < 16; i++) {
         VTX.phase[i] = CQuad.mul(VTX.phase[i], (VTX.hw(i) & 1) === 0 ? zf : zb);
       }
-      s._driveLast = 0.45;   
     }
     if (s.id === 29) {
       MSTVQ.setB(w);
