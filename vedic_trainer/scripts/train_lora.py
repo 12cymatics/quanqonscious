@@ -88,7 +88,9 @@ def main() -> None:
             max_length=cfg.data.max_seq_length,
             padding=False,
         )
-        out["labels"] = [list(ids) for ids in out["input_ids"]]
+        # NOTE: labels are produced by DataCollatorForLanguageModeling(mlm=False),
+        # which sets labels = input_ids with pad positions masked to -100.
+        # Pre-setting them here makes tokenizer.pad() fail on the ragged list.
         return out
 
     train_ds = train_ds.map(_tokenize, batched=True, remove_columns=train_ds.column_names)

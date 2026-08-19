@@ -9,7 +9,7 @@ from datasets import load_dataset
 from torch import nn
 from transformers import PreTrainedTokenizerBase
 
-SCAN_SPLITS: tuple[str, ...] = ("simple", "length", "jump")
+SCAN_SPLITS: tuple[str, ...] = ("simple", "length", "addprim_jump")
 
 
 @dataclass
@@ -46,7 +46,7 @@ def evaluate_scan(
     for split in splits:
         if split not in SCAN_SPLITS:
             raise ValueError(f"unknown SCAN split: {split!r}")
-        ds = load_dataset("scan", split, split="test")
+        ds = load_dataset("scan", split, split="test", trust_remote_code=True)
         if eval_subset is not None:
             ds = ds.select(range(min(eval_subset, len(ds))))
         n_total = 0

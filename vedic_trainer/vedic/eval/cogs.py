@@ -36,7 +36,18 @@ def evaluate_cogs(
     for split in splits:
         if split not in COGS_SPLITS:
             raise ValueError(f"unknown COGS split: {split!r}")
-        ds = load_dataset("cogs", split=split)
+        # `cogs` does not exist on the HF Hub. Load the canonical Kim & Linzen
+        # release (najoungkim/COGS) from local TSVs instead.
+        import os
+        _dir = os.environ.get("COGS_DIR", ".")
+        ds = load_dataset(
+            "csv",
+            data_files={split: os.path.join(_dir, f"cogs_{split}.tsv")},
+            split=split,
+            delimiter="\t",
+            column_names=["sentence", "logical_form", "split_type"],
+            quoting=3,
+        )
         if eval_subset is not None:
             ds = ds.select(range(min(eval_subset, len(ds))))
         n_total = 0
