@@ -172,3 +172,46 @@ Walsh row (image `c·h₀`), S21 takes absolute values (constant vector `|c|`),
 S22 takes differences over (v, v̄) pairs (exactly 0 on a constant). Any queue
 containing that ordered run is the zero map. CONCURRENT's 220-digit
 denominators show the real cost of exact-ℚ composition.
+
+---
+
+## After fixing the structural defects
+
+The runs above were not a fair test of the hypothesis: two of the four
+auxiliary losses had zero gradient and the Tesseract projection was frozen at
+random initialisation. With all four defects fixed (`44ce458`), the ablation
+was re-run from scratch.
+
+| seed | `no_sutra` | `full` | Δ | rel | prior rel (2 dead) |
+|---|---|---|---|---|---|
+| 42 | 1.6501 | 2.1220 | +0.4719 | **+28.60%** | +3.84% |
+| 1 | 1.6566 | 2.1310 | +0.4744 | **+28.64%** | +3.19% |
+| 2 | 1.6630 | 1.9906 | +0.3276 | **+19.70%** | +3.31% |
+| **mean** | **1.6566** | **2.0812** | **+0.4246** | **+25.63%** | +3.44% |
+| sd | 0.0064 | 0.0786 | | | |
+
+- effect is **66×** the baseline seed sd
+- ranges **disjoint** (worst `no_sutra` 1.6630 < best `full` 1.9906)
+- direction unanimous
+- the penalty is **7.4× larger** than when half the objective was inert
+
+Making the losses work made the result worse, not better. The earlier +3.44%
+understated the damage precisely because `L_cons` and `L_curv` contributed
+nothing.
+
+### Caveats
+
+- **Baseline shifted** 1.6477 → 1.6501. Expected: `TesseractWM`'s parameters
+  now enter the optimizer, so AdamW weight-decays them even in the `no_sutra`
+  arm where no auxiliary gradient flows.
+- **`full` variance grew** (sd 0.0051 → 0.0786). Seed 2 lands at +19.7% while
+  42 and 1 sit at +28.6%, so the live objective is less stable across seeds
+  than the inert one was.
+- **Loss scale not retuned.** `L_cons` now contributes ≈1.99 weighted against
+  a CE of ≈1.7 at the configured β = 0.05, i.e. comparable to the main
+  objective. The weights were chosen for the old (inert) scales and were run
+  unchanged rather than retuned to flatter the result. A fair follow-up would
+  rescale the auxiliary weights so each sits an order of magnitude below CE,
+  which is the usual convention. **This run does not settle whether a
+  well-scaled version of these losses would still hurt.**
+
