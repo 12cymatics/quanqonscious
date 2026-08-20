@@ -309,3 +309,105 @@ def test_out_of_range_sutra_id_raises():
 def test_wrong_vertex_count_raises():
     with pytest.raises(ValueError):
         K.apply_sutra(1, tuple(Fraction(0) for _ in range(8)), STRENGTH)
+
+
+# ═══════════════════════════════ Gate E — operator records (blueprint)
+
+
+def test_every_sutra_has_a_complete_operator_record():
+    recs = K.all_operator_records()
+    assert len(recs) == 29
+    for r in recs:
+        assert r.domain == "ℚ^16 over V4 = Z₂⁴"
+        assert r.codomain == "ℚ^16 over V4 = Z₂⁴"
+        assert r.decomposition and r.extensional and r.intensional
+
+
+def test_linearity_status_is_declared_and_correct():
+    """MULT multiplies Ψ by Ψ and CONV convolves Ψ with itself, so both are
+    quadratic. The other five kinds are linear."""
+    lin = {s.id for s in K.SUTRAS if K.is_linear(s.id)}
+    quad = {s.id for s in K.SUTRAS if not K.is_linear(s.id)}
+    assert quad == {s.id for s in K.SUTRAS if s.kind in ("MULT", "CONV")}
+    assert lin | quad == set(K.ALL)
+
+
+def test_linear_operators_really_are_linear():
+    """Verified by superposition, not asserted."""
+    import random
+    r = random.Random(0)
+    f = tuple(Fraction(r.randint(-9, 9), r.randint(1, 5)) for _ in range(16))
+    g = tuple(Fraction(r.randint(-9, 9), r.randint(1, 5)) for _ in range(16))
+    fg = tuple(a + b for a, b in zip(f, g))
+    for s in K.SUTRAS:
+        if not K.is_linear(s.id):
+            continue
+        lhs = K.apply_sutra(s.id, fg, STRENGTH)
+        rhs = tuple(a + b for a, b in zip(K.apply_sutra(s.id, f, STRENGTH),
+                                          K.apply_sutra(s.id, g, STRENGTH)))
+        assert lhs == rhs, f"S{s.id} declared linear but fails superposition"
+
+
+def test_quadratic_operators_really_are_not_linear():
+    import random
+    r = random.Random(1)
+    f = tuple(Fraction(r.randint(1, 9)) for _ in range(16))
+    g = tuple(Fraction(r.randint(1, 9)) for _ in range(16))
+    fg = tuple(a + b for a, b in zip(f, g))
+    for s in K.SUTRAS:
+        if K.is_linear(s.id):
+            continue
+        lhs = K.apply_sutra(s.id, fg, STRENGTH)
+        rhs = tuple(a + b for a, b in zip(K.apply_sutra(s.id, f, STRENGTH),
+                                          K.apply_sutra(s.id, g, STRENGTH)))
+        assert lhs != rhs, f"S{s.id} declared quadratic but behaves linearly"
+
+
+def test_quadratic_operators_refuse_a_matrix_representation():
+    for s in K.SUTRAS:
+        if not K.is_linear(s.id):
+            with pytest.raises(ValueError, match="quadratic"):
+                K.operator_matrix(s.id, STRENGTH)
+
+
+def test_linear_operator_matrices_reproduce_the_action():
+    """Matrix invariant: M·Ψ must equal the operator applied to Ψ."""
+    for s in K.SUTRAS:
+        if not K.is_linear(s.id):
+            continue
+        M = K.operator_matrix(s.id, STRENGTH)
+        got = tuple(sum((M[i][j] * PSI[j] for j in range(16)), Fraction(0))
+                    for i in range(16))
+        assert got == K.apply_sutra(s.id, PSI, STRENGTH), f"S{s.id} matrix mismatch"
+
+
+def test_linear_operators_are_reversible_at_this_strength():
+    """Reversibility condition: det ≠ 0."""
+    for s in K.SUTRAS:
+        if K.is_linear(s.id):
+            assert K.is_reversible(s.id, STRENGTH), f"S{s.id} is singular"
+
+
+def test_matrix_at_zero_strength_is_the_identity():
+    for s in K.SUTRAS:
+        if not K.is_linear(s.id):
+            continue
+        M = K.operator_matrix(s.id, Fraction(0))
+        for i in range(16):
+            for j in range(16):
+                assert M[i][j] == (1 if i == j else 0)
+
+
+def test_determinant_is_exact_and_matches_a_known_case():
+    ident = tuple(tuple(Fraction(1 if i == j else 0) for j in range(4))
+                  for i in range(4))
+    assert K.determinant(ident) == 1
+    swap = (ident[1], ident[0], ident[2], ident[3])
+    assert K.determinant(swap) == -1
+
+
+def test_intensional_evidence_is_labelled_uncertified():
+    """The blueprint says these are generic constructions, not proven Vedic
+    decompositions. That label must not be quietly upgraded."""
+    for r in K.all_operator_records():
+        assert "UNCERTIFIED" in r.intensional

@@ -110,10 +110,21 @@ SANSKRIT: Tuple[str, ...] = (
     "ध्वजाङ्क", "गुणितसमुच्चयः", "अन्त्ययोः", "संरक्षण",
 )
 
-# Per-sutra exact coefficients (Vedic protocol v4.0 §4.3). Every one is an
-# exact rational; no IEEE-754 representation exists in the arithmetic path.
+# Per-sutra coefficients (Vedic protocol v4.0 §4.3). Every one is an exact
+# rational; no IEEE-754 representation exists in the arithmetic path.
+#
+# CAVEAT, per the Exact Kernel Evolution Blueprint (§Golden-ratio extension):
+# these are rational *representatives*, not the transcendental/algebraic
+# constants themselves. φ, √2, √3, √5, e, π, ln2 … are irrational and cannot
+# live in ℚ. S1's 12586269025/7778742049 is the Fibonacci convergent F₅₀/F₄₉,
+# which agrees with φ to double precision but is NOT φ. The blueprint is
+# explicit that "treating those values as elements of K2 would be false" and
+# that the canonical home for φ and √5 is the extension C4 = K2(√5), where
+# φ = (1+√5)/2 and φ³ = 2 + √5 exactly. See ``k2_field.py``; use
+# ``k2_field.phi()`` when exactness in φ is required, and these rationals only
+# where a declared rational representative is what the operator wants.
 COEFFICIENT: Dict[int, Fraction] = {
-    1:  Fraction(12586269025, 7778742049),   # φ  (F₅₀/F₄₉)
+    1:  Fraction(12586269025, 7778742049),   # F₅₀/F₄₉ ≈ φ (see caveat; exact φ is in C4)
     2:  Fraction(2718282, 1000000),          # e
     3:  Fraction(355, 113),                  # π  (Milü)
     4:  Fraction(577, 408),                  # √2 (Pell convergent)
@@ -455,3 +466,139 @@ def compose(mode: str, psi: Q16, strength: Fraction,
     if key not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {sorted(MODES)}")
     return MODES[key](psi, strength, order)
+
+
+# ----------------------------------------------------------------------
+# Operator records (Exact Kernel Evolution Blueprint, Gate E)
+# ----------------------------------------------------------------------
+#
+# The blueprint requires, per operator: exact domain/codomain, decomposition,
+# linearity status, reversibility conditions, matrix/operator invariant, and
+# a separation of extensional from intensional evidence.
+#
+#   EXTENSIONAL — the output equals the declared mathematical map.
+#   INTENSIONAL — the implementation uses the claimed *Vedic decomposition*.
+#
+# The blueprint states plainly that the current 29-entry runtime is
+# "executable but several entries are generic phase, permutation, or
+# pair-rotation constructions ... not yet certified as the intended Vedic
+# decompositions." That assessment is carried here rather than papered over:
+# every operator is EXTENSIONALLY defined and tested against its declared map,
+# and every one is INTENSIONALLY uncertified.
+
+LINEAR_KINDS = frozenset({"REFL", "DIV", "DIFF", "PERM", "MOD"})
+"""Kinds whose action is linear in Ψ. MULT and CONV are quadratic:
+MULT multiplies Ψᵢ by Ψ_{i⊕1}, CONV convolves Ψ with itself."""
+
+QUADRATIC_KINDS = frozenset({"MULT", "CONV"})
+
+EXTENSIONAL_STATUS = "defined and tested against the declared map"
+INTENSIONAL_STATUS = (
+    "UNCERTIFIED — the operator is a generic blend/permutation/convolution "
+    "form, not a proven Vedic arithmetic decomposition"
+)
+
+
+def is_linear(sid: int) -> bool:
+    """Whether S_sid acts linearly on Ψ (blueprint: linearity status)."""
+    _check_id(sid)
+    return SUTRA_KIND[sid] in LINEAR_KINDS
+
+
+def operator_matrix(sid: int, strength: Fraction) -> Tuple[Tuple[Fraction, ...], ...]:
+    """The exact 16×16 matrix of a linear sutra (blueprint: matrix invariant).
+
+    Raises for quadratic kinds, which have no matrix representation — that
+    refusal is the point: MULT and CONV are not linear operators and must not
+    be reported as though they were.
+    """
+    _check_id(sid)
+    if not is_linear(sid):
+        raise ValueError(
+            f"S{sid} is {SUTRA_KIND[sid]}, which is quadratic in Ψ; "
+            "it has no 16×16 matrix representation"
+        )
+    cols = []
+    for j in range(NUM_VERTICES):
+        basis = tuple(Fraction(1) if i == j else Fraction(0)
+                      for i in range(NUM_VERTICES))
+        cols.append(apply_sutra(sid, basis, strength))
+    # cols[j] is the image of e_j, i.e. column j; transpose to row-major.
+    return tuple(tuple(cols[j][i] for j in range(NUM_VERTICES))
+                 for i in range(NUM_VERTICES))
+
+
+def determinant(matrix: Sequence[Sequence[Fraction]]) -> Fraction:
+    """Exact determinant by fraction-free Gaussian elimination."""
+    n = len(matrix)
+    a = [list(row) for row in matrix]
+    det = Fraction(1)
+    for col in range(n):
+        piv = next((r for r in range(col, n) if a[r][col] != 0), None)
+        if piv is None:
+            return Fraction(0)
+        if piv != col:
+            a[col], a[piv] = a[piv], a[col]
+            det = -det
+        det *= a[col][col]
+        inv = Fraction(1) / a[col][col]
+        for r in range(col + 1, n):
+            if a[r][col] != 0:
+                f = a[r][col] * inv
+                for c in range(col, n):
+                    a[r][c] -= f * a[col][c]
+    return det
+
+
+def is_reversible(sid: int, strength: Fraction) -> bool:
+    """Reversibility condition: a linear sutra is invertible iff det ≠ 0.
+
+    Quadratic kinds are not decided here and raise rather than guess.
+    """
+    return determinant(operator_matrix(sid, strength)) != 0
+
+
+@dataclass(frozen=True)
+class OperatorRecord:
+    """The blueprint's per-operator evidence record."""
+
+    id: int
+    name: str
+    kind: str
+    category: str
+    domain: str
+    codomain: str
+    decomposition: str
+    linear: bool
+    extensional: str
+    intensional: str
+
+
+DECOMPOSITION = {
+    "MULT": "Ψᵢ ↦ Ψᵢ·(1 + α·Ψ_{i⊕1})   [bit-0 neighbour product]",
+    "REFL": "Ψᵢ ↦ blend(Ψᵢ, (Ψᵢ+Ψ_c)/2, α)   [complement average]",
+    "CONV": "Ψᵢ ↦ blend(Ψᵢ, (Ψ⊛Ψ)ᵢ/16, α)   [XOR self-convolution]",
+    "DIV":  "Ψᵢ ↦ blend(Ψᵢ, m + hw(i)/4·(edge−m), α)   [Hamming layers]",
+    "DIFF": "Ψᵢ ↦ blend(Ψᵢ, edgeMean(i), α)   [graph Laplacian]",
+    "PERM": "Ψᵢ ↦ blend(Ψᵢ, Ψ_{i⊕2^((id+1)&3)}, α)   [axis reflection]",
+    "MOD":  "Ψᵢ ↦ blend(Ψᵢ, mean(Ψ), α)   [residue toward mean]",
+}
+
+
+def operator_record(sid: int) -> OperatorRecord:
+    """The full record for one sutra."""
+    _check_id(sid)
+    s = SUTRAS[sid - 1]
+    decomp = DECOMPOSITION[s.kind]
+    if sid == 5:
+        decomp = "Ψᵢ ↦ blend(Ψᵢ, −Ψ_c, α)   [zero-sum complement]"
+    return OperatorRecord(
+        id=sid, name=s.name, kind=s.kind, category=s.category,
+        domain="ℚ^16 over V4 = Z₂⁴", codomain="ℚ^16 over V4 = Z₂⁴",
+        decomposition=decomp, linear=is_linear(sid),
+        extensional=EXTENSIONAL_STATUS, intensional=INTENSIONAL_STATUS,
+    )
+
+
+def all_operator_records() -> Tuple[OperatorRecord, ...]:
+    return tuple(operator_record(i) for i in ALL)
