@@ -130,9 +130,15 @@ def schedule_seed(indices: Sequence[int]) -> int:
 #          indices (v < v⊕mask), zero elsewhere.
 #   S27 -> returns a scalar. Lifted like S18.
 #
-# Binary sutras (S3, S17, S23) take a second operand Φ. Under composition the
-# canonical binding is self-application Φ = Ψ, which is how a bilinear form
-# becomes a unary operator; an explicit Φ can be supplied instead.
+# Binary sutras (S3, S17, S23) take a second operand Φ. Composition needs a
+# unary operator, so Φ must be bound to a function of Ψ.
+#
+# The obvious binding, Φ = Ψ, is wrong for S17: S17(Ψ, Ψ) = Ψ·Ψ_ref/Ψ_ref = Ψ
+# for every ref, so T₁₇ becomes the identity — a no-op in SERIES and pure
+# dilution in a PARALLEL mean. The default binding is therefore the Nikhilam
+# complement Φ = S2(Ψ), which is the pairing involution S7/S8/S22/S23 already
+# use, and which degenerates for none of the three (verified in
+# test_composition.py). BINARY_BINDING can be swapped for another policy.
 
 
 @dataclass(frozen=True)
@@ -155,12 +161,24 @@ def _embed_pairs8(vals: Sequence[Fraction], mask: int) -> Q16:
     return tuple(out)
 
 
+def nikhilam_binding(psi: Q16) -> Q16:
+    """Default Φ for the binary sutras: the Nikhilam complement S2(Ψ)."""
+    return S.s2_nikhilam(psi)
+
+
+BINARY_BINDING: Callable[[Q16], Q16] = nikhilam_binding
+"""Policy that supplies Φ to S3/S17/S23 under composition.
+
+Must not make any of them the identity — Φ = Ψ does exactly that to S17.
+"""
+
+
 def _unary_ops() -> Dict[int, Callable[[Q16], Q16]]:
     """Build the canonical T_k for k = 0..28 (sutra S(k+1))."""
     return {
         0:  lambda p: S.s1_eka_adhikena(p),
         1:  lambda p: S.s2_nikhilam(p),
-        2:  lambda p: S.s3_urdhva_tiryak(p, p),          # Φ = Ψ
+        2:  lambda p: S.s3_urdhva_tiryak(p, BINARY_BINDING(p)),
         3:  lambda p: S.s4_paravartya(p),
         4:  lambda p: S.s5_shunyam_samya(p),
         5:  lambda p: S.s6_anurupya_shunyam(p),
@@ -174,13 +192,13 @@ def _unary_ops() -> Dict[int, Callable[[Q16], Q16]]:
         13: lambda p: S.s14_ekanyunena_purvena(p),
         14: lambda p: S.s15_gunitasamucchaya_product(p),
         15: lambda p: S.s16_gunaka_samucchaya(p),
-        16: lambda p: S.s17_anurupyena_proportion(p, p), # Φ = Ψ
+        16: lambda p: S.s17_anurupyena_proportion(p, BINARY_BINDING(p)),
         17: lambda p: st_scale(p, S.s18_adyamadyena_antyamantyena(p)),
         18: lambda p: S.s19_lopana_sthapanabhyam(p),
         19: lambda p: S.s20_vilokanam_spect(p),
         20: lambda p: S.s21_dhvajanka_flag(p),
         21: lambda p: _embed_pairs8(S.s22_parity_complement(p), S.FULL_MASK),
-        22: lambda p: S.s23_dwandwa_yoga(p, p),          # Φ = Ψ
+        22: lambda p: S.s23_dwandwa_yoga(p, BINARY_BINDING(p)),
         23: lambda p: S.s24_kevalaih_saptakam(p),
         24: lambda p: S.s25_vestana_circular(p),
         25: lambda p: S.s26_yavadunam_square(p),
@@ -340,3 +358,31 @@ def compose(mode: str, psi: Q16, indices: Sequence[int] = ALL) -> Q16:
         raise ValueError(f"unknown composition mode {mode!r}; "
                          f"expected one of {sorted(MODES)}")
     return MODES[key](psi, indices)
+
+
+def annihilating_runs(indices: Sequence[int] = ALL) -> Tuple[Tuple[int, ...], ...]:
+    """Ordered sub-runs of the queue that are the zero map on every input.
+
+    SERIES silently returning a zero vector is a valid computation but a
+    useless result a caller could mistake for signal. This reports *why*.
+
+    The known structural run is S20 → S21 → S22: S20 projects onto one Walsh
+    row so its image is c·h_axis; S21 takes absolute values, turning the
+    alternating vector into the constant |c|; S22 differences (v, v⊕mask)
+    pairs, which is exactly zero on a constant. It is a property of the
+    specified operators, not of any particular Ψ, so it cannot be fixed by a
+    different binding or lift — only by changing S20/S21/S22 themselves.
+    """
+    ks = _check_queue(indices)
+    found: List[Tuple[int, ...]] = []
+    for run in ((19, 20, 21),):
+        pos = [i for i, k in enumerate(ks) if k in run]
+        ordered = [ks[i] for i in pos]
+        if ordered == list(run):
+            found.append(run)
+    return tuple(found)
+
+
+def is_degenerate_series(indices: Sequence[int] = ALL) -> bool:
+    """True when SERIES over this queue is the zero map for every input."""
+    return bool(annihilating_runs(indices))

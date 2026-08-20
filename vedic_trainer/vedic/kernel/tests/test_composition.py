@@ -259,16 +259,33 @@ def test_composite_works_where_preconditions_hold():
     assert len(out) == 16 and all(isinstance(x, Fraction) for x in out)
 
 
-def test_t17_is_the_identity_under_self_binding():
-    """The registry binds Φ = Ψ to make S17 unary, and S17(Ψ, Ψ) = Ψ.
+def test_binary_binding_never_degenerates_to_the_identity():
+    """No binary sutra may become a no-op under composition.
 
-    So T₁₇ is the identity operator: it is a no-op in SERIES and pure
-    dilution in a PARALLEL mean. Two of the 29 composed operators are inert
-    this way — see also test_t18_scales_by_a_scalar.
+    Φ = Ψ makes S17 the identity (Ψ·Ψ_ref/Ψ_ref = Ψ) — a no-op in SERIES and
+    pure dilution in a PARALLEL mean. The default binding is the Nikhilam
+    complement Φ = S2(Ψ), which degenerates for none of S3/S17/S23.
     """
+    for k in (2, 16, 22):
+        identical = all(C.apply_one(k, _rnd(seed + 500)) == _rnd(seed + 500)
+                        for seed in range(4))
+        assert not identical, f"T{k+1} is the identity under the current binding"
+
+
+def test_s17_would_be_the_identity_under_self_binding():
+    """Documents the defect the binding policy exists to avoid."""
+    import vedic.kernel.sutras_exact as SX
     for seed in range(4):
-        x = _rnd(seed + 500)
-        assert C.apply_one(16, x) == x
+        x = _rnd(seed + 510)
+        assert SX.s17_anurupyena_proportion(x, x) == x
+
+
+def test_annihilating_run_is_detected():
+    """SERIES degeneracy is reported, not silently returned as zeros."""
+    assert C.is_degenerate_series(C.ALL)
+    assert C.annihilating_runs(C.ALL) == ((19, 20, 21),)
+    assert not C.is_degenerate_series([0, 1, 2, 3])
+    assert C.annihilating_runs([0, 1, 2]) == ()
 
 
 def test_t18_and_t27_are_scalar_rescalings():

@@ -58,8 +58,32 @@ class VedicTrainer(Trainer):
         self.register_buffer_module.to(self.args.device)
         self.wht_axis = wht_axis_torch(device=self.args.device)
 
-        # Running integer counter for R1 (CONS_TRACE_KEY).
+        # Running integer counter for R1 (CONS_TRACE_KEY). Diagnostic only —
+        # it is reported in the log, never added to the loss (see L_cons).
         self._trace_sum = 0
+
+    def create_optimizer(self):
+        """Include the auxiliary modules' parameters in the optimizer.
+
+        ``TesseractWM`` holds the learned d_model -> 16 projection that maps
+        hidden states onto the tesseract, and it lives on the Trainer rather
+        than inside ``self.model``. HuggingFace builds the optimizer from
+        ``self.model.parameters()``, so those 9,216 weights were silently
+        frozen at their random initialisation for the whole run: gradients
+        flowed through the projection to the LoRA weights, but the projection
+        itself never moved. Adding the parameter group here trains it.
+        """
+        optimizer = super().create_optimizer()
+        aux = [p for p in self.register_buffer_module.parameters() if p.requires_grad]
+        if aux:
+            seen = {id(p) for group in optimizer.param_groups for p in group["params"]}
+            fresh = [p for p in aux if id(p) not in seen]
+            if fresh:
+                optimizer.add_param_group({
+                    "params": fresh,
+                    "weight_decay": self.args.weight_decay,
+                })
+        return optimizer
 
     @property
     def loss_weights(self) -> tuple[float, float, float, float]:
