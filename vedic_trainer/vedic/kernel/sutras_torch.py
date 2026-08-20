@@ -7,7 +7,7 @@ Conventions:
 
 Every operator that has a fixed permutation index pre-computes a ``LongTensor``
 buffer at module init so the forward path is pure tensor advanced indexing
-(no Python loops over the 16 vertices). Bit-exactness against ``sutras_exact``
+(no Python loops over the 16 vertices). Bit-exactness against ``z2_primitives``
 is verified by ``tests/test_bit_exact.py``.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ from .tesseract import (
     rotate_left_k,
 )
 from .wht import hadamard_16_torch
-from .sutras_exact import (
+from .z2_primitives import (
     FULL_MASK,
     S1_MASK,
     S4_MASK,

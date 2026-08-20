@@ -17,8 +17,9 @@ from vedic.external.lean_props import _enumerate_canonical_psi
 def test_build_lean_props_renders_canonical_set() -> None:
     for name, psi in _enumerate_canonical_psi():
         props = build_lean_props(psi)
-        # Expected identity keys (a stable subset of the 30-identity catalogue
-        # that is renderable as Bool over Rat literals).
+        # The full set this renderer emits. Not a subset: anything the
+        # renderer cannot express is declared in unrenderable_identities()
+        # and checked by test_coverage_accounts_for_every_identity.
         expected = {
             "S1∘S1 = id",
             "S2∘S2 = id",
@@ -27,7 +28,6 @@ def test_build_lean_props_renders_canonical_set() -> None:
             "S15∘S16 = id",
             "S16∘S15 = id",
             "S25^4 = id",
-            "S26 = S26",
             "S29 closed form",
             "S4 = I − S1",
             "S10 = (Ψ − 1)²",
@@ -57,3 +57,27 @@ def test_lean_session_resolves_path() -> None:
     path = cfg.resolved_lean_path()
     assert path
     assert "lean" in path
+
+
+def test_no_rendered_body_is_a_bare_boolean_literal() -> None:
+    """A Lean body of `true` cannot fail and would fake coverage."""
+    for _name, psi in _enumerate_canonical_psi():
+        for key, body in build_lean_props(psi).items():
+            assert body.strip() not in ("true", "false"), (
+                f"{key} renders as a bare literal — vacuous"
+            )
+
+
+def test_coverage_accounts_for_every_identity() -> None:
+    """Rendered + declared-unrenderable = the whole 30-identity catalogue."""
+    from vedic.external.lean_props import coverage_report
+    for _name, psi in _enumerate_canonical_psi():
+        rep = coverage_report(psi)
+        assert rep["catalogue"] == 30
+        assert rep["unaccounted"] == 0
+
+
+def test_unrenderable_set_states_a_reason_for_each() -> None:
+    from vedic.external.lean_props import unrenderable_identities
+    for name, reason in unrenderable_identities().items():
+        assert reason and "predicate-shaped" in reason, name

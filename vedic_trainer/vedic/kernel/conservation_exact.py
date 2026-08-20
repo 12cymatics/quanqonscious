@@ -26,7 +26,7 @@ from fractions import Fraction
 from typing import Tuple
 
 from .q import Q16
-from .sutras_exact import s7_sankalana_vyavakalana, s29_mean_drive
+from .z2_primitives import s7_sankalana_vyavakalana, s29_mean_drive
 from .tesseract import COMPLEMENT, NUM_VERTICES, pairs_v_lt_complement
 
 # T(29) = 1 + 2 + ... + 29 = 435.

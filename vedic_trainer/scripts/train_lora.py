@@ -52,12 +52,11 @@ def _dtype_from_str(s: str) -> torch.dtype:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Vedic LoRA fine-tune.")
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--skip-bit-exact-gate", action="store_true",
-                        help="Override only when running inside the test harness.")
     args = parser.parse_args()
 
-    if not args.skip_bit_exact_gate:
-        _run_bit_exact_gate()
+    # The bit-exact gate is mandatory. There is no override: a kernel that does
+    # not reproduce the committed fixtures must not train.
+    _run_bit_exact_gate()
 
     cfg: TrainingConfig = load_yaml(args.config)
     torch.manual_seed(cfg.seed)

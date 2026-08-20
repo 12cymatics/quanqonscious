@@ -34,7 +34,7 @@ from typing import Callable, Dict, Iterable, List, Sequence, Tuple
 
 from .q import Q16
 from .tesseract import NUM_VERTICES
-from . import sutras_exact as S
+from . import z2_primitives as S
 
 # ----------------------------------------------------------------------
 # State arithmetic on ℚ^16
@@ -120,7 +120,7 @@ def schedule_seed(indices: Sequence[int]) -> int:
 #
 # Four sutras are not natively ℚ^16 → ℚ^16. Composition needs a uniform
 # signature, so each gets an explicit, documented lift. The raw functions in
-# sutras_exact stay untouched and keep their true return types; only the
+# z2_primitives stay untouched and keep their true return types; only the
 # composed view is lifted.
 #
 #   S7  -> returns (sym, anti). Lift selects one part; which part is an

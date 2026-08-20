@@ -42,7 +42,7 @@ def test_contradiction_pair_polarity_inverted() -> None:
         # bit-0-uniform component of the encoded representation. We check
         # that the polarity axis itself flipped sign on the *raw* S2 result.
         # Specifically: axis 0 of S2(Ψ) equals −axis 0 of Ψ.
-        from vedic.kernel.sutras_exact import s2_nikhilam
+        from vedic.kernel.z2_primitives import s2_nikhilam
         s2_psi = s2_nikhilam(pair.base_psi)
         f_s2 = decode_psi_to_axes(s2_psi)
         assert f_s2[0] == -f_base[0], "polarity axis did not flip under S2"

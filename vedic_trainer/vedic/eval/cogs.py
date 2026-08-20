@@ -29,7 +29,6 @@ def evaluate_cogs(
     splits: Iterable[str] = COGS_SPLITS,
     max_new_tokens: int = 256,
     device: str | torch.device = "cpu",
-    eval_subset: int | None = None,
 ) -> Mapping[str, CogsResult]:
     model.eval()
     results: dict[str, CogsResult] = {}
@@ -48,8 +47,6 @@ def evaluate_cogs(
             column_names=["sentence", "logical_form", "split_type"],
             quoting=3,
         )
-        if eval_subset is not None:
-            ds = ds.select(range(min(eval_subset, len(ds))))
         n_total = 0
         n_correct = 0
         for example in ds:

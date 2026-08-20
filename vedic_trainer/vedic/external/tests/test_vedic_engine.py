@@ -18,7 +18,7 @@ def test_engine_counts() -> None:
     assert len(eng.sub_sutras) == 13
 
 
-def test_engine_smoke_runs() -> None:
+def test_engine_executes_all_29_sutras() -> None:
     tester = ProofTester()
     tester.verify_sutra_engine()
     res = tester.results["vedic_sutras"]
@@ -26,6 +26,7 @@ def test_engine_smoke_runs() -> None:
     assert res["sub_sutras"] == 13
     assert res["executed"] == 29
     assert res["verified"] is True
+    assert res["main_sutras"] + res["sub_sutras"] == res["executed"] == 29
 
 
 def test_engine_outputs_are_finite() -> None:

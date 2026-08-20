@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from vedic.kernel import conservation_exact as ce
-from vedic.kernel import sutras_exact as se
+from vedic.kernel import z2_primitives as se
 from vedic.kernel.q import Q16
 
 

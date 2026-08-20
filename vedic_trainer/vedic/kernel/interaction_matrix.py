@@ -16,7 +16,7 @@ from fractions import Fraction
 from typing import Callable, Sequence, Tuple
 
 from .q import Q16, q_eq
-from .sutras_exact import (
+from .z2_primitives import (
     s1_eka_adhikena,
     s2_nikhilam,
     s3_urdhva_tiryak,

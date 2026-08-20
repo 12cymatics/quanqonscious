@@ -22,8 +22,6 @@ def main() -> None:
     parser.add_argument("--adapter", type=Path, required=True,
                         help="LoRA adapter directory (a TrainingConfig output_dir).")
     parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--scan-subset", type=int, default=None)
-    parser.add_argument("--cogs-subset", type=int, default=None)
     parser.add_argument("--audit-corpus", type=Path, default=None,
                         help="Optional file with one generated text per line for audit-closure rate.")
     parser.add_argument("--output", type=Path, required=True)
@@ -37,12 +35,8 @@ def main() -> None:
     model = PeftModel.from_pretrained(base, str(args.adapter))
     model = model.to(args.device)
 
-    scan_results = evaluate_scan(
-        model, tokenizer, device=args.device, eval_subset=args.scan_subset
-    )
-    cogs_results = evaluate_cogs(
-        model, tokenizer, device=args.device, eval_subset=args.cogs_subset
-    )
+    scan_results = evaluate_scan(model, tokenizer, device=args.device)
+    cogs_results = evaluate_cogs(model, tokenizer, device=args.device)
 
     audit_rate = None
     if args.audit_corpus is not None:

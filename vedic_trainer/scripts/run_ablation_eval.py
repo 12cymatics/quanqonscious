@@ -40,10 +40,7 @@ def main():
     ap.add_argument("--base-model", required=True)
     ap.add_argument("--adapter", type=Path, default=None)
     ap.add_argument("--device", default="cpu")
-    ap.add_argument("--scan-subset", type=int, default=None)
-    ap.add_argument("--cogs-subset", type=int, default=None)
     ap.add_argument("--heldout", type=Path, default=None)
-    ap.add_argument("--skip-gen", action="store_true")
     ap.add_argument("--output", type=Path, required=True)
     a = ap.parse_args()
 
@@ -65,16 +62,15 @@ def main():
                               "n_tokens": ntok, "secs": round(time.time() - t0, 1)}
         print("heldout:", json.dumps(payload["heldout"]))
 
-    if not a.skip_gen:
-        t0 = time.time()
-        s = evaluate_scan(model, tok, device=a.device, eval_subset=a.scan_subset)
+    t0 = time.time()
+        s = evaluate_scan(model, tok, device=a.device)
         payload["scan"] = {k: {"n_total": v.n_total, "n_correct": v.n_correct,
                                "accuracy": v.accuracy} for k, v in s.items()}
         payload["scan_secs"] = round(time.time() - t0, 1)
         print("scan:", json.dumps(payload["scan"]))
 
         t0 = time.time()
-        c = evaluate_cogs(model, tok, device=a.device, eval_subset=a.cogs_subset)
+        c = evaluate_cogs(model, tok, device=a.device)
         payload["cogs"] = {k: {"n_total": v.n_total, "n_correct": v.n_correct,
                                "accuracy": v.accuracy} for k, v in c.items()}
         payload["cogs_secs"] = round(time.time() - t0, 1)

@@ -15,7 +15,7 @@ from fractions import Fraction
 
 import pytest
 
-import vedic.kernel.sutras_exact as S
+import vedic.kernel.z2_primitives as S
 
 PSI = tuple(Fraction(v * v + 1, 3) for v in range(16))
 # A second, independent operand. S17/S23 are binary; exercising their operands

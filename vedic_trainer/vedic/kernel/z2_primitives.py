@@ -1,27 +1,30 @@
-"""All 29 sutras in exact ℚ arithmetic, with full positional operands.
+"""Primitive exact-ℚ maps on Z₂⁴ — NOT the 29 sutras.
 
-Every sutra is a total function over ``Q16`` (sometimes scalar, sometimes
-``Q16 × Q16 -> Q16``). The formulas follow the spec table verbatim where it
-is unambiguous; for the three entries the spec marks as
-authoritative-from-simulator but does not fully spell out (S6 e₀, S19
-LopanaSthapanabhyam, S21 DhvajankaFlag), the chosen interpretation is
-documented in ``docs/SUTRA_CATALOGUE.md`` and at the top of the function.
+**This module is not an implementation of the Vedic sutras.** The authority
+for those is ``sutras_canonical``, which ports the engine's
+``STRICT_SUTRA_KERNEL``. This file is kept because the conservation
+residuals, the interaction-matrix catalogue, the synthetic-data encoder and
+the committed fixtures are all built on these *unweighted* primitives, and
+they are a different mathematical layer from the α-weighted sutra operators.
 
-Operands
---------
-A Vedic sutra is a *rule with operands*, not a fixed map: Ekādhikena is "by
-one more than the previous" for a stated previous; Yāvadūnam is "by the
-deficiency from the base" for a stated base; Kevalaiḥ Saptakam is "only the
-sevens" for a stated divisor. Earlier revisions baked those operands in as
-inline literals, which collapsed each rule to a single instance of itself.
+The two disagree, concretely:
 
-Here every operand is an explicit parameter with a named canonical default
-drawn from the constant block below. Nothing is a magic number, every
-operand can be overridden per call, and passing the canonical value
-reproduces the pre-parameterisation behaviour bit-for-bit — which
-``scripts/verify_bit_exact.py`` gates against the committed fixtures.
+* these maps carry no α weight, so none of them reduces to the identity as
+  strength → 0, which is the §12Y guarantee the real sutras satisfy;
+* the numbering conflicts — here S19 is LopanaSthapanabhyam and S24 is
+  KevalaihSaptakam, while the engine has S19 = Kevalaih Saptakam Guṇyāt and
+  S24 = Lopanasthāpanābhyām;
+* canonical S7 is PERMUTATIVE (an axis reflection), whereas the primitive
+  here is the symmetric/antisymmetric split that R4 needs.
 
-No epsilons, no clamps, no silent fallbacks: preconditions raise.
+The historical Sanskrit function names are retained only so the fixtures and
+the interaction catalogue keep resolving. Do not read them as sutra
+definitions. Anything that means "the 29 sutras" must import
+``sutras_canonical``.
+
+Every operand is an explicit parameter with a named canonical default; the
+values reproduce the committed fixtures bit-for-bit. No epsilons, no clamps,
+no silent fallbacks: preconditions raise.
 """
 from __future__ import annotations
 

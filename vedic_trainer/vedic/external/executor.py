@@ -2,7 +2,7 @@
 
 Adapted from ``codex/locate-runnable-simulations-in-repos:src/quanqonscious/sutra_executor.py``.
 The original ``run_full_engine`` dependency is replaced with a sequential
-application of every operator in ``vedic.kernel.sutras_exact`` (the
+application of every operator in ``vedic.kernel.z2_primitives`` (the
 exact-ℚ Z₂⁴ algebra). The output type is ``Q16`` (tuple of Fraction).
 
 Process pool execution requires the worker function to be importable at
@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Iterable, List
 
 from vedic.kernel.q import Q16
-from vedic.kernel.sutras_exact import (
+from vedic.kernel.z2_primitives import (
     s1_eka_adhikena,
     s2_nikhilam,
     s4_paravartya,

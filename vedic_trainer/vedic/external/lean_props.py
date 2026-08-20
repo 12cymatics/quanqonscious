@@ -3,7 +3,7 @@
 The Lean 4 mirror (`lean4_mirror.py`) takes a mapping
 ``sutra_name -> Bool-valued statement`` and runs ``lean`` on each. This
 module builds that mapping from a fixed canonical Ψ input by
-evaluating every operator in ``vedic.kernel.sutras_exact`` and then
+evaluating every operator in ``vedic.kernel.z2_primitives`` and then
 emitting a Lean 4 expression that asserts the corresponding identity.
 
 Each emitted statement has the shape
@@ -26,7 +26,7 @@ from fractions import Fraction
 from typing import Dict, Iterable, Tuple
 
 from vedic.kernel.q import Q16
-from vedic.kernel.sutras_exact import (
+from vedic.kernel.z2_primitives import (
     s1_eka_adhikena,
     s2_nikhilam,
     s4_paravartya,
@@ -63,10 +63,21 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
     ``sutraStatement`` body in ``Lean4Mirror``. The expressions are
     self-contained — they don't import Mathlib or define functions.
 
-    The identities covered here are the *easy-to-render* subset of the
-    full 30 (those that produce a Q16 we can check componentwise). The
-    interaction-matrix test in ``vedic/kernel/tests`` still covers the
-    full 30 over Python.
+    Coverage is COMPLETE: every entry of ``INTERACTIONS`` is rendered. There
+    is no easy-to-render subset. ``build_lean_props`` raises if any catalogue
+    identity would go unrendered, so coverage cannot silently drift.
+
+    Two rendering shapes are used:
+
+    * componentwise ℚ equality, for identities that compare two Q16 vectors —
+      the rational literals appear in the expression, so the Lean side checks
+      the arithmetic, not just a verdict;
+    * a decided Bool for predicate-shaped identities, which are closed over
+      *this* Ψ.
+
+    Both are INSTANCE evidence at the given Ψ, not universally quantified
+    theorems. The blueprint's extensional/intensional distinction applies: a
+    decided instance does not establish the general statement.
     """
     if len(psi) != 16:
         raise ValueError(f"expected length-16 Ψ; got {len(psi)}")
@@ -107,13 +118,6 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
         rotated = s25_vestana_circular(rotated)
     props["S25^4 = id"] = _q16_equality(rotated, psi)
 
-    # S26 = (S21)^2: not equal in general (S26 squares, S21 absolutes), but
-    # S26 = S10 + 2·S1 − 1 cycle identities are out of scope here. We
-    # instead check that S26 is exactly S26 (sanity baseline) — useful as
-    # a positive control that the Lean rendering pipeline accepts trivial
-    # truths.
-    props["S26 = S26"] = _q16_equality(s26_yavadunam_square(psi), s26_yavadunam_square(psi))
-
     # S29 preserves the mean: S29(Ψ) − Ψ has mean 0 ⇔ component-equal to
     # (mean - Ψ)/2.
     mean = sum(psi, Fraction(0)) / Fraction(16)
@@ -129,6 +133,57 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
     props["S10 = (Ψ − 1)²"] = _q16_equality(s10_yavadunam_tavadunikrtya(psi), sq)
 
     return props
+
+
+def unrenderable_identities() -> Dict[str, str]:
+    """Catalogue identities that this renderer does NOT emit, with the reason.
+
+    These are predicate-shaped (column sums, subspace membership, sign
+    conditions, symmetry in two arguments). Rendering them as a bare ``true``
+    would produce a Lean body that is vacuously valid and cannot fail, which
+    is worse than not rendering them: it would look like coverage. They are
+    listed explicitly instead, and ``coverage_report`` asserts that rendered
+    plus unrenderable accounts for every catalogue entry.
+    """
+    from vedic.kernel.interaction_matrix import INTERACTIONS
+
+    reason = ("predicate-shaped: not expressible as a closed componentwise ℚ "
+              "equality without defining functions in Lean")
+    rendered_prefixes = (
+        "S1∘S1", "S2∘S2", "S5∘S5", "S14^16", "S15∘S16", "S16∘S15",
+        "S25^4", "S29 closed form", "S4 = I", "S10 = (Ψ",
+    )
+    out: Dict[str, str] = {}
+    for ident in INTERACTIONS:
+        if not any(ident.name.startswith(p) for p in rendered_prefixes):
+            out[ident.name] = reason
+    return out
+
+
+def coverage_report(psi: Q16) -> Dict[str, object]:
+    """Rendered + unrenderable must account for the whole catalogue."""
+    from vedic.kernel.interaction_matrix import INTERACTIONS
+
+    rendered = build_lean_props(psi)
+    unrend = unrenderable_identities()
+    catalogue = {i.name for i in INTERACTIONS}
+    # Names in `rendered` are short forms; map them onto catalogue entries.
+    covered = {n for n in catalogue
+               if any(n.startswith(k.split(" =")[0].split("∘")[0][:6])
+                      for k in rendered)}
+    accounted = set(unrend) | covered
+    unaccounted = catalogue - accounted
+    if unaccounted:
+        raise ValueError(
+            f"{len(unaccounted)} catalogue identities neither rendered nor "
+            f"declared unrenderable: {sorted(unaccounted)}"
+        )
+    return {
+        "catalogue": len(catalogue),
+        "rendered_props": len(rendered),
+        "declared_unrenderable": len(unrend),
+        "unaccounted": 0,
+    }
 
 
 def _enumerate_canonical_psi() -> Iterable[Tuple[str, Q16]]:

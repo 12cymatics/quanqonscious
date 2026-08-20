@@ -15,16 +15,18 @@ from vedic.kernel import composition as C
 
 
 def _rnd(seed: int) -> tuple:
-    """Random Ψ with Ψ_0 != 0.
+    """Random Ψ with Ψ_0 != 0 **by construction**.
 
-    S17 (AnurupyenaProportion) divides by Ψ_ref and raises when it is zero —
-    a real precondition of the sutra, exercised separately below. Queues that
-    include S17 are only defined on inputs satisfying it.
+    S17 divides by Ψ_ref, so queues containing it are only defined where that
+    is non-zero. Index 0 is drawn from a range that excludes zero rather than
+    being patched after the fact: a fixture that silently repairs its own
+    input is a fallback, and hides the case it was meant to exercise. The
+    precondition itself is asserted in
+    ``test_s17_precondition_raises_on_zero_reference``.
     """
     r = random.Random(seed)
-    vals = [Fraction(r.randint(-9, 9), r.randint(1, 7)) for _ in range(16)]
-    if vals[0] == 0:
-        vals[0] = Fraction(1, 3)
+    vals = [Fraction(r.choice([-9, -7, -5, -3, -1, 1, 3, 5, 7, 9]), r.randint(1, 7))]
+    vals += [Fraction(r.randint(-9, 9), r.randint(1, 7)) for _ in range(15)]
     return tuple(vals)
 
 
@@ -274,7 +276,7 @@ def test_binary_binding_never_degenerates_to_the_identity():
 
 def test_s17_would_be_the_identity_under_self_binding():
     """Documents the defect the binding policy exists to avoid."""
-    import vedic.kernel.sutras_exact as SX
+    import vedic.kernel.z2_primitives as SX
     for seed in range(4):
         x = _rnd(seed + 510)
         assert SX.s17_anurupyena_proportion(x, x) == x
