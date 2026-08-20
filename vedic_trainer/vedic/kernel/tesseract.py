@@ -61,6 +61,35 @@ def rotate_left_1(v: int) -> int:
     return ((v << 1) & 0b1111) | ((v >> 3) & 0b1)
 
 
+def rotate_left_k(v: int, k: int) -> int:
+    """Bit-rotate-left-k on the 4-bit field. ``rotate_left_1`` is ``k = 1``.
+
+    The rotation amount is taken mod BIT_WIDTH, so every k is a valid,
+    total rotation; k is an explicit operand of S25 rather than a constant
+    baked into the operator.
+    """
+    if not 0 <= v < NUM_VERTICES:
+        raise ValueError(f"vertex out of range: {v}")
+    k %= BIT_WIDTH
+    return ((v << k) & 0b1111) | ((v >> (BIT_WIDTH - k)) & ((1 << k) - 1)) if k else v
+
+
+def xor_pairs_lt(mask: int) -> Tuple[Tuple[int, int], ...]:
+    """Pairs (v, v ^ mask) with v < v ^ mask, ascending in v.
+
+    Generalises ``pairs_v_lt_complement`` (which is ``mask = 0b1111``) so the
+    pairing involution is an explicit operand of S22 / S8.
+    """
+    if not 0 <= mask < NUM_VERTICES:
+        raise ValueError(f"mask out of range: {mask}")
+    out: List[Tuple[int, int]] = []
+    for v in range(NUM_VERTICES):
+        c = v ^ mask
+        if v < c:
+            out.append((v, c))
+    return tuple(out)
+
+
 def pairs_v_lt_complement() -> Tuple[Tuple[int, int], ...]:
     """Return the 8 pairs (v, v̄) with v < v̄, indexed in ascending v.
 

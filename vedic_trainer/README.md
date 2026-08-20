@@ -5,6 +5,13 @@ package exposes:
 
 - An exact-ℚ reference implementation of the 29 Vedic sutras (the
   "structuring algebra") and four conservation residuals over **Z₂⁴**.
+  Every sutra takes its own operands explicitly (mask, base, reference
+  index, modulus, rotation, axis set, blend weight) with named canonical
+  defaults — see `vedic/kernel/sutras_exact.py`.
+- A composition algebra (`vedic/kernel/composition.py`) that runs any sutra
+  queue in **SERIES**, **PARALLEL**, **CONCURRENT** (BSP wavefront,
+  W = ⌈√N⌉), **CANONICAL** or **COMPOSITE**, all in exact ℚ with a
+  deterministic, queue-seeded scheduler.
 - A bit-exact torch port (autograd-enabled) used by the training path.
 - A `TesseractWM` working-memory projection from hidden states to a
   16-vertex Boolean cube.
@@ -21,7 +28,9 @@ package exposes:
 
 | Layer            | Implemented | Tested locally       |
 | ---------------- | ----------- | -------------------- |
-| Kernel (ℚ)       | yes         | 35 tests (pytest)    |
+| Kernel (ℚ)       | yes         | 13 tests (pytest)    |
+| Operands         | yes         | 44 tests             |
+| Composition      | yes         | 35 tests             |
 | Kernel (torch)   | yes         | 22 buffer tests      |
 | Conservation     | yes         | 8 tests              |
 | Interaction lat. | 30 ids      | 2 tests, 50 pairs    |
@@ -43,6 +52,13 @@ python scripts/verify_bit_exact.py
 
 # All local tests (kernel + data; ℚ-only, no floats)
 python -m pytest vedic/kernel/tests vedic/data/tests -q
+
+# Are the four auxiliary losses differentiable w.r.t. Psi?
+python scripts/probe_aux_gradients.py
+
+# Run a sutra queue through every composition mode
+python scripts/run_composition.py
+python scripts/run_composition.py --mode CONCURRENT --show-waves
 
 # Generate the synthetic LoRA corpus
 python scripts/generate_synthetic.py \
