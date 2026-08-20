@@ -125,3 +125,50 @@ cannot validate the claim.**
 - Single base model and one dataset scale. The negative result is solid
   for this setup; it does not rule out an effect at larger scale or on
   an in-distribution compositional task.
+
+---
+
+## Re-run on the reworked kernel (operands + composition algebra)
+
+After parameterising all 29 sutras (every operand explicit) and adding the
+SERIES / PARALLEL / CONCURRENT composition algebra, the whole ablation was
+re-run from scratch: fresh adapters, all three seeds, both arms.
+
+| seed | `no_sutra` | `full` | Δ | rel | reproduces prior run |
+|---|---|---|---|---|---|
+| 42 | 1.647661 | 1.710895 | +0.0632 | +3.84% | yes |
+| 1 | 1.655605 | 1.708396 | +0.0528 | +3.19% | yes |
+| 2 | 1.663117 | 1.718151 | +0.0550 | +3.31% | yes |
+| **mean** | **1.655461** | **1.712481** | **+0.0570** | **+3.44%** | |
+| sd | 0.007729 | 0.005067 | | | |
+
+All six runs reproduce the pre-rework held-out CE **bit-for-bit**. The
+operand refactor is behaviour-neutral end to end — not merely at the fixture
+gate but through a full training run — and the conclusion is unchanged:
+
+- effect is **7.4×** the baseline seed sd
+- ranges **disjoint** (worst `no_sutra` 1.6631 < best `full` 1.7084)
+- direction unanimous across seeds
+
+`L_cons` and `L_curv` remain dead after the rework, as expected: their defect
+is structural, not a matter of which operands the sutras take. `L_cons`
+depends only on the step counter; `L_curv` power-iterates a Ψ-independent
+matrix from a random vector.
+
+### Composition modes on the full 29-sutra queue
+
+`python scripts/run_composition.py`
+
+| mode | result | max denominator digits |
+|---|---|---|
+| SERIES | **zero map** | 1 |
+| PARALLEL | 16/16 nonzero | 7 |
+| CONCURRENT | 16/16 nonzero | 220 |
+| CANONICAL | 16/16 nonzero | 7 |
+| COMPOSITE | raises (S17 precondition) | — |
+
+SERIES over the whole queue annihilates every input: S20 projects onto one
+Walsh row (image `c·h₀`), S21 takes absolute values (constant vector `|c|`),
+S22 takes differences over (v, v̄) pairs (exactly 0 on a constant). Any queue
+containing that ordered run is the zero map. CONCURRENT's 220-digit
+denominators show the real cost of exact-ℚ composition.
