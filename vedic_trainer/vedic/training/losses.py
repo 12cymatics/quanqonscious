@@ -29,7 +29,7 @@ from vedic.kernel.conservation_torch import (
     r4_torch,
 )
 from vedic.kernel.hessian import HessianModule
-from vedic.kernel.sutras_torch import S5, S7, S11
+from vedic.kernel.sutras_torch import S5, S7, S11, S29
 from vedic.kernel.tesseract import NUM_VERTICES
 from vedic.kernel.wht import wht_axis_torch
 
@@ -65,41 +65,80 @@ def L_chi(psi: Tensor, s7: S7) -> Tensor:
 
 
 def L_cons(psi: Tensor, trace_sum: Tensor) -> Tensor:
-    """Mean of R1² + R2² + R3² + R4².
+    """Conservation penalty: drift of the conserved quantities under S29.
 
-    R2/R3/R4 are algebraic identities over ℚ; they evaluate to floating
-    round-off here. R1 closes at multiples of T(29) = 435.
+    **Why this is not Σ Rᵢ².** The four specified residuals cannot serve as a
+    loss, and the earlier implementation that summed them was a constant:
+
+    - ``R1 = trace_sum mod 435`` takes no Ψ at all. It is a step counter, and
+      squaring it added ``trace_sum²`` — growing quadratically to ~10⁶ — to a
+      loss whose true CE term is ~1.7, with gradient exactly zero.
+    - ``R2``, ``R3`` and ``R4`` are **algebraic identities**, exactly zero for
+      every Ψ (verified over ℚ in ``test_conservation_laws.py``). R2 restates
+      that each vertex lies in one complement pair; R3 that S29 is mean
+      preserving by construction; R4 that the symmetric and antisymmetric
+      parts of an involution are orthogonal. An identity constrains nothing,
+      so its gradient is identically zero.
+
+    A conservation *loss* needs a residual that is zero only on a subspace.
+    The quantities R1..R4 name are genuinely conserved by S29, so we penalise
+    the drift of those quantities when the operator is applied — which is
+    non-zero exactly when Ψ leaves the conserved subspace:
+
+        L_cons = (Δmass)² + (Δ‖S‖²)² + (Δ‖A‖²)²,   Δq = q(S29 Ψ) − q(Ψ)
+
+    normalised by the batch. ``trace_sum`` is retained in the signature and
+    reported for the audit chain, but it is a diagnostic, not a loss term.
     """
-    return cons_l2_torch(psi, trace_sum)
+    s29 = S29().to(psi.device)
+    s7 = S7().to(psi.device)
+    out = s29(psi)
+
+    mass = psi.sum(dim=-1)
+    mass_out = out.sum(dim=-1)
+
+    sym, anti = s7(psi)
+    sym_o, anti_o = s7(out)
+    e_sym = (sym * sym).sum(dim=-1)
+    e_anti = (anti * anti).sum(dim=-1)
+    e_sym_o = (sym_o * sym_o).sum(dim=-1)
+    e_anti_o = (anti_o * anti_o).sum(dim=-1)
+
+    d_mass = mass_out - mass
+    d_sym = e_sym_o - e_sym
+    d_anti = e_anti_o - e_anti
+    return (d_mass * d_mass + d_sym * d_sym + d_anti * d_anti).mean()
 
 
 # ---------- L_curv : curvature spike ---------------------------------
 
 
 def L_curv(psi: Tensor, hessian: HessianModule, lanczos_iters: int = 16) -> Tensor:
-    """Penalise the largest Rayleigh quotient of g_ab spiking above the batch mean.
+    """Penalise the Rayleigh quotient of g_ab **at Ψ** spiking above the batch mean.
 
-    Implemented via ``lanczos_iters`` steps of power iteration. On a 16×16
-    PSD matrix, 16 iterations is overkill — the method converges
-    geometrically with rate (λ_2/λ_1) and 16 iterations gives many
-    decimal digits. No epsilon: the numerator and denominator of the
-    Rayleigh quotient are real-symmetric inner products, and we assert
-    the unit-vector norm rather than clamp it.
+        κ(Ψ) = ⟨Ψ, g_ab Ψ⟩ / ⟨Ψ, Ψ⟩
+
+    **Why not power iteration.** The earlier implementation power-iterated
+    from ``torch.randn_like(psi)`` — a random vector, not Ψ — toward the top
+    eigenvector of ``g_ab``. But ``hessian.py`` states, and
+    ``test_conservation_laws.py`` verifies, that *g_ab is independent of Ψ*:
+    every contributing operator is linear. So the iterate, the eigenvalue and
+    hence κ were all constant in Ψ, identical across the batch, and
+    ``relu(κ − κ.mean())`` was identically zero with no grad_fn at all.
+
+    The Rayleigh quotient evaluated at Ψ is what the curvature of the energy
+    *along the current state* actually means, it is what this docstring always
+    claimed, and it is genuinely differentiable in Ψ. ``lanczos_iters`` is
+    retained for signature compatibility and is unused.
+
+    No epsilon: the denominator is asserted non-zero rather than clamped.
     """
-    H = hessian(psi)  # (B, 16, 16)
-    u = torch.randn_like(psi)
-    norm = u.norm(dim=-1, keepdim=True)
-    if (norm == 0).any():
-        raise ValueError("L_curv: zero-norm random init; rerun with a different seed.")
-    u = u / norm
-    for _ in range(lanczos_iters):
-        u = torch.einsum("bij,bj->bi", H, u)
-        norm = u.norm(dim=-1, keepdim=True)
-        if (norm == 0).any():
-            raise ValueError("L_curv: power-iteration vector collapsed to zero.")
-        u = u / norm
-    Hu = torch.einsum("bij,bj->bi", H, u)
-    kappa = (u * Hu).sum(dim=-1)
+    H = hessian(psi)  # (B, 16, 16) — constant in Ψ: every operator is linear.
+    norm_sq = (psi * psi).sum(dim=-1)
+    if (norm_sq == 0).any():
+        raise ValueError("L_curv: zero-norm Ψ has no Rayleigh quotient.")
+    HPsi = torch.einsum("bij,bj->bi", H, psi)
+    kappa = (psi * HPsi).sum(dim=-1) / norm_sq
     # Penalise excess over the batch mean (centred, scale-free).
     excess = torch.relu(kappa - kappa.detach().mean())
     return excess.mean()

@@ -16,7 +16,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from vedic.kernel import conservation_exact as ce
-from vedic.kernel import sutras_exact as se
+from vedic.kernel import z2_primitives as se
 from vedic.kernel.q import Q16
 
 
@@ -49,6 +49,10 @@ def _load(name: str) -> dict[str, object]:
         return json.load(f)
 
 
+def _frac_to_obj_cmp(x):
+    return x
+
+
 def main() -> int:
     _ensure_fixtures()
 
@@ -59,21 +63,75 @@ def main() -> int:
     inputs: list[Q16] = [_objs_to_q16(p) for p in psi_data["inputs"]]
     failures: list[str] = []
 
+    # Exhaustive: every operator recorded in the fixture is recomputed and
+    # compared. There is no spot-check and no representative subset -- a gate
+    # that verifies a quarter of the kernel is not a gate.
+    def _binary(psi):
+        return se.s2_nikhilam(psi)
+
+    vector_ops = {
+        "S1": se.s1_eka_adhikena, "S2": se.s2_nikhilam,
+        "S4": se.s4_paravartya, "S5": se.s5_shunyam_samya,
+        "S6": se.s6_anurupya_shunyam, "S8": se.s8_puranapuranabhyam_fill,
+        "S9": se.s9_chalana_kalanabhyam,
+        "S10": se.s10_yavadunam_tavadunikrtya, "S11": se.s11_vyasti_samasti,
+        "S12": se.s12_shesanyankena_charamena,
+        "S13": se.s13_sopantyadvayamantyam_last2,
+        "S14": se.s14_ekanyunena_purvena,
+        "S15": se.s15_gunitasamucchaya_product,
+        "S16": se.s16_gunaka_samucchaya, "S19": se.s19_lopana_sthapanabhyam,
+        "S20": se.s20_vilokanam_spect, "S21": se.s21_dhvajanka_flag,
+        "S24": se.s24_kevalaih_saptakam, "S25": se.s25_vestana_circular,
+        "S26": se.s26_yavadunam_square, "S28": se.s28_lopana_restore,
+        "S29": se.s29_mean_drive,
+    }
+    binary_ops = {
+        "S3": se.s3_urdhva_tiryak,
+        "S17": se.s17_anurupyena_proportion,
+        "S23": se.s23_dwandwa_yoga,
+    }
+    scalar_ops = {
+        "S18": se.s18_adyamadyena_antyamantyena,
+        "S27": se.s27_samuccaya_gunitah,
+    }
+
+    checked_keys: set[str] = set()
     for i, rec in enumerate(sutra_data["records"]):
         psi = _objs_to_q16(rec["input"])
         if psi != inputs[i]:
             failures.append(f"input mismatch at idx {i}")
-        # Spot-check a representative subset (the simulator-match test
-        # already checks every operator; here we re-verify the high-impact
-        # operators that drive the auxiliary losses).
-        if _objs_to_q16(rec["S5"]) != se.s5_shunyam_samya(psi):
-            failures.append(f"S5 mismatch at idx {i}")
-        if _objs_to_q16(rec["S9"]) != se.s9_chalana_kalanabhyam(psi):
-            failures.append(f"S9 mismatch at idx {i}")
-        if _objs_to_q16(rec["S11"]) != se.s11_vyasti_samasti(psi):
-            failures.append(f"S11 mismatch at idx {i}")
-        if _objs_to_q16(rec["S29"]) != se.s29_mean_drive(psi):
-            failures.append(f"S29 mismatch at idx {i}")
+
+        for key, fn in vector_ops.items():
+            if _objs_to_q16(rec[key]) != fn(psi):
+                failures.append(f"{key} mismatch at idx {i}")
+            checked_keys.add(key)
+
+        for key, fn in binary_ops.items():
+            if _objs_to_q16(rec[key]) != fn(psi, _binary(psi)):
+                failures.append(f"{key} mismatch at idx {i}")
+            checked_keys.add(key)
+
+        for key, fn in scalar_ops.items():
+            if _obj_to_frac(rec[key]) != fn(psi):
+                failures.append(f"{key} mismatch at idx {i}")
+            checked_keys.add(key)
+
+        sym, anti = se.s7_sankalana_vyavakalana(psi)
+        if _objs_to_q16(rec["S7_sym"]) != sym:
+            failures.append(f"S7_sym mismatch at idx {i}")
+        if _objs_to_q16(rec["S7_anti"]) != anti:
+            failures.append(f"S7_anti mismatch at idx {i}")
+        checked_keys.update({"S7_sym", "S7_anti"})
+
+        if [_frac_to_obj_cmp(x) for x in se.s22_parity_complement(psi)] != \
+                [(_obj_to_frac(o)) for o in rec["S22"]]:
+            failures.append(f"S22 mismatch at idx {i}")
+        checked_keys.add("S22")
+
+        # Nothing in the fixture may go unverified.
+        unchecked = set(rec) - checked_keys - {"input"}
+        if unchecked:
+            failures.append(f"fixture keys never verified at idx {i}: {sorted(unchecked)}")
 
     for i, rec in enumerate(cons_data["records"]):
         psi = inputs[i // 3]

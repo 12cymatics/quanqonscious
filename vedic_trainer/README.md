@@ -5,6 +5,13 @@ package exposes:
 
 - An exact-ℚ reference implementation of the 29 Vedic sutras (the
   "structuring algebra") and four conservation residuals over **Z₂⁴**.
+  Every sutra takes its own operands explicitly (mask, base, reference
+  index, modulus, rotation, axis set, blend weight) with named canonical
+  defaults — see `vedic/kernel/sutras_exact.py`.
+- A composition algebra (`vedic/kernel/composition.py`) that runs any sutra
+  queue in **SERIES**, **PARALLEL**, **CONCURRENT** (BSP wavefront,
+  W = ⌈√N⌉), **CANONICAL** or **COMPOSITE**, all in exact ℚ with a
+  deterministic, queue-seeded scheduler.
 - A bit-exact torch port (autograd-enabled) used by the training path.
 - A `TesseractWM` working-memory projection from hidden states to a
   16-vertex Boolean cube.
@@ -19,18 +26,25 @@ package exposes:
 
 ## Status
 
-| Layer            | Implemented | Tested locally       |
-| ---------------- | ----------- | -------------------- |
-| Kernel (ℚ)       | yes         | 35 tests (pytest)    |
-| Kernel (torch)   | yes         | 22 buffer tests      |
-| Conservation     | yes         | 8 tests              |
-| Interaction lat. | 30 ids      | 2 tests, 50 pairs    |
-| Memory           | yes         | covered by trainer   |
-| Training         | yes         | requires HF + LoRA   |
-| Data             | yes         | 5 tests              |
-| Eval             | yes         | requires SCAN/COGS   |
-| Fixtures         | committed   | bit-exact gate ✓     |
-| External sidecar | yes         | 15 tests (1 lean-skip) |
+| Layer            | Implemented | Tested locally         |
+| ---------------- | ----------- | ---------------------- |
+| Kernel (ℚ)       | yes         | 13 tests               |
+| Operands         | yes         | 44 tests               |
+| Composition      | yes         | 37 tests               |
+| Canonical 29     | yes         | 45 tests               |
+| Blueprint gates  | yes         | 33 tests               |
+| Kernel (torch)   | yes         | 22 buffer tests        |
+| Data             | yes         | 5 tests                |
+| External sidecar | yes         | 18 tests               |
+| Memory           | yes         | covered by trainer     |
+| Training         | yes         | requires HF + LoRA     |
+| Eval             | yes         | requires SCAN/COGS     |
+| Fixtures         | committed   | bit-exact gate, all 29 |
+
+Counts above are not hand-maintained. `scripts/verify_counts.py --check`
+measures the suite and exits 1 if this table disagrees, because these numbers
+were previously wrong: they had been read off wrapped `pytest -q` dots, and
+`-q` prints no summary line, so the real figure was never on screen.
 
 All ℚ-only tests pass on this machine (CPU). The training pipeline runs
 on the user's Mac Pro 2019 (32 GB unified memory, MPS).
@@ -43,6 +57,13 @@ python scripts/verify_bit_exact.py
 
 # All local tests (kernel + data; ℚ-only, no floats)
 python -m pytest vedic/kernel/tests vedic/data/tests -q
+
+# Are the four auxiliary losses differentiable w.r.t. Psi?
+python scripts/probe_aux_gradients.py
+
+# Run a sutra queue through every composition mode
+python scripts/run_composition.py
+python scripts/run_composition.py --mode CONCURRENT --show-waves
 
 # Generate the synthetic LoRA corpus
 python scripts/generate_synthetic.py \

@@ -10,12 +10,10 @@ Sub-Sutra 13: Puranapuranabyham - Quantum Completion Analysis
 
 import numpy as np
 import cirq
-try:
-    import cudaq
-    HAS_CUDAQ = True
-except ImportError:
-    HAS_CUDAQ = False
-    cudaq = None
+# No optional-dependency fallback: if a backend this module needs is absent,
+# the import fails loudly rather than silently degrading to a different code
+# path whose results are not comparable.
+import cudaq
 
 import torch
 from typing import List, Union, Optional

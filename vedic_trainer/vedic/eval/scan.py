@@ -9,7 +9,7 @@ from datasets import load_dataset
 from torch import nn
 from transformers import PreTrainedTokenizerBase
 
-SCAN_SPLITS: tuple[str, ...] = ("simple", "length", "jump")
+SCAN_SPLITS: tuple[str, ...] = ("simple", "length", "addprim_jump")
 
 
 @dataclass
@@ -33,22 +33,19 @@ def evaluate_scan(
     splits: Iterable[str] = SCAN_SPLITS,
     max_new_tokens: int = 96,
     device: str | torch.device = "cpu",
-    eval_subset: int | None = None,
 ) -> Mapping[str, ScanResult]:
     """Run greedy decoding on each requested SCAN split.
 
     The dataset id ``scan/{split}`` follows the canonical Lake & Baroni
-    distribution. ``eval_subset`` truncates each split for quick
-    smoke-runs but is None by default (full evaluation).
+    distribution. Every split is evaluated in full: there is no subset or
+    smoke mode, because a truncated benchmark is not the benchmark.
     """
     model.eval()
     results: dict[str, ScanResult] = {}
     for split in splits:
         if split not in SCAN_SPLITS:
             raise ValueError(f"unknown SCAN split: {split!r}")
-        ds = load_dataset("scan", split, split="test")
-        if eval_subset is not None:
-            ds = ds.select(range(min(eval_subset, len(ds))))
+        ds = load_dataset("scan", split, split="test", trust_remote_code=True)
         n_total = 0
         n_correct = 0
         for example in ds:

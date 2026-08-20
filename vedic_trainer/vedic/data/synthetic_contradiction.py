@@ -23,7 +23,7 @@ from fractions import Fraction
 from typing import Iterable
 
 from vedic.kernel.q import Q16
-from vedic.kernel.sutras_exact import s2_nikhilam, s5_shunyam_samya
+from vedic.kernel.z2_primitives import s2_nikhilam, s5_shunyam_samya
 
 from .tesseract_encode import encode_text_to_psi
 

@@ -10,7 +10,7 @@ What's here:
 - ``vedic_engine`` — the classical (NumPy float64) interpretation of
   the 29 sutras as arithmetic recipes. Source:
   ``codex/replace-blocks-with-fixed-implementations:src/quanqonscious/vedic_sutra_engine.py``.
-  Complements ``vedic.kernel.sutras_exact`` (Z₂⁴ structural algebra
+  Complements ``vedic.kernel.z2_primitives`` (Z₂⁴ structural algebra
   over ℚ) — the two interpretations are different lenses on the same
   29 Vedic algorithms.
 - ``hypercube`` — float hypercube operators (Λ, Ω, Υ, weighted) that
@@ -23,7 +23,7 @@ What's here:
   Lean 4 ``Prop``s so the Lean mirror can prove them on demand.
 - ``executor`` — serial / threads / processes orchestration adapter.
   Source: ``codex/locate-runnable-simulations-in-repos:src/quanqonscious/sutra_executor.py``.
-  Adapted to run our exact-ℚ sutras_exact functions across batches.
+  Adapted to run our exact-ℚ z2_primitives functions across batches.
 - ``proof_validation`` — smoke test harness that asserts every sutra
   in ``vedic_engine`` is callable on representative inputs. Source:
   ``codex/replace-blocks-with-fixed-implementations:src/quanqonscious/proof_validation.py``.

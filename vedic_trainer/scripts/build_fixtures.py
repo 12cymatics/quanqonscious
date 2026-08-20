@@ -22,7 +22,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from vedic.kernel import conservation_exact as ce
-from vedic.kernel import sutras_exact as se
+from vedic.kernel import z2_primitives as se
 from vedic.kernel.q import Q16
 
 
@@ -96,6 +96,14 @@ def build(seed: int, n_inputs: int, out_dir: Path) -> None:
         rec["S27"] = _frac_to_obj(se.s27_samuccaya_gunitah(psi))
         rec["S28"] = _q_to_obj(se.s28_lopana_restore(psi))
         rec["S29"] = _q_to_obj(se.s29_mean_drive(psi))
+        # The three genuinely binary sutras. Phi is the Nikhilam complement of
+        # Psi -- a declared, reproducible second operand, so that all 29 are
+        # covered rather than 26. Phi = Psi is not usable: it makes S17 the
+        # identity for every reference index.
+        phi = se.s2_nikhilam(psi)
+        rec["S3"] = _q_to_obj(se.s3_urdhva_tiryak(psi, phi))
+        rec["S17"] = _q_to_obj(se.s17_anurupyena_proportion(psi, phi))
+        rec["S23"] = _q_to_obj(se.s23_dwandwa_yoga(psi, phi))
         sutra_records.append(rec)
 
     with sutra_outputs_path.open("w", encoding="utf-8") as f:

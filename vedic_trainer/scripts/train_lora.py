@@ -52,12 +52,11 @@ def _dtype_from_str(s: str) -> torch.dtype:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Vedic LoRA fine-tune.")
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--skip-bit-exact-gate", action="store_true",
-                        help="Override only when running inside the test harness.")
     args = parser.parse_args()
 
-    if not args.skip_bit_exact_gate:
-        _run_bit_exact_gate()
+    # The bit-exact gate is mandatory. There is no override: a kernel that does
+    # not reproduce the committed fixtures must not train.
+    _run_bit_exact_gate()
 
     cfg: TrainingConfig = load_yaml(args.config)
     torch.manual_seed(cfg.seed)
@@ -88,7 +87,9 @@ def main() -> None:
             max_length=cfg.data.max_seq_length,
             padding=False,
         )
-        out["labels"] = [list(ids) for ids in out["input_ids"]]
+        # NOTE: labels are produced by DataCollatorForLanguageModeling(mlm=False),
+        # which sets labels = input_ids with pad positions masked to -100.
+        # Pre-setting them here makes tokenizer.pad() fail on the ragged list.
         return out
 
     train_ds = train_ds.map(_tokenize, batched=True, remove_columns=train_ds.column_names)
