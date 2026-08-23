@@ -14,6 +14,12 @@ name: external-submit-pypi-watchdog
 #
 # The watchdog has no effect on successful checks or on checks produced
 # by our own workflow.
+#
+# The override is NOT unconditional. It reads our own `submit-pypi` result
+# for the same SHA first and mirrors it: green only when the repo-internal
+# gate actually passed, `failure` when it did not, and `pending` when it has
+# not reported yet. Before this, the status was posted green whatever our own
+# gate said, while its description claimed the gate had passed.
 
 on:
   check_run:
@@ -33,19 +39,56 @@ jobs:
       github.event.check_run.app.slug != 'github-actions'
     runs-on: ubuntu-latest
     steps:
-      - name: Post green override status
+      # The override's description asserted "repo-internal gate passes" while
+      # nothing checked whether it did. If the external check failed AND our
+      # own submit-pypi job had also failed on this SHA, the override still
+      # went green — which is the one case where it must not. The repo's own
+      # result is now read first, and the status mirrors it.
+      - name: Read the repo-internal submit-pypi result for this SHA
+        id: internal
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.check_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          CONC=$(gh api "repos/${REPO}/commits/${SHA}/check-runs" --paginate \
+                   --jq '[.check_runs[]
+                          | select(.name == "submit-pypi")
+                          | select(.app.slug == "github-actions")
+                          | select(.status == "completed")]
+                         | last | .conclusion // empty' 2>/dev/null || true)
+          echo "conclusion=${CONC:-none}" >> "$GITHUB_OUTPUT"
+          echo "repo-internal submit-pypi on ${SHA}: ${CONC:-not found}"
+
+      - name: Post override status mirroring the repo-internal gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.event.check_run.head_sha }}
           SOURCE: ${{ github.event.check_run.app.slug }}
           DETAILS_URL: ${{ github.event.check_run.details_url }}
           REPO: ${{ github.repository }}
+          INTERNAL: ${{ steps.internal.outputs.conclusion }}
         run: |
           set -eu
+          case "$INTERNAL" in
+            success)
+              STATE=success
+              DESC="external submit-pypi (${SOURCE}) out of repo scope; repo-internal gate passed"
+              ;;
+            none)
+              STATE=pending
+              DESC="external submit-pypi (${SOURCE}) failed; repo-internal gate has not reported yet"
+              ;;
+            *)
+              STATE=failure
+              DESC="external submit-pypi (${SOURCE}) failed AND repo-internal gate is ${INTERNAL}"
+              ;;
+          esac
           gh api "repos/${REPO}/statuses/${SHA}" \
-            -f state=success \
+            -f state="$STATE" \
             -f context="submit-pypi-override" \
-            -f description="external submit-pypi (${SOURCE}) out of repo scope; repo-internal gate passes" \
+            -f description="$DESC" \
             -f target_url="${DETAILS_URL}"
 
       - name: Find associated open PR
