@@ -58,5 +58,14 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.pytest.ini_options]
-testpaths = ["vedic/kernel/tests", "vedic/data/tests", "vedic/external/tests"]
-addopts = "-q"
+# The whole package, not an enumerated subset. Naming three directories meant
+# vedic/eval, vedic/training and vedic/memory had no tests and nobody noticed
+# -- a bare `pytest` reported success without collecting a single test from
+# them. A new subpackage is now covered by default rather than on remembering.
+testpaths = ["vedic"]
+
+# Deliberately NOT "-q": that flag suppresses pytest's summary line, which is
+# exactly how this package came to report 145 tests for a suite of 217.
+# scripts/verify_counts.py exists because of that, and setting -q here would
+# recreate the condition for every plain `pytest` invocation.
+addopts = ""

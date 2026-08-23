@@ -31,6 +31,10 @@ data/*
 !data/.gitkeep
 checkpoints/*
 !checkpoints/.gitkeep
-runs/
+# runs/*.json ARE the evidence behind every number in ABLATION_RESULTS.md
+# and are checked by scripts/verify_ablation.py --check. They are 4 KB in
+# total and must travel with the repo; only the bulky logs are ignored.
+runs/*
+!runs/*.json
 wandb/
 *.log

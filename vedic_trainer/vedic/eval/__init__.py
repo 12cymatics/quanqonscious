@@ -12,7 +12,12 @@ from typing import Any
 from .compositional_audit import audit_closure_rate, score_audit_psi_batch
 
 
-SCAN_SPLITS: tuple[str, ...] = ("simple", "length", "jump")
+# Re-exported from the module that validates against it, never redeclared.
+# This constant used to read ("simple", "length", "jump") while scan.py read
+# ("simple", "length", "addprim_jump"), so any caller who imported the
+# package-level name and passed it straight through hit
+# `ValueError: unknown SCAN split: 'jump'`.
+from .scan_splits import COGS_SPLITS, SCAN_SPLITS  # noqa: E402
 
 
 def evaluate_scan(*args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
@@ -25,6 +30,7 @@ def evaluate_cogs(*args: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
 
 __all__ = [
     "SCAN_SPLITS",
+    "COGS_SPLITS",
     "evaluate_scan",
     "evaluate_cogs",
     "audit_closure_rate",

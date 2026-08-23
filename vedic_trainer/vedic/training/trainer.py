@@ -107,7 +107,14 @@ class VedicTrainer(Trainer):
         ce_loss = outputs.loss
 
         last_hidden = outputs.hidden_states[-1]            # (B, T, d_model)
-        attn_mask: Tensor | None = forward_inputs.get("attention_mask")
+        try:
+            attn_mask: Tensor = forward_inputs["attention_mask"]
+        except KeyError:
+            raise ValueError(
+                "the batch carries no attention_mask; TesseractWM cannot pool "
+                "without one and the auxiliary losses would be computed over "
+                "padding. Check the collator."
+            ) from None
         psi = self.tesseract_wm(last_hidden, attn_mask)    # (B, 16)
 
         # Maintain the integer trace counter (R1).

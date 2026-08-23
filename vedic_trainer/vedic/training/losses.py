@@ -21,17 +21,12 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from vedic.kernel.conservation_torch import (
-    cons_l2_torch,
-    r1_torch,
-    r2_torch,
-    r3_torch,
-    r4_torch,
-)
+# NOTE: conservation_torch is deliberately NOT imported here. L_cons no
+# longer sums R1..R4 -- see its docstring for why that sum was a constant --
+# so importing the residuals would suggest a dependency that does not exist.
 from vedic.kernel.hessian import HessianModule
 from vedic.kernel.sutras_torch import S5, S7, S11, S29
 from vedic.kernel.tesseract import NUM_VERTICES
-from vedic.kernel.wht import wht_axis_torch
 
 CONS_TRACE_KEY = "vedic_trace_sum"
 """Trainer-state key for the running integer trace counter feeding R1.

@@ -125,10 +125,24 @@ class Lean4Mirror:
 
     def __init__(self, config: Lean4SessionConfig | None = None):
         self.config = config or Lean4SessionConfig()
-        self._lean_path = self.config.resolved_lean_path()
         self._artifact_root = Path(tempfile.mkdtemp(prefix="quanqonscious-lean4-"))
         self._artifact_root.mkdir(parents=True, exist_ok=True)
         self._script_counter = itertools.count()
+
+    @property
+    def _lean_path(self) -> str:
+        """The Lean executable, resolved on first use rather than at __init__.
+
+        Resolving eagerly made the whole object unconstructible without a Lean
+        toolchain, including for *rendering* — which is pure string work and
+        needs no compiler. Anything that actually runs Lean still gets the
+        same FileNotFoundError, just at the point where it matters.
+        """
+        cached = getattr(self, "_lean_path_cache", None)
+        if cached is None:
+            cached = self.config.resolved_lean_path()
+            self._lean_path_cache = cached
+        return cached
 
     # ------------------------------------------------------------------
     # Script rendering utilities
@@ -160,7 +174,7 @@ class Lean4Mirror:
                 "  if sutraStatement then",
                 "    IO.println ""true""",
                 "  else",
-                "    throw <| IO.userError ""mirror validation failed""",
+                '    throw <| IO.userError "mirror validation failed"',
                 "",
                 "#eval mirrorMain",
             ]

@@ -15,6 +15,18 @@ Queue indices are 1-based on the command line (S1..S29) and converted to the
 0-based internal index. Everything runs in exact ℚ; the report shows the
 largest denominator reached, which is the real cost driver of exact
 composition.
+
+This is a REPORTER, not a gate: it exits 0 whether or not a mode returns the
+zero map or raises, because both are expected, documented results for the
+canonical queue. SERIES over all 29 *is* the zero map (S20 projects to one
+Walsh row, S21 takes absolute values, S22 differences a constant), and
+COMPOSITE *does* raise on S17's precondition. Printing those as ordinary
+rows is the correct output, not a swallowed failure.
+
+The checks that must fail loudly live elsewhere and do:
+`composition.is_degenerate_series` / `annihilating_runs` detect the
+annihilating run and are asserted in `test_composition.py`, and
+`scripts/show_sutras.py --verify` exits non-zero on any structural violation.
 """
 from __future__ import annotations
 

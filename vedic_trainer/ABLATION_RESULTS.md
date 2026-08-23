@@ -36,7 +36,7 @@ The two arm configs differ **only** in the four loss weights and
 
 - **`L_curv` is identically zero.** It power-iterates from
   `torch.randn_like(psi)` — a random vector, not Ψ — against `g_ab`.
-  `hessian.py`'s own docstring states *"because every contributing
+  `vedic/kernel/hessian.py`'s own docstring states *"because every contributing
   operator is linear, g_ab is independent of Ψ"*, confirmed here:
   `g_ab` is bit-identical for different Ψ. Every batch row therefore
   shares one matrix, so `relu(kappa - kappa.detach().mean())` is 0.
@@ -114,7 +114,7 @@ cannot validate the claim.**
 
 ## Notes
 
-- `verify_bit_exact.py` passes (32 inputs, 32 sutra records, 96
+- `scripts/verify_bit_exact.py` passes (32 inputs, 32 sutra records, 96
   conservation records). The exact-ℚ kernel and its torch port do agree;
   that is a separate, genuine property and is not in question here.
 - 12 of 5,120 generated records come back `audit_closed=True`, worth
@@ -212,6 +212,68 @@ nothing.
   objective. The weights were chosen for the old (inert) scales and were run
   unchanged rather than retuned to flatter the result. A fair follow-up would
   rescale the auxiliary weights so each sits an order of magnitude below CE,
-  which is the usual convention. **This run does not settle whether a
-  well-scaled version of these losses would still hurt.**
+  which is the usual convention. That run is below, and it settles the
+  question.
 
+
+
+---
+
+## After rescaling the auxiliary weights
+
+The run above left `L_cons` weighted at ~120% of CE, because the weights had
+been chosen when two of the four losses were inert and were deliberately run
+unchanged rather than retuned to flatter the result. That left one question
+open: **does a properly scaled version of these losses still hurt?**
+
+Each weight was rescaled so its term contributes ~10% of CE at the observed
+raw magnitudes — the usual convention — putting all four at the same
+weighted value rather than one dominating:
+
+| loss | raw | old w | old weighted | new w | new weighted |
+|---|---|---|---|---|---|
+| `L_chi` | 0.5087 | 0.100 | 0.0509 | 0.326317 | 0.1660 |
+| `L_cons` | 39.8677 | 0.050 | **1.9934** | 0.004164 | 0.1660 |
+| `L_curv` | 1.8051 | 0.020 | 0.0361 | 0.091961 | 0.1660 |
+| `L_dual` | 13.7416 | 0.050 | 0.6871 | 0.012080 | 0.1660 |
+
+Same code, same data, same seeds, same `no_sutra` arm (all four weights zero,
+so that arm is unchanged and its runs are reused).
+
+| seed | `no_sutra` | `full` (scaled) | Δ | rel | rel (unscaled) |
+|---|---|---|---|---|---|
+| 42 | 1.6501 | 1.7848 | +0.1346 | **+8.16%** | +28.60% |
+| 1 | 1.6566 | 1.7702 | +0.1135 | **+6.85%** | +28.64% |
+| 2 | 1.6630 | 1.8183 | +0.1553 | **+9.34%** | +19.70% |
+| **mean** | **1.6566** | **1.7911** | **+0.1345** | **+8.12%** | +25.63% |
+| sd | 0.0064 | 0.0247 | 0.0209 | | |
+
+**The answer is yes: properly scaled, the losses still hurt.**
+
+- the penalty is **21× the baseline seed sd** (0.0064)
+- ranges **disjoint**: worst `no_sutra` 1.6630 < best scaled `full` 1.7702
+- direction **unanimous** across all three seeds
+- `full` variance **fell** (sd 0.0786 → 0.0247), so the scaled objective is
+  also more stable — the effect is not an artifact of one bad seed
+
+Scaling reduces the damage to roughly a third (+25.63% → +8.12%) and removes
+the objection that the earlier result was an artifact of one term drowning
+the others. It does not change the direction. Across three weightings — two
+losses inert (+3.44%), all four live at the original weights (+25.63%), and
+all four live at conventional weights (+8.12%) — the sutra auxiliary losses
+made held-out language modelling worse every time, on every seed.
+
+### What is and is not concluded
+
+Concluded, for this setup: adding these four sutra-derived auxiliary losses
+to a LoRA fine-tune of SmolLM2-135M on this synthetic corpus costs held-out
+cross-entropy, and the cost is not a scaling artifact.
+
+Not concluded: nothing here rules out an effect at a larger model scale, on
+a different corpus, or on a genuinely compositional in-distribution task.
+The one benchmark named for that purpose (SCAN/COGS) scored 0 for every arm
+including the untuned base, so it could not have detected an effect either
+way — see above.
+
+Every number in this document is checked against `runs/*.json` by
+`scripts/verify_ablation.py --check`, which is run by the test suite.

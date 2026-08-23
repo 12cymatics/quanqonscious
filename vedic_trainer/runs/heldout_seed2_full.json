@@ -1,0 +1,10 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "adapter": "checkpoints/seed2_full",
+  "heldout": {
+    "ce_loss": 1.718150633613655,
+    "ppl": 5.574210169145572,
+    "n_tokens": 5348,
+    "secs": 13.4
+  }
+}

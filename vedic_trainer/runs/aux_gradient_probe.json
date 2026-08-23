@@ -1,0 +1,35 @@
+{
+  "losses": {
+    "L_chi": {
+      "value": 0.508707582950592,
+      "weight": 0.1,
+      "weighted": 0.05087075829505921,
+      "grad_l1": 0.7226906418800354,
+      "reaches_psi": true
+    },
+    "L_cons": {
+      "value": 39.8676872253418,
+      "weight": 0.05,
+      "weighted": 1.9933843612670898,
+      "grad_l1": 156.08770751953125,
+      "reaches_psi": true
+    },
+    "L_curv": {
+      "value": 1.8051190376281738,
+      "weight": 0.02,
+      "weighted": 0.03610238075256348,
+      "grad_l1": 15.591034889221191,
+      "reaches_psi": true
+    },
+    "L_dual": {
+      "value": 13.74158000946045,
+      "weight": 0.05,
+      "weighted": 0.6870790004730225,
+      "grad_l1": 22.776817321777344,
+      "reaches_psi": true
+    }
+  },
+  "g_ab_constant_in_psi": true,
+  "dead": [],
+  "config": "configs/ablations/cpu_full.yaml"
+}

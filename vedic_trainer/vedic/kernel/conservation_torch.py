@@ -9,8 +9,18 @@ Bit-exact mirror of ``conservation_exact.py``. The four residuals are:
 
 R2, R3, R4 are algebraic identities over ℚ — they evaluate to exact zero on
 the Fraction path and to a tiny float-rounding residual on the torch path.
-The bit-exact test verifies that the torch residual stays below 1e-7 of the
-input scale on 100 randomized Q16 inputs.
+
+**Not on the training path.** ``L_cons`` does not use these; summing R1..R4
+produced a constant with zero gradient (see ``vedic/training/losses.py``).
+This module is the torch mirror of ``conservation_exact.py``, kept as a
+reference implementation and verified against it.
+
+This docstring previously asserted "the bit-exact test verifies that the
+torch residual stays below 1e-7 … on 100 randomized Q16 inputs". No such test
+existed. ``vedic/training/losses.py`` did *import* five names from here, but
+never used them -- their only occurrence was the import block itself -- so
+the claim was unbacked for its whole life.
+``vedic/kernel/tests/test_conservation_torch.py`` now makes it true.
 """
 from __future__ import annotations
 

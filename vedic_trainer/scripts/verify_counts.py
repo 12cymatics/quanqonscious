@@ -45,29 +45,62 @@ LAYERS: dict[str, list[str]] = {
     "Kernel (torch)": ["vedic/kernel/tests/test_torch_buffers.py"],
     "Data": ["vedic/data/tests"],
     "External sidecar": ["vedic/external/tests"],
+    "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
+    "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
+    "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
+    "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
+    "Audit closure": ["vedic/eval/tests"],
+    "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
 }
 
-_SUMMARY = re.compile(r"(\d+) passed")
+_COLLECTED = re.compile(r"(\d+) tests? collected")
+_FAILED = re.compile(r"(\d+) (?:failed|error)")
 
 
 def measure(paths: list[str]) -> int:
-    """Collected-and-passing count, read from pytest's summary line.
+    """Number of tests COLLECTED, not passed.
 
-    Deliberately does NOT pass -q: that flag suppresses the summary, which is
-    the exact condition that made the number unreadable in the first place.
+    It used to be the "N passed" count, which is environment-dependent: three
+    tests here are skipped when no Lean toolchain is present, so the same
+    README was correct on a machine with Lean and wrong in CI without it. A
+    count that changes with the machine cannot be a claim about the suite.
+
+    Collection is environment-independent -- a skipped test is still collected
+    -- so this is what the README's numbers mean. Whether they *pass* is a
+    separate question, asked by `failures()`.
     """
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", *paths, "--no-header"],
+        [sys.executable, "-m", "pytest", *paths, "--collect-only", "-q",
+         "--no-header"],
         cwd=REPO, capture_output=True, text=True,
         env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
     )
-    m = _SUMMARY.search(proc.stdout)
+    m = _COLLECTED.search(proc.stdout)
     if not m:
         raise RuntimeError(
-            f"no pytest summary line for {paths}; output tail:\n"
+            f"no collection summary for {paths}; output tail:\n"
             + "\n".join(proc.stdout.strip().splitlines()[-5:])
         )
     return int(m.group(1))
+
+
+def failures() -> tuple[int, str]:
+    """Run the suite; return (failure count, the summary line).
+
+    Counting collected tests alone would let the README stay "correct" while
+    every one of them failed. Deliberately does NOT pass -q: that suppresses
+    the summary line, the exact condition this script exists to prevent.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "vedic/", "--no-header"],
+        cwd=REPO, capture_output=True, text=True,
+        env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
+    )
+    tail = [ln for ln in proc.stdout.strip().splitlines()
+            if " passed" in ln or " failed" in ln or " error" in ln]
+    line = tail[-1] if tail else "(no summary line)"
+    m = _FAILED.search(line)
+    return (int(m.group(1)) if m else 0), line.strip()
 
 
 def readme_counts() -> dict[str, int]:
@@ -86,25 +119,34 @@ def readme_counts() -> dict[str, int]:
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--check", action="store_true",
-                    help="verify the README table matches; exit 1 on mismatch")
-    args = ap.parse_args()
+def reconcile(measured: dict[str, int], total: int,
+              claimed: dict[str, int], n_failed: int = 0,
+              summary: str = "") -> list[str]:
+    """Judge measured counts against claimed ones. Pure: no I/O, no pytest.
 
-    measured = {name: measure(paths) for name, paths in LAYERS.items()}
-    total = measure(["vedic/"])
-
-    width = max(len(n) for n in measured)
-    for name, n in measured.items():
-        print(f"  {name:<{width}}  {n:>4}")
-    print(f"  {'TOTAL (vedic/)':<{width}}  {total:>4}")
-
-    if not args.check:
-        return 0
-
-    claimed = readme_counts()
+    Split out of `main` so the judgment can be regeneration-tested directly.
+    A gate whose decision logic can only be exercised by running the entire
+    suite is a gate nobody re-tests -- and the decisions are exactly the part
+    that can silently stop working.
+    """
     problems: list[str] = []
+
+    if n_failed:
+        problems.append(
+            f"{n_failed} test(s) do not pass: {summary}. A count of collected "
+            f"tests says nothing about whether they work.")
+
+    # The layers must account for every test. Without this, a new test file
+    # that no layer names is simply invisible: the README stays "correct"
+    # while the suite it describes has grown past it.
+    layered = sum(measured.values())
+    if layered != total:
+        problems.append(
+            f"layers sum to {layered} but the suite has {total} tests — "
+            f"{total - layered} belong to no layer. Add them to LAYERS (and "
+            f"to the README table) rather than leaving them unaccounted.")
+
+    claimed = claimed
     for name, n in measured.items():
         if name not in claimed:
             problems.append(f"README has no row for layer {name!r} ({n} tests)")
@@ -114,6 +156,31 @@ def main() -> int:
     for name in claimed:
         if name not in measured:
             problems.append(f"README row {name!r} maps to no layer here")
+
+    return problems
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--check", action="store_true",
+                    help="verify the README table matches; exit 1 on mismatch")
+    args = ap.parse_args()
+
+    measured = {name: measure(paths) for name, paths in LAYERS.items()}
+    total = measure(["vedic/"])
+    n_failed, summary = failures()
+
+    width = max(len(n) for n in measured)
+    for name, n in measured.items():
+        print(f"  {name:<{width}}  {n:>4}")
+    print(f"  {'TOTAL (vedic/)':<{width}}  {total:>4}   (collected)")
+    print(f"\n  suite: {summary}")
+
+    if not args.check:
+        return 0
+
+    problems = reconcile(measured, total, readme_counts(),
+                         n_failed, summary)
 
     if problems:
         print("\nMISMATCH:")

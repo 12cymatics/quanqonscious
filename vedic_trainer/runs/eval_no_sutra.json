@@ -1,0 +1,41 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "adapter": "checkpoints/cpu_no_sutra",
+  "heldout": {
+    "ce_loss": 1.647660667716164,
+    "ppl": 5.194813207600288,
+    "n_tokens": 5348,
+    "secs": 16.1
+  },
+  "scan": {
+    "simple": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "length": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "addprim_jump": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    }
+  },
+  "scan_secs": 527.7,
+  "cogs": {
+    "test": {
+      "n_total": 20,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "gen": {
+      "n_total": 20,
+      "n_correct": 0,
+      "accuracy": 0.0
+    }
+  },
+  "cogs_secs": 648.6
+}

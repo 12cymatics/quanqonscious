@@ -24,10 +24,50 @@ def _make_inputs() -> List[Q16]:
     [ExecutionMode.SERIAL, ExecutionMode.THREADS, ExecutionMode.PROCESSES],
 )
 def test_executor_modes_agree(mode: ExecutionMode) -> None:
+    """The three modes must agree — and on outputs that can disagree.
+
+    3 of the 4 fixture inputs run through `_PIPELINE` to the all-zero vector,
+    and on the zero vector every implementation agrees no matter what it
+    does. Asserting `serial == other` across all four therefore tested one
+    real case and three vacuous ones. The degenerate rows are still compared
+    (they must stay zero), but agreement is separately required on at least
+    one row that is not.
+    """
     inputs = _make_inputs()
     serial = SutraExecutor(mode=ExecutionMode.SERIAL).execute(inputs)
     other = SutraExecutor(mode=mode, max_workers=2).execute(inputs)
     assert serial == other
+
+    live = [i for i, out in enumerate(serial) if any(v != 0 for v in out)]
+    assert live, (
+        "every fixture input collapsed to the zero vector, so this comparison "
+        "cannot distinguish a correct executor from a broken one. Add an "
+        "input that survives the pipeline.")
+    for i in live:
+        assert serial[i] == other[i]
+
+
+def test_the_pipeline_degeneracy_is_known_and_pinned() -> None:
+    """Which inputs collapse is a property of the operator set, so pin it.
+
+    If a future change makes more inputs collapse, the mode-agreement test
+    above quietly loses coverage. This fails instead.
+    """
+    outs = SutraExecutor(mode=ExecutionMode.SERIAL).execute(_make_inputs())
+    collapsed = [i for i, out in enumerate(outs) if all(v == 0 for v in out)]
+    assert collapsed == [0, 2, 3], (
+        f"the set of collapsing inputs changed to {collapsed}; check whether "
+        f"test_executor_modes_agree still has a live case")
+
+
+def test_the_pipeline_declares_which_sutras_it_omits() -> None:
+    """22 of 29, and the 7 excluded are named rather than merely missing."""
+    from vedic.external.executor import _PIPELINE
+
+    assert len(_PIPELINE) == 22
+    names = {fn.__name__.split("_")[0] for fn in _PIPELINE}
+    excluded = {f"s{n}" for n in (3, 17, 23, 18, 27, 7, 22)} - names
+    assert excluded, "the exclusion list no longer matches the pipeline"
 
 
 def test_executor_output_is_q16() -> None:
