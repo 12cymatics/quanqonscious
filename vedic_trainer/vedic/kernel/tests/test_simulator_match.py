@@ -34,8 +34,14 @@ def _require_fixtures() -> None:
 
     This used to call ``build_fixtures.py`` when a fixture was missing --
     regenerating the reference *from the same kernel the gate then compares
-    against*, so an empty ``fixtures/`` produced a confident
-    "bit-exact" pass having verified nothing at all.
+    against*, so an empty ``fixtures/`` produced a confident "bit-exact" pass.
+
+    To be exact about what that cost: the comparisons still ran, and would
+    still have caught nondeterminism between the two executions. What they
+    could no longer do is falsify *correctness* -- the reference agreed with
+    the kernel because it had just been written from it. A gate that cannot
+    be wrong about the thing it exists to check is not a weak gate; it is a
+    different gate than the one everyone was citing.
 
     The fixtures are a committed reference, not a build artefact. If they are
     missing the answer is that the gate cannot run, not that it should

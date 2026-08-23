@@ -144,9 +144,15 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
 # the two previous versions of this both used prefix matching -- one to decide
 # what was unrenderable, a different one (a 6-character prefix) to decide what
 # was covered -- so "S1∘S1 = id" reduced to the prefix "S1" and marked S10,
-# S11, S12, S13, S14, S15, S16, S19, S20 and S21 as covered. Fourteen
-# identities landed in both buckets at once, and `unaccounted` was reported as
-# the literal 0 regardless.
+# S11, S12, S13, S14, S15, S16, S19, S20 and S21 as covered. Exactly fourteen
+# identities landed in both buckets at once.
+#
+# The prefix match is the load-bearing defect. The literal `"unaccounted": 0`
+# alongside it was cosmetic rather than independently false: with `covered`
+# that generous, covered ∪ unrenderable really did span all 30, so the
+# `if unaccounted: raise` above it never fired and the literal was only ever
+# reached when it happened to be correct. It still had to go -- a value that
+# is right by luck is not a check -- but it was not what hid the gap.
 #
 # A rendered prop with no catalogue counterpart maps to None and is counted as
 # such rather than being credited against an unrelated entry.
