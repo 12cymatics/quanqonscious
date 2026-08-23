@@ -16,6 +16,14 @@ import pytest
 
 SCRIPTS = sorted((Path(__file__).resolve().parents[3] / "scripts").glob("*.py"))
 
+# `__init__.py` is a package marker, not a driver, so the entry-point
+# obligation does not apply to it. That exclusion lives here, in the
+# parameter list, rather than as a runtime pytest.skip: a skip reports as
+# "not run" and looks the same whether the reason is sound or the test
+# quietly stopped working. The marker is checked on its own terms in
+# test_package_marker_is_only_a_marker.
+DRIVERS = [p for p in SCRIPTS if p.name != "__init__.py"]
+
 
 def test_scripts_directory_is_not_empty():
     assert SCRIPTS, "no scripts found — the glob is wrong, not the directory"
@@ -31,11 +39,27 @@ def test_script_compiles(path: Path):
         pytest.fail(f"{path.name} does not parse: line {e.lineno}: {e.msg}")
 
 
-@pytest.mark.parametrize("path", SCRIPTS, ids=[p.name for p in SCRIPTS])
+def test_there_are_drivers_to_check():
+    assert DRIVERS, "scripts/ contains no drivers — the exclusion is too broad"
+
+
+def test_package_marker_is_only_a_marker():
+    """`__init__.py` is exempt from the entry-point rule only while it is
+    genuinely empty. If code appears in it, the exemption stops applying."""
+    init = Path(__file__).resolve().parents[3] / "scripts" / "__init__.py"
+    if not init.exists():
+        return
+    body = ast.parse(init.read_text(encoding="utf-8")).body
+    code = [n for n in body if not isinstance(n, ast.Expr)
+            or not isinstance(n.value, ast.Constant)]
+    assert not code, (
+        "scripts/__init__.py now contains code, so it is a module and must "
+        "meet the same obligations as every other script")
+
+
+@pytest.mark.parametrize("path", DRIVERS, ids=[p.name for p in DRIVERS])
 def test_script_has_an_entry_point(path: Path):
     """Each script is runnable: it defines main() and guards __main__."""
-    if path.name == "__init__.py":
-        pytest.skip("package marker, not a driver")
     src = path.read_text(encoding="utf-8")
     tree = ast.parse(src, filename=str(path))
     has_main = any(isinstance(n, ast.FunctionDef) and n.name == "main"
