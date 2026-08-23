@@ -99,3 +99,28 @@ def test_the_gate_rejects_a_wrong_number():
     perturbed = text.replace(f"| 42 | {real} |", f"| 42 | {real[:-1]}9 |", 1)
     assert perturbed != text, f"expected to find a seed-42 cell quoting {real}"
     assert VA.check(perturbed, SETS), "the gate passed a document it should reject"
+
+
+RUN_FILES = sorted((REPO / "runs").glob("*.json"))
+
+
+def test_there_are_run_files():
+    assert RUN_FILES, "runs/ holds no JSON — the evidence directory is empty"
+
+
+@pytest.mark.parametrize("path", RUN_FILES, ids=[p.name for p in RUN_FILES])
+def test_run_file_is_actually_json(path: Path):
+    """A .json that is captured stdout is not evidence, it is a transcript.
+
+    Two probe outputs were committed here as `.json` while actually holding
+    piped terminal output -- one with a trailing human-readable line, one
+    that was entirely a torch warning. Both are unreadable by anything that
+    trusts the extension.
+    """
+    try:
+        json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise AssertionError(
+            f"{path.name} is named .json but does not parse: {e}. If it is a "
+            f"terminal capture, it belongs in a .log (which .gitignore "
+            f"excludes) and the producing script should write real JSON.")

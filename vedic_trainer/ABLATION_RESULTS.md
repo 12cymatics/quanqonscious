@@ -36,7 +36,7 @@ The two arm configs differ **only** in the four loss weights and
 
 - **`L_curv` is identically zero.** It power-iterates from
   `torch.randn_like(psi)` — a random vector, not Ψ — against `g_ab`.
-  `hessian.py`'s own docstring states *"because every contributing
+  `vedic/kernel/hessian.py`'s own docstring states *"because every contributing
   operator is linear, g_ab is independent of Ψ"*, confirmed here:
   `g_ab` is bit-identical for different Ψ. Every batch row therefore
   shares one matrix, so `relu(kappa - kappa.detach().mean())` is 0.
@@ -114,7 +114,7 @@ cannot validate the claim.**
 
 ## Notes
 
-- `verify_bit_exact.py` passes (32 inputs, 32 sutra records, 96
+- `scripts/verify_bit_exact.py` passes (32 inputs, 32 sutra records, 96
   conservation records). The exact-ℚ kernel and its torch port do agree;
   that is a separate, genuine property and is not in question here.
 - 12 of 5,120 generated records come back `audit_closed=True`, worth

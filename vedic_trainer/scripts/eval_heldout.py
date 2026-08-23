@@ -40,6 +40,22 @@ def heldout_loss(model, tok, path: Path, device: str, max_len: int = 512, bs: in
     return tot / ntok, ntok
 
 
+def perplexity(ce: float) -> float:
+    """exp(CE), with no clamp.
+
+    This read ``math.exp(min(loss, 40))``, so any cross-entropy above 40 was
+    reported as e^40 -- a plausible-looking number standing in for a
+    divergent run. A CE that high means the evaluation is broken, and that
+    should surface here rather than be rounded into the record.
+    """
+    if ce > 709:                      # math.exp overflows just above this
+        raise ValueError(
+            f"held-out cross-entropy is {ce:.1f}; perplexity is not "
+            f"representable and the run is not usable. Investigate the "
+            f"evaluation rather than recording a capped value.")
+    return math.exp(ce)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--base-model", required=True)
@@ -63,7 +79,7 @@ def main() -> int:
     t0 = time.time()
     loss, ntok = heldout_loss(model, tok, a.heldout, a.device)
     payload = {"model": a.base_model, "adapter": tag,
-               "heldout": {"ce_loss": loss, "ppl": math.exp(min(loss, 40)),
+               "heldout": {"ce_loss": loss, "ppl": perplexity(loss),
                            "n_tokens": ntok, "secs": round(time.time() - t0, 1)}}
     a.output.parent.mkdir(parents=True, exist_ok=True)
     a.output.write_text(json.dumps(payload, indent=2))

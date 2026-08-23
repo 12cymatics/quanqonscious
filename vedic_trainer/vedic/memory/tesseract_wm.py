@@ -50,7 +50,13 @@ class TesseractWM(nn.Module):
             )
 
         if attention_mask is None:
-            pooled = hidden_states.mean(dim=1)
+            raise ValueError(
+                "TesseractWM requires an attention_mask. Mean-pooling without "
+                "one averages over padding positions, so Psi -- and all four "
+                "auxiliary losses computed from it -- would be silently wrong "
+                "with no error and no log line. This module's docstring says "
+                "there are no fail-safes; this is that promise."
+            )
         else:
             if attention_mask.shape != hidden_states.shape[:2]:
                 raise ValueError(

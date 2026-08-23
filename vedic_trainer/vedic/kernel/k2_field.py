@@ -36,6 +36,7 @@ No floats anywhere. Every coordinate is a ``Fraction``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from fractions import Fraction
 from typing import Tuple
 
@@ -50,6 +51,11 @@ __all__ = [
 # ----------------------------------------------------------------------
 
 
+# The only two floats in this module. They exist solely for to_float().
+_SQRT2_F = math.sqrt(2.0)
+_SQRT5_F = math.sqrt(5.0)
+
+
 @dataclass(frozen=True)
 class Q2:
     """a + b√2 with a, b ∈ ℚ."""
@@ -60,6 +66,16 @@ class Q2:
     def __post_init__(self) -> None:
         object.__setattr__(self, "a", Fraction(self.a))
         object.__setattr__(self, "b", Fraction(self.b))
+
+    def to_float(self) -> float:
+        """Render to IEEE-754. THE boundary: nothing upstream may call this.
+
+        Every operation in this module is exact; a float appears only when a
+        value is being displayed or plotted. Keeping that conversion in one
+        named method is what makes "no float contamination in the arithmetic
+        path" a checkable statement rather than an intention.
+        """
+        return float(self.a) + float(self.b) * _SQRT2_F
 
     def __add__(self, o: "Q2") -> "Q2":
         return Q2(self.a + o.a, self.b + o.b)
@@ -185,6 +201,11 @@ class C4:
 
     u: K2 = K2()
     v: K2 = K2()
+
+    def to_float(self) -> complex:
+        """Render to a complex float. See Q2.to_float -- this is the boundary."""
+        return (complex(self.u.re.to_float(), self.u.im.to_float())
+                + complex(self.v.re.to_float(), self.v.im.to_float()) * _SQRT5_F)
 
     @staticmethod
     def from_k2(z: K2) -> "C4":

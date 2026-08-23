@@ -14,7 +14,6 @@ runs without manual setup.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -30,21 +29,36 @@ REPO = Path(__file__).resolve().parents[3]
 FIXTURE_DIR = REPO / "fixtures"
 
 
-def _ensure_fixtures() -> None:
-    needed = [
+def _require_fixtures() -> None:
+    """Refuse to run if the committed reference is absent.
+
+    This used to call ``build_fixtures.py`` when a fixture was missing --
+    regenerating the reference *from the same kernel the gate then compares
+    against*, so an empty ``fixtures/`` produced a confident
+    "bit-exact" pass having verified nothing at all.
+
+    The fixtures are a committed reference, not a build artefact. If they are
+    missing the answer is that the gate cannot run, not that it should
+    manufacture something to agree with.
+    """
+    missing = [p.name for p in (
         FIXTURE_DIR / "psi_inputs.json",
         FIXTURE_DIR / "sutra_outputs.json",
         FIXTURE_DIR / "conservation_residuals.json",
-    ]
-    if all(p.exists() for p in needed):
-        return
-    cmd = [sys.executable, "scripts/build_fixtures.py", "--out", str(FIXTURE_DIR)]
-    subprocess.check_call(cmd, cwd=REPO)
+    ) if not p.exists()]
+    if missing:
+        raise SystemExit(
+            f"fixtures/ is missing {', '.join(missing)}. These are the "
+            f"committed reference this gate checks against; they are tracked "
+            f"in git. Restore them (git checkout -- fixtures/) rather than "
+            f"rebuilding: scripts/build_fixtures.py writes them from the same "
+            f"kernel under test, so a rebuilt fixture cannot falsify anything."
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)
 def fixtures_present() -> None:
-    _ensure_fixtures()
+    _require_fixtures()
 
 
 def _obj_to_frac(obj: dict[str, int]) -> Fraction:

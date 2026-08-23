@@ -63,9 +63,13 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
     ``sutraStatement`` body in ``Lean4Mirror``. The expressions are
     self-contained — they don't import Mathlib or define functions.
 
-    Coverage is COMPLETE: every entry of ``INTERACTIONS`` is rendered. There
-    is no easy-to-render subset. ``build_lean_props`` raises if any catalogue
-    identity would go unrendered, so coverage cannot silently drift.
+    Coverage is PARTIAL and reported as such: 8 of the 30 catalogue
+    identities are proved in Lean, 22 are declared unrenderable with a stated
+    reason, and ``coverage_report`` raises if any entry is in neither bucket
+    or in both. An earlier docstring here read "Coverage is COMPLETE: every
+    entry of ``INTERACTIONS`` is rendered" while 10 props were emitted for a
+    30-entry catalogue, and the coverage check it pointed at returned a
+    hardcoded zero.
 
     Two rendering shapes are used:
 
@@ -135,6 +139,35 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
     return props
 
 
+
+# Which catalogue identity each rendered proposition proves. Explicit, because
+# the two previous versions of this both used prefix matching -- one to decide
+# what was unrenderable, a different one (a 6-character prefix) to decide what
+# was covered -- so "S1∘S1 = id" reduced to the prefix "S1" and marked S10,
+# S11, S12, S13, S14, S15, S16, S19, S20 and S21 as covered. Fourteen
+# identities landed in both buckets at once, and `unaccounted` was reported as
+# the literal 0 regardless.
+#
+# A rendered prop with no catalogue counterpart maps to None and is counted as
+# such rather than being credited against an unrelated entry.
+RENDERS: Dict[str, str | None] = {
+    "S1∘S1 = id": "S1∘S1 = id (bit-0 toggle is involution)",
+    "S2∘S2 = id": "S2∘S2 = id (complement is involution)",
+    "S5∘S5 = S5": "S5∘S5 = S5 (centering is idempotent)",
+    "S14^16 = id": "S14^16 = id",
+    "S15∘S16 = id": "S15 ∘ S16 = id (popcount scale is invertible)",
+    "S16∘S15 = id": "S16 ∘ S15 = id",
+    "S25^4 = id": "S25^4 = id",
+    "S4 = I − S1": "S4 = (I − S1)",
+    # These two render a *different* statement from any catalogue entry: the
+    # closed form of S29 rather than its mean-preservation, and the closed form
+    # of S10 rather than its non-negativity. Claiming they cover
+    # "mean(S29 Ψ) = mean(Ψ)" and "S10 Ψ ≥ 0 elementwise" would be the same
+    # slippage the prefix match made, so they are recorded as covering nothing.
+    "S29 closed form": None,
+    "S10 = (Ψ − 1)²": None,
+}
+
 def unrenderable_identities() -> Dict[str, str]:
     """Catalogue identities that this renderer does NOT emit, with the reason.
 
@@ -149,15 +182,8 @@ def unrenderable_identities() -> Dict[str, str]:
 
     reason = ("predicate-shaped: not expressible as a closed componentwise ℚ "
               "equality without defining functions in Lean")
-    rendered_prefixes = (
-        "S1∘S1", "S2∘S2", "S5∘S5", "S14^16", "S15∘S16", "S16∘S15",
-        "S25^4", "S29 closed form", "S4 = I", "S10 = (Ψ",
-    )
-    out: Dict[str, str] = {}
-    for ident in INTERACTIONS:
-        if not any(ident.name.startswith(p) for p in rendered_prefixes):
-            out[ident.name] = reason
-    return out
+    proved = {v for v in RENDERS.values() if v is not None}
+    return {i.name: reason for i in INTERACTIONS if i.name not in proved}
 
 
 def coverage_report(psi: Q16) -> Dict[str, object]:
@@ -167,22 +193,37 @@ def coverage_report(psi: Q16) -> Dict[str, object]:
     rendered = build_lean_props(psi)
     unrend = unrenderable_identities()
     catalogue = {i.name for i in INTERACTIONS}
-    # Names in `rendered` are short forms; map them onto catalogue entries.
-    covered = {n for n in catalogue
-               if any(n.startswith(k.split(" =")[0].split("∘")[0][:6])
-                      for k in rendered)}
-    accounted = set(unrend) | covered
-    unaccounted = catalogue - accounted
+
+    unmapped = sorted(set(rendered) - set(RENDERS))
+    if unmapped:
+        raise ValueError(
+            f"rendered props with no declared catalogue target: {unmapped}. "
+            f"Add them to RENDERS -- mapping to None if they prove something "
+            f"the catalogue does not list.")
+
+    covered = {RENDERS[k] for k in rendered if RENDERS[k] is not None}
+    stray = sorted(covered - catalogue)
+    if stray:
+        raise ValueError(f"RENDERS names entries not in the catalogue: {stray}")
+
+    both = sorted(covered & set(unrend))
+    if both:
+        raise ValueError(
+            f"{len(both)} identities are both proved and declared "
+            f"unrenderable: {both}")
+
+    unaccounted = sorted(catalogue - covered - set(unrend))
     if unaccounted:
         raise ValueError(
             f"{len(unaccounted)} catalogue identities neither rendered nor "
-            f"declared unrenderable: {sorted(unaccounted)}"
+            f"declared unrenderable: {unaccounted}"
         )
     return {
         "catalogue": len(catalogue),
         "rendered_props": len(rendered),
+        "proved_identities": len(covered),
         "declared_unrenderable": len(unrend),
-        "unaccounted": 0,
+        "unaccounted": len(unaccounted),
     }
 
 

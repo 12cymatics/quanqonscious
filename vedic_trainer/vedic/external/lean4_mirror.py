@@ -160,7 +160,7 @@ class Lean4Mirror:
                 "  if sutraStatement then",
                 "    IO.println ""true""",
                 "  else",
-                "    throw <| IO.userError ""mirror validation failed""",
+                '    throw <| IO.userError "mirror validation failed"',
                 "",
                 "#eval mirrorMain",
             ]

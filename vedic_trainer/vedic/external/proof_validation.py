@@ -1,4 +1,9 @@
-"""Smoke test harness for the classical Vedic sutra engine and hypercube.
+"""Validation harness for the classical Vedic sutra engine and hypercube.
+
+Not a smoke test. It was described as one and behaved like less than one:
+``verify_sutra_engine`` collected all 29 outputs, inspected none of them, and
+recorded ``"verified": True`` as a literal — which the test then asserted, so
+neither could fail. The verdict is now derived from the outputs.
 
 Adapted from
 ``codex/replace-blocks-with-fixed-implementations:src/quanqonscious/proof_validation.py``.
@@ -25,6 +30,12 @@ def _make_inputs(seed: int = 42) -> Dict[str, np.ndarray]:
         "Y": np.abs(rng.standard_normal((8, 8))) + 0.5,
         "V": np.abs(rng.standard_normal(16)) + 0.5,
     }
+
+
+def _sutra_names(engine: VedicSutraEngine) -> List[str]:
+    """Names in the same order as `_sutra_invocations`, for error messages."""
+    return [getattr(m, "__name__", repr(m))
+            for m in list(engine.sutras) + list(engine.sub_sutras)]
 
 
 def _sutra_invocations(engine: VedicSutraEngine,
@@ -81,11 +92,31 @@ class ProofTester:
         data = _make_inputs()
         invocations = _sutra_invocations(engine, data)
         outputs = [call() for call in invocations]
+
+        # The verdict is computed from what the engine returned. Previously
+        # this was the literal True and the outputs were discarded.
+        problems: List[str] = []
+        for name, value in zip(_sutra_names(engine), outputs):
+            # No dtype coercion: several sutras return complex arrays, and
+            # `dtype=float` would silently discard the imaginary part --
+            # exactly the kind of quiet degradation this harness is checking
+            # for. np.isfinite handles complex directly.
+            arr = np.asarray(value)
+            if arr.size == 0:
+                problems.append(f"{name}: returned an empty result")
+            elif not np.all(np.isfinite(arr)):
+                problems.append(f"{name}: returned non-finite values")
+        expected = len(engine.sutras) + len(engine.sub_sutras)
+        if len(outputs) != expected:
+            problems.append(
+                f"ran {len(outputs)} sutras, engine declares {expected}")
+
         self.results["vedic_sutras"] = {
             "main_sutras": len(engine.sutras),
             "sub_sutras": len(engine.sub_sutras),
             "executed": len(outputs),
-            "verified": True,
+            "problems": problems,
+            "verified": not problems,
         }
 
     def verify_hypercube(self) -> None:

@@ -118,10 +118,44 @@ def test_phi_cubed_is_exactly_two_plus_sqrt5():
     assert phi_cubed() == C4(K2.from_rational(2), K2.from_rational(1))
 
 
-def test_phi_cubed_float_matches_the_documented_value():
-    """Sanity link to the 4.236 the design docs quote, at the render boundary."""
-    approx = 2 + 5 ** 0.5
-    assert abs(approx - 4.23606797749979) < 1e-12
+def test_phi_cubed_renders_to_the_documented_float():
+    """The 4.236 the design docs quote, produced by the package's own boundary.
+
+    This test used to read `approx = 2 + 5 ** 0.5` and compare that to a
+    literal. It imported nothing under test and could not fail on any change
+    to this codebase — it verified that Python can add. It now goes through
+    `C4.to_float`, which is the one place a float is allowed to appear.
+    """
+    assert abs(phi_cubed().to_float() - (4.23606797749979 + 0j)) < 1e-12
+
+
+def test_the_render_boundary_is_the_only_float_in_the_field_module():
+    """`to_float` is a boundary only if nothing else in the module uses floats."""
+    import ast
+    import inspect
+
+    from vedic.kernel import k2_field
+
+    tree = ast.parse(inspect.getsource(k2_field))
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name != "to_float":
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, float):
+                    offenders.append(f"{node.name}: {sub.value}")
+                if (isinstance(sub, ast.Name)
+                        and sub.id in {"_SQRT2_F", "_SQRT5_F"}):
+                    offenders.append(f"{node.name} reads {sub.id}")
+    assert not offenders, (
+        "float literals or float constants outside to_float: " + str(offenders))
+
+
+def test_exact_and_rendered_values_disagree_as_they_must():
+    """phi_cubed() is exactly 2+sqrt5; its float is not, and cannot be."""
+    from fractions import Fraction
+    rendered = phi_cubed().to_float().real
+    assert Fraction(rendered) != Fraction(2) + Fraction(5) ** 1  # not exact
+    assert phi_cubed() == C4(K2.from_rational(2), K2.from_rational(1))
 
 
 def test_c4_embeds_k2():

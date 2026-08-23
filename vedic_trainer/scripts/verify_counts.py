@@ -47,6 +47,9 @@ LAYERS: dict[str, list[str]] = {
     "External sidecar": ["vedic/external/tests"],
     "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
     "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
+    "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
+    "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
+    "Audit closure": ["vedic/eval/tests"],
 }
 
 _SUMMARY = re.compile(r"(\d+) passed")
@@ -105,8 +108,19 @@ def main() -> int:
     if not args.check:
         return 0
 
-    claimed = readme_counts()
     problems: list[str] = []
+
+    # The layers must account for every test. Without this, a new test file
+    # that no layer names is simply invisible: the README stays "correct"
+    # while the suite it describes has grown past it.
+    layered = sum(measured.values())
+    if layered != total:
+        problems.append(
+            f"layers sum to {layered} but the suite has {total} tests — "
+            f"{total - layered} belong to no layer. Add them to LAYERS (and "
+            f"to the README table) rather than leaving them unaccounted.")
+
+    claimed = readme_counts()
     for name, n in measured.items():
         if name not in claimed:
             problems.append(f"README has no row for layer {name!r} ({n} tests)")

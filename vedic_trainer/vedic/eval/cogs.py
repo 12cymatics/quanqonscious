@@ -9,7 +9,7 @@ from datasets import load_dataset
 from torch import nn
 from transformers import PreTrainedTokenizerBase
 
-COGS_SPLITS: tuple[str, ...] = ("test", "gen")
+from vedic.eval.scan_splits import COGS_SPLITS  # noqa: F401
 
 
 @dataclass
@@ -20,7 +20,17 @@ class CogsResult:
 
     @property
     def accuracy(self) -> float:
-        return self.n_correct / self.n_total if self.n_total else 0.0
+        """Exact-match accuracy. Undefined on an empty split, and says so.
+
+        This returned 0.0 when n_total was 0, which is indistinguishable from
+        a split where the model got everything wrong -- the difference between
+        "the model failed" and "the data never loaded"."""
+        if self.n_total == 0:
+            raise ZeroDivisionError(
+                f"{self.split!r} evaluated 0 examples, so it has no accuracy. "
+                f"The split did not load; fix that rather than reading a rate "
+                f"off an empty denominator.")
+        return self.n_correct / self.n_total
 
 
 def evaluate_cogs(
@@ -38,7 +48,17 @@ def evaluate_cogs(
         # `cogs` does not exist on the HF Hub. Load the canonical Kim & Linzen
         # release (najoungkim/COGS) from local TSVs instead.
         import os
-        _dir = os.environ.get("COGS_DIR", ".")
+        # Defaulting to "." silently pointed the loader at whatever directory
+        # the process happened to start in, which either fails obscurely or
+        # picks up an unrelated file.
+        try:
+            _dir = os.environ["COGS_DIR"]
+        except KeyError:
+            raise RuntimeError(
+                "COGS_DIR is not set. It must name the directory holding "
+                "cogs_test.tsv and cogs_gen.tsv from the Kim & Linzen "
+                "release (najoungkim/COGS); `cogs` is not on the HF Hub."
+            ) from None
         ds = load_dataset(
             "csv",
             data_files={split: os.path.join(_dir, f"cogs_{split}.tsv")},

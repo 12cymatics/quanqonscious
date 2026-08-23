@@ -62,6 +62,14 @@ class RunSet:
     base: str      # filename template, {} = seed
     full: str
     columns: tuple[str, ...]
+    base_adapter: str = r"no_sutra$"
+    full_adapter: str = r"(?<!no_)(?<!no_su)full$"
+
+    # Known limitation, stated rather than papered over: the run JSONs do not
+    # record their seed, so the seed-to-file binding rests on the filename
+    # alone. The *arm* does not -- it is cross-checked against the adapter
+    # each file records, so a base/full swap cannot pass. Runs written from
+    # here on should record the seed; these were not.
 
 
 RUN_SETS: tuple[RunSet, ...] = (
@@ -92,6 +100,7 @@ RUN_SETS: tuple[RunSet, ...] = (
         base="fixed_seed{}_base.json",   # the zero-weight arm is unchanged
         full="scaled_seed{}.json",
         columns=("base", "full", "delta", "rel", "rel@fixed"),
+        full_adapter=r"scaled\d*_full$",
     ),
 )
 
@@ -105,9 +114,25 @@ def _path(rs: RunSet, arm: str, seed: int) -> Path:
     return RUNS / template.format(stem)
 
 
-def ce(path: Path) -> float:
-    """Held-out cross-entropy, read from the run's own JSON."""
-    return json.loads(path.read_text())["heldout"]["ce_loss"]
+def ce(path: Path, expect_adapter: str) -> float:
+    """Held-out cross-entropy, read from the run's own JSON.
+
+    The arm is confirmed against the ``adapter`` the file itself records,
+    never inferred from the filename. ``fixed_seed42_base.json`` records
+    ``checkpoints/cpu_no_sutra``: "base" here means the zero-weight arm, not
+    the untuned base model (that is ``eval_base.json``, adapter ``base``).
+    With names that close to each other, a swapped or mislabelled file has to
+    be caught by content.
+    """
+    rec = json.loads(path.read_text())
+    adapter = rec.get("adapter")
+    if adapter is None:
+        raise ValueError(f"{path.name} records no adapter; its arm is unknowable")
+    if not re.search(expect_adapter, adapter):
+        raise ValueError(
+            f"{path.name} is used as the {expect_adapter!r} arm but records "
+            f"adapter {adapter!r} -- the file and its slot disagree")
+    return rec["heldout"]["ce_loss"]
 
 
 @dataclass
@@ -169,7 +194,7 @@ def load(rs: RunSet) -> Measured | None:
         b, f = _path(rs, "base", s), _path(rs, "full", s)
         if not (b.exists() and f.exists()):
             return None
-        seeds[s] = (ce(b), ce(f))
+        seeds[s] = (ce(b, rs.base_adapter), ce(f, rs.full_adapter))
     return Measured(seeds)
 
 
@@ -289,7 +314,14 @@ def check(text: str, sets: dict[str, Measured]) -> list[str]:
                     continue
 
                 if q is None:
-                    continue          # prose cell; nothing numeric to verify
+                    # A column declared to hold a number must hold one. "~28%"
+                    # or "n/a" in a numeric column would otherwise slip past
+                    # unchecked, which is the failure mode this gate exists for.
+                    if name in expect and cell.strip():
+                        problems.append(
+                            f"[{rs.key}] row {label!r} {name} is declared "
+                            f"numeric but reads {cell.strip()!r}")
+                    continue          # genuinely a prose column
                 value, places = q
 
                 if name is None or name not in expect:
