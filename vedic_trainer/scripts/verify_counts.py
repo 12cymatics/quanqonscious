@@ -52,27 +52,54 @@ LAYERS: dict[str, list[str]] = {
     "Audit closure": ["vedic/eval/tests"],
 }
 
-_SUMMARY = re.compile(r"(\d+) passed")
+_COLLECTED = re.compile(r"(\d+) tests? collected")
+_FAILED = re.compile(r"(\d+) (?:failed|error)")
 
 
 def measure(paths: list[str]) -> int:
-    """Collected-and-passing count, read from pytest's summary line.
+    """Number of tests COLLECTED, not passed.
 
-    Deliberately does NOT pass -q: that flag suppresses the summary, which is
-    the exact condition that made the number unreadable in the first place.
+    It used to be the "N passed" count, which is environment-dependent: three
+    tests here are skipped when no Lean toolchain is present, so the same
+    README was correct on a machine with Lean and wrong in CI without it. A
+    count that changes with the machine cannot be a claim about the suite.
+
+    Collection is environment-independent -- a skipped test is still collected
+    -- so this is what the README's numbers mean. Whether they *pass* is a
+    separate question, asked by `failures()`.
     """
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", *paths, "--no-header"],
+        [sys.executable, "-m", "pytest", *paths, "--collect-only", "-q",
+         "--no-header"],
         cwd=REPO, capture_output=True, text=True,
         env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
     )
-    m = _SUMMARY.search(proc.stdout)
+    m = _COLLECTED.search(proc.stdout)
     if not m:
         raise RuntimeError(
-            f"no pytest summary line for {paths}; output tail:\n"
+            f"no collection summary for {paths}; output tail:\n"
             + "\n".join(proc.stdout.strip().splitlines()[-5:])
         )
     return int(m.group(1))
+
+
+def failures() -> tuple[int, str]:
+    """Run the suite; return (failure count, the summary line).
+
+    Counting collected tests alone would let the README stay "correct" while
+    every one of them failed. Deliberately does NOT pass -q: that suppresses
+    the summary line, the exact condition this script exists to prevent.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "vedic/", "--no-header"],
+        cwd=REPO, capture_output=True, text=True,
+        env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
+    )
+    tail = [ln for ln in proc.stdout.strip().splitlines()
+            if " passed" in ln or " failed" in ln or " error" in ln]
+    line = tail[-1] if tail else "(no summary line)"
+    m = _FAILED.search(line)
+    return (int(m.group(1)) if m else 0), line.strip()
 
 
 def readme_counts() -> dict[str, int]:
@@ -99,16 +126,23 @@ def main() -> int:
 
     measured = {name: measure(paths) for name, paths in LAYERS.items()}
     total = measure(["vedic/"])
+    n_failed, summary = failures()
 
     width = max(len(n) for n in measured)
     for name, n in measured.items():
         print(f"  {name:<{width}}  {n:>4}")
-    print(f"  {'TOTAL (vedic/)':<{width}}  {total:>4}")
+    print(f"  {'TOTAL (vedic/)':<{width}}  {total:>4}   (collected)")
+    print(f"\n  suite: {summary}")
 
     if not args.check:
         return 0
 
     problems: list[str] = []
+
+    if n_failed:
+        problems.append(
+            f"{n_failed} test(s) do not pass: {summary}. A count of collected "
+            f"tests says nothing about whether they work.")
 
     # The layers must account for every test. Without this, a new test file
     # that no layer names is simply invisible: the README stays "correct"

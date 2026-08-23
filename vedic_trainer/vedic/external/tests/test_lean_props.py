@@ -156,14 +156,62 @@ def test_unrenderable_set_states_a_reason_for_each() -> None:
 
 
 
-def test_the_rendered_script_is_well_formed_lean():
-    """The generated code must actually parse, not merely look like Lean.
+def test_the_error_branch_keeps_its_string_literal():
+    """The regression guard for the actual bug — runs everywhere, no Lean needed.
 
     `_render_script` wrote its error branch as two adjacent Python string
     literals, so the inner quotes were consumed by implicit concatenation and
     every generated script was a Lean syntax error. `_interpret_result` then
     set success=False for every sutra, and nothing noticed, because no test
     had ever compiled one.
+
+    Rendering is pure string work, so this assertion must not be gated behind
+    having a compiler. It was, and CI (which has no Lean) failed on the
+    construction rather than skipping — which is how `Lean4Mirror.__init__`
+    resolving the binary eagerly turned out to be a defect of its own.
+    """
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    body = Lean4Mirror()._render_script("S1test", "true")
+    assert 'IO.userError "mirror validation failed"' in body, \
+        "the error branch lost its string literal again"
+
+
+def test_rendering_needs_no_lean_toolchain():
+    """Constructing a mirror to render must not require a compiler."""
+    import shutil as _shutil
+
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    real_which = _shutil.which
+    _shutil.which = lambda name, *a, **k: (None if name == "lean"
+                                           else real_which(name, *a, **k))
+    try:
+        body = Lean4Mirror()._render_script("S1test", "true")
+        assert "def sutraStatement : Bool :=" in body
+    finally:
+        _shutil.which = real_which
+
+
+def test_running_without_lean_still_raises():
+    """Laziness must not turn a missing compiler into a silent no-op."""
+    import shutil as _shutil
+
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    real_which = _shutil.which
+    _shutil.which = lambda name, *a, **k: (None if name == "lean"
+                                           else real_which(name, *a, **k))
+    try:
+        with pytest.raises(FileNotFoundError):
+            Lean4Mirror().run_serial({"S1test": "true"})
+    finally:
+        _shutil.which = real_which
+
+
+@pytest.mark.skipif(not LEAN_OK, reason=f"lean unusable: {LEAN_WHY}")
+def test_the_rendered_script_compiles():
+    """The generated code parses, checked by the real compiler.
 
     Mathlib is not installed in every environment, so the two Mathlib-only
     lines are stripped here; that isolates the *generated* code, which is
@@ -175,16 +223,10 @@ def test_the_rendered_script_is_well_formed_lean():
     from vedic.external.lean4_mirror import Lean4Mirror
 
     body = Lean4Mirror()._render_script("S1test", "true")
-    assert 'IO.userError "mirror validation failed"' in body, \
-        "the error branch lost its string literal again"
-
-    if not shutil.which("lean"):
-        pytest.skip("no lean binary on PATH")
     stripped = "\n".join(
         line for line in body.splitlines()
         if line not in ("import Mathlib", "open scoped BigOperators"))
-    d = pathlib.Path(tempfile.mkdtemp())
-    f = d / "M.lean"
+    f = pathlib.Path(tempfile.mkdtemp()) / "M.lean"
     f.write_text(stripped)
     r = subprocess.run(["lean", str(f)], capture_output=True, text=True,
                        timeout=300)

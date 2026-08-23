@@ -44,7 +44,7 @@ package exposes:
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
-| External sidecar | yes         | 23 tests               |
+| External sidecar | yes         | 27 tests               |
 | Script validity  | yes         | 46 tests               |
 | Reported numbers | yes         | 36 tests               |
 | Documented paths | yes         | 20 tests               |
@@ -60,10 +60,19 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-All 441 tests pass on this machine (CPU). One is skipped, for a reason
-established by asking the compiler rather than by looking for a file:
-`test_mirror_run_serial_actually_verifies` needs a Mathlib toolchain, and
-there isn't one here. Every other skip has been removed. The training
+445 tests are collected. The counts above are **collected**, not passed:
+three tests need a Lean toolchain, so a "passed" count would be 445 here and
+442 in CI — the same README correct on one machine and wrong on the other.
+`verify_counts.py --check` measures collection and separately fails if any
+test does not pass, so neither question can hide behind the other.
+
+Every skip left is an environment capability, and each reason comes from
+asking the compiler rather than looking for a file on `PATH`: an elan shim
+with no toolchain satisfies `shutil.which("lean")`. On this machine Lean 4.10
+is present but Mathlib is not, so one test skips; in CI all three do. The
+assertion that guards the string-literal defect in the generated Lean runs
+everywhere — rendering is pure string work and must not be gated on having a
+compiler. The training
 pipeline has also been run end to end on 4 CPU cores in fp32 — see
 `ABLATION_RESULTS.md` — so CPU is a supported path for the full
 experiment, not only for the gates.
