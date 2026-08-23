@@ -129,6 +129,25 @@ def test_phi_cubed_renders_to_the_documented_float():
     assert abs(phi_cubed().to_float() - (4.23606797749979 + 0j)) < 1e-12
 
 
+def float_offenders(source: str, boundary: str = "to_float") -> list[str]:
+    """Functions other than `boundary` that touch a float literal or constant.
+
+    Pure, so `test_gates_reject.py` can prove it rejects a leaked float
+    without editing k2_field.py on disk.
+    """
+    import ast as _ast
+    out = []
+    for node in _ast.walk(_ast.parse(source)):
+        if isinstance(node, _ast.FunctionDef) and node.name != boundary:
+            for sub in _ast.walk(node):
+                if isinstance(sub, _ast.Constant) and isinstance(sub.value, float):
+                    out.append(f"{node.name}: {sub.value}")
+                if (isinstance(sub, _ast.Name)
+                        and sub.id in {"_SQRT2_F", "_SQRT5_F"}):
+                    out.append(f"{node.name} reads {sub.id}")
+    return out
+
+
 def test_the_render_boundary_is_the_only_float_in_the_field_module():
     """`to_float` is a boundary only if nothing else in the module uses floats."""
     import ast
@@ -136,16 +155,7 @@ def test_the_render_boundary_is_the_only_float_in_the_field_module():
 
     from vedic.kernel import k2_field
 
-    tree = ast.parse(inspect.getsource(k2_field))
-    offenders = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name != "to_float":
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Constant) and isinstance(sub.value, float):
-                    offenders.append(f"{node.name}: {sub.value}")
-                if (isinstance(sub, ast.Name)
-                        and sub.id in {"_SQRT2_F", "_SQRT5_F"}):
-                    offenders.append(f"{node.name} reads {sub.id}")
+    offenders = float_offenders(inspect.getsource(k2_field))
     assert not offenders, (
         "float literals or float constants outside to_float: " + str(offenders))
 

@@ -50,6 +50,7 @@ LAYERS: dict[str, list[str]] = {
     "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
     "Audit closure": ["vedic/eval/tests"],
+    "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")
@@ -118,6 +119,47 @@ def readme_counts() -> dict[str, int]:
     return out
 
 
+def reconcile(measured: dict[str, int], total: int,
+              claimed: dict[str, int], n_failed: int = 0,
+              summary: str = "") -> list[str]:
+    """Judge measured counts against claimed ones. Pure: no I/O, no pytest.
+
+    Split out of `main` so the judgment can be regeneration-tested directly.
+    A gate whose decision logic can only be exercised by running the entire
+    suite is a gate nobody re-tests -- and the decisions are exactly the part
+    that can silently stop working.
+    """
+    problems: list[str] = []
+
+    if n_failed:
+        problems.append(
+            f"{n_failed} test(s) do not pass: {summary}. A count of collected "
+            f"tests says nothing about whether they work.")
+
+    # The layers must account for every test. Without this, a new test file
+    # that no layer names is simply invisible: the README stays "correct"
+    # while the suite it describes has grown past it.
+    layered = sum(measured.values())
+    if layered != total:
+        problems.append(
+            f"layers sum to {layered} but the suite has {total} tests — "
+            f"{total - layered} belong to no layer. Add them to LAYERS (and "
+            f"to the README table) rather than leaving them unaccounted.")
+
+    claimed = claimed
+    for name, n in measured.items():
+        if name not in claimed:
+            problems.append(f"README has no row for layer {name!r} ({n} tests)")
+        elif claimed[name] != n:
+            problems.append(
+                f"README says {name!r} = {claimed[name]}, measured {n}")
+    for name in claimed:
+        if name not in measured:
+            problems.append(f"README row {name!r} maps to no layer here")
+
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
@@ -137,33 +179,8 @@ def main() -> int:
     if not args.check:
         return 0
 
-    problems: list[str] = []
-
-    if n_failed:
-        problems.append(
-            f"{n_failed} test(s) do not pass: {summary}. A count of collected "
-            f"tests says nothing about whether they work.")
-
-    # The layers must account for every test. Without this, a new test file
-    # that no layer names is simply invisible: the README stays "correct"
-    # while the suite it describes has grown past it.
-    layered = sum(measured.values())
-    if layered != total:
-        problems.append(
-            f"layers sum to {layered} but the suite has {total} tests — "
-            f"{total - layered} belong to no layer. Add them to LAYERS (and "
-            f"to the README table) rather than leaving them unaccounted.")
-
-    claimed = readme_counts()
-    for name, n in measured.items():
-        if name not in claimed:
-            problems.append(f"README has no row for layer {name!r} ({n} tests)")
-        elif claimed[name] != n:
-            problems.append(
-                f"README says {name!r} = {claimed[name]}, measured {n}")
-    for name in claimed:
-        if name not in measured:
-            problems.append(f"README row {name!r} maps to no layer here")
+    problems = reconcile(measured, total, readme_counts(),
+                         n_failed, summary)
 
     if problems:
         print("\nMISMATCH:")

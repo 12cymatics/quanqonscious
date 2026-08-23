@@ -99,13 +99,27 @@ def test_shell_script_parses(path: Path):
 _REF = re.compile(r"scripts/([A-Za-z0-9_-]+\.(?:py|sh))")
 
 
+def dead_references(source: str, scripts_dir: Path) -> list[str]:
+    """scripts/<name> referenced by this source that do not exist. Pure."""
+    return sorted({r for r in _REF.findall(source)
+                   if not (scripts_dir / r).exists()})
+
+
+def syntax_error_in(source: str, name: str = "<probe>") -> str | None:
+    """The SyntaxError message for this source, or None if it parses. Pure."""
+    try:
+        ast.parse(source, filename=name)
+    except SyntaxError as e:
+        return f"line {e.lineno}: {e.msg}"
+    return None
+
+
 @pytest.mark.parametrize("path", SHELL + DRIVERS,
                          ids=[p.name for p in SHELL + DRIVERS])
 def test_referenced_scripts_exist(path: Path):
     """Every scripts/<name> a driver names must be there to be called."""
     root = path.resolve().parents[1]
-    missing = sorted({r for r in _REF.findall(path.read_text(encoding="utf-8"))
-                      if not (root / "scripts" / r).exists()})
+    missing = dead_references(path.read_text(encoding="utf-8"), root / "scripts")
     assert not missing, (
         f"{path.name} invokes scripts that do not exist: {missing}. Either "
         f"they were deleted without updating this driver, or the name is a "

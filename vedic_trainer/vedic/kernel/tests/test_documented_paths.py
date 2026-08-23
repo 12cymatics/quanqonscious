@@ -39,6 +39,17 @@ def _cited(doc: str) -> set[str]:
     return set(_PATH.findall((REPO / doc).read_text(encoding="utf-8")))
 
 
+def missing(cited: set[str], repo: Path, external: set[str]) -> list[str]:
+    """Cited paths that neither exist nor are declared external. Pure.
+
+    Extracted so `test_gates_reject.py` can prove this rejects a stale path
+    without editing the real README -- a regeneration test that mutates the
+    repo can leave it dirty if it fails midway.
+    """
+    return sorted(p for p in cited
+                  if p not in external and not (repo / p).exists())
+
+
 ALL = sorted({(d, p) for d in DOCS for p in _cited(d)})
 
 
