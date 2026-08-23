@@ -45,6 +45,8 @@ LAYERS: dict[str, list[str]] = {
     "Kernel (torch)": ["vedic/kernel/tests/test_torch_buffers.py"],
     "Data": ["vedic/data/tests"],
     "External sidecar": ["vedic/external/tests"],
+    "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
+    "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
 }
 
 _SUMMARY = re.compile(r"(\d+) passed")

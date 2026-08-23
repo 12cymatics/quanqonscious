@@ -1,0 +1,10 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "adapter": "checkpoints/cpu_no_sutra",
+  "heldout": {
+    "ce_loss": 1.6501285969185668,
+    "ppl": 5.207649471796858,
+    "n_tokens": 5348,
+    "secs": 10.6
+  }
+}

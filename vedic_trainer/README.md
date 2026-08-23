@@ -36,6 +36,8 @@ package exposes:
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
 | External sidecar | yes         | 18 tests               |
+| Script validity  | yes         | 28 tests               |
+| Reported numbers | yes         | 10 tests               |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
 | Eval             | yes         | requires SCAN/COGS     |

@@ -1,0 +1,41 @@
+{
+  "model": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "adapter": "base",
+  "heldout": {
+    "ce_loss": 6.282472240273954,
+    "ppl": 535.1099502538394,
+    "n_tokens": 5348,
+    "secs": 13.2
+  },
+  "scan": {
+    "simple": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "length": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "addprim_jump": {
+      "n_total": 30,
+      "n_correct": 0,
+      "accuracy": 0.0
+    }
+  },
+  "scan_secs": 358.0,
+  "cogs": {
+    "test": {
+      "n_total": 20,
+      "n_correct": 0,
+      "accuracy": 0.0
+    },
+    "gen": {
+      "n_total": 20,
+      "n_correct": 0,
+      "accuracy": 0.0
+    }
+  },
+  "cogs_secs": 410.3
+}
