@@ -44,9 +44,9 @@ package exposes:
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
-| External sidecar | yes         | 21 tests               |
+| External sidecar | yes         | 23 tests               |
 | Script validity  | yes         | 46 tests               |
-| Reported numbers | yes         | 33 tests               |
+| Reported numbers | yes         | 36 tests               |
 | Documented paths | yes         | 20 tests               |
 | Conservation (torch) | yes     | 109 tests              |
 | Audit closure    | yes         | 6 tests                |
@@ -60,7 +60,7 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-All 436 tests pass on this machine (CPU). One is skipped, for a reason
+All 441 tests pass on this machine (CPU). One is skipped, for a reason
 established by asking the compiler rather than by looking for a file:
 `test_mirror_run_serial_actually_verifies` needs a Mathlib toolchain, and
 there isn't one here. Every other skip has been removed. The training

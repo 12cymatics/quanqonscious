@@ -50,25 +50,36 @@ def main() -> int:
         print(f"  {kind:5} {FORMULA[kind]:46} S{ids}")
     print(f"  {'':5} {S5_FORMULA:46} S[5]")
 
+    failures: list[str] = []
+
     if a.verify:
         psi = tuple(Fraction(v * v + 1, 7) for v in range(16))
         print("\nSTRUCTURAL VERIFICATION")
         print("─" * 92)
-        print(f"  all 29 present                    "
-              f"{len(K.SUTRAS) == 29 and K.ALL == tuple(range(1, 30))}")
-        print(f"  Σδ(1..29) = T(29) = 435           "
-              f"{sum(s.delta for s in K.SUTRAS) == 435}")
-        idz = all(K.apply_sutra(s.id, psi, Fraction(0)) == psi for s in K.SUTRAS)
-        print(f"  α→0 ⇒ identity, all 29 (§12Y)     {idz}")
-        live = all(K.apply_sutra(s.id, psi, Fraction(50)) != psi for s in K.SUTRAS)
-        print(f"  every sutra moves the field       {live}")
-        exact = all(isinstance(x, Fraction)
-                    for s in K.SUTRAS
-                    for x in K.apply_sutra(s.id, psi, Fraction(50)))
-        print(f"  exact ℚ throughout, no floats     {exact}")
-        cascade = K.apply_all(psi, Fraction(50))
-        print(f"  full cascade non-degenerate       "
-              f"{any(x != 0 for x in cascade)}")
+
+        def check(label: str, ok: bool) -> None:
+            # Every one of these printed True or False and the script returned
+            # 0 either way, so a red line was indistinguishable from a green
+            # one to anything but a human reading the terminal.
+            print(f"  {label:34}{ok}")
+            if not ok:
+                failures.append(label.strip())
+
+        check("all 29 present",
+              len(K.SUTRAS) == 29 and K.ALL == tuple(range(1, 30)))
+        check("Σδ(1..29) = T(29) = 435",
+              sum(s.delta for s in K.SUTRAS) == 435)
+        check("α→0 ⇒ identity, all 29 (§12Y)",
+              all(K.apply_sutra(s.id, psi, Fraction(0)) == psi
+                  for s in K.SUTRAS))
+        check("every sutra moves the field",
+              all(K.apply_sutra(s.id, psi, Fraction(50)) != psi
+                  for s in K.SUTRAS))
+        check("exact ℚ throughout, no floats",
+              all(isinstance(x, Fraction) for s in K.SUTRAS
+                  for x in K.apply_sutra(s.id, psi, Fraction(50))))
+        check("full cascade non-degenerate",
+              any(x != 0 for x in K.apply_all(psi, Fraction(50))))
 
     if a.drift is not None:
         psi = tuple(Fraction(v * v + 1, 7) for v in range(16))
@@ -85,6 +96,10 @@ def main() -> int:
                             ("all 29", K.ALL)):
             q = K.norm_sq(K.apply_all(psi, st, core))
             print(f"    {label:9} {float(abs(q - q0) / q0):.6f}")
+
+    if failures:
+        print(f"\n{len(failures)} structural check(s) FAILED: {failures}")
+        return 1
     return 0
 
 
