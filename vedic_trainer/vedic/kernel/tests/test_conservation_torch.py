@@ -79,3 +79,39 @@ def test_cons_l2_has_no_gradient_to_psi():
     val = cons_l2_torch(psi, torch.tensor([336.0], dtype=torch.float64))
     g, = torch.autograd.grad(val, psi, allow_unused=True)
     assert g is None or float(g.abs().sum()) == 0.0
+
+
+# ─────────────────────────────────── the g_ab dtype contract
+
+def test_hessian_is_built_at_the_requested_dtype():
+    """float64 must mean float64, not float32 wearing a float64 dtype.
+
+    `hessian_dense_torch` used to build a hardcoded np.float32 intermediate
+    and cast afterwards, so requesting float64 returned float32 precision --
+    measured max error 6.358e-07 against exact ℚ, which exceeds the TOL this
+    file compares against. HESSIAN_Q contains denominator 96, not a power of
+    two, so the loss was real rather than notional.
+    """
+    from fractions import Fraction
+
+    from vedic.kernel.hessian import HESSIAN_Q, hessian_dense_torch
+
+    exact = [[Fraction(x) for x in row] for row in HESSIAN_Q]
+    got = hessian_dense_torch(dtype=torch.float64)
+    assert got.dtype is torch.float64
+    err = max(abs(float(got[i][j]) - float(exact[i][j]))
+              for i in range(16) for j in range(16))
+    assert err == 0.0, f"float64 request lost precision: max error {err:.3e}"
+
+
+def test_the_hessian_has_a_non_dyadic_denominator():
+    """Guards the test above: with only powers of two, float32 would be exact
+    and the dtype defect would have been invisible."""
+    from fractions import Fraction
+
+    from vedic.kernel.hessian import HESSIAN_Q
+
+    dens = {Fraction(x).denominator for row in HESSIAN_Q for x in row}
+    assert any(d & (d - 1) for d in dens), (
+        f"all denominators {sorted(dens)} are powers of two; the dtype "
+        f"contract cannot be observed on this matrix")

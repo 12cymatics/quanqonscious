@@ -52,6 +52,7 @@ LAYERS: dict[str, list[str]] = {
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
     "Audit closure": ["vedic/eval/tests"],
     "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
+    "Aux checkpoint": ["vedic/training/tests"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

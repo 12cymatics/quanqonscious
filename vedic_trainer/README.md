@@ -49,9 +49,10 @@ package exposes:
 | Script validity  | yes         | 49 tests               |
 | Reported numbers | yes         | 37 tests               |
 | Documented paths | yes         | 20 tests               |
-| Conservation (torch) | yes     | 109 tests              |
+| Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
 | Gates reject     | yes         | 30 tests               |
+| Aux checkpoint   | yes         | 6 tests                |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
 | Eval             | yes         | requires SCAN/COGS     |
@@ -62,10 +63,10 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-486 tests are collected. The counts above are **collected**, not passed:
-three tests need a Lean toolchain, so a "passed" count would be 485 here (1
-skipped) and 483 in CI (3 skipped) — the same README correct on one machine and
-wrong on the other. Collection is 486 in both.
+494 tests are collected. The counts above are **collected**, not passed:
+three tests need a Lean toolchain, so a "passed" count would be 493 here (1
+skipped) and 491 in CI (3 skipped) — the same README correct on one machine and
+wrong on the other. Collection is 494 in both.
 `verify_counts.py --check` measures collection and separately fails if any
 test does not pass, so neither question can hide behind the other.
 

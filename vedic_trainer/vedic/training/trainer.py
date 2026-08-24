@@ -1,6 +1,7 @@
 """HuggingFace Trainer subclass: routes hidden states through TesseractWM and adds the four sutra losses."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
 
 import torch
@@ -21,13 +22,28 @@ class VedicTrainer(Trainer):
 
     The base HuggingFace ``Trainer`` is reused unchanged for optimizer,
     scheduler, gradient accumulation, mixed precision, checkpointing, etc.
-    We override exactly two things:
+    Three methods are overridden:
 
     - ``compute_loss`` to inject the auxiliary losses
-    - ``_save`` is unchanged; the TesseractWM and HessianModule are
-      registered as ``self.aux_modules`` so they are saved with the
-      checkpoint via the standard PyTorch state-dict path.
+    - ``create_optimizer`` to put the auxiliary parameters in a param group,
+      without which TesseractWM's projection never trains
+    - ``_save`` to write those auxiliary parameters next to the adapter
+
+    The third used to read: "``_save`` is unchanged; the TesseractWM and
+    HessianModule are registered as ``self.aux_modules`` so they are saved
+    with the checkpoint via the standard PyTorch state-dict path." Every
+    clause of that was false. There is no ``aux_modules`` attribute anywhere
+    in the package, ``_save`` was not overridden, and PEFT's ``_save`` writes
+    adapter tensors only -- verified: the committed checkpoints hold 240
+    tensors, none of them TesseractWM or Hessian.
+
+    The consequence was that the 9,216-parameter Ψ projection was trained and
+    then discarded. Reloading a checkpoint silently produced a fresh random
+    orthogonal projection, so Ψ -- and every auxiliary loss computed from it
+    -- could not be reproduced from a saved run.
     """
+
+    AUX_STATE_FILE = "vedic_aux_modules.pt"
 
     def __init__(
         self,
@@ -61,6 +77,40 @@ class VedicTrainer(Trainer):
         # Running integer counter for R1 (CONS_TRACE_KEY). Diagnostic only —
         # it is reported in the log, never added to the loss (see L_cons).
         self._trace_sum = 0
+
+    def _save(self, output_dir: str | None = None,
+              state_dict: Any = None) -> None:
+        """Write the adapter, then the auxiliary modules beside it."""
+        super()._save(output_dir, state_dict)
+        target = Path(output_dir if output_dir is not None
+                      else self.args.output_dir)
+        target.mkdir(parents=True, exist_ok=True)
+        torch.save(self.register_buffer_module.state_dict(),
+                   target / self.AUX_STATE_FILE)
+
+    @classmethod
+    def load_aux_state(cls, checkpoint_dir: str | Path,
+                       d_model: int) -> nn.ModuleDict:
+        """Rebuild the auxiliary modules from a checkpoint written by _save.
+
+        Raises rather than returning a freshly initialised projection: a
+        randomly re-initialised Ψ is not the Ψ that was trained, and silently
+        substituting one is how this defect went unnoticed.
+        """
+        path = Path(checkpoint_dir) / cls.AUX_STATE_FILE
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{path} is missing, so the trained Psi projection cannot be "
+                f"restored. Checkpoints written before this was fixed do not "
+                f"contain it and cannot be reconstructed -- retrain rather "
+                f"than proceeding with a random projection.")
+        modules = nn.ModuleDict({
+            "tesseract_wm": TesseractWM(d_model=d_model),
+            "hessian": HessianModule(),
+            "s5": S5(), "s7": S7(), "s11": S11(),
+        })
+        modules.load_state_dict(torch.load(path, map_location="cpu"))
+        return modules
 
     def create_optimizer(self):
         """Include the auxiliary modules' parameters in the optimizer.

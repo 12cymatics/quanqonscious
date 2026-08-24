@@ -150,9 +150,21 @@ def hessian_exact() -> QMatrix:
 
 def hessian_dense_torch(dtype: torch.dtype = torch.float32,
                         device: str | torch.device = "cpu") -> Tensor:
-    """Return g_ab as a (16, 16) torch tensor with the requested dtype/device."""
-    arr = np.array([[float(x) for x in row] for row in HESSIAN_Q], dtype=np.float32)
-    return torch.from_numpy(arr).to(dtype=dtype, device=device)
+    """Return g_ab as a (16, 16) torch tensor with the requested dtype/device.
+
+    Built AT the requested dtype. It used to construct a hardcoded
+    ``np.float32`` intermediate and cast afterwards, so asking for float64
+    returned float32 precision wearing a float64 dtype -- measured max error
+    6.358e-07 against exact ℚ, where a correct conversion gives 0.0. That
+    exceeds the 1e-7 tolerance ``test_conservation_torch.py`` compares
+    against. ``HESSIAN_Q`` contains denominator 96, which is not a power of
+    two, so the loss is real rather than notional.
+
+    Production passes float32 and was unaffected; the parameter was a trap
+    for the first caller who trusted it.
+    """
+    return torch.tensor([[float(x) for x in row] for row in HESSIAN_Q],
+                        dtype=dtype, device=device)
 
 
 class HessianModule(nn.Module):
