@@ -45,6 +45,8 @@ def _require_fixtures() -> None:
         FIXTURE_DIR / "psi_inputs.json",
         FIXTURE_DIR / "sutra_outputs.json",
         FIXTURE_DIR / "conservation_residuals.json",
+        FIXTURE_DIR / "canonical_inputs.json",
+        FIXTURE_DIR / "canonical_sutra_outputs.json",
     ) if not p.exists()]
     if missing:
         raise SystemExit(
@@ -71,6 +73,40 @@ def _load(name: str) -> dict[str, object]:
 
 def _frac_to_obj_cmp(x):
     return x
+
+
+def _check_canonical(failures: list[str]) -> tuple[int, int]:
+    """Recompute every canonical-sutra record and compare.
+
+    `z2_primitives`, which the rest of this gate covers, states in its own
+    docstring that it is NOT the 29 sutras and uses a conflicting numbering.
+    So the module the README calls "the single authority" had no fixture
+    gate, while falsification criterion 3 read as though it covered them.
+
+    Scope, stated rather than implied: these fixtures are written by the same
+    kernel compared against them, so they detect DRIFT, not error. They are a
+    regression reference. Correctness against the upstream definition is
+    checked by exporting from the user's vedic_v18.24_full_kernel.html, which
+    is external to this repository.
+    """
+    from vedic.kernel import sutras_canonical as K
+
+    inputs = [_objs_to_q16(p) for p in _load("canonical_inputs.json")["inputs"]]
+    data = _load("canonical_sutra_outputs.json")
+    for rec in data["records"]:
+        psi = inputs[rec["input"]]
+        got = K.apply_sutra(rec["sutra"], psi, Fraction(rec["strength"]))
+        want = _objs_to_q16(rec["output"])
+        if got != want:
+            failures.append(
+                f"canonical S{rec['sutra']} ({rec['name']}) at strength "
+                f"{rec['strength']} on input {rec['input']}: drifted")
+        alpha = K.alpha(rec["sutra"], Fraction(rec["strength"]))
+        if alpha != _obj_to_frac(rec["alpha"]):
+            failures.append(
+                f"canonical S{rec['sutra']} alpha at strength "
+                f"{rec['strength']}: {alpha} != recorded")
+    return len(inputs), len(data["records"])
 
 
 def main() -> int:
@@ -171,9 +207,19 @@ def main() -> int:
             print(f"FAIL: {f}", file=sys.stderr)
         print(f"{len(failures)} bit-exact mismatches", file=sys.stderr)
         return 1
+    n_ci, n_cr = _check_canonical(failures)
+    if failures:
+        for f in failures[:20]:
+            print(f"  {f}")
+        print(f"\n{len(failures)} canonical mismatches")
+        return 1
     print(
         f"OK — {len(inputs)} inputs, {len(sutra_data['records'])} sutra records, "
         f"{len(cons_data['records'])} conservation records bit-exact"
+    )
+    print(
+        f"OK — {n_ci} inputs, {n_cr} canonical-29 records match the "
+        f"regression reference"
     )
     return 0
 
