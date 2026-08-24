@@ -1,9 +1,18 @@
 """Four sutra-derived auxiliary losses applied to the Tesseract memory.
 
     L_χ    : contradiction (S7 antisymmetric energy fraction)
-    L_cons : conservation (Σᵢ Rᵢ² over R1..R4)
-    L_curv : curvature   (top eigenvalue of g_ab via Lanczos)
+    L_cons : conservation (drift of mass, ‖S‖² and ‖A‖² under S29)
+    L_curv : curvature   (Rayleigh quotient of g_ab at Ψ)
     L_dual : dual-basis  ((S5∘S11) Ψ vs WHT-axis reconstruction)
+
+L_cons and L_curv are NOT what an earlier version of this header
+specified. It named ``Σᵢ Rᵢ²`` over R1..R4 for the first and a top
+eigenvalue of g_ab obtained by Lanczos for the second; neither body does
+that, and neither could — R1..R4 are a step counter plus three algebraic
+identities, and g_ab is constant in Ψ, so both of the specified
+quantities have identically zero gradient. Each function's own docstring
+derives its replacement and is the authoritative description; this list
+summarises them. There is no Lanczos and no eigensolve in this file.
 
 Total loss is composed by the trainer:
 
@@ -13,8 +22,10 @@ The kernel paths (sutras, Hessian, WHT) are exact-rational reference
 operations; the autograd path uses torch float buffers built from those
 exact rationals (every constant in this module traces back to a Fraction
 in vedic.kernel — see SUTRA_CATALOGUE.md). No epsilons in the kernel
-sutras. The only numerical stabilisers in this file are documented and
-constrained to the loss aggregation boundary.
+sutras, and none here either: this file contains no numerical
+stabilisers at all. The two places that would need one — the L_χ
+denominator and the L_curv denominator — raise ``ValueError`` on a
+degenerate Ψ instead of being floored by an epsilon or a clamp.
 """
 from __future__ import annotations
 

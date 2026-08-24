@@ -44,9 +44,10 @@ package exposes:
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
+| Split integrity  | yes         | 7 tests                |
 | External sidecar | yes         | 27 tests               |
-| Script validity  | yes         | 46 tests               |
-| Reported numbers | yes         | 36 tests               |
+| Script validity  | yes         | 49 tests               |
+| Reported numbers | yes         | 37 tests               |
 | Documented paths | yes         | 20 tests               |
 | Conservation (torch) | yes     | 109 tests              |
 | Audit closure    | yes         | 6 tests                |
@@ -61,10 +62,10 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-475 tests are collected. The counts above are **collected**, not passed:
-three tests need a Lean toolchain, so a "passed" count would be 474 here (1
-skipped) and 472 in CI (3 skipped) — the same README correct on one machine and
-wrong on the other. Collection is 475 in both.
+486 tests are collected. The counts above are **collected**, not passed:
+three tests need a Lean toolchain, so a "passed" count would be 485 here (1
+skipped) and 483 in CI (3 skipped) — the same README correct on one machine and
+wrong on the other. Collection is 486 in both.
 `verify_counts.py --check` measures collection and separately fails if any
 test does not pass, so neither question can hide behind the other.
 
