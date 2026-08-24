@@ -9,6 +9,17 @@ that can make held-out language modelling consistently worse.**
 
 Reproduce with `scripts/reproduce_ablation.sh`.
 
+> **Read this before the tables.** Every result down to *"After fixing the
+> eval split"* was measured on a train/eval split that leaked completely:
+> all 332 eval source sentences also appeared in train. Held-out CE there was
+> scoring the model on near-duplicate paraphrases of text it had memorised,
+> so every **absolute** figure in those sections is inflated — including
+> "fine-tuning cuts held-out CE by 73.8%" and the pipeline-soundness argument
+> built on it. The **relative** comparison between arms largely survives,
+> because both arms shared the confound; the final section shows by how
+> much. The sections are kept rather than deleted so the correction is
+> checkable.
+
 ## Setup
 
 | | |
@@ -277,3 +288,79 @@ way — see above.
 
 Every number in this document is checked against `runs/*.json` by
 `scripts/verify_ablation.py --check`, which is run by the test suite.
+
+
+---
+
+## After fixing the eval split
+
+The split was made by shuffling **records**. The generator emits ten records
+per seed sentence (one contradiction pair, four axis-paraphrase pairs), so
+nine of a sentence's ten records went to train and the tenth to eval:
+
+```
+train 4608  eval 512
+exact record overlap: 0
+distinct sources: train 512  eval 332   SOURCE OVERLAP 332
+```
+
+`scripts/split_corpus.py` partitions **sources** instead, so every record
+derived from a sentence travels with it: 461 train sources / 51 eval
+sources, 0 shared, 0 shared texts.
+`vedic/data/tests/test_split_is_disjoint.py` checks the files the training
+configs actually read, and fails on the historical split.
+
+Same code, same configs, same seeds. Both arms retrained from scratch on the
+corrected split — the `no_sutra` arm too, because its old numbers were
+measured on the leak as well.
+
+| seed | `no_sutra` | `full` (scaled) | Δ | rel | rel (leaking split) |
+|---|---|---|---|---|---|
+| 42 | 1.7315 | 1.8616 | +0.1302 | **+7.52%** | +8.16% |
+| 1 | 1.7160 | 1.8367 | +0.1207 | **+7.03%** | +6.85% |
+| 2 | 1.7246 | 1.8789 | +0.1543 | **+8.95%** | +9.34% |
+| **mean** | **1.7240** | **1.8591** | **+0.1350** | **+7.83%** | +8.12% |
+| sd | 0.0077 | 0.0212 | 0.0174 | | |
+
+**The conclusion survives.** On a genuinely held-out split the sutra
+auxiliary losses still cost held-out cross-entropy:
+
+- the penalty is **17.4× the baseline seed sd** (0.0077)
+- ranges **disjoint**: worst `no_sutra` 1.7315 < best `full` 1.8367
+- direction **unanimous** across all three seeds
+- **+7.83%** against **+8.12%** on the leaking split — a difference of 0.29
+  percentage points
+
+### What the leak did and did not do
+
+Every arm moved **up** once the memorised sentences were gone — `no_sutra`
+from 1.6501/1.6566/1.6630 to 1.7315/1.7160/1.7246 — while the seed spread
+stayed comparable (sd 0.0064 → 0.0077). The leak was shifting the *level*,
+not adding noise, and it shifted both arms by almost the same amount. That
+is what a shared confound does: it inflates the absolute numbers without
+manufacturing a difference between the arms.
+
+So the earlier tables were wrong about **how well the model does** and right
+about **which arm does better**. Both halves matter, and only the second
+was ever the question being asked.
+
+### The four weightings, together
+
+| run | weighting | split | penalty |
+|---|---|---|---|
+| `initial` | two losses inert | leaking | +3.44% |
+| `fixed` | all four live, original weights | leaking | +25.63% |
+| `scaled` | all four live, conventional weights | leaking | +8.12% |
+| `disjoint` | all four live, conventional weights | **source-disjoint** | **+7.83%** |
+
+Four measurements, four times worse. Every figure in this section is checked
+against `runs/disjoint_*.json` by `scripts/verify_ablation.py --check`, which
+the test suite runs.
+
+### Still not concluded
+
+Nothing here rules out an effect at a larger model scale, on a different
+corpus, or on a genuinely compositional in-distribution task. The benchmark
+named for that purpose (SCAN/COGS) scored 0 for every arm including the
+untuned base, and those numbers are themselves a 30/20-example subset — see
+the note in that section.

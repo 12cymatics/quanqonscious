@@ -102,6 +102,14 @@ RUN_SETS: tuple[RunSet, ...] = (
         columns=("base", "full", "delta", "rel", "rel@fixed"),
         full_adapter=r"scaled\d*_full$",
     ),
+    RunSet(
+        key="disjoint",
+        heading="## After fixing the eval split",
+        base="disjoint_seed{}_no_sutra.json",
+        full="disjoint_seed{}_scaled.json",
+        columns=("base", "full", "delta", "rel", "rel@scaled"),
+        full_adapter=r"scaled\d*_full$",
+    ),
 )
 
 # The initial run stored seed 42 under a different name than seeds 1 and 2.
@@ -355,10 +363,59 @@ def check_weight_table(text: str) -> tuple[list[str], set[tuple[str, str, int]]]
     return problems, verified
 
 
+SUMMARY_SECTION = "### The four weightings, together"
+
+
+def check_summary_table(text: str, sets: dict[str, Measured]
+                        ) -> tuple[list[str], set[tuple[str, str, int]]]:
+    """Verify the cross-run summary against the run sets it summarises.
+
+    Each row names a run set in its first column, so the penalty is checked
+    against that set's own mean rather than retyped. Row labels must be
+    unique: the cell inventory is keyed by (section, label, column), so two
+    rows sharing a label would collide and one would go unchecked.
+    """
+    problems: list[str] = []
+    verified: set[tuple[str, str, int]] = set()
+    rows = _rows(text, SUMMARY_SECTION)
+    named = [r for r in rows if r and r[0].replace("`", "").strip() in sets]
+    if not named:
+        return ([f"{SUMMARY_SECTION} names no known run set"], verified)
+
+    seen_labels: set[str] = set()
+    for row in named:
+        label = row[0].replace("**", "").strip()
+        key = row[0].replace("`", "").strip()
+        if label in seen_labels:
+            problems.append(
+                f"[summary] duplicate row label {label!r}; labels must be "
+                f"unique or a row goes unchecked")
+            continue
+        seen_labels.add(label)
+        col = len(row) - 1                      # penalty is the last column
+        q = _quoted(row[col])
+        if q is None:
+            problems.append(
+                f"[summary] row {key} penalty reads {row[col].strip()!r}, "
+                f"which is not a number")
+            continue
+        got, places = q
+        verified.add((SUMMARY_SECTION, label, col))
+        want = sets[key].mean_rel
+        if not _rounds_to(want, got, places):
+            problems.append(
+                f"[summary] row {key} penalty says {row[col].strip()}, "
+                f"computed {want:.4f}%")
+    return problems, verified
+
+
 def check(text: str, sets: dict[str, Measured]) -> list[str]:
     problems: list[str] = []
     wp, verified = check_weight_table(text)
     problems.extend(wp)
+    sp, sv = check_summary_table(text, sets)
+    problems.extend(sp)
+    verified |= sv
     for rs in RUN_SETS:
         m = sets.get(rs.key)
         rows = _rows(text, rs.heading)
