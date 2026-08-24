@@ -203,15 +203,20 @@ def main() -> int:
             failures.append(f"R4 mismatch at idx {i}")
 
     if failures:
-        for f in failures[:20]:
+        # Every failure is printed. This used to print failures[:20] under a
+        # count of all of them, so a reader saw "N mismatches" above a list of
+        # 20 and had no way to tell which N-20 were withheld -- on a gate whose
+        # entire job is to say precisely what drifted.
+        for f in failures:
             print(f"FAIL: {f}", file=sys.stderr)
-        print(f"{len(failures)} bit-exact mismatches", file=sys.stderr)
+        print(f"{len(failures)} bit-exact mismatches (all listed above)",
+              file=sys.stderr)
         return 1
     n_ci, n_cr = _check_canonical(failures)
     if failures:
-        for f in failures[:20]:
+        for f in failures:            # all of them, not a leading slice
             print(f"  {f}")
-        print(f"\n{len(failures)} canonical mismatches")
+        print(f"\n{len(failures)} canonical mismatches (all listed above)")
         return 1
     print(
         f"OK — {len(inputs)} inputs, {len(sutra_data['records'])} sutra records, "

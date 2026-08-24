@@ -105,23 +105,30 @@ Fine-tuning cuts held-out CE by **73.8%** (perplexity 535 → 5.2). The
 harness is sound; that is what makes the negative result above
 trustworthy rather than an artifact of a broken setup.
 
-## SCAN / COGS cannot test this hypothesis
+## SCAN / COGS — withdrawn
 
-Exact-match, greedy decoding, 30 SCAN and 20 COGS examples per split:
+**The figures that were here have been withdrawn.** They were exact-match
+scores over **30 SCAN and 20 COGS examples per split**, against real splits
+of 3,920–21,000. That is 0.1–0.7% of the benchmark, and it was presented as
+the benchmark.
 
-| arm | SCAN simple | SCAN length | SCAN addprim_jump | COGS test | COGS gen |
-|---|---|---|---|---|---|
-| base (untuned) | 0/30 | 0/30 | 0/30 | 0/20 | 0/20 |
-| `no_sutra` | 0/30 | 0/30 | 0/30 | 0/20 | 0/20 |
-| `full` | 0/30 | 0/30 | 0/30 | 0/20 | 0/20 |
+They were produced by `--scan-subset 30 --cogs-subset 20` flags on a script
+that no longer exists. `scripts/eval_benchmarks.py`, which replaced it,
+states in its first paragraph: *"There is no `--subset` and no `--skip`: a
+truncated benchmark is not the benchmark, and a flag that shortens it is how
+a partial result gets reported as a complete one."* Keeping numbers produced
+by exactly that mechanism, under a heading asserting what the benchmark can
+and cannot do, contradicted the tool that replaced it.
 
-Zero everywhere, including the untuned base. The training corpus is
-English declaratives with polarity flips and axis paraphrases; SCAN is
-`command → action-sequence` and COGS is `sentence → logical form`. The
-distributions are disjoint, so no amount of training on this corpus
-moves either benchmark, and neither can detect an effect in either
-direction. **The benchmark named in the README as the validation target
-cannot validate the claim.**
+Nothing is claimed in their place. **SCAN and COGS are unmeasured for this
+package.** Running them means the full splits — roughly 36,000 greedy
+decodes — via `scripts/eval_benchmarks.py`, which has no flag to shorten it.
+
+The raw records remain in `runs/eval_*.json` and are honest about what was
+executed: each carries `"n_total": 30` or `"n_total": 20`. They are a record
+of a subset run, not of a benchmark, and
+`vedic/eval/tests/test_no_subset_is_quoted_as_a_benchmark.py` fails if any
+document quotes an accuracy sourced from them.
 
 ## Notes
 
@@ -282,9 +289,16 @@ cross-entropy, and the cost is not a scaling artifact.
 
 Not concluded: nothing here rules out an effect at a larger model scale, on
 a different corpus, or on a genuinely compositional in-distribution task.
-The one benchmark named for that purpose (SCAN/COGS) scored 0 for every arm
-including the untuned base, so it could not have detected an effect either
-way — see above.
+The one benchmark named for that purpose (SCAN/COGS) is **unmeasured** — the
+figures once reported here covered 0.1–0.7% of each split and have been
+withdrawn, so nothing is known about how any arm scores on it.
+
+One objection this does not rest on: truncation. `scripts/eval_heldout.py` caps
+examples at 512 tokens, and the cap was invisible here — the longest example
+in `data/synthetic_eval.jsonl` is 14 tokens, so no held-out evaluation in
+this document scored a truncated prefix. The script now records
+`n_truncated` and `max_tokens_seen` in every result file rather than leaving
+that to be assumed.
 
 Every number in this document is checked against `runs/*.json` by
 `scripts/verify_ablation.py --check`, which is run by the test suite.
@@ -361,6 +375,7 @@ the test suite runs.
 
 Nothing here rules out an effect at a larger model scale, on a different
 corpus, or on a genuinely compositional in-distribution task. The benchmark
-named for that purpose (SCAN/COGS) scored 0 for every arm including the
-untuned base, and those numbers are themselves a 30/20-example subset — see
-the note in that section.
+named for that purpose (SCAN/COGS) is **unmeasured** — the figures once
+reported here were a 30/20-example subset and have been withdrawn. Measuring
+it means the full splits, roughly 36,000 greedy decodes, through
+`scripts/eval_benchmarks.py`.

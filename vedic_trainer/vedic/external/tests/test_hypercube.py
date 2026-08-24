@@ -1,4 +1,21 @@
-"""Smoke tests for the hypercube operators adapter."""
+"""Shape, finiteness and construction-invariant checks on the hypercube adapter.
+
+What these four tests actually assert, in full:
+
+- ``lambda_operator`` returns an (8, 8) array equal to its own transpose
+  under ``np.allclose``. Λ is built as ``0.5 * (result + result.T)``, so the
+  symmetry holds by construction; the test pins the construction, it does not
+  discover the property.
+- ``weighted_hypercube``, ``omega_operator`` and ``upsilon_operator`` return
+  (8, 8) arrays whose entries are all finite.
+- ``ProofTester.record_hypercube_shapes`` writes the four expected ``*_shape``
+  keys, each (8, 8).
+
+No output of any operator is compared against a reference value, an
+independent implementation, or an analytic result. Nothing here establishes
+that Λ, Ω, Υ or the weighted hypercube compute the intended quantity — only
+that they run, return the declared shape, and stay finite.
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -32,9 +49,9 @@ def test_omega_upsilon_are_well_typed() -> None:
     assert np.all(np.isfinite(Upsilon))
 
 
-def test_prooftester_hypercube_invocations() -> None:
+def test_prooftester_records_the_four_hypercube_shapes() -> None:
     tester = ProofTester()
-    tester.verify_hypercube()
+    tester.record_hypercube_shapes()
     res = tester.results["hypercube"]
     assert res["P_shape"] == (8, 8)
     assert res["Lambda_shape"] == (8, 8)

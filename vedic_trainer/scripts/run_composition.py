@@ -24,9 +24,12 @@ COMPOSITE *does* raise on S17's precondition. Printing those as ordinary
 rows is the correct output, not a swallowed failure.
 
 The checks that must fail loudly live elsewhere and do:
-`composition.is_degenerate_series` / `annihilating_runs` detect the
-annihilating run and are asserted in `test_composition.py`, and
+`composition.known_annihilating_runs` / `has_known_annihilating_run` match the
+queue against a fixed list holding the one annihilating run we know about
+(S20 -> S21 -> S22), and that match is asserted in `test_composition.py`;
 `scripts/show_sutras.py --verify` exits non-zero on any structural violation.
+Note the first pair is a lookup, not a search: it detects the known run and
+nothing else, so it cannot certify an arbitrary queue as non-degenerate.
 """
 from __future__ import annotations
 
@@ -47,10 +50,20 @@ def parse_queue(text: str) -> List[int]:
     if text.strip().lower() == "all":
         return list(C.ALL)
     out: List[int] = []
-    for part in text.split(","):
+    fields = text.split(",")
+    for pos, part in enumerate(fields):
         part = part.strip()
+        # An empty field is a malformed queue, not an omission to skip over.
+        # This used to `continue`, so `--queue "1,,3"` and `--queue "1,3,"`
+        # silently ran a 2-sutra queue while the caller believed they had
+        # asked for something else. Composition results depend on queue
+        # length (W = ceil(sqrt(N)), the delta weights, the 1/N in COMPOSITE),
+        # so a quietly shortened queue produces a different, plausible number.
         if not part:
-            continue
+            raise ValueError(
+                f"malformed queue {text!r}: field {pos + 1} of "
+                f"{len(fields)} is empty. Expected comma-separated sutra "
+                f"numbers 1..{C.N_SUTRAS} with no empty fields, or 'all'.")
         n = int(part)
         if not 1 <= n <= C.N_SUTRAS:
             raise ValueError(f"sutra number out of range 1..{C.N_SUTRAS}: {n}")
@@ -131,6 +144,17 @@ def main() -> int:
             print(f"{m:11} {flag:8} {r['nonzero']:>8} {r['max_denominator_digits']:>15}")
         else:
             print(f"{m:11} {'RAISED':8}  {r['error'][:40]}")
+
+    # Exit 0 even when a mode shows RAISED. This driver's job is to report
+    # what each mode does on the given queue and Psi, and "COMPOSITE is out
+    # of domain here, because S17 needs Psi_0 != 0" is one of the answers it
+    # exists to produce -- reported in the table and in --json, not absorbed.
+    # The exit code says whether the report was produced, not whether the
+    # subject passed. COMPOSITE raises on the default Psi, so returning
+    # non-zero for it would make the documented invocation permanently red,
+    # which trains a reader to ignore the status rather than read it.
+    # An exception this driver does not expect is not caught at all and
+    # leaves a traceback and a non-zero exit of its own.
     return 0
 
 

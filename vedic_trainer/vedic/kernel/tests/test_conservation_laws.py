@@ -7,6 +7,7 @@ import pytest
 
 from vedic.kernel import conservation_exact as ce
 from vedic.kernel.q import Q16
+from vedic.kernel.z2_primitives import s29_mean_drive
 
 
 def test_r1_zero_on_multiples_of_435() -> None:
@@ -35,6 +36,31 @@ def test_r3_zero_for_every_psi(q16_corpus: list[Q16]) -> None:
     """R3 ≡ 0: S29 preserves the mean exactly."""
     for psi in q16_corpus:
         assert ce.r3_s29_mean_preservation(psi) == Fraction(0)
+
+
+@pytest.mark.parametrize("weight", [
+    Fraction(1, 2),      # the canonical weight
+    Fraction(0),         # identity
+    Fraction(1),         # full drive to the mean
+    Fraction(1, 3),
+    Fraction(7, 11),
+    Fraction(-2, 5),     # outside [0, 1]: still affine, still mean-preserving
+    Fraction(13, 4),
+])
+def test_r3_vanishes_at_every_weight(weight: Fraction,
+                                     q16_corpus: list[Q16]) -> None:
+    """R3 = 0 is a property of the affine family, not of w = 1/2.
+
+    (S29 Ψ)_v = (1−w)·Ψ_v + w·mean(Ψ) has mean (1−w)·mean + w·mean = mean
+    for any w. ``conservation_exact`` states this; a test that only ever
+    exercised the canonical weight would leave the general claim unchecked.
+    """
+    for psi in q16_corpus:
+        driven = s29_mean_drive(psi, weight)
+        mean_in = sum(psi, Fraction(0)) / len(psi)
+        mean_out = sum(driven, Fraction(0)) / len(driven)
+        assert mean_out - mean_in == Fraction(0), \
+            f"S29 at weight {weight} moved the mean on {psi}"
 
 
 def test_r4_zero_for_every_psi(q16_corpus: list[Q16]) -> None:

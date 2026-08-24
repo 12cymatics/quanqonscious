@@ -25,12 +25,28 @@ dependencies = [
 fixtures = ["playwright>=1.43"]
 dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.4"]
 
-[project.scripts]
-vedic-train = "scripts.train_lora:main"
-vedic-eval = "scripts.run_eval:main"
-vedic-verify = "scripts.verify_bit_exact:main"
-vedic-export-fixtures = "scripts.export_simulator_fixtures:main"
-vedic-generate = "scripts.generate_synthetic:main"
+# There is deliberately no [project.scripts]. Five console entry points used to
+# live here -- vedic-train, vedic-eval, vedic-verify, vedic-export-fixtures and
+# vedic-generate -- pointing at "scripts.<module>:main". They were broken on any
+# installed wheel: packages.find includes "vedic*" only, so the `scripts`
+# package was never shipped and every one of them died with ModuleNotFoundError.
+#
+# Shipping `scripts` would not have fixed them, which is why the entry points
+# went instead of the include line. Those modules are written for a source
+# checkout and resolve repo paths from their own location: verify_bit_exact
+# reads `Path(__file__).resolve().parents[1] / "fixtures"`, and train_lora
+# shells out to `REPO / "scripts" / "verify_bit_exact.py"` with `cwd=REPO`.
+# Under site-packages parents[1] is site-packages, where fixtures/ and configs/
+# do not exist -- so installing the package would have swapped an import error
+# for a missing-data error. It would also have put a top-level package named
+# `scripts` on sys.path, colliding with every other project that does the same.
+#
+# These are repo workflows, and the repo runs them that way: `python
+# scripts/train_lora.py --config ...`, as README.md, docs/BIT_EXACT_PROTOCOL.md
+# and scripts/reproduce_ablation.sh all invoke them. Nothing anywhere called the
+# console names. Making them work would mean packaging fixtures/ and configs/ as
+# package data and rewriting the path resolution -- a real change to undertake
+# deliberately, not a line to restore here.
 
 [tool.setuptools.packages.find]
 include = ["vedic*"]

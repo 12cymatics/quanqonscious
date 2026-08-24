@@ -251,7 +251,7 @@ def test_dead_loss_detector_reports_all_four_live_on_the_real_losses():
 def test_dead_loss_detector_names_a_loss_detached_from_psi(monkeypatch):
     """The check that should have stopped the first ablation and did not."""
     import torch
-    monkeypatch.setattr(PROBE, "L_cons", lambda psi, ts: torch.tensor(3.0))
+    monkeypatch.setattr(PROBE, "L_cons", lambda psi: torch.tensor(3.0))
     weights = PROBE.weights_from(REPO / "configs" / "ablations" / "cpu_full.yaml")
     report = PROBE.probe(weights)
     assert report["dead"] == ["L_cons"]

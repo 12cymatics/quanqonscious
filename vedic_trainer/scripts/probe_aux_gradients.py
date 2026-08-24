@@ -51,16 +51,15 @@ def probe(weights: dict[str, float]) -> dict:
     s5, s7, s11, h = S5(), S7(), S11(), HessianModule()
     wht = wht_axis_torch(device="cpu")
     fns = {
-        "L_chi": lambda p, t: L_chi(p, s7),
-        "L_cons": lambda p, t: L_cons(p, t),
-        "L_curv": lambda p, t: L_curv(p, h),
-        "L_dual": lambda p, t: L_dual(p, wht, s5, s11),
+        "L_chi": lambda p: L_chi(p, s7),
+        "L_cons": lambda p: L_cons(p),
+        "L_curv": lambda p: L_curv(p, h),
+        "L_dual": lambda p: L_dual(p, wht, s5, s11),
     }
     out: dict = {"losses": {}}
     for name, fn in fns.items():
         psi = torch.randn(8, 16, requires_grad=True)
-        ts = torch.arange(8, dtype=torch.long)
-        v = fn(psi, ts)
+        v = fn(psi)
         if not v.requires_grad:
             grad_l1 = 0.0
         else:

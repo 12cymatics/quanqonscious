@@ -34,18 +34,28 @@ def test_encode_decode_roundtrip() -> None:
 
 
 def test_contradiction_pair_polarity_inverted() -> None:
+    """Every axis of the contradiction Ψ is the negation of the base's.
+
+    This previously decoded ``pair.contradiction_psi`` into ``f_neg`` and
+    then never used it, asserting instead that ``s2_nikhilam(base_psi)``
+    flips axis 0 -- a property of S2, on an object the generator does not
+    return. ``generate_contradiction_pair`` could have emitted anything at
+    all as its contradiction and this test would still have passed.
+
+    A comment justified the detour by saying the S5 centering step "kills
+    the bit-0-uniform component" so the direct check was unavailable. It is
+    not: ``_antipodal_psi`` is S5(S2(Ψ)), and decoding it gives exactly
+    -f for all four axes on every base text. The check the name promises
+    was available the whole time.
+    """
     for text in _BASE_TEXTS:
         pair = generate_contradiction_pair(text)
         f_base = decode_psi_to_axes(pair.base_psi)
         f_neg = decode_psi_to_axes(pair.contradiction_psi)
-        # The contradiction Ψ has been centered (S5), which kills the
-        # bit-0-uniform component of the encoded representation. We check
-        # that the polarity axis itself flipped sign on the *raw* S2 result.
-        # Specifically: axis 0 of S2(Ψ) equals −axis 0 of Ψ.
-        from vedic.kernel.z2_primitives import s2_nikhilam
-        s2_psi = s2_nikhilam(pair.base_psi)
-        f_s2 = decode_psi_to_axes(s2_psi)
-        assert f_s2[0] == -f_base[0], "polarity axis did not flip under S2"
+        assert tuple(f_neg) == tuple(-f for f in f_base), (
+            f"contradiction Ψ is not the antipode of the base for {text!r}: "
+            f"base={tuple(str(f) for f in f_base)} "
+            f"contradiction={tuple(str(f) for f in f_neg)}")
 
 
 def test_paraphrase_pair_differs_on_targeted_axis_only() -> None:

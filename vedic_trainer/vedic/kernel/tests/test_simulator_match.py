@@ -14,7 +14,6 @@ runs without manual setup.
 from __future__ import annotations
 
 import json
-import sys
 from fractions import Fraction
 from pathlib import Path
 

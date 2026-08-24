@@ -62,13 +62,3 @@ def slot_index_for(name: str) -> int:
         return SLOT_NAMES.index(name)
     except ValueError as exc:
         raise ValueError(f"unknown slot name: {name!r}") from exc
-
-
-def vertex_for_name(name: str) -> int:
-    """Alias of slot_index_for, kept for code that prefers the verb."""
-    return slot_index_for(name)
-
-
-def axis_of(slot_name: str) -> Tuple[str, ...]:
-    """Return the per-axis label tuple for a slot name."""
-    return tuple(slot_name.split("."))

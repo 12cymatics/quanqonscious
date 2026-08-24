@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 from math import isqrt
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Callable, Dict, List, Sequence, Tuple
 
 from .q import Q16
 from .tesseract import NUM_VERTICES
@@ -76,6 +76,26 @@ _MASK32 = 0xFFFFFFFF
 _POLY = 0xB4BCD35C
 _GOLDEN = 0x9E3779B9
 
+# The Galois LFSR cannot hold state 0: with s = 0 the tapped bit is 0, so the
+# shift never triggers the XOR and 0 >> 1 == 0. Zero is an absorbing fixed
+# point, not a short cycle -- next() returns 0 forever, below() returns 0
+# forever, and permute() collapses to a fixed rotation. A zero seed therefore
+# has to become something else before the generator runs.
+#
+# This is NOT a convenience default. The reference implementation this module
+# is ported from bit-for-bit (R4_tesseract_cymatic_v4.html, section 4:
+# ``seed(v) { this.s = (BigInt(v) & this.MASK) || 1n; }``) substitutes exactly
+# this value, and the port's whole purpose is that both implementations
+# schedule identically. Raising here instead would make the two diverge on the
+# one input where the reference is defined, which is a worse failure than the
+# one it would report.
+#
+# The residual cost, stated so it is not a surprise: a queue whose
+# schedule_seed hashes to 0 schedules identically to one hashing to 1. That
+# collision is a property of the specified generator, inherited deliberately;
+# it cannot be removed here without breaking bit-exactness with the reference.
+_LFSR_ZERO_SEED_SUBSTITUTE = 1
+
 
 class Lfsr:
     """32-bit Galois LFSR. Same polynomial and step order as the reference."""
@@ -83,7 +103,10 @@ class Lfsr:
     __slots__ = ("s",)
 
     def __init__(self, seed: int) -> None:
-        self.s = (seed & _MASK32) or 1
+        s = seed & _MASK32
+        # Not an or-default: 0 is an absorbing state of this generator.
+        # See _LFSR_ZERO_SEED_SUBSTITUTE for why it is substituted, not raised.
+        self.s = _LFSR_ZERO_SEED_SUBSTITUTE if s == 0 else s
 
     def next(self) -> int:
         lsb = self.s & 1
@@ -360,22 +383,44 @@ def compose(mode: str, psi: Q16, indices: Sequence[int] = ALL) -> Q16:
     return MODES[key](psi, indices)
 
 
-def annihilating_runs(indices: Sequence[int] = ALL) -> Tuple[Tuple[int, ...], ...]:
-    """Ordered sub-runs of the queue that are the zero map on every input.
+#: Fixed list of annihilating runs known to us. **Not** the output of a
+#: search, and not claimed to be complete — see ``known_annihilating_runs``.
+#:
+#: (19, 20, 21) is S20 → S21 → S22 in 0-based queue indices. S20 projects onto
+#: one Walsh row, so its image is c·h_axis; S21 takes absolute values, turning
+#: that alternating vector into the constant |c|; S22 differences (v, v⊕mask)
+#: pairs, which is exactly zero on a constant. That is a property of the
+#: specified operators, not of any particular Ψ, so it cannot be fixed by a
+#: different binding or lift — only by changing S20/S21/S22 themselves.
+_KNOWN_ANNIHILATING_RUNS: Tuple[Tuple[int, ...], ...] = ((19, 20, 21),)
+
+
+def known_annihilating_runs(
+        indices: Sequence[int] = ALL) -> Tuple[Tuple[int, ...], ...]:
+    """Which runs from the fixed ``_KNOWN_ANNIHILATING_RUNS`` list this queue contains.
 
     SERIES silently returning a zero vector is a valid computation but a
-    useless result a caller could mistake for signal. This reports *why*.
+    useless result a caller could mistake for signal. This reports one known
+    reason it happens.
 
-    The known structural run is S20 → S21 → S22: S20 projects onto one Walsh
-    row so its image is c·h_axis; S21 takes absolute values, turning the
-    alternating vector into the constant |c|; S22 differences (v, v⊕mask)
-    pairs, which is exactly zero on a constant. It is a property of the
-    specified operators, not of any particular Ψ, so it cannot be fixed by a
-    different binding or lift — only by changing S20/S21/S22 themselves.
+    **This is a lookup against a hardcoded list of one run, not a search.** It
+    does not analyse the queue, and it cannot discover an annihilating run that
+    is not already in ``_KNOWN_ANNIHILATING_RUNS``. An empty return therefore
+    means "none of the runs we know about is present in this order", which is
+    strictly weaker than "SERIES over this queue is not the zero map".
+
+    Searching for annihilating runs in general is not available here, and the
+    known run is itself the reason why: S21 takes absolute values, so the run
+    is not linear, and the composite cannot be settled by multiplying exact
+    16×16 matrices and testing for the zero matrix. Establishing "zero on every
+    input" for an arbitrary run needs the kind of image-containment argument
+    written out for (19, 20, 21) above, which is a proof about the operators,
+    not a computation a runtime helper can perform. Sampling inputs would only
+    produce a Monte-Carlo verdict, which is not what either caller wants.
     """
     ks = _check_queue(indices)
     found: List[Tuple[int, ...]] = []
-    for run in ((19, 20, 21),):
+    for run in _KNOWN_ANNIHILATING_RUNS:
         pos = [i for i, k in enumerate(ks) if k in run]
         ordered = [ks[i] for i in pos]
         if ordered == list(run):
@@ -383,6 +428,12 @@ def annihilating_runs(indices: Sequence[int] = ALL) -> Tuple[Tuple[int, ...], ..
     return tuple(found)
 
 
-def is_degenerate_series(indices: Sequence[int] = ALL) -> bool:
-    """True when SERIES over this queue is the zero map for every input."""
-    return bool(annihilating_runs(indices))
+def has_known_annihilating_run(indices: Sequence[int] = ALL) -> bool:
+    """True when this queue contains one of the known annihilating runs.
+
+    True is conclusive: SERIES over this queue is the zero map for every input.
+    **False is not** — it means only that no run in the fixed list is present,
+    not that the queue is non-degenerate. Do not read this as a clean bill of
+    health for a queue.
+    """
+    return bool(known_annihilating_runs(indices))

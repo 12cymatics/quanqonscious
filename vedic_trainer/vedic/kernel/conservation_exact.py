@@ -13,7 +13,10 @@ R2: complement-pair sum equals total sum.
 
 R3: S29 mean preservation.
     mean(S29(Ψ)) − mean(Ψ) = 0  for all Ψ.
-    Direct from the simplified S29 formula (Ψ_v + mean(Ψ)) / 2.
+    S29 is the affine mean drive (S29 Ψ)_v = (1−w)·Ψ_v + w·mean(Ψ), whose
+    mean is (1−w)·mean(Ψ) + w·mean(Ψ) = mean(Ψ). The residual is therefore
+    zero for every weight w, not only the canonical w = 1/2 — pinned by
+    ``test_conservation_laws.py::test_r3_vanishes_at_every_weight``.
 
 R4: S/A (Beltrami) orthogonality.
     ⟨S(Ψ), A(Ψ)⟩ = 0 because S/A decompose Ψ on the eigenspaces of the
@@ -27,7 +30,7 @@ from typing import Tuple
 
 from .q import Q16
 from .z2_primitives import s7_sankalana_vyavakalana, s29_mean_drive
-from .tesseract import COMPLEMENT, NUM_VERTICES, pairs_v_lt_complement
+from .tesseract import NUM_VERTICES, pairs_v_lt_complement
 
 # T(29) = 1 + 2 + ... + 29 = 435.
 T29: int = 29 * 30 // 2

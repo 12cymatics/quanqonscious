@@ -23,11 +23,10 @@ from __future__ import annotations
 from fractions import Fraction
 from typing import Tuple
 
-import numpy as np
 import torch
 from torch import Tensor, nn
 
-from .tesseract import BIT_WIDTH, COMPLEMENT, NUM_VERTICES, POPCOUNT, SHELLS
+from .tesseract import BIT_WIDTH, COMPLEMENT, NUM_VERTICES, SHELLS
 
 # ----------------------------------------------------------------------
 # Linear-operator matrices (16x16) over ℚ

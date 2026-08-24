@@ -1,4 +1,23 @@
-"""Evaluate a trained checkpoint on SCAN + COGS + audit-closure rate."""
+"""Evaluate a trained checkpoint on SCAN + COGS, and optionally audit closure.
+
+``audit_closure_rate`` is written to the results JSON only when
+``--audit-corpus`` supplied a corpus to measure it on. It used to be emitted
+as ``null`` on every run that omitted the flag, which records a measurement
+that was never taken as though it were a value: a reader aggregating result
+files sees a numeric field that is sometimes null and reasonably reads it as
+0.0, or as a measurement that ran and failed.
+
+Absence is the only faithful encoding of "not measured". A consumer that
+needs the rate now gets a ``KeyError`` from ``payload["audit_closure_rate"]``
+instead of a ``None`` that arithmetic will happily turn into a number.
+
+The flag stays optional rather than becoming required, because the rate needs
+an input the caller may legitimately not have -- a corpus of generated text,
+which is a separate generation step from the SCAN/COGS benchmarks. Requiring
+it would couple those benchmarks to that step, and the likely response would
+be a placeholder corpus passed only to satisfy argparse, which yields a
+real-looking rate computed from nothing. That is worse than an absent key.
+"""
 from __future__ import annotations
 
 import argparse
@@ -38,19 +57,21 @@ def main() -> None:
     scan_results = evaluate_scan(model, tokenizer, device=args.device)
     cogs_results = evaluate_cogs(model, tokenizer, device=args.device)
 
-    audit_rate = None
-    if args.audit_corpus is not None:
-        with args.audit_corpus.open("r", encoding="utf-8") as f:
-            texts = [line.strip() for line in f if line.strip()]
-        audit_rate = audit_closure_rate(texts)
-
     payload = {
         "scan": {k: {"n_total": v.n_total, "n_correct": v.n_correct, "accuracy": v.accuracy}
                  for k, v in scan_results.items()},
         "cogs": {k: {"n_total": v.n_total, "n_correct": v.n_correct, "accuracy": v.accuracy}
                  for k, v in cogs_results.items()},
-        "audit_closure_rate": audit_rate,
     }
+
+    # The key exists only when it was measured. See the module docstring.
+    if args.audit_corpus is not None:
+        with args.audit_corpus.open("r", encoding="utf-8") as f:
+            texts = [line.strip() for line in f if line.strip()]
+        payload["audit_closure_rate"] = audit_closure_rate(texts)
+    else:
+        print("audit closure: not measured (--audit-corpus not given); "
+              "'audit_closure_rate' is omitted from the results file.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)

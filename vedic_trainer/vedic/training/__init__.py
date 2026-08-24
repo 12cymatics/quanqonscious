@@ -11,7 +11,6 @@ from .config import (
 )
 from .lora_config import build_lora_config
 from .losses import (
-    CONS_TRACE_KEY,
     L_chi,
     L_cons,
     L_curv,
@@ -27,7 +26,6 @@ __all__ = [
     "TrainingConfig",
     "load_yaml",
     "build_lora_config",
-    "CONS_TRACE_KEY",
     "L_chi",
     "L_cons",
     "L_curv",

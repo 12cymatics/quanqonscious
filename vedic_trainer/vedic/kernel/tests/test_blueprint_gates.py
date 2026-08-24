@@ -150,7 +150,6 @@ def float_offenders(source: str, boundary: str = "to_float") -> list[str]:
 
 def test_the_render_boundary_is_the_only_float_in_the_field_module():
     """`to_float` is a boundary only if nothing else in the module uses floats."""
-    import ast
     import inspect
 
     from vedic.kernel import k2_field
