@@ -47,7 +47,7 @@ package exposes:
 | Split integrity  | yes         | 7 tests                |
 | External sidecar | yes         | 27 tests               |
 | Script validity  | yes         | 52 tests               |
-| Reported numbers | yes         | 37 tests               |
+| Reported numbers | yes         | 38 tests               |
 | Documented paths | yes         | 20 tests               |
 | Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
