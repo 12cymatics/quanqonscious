@@ -47,7 +47,7 @@ package exposes:
 | Split integrity  | yes         | 7 tests                |
 | External sidecar | yes         | 27 tests               |
 | Script validity  | yes         | 52 tests               |
-| Reported numbers | yes         | 39 tests               |
+| Reported numbers | yes         | 40 tests               |
 | Documented paths | yes         | 20 tests               |
 | Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
@@ -63,10 +63,10 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-500 tests are collected. The counts above are **collected**, not passed:
-three tests need a Lean toolchain, so a "passed" count would be 499 here (1
-skipped) and 497 in CI (3 skipped) — the same README correct on one machine and
-wrong on the other. Collection is 500 in both.
+501 tests are collected. The counts above are **collected**, not passed:
+three tests need a Lean toolchain, so a "passed" count would be 500 here (1
+skipped) and 498 in CI (3 skipped) — the same README correct on one machine and
+wrong on the other. Collection is 501 in both.
 `verify_counts.py --check` measures collection and separately fails if any
 test does not pass, so neither question can hide behind the other.
 
