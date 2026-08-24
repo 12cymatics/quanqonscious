@@ -102,6 +102,14 @@ RUN_SETS: tuple[RunSet, ...] = (
         columns=("base", "full", "delta", "rel", "rel@fixed"),
         full_adapter=r"scaled\d*_full$",
     ),
+    RunSet(
+        key="disjoint",
+        heading="## After fixing the eval split",
+        base="disjoint_seed{}_no_sutra.json",
+        full="disjoint_seed{}_scaled.json",
+        columns=("base", "full", "delta", "rel", "rel@scaled"),
+        full_adapter=r"scaled\d*_full$",
+    ),
 )
 
 # The initial run stored seed 42 under a different name than seeds 1 and 2.
@@ -233,6 +241,56 @@ def _rounds_to(computed: float, quoted: float, places: int) -> bool:
     return abs(computed - quoted) <= 0.5 * 10 ** (-places) + 1e-12
 
 
+# Sections whose numbers this gate does NOT verify, each with the reason.
+# A section is exempt only by appearing here, never by the gate failing to
+# recognise its shape -- that is the same "unchecked means skipped" default
+# this file exists to remove, and the document's own claim to check every
+# number was false because of it.
+UNVERIFIED: dict[str, str] = {
+    "## Are the four losses differentiable w.r.t. Ψ?":
+        "a snapshot of the PRE-FIX probe. It cannot be regenerated from the "
+        "current code, which is the point of the section; runs/"
+        "aux_gradient_probe.json records the post-fix state instead",
+    "## Reported loss is not the loss being optimised":
+        "training-log values from a run whose logs are not committed",
+    "## The pipeline itself works":
+        "CE for the untuned base and both arms; the arm rows duplicate the "
+        "held-out table, the base row comes from runs/eval_base.json",
+    # NOTE ON SCOPE: the inventory counts cells that are a bare number. Cells
+    # written as a ratio ("0/30") or as prose carrying a figure ("4,608 train
+    # / 512 eval") are NOT counted, so they are neither checked nor listed
+    # here. That is a real limit of this gate, stated rather than papered
+    # over: the SCAN/COGS table and the Setup table fall entirely in that gap.
+    "### Composition modes on the full 29-sutra queue":
+        "structural properties of the operator algebra, asserted by "
+        "vedic/kernel/tests/test_composition.py rather than by any run",
+}
+
+
+def _numeric_cells(text: str) -> dict[tuple[str, str, int], str]:
+    """Every numeric cell in every table, keyed by (section, row label, column).
+
+    The gate used to verify the four seed tables and say nothing about the
+    other seventeen, while the document claimed every number was checked.
+    This is the denominator that makes that claim testable.
+    """
+    out: dict[tuple[str, str, int], str] = {}
+    section = "(preamble)"
+    for line in text.splitlines():
+        if line.startswith("#"):
+            section = line.strip()
+            continue
+        stripped = line.strip()
+        if not stripped.startswith("|") or set(stripped) <= set("|-: "):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        label = cells[0].replace("**", "").strip() if cells else ""
+        for i, cell in enumerate(cells[1:], start=1):
+            if _quoted(cell) is not None:
+                out[(section, label, i)] = cell
+    return out
+
+
 def _rows(text: str, heading: str) -> list[list[str]]:
     """Table rows belonging to a section, up to the next same-level heading."""
     start = text.find(heading)
@@ -249,8 +307,115 @@ def _rows(text: str, heading: str) -> list[list[str]]:
     return rows
 
 
+WEIGHT_TABLE_SECTION = "## After rescaling the auxiliary weights"
+_WEIGHT_KEY = {"L_chi": "alpha_chi", "L_cons": "beta_cons",
+               "L_curv": "gamma_curv", "L_dual": "delta_dual"}
+
+
+def check_weight_table(text: str) -> tuple[list[str], set[tuple[str, str, int]]]:
+    """Verify the rescaling table against the probe JSON and the two configs.
+
+    Columns: raw | old w | old weighted | new w | new weighted. Every one is
+    derivable -- `raw` from runs/aux_gradient_probe.json, the weights from
+    configs/ablations/{cpu_full,scaled_full}.yaml, the products by
+    multiplication. Twenty cells that previously sat inside a checked section
+    entirely unverified, because the row labels were not seed/mean/sd.
+    """
+    import yaml
+
+    problems: list[str] = []
+    verified: set[tuple[str, str, int]] = set()
+    rows = [r for r in _rows(text, WEIGHT_TABLE_SECTION)
+            if r and r[0].replace("`", "").strip() in _WEIGHT_KEY]
+    if not rows:
+        return ([f"{WEIGHT_TABLE_SECTION} has no loss-weight rows"], verified)
+
+    probe = json.loads((RUNS / "aux_gradient_probe.json").read_text())["losses"]
+    old = yaml.safe_load((REPO / "configs" / "ablations" / "cpu_full.yaml")
+                         .read_text())["loss_weights"]
+    new = yaml.safe_load((REPO / "configs" / "ablations" / "scaled_full.yaml")
+                         .read_text())["loss_weights"]
+
+    for row in rows:
+        # `name` indexes the config/probe; `label` must match the inventory's
+        # key, which keeps the cell text verbatim (backticks included).
+        label = row[0].replace("**", "").strip()
+        name = row[0].replace("`", "").strip()
+        raw = probe[name]["value"]
+        ow, nw = old[_WEIGHT_KEY[name]], new[_WEIGHT_KEY[name]]
+        expect = {1: raw, 2: ow, 3: raw * ow, 4: nw, 5: raw * nw}
+        for col, want in expect.items():
+            if col >= len(row):
+                problems.append(f"[weights] row {name} has no column {col}")
+                continue
+            q = _quoted(row[col])
+            if q is None:
+                problems.append(
+                    f"[weights] row {name} column {col} is declared numeric "
+                    f"but reads {row[col].strip()!r}")
+                continue
+            got, places = q
+            verified.add((WEIGHT_TABLE_SECTION, label, col))
+            if not _rounds_to(want, got, places):
+                problems.append(
+                    f"[weights] row {name} column {col} says {row[col].strip()}, "
+                    f"computed {want:.6f}")
+    return problems, verified
+
+
+SUMMARY_SECTION = "### The four weightings, together"
+
+
+def check_summary_table(text: str, sets: dict[str, Measured]
+                        ) -> tuple[list[str], set[tuple[str, str, int]]]:
+    """Verify the cross-run summary against the run sets it summarises.
+
+    Each row names a run set in its first column, so the penalty is checked
+    against that set's own mean rather than retyped. Row labels must be
+    unique: the cell inventory is keyed by (section, label, column), so two
+    rows sharing a label would collide and one would go unchecked.
+    """
+    problems: list[str] = []
+    verified: set[tuple[str, str, int]] = set()
+    rows = _rows(text, SUMMARY_SECTION)
+    named = [r for r in rows if r and r[0].replace("`", "").strip() in sets]
+    if not named:
+        return ([f"{SUMMARY_SECTION} names no known run set"], verified)
+
+    seen_labels: set[str] = set()
+    for row in named:
+        label = row[0].replace("**", "").strip()
+        key = row[0].replace("`", "").strip()
+        if label in seen_labels:
+            problems.append(
+                f"[summary] duplicate row label {label!r}; labels must be "
+                f"unique or a row goes unchecked")
+            continue
+        seen_labels.add(label)
+        col = len(row) - 1                      # penalty is the last column
+        q = _quoted(row[col])
+        if q is None:
+            problems.append(
+                f"[summary] row {key} penalty reads {row[col].strip()!r}, "
+                f"which is not a number")
+            continue
+        got, places = q
+        verified.add((SUMMARY_SECTION, label, col))
+        want = sets[key].mean_rel
+        if not _rounds_to(want, got, places):
+            problems.append(
+                f"[summary] row {key} penalty says {row[col].strip()}, "
+                f"computed {want:.4f}%")
+    return problems, verified
+
+
 def check(text: str, sets: dict[str, Measured]) -> list[str]:
     problems: list[str] = []
+    wp, verified = check_weight_table(text)
+    problems.extend(wp)
+    sp, sv = check_summary_table(text, sets)
+    problems.extend(sp)
+    verified |= sv
     for rs in RUN_SETS:
         m = sets.get(rs.key)
         rows = _rows(text, rs.heading)
@@ -313,6 +478,7 @@ def check(text: str, sets: dict[str, Measured]) -> list[str]:
                             f"{'identical' if ok else 'different'}")
                     continue
 
+                verified.add((rs.heading, label, i + 1))
                 if q is None:
                     # A column declared to hold a number must hold one. "~28%"
                     # or "n/a" in a numeric column would otherwise slip past
@@ -339,6 +505,23 @@ def check(text: str, sets: dict[str, Measured]) -> list[str]:
         for required in [f"seed{s}" for s in SEEDS] + ["mean", "sd"]:
             if required not in seen:
                 problems.append(f"[{rs.key}] table has no {required} row")
+
+    # Everything the loop above did not verify must be declared unverified.
+    stale = sorted(UNVERIFIED.keys() - {k[0] for k in _numeric_cells(text)})
+    for heading in stale:
+        problems.append(
+            f"UNVERIFIED declares {heading!r}, which holds no numbers — an "
+            f"exemption for a section nobody quotes is one waiting to be reused")
+
+    unchecked = sorted(
+        {k for k in _numeric_cells(text)
+         if k not in verified and k[0] not in UNVERIFIED})
+    for section, label, col in unchecked[:12]:
+        problems.append(
+            f"{section} row {label!r} column {col} holds a number this gate "
+            f"neither verified nor declares unverifiable")
+    if len(unchecked) > 12:
+        problems.append(f"...and {len(unchecked) - 12} more unchecked cells")
     return problems
 
 

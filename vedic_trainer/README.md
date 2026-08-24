@@ -44,13 +44,15 @@ package exposes:
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
+| Split integrity  | yes         | 7 tests                |
 | External sidecar | yes         | 27 tests               |
-| Script validity  | yes         | 46 tests               |
-| Reported numbers | yes         | 36 tests               |
-| Documented paths | yes         | 20 tests               |
-| Conservation (torch) | yes     | 109 tests              |
+| Script validity  | yes         | 52 tests               |
+| Reported numbers | yes         | 44 tests               |
+| Documented paths | yes         | 22 tests               |
+| Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
 | Gates reject     | yes         | 30 tests               |
+| Aux checkpoint   | yes         | 7 tests                |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
 | Eval             | yes         | requires SCAN/COGS     |
@@ -61,10 +63,10 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-475 tests are collected. The counts above are **collected**, not passed:
-three tests need a Lean toolchain, so a "passed" count would be 474 here (1
-skipped) and 472 in CI (3 skipped) — the same README correct on one machine and
-wrong on the other. Collection is 475 in both.
+507 tests are collected. The counts above are **collected**, not passed:
+three tests need a Lean toolchain, so a "passed" count would be 506 here (1
+skipped) and 504 in CI (3 skipped) — the same README correct on one machine and
+wrong on the other. Collection is 507 in both.
 `verify_counts.py --check` measures collection and separately fails if any
 test does not pass, so neither question can hide behind the other.
 
@@ -185,6 +187,22 @@ fixtures.**
 *Not triggered.* `scripts/verify_bit_exact.py` checks all 30 fixture keys —
 32 inputs, 32 sutra records, 96 conservation records — and an unchecked key
 is itself a failure. It passes.
+
+Its scope was narrower than this criterion implied. Those fixtures cover
+`vedic/kernel/z2_primitives.py`, which states in its own first paragraph that
+it is **not** an implementation of the 29 sutras and uses a conflicting
+numbering. `vedic/kernel/sutras_canonical.py` — named above as the single authority — had
+no fixture-backed gate at all. It now has one: 8 inputs × 29 sutras × 3
+strengths = 696 records, including α → 0 (the §12Y identity guarantee) and
+the α value itself.
+
+**What that gate can and cannot show.** The fixtures are written by the same
+kernel they are compared against, so they detect **drift, not error** — they
+are a regression reference. Correctness against the upstream definition is a
+separate question, answered by exporting from the user's
+`vedic_v18.24_full_kernel.html`, which is external to this repository. The
+distinction matters: an earlier version of this gate rebuilt its own missing
+fixtures, which made it unfalsifiable rather than merely narrow.
 
 The strict ℚ reference layer is what makes criterion 3 honest: float
 tolerance does not enter the verification path, and every comparison in

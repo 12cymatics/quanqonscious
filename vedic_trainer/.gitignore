@@ -27,8 +27,14 @@ venv/
 .DS_Store
 
 # Project artefacts
+# The generated corpus (3 MB) stays out; the SEED corpus does not. Without
+# it, `reproduce_ablation.sh` step 1 fails on a fresh clone and nothing in
+# the repository can regenerate or falsify the numbers in
+# ABLATION_RESULTS.md. seed_corpus.txt + generate_synthetic.py +
+# split_corpus.py reproduce data/ deterministically.
 data/*
 !data/.gitkeep
+!data/seed_corpus.txt
 checkpoints/*
 !checkpoints/.gitkeep
 # runs/*.json ARE the evidence behind every number in ABLATION_RESULTS.md

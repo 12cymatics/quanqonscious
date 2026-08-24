@@ -43,7 +43,8 @@ LAYERS: dict[str, list[str]] = {
     "Canonical 29": ["vedic/kernel/tests/test_sutras_canonical.py"],
     "Blueprint gates": ["vedic/kernel/tests/test_blueprint_gates.py"],
     "Kernel (torch)": ["vedic/kernel/tests/test_torch_buffers.py"],
-    "Data": ["vedic/data/tests"],
+    "Data": ["vedic/data/tests/test_synthetic_quality.py"],
+    "Split integrity": ["vedic/data/tests/test_split_is_disjoint.py"],
     "External sidecar": ["vedic/external/tests"],
     "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
     "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
@@ -51,6 +52,7 @@ LAYERS: dict[str, list[str]] = {
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
     "Audit closure": ["vedic/eval/tests"],
     "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
+    "Aux checkpoint": ["vedic/training/tests"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

@@ -1,6 +1,7 @@
 """HuggingFace Trainer subclass: routes hidden states through TesseractWM and adds the four sutra losses."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
 
 import torch
@@ -13,6 +14,7 @@ from vedic.kernel.wht import wht_axis_torch
 from vedic.memory import TesseractWM
 
 from .config import TrainingConfig
+from .aux_state import AUX_STATE_FILE, save_aux_state  # noqa: F401
 from .losses import CONS_TRACE_KEY, total_loss
 
 
@@ -21,13 +23,29 @@ class VedicTrainer(Trainer):
 
     The base HuggingFace ``Trainer`` is reused unchanged for optimizer,
     scheduler, gradient accumulation, mixed precision, checkpointing, etc.
-    We override exactly two things:
+    Three methods are overridden:
 
     - ``compute_loss`` to inject the auxiliary losses
-    - ``_save`` is unchanged; the TesseractWM and HessianModule are
-      registered as ``self.aux_modules`` so they are saved with the
-      checkpoint via the standard PyTorch state-dict path.
+    - ``create_optimizer`` to put the auxiliary parameters in a param group,
+      without which TesseractWM's projection never trains
+    - ``_save`` to write those auxiliary parameters next to the adapter
+
+    The third used to read: "``_save`` is unchanged; the TesseractWM and
+    HessianModule are registered as ``self.aux_modules`` so they are saved
+    with the checkpoint via the standard PyTorch state-dict path." Every
+    clause of that was false. There is no ``aux_modules`` attribute anywhere
+    in the package, ``_save`` was not overridden, and PEFT's ``_save`` writes
+    adapter tensors only -- verified: the committed checkpoints hold 240
+    tensors, none of them TesseractWM or Hessian.
+
+    The consequence was that the 9,216-parameter Ψ projection was trained and
+    then discarded. Reloading a checkpoint silently produced a fresh random
+    orthogonal projection, so Ψ -- and every auxiliary loss computed from it
+    -- could not be reproduced from a saved run.
     """
+
+    #: Re-exported from .aux_state so callers can find it on the trainer.
+    AUX_STATE_FILE = AUX_STATE_FILE
 
     def __init__(
         self,
@@ -61,6 +79,14 @@ class VedicTrainer(Trainer):
         # Running integer counter for R1 (CONS_TRACE_KEY). Diagnostic only —
         # it is reported in the log, never added to the loss (see L_cons).
         self._trace_sum = 0
+
+    def _save(self, output_dir: str | None = None,
+              state_dict: Any = None) -> None:
+        """Write the adapter, then the auxiliary modules beside it."""
+        super()._save(output_dir, state_dict)
+        save_aux_state(self.register_buffer_module,
+                       output_dir if output_dir is not None
+                       else self.args.output_dir)
 
     def create_optimizer(self):
         """Include the auxiliary modules' parameters in the optimizer.

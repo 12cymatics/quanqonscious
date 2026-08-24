@@ -1,7 +1,7 @@
 """29-sutra kernel: exact ℚ reference + torch autograd port."""
 from __future__ import annotations
 
-from .q import Q, Q16, q_zeros, q_from_floats, q_to_floats, q_eq, q_close
+from .q import Q, Q16, q_zeros, q_to_floats, q_eq
 from .tesseract import (
     NUM_VERTICES,
     BIT_WIDTH,
@@ -19,10 +19,8 @@ __all__ = [
     "Q",
     "Q16",
     "q_zeros",
-    "q_from_floats",
     "q_to_floats",
     "q_eq",
-    "q_close",
     "NUM_VERTICES",
     "BIT_WIDTH",
     "COMPLEMENT",
