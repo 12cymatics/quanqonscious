@@ -5,39 +5,41 @@ Why this exists
 `VedicTrainer`'s docstring claimed the auxiliary modules were "registered as
 `self.aux_modules` so they are saved with the checkpoint via the standard
 PyTorch state-dict path". No such attribute existed, `_save` was not
-overridden, and PEFT's `_save` writes adapter tensors only. The committed
+overridden, and PEFT's `_save` writes adapter tensors only -- the committed
 checkpoints hold 240 tensors, none of them TesseractWM or Hessian.
 
-So the 9,216-parameter projection was trained -- an earlier fix specifically
-added it to the optimizer -- and then thrown away at save time. Reloading
-produced a fresh random orthogonal projection, which means Ψ and every
-auxiliary loss derived from it could not be reproduced from a saved run.
+So the 9,216-parameter projection was trained (an earlier fix specifically
+added it to the optimizer) and then thrown away at save time. Reloading gave
+a fresh random orthogonal projection, so Ψ and every auxiliary loss derived
+from it could not be reproduced from a saved run.
 
-These tests exercise the save and load directly, without a HF Trainer, so
-they run in the suite rather than only in a training job.
+Nothing here imports `VedicTrainer`. An earlier version of this file did,
+and failed collection in CI with `ModuleNotFoundError: No module named
+'transformers'` -- the trainer inherits from `transformers.Trainer`, which
+CI does not install. Skipping when transformers is absent would have made
+the guard inert in the one environment that runs it automatically, which is
+the condition that let the original defect through. The save contract lives
+in `vedic/training/aux_state.py`, whose real dependencies are torch and the
+modules themselves; the `_save` override is checked by parsing the source.
 """
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
 import torch
-from torch import nn
 
-from vedic.kernel.hessian import HessianModule
-from vedic.kernel.sutras_torch import S5, S7, S11
 from vedic.memory import TesseractWM
-from vedic.training.trainer import VedicTrainer
+from vedic.training.aux_state import (
+    AUX_STATE_FILE,
+    build_aux_modules,
+    load_aux_state,
+    save_aux_state,
+)
 
 D_MODEL = 32
-
-
-def _modules() -> nn.ModuleDict:
-    return nn.ModuleDict({
-        "tesseract_wm": TesseractWM(d_model=D_MODEL),
-        "hessian": HessianModule(),
-        "s5": S5(), "s7": S7(), "s11": S11(),
-    })
+TRAINER_SRC = Path(__file__).resolve().parents[1] / "trainer.py"
 
 
 def test_the_projection_has_parameters_worth_saving():
@@ -47,23 +49,23 @@ def test_the_projection_has_parameters_worth_saving():
 
 
 def test_saved_state_restores_the_same_projection(tmp_path: Path):
-    original = _modules()
+    original = build_aux_modules(D_MODEL)
     with torch.no_grad():                       # make it distinguishable
         original["tesseract_wm"].proj.weight.add_(1.5)
-    torch.save(original.state_dict(), tmp_path / VedicTrainer.AUX_STATE_FILE)
+    save_aux_state(original, tmp_path)
 
-    restored = VedicTrainer.load_aux_state(tmp_path, d_model=D_MODEL)
-    a = original["tesseract_wm"].proj.weight
-    b = restored["tesseract_wm"].proj.weight
-    assert torch.equal(a, b), "the restored projection is not the saved one"
+    restored = load_aux_state(tmp_path, d_model=D_MODEL)
+    assert torch.equal(original["tesseract_wm"].proj.weight,
+                       restored["tesseract_wm"].proj.weight), \
+        "the restored projection is not the saved one"
 
 
-def test_a_fresh_module_does_not_match_a_trained_one(tmp_path: Path):
+def test_a_fresh_module_does_not_match_a_trained_one():
     """The failure mode being prevented: a random re-init standing in."""
-    trained = _modules()
+    trained = build_aux_modules(D_MODEL)
     with torch.no_grad():
         trained["tesseract_wm"].proj.weight.add_(1.5)
-    fresh = _modules()
+    fresh = build_aux_modules(D_MODEL)
     assert not torch.equal(trained["tesseract_wm"].proj.weight,
                            fresh["tesseract_wm"].proj.weight), (
         "a fresh projection equals a trained one, so this test cannot "
@@ -73,21 +75,45 @@ def test_a_fresh_module_does_not_match_a_trained_one(tmp_path: Path):
 def test_loading_without_the_file_raises_rather_than_reinitialising(tmp_path):
     """Checkpoints written before the fix have no aux state. Say so."""
     with pytest.raises(FileNotFoundError, match="cannot be restored"):
-        VedicTrainer.load_aux_state(tmp_path, d_model=D_MODEL)
+        load_aux_state(tmp_path, d_model=D_MODEL)
 
 
-def test_the_trainer_declares_a_save_override():
-    """_save must be overridden here, not inherited."""
-    assert "_save" in vars(VedicTrainer), (
-        "VedicTrainer does not override _save, so the auxiliary modules are "
-        "not written and the docstring's claim is false again")
+def test_save_writes_the_expected_filename(tmp_path: Path):
+    path = save_aux_state(build_aux_modules(D_MODEL), tmp_path)
+    assert path.name == AUX_STATE_FILE
+    assert path.exists()
 
 
 def test_every_auxiliary_module_is_covered_by_the_saved_state(tmp_path: Path):
-    """A module added to the ModuleDict but missing from the reload is a leak."""
-    original = _modules()
-    torch.save(original.state_dict(), tmp_path / VedicTrainer.AUX_STATE_FILE)
-    restored = VedicTrainer.load_aux_state(tmp_path, d_model=D_MODEL)
+    """A module added to the dict but missing from the reload is a leak."""
+    original = build_aux_modules(D_MODEL)
+    save_aux_state(original, tmp_path)
+    restored = load_aux_state(tmp_path, d_model=D_MODEL)
     assert set(original.keys()) == set(restored.keys())
     assert (set(original.state_dict().keys())
             == set(restored.state_dict().keys()))
+
+
+def test_the_trainer_overrides_save_and_calls_the_helper():
+    """Parsed, not imported: this must hold where transformers is absent too.
+
+    Without the override, PEFT's `_save` writes adapter tensors only and the
+    projection is discarded again -- silently, exactly as before.
+    """
+    tree = ast.parse(TRAINER_SRC.read_text(encoding="utf-8"))
+    cls = next((n for n in ast.walk(tree)
+                if isinstance(n, ast.ClassDef) and n.name == "VedicTrainer"),
+               None)
+    assert cls is not None, "VedicTrainer not found in trainer.py"
+
+    save = next((n for n in cls.body
+                 if isinstance(n, ast.FunctionDef) and n.name == "_save"), None)
+    assert save is not None, (
+        "VedicTrainer does not override _save, so the auxiliary modules are "
+        "not written and the docstring's claim is false again")
+
+    called = {n.func.id for n in ast.walk(save)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "save_aux_state" in called, (
+        "_save is overridden but does not call save_aux_state, so nothing "
+        "guarantees the auxiliary state is written")

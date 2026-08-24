@@ -14,6 +14,7 @@ from vedic.kernel.wht import wht_axis_torch
 from vedic.memory import TesseractWM
 
 from .config import TrainingConfig
+from .aux_state import AUX_STATE_FILE, save_aux_state  # noqa: F401
 from .losses import CONS_TRACE_KEY, total_loss
 
 
@@ -43,7 +44,8 @@ class VedicTrainer(Trainer):
     -- could not be reproduced from a saved run.
     """
 
-    AUX_STATE_FILE = "vedic_aux_modules.pt"
+    #: Re-exported from .aux_state so callers can find it on the trainer.
+    AUX_STATE_FILE = AUX_STATE_FILE
 
     def __init__(
         self,
@@ -82,35 +84,9 @@ class VedicTrainer(Trainer):
               state_dict: Any = None) -> None:
         """Write the adapter, then the auxiliary modules beside it."""
         super()._save(output_dir, state_dict)
-        target = Path(output_dir if output_dir is not None
-                      else self.args.output_dir)
-        target.mkdir(parents=True, exist_ok=True)
-        torch.save(self.register_buffer_module.state_dict(),
-                   target / self.AUX_STATE_FILE)
-
-    @classmethod
-    def load_aux_state(cls, checkpoint_dir: str | Path,
-                       d_model: int) -> nn.ModuleDict:
-        """Rebuild the auxiliary modules from a checkpoint written by _save.
-
-        Raises rather than returning a freshly initialised projection: a
-        randomly re-initialised Ψ is not the Ψ that was trained, and silently
-        substituting one is how this defect went unnoticed.
-        """
-        path = Path(checkpoint_dir) / cls.AUX_STATE_FILE
-        if not path.exists():
-            raise FileNotFoundError(
-                f"{path} is missing, so the trained Psi projection cannot be "
-                f"restored. Checkpoints written before this was fixed do not "
-                f"contain it and cannot be reconstructed -- retrain rather "
-                f"than proceeding with a random projection.")
-        modules = nn.ModuleDict({
-            "tesseract_wm": TesseractWM(d_model=d_model),
-            "hessian": HessianModule(),
-            "s5": S5(), "s7": S7(), "s11": S11(),
-        })
-        modules.load_state_dict(torch.load(path, map_location="cpu"))
-        return modules
+        save_aux_state(self.register_buffer_module,
+                       output_dir if output_dir is not None
+                       else self.args.output_dir)
 
     def create_optimizer(self):
         """Include the auxiliary modules' parameters in the optimizer.
