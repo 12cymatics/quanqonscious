@@ -293,12 +293,12 @@ The one benchmark named for that purpose (SCAN/COGS) is **unmeasured** — the
 figures once reported here covered 0.1–0.7% of each split and have been
 withdrawn, so nothing is known about how any arm scores on it.
 
-One objection this does not rest on: truncation. `scripts/eval_heldout.py` caps
-examples at 512 tokens, and the cap was invisible here — the longest example
-in `data/synthetic_eval.jsonl` is 14 tokens, so no held-out evaluation in
-this document scored a truncated prefix. The script now records
-`n_truncated` and `max_tokens_seen` in every result file rather than leaving
-that to be assumed.
+One objection this does not rest on: truncation. `scripts/eval_heldout.py`
+caps examples at 512 tokens, and the cap was invisible here — in the held-out
+corpus that `scripts/split_corpus.py` writes, the longest example is 14
+tokens, so no held-out evaluation in this document scored a truncated prefix.
+The script now records `n_truncated` and `max_tokens_seen` in every result
+file rather than leaving that to be assumed.
 
 Every number in this document is checked against `runs/*.json` by
 `scripts/verify_ablation.py --check`, which is run by the test suite.

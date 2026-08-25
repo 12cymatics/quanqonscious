@@ -52,7 +52,7 @@ package exposes:
 | Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
 | Benchmark honesty | yes        | 30 tests               |
-| Gates reject     | yes         | 30 tests               |
+| Gates reject     | yes         | 32 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
