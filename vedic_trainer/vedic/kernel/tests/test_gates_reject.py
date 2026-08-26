@@ -182,17 +182,36 @@ SV = _load("vedic/kernel/tests/test_scripts_are_valid.py")
 
 
 def test_path_gate_accepts_paths_that_exist():
-    assert DP.missing({"README.md"}, REPO, set()) == []
+    assert DP.missing({"README.md"}, DP.TRACKED, set()) == []
 
 
 def test_path_gate_rejects_a_renamed_module_still_cited():
-    assert DP.missing({"vedic/kernel/sutras_exact.py"}, REPO, set()) == \
+    assert DP.missing({"vedic/kernel/sutras_exact.py"}, DP.TRACKED, set()) == \
         ["vedic/kernel/sutras_exact.py"]
 
 
 def test_path_gate_honours_only_declared_externals():
-    assert DP.missing({"someones_kernel.html"}, REPO, {"someones_kernel.html"}) == []
-    assert DP.missing({"someones_kernel.html"}, REPO, set()) != []
+    assert DP.missing({"someones_kernel.html"}, DP.TRACKED,
+                      {"someones_kernel.html"}) == []
+    assert DP.missing({"someones_kernel.html"}, DP.TRACKED, set()) != []
+
+
+def test_path_gate_rejects_a_generated_artifact_that_is_present_locally():
+    """The defect that reached CI: `data/*` is gitignored, so a document
+    naming a generated file passed on a machine that had run the generator
+    and failed in a fresh clone. Resolving against the tracked set makes the
+    verdict identical in both places, which is the whole point."""
+    generated = "data/synthetic_eval.jsonl"
+    assert generated not in DP.TRACKED, \
+        f"{generated} is tracked now — pick another gitignored path here"
+    assert DP.missing({generated}, DP.TRACKED, set()) == [generated], \
+        "the path gate accepted a file git does not track"
+
+
+def test_path_gate_reads_a_real_tracked_set():
+    """Without this, an empty TRACKED would make the two rejection tests
+    above pass for the wrong reason."""
+    assert "README.md" in DP.TRACKED and len(DP.TRACKED) > 50
 
 
 def test_script_gate_accepts_a_driver_whose_references_exist():
@@ -251,7 +270,7 @@ def test_dead_loss_detector_reports_all_four_live_on_the_real_losses():
 def test_dead_loss_detector_names_a_loss_detached_from_psi(monkeypatch):
     """The check that should have stopped the first ablation and did not."""
     import torch
-    monkeypatch.setattr(PROBE, "L_cons", lambda psi, ts: torch.tensor(3.0))
+    monkeypatch.setattr(PROBE, "L_cons", lambda psi: torch.tensor(3.0))
     weights = PROBE.weights_from(REPO / "configs" / "ablations" / "cpu_full.yaml")
     report = PROBE.probe(weights)
     assert report["dead"] == ["L_cons"]

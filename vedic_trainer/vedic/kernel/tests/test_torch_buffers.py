@@ -12,8 +12,6 @@ permutations and weight tables, and that re-use is what we check here.
 """
 from __future__ import annotations
 
-from fractions import Fraction
-from typing import Callable
 
 import torch
 
@@ -27,7 +25,7 @@ from vedic.kernel.tesseract import (
     pairs_v_lt_complement,
     rotate_left_1,
 )
-from vedic.kernel.wht import HADAMARD_16_Q, WHT_AXIS_Q
+from vedic.kernel.wht import HADAMARD_16_Q
 
 
 def _as_int_list(buf: torch.Tensor) -> list[int]:

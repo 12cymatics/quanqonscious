@@ -119,7 +119,25 @@ class ProofTester:
             "verified": not problems,
         }
 
-    def verify_hypercube(self) -> None:
+    def record_hypercube_shapes(self) -> None:
+        """Record the output shapes of the four hypercube operators. No verdict.
+
+        This does not verify anything, and is named so it cannot be read as
+        doing so. It builds ``Hypercube(size=8)`` itself and stores the four
+        result shapes; there is no reference value, no comparison, and no
+        pass/fail key in what it writes to ``self.results``.
+
+        It deliberately does not emit a ``verified`` key the way
+        ``verify_sutra_engine`` does. Every verdict available here is settled
+        before it runs: the shapes are (8, 8) because this method chose
+        ``size=8``; Λ is symmetric because ``lambda_operator`` returns
+        ``0.5 * (result + result.T)``; and the outputs are finite because
+        ``lambda_operator`` already raises on a non-finite adapter result. A
+        ``"verified": True`` computed from any of those would be a foregone
+        conclusion dressed as a measurement — the same defect this module's
+        header describes removing from ``verify_sutra_engine``, which had
+        recorded that key as a literal.
+        """
         hypercube = Hypercube(size=8)
         alpha_vector = np.ones(16)
         chi = 0.5

@@ -1,10 +1,8 @@
 """HuggingFace Trainer subclass: routes hidden states through TesseractWM and adds the four sutra losses."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Mapping
 
-import torch
 from torch import Tensor, nn
 from transformers import Trainer
 
@@ -15,7 +13,7 @@ from vedic.memory import TesseractWM
 
 from .config import TrainingConfig
 from .aux_state import AUX_STATE_FILE, save_aux_state  # noqa: F401
-from .losses import CONS_TRACE_KEY, total_loss
+from .losses import total_loss
 
 
 class VedicTrainer(Trainer):
@@ -75,10 +73,6 @@ class VedicTrainer(Trainer):
         )
         self.register_buffer_module.to(self.args.device)
         self.wht_axis = wht_axis_torch(device=self.args.device)
-
-        # Running integer counter for R1 (CONS_TRACE_KEY). Diagnostic only —
-        # it is reported in the log, never added to the loss (see L_cons).
-        self._trace_sum = 0
 
     def _save(self, output_dir: str | None = None,
               state_dict: Any = None) -> None:
@@ -143,19 +137,9 @@ class VedicTrainer(Trainer):
             ) from None
         psi = self.tesseract_wm(last_hidden, attn_mask)    # (B, 16)
 
-        # Maintain the integer trace counter (R1).
-        batch_size = psi.size(0)
-        self._trace_sum = (self._trace_sum + batch_size) % (29 * 30 // 2 * 1000)
-        trace_sum = torch.tensor(
-            [self._trace_sum] * batch_size,
-            dtype=torch.long,
-            device=psi.device,
-        )
-
         total, components = total_loss(
             ce_loss=ce_loss,
             psi=psi,
-            trace_sum=trace_sum,
             weights=self.loss_weights,
             s5=self.s5,
             s7=self.s7,
@@ -166,7 +150,6 @@ class VedicTrainer(Trainer):
 
         if self.state.global_step % self.args.logging_steps == 0:
             log_payload = {f"{k}": float(v.item()) for k, v in components.items()}
-            log_payload[CONS_TRACE_KEY] = self._trace_sum
             self.log(log_payload)
 
         return (total, outputs) if return_outputs else total

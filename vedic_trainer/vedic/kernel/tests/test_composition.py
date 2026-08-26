@@ -282,12 +282,17 @@ def test_s17_would_be_the_identity_under_self_binding():
         assert SX.s17_anurupyena_proportion(x, x) == x
 
 
-def test_annihilating_run_is_detected():
-    """SERIES degeneracy is reported, not silently returned as zeros."""
-    assert C.is_degenerate_series(C.ALL)
-    assert C.annihilating_runs(C.ALL) == ((19, 20, 21),)
-    assert not C.is_degenerate_series([0, 1, 2, 3])
-    assert C.annihilating_runs([0, 1, 2]) == ()
+def test_known_annihilating_run_is_detected():
+    """The one known SERIES degeneracy is reported, not silently returned as zeros.
+
+    The negative cases assert only that the known run is absent from those
+    queues. They are not evidence that SERIES over [0, 1, 2, 3] is non-zero --
+    the lookup is against a fixed list and cannot make that claim.
+    """
+    assert C.has_known_annihilating_run(C.ALL)
+    assert C.known_annihilating_runs(C.ALL) == ((19, 20, 21),)
+    assert not C.has_known_annihilating_run([0, 1, 2, 3])
+    assert C.known_annihilating_runs([0, 1, 2]) == ()
 
 
 def test_t18_and_t27_are_scalar_rescalings():

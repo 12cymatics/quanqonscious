@@ -37,7 +37,7 @@ package exposes:
 
 | Layer            | Implemented | Tested locally         |
 | ---------------- | ----------- | ---------------------- |
-| Kernel (ℚ)       | yes         | 13 tests               |
+| Kernel (ℚ)       | yes         | 20 tests               |
 | Operands         | yes         | 44 tests               |
 | Composition      | yes         | 37 tests               |
 | Canonical 29     | yes         | 45 tests               |
@@ -45,13 +45,14 @@ package exposes:
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
 | Split integrity  | yes         | 7 tests                |
-| External sidecar | yes         | 27 tests               |
+| External sidecar | yes         | 116 tests              |
 | Script validity  | yes         | 52 tests               |
 | Reported numbers | yes         | 44 tests               |
-| Documented paths | yes         | 22 tests               |
+| Documented paths | yes         | 27 tests               |
 | Conservation (torch) | yes     | 111 tests              |
 | Audit closure    | yes         | 6 tests                |
-| Gates reject     | yes         | 30 tests               |
+| Benchmark honesty | yes        | 30 tests               |
+| Gates reject     | yes         | 32 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
@@ -148,18 +149,25 @@ so each one carries a result rather than an expectation.
 **1. `configs/ablations/full.yaml` does not beat `configs/ablations/no_sutra.yaml`
 by ≥ 2% absolute on SCAN length-split exact-match.**
 
-*Met — but vacuously, and the criterion was badly chosen.* Both arms scored
-0/30, and so did the **untuned base model**. A criterion that returns the
-same answer for a model that was never trained cannot detect an effect in
-either direction. The training corpus is English declaratives with polarity
-flips and axis paraphrases; SCAN is `command → action-sequence`. The
-distributions are disjoint.
+*Unmeasured.* This was previously recorded as "met, but vacuously" on the
+strength of 30 SCAN and 20 COGS examples per split — 0.1–0.7% of splits that
+run to 3,920–21,000. Those figures came from `--scan-subset`/`--cogs-subset`
+flags on a script that no longer exists, and have been **withdrawn**; see
+`ABLATION_RESULTS.md`. A subset that small cannot establish the criterion in
+either direction, so nothing is claimed for it.
 
-The measure that does discriminate is held-out cross-entropy, and there the
-auxiliary losses make the model **worse by +25.63%** (three seeds, disjoint
-ranges, 66× the baseline seed spread). See `ABLATION_RESULTS.md`; every
-figure there is checked against `runs/*.json` by
-`scripts/verify_ablation.py --check`.
+Measuring it means the full splits through `scripts/eval_benchmarks.py`,
+which has no flag to shorten the work: roughly 36,000 greedy decodes.
+
+Note also that this criterion names `configs/ablations/full.yaml`, a config targeting a gated
+base model that **was never run**. Every executed result uses the `cpu_*` and
+`scaled*` configs on `HuggingFaceTB/SmolLM2-135M-Instruct`.
+
+The measure that does discriminate is held-out cross-entropy on a
+source-disjoint split, and there the auxiliary losses make the model **worse
+by +7.83%** (three seeds, disjoint ranges, 17.4× the baseline seed spread).
+See `ABLATION_RESULTS.md`; every figure there is checked against
+`runs/*.json` by `scripts/verify_ablation.py --check`.
 
 **2. Audit-closure rate at inference for `full` minus `no_sutra` < 10% absolute.**
 

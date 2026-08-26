@@ -25,11 +25,10 @@ What is actually verified, and by what:
 Not verified: that any torch sutra's output matches its ℚ counterpart at any
 tolerance.
 
-The ℚ functions here contain no epsilons, no clamps and no try/except. The one
-tolerance in this file is ``q_close``'s ``rtol``/``atol``, which exists solely
-to compare a ℚ vector against a float sequence; it is a float-comparison
-helper, not a stabiliser inside any ℚ computation. Nothing in the package
-currently calls it — it is exported by ``vedic.kernel`` and otherwise unused.
+The ℚ functions here contain no epsilons, no clamps, no try/except and no
+tolerances of any kind. ``q_eq`` is exact Fraction equality; ``q_to_floats``
+is a one-way conversion for display and for the torch port's buffers, and
+nothing converts back.
 """
 from __future__ import annotations
 

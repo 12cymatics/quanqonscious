@@ -17,9 +17,7 @@ input text. No LLM call is made at generation time.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from fractions import Fraction
 from typing import Iterable
 
 from vedic.kernel.q import Q16

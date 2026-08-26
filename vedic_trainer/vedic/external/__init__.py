@@ -24,8 +24,11 @@ What's here:
 - ``executor`` — serial / threads / processes orchestration adapter.
   Source: ``codex/locate-runnable-simulations-in-repos:src/quanqonscious/sutra_executor.py``.
   Adapted to run our exact-ℚ z2_primitives functions across batches.
-- ``proof_validation`` — smoke test harness that asserts every sutra
-  in ``vedic_engine`` is callable on representative inputs. Source:
+- ``proof_validation`` — harness that invokes every sutra in
+  ``vedic_engine`` on representative inputs and derives a verdict from the
+  outputs (empty or non-finite results are recorded as problems). Its
+  hypercube half records operator shapes only and is named
+  ``record_hypercube_shapes`` to say so. Source:
   ``codex/replace-blocks-with-fixed-implementations:src/quanqonscious/proof_validation.py``.
 
 All adapters are pure Python; they have soft dependencies on numpy

@@ -1,9 +1,24 @@
-"""Smoke tests for the classical (NumPy) Vedic sutra engine adapter.
+"""Callability, count, shape and finiteness checks on the classical engine adapter.
 
-These tests verify that every callable in ``VedicSutraEngine.sutras`` and
-``.sub_sutras`` (16 + 13 = 29) is invocable on representative inputs and
-returns a finite NumPy / scalar value. No epsilons, no float tolerance —
-shape and finiteness only.
+What these three tests actually assert, in full:
+
+- ``VedicSutraEngine`` declares 16 sutras and 13 sub-sutras, and
+  ``ProofTester.verify_sutra_engine`` invokes all 29 on representative inputs
+  without any returning empty or non-finite values. That harness derives its
+  ``verified`` key from the outputs it collected, so the assertion on it can
+  fail; it checks emptiness and finiteness, not correctness of any value.
+- Five operators are then invoked directly and checked for finiteness and
+  declared shape: ``ekadhikena_purvena``, ``urdhva_tiryagbhyam``,
+  ``chalana_kalanabyham`` and ``gunitasamuccayah_samuccayagunitah``.
+- One genuine algebraic identity is checked, on
+  ``sankalana_vyavakalanabhyam``: that ``sym + diff == 2X`` and
+  ``sym - diff == 2Y``, under ``np.allclose``. This is the only test in the
+  file that constrains what a sutra computes rather than that it computed
+  something.
+
+For the other 28 operators nothing here compares an output against a
+reference value or an independent implementation, so their numerical results
+are unverified by this file.
 """
 from __future__ import annotations
 

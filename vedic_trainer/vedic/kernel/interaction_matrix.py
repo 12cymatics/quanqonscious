@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Tuple
 
 from .q import Q16, q_eq
 from .z2_primitives import (
@@ -43,7 +43,7 @@ from .z2_primitives import (
     s28_lopana_restore,
     s29_mean_drive,
 )
-from .tesseract import COMPLEMENT, NUM_VERTICES, POPCOUNT
+from .tesseract import COMPLEMENT, NUM_VERTICES
 
 
 @dataclass(frozen=True)

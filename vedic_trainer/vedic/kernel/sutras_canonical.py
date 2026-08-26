@@ -483,8 +483,28 @@ def compose(mode: str, psi: Q16, strength: Fraction,
 # "executable but several entries are generic phase, permutation, or
 # pair-rotation constructions ... not yet certified as the intended Vedic
 # decompositions." That assessment is carried here rather than papered over:
-# every operator is EXTENSIONALLY defined and tested against its declared map,
-# and every one is INTENSIONALLY uncertified.
+# every operator is INTENSIONALLY uncertified, and ``INTENSIONAL_STATUS``
+# says so on every record.
+#
+# There is deliberately no matching ``extensional`` field. One used to exist,
+# holding the constant string "defined and tested against the declared map",
+# stamped unconditionally onto all 29 records by ``operator_record()``. It was
+# removed for two reasons. First, being identical for every operator it could
+# not distinguish any one from any other, which is the only thing a
+# per-operator evidence field is for. Second, "tested against the declared
+# map" is a claim about the test suite, and this module cannot observe the
+# test suite — so whatever it reported was an assertion, never a measurement.
+#
+# The evidence it gestured at is real and stays where it is checkable: the
+# closed form for each kind is asserted against the implementation in
+# ``tests/test_sutras_canonical.py`` — ``test_mult_formula``,
+# ``test_refl_formula_general``,
+# ``test_refl_formula_s5_is_the_negated_complement``, ``test_conv_formula``,
+# ``test_diff_formula``, ``test_perm_axis_is_id_plus_one_mod_four``,
+# ``test_div_formula_interpolates_hamming_layers`` and
+# ``test_mod_formula_blends_toward_the_mean``. The record's ``decomposition``
+# field names the map each of those checks, so the pointer to the evidence
+# survives; only the self-awarded verdict is gone.
 
 LINEAR_KINDS = frozenset({"REFL", "DIV", "DIFF", "PERM", "MOD"})
 """Kinds whose action is linear in Ψ. MULT and CONV are quadratic:
@@ -492,7 +512,6 @@ MULT multiplies Ψᵢ by Ψ_{i⊕1}, CONV convolves Ψ with itself."""
 
 QUADRATIC_KINDS = frozenset({"MULT", "CONV"})
 
-EXTENSIONAL_STATUS = "defined and tested against the declared map"
 INTENSIONAL_STATUS = (
     "UNCERTIFIED — the operator is a generic blend/permutation/convolution "
     "form, not a proven Vedic arithmetic decomposition"
@@ -570,7 +589,6 @@ class OperatorRecord:
     codomain: str
     decomposition: str
     linear: bool
-    extensional: str
     intensional: str
 
 
@@ -596,7 +614,7 @@ def operator_record(sid: int) -> OperatorRecord:
         id=sid, name=s.name, kind=s.kind, category=s.category,
         domain="ℚ^16 over V4 = Z₂⁴", codomain="ℚ^16 over V4 = Z₂⁴",
         decomposition=decomp, linear=is_linear(sid),
-        extensional=EXTENSIONAL_STATUS, intensional=INTENSIONAL_STATUS,
+        intensional=INTENSIONAL_STATUS,
     )
 
 

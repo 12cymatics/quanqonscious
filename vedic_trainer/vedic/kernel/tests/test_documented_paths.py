@@ -14,10 +14,24 @@ failure at the moment of the rename.
 External files -- things that live on the user's machine rather than in this
 repository -- are declared below. A path is exempt only by appearing in that
 list, never by failing to be found.
+
+Tracked, not present
+--------------------
+Existence is decided by ``git ls-files``, not by ``Path.exists()``. The two
+differ exactly where it matters: ``data/*`` is gitignored, so a document
+naming ``data/synthetic_eval.jsonl`` passed on any machine that had run the
+generator and failed in CI, which checks out only tracked files. That is the
+same environment-dependence ``verify_counts.py`` was fixed for -- a gate
+whose verdict depends on the machine is not a gate.
+
+A reader clones this repository. A path that reaches them only if they first
+run something is not a pointer they can follow, so naming the generator is
+the correct fix, not exempting the artifact.
 """
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -39,15 +53,39 @@ def _cited(doc: str) -> set[str]:
     return set(_PATH.findall((REPO / doc).read_text(encoding="utf-8")))
 
 
-def missing(cited: set[str], repo: Path, external: set[str]) -> list[str]:
-    """Cited paths that neither exist nor are declared external. Pure.
+def _tracked(repo: Path) -> frozenset[str]:
+    """Every path git tracks, relative to `repo`.
 
-    Extracted so `test_gates_reject.py` can prove this rejects a stale path
-    without editing the real README -- a regeneration test that mutates the
-    repo can leave it dirty if it fails midway.
+    Directories are included as well as files, so a document may cite a
+    directory that contains tracked files.
     """
-    return sorted(p for p in cited
-                  if p not in external and not (repo / p).exists())
+    out = subprocess.run(["git", "-C", str(repo), "ls-files"],
+                         capture_output=True, text=True, check=True).stdout
+    paths: set[str] = set()
+    for line in out.splitlines():
+        paths.add(line)
+        parent = Path(line).parent
+        while str(parent) != ".":
+            paths.add(str(parent))
+            parent = parent.parent
+    return frozenset(paths)
+
+
+TRACKED = _tracked(REPO)
+
+
+def missing(cited: set[str], tracked: frozenset[str],
+            external: set[str]) -> list[str]:
+    """Cited paths that git does not track and that are not declared external.
+
+    Pure, and takes the tracked set rather than reading the filesystem, so
+    it returns the same answer on a developer machine carrying generated
+    artifacts as in a fresh clone. `test_gates_reject.py` uses it to prove
+    this rejects a stale path without editing the real README -- a
+    regeneration test that mutates the repo can leave it dirty if it fails
+    midway.
+    """
+    return sorted(p for p in cited if p not in external and p not in tracked)
 
 
 ALL = sorted({(d, p) for d in DOCS for p in _cited(d)})
@@ -59,13 +97,27 @@ def test_the_documents_cite_some_paths():
 
 
 @pytest.mark.parametrize("doc,path", ALL, ids=[f"{d}:{p}" for d, p in ALL])
-def test_documented_path_exists(doc: str, path: str):
+def test_documented_path_is_tracked(doc: str, path: str):
     if path in EXTERNAL:
         return
-    assert (REPO / path).exists(), (
-        f"{doc} points at {path}, which does not exist. Either the file was "
-        f"renamed and the document was not updated, or the path belongs in "
-        f"EXTERNAL in this test with a note saying whose machine it is on.")
+    assert path in TRACKED, (
+        f"{doc} points at {path}, which git does not track"
+        + (" -- though it is present here, so this passes on your machine "
+           "and fails in a fresh clone. It is a generated artifact: name the "
+           "script that writes it instead."
+           if (REPO / path).exists() else
+           ". Either the file was renamed and the document was not updated, "
+           "or the path belongs in EXTERNAL in this test with a note saying "
+           "whose machine it is on."))
+
+
+def test_the_tracked_set_was_read():
+    """Guards the rest: an empty tracked set would fail everything, and a
+    subprocess that quietly returned nothing would be indistinguishable from
+    a repository with no files."""
+    assert len(TRACKED) > 50, (
+        f"git ls-files returned {len(TRACKED)} paths — the tracked set was "
+        f"not read, so every path check above is meaningless")
 
 
 def test_external_list_has_no_dead_entries():

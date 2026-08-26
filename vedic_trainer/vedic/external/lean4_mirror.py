@@ -226,10 +226,9 @@ class Lean4Mirror:
     def _clean_artifact(self, path: Path) -> None:
         if self.config.keep_artifacts:
             return
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+        # missing_ok states the postcondition -- "this path is gone" -- rather
+        # than catching the miss, so no other error can be absorbed with it.
+        path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Public APIs

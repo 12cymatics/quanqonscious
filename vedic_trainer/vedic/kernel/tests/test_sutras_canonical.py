@@ -320,7 +320,7 @@ def test_every_sutra_has_a_complete_operator_record():
     for r in recs:
         assert r.domain == "ℚ^16 over V4 = Z₂⁴"
         assert r.codomain == "ℚ^16 over V4 = Z₂⁴"
-        assert r.decomposition and r.extensional and r.intensional
+        assert r.decomposition and r.intensional
 
 
 def test_linearity_status_is_declared_and_correct():

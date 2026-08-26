@@ -31,7 +31,6 @@ import argparse
 import json
 import re
 import statistics
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 

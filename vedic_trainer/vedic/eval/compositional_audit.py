@@ -32,7 +32,7 @@ and the criterion — need revisiting.
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from vedic.data.audit_filter import audit_psi
 from vedic.data.tesseract_encode import encode_text_to_psi

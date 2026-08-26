@@ -39,14 +39,6 @@ from vedic.kernel.hessian import HessianModule
 from vedic.kernel.sutras_torch import S5, S7, S11, S29
 from vedic.kernel.tesseract import NUM_VERTICES
 
-CONS_TRACE_KEY = "vedic_trace_sum"
-"""Trainer-state key for the running integer trace counter feeding R1.
-
-The trainer increments this by 1 per training example; once 435 examples
-have been processed, R1 closes (i.e., evaluates to 0) deterministically.
-"""
-
-
 # ---------- L_χ : contradiction ---------------------------------------
 
 
@@ -70,7 +62,7 @@ def L_chi(psi: Tensor, s7: S7) -> Tensor:
 # ---------- L_cons : conservation ------------------------------------
 
 
-def L_cons(psi: Tensor, trace_sum: Tensor) -> Tensor:
+def L_cons(psi: Tensor) -> Tensor:
     """Conservation penalty: drift of the conserved quantities under S29.
 
     **Why this is not Σ Rᵢ².** The four specified residuals cannot serve as a
@@ -93,8 +85,8 @@ def L_cons(psi: Tensor, trace_sum: Tensor) -> Tensor:
 
         L_cons = (Δmass)² + (Δ‖S‖²)² + (Δ‖A‖²)²,   Δq = q(S29 Ψ) − q(Ψ)
 
-    normalised by the batch. ``trace_sum`` is retained in the signature and
-    reported for the audit chain, but it is a diagnostic, not a loss term.
+    normalised by the batch. It is a function of Ψ alone; the R1 step counter
+    is not an input here.
     """
     s29 = S29().to(psi.device)
     s7 = S7().to(psi.device)
@@ -119,7 +111,7 @@ def L_cons(psi: Tensor, trace_sum: Tensor) -> Tensor:
 # ---------- L_curv : curvature spike ---------------------------------
 
 
-def L_curv(psi: Tensor, hessian: HessianModule, lanczos_iters: int = 16) -> Tensor:
+def L_curv(psi: Tensor, hessian: HessianModule) -> Tensor:
     """Penalise the Rayleigh quotient of g_ab **at Ψ** spiking above the batch mean.
 
         κ(Ψ) = ⟨Ψ, g_ab Ψ⟩ / ⟨Ψ, Ψ⟩
@@ -134,8 +126,7 @@ def L_curv(psi: Tensor, hessian: HessianModule, lanczos_iters: int = 16) -> Tens
 
     The Rayleigh quotient evaluated at Ψ is what the curvature of the energy
     *along the current state* actually means, it is what this docstring always
-    claimed, and it is genuinely differentiable in Ψ. ``lanczos_iters`` is
-    retained for signature compatibility and is unused.
+    claimed, and it is genuinely differentiable in Ψ.
 
     No epsilon: the denominator is asserted non-zero rather than clamped.
     """
@@ -175,7 +166,6 @@ def L_dual(psi: Tensor, wht_axis: Tensor, s5: S5, s11: S11) -> Tensor:
 def total_loss(
     ce_loss: Tensor,
     psi: Tensor,
-    trace_sum: Tensor,
     *,
     weights: tuple[float, float, float, float],
     s5: S5,
@@ -190,7 +180,7 @@ def total_loss(
     """
     alpha, beta, gamma, delta = weights
     chi = L_chi(psi, s7)
-    cons = L_cons(psi, trace_sum)
+    cons = L_cons(psi)
     curv = L_curv(psi, hessian)
     dual = L_dual(psi, wht_axis, s5, s11)
     total = ce_loss + alpha * chi + beta * cons + gamma * curv + delta * dual

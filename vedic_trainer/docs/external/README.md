@@ -102,3 +102,14 @@ emits the Bool string and does not invoke Lean).
   and on `cirq` / `cudaq` / `torch`, so it is not wired into the kernel.
   It is preserved here as reference for future work on bringing
   sub-sutra 10–13 palindrome semantics into the Z₂⁴ kernel.
+
+  **It does not meet this package's standards and must not be imported.**
+  `sopaantyadvayamantyam` computes `x * 2 ** steps` under the comment
+  "dominant eigenvalue approximation", with three identical branches; the
+  kernel forbids approximations and dead branches alike. The file is kept
+  byte-identical because it is a record of what that branch contains, and
+  editing a record is not the same as correcting code — the same reason
+  `runs/*.json` keeps the withdrawn subset evaluations. What is forbidden
+  is depending on it, which
+  `vedic/external/tests/test_reference_archive_is_not_live_code.py`
+  enforces.

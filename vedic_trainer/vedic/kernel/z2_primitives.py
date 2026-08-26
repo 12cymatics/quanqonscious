@@ -32,15 +32,7 @@ from fractions import Fraction
 from typing import Tuple
 
 from .q import Q16
-from .tesseract import (
-    BIT_WIDTH,
-    COMPLEMENT,
-    NUM_VERTICES,
-    POPCOUNT,
-    SHELLS,
-    rotate_left_k,
-    xor_pairs_lt,
-)
+from .tesseract import BIT_WIDTH, NUM_VERTICES, POPCOUNT, SHELLS, rotate_left_k, xor_pairs_lt
 
 # ----------------------------------------------------------------------
 # Canonical operands

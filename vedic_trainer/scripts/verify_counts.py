@@ -50,7 +50,8 @@ LAYERS: dict[str, list[str]] = {
     "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
     "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
-    "Audit closure": ["vedic/eval/tests"],
+    "Audit closure": ["vedic/eval/tests/test_audit_closure_degeneracy.py"],
+    "Benchmark honesty": ["vedic/eval/tests/test_no_subset_is_quoted_as_a_benchmark.py"],
     "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
     "Aux checkpoint": ["vedic/training/tests"],
 }

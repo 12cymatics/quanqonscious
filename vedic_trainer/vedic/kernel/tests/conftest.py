@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import random
 from fractions import Fraction
-from typing import Iterator
 
 import pytest
 

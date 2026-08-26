@@ -17,7 +17,6 @@ trace rather than hide the bug behind a clamp.
 """
 from __future__ import annotations
 
-import torch
 from torch import Tensor, nn
 
 from vedic.kernel.tesseract import NUM_VERTICES
