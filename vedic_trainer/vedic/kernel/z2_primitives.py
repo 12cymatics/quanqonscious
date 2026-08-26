@@ -348,8 +348,22 @@ def s21_dhvajanka_flag(psi: Q16) -> Q16:
 
 def s22_parity_complement(psi: Q16, mask: int = FULL_MASK) -> Tuple[Fraction, ...]:
     """S22(Ψ)_i = Ψ_{v_i} − Ψ_{v_i ⊕ mask}  over the 8 pairs with v < v⊕mask,
-    ascending in v. Output length 8."""
+    ascending in v. Output length 8, for every mask in 1..15.
+
+    mask = 0 is rejected. The operator is defined over pairs (v, v⊕mask)
+    with v ≠ v⊕mask; at mask 0 the involution is the identity, there are no
+    such pairs, and ``xor_pairs_lt(0)`` yields nothing — so the function
+    returned an empty tuple while its own contract promised length 8. An
+    empty vector is not a degenerate S22 result, it is the absence of one,
+    and a caller that unpacks it or feeds it to ``_embed_pairs8`` gets a
+    silent shape error instead of a stated precondition failure.
+    """
     _check_mask(mask, "S22 mask")
+    if mask == 0:
+        raise ValueError(
+            "S22 precondition violated: mask must be non-zero. At mask 0 the "
+            "complement involution is the identity, so there are no (v, v⊕mask) "
+            "pairs and the output would be empty rather than length 8.")
     return tuple(psi[v] - psi[c] for v, c in xor_pairs_lt(mask))
 
 

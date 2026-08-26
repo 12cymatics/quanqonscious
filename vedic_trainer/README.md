@@ -37,15 +37,15 @@ package exposes:
 
 | Layer            | Implemented | Tested locally         |
 | ---------------- | ----------- | ---------------------- |
-| Kernel (ℚ)       | yes         | 20 tests               |
-| Operands         | yes         | 44 tests               |
+| Kernel (ℚ)       | yes         | 1185 tests             |
+| Operands         | yes         | 169 tests              |
 | Composition      | yes         | 37 tests               |
-| Canonical 29     | yes         | 45 tests               |
+| Canonical 29     | yes         | 319 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
-| Split integrity  | yes         | 7 tests                |
-| External sidecar | yes         | 116 tests              |
+| Split integrity  | yes         | 8 tests                |
+| External sidecar | yes         | 183 tests              |
 | Script validity  | yes         | 52 tests               |
 | Reported numbers | yes         | 44 tests               |
 | Documented paths | yes         | 27 tests               |

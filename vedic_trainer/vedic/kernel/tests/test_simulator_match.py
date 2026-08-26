@@ -8,8 +8,27 @@ Invariants:
   (``scripts/export_simulator_fixtures.py``) on their Mac, the same
   files must match byte-for-byte.
 
-If the fixtures are missing, the tests rebuild them so the suite always
-runs without manual setup.
+The fixtures are a committed reference. If they are missing this refuses to
+run rather than rebuilding them — see ``_require_fixtures``.
+
+What this file replaced
+-----------------------
+Three defects, all of the same kind — the check was narrower than the data:
+
+* **S3, S17 and S23 were never compared.** The fixture records carry all
+  twenty-nine operators; the test asserted twenty-six of them and silently
+  ignored the three binary ones, whose reference values were sitting in the
+  same file. The comparison list was written by hand, so the gap was
+  invisible.
+* **One monolithic loop.** The first mismatching record aborted the test, so
+  a run reported one failure whatever the true extent of the damage.
+* **Nothing asserted the records were there.** ``for rec in
+  data["records"]`` over an empty list passes, and ``len(inputs) >= 1``
+  accepted a one-record fixture as if it were the full set.
+
+The comparison is now driven by the keys present in the fixture itself, so a
+key that exists in the reference and has no kernel call to compare it
+against is a failure rather than an omission.
 """
 from __future__ import annotations
 
@@ -61,9 +80,7 @@ def _require_fixtures() -> None:
         )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def fixtures_present() -> None:
-    _require_fixtures()
+_require_fixtures()
 
 
 def _obj_to_frac(obj: dict[str, int]) -> Fraction:
@@ -79,65 +96,142 @@ def _load(name: str) -> dict[str, object]:
         return json.load(f)
 
 
-def test_psi_inputs_roundtrip() -> None:
-    data = _load("psi_inputs.json")
-    inputs = data["inputs"]
-    assert isinstance(inputs, list) and len(inputs) >= 1
-    for psi_obj in inputs:
-        psi = _objs_to_q16(psi_obj)
-        assert all(isinstance(x, Fraction) for x in psi)
+PSI_INPUTS = _load("psi_inputs.json")
+SUTRA_OUTPUTS = _load("sutra_outputs.json")
+RESIDUALS = _load("conservation_residuals.json")
+
+SUTRA_RECORDS = list(SUTRA_OUTPUTS["records"])
+RESIDUAL_RECORDS = list(RESIDUALS["records"])
+INPUTS = [_objs_to_q16(p) for p in PSI_INPUTS["inputs"]]
 
 
-def test_sutra_outputs_match_kernel() -> None:
-    data = _load("sutra_outputs.json")
-    for rec in data["records"]:
-        psi = _objs_to_q16(rec["input"])
-
-        assert _objs_to_q16(rec["S1"]) == se.s1_eka_adhikena(psi)
-        assert _objs_to_q16(rec["S2"]) == se.s2_nikhilam(psi)
-        assert _objs_to_q16(rec["S4"]) == se.s4_paravartya(psi)
-        assert _objs_to_q16(rec["S5"]) == se.s5_shunyam_samya(psi)
-        assert _objs_to_q16(rec["S6"]) == se.s6_anurupya_shunyam(psi)
-        sym, anti = se.s7_sankalana_vyavakalana(psi)
-        assert _objs_to_q16(rec["S7_sym"]) == sym
-        assert _objs_to_q16(rec["S7_anti"]) == anti
-        assert _objs_to_q16(rec["S8"]) == se.s8_puranapuranabhyam_fill(psi)
-        assert _objs_to_q16(rec["S9"]) == se.s9_chalana_kalanabhyam(psi)
-        assert _objs_to_q16(rec["S10"]) == se.s10_yavadunam_tavadunikrtya(psi)
-        assert _objs_to_q16(rec["S11"]) == se.s11_vyasti_samasti(psi)
-        assert _objs_to_q16(rec["S12"]) == se.s12_shesanyankena_charamena(psi)
-        assert _objs_to_q16(rec["S13"]) == se.s13_sopantyadvayamantyam_last2(psi)
-        assert _objs_to_q16(rec["S14"]) == se.s14_ekanyunena_purvena(psi)
-        assert _objs_to_q16(rec["S15"]) == se.s15_gunitasamucchaya_product(psi)
-        assert _objs_to_q16(rec["S16"]) == se.s16_gunaka_samucchaya(psi)
-        assert _obj_to_frac(rec["S18"]) == se.s18_adyamadyena_antyamantyena(psi)
-        assert _objs_to_q16(rec["S19"]) == se.s19_lopana_sthapanabhyam(psi)
-        assert _objs_to_q16(rec["S20"]) == se.s20_vilokanam_spect(psi)
-        assert _objs_to_q16(rec["S21"]) == se.s21_dhvajanka_flag(psi)
-        s22_ref = se.s22_parity_complement(psi)
-        s22_fix = tuple(_obj_to_frac(o) for o in rec["S22"])
-        assert s22_fix == s22_ref
-        assert _objs_to_q16(rec["S24"]) == se.s24_kevalaih_saptakam(psi)
-        assert _objs_to_q16(rec["S25"]) == se.s25_vestana_circular(psi)
-        assert _objs_to_q16(rec["S26"]) == se.s26_yavadunam_square(psi)
-        assert _obj_to_frac(rec["S27"]) == se.s27_samuccaya_gunitah(psi)
-        assert _objs_to_q16(rec["S28"]) == se.s28_lopana_restore(psi)
-        assert _objs_to_q16(rec["S29"]) == se.s29_mean_drive(psi)
+# ``build_fixtures.py`` uses Φ = S2(Ψ) for the three binary operators. Φ = Ψ
+# is not usable: it makes S17 the identity, so the fixture would record a
+# value that says nothing about S17.
+def _phi_for(psi: Q16) -> Q16:
+    return se.s2_nikhilam(psi)
 
 
-def test_conservation_residuals_match_kernel() -> None:
-    data = _load("conservation_residuals.json")
-    psi_data = _load("psi_inputs.json")
-    inputs = [_objs_to_q16(p) for p in psi_data["inputs"]]
+#: key in the fixture record -> callable producing the kernel's value.
+#: Every operator, including the three the old comparison list omitted.
+COMPARISONS = {
+    "S1": lambda psi: se.s1_eka_adhikena(psi),
+    "S2": lambda psi: se.s2_nikhilam(psi),
+    "S3": lambda psi: se.s3_urdhva_tiryak(psi, _phi_for(psi)),
+    "S4": lambda psi: se.s4_paravartya(psi),
+    "S5": lambda psi: se.s5_shunyam_samya(psi),
+    "S6": lambda psi: se.s6_anurupya_shunyam(psi),
+    "S7_sym": lambda psi: se.s7_sankalana_vyavakalana(psi)[0],
+    "S7_anti": lambda psi: se.s7_sankalana_vyavakalana(psi)[1],
+    "S8": lambda psi: se.s8_puranapuranabhyam_fill(psi),
+    "S9": lambda psi: se.s9_chalana_kalanabhyam(psi),
+    "S10": lambda psi: se.s10_yavadunam_tavadunikrtya(psi),
+    "S11": lambda psi: se.s11_vyasti_samasti(psi),
+    "S12": lambda psi: se.s12_shesanyankena_charamena(psi),
+    "S13": lambda psi: se.s13_sopantyadvayamantyam_last2(psi),
+    "S14": lambda psi: se.s14_ekanyunena_purvena(psi),
+    "S15": lambda psi: se.s15_gunitasamucchaya_product(psi),
+    "S16": lambda psi: se.s16_gunaka_samucchaya(psi),
+    "S17": lambda psi: se.s17_anurupyena_proportion(psi, _phi_for(psi)),
+    "S18": lambda psi: se.s18_adyamadyena_antyamantyena(psi),
+    "S19": lambda psi: se.s19_lopana_sthapanabhyam(psi),
+    "S20": lambda psi: se.s20_vilokanam_spect(psi),
+    "S21": lambda psi: se.s21_dhvajanka_flag(psi),
+    "S22": lambda psi: se.s22_parity_complement(psi),
+    "S23": lambda psi: se.s23_dwandwa_yoga(psi, _phi_for(psi)),
+    "S24": lambda psi: se.s24_kevalaih_saptakam(psi),
+    "S25": lambda psi: se.s25_vestana_circular(psi),
+    "S26": lambda psi: se.s26_yavadunam_square(psi),
+    "S27": lambda psi: se.s27_samuccaya_gunitah(psi),
+    "S28": lambda psi: se.s28_lopana_restore(psi),
+    "S29": lambda psi: se.s29_mean_drive(psi),
+}
 
-    n = len(inputs)
-    assert len(data["records"]) == n * 3
 
-    for i, rec in enumerate(data["records"]):
-        psi = inputs[i // 3]
-        trace = _obj_to_frac(rec["trace_sum"])
-        r1, r2, r3, r4 = ce.all_residuals(psi, trace)
-        assert _obj_to_frac(rec["R1"]) == r1
-        assert _obj_to_frac(rec["R2"]) == r2
-        assert _obj_to_frac(rec["R3"]) == r3
-        assert _obj_to_frac(rec["R4"]) == r4
+# ─────────────────────────────────────────────────────── non-vacuity guards
+
+def test_the_fixtures_hold_the_expected_number_of_records() -> None:
+    """Exact counts, not ``>= 1``.
+
+    A fixture file truncated to one record would satisfy a ``>= 1`` check
+    and reduce the whole cross-check to a single input.
+    """
+    assert len(INPUTS) == 32, f"psi_inputs.json holds {len(INPUTS)} inputs"
+    assert len(SUTRA_RECORDS) == 32, \
+        f"sutra_outputs.json holds {len(SUTRA_RECORDS)} records"
+    assert len(RESIDUAL_RECORDS) == len(INPUTS) * 3, \
+        f"conservation_residuals.json holds {len(RESIDUAL_RECORDS)} records"
+
+
+def test_every_fixture_key_has_a_comparison() -> None:
+    """The fixture drives the comparison, not a hand-written list.
+
+    This is the check that would have caught S3, S17 and S23 being absent
+    from the old test: their reference values were present in every record
+    and nothing compared them.
+    """
+    keys = {k for rec in SUTRA_RECORDS for k in rec if k != "input"}
+    uncompared = sorted(keys - set(COMPARISONS))
+    assert not uncompared, (
+        f"the fixture carries reference values for {uncompared} and nothing "
+        f"compares them against the kernel")
+    unused = sorted(set(COMPARISONS) - keys)
+    assert not unused, (
+        f"comparisons declared for keys the fixture does not contain: {unused}")
+
+
+def test_the_comparison_set_covers_all_29_operators() -> None:
+    """S7 contributes two keys, so 29 operators give 30 comparison keys."""
+    covered = {k.split("_")[0] for k in COMPARISONS}
+    assert covered == {f"S{i}" for i in range(1, 30)}, \
+        f"operators with no fixture comparison: " \
+        f"{sorted({f'S{i}' for i in range(1, 30)} - covered)}"
+    assert len(COMPARISONS) == 30
+
+
+def test_psi_inputs_are_well_formed() -> None:
+    for i, psi in enumerate(INPUTS):
+        assert len(psi) == 16, f"input {i} has {len(psi)} components"
+        assert all(isinstance(x, Fraction) for x in psi), f"input {i}"
+    assert len(set(INPUTS)) == len(INPUTS), "psi_inputs.json contains duplicates"
+
+
+# ────────────────────────────────────────────────────── the cross-check
+
+RECORD_KEYS = [(i, k) for i in range(len(SUTRA_RECORDS))
+               for k in sorted(COMPARISONS)]
+
+
+@pytest.mark.parametrize("index,key", RECORD_KEYS,
+                         ids=[f"rec{i}:{k}" for i, k in RECORD_KEYS])
+def test_sutra_output_matches_kernel(index: int, key: str) -> None:
+    """One record, one operator, one assertion.
+
+    960 separate checks rather than one loop: a kernel change that breaks
+    three operators reports as three failures naming them, instead of
+    aborting at whichever came first.
+    """
+    rec = SUTRA_RECORDS[index]
+    psi = _objs_to_q16(rec["input"])
+    expected_raw = rec[key]
+    got = COMPARISONS[key](psi)
+    if isinstance(got, Fraction):
+        assert _obj_to_frac(expected_raw) == got, f"{key} on record {index}"
+    else:
+        expected = _objs_to_q16(expected_raw)
+        assert len(expected) == len(got), (
+            f"{key} on record {index}: fixture has {len(expected)} components, "
+            f"kernel returned {len(got)}")
+        assert expected == got, f"{key} on record {index}"
+
+
+@pytest.mark.parametrize("index", range(len(RESIDUAL_RECORDS)))
+def test_conservation_residuals_match_kernel(index: int) -> None:
+    rec = RESIDUAL_RECORDS[index]
+    psi = INPUTS[index // 3]
+    trace = _obj_to_frac(rec["trace_sum"])
+    r1, r2, r3, r4 = ce.all_residuals(psi, trace)
+    assert _obj_to_frac(rec["R1"]) == r1, f"R1 on record {index}"
+    assert _obj_to_frac(rec["R2"]) == r2, f"R2 on record {index}"
+    assert _obj_to_frac(rec["R3"]) == r3, f"R3 on record {index}"
+    assert _obj_to_frac(rec["R4"]) == r4, f"R4 on record {index}"

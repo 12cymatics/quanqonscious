@@ -118,7 +118,7 @@ def test_no_document_quotes_a_subset_accuracy():
                 # to let particular wording through.
                 if correct > total:
                     continue
-                offenders.append(f"{doc}:{i}: {m.group(0)}  in  {line.strip()[:70]}")
+                offenders.append(f"{doc}:{i}: {m.group(0)}  in  {line.strip()}")
     assert not offenders, (
         "a subset accuracy is quoted as a result:\n" + "\n".join(offenders)
         + "\n\nThese figures were withdrawn. Report the full-split numbers "
@@ -188,7 +188,7 @@ def test_no_document_states_a_benchmark_score_in_prose():
             claim = _score_claim(sentence)
             if claim:
                 flat = " ".join(sentence.split())
-                offenders.append(f"{doc}: ...{flat[:120]}...  [{claim}]")
+                offenders.append(f"{doc}: {flat}  [{claim}]")
     assert not offenders, (
         "a SCAN/COGS score is stated in prose:\n" + "\n".join(offenders)
         + "\n\nThese benchmarks are unmeasured for this package. Withdrawing "

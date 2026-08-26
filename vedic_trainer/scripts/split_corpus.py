@@ -79,7 +79,7 @@ def main() -> int:
     overlap = set(train_src) & set(eval_src)
     if overlap:
         raise SystemExit(f"BUG: {len(overlap)} sources on both sides: "
-                         f"{sorted(overlap)[:5]}")
+                         f"{sorted(overlap)}")
 
     for path, srcs in ((args.train, train_src), (args.eval, eval_src)):
         rows = [r for s in srcs for r in groups[s]]

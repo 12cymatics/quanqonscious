@@ -8,17 +8,33 @@ emitting a Lean 4 expression that asserts the corresponding identity.
 
 Each emitted statement has the shape
 
-    decide ((<lhs_rational>) = (<rhs_rational>))
+    decide ((<a_num> : Int) * (<b_den> : Int) = (<b_num> : Int) * (<a_den> : Int))
 
-where lhs/rhs are Lean ``Rat`` literals built from the integer numerator
-and denominator of the Python Fraction. The Lean compiler then has to
-agree that the rationals are equal — a bit-exact cross-check between
-two independent rational implementations (Python ``fractions`` and Lean
-``Rat``).
+which is exact rational equality written as integer cross-multiplication:
+for a = a_num/a_den and b = b_num/b_den, a = b iff a_num·b_den = b_num·a_den.
+Python's ``Fraction`` normalises to lowest terms with a positive
+denominator, so the equivalence needs no side conditions.
 
-If Lean 4 is not installed locally, ``build_lean_props`` still runs and
-produces the statement mapping; only ``Lean4Mirror.run_*`` calls require
-the binary.
+Why cross-multiplication rather than Lean ``Rat`` literals
+---------------------------------------------------------
+``Rat`` is not in core Lean 4 -- it needs Mathlib or a Std build carrying
+``Std.Internal.Rat``. Emitting ``Rat`` made every generated script
+unverifiable without Mathlib, and that single dependency produced two
+defects at once: the end-to-end mirror test was skipped wherever Mathlib
+was absent, and the "the rendered script compiles" test compiled a
+*doctored* script with the imports stripped and the body replaced by the
+literal ``true`` -- a body chosen because it needs nothing, which is why
+it passed while no real generated statement could compile at all.
+
+``Int`` is core. Cross-multiplication is the same assertion over the same
+integers, so nothing is weakened: the numerators and denominators appear
+as literals and Lean performs the multiplication and the comparison
+itself. What changes is that the emitted script now compiles under a bare
+Lean 4 toolchain, so the real statements can be verified rather than
+skipped or substituted.
+
+``build_lean_props`` runs without Lean installed and produces the
+statement mapping; only ``Lean4Mirror.run_*`` calls require the binary.
 """
 from __future__ import annotations
 
@@ -29,18 +45,46 @@ from vedic.kernel.q import Q16
 from vedic.kernel.z2_primitives import s1_eka_adhikena, s2_nikhilam, s4_paravartya, s5_shunyam_samya, s10_yavadunam_tavadunikrtya, s14_ekanyunena_purvena, s15_gunitasamucchaya_product, s16_gunaka_samucchaya, s25_vestana_circular, s29_mean_drive
 
 
-def _rat_literal(x: Fraction) -> str:
-    """Render a Python Fraction as a Lean 4 ``Rat`` literal."""
-    if x.denominator == 1:
-        return f"({x.numerator} : Rat)"
-    return f"((({x.numerator} : Rat)) / ({x.denominator} : Rat))"
+def _int_literal(n: int) -> str:
+    """Render a Python int as a core-Lean ``Int`` literal.
+
+    Negative values are parenthesised so ``-3 * 7`` cannot reassociate.
+    """
+    return f"({n} : Int)"
+
+
+def _exact_equality(a: Fraction, b: Fraction) -> str:
+    """Bool expression asserting a = b exactly, over core-Lean ``Int``.
+
+    a = b  <->  a.numerator * b.denominator = b.numerator * a.denominator.
+    ``Fraction`` guarantees lowest terms and a positive denominator, so no
+    sign or zero-denominator side condition is needed. Lean is given the four
+    integers and must do the multiplication and the comparison; nothing is
+    precomputed on the Python side.
+    """
+    if a.denominator <= 0 or b.denominator <= 0:
+        raise ValueError(
+            f"Fraction invariant violated: denominators must be positive, "
+            f"got {a} and {b}. Cross-multiplication would flip the "
+            f"inequality direction and silently change the assertion.")
+    lhs = f"{_int_literal(a.numerator)} * {_int_literal(b.denominator)}"
+    rhs = f"{_int_literal(b.numerator)} * {_int_literal(a.denominator)}"
+    return f"decide ({lhs} = {rhs})"
 
 
 def _q16_equality(lhs: Q16, rhs: Q16) -> str:
-    """Bool expression: every component of lhs equals every component of rhs."""
-    parts = []
-    for a, b in zip(lhs, rhs):
-        parts.append(f"decide ({_rat_literal(a)} = {_rat_literal(b)})")
+    """Bool expression: every component of lhs equals every component of rhs.
+
+    All sixteen components are emitted. There is no sampling and no early
+    exit: a conjunction over fewer than sixteen would assert less than
+    "these two vectors are equal".
+    """
+    if len(lhs) != 16 or len(rhs) != 16:
+        raise ValueError(
+            f"expected two length-16 vectors; got {len(lhs)} and {len(rhs)}")
+    parts = [_exact_equality(a, b) for a, b in zip(lhs, rhs)]
+    if len(parts) != 16:
+        raise AssertionError("emitted fewer than 16 component equalities")
     return " && ".join(parts)
 
 
@@ -49,7 +93,8 @@ def build_lean_props(psi: Q16) -> Dict[str, str]:
 
     Each value is a closed Bool-valued expression suitable as the
     ``sutraStatement`` body in ``Lean4Mirror``. The expressions are
-    self-contained — they don't import Mathlib or define functions.
+    self-contained: core-Lean ``Int`` arithmetic only, no imports and no
+    function definitions, so they compile under a bare toolchain.
 
     Coverage is PARTIAL and reported as such: 8 of the 30 catalogue
     identities are proved in Lean, 22 are declared unrenderable with a stated

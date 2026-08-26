@@ -1,13 +1,34 @@
 """Lean 4 mirror: render canonical algebraic identities as Bool props.
 
-If the ``lean`` binary is not available, the actual mirror is skipped —
-but ``build_lean_props`` is still tested because its output is just a
-string-mapping that should render deterministically without Lean.
+Nothing here is skipped and nothing is substituted. Every statement the
+renderer emits is compiled by the real ``lean`` binary, unmodified, through
+the same ``Lean4Mirror`` path production uses.
+
+What that replaced
+------------------
+Two tests used to stand in for this one, and neither could have failed:
+
+* the compile test **stripped** ``import Mathlib`` and
+  ``open scoped BigOperators`` from the rendered script and compiled a body
+  of the literal ``true`` -- a body chosen because it needs nothing. No real
+  generated statement was ever compiled by it; every one of them would have
+  failed, because ``Rat`` is not in core Lean.
+* the end-to-end test was **skipped** wherever Mathlib was absent, which is
+  everywhere this package runs.
+
+Underneath both sat a defect neither could reach: ``Lean4Mirror`` writes its
+scripts to a temp directory, and ``elan`` resolves a toolchain by walking up
+from the invocation directory, so every ``lean`` call returned "no default
+toolchain configured". The mirror could not verify anything at all, and the
+skip meant nobody found out.
+
+The renderer now emits core-Lean ``Int`` cross-multiplication -- the same
+exact rational equality, no library needed -- and the mirror writes the
+committed toolchain pin beside its scripts. So the real path runs, and these
+tests exercise it.
 """
 from __future__ import annotations
 
-import pathlib
-import shutil
 
 import pytest
 
@@ -33,63 +54,67 @@ def test_build_lean_props_renders_canonical_set() -> None:
             "S4 = I − S1",
             "S10 = (Ψ − 1)²",
         }
-        assert expected.issubset(props.keys()), (
-            f"missing identities for {name}: {expected - props.keys()}"
-        )
+        assert props.keys() == expected, (
+            f"renderer output for {name} is not the declared set: "
+            f"missing {expected - props.keys()}, unexpected {props.keys() - expected}")
         for key, body in props.items():
             assert isinstance(body, str)
-            assert "decide" in body
-            assert "Rat" in body
+            assert "decide" in body, f"{key} renders no decidable proposition"
+            assert "Int" in body, f"{key} renders no Int arithmetic"
+            assert "Rat" not in body, (
+                f"{key} renders a Rat literal. Rat is not in core Lean, so "
+                f"the emitted script needs Mathlib and cannot be verified by "
+                f"a bare toolchain -- which is what made the compile test "
+                f"strip its imports and the end-to-end test skip.")
 
 
-def test_lean_props_use_only_rat_literals() -> None:
-    """The rendered Bool body must not contain placeholder/un-resolved tokens."""
-    _, psi = next(iter(_enumerate_canonical_psi()))
-    props = build_lean_props(psi)
-    for body in props.values():
-        # No Python-side tokens leak in.
-        for bad in ("Fraction", "None", "lambda", "{", "}"):
-            assert bad not in body, f"unrendered token {bad!r} in:\n{body}"
+def test_every_rendered_body_asserts_all_sixteen_components() -> None:
+    """A conjunction over fewer than 16 asserts less than vector equality.
 
-
-
-def _lean_compiles(preamble: str) -> tuple[bool, str]:
-    """Can `lean` actually compile this preamble?
-
-    `shutil.which("lean") is None` was the whole condition. That gates on the
-    binary being on PATH, not on it working: an elan shim with no toolchain
-    passes it, so the guarded tests "ran" against a compiler that could not
-    compile anything. Ask the compiler instead of the filesystem.
-
-    Two capabilities are distinguished, because conflating them over-skips:
-    running Lean at all, and having Mathlib available.
+    Both rendering shapes compare two Q16 vectors, so each body must carry
+    exactly sixteen component comparisons. A renderer that emitted, say,
+    the first four would still read as a passing Lean proof.
     """
-    import subprocess
-    import tempfile
-    if shutil.which("lean") is None:
-        return False, "no lean binary on PATH"
-    probe = pathlib.Path(tempfile.mkdtemp()) / "Probe.lean"
-    probe.write_text(preamble + "#eval (1 : Nat) + 1\n")
-    try:
-        r = subprocess.run(["lean", str(probe)], capture_output=True,
-                           text=True, timeout=300)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return False, f"lean did not run: {e}"
-    if r.returncode != 0:
-        return False, f"lean cannot compile: {(r.stderr or r.stdout).strip()[:120]}"
-    return True, ""
+    for name, psi in _enumerate_canonical_psi():
+        for key, body in build_lean_props(psi).items():
+            assert body.count("decide") == 16, (
+                f"{name}/{key} compares {body.count('decide')} components, "
+                f"not 16")
 
 
-LEAN_OK, LEAN_WHY = _lean_compiles("")
-MATHLIB_OK, MATHLIB_WHY = _lean_compiles("import Mathlib\n")
+def test_rendered_bodies_carry_no_python_side_tokens() -> None:
+    """Every Ψ, not one: a leak could be input-dependent."""
+    for name, psi in _enumerate_canonical_psi():
+        for key, body in build_lean_props(psi).items():
+            for bad in ("Fraction", "None", "lambda", "{", "}", "Rat"):
+                assert bad not in body, \
+                    f"unrendered token {bad!r} in {name}/{key}:\n{body}"
 
 
-@pytest.mark.skipif(not LEAN_OK, reason=f"lean unusable: {LEAN_WHY}")
-def test_lean_session_resolves_path() -> None:
-    cfg = Lean4SessionConfig()
-    path = cfg.resolved_lean_path()
-    assert path
-    assert "lean" in path
+def test_cross_multiplication_is_exact_rational_equality() -> None:
+    """The rewrite's correctness, checked rather than asserted.
+
+    a/b = c/d iff a·d = c·b for positive b, d. This exercises the renderer's
+    own comparison on pairs that are equal, unequal, and equal-only-after-
+    reduction, so a renderer that emitted a always-true or always-false
+    comparison fails here.
+    """
+    from fractions import Fraction
+
+    from vedic.external.lean_props import _exact_equality
+
+    import re
+
+    def evaluates_true(expr: str) -> bool:
+        nums = [int(n) for n in re.findall(r"\(\s*(-?\d+)\s*: Int\)", expr)]
+        assert len(nums) == 4, f"expected four Int literals, got {nums}"
+        return nums[0] * nums[1] == nums[2] * nums[3]
+
+    assert evaluates_true(_exact_equality(Fraction(3, 6), Fraction(1, 2)))
+    assert evaluates_true(_exact_equality(Fraction(-2, 4), Fraction(-1, 2)))
+    assert not evaluates_true(_exact_equality(Fraction(1, 2), Fraction(1, 3)))
+    assert not evaluates_true(_exact_equality(Fraction(1, 2), Fraction(-1, 2)))
+
 
 
 def test_no_rendered_body_is_a_bare_boolean_literal() -> None:
@@ -209,45 +234,174 @@ def test_running_without_lean_still_raises():
         _shutil.which = real_which
 
 
-@pytest.mark.skipif(not LEAN_OK, reason=f"lean unusable: {LEAN_WHY}")
-def test_the_rendered_script_compiles():
-    """The generated code parses, checked by the real compiler.
+def test_lean_session_resolves_path() -> None:
+    """No skip guard. Lean is a declared requirement of this package.
 
-    Mathlib is not installed in every environment, so the two Mathlib-only
-    lines are stripped here; that isolates the *generated* code, which is
-    what this test is about.
+    The pin lives at the package root in ``lean-toolchain``; if the toolchain
+    is absent this must fail rather than report a skip, because a skipped
+    Lean check reads as "not applicable here" when it means "the one
+    independent cross-check of the kernel did not run".
+    """
+    cfg = Lean4SessionConfig()
+    path = cfg.resolved_lean_path()
+    assert path
+    assert "lean" in path
+
+
+def test_the_package_pins_a_lean_toolchain() -> None:
+    """The pin is what makes the generated scripts compile from any cwd."""
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    pin = Lean4Mirror.TOOLCHAIN_PIN
+    assert pin.is_file(), f"{pin} is missing"
+    text = pin.read_text(encoding="utf-8").strip()
+    assert text.startswith("leanprover/lean4:"), \
+        f"toolchain pin does not name a Lean 4 toolchain: {text!r}"
+
+
+def test_the_artifact_directory_carries_the_pin() -> None:
+    """elan resolves upward from the invocation directory.
+
+    Without this file beside the scripts, every ``lean`` call in a temp
+    directory fails with "no default toolchain configured" -- which is
+    exactly what the mirror did, undetected, for as long as the only test
+    that ran it was skipped.
+    """
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    m = Lean4Mirror()
+    written = m._artifact_root / "lean-toolchain"
+    assert written.is_file(), "artifact root has no toolchain pin"
+    assert written.read_text(encoding="utf-8").strip() == \
+        Lean4Mirror.TOOLCHAIN_PIN.read_text(encoding="utf-8").strip()
+
+
+def test_the_default_config_requests_no_imports() -> None:
+    """A Mathlib default makes the emitted script unverifiable everywhere
+    this package actually runs, and nothing in the emitted body used it."""
+    assert tuple(Lean4SessionConfig().imports) == ()
+    assert "BigOperators" not in Lean4SessionConfig().prelude
+
+
+def test_the_rendered_script_compiles_unmodified() -> None:
+    """The real rendered script, byte for byte, through the real compiler.
+
+    Nothing is stripped and no body is substituted. The previous version of
+    this test removed the two Mathlib lines and rendered the statement
+    ``"true"``; it passed for years while every genuine statement failed to
+    compile.
     """
     import subprocess
-    import tempfile
 
     from vedic.external.lean4_mirror import Lean4Mirror
 
-    body = Lean4Mirror()._render_script("S1test", "true")
-    stripped = "\n".join(
-        line for line in body.splitlines()
-        if line not in ("import Mathlib", "open scoped BigOperators"))
-    f = pathlib.Path(tempfile.mkdtemp()) / "M.lean"
-    f.write_text(stripped)
-    r = subprocess.run(["lean", str(f)], capture_output=True, text=True,
-                       timeout=300)
+    mirror = Lean4Mirror()
+    statement = "decide ((1 : Int) * (7 : Int) = (1 : Int) * (7 : Int))"
+    path = mirror._write_script("S1test", statement)
+    assert path.read_text(encoding="utf-8") == \
+        mirror._render_script("S1test", statement), \
+        "the compiled file is not what the renderer produced"
+    r = subprocess.run(["lean", path.name], cwd=str(path.parent),
+                       capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, \
-        f"generated Lean does not compile:\n{(r.stderr or r.stdout)[:600]}"
+        f"generated Lean does not compile:\n{r.stderr or r.stdout}"
     assert r.stdout.strip() == "true"
 
 
-@pytest.mark.skipif(not MATHLIB_OK, reason=f"Mathlib unavailable: {MATHLIB_WHY}")
-def test_mirror_run_serial_actually_verifies():
-    """End-to-end: render, compile, and read the verdict.
+def _all_generated_statements():
+    """(psi_label, identity_name, body) for every canonical Ψ. No sampling."""
+    out = []
+    for label, psi in _enumerate_canonical_psi():
+        for name, body in build_lean_props(psi).items():
+            out.append((label, name, body))
+    return out
 
-    `run_serial`, `run_concurrent` and `run_parallel` had no test at all. The
-    generated scripts `import Mathlib`, so this needs a Mathlib toolchain and
-    is skipped where there isn't one — with the reason established by asking
-    the compiler, not by looking for a file on PATH.
+
+GENERATED = _all_generated_statements()
+
+
+def test_there_are_generated_statements_to_compile() -> None:
+    """Guards the parametrised test below against an empty renderer."""
+    assert len(GENERATED) == 30, \
+        f"expected 3 canonical Ψ × 10 identities = 30, got {len(GENERATED)}"
+
+
+@pytest.mark.parametrize("label,name,body", GENERATED,
+                         ids=[f"{a}:{b}" for a, b, _ in GENERATED])
+def test_every_generated_statement_is_verified_by_lean(label, name, body):
+    """Each statement compiled and evaluated separately.
+
+    Parametrised rather than looped so one failing identity reports as one
+    failure and the other twenty-nine still run -- a loop stops at the first
+    and hides the rest.
     """
     from vedic.external.lean4_mirror import Lean4Mirror
 
-    results = Lean4Mirror().run_serial({"S1true": "true", "S1false": "false"})
+    results = Lean4Mirror().run_serial({name: body})
+    assert len(results) == 1
+    r = results[0]
+    assert r.success, (
+        f"{label}/{name} was not verified by Lean:\n"
+        f"stdout: {r.stdout}\nstderr: {r.stderr}")
+
+
+def test_mirror_run_serial_actually_verifies() -> None:
+    """End-to-end, unskipped: render, compile, read the verdict.
+
+    Includes a false statement, because a mirror that reports success for
+    everything would pass every test above.
+    """
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    results = Lean4Mirror().run_serial({
+        "S1true": "decide ((1 : Int) * (7 : Int) = (1 : Int) * (7 : Int))",
+        "S1false": "decide ((1 : Int) * (7 : Int) = (2 : Int) * (7 : Int))",
+    })
     by_name = {r.sutra: r for r in results}
     assert by_name["S1true"].success, by_name["S1true"]
     assert not by_name["S1false"].success, (
-        "a statement that is `false` must not be reported as verified")
+        "a statement that is false must not be reported as verified")
+
+
+def _corrupt_one_component(body: str) -> str:
+    """Return `body` with exactly one component comparison made false.
+
+    Rewrites the right-hand side of the first ``decide`` so the comparison is
+    arithmetically false, and verifies that in Python before returning, so a
+    corruption that happened to stay true can never be handed to Lean as if
+    it were a real falsification.
+    """
+    import re
+
+    m = re.search(r"decide \(\((-?\d+) : Int\) \* \((-?\d+) : Int\) = "
+                  r"\((-?\d+) : Int\) \* \((-?\d+) : Int\)\)", body)
+    if m is None:
+        raise AssertionError(f"no component comparison found in:\n{body}")
+    a, b, c, d = (int(g) for g in m.groups())
+    assert a * b == c * d, "the identity was already false before corruption"
+    c_bad = c + 1
+    assert a * b != c_bad * d, "corruption did not change the truth value"
+    corrupted = (f"decide (({a} : Int) * ({b} : Int) = "
+                 f"({c_bad} : Int) * ({d} : Int))")
+    out = body[:m.start()] + corrupted + body[m.end():]
+    assert out != body
+    return out
+
+
+@pytest.mark.parametrize("label,name,body", GENERATED,
+                         ids=[f"{a}:{b}" for a, b, _ in GENERATED])
+def test_lean_rejects_a_corrupted_form_of_every_identity(label, name, body):
+    """Falsification on real content, for all thirty statements.
+
+    Every statement above is one Lean accepts. Without this, a mirror that
+    reported success unconditionally -- or a renderer emitting comparisons
+    that are true by construction regardless of the kernel -- would pass the
+    whole file. One component of each identity is made arithmetically false
+    and Lean must refuse it.
+    """
+    from vedic.external.lean4_mirror import Lean4Mirror
+
+    r = Lean4Mirror().run_serial({name: _corrupt_one_component(body)})[0]
+    assert not r.success, (
+        f"Lean accepted a corrupted form of {label}/{name} — the mirror "
+        f"cannot distinguish a true identity from a false one")

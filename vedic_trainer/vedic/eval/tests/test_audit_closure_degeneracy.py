@@ -45,7 +45,11 @@ def test_audit_closure_is_index_dependent_only():
 def test_only_r1_is_ever_nonzero():
     """R2/R3/R4 are identities; only R1 can move."""
     nonzero = {"R1": 0, "R2": 0, "R3": 0, "R4": 0}
-    for i, text in enumerate(ENGLISH[:200]):
+    # Both corpora in full. The claim is that only R1 can ever move; a
+    # slice tests it on the first 200 English strings and says nothing about
+    # the rest or about the noise corpus, which is where a text-dependent
+    # residual would most plausibly show up.
+    for i, text in enumerate(ENGLISH + NOISE):
         for key, val in zip(nonzero, audit_psi(encode_text_to_psi(text),
                                                Fraction(i)).residuals):
             if val != 0:

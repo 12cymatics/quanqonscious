@@ -52,9 +52,13 @@ def test_torch_residuals_match_exact_within_tolerance(seed: int):
 def test_the_exact_residuals_really_are_identities():
     """Guards the test above: if R2..R4 were not identically zero over ℚ,
     matching them within a tolerance would be a much weaker statement."""
-    for seed in SEEDS[:20]:
+    # All 100 seeds, the same set the tolerance test above uses. Checking a
+    # fifth of them made this guard weaker than the thing it guards: a seed
+    # where R2..R4 were not identically zero would sit in the untested 80 and
+    # the tolerance comparison above would still pass on it.
+    for seed in SEEDS:
         _, r2, r3, r4 = all_residuals(_psi(seed), Fraction(0))
-        assert (r2, r3, r4) == (0, 0, 0)
+        assert (r2, r3, r4) == (0, 0, 0), f"seed {seed}: R2..R4 not identically zero"
 
 
 @pytest.mark.parametrize("trace", [0, 1, 434, 435, 436, 870])

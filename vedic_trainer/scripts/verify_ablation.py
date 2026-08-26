@@ -515,12 +515,13 @@ def check(text: str, sets: dict[str, Measured]) -> list[str]:
     unchecked = sorted(
         {k for k in _numeric_cells(text)
          if k not in verified and k[0] not in UNVERIFIED})
-    for section, label, col in unchecked[:12]:
+    # Every unchecked cell, not the first twelve. A gate that reports "and 47
+    # more" makes the reader decide how much of its own output to trust, and
+    # the cell it elides is the one nobody fixes.
+    for section, label, col in unchecked:
         problems.append(
             f"{section} row {label!r} column {col} holds a number this gate "
             f"neither verified nor declares unverifiable")
-    if len(unchecked) > 12:
-        problems.append(f"...and {len(unchecked) - 12} more unchecked cells")
     return problems
 
 
