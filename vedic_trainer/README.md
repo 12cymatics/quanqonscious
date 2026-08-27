@@ -69,7 +69,7 @@ text.
 | External sidecar | yes         | 181 tests              |
 | Script validity  | yes         | 40 tests               |
 | Withdrawn numbers | yes        | 26 tests               |
-| Documented paths | yes         | 79 tests               |
+| Documented paths | yes         | 77 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
@@ -88,14 +88,14 @@ were previously wrong: they had been read off wrapped `pytest -q` dots, and
 that gate on every push — it cannot run inside the suite, because it runs
 pytest and a test calling it would recurse.
 
-**Documented paths** doubled (39 → 79) when the gate stopped reading a
+**Documented paths** doubled (39 → 77) when the gate stopped reading a
 hand-written list of two documents and started reading every Markdown file
 git tracks. Everything under `docs/` had been outside it for the life of the
 project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2473 tests are collected and 2473 pass. **Nothing is skipped**, here or in
+2471 tests are collected and 2471 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is

@@ -269,7 +269,7 @@ point = lattice.point(100, 200, 300)  # Auto-wraps to grid size
    - Visualization separate from computation
 
 2. **Module Naming Conventions**
-   - Core modules: `lowercase.py` (e.g., `state.py`, `lattice.py`)
+   - Core modules: lowercase filenames (e.g., `state.py`, `lattice.py`)
    - Sutra modules: `*sutraws.py` or `*sutraaws.py` suffix
    - Runners: `run_*.py` prefix
    - Engines: `*_engine.py` suffix
@@ -1056,6 +1056,11 @@ if torch.cuda.is_available():
 ```bash
 # Test invariants
 python tests/test_invariants.py
+
+# Every file path named in this repository's documentation must resolve.
+# Runs standalone or under pytest; bare `pytest` at the root picks it up,
+# which is how python-app.yml runs it on main.
+python tests/test_documented_paths.py
 
 # Run minimal simulation
 python -c "from pcfe_final_integration import quick_test_run; quick_test_run()"

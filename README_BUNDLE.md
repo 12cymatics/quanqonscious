@@ -2,14 +2,29 @@
 
 Created: 2026-05-22, Australia/Brisbane.
 
-This bundle collects the local work artifacts from the Vedic/sutra simulator review and the LLM sutra-trace fine-tuning experiment.
+This bundle collects the local work artifacts from the Vedic/sutra simulator
+review and the LLM sutra-trace fine-tuning experiment.
+
+> **None of what this document describes is in this repository.**
+> `llm_sutra_reasoning_experiment/`, `source_artifacts/`,
+> `remote_checkpoints/`, `requirements-local-mac.txt`,
+> `requirements-train.txt` and `scripts/run_gpu_qlora.sh` are all part of a
+> separate local bundle. Every path below and every command in the two
+> "Recreate" sections is written for that bundle's working directory, not for
+> a clone of this repository — running them here will not work.
+>
+> The figures below (39,000 rows, 30,000 training rows, 5,000 held-out rows
+> at 100% accuracy, checkpoints through step 10 of 938) are therefore
+> **unverifiable from this repository**. They are recorded as what the bundle
+> reported, not as a result this repository can reproduce or falsify. Nothing
+> here should be quoted as a result of this project.
 
 ## Contents
 
 - `llm_sutra_reasoning_experiment/`
   - Dataset/oracle source code.
   - Training and inference scripts.
-  - Local smoke tests.
+  - Local tests.
   - Full 39k generated reasoning dataset.
   - SFT formatted train/val/test/OOD files for trace, answer-only, and shuffled-trace variants.
   - Reports and status pages.

@@ -57,7 +57,7 @@ Execution record fields:
 
 
 ## Signature Vault Index Contract
-When persisted with the platform vault writer, each bundle emits an `index.jsonl` entry containing:
+When persisted with the platform vault writer, each bundle emits an index.jsonl entry (a generated artifact, not a tracked file) containing:
 - `bundle_id` (sha256 of canonicalized payload),
 - `run_label`,
 - `benchmark_protocol_version`,

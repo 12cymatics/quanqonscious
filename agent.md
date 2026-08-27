@@ -32,49 +32,59 @@ The agent must output **production‑ready code and mathematically rigorous proo
 
 1. **No Simplifications** — Every derivation must be complete; include *all* intermediary algebraic steps.  
 2. **Executable Artefacts** — All source files, notebooks, and CI scripts must run **headless** on an A100 80 GB node (`ubuntu‑22.04`, CUDA 12.5).  
-3. **Cross‑Language Parity** — Maintain feature‑equivalent modules in **Python 3.12**, **Julia 1.11**, and **Verilog/SystemVerilog** where applicable.  
+3. **Cross‑Language Parity** *(target, not current state)* — feature‑equivalent modules in **Python 3.12**, **Julia 1.11** and **Verilog/SystemVerilog** where applicable. There is no Julia or Verilog in the repository today; `src/julia/` and `src/verilog/` hold one `.gitkeep` each. See §4.
 4. **Memory Integrity** — Persist new formulas, kernels, or benchmarks to project memory; skip obsolete data.  
 5. **Ethical Containment** — Embed runtime checks for hazardous output (e.g., weaponisable electromagnetic blueprints).  
 6. **Investor‑Grade Documentation** — Every commit must include an `.adoc` or `.md` explainer with figs/benchmarks.  
-1. **No Simplifications** — Every derivation must be complete; include *all* intermediary algebraic steps.
-2. **Executable Artefacts** — All source files, notebooks, and CI scripts must run **headless** on an A100 80 GB node (`ubuntu‑22.04`, CUDA 12.5).
-3. **Cross‑Language Parity** — Maintain feature‑equivalent modules in **Python 3.12**, **Julia 1.11**, and **Verilog/SystemVerilog** where applicable.
-4. **Memory Integrity** — Persist new formulas, kernels, or benchmarks to project memory; skip obsolete data.
-5. **Ethical Containment** — Embed runtime checks for hazardous output (e.g., weaponisable electromagnetic blueprints).
-6. **Investor‑Grade Documentation** — Every commit must include an `.adoc` or `.md` explainer with figs/benchmarks.
 
 ---
 
-## 4 Repository Layout (standardised)
+## 4 Repository Layout — aspirational, and **not** what this repository is
+
+**`CLAUDE.md` is the authority on the actual layout.** Read it, not this
+section. What follows is a target that was never built, kept because the gap
+is worth seeing rather than quietly deleting.
 
 ```text
 /
 ├─ agent.md                   ← **THIS SPEC**
 ├─ docs/
-│   ├─ grvq_whitepaper.adoc
-│   ├─ mstvq_tensor_proofs.adoc
-│   └─ hypercube_methods.adoc
+│   ├─ grvq_whitepaper.adoc          (does not exist)
+│   ├─ mstvq_tensor_proofs.adoc      (does not exist)
+│   └─ hypercube_methods.adoc        (does not exist)
 ├─ src/
-│   ├─ python/
-│   │   ├─ grvq/
-│   │   ├─ mstvq/
-│   │   └─ vedic_math/
-│   ├─ julia/
-│   └─ verilog/
+│   ├─ python/{grvq, mstvq, vedic_math}   (empty)
+│   ├─ julia/                              (empty)
+│   └─ verilog/                            (empty)
 ├─ notebooks/
-│   ├─ water_dimer_vqe.ipynb
-│   └─ 4d_cymatic_simulation.ipynb
-├─ tests/
-│   ├─ pytest/
-│   └─ runtests.jl
-└─ ci/
-    ├─ .github/workflows/
-    └─ scripts/
+│   ├─ water_dimer_vqe.ipynb         (does not exist)
+│   └─ 4d_cymatic_simulation.ipynb   (does not exist)
+├─ tests/pytest/                     (empty)
+└─ ci/                               (empty)
 ```
 
-*Directories listed above **must exist**; the agent auto‑creates missing paths.*
+This section used to present that tree as "standardised" and close with
+*"Directories listed above must exist; the agent auto-creates missing
+paths."*
 
----
+**That directive ran, and this is what it produced.** Eight directories whose
+entire tracked contents are a `.gitkeep` file — `src/python/grvq/.gitkeep`,
+`src/python/mstvq/.gitkeep`, `src/python/vedic_math/.gitkeep`,
+`src/julia/.gitkeep`, `src/verilog/.gitkeep`, `tests/pytest/.gitkeep`,
+`ci/.gitkeep` and `ci/.github/workflows/.gitkeep`. Not one line of Julia,
+Verilog or CI code was ever written into them: `git ls-files '*.jl' '*.v'
+'*.sv'` returns nothing.
+
+That is the failure mode this section is now a record of. A wish written in
+the voice of accomplished fact, plus an instruction to make the filesystem
+agree with it, does not produce the thing. It produces empty directories that
+make the wish *look* satisfied and leave a reader unable to tell the built
+parts from the intended ones — which is worse than the gap it was covering,
+because the gap was at least visible.
+
+The real code is in `core/`, `pcfe-v3/`, `vedic_trainer/` and the root-level
+modules.
+
 
 ## 5 Coding Standards
 
@@ -85,12 +95,6 @@ The agent must output **production‑ready code and mathematically rigorous proo
 
 ### 5.2 Julia
 * Follow `BlueStyle`; unit tests in `test/runtests.jl`; ensure `Pkg.test()` clean.  
-* Use `ruff` style “strict” profile; auto‑fix on commit.
-* Type‑annotate **all** functions (`mypy --strict`).
-* Parallelism via `ray` or `mpi4py`; never use `multiprocessing.Pool` directly (avoids fork issues on CUDA nodes).
-
-### 5.2 Julia
-* Follow `BlueStyle`; unit tests in `test/runtests.jl`; ensure `Pkg.test()` clean.
 * No *eval‑generated* code; explicit macros only.
 
 ### 5.3 Verilog/SystemVerilog
@@ -135,10 +139,8 @@ REQUIREMENTS:
 
 ## 7 Continuous Integration
 
-* **GitHub Actions** workflow `ci/linux_gpu.yml` provisions `lamini/ubuntu‑cuda‑12_5‑a100`.  
+* *(target, not current state)* A GitHub Actions workflow at `ci/linux_gpu.yml` provisioning `lamini/ubuntu‑cuda‑12_5‑a100`. It does not exist; `ci/` holds only `.gitkeep` files. The workflows this repository actually runs are `.github/workflows/python-app.yml` and `.github/workflows/submit-pypi.yml`.
 * Jobs: `lint`, `unit‑python`, `unit‑julia`, `fpga‑synth`, `lean‑proof‑check`, `benchmark`.  
-* **GitHub Actions** workflow `ci/linux_gpu.yml` provisions `lamini/ubuntu‑cuda‑12_5‑a100`.
-* Jobs: `lint`, `unit‑python`, `unit‑julia`, `fpga‑synth`, `lean‑proof‑check`, `benchmark`.
 * Artifacts: HTML coverage, `docs/_build`, binary `.pt` / `.jld2` model checkpoints.
 
 ---
@@ -147,8 +149,6 @@ REQUIREMENTS:
 
 * Automated SPDX license headers (`Apache‑2.0`) inserted on save.  
 * SBOM generated via `cyclonedx‑python` & `cyclonedx‑julia`.  
-* Automated SPDX license headers (`Apache‑2.0`) inserted on save.
-* SBOM generated via `cyclonedx‑python` & `cyclonedx‑julia`.
 * Release signing (`cosign`) w/ Sigstore Fulcio.
 
 ---
@@ -171,10 +171,6 @@ Refer to `docs/vedic_sutras.pdf` for the full sutra definitions.
   \(Q_d(\chi)=\bigotimes_{i=1}^d \begin{bmatrix}0 & 1\\ 1 & 0\end{bmatrix}^\chi\)
 
 * **\(P_d(\chi)\)** — Adjacency fusion operator:  
-* **\(Q_d(\chi)\)** — Kronecker fabric tensor:
-  \(Q_d(\chi)=\bigotimes_{i=1}^d \begin{bmatrix}0 & 1\\ 1 & 0\end{bmatrix}^\chi\)
-
-* **\(P_d(\chi)\)** — Adjacency fusion operator:
   \(P_d(\chi)=\sum_{k=0}^{d-1} \sigma_x^{\otimes k}\otimes\sigma_z\otimes\sigma_x^{\otimes (d-k-1)}\)
 
 ---
@@ -197,12 +193,6 @@ computed exactly with integer Ekādhikena coefficients and Lucas weighting:
 
 2. **Main‑sutra evaluations** at \(z=1\):  
    Using \(S_k(1)=\sum_{i=0}^{d_k}(-1)^{ik}\binom{k+d_k}{i}\) with \(d_k=(k\bmod4)+2\).  
-1. **Lucas weights**
-   \(L_{1..8}=(2,1,3,4,7,11,18,29)\), \(\sum L_k=75\),
-   \(\alpha_k=L_k/75\).
-
-2. **Main‑sutra evaluations** at \(z=1\):
-   Using \(S_k(1)=\sum_{i=0}^{d_k}(-1)^{ik}\binom{k+d_k}{i}\) with \(d_k=(k\bmod4)+2\).
 
 3. **Compute the palindromic sum**:
 

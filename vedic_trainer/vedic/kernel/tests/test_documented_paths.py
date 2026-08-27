@@ -105,6 +105,11 @@ REMOVED = {
     # and it survived in three documents because DOCS listed two.
     "vedic/kernel/sutras_exact.py",
     "sutras_exact.py",
+    # Deleted with the submit-pypi-override mechanism. docs/CI_AUTOMATION.md
+    # names it in the section recording why that machinery existed and why
+    # it is gone — a shadow status is worth explaining once rather than
+    # rediscovering.
+    "external-submit-pypi-watchdog.yml",
 }
 
 _PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|json|yaml|yml|"

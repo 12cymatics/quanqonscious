@@ -1,104 +1,59 @@
-# CI automation: handling the external `submit-pypi` check
+# CI
 
-## Background
+One workflow gates this package: `.github/workflows/submit-pypi.yml`.
 
-PR #90 was blocked (informationally — it was not a required-status-check
-in branch protection) by an opaque `submit-pypi` check that failed in
-~17 seconds on every commit. That PR is long closed; this section is kept
-as the reason the automation below exists, in the past tense it belongs in.
-The check was **not produced by any workflow file in this repository**
-(verified across all 30 remote branches at the time): the only workflows here are `python-app.yml`,
-`submit-pypi.yml` (ours), and `external-submit-pypi-watchdog.yml`
-(ours). The external `submit-pypi` therefore comes from one of:
+## What it runs
 
-- an **organization-level reusable workflow** living in
-  `12cymatics/.github`,
-- a **GitHub Marketplace App** installed at the repo or org level,
-- a **status reporter** posting via webhook to the Commit Status API.
+1. **Installs Lean 4** at the version pinned by `vedic_trainer/lean-toolchain`,
+   and verifies `lean --version` matches that pin. Lean is a hard requirement
+   of the suite, not an optional extra: the Lean mirror is the one independent
+   cross-check of the exact-ℚ kernel, and its tests used to carry `skipif`
+   guards that turned "the compiler is absent" into a green run — so the
+   mirror sat broken, unable to resolve a toolchain at all, without anyone
+   noticing.
+2. **Builds** the `vedic_trainer` sdist + wheel.
+3. **Bit-exact ℚ gate** — `scripts/verify_bit_exact.py`. Refuses to run at all
+   against a missing reference rather than rebuilding one from the code under
+   test.
+4. **Full test suite** — `pytest -q`.
+5. **README count gate** — `scripts/verify_counts.py --check`. This cannot
+   live inside the suite: `verify_counts.py` runs pytest, so a test calling it
+   would recurse. The suite exercises its judgment in isolation, and this step
+   is the only place that judgment meets the real README. Its first run caught
+   a defect in the gate itself.
+6. **PyPI upload**, on tag pushes only (`refs/tags/v*`), when `PYPI_API_TOKEN`
+   is configured.
 
-The MCP scope of the agent that built this is restricted to
-`12cymatics/quanqonscious` so the agent cannot inspect or modify the
-external workflow directly.
+If a step is added to the workflow and not to this list, the list is wrong and
+nothing here will say so. Read the workflow when the two disagree.
 
-## Automation in this repo
+`.github/workflows/python-app.yml` also exists. It targets the **parent**
+repository, not this package: `main` only, CUDA + CuPy, and a bare `pytest` at
+the repository root.
 
-Two workflows handle this from inside the repo:
+## The `submit-pypi-override` status, and why it is gone
 
-### `submit-pypi.yml`
+An opaque `submit-pypi` check, produced by no workflow in this repository,
+used to fail on every commit and block PRs informationally. Two pieces of
+machinery grew around it: a `submit-pypi-override` Commit Status posted by our
+own workflow, and an `external-submit-pypi-watchdog.yml` that watched for the
+external check's failure, mirrored our internal result into that status, and
+left one explanatory comment per PR.
 
-Our authoritative `submit-pypi` job:
+Both are **deleted**. What replaced them is nothing: the repo-internal
+`submit-pypi` job is the gate, and it reports as itself.
 
-1. Installs Lean 4 at the version pinned by `vedic_trainer/lean-toolchain`,
-   and verifies `lean --version` matches that pin. Lean is a hard
-   requirement of the suite, not an optional extra: the Lean mirror is the
-   one independent cross-check of the exact-ℚ kernel, and its tests used to
-   carry `skipif` guards that turned "the compiler is absent" into a green
-   run — so the mirror sat broken without anyone noticing.
-2. Builds the `vedic_trainer` sdist + wheel.
-3. Runs the bit-exact ℚ gate (`scripts/verify_bit_exact.py`).
-4. Runs the full test suite (`pytest -q`).
-5. Runs the README count gate (`scripts/verify_counts.py --check`). This
-   cannot live inside the suite — `verify_counts.py` runs pytest, so a test
-   calling it would recurse — so the suite exercises its judgment in
-   isolation and this step is the only place the judgment meets the real
-   README. Its first run caught a defect in the gate itself.
-6. On tag pushes only (`refs/tags/v*`): uploads to PyPI when
-   `PYPI_API_TOKEN` is configured; otherwise no-op skip.
-7. On success: posts a Commit Status named `submit-pypi-override`
-   marked `success` with a link to the workflow run.
+The removal is worth a note because a shadow status is a genuinely bad thing
+to leave lying around. It is a second name for a verdict, posted by a
+different job, on the same commit — so a reader has two greens and no way to
+tell which one the branch actually requires, and any drift between them is
+invisible. The watchdog had already been caught posting green while the
+repo-internal gate had failed, and was patched to mirror it. A mechanism that
+needs that patch is a mechanism whose default is to lie.
 
-If a step is added to `.github/workflows/submit-pypi.yml` and not to this
-list, the list is wrong and nothing here will say so. Read the workflow when
-the two disagree.
-
-### `external-submit-pypi-watchdog.yml`
-
-Listens for `check_run.completed` events. When the completed check is
-named `submit-pypi`, has conclusion `failure`, and was produced by an
-app other than GitHub Actions (i.e. the opaque external one):
-
-1. Posts a green `submit-pypi-override` Commit Status on the same SHA.
-2. Finds the associated open PR.
-3. Drops a single explanatory comment on that PR (idempotent — a
-   `<!-- submit-pypi-watchdog -->` marker prevents duplicates).
-
-## How to make the PR fully green
-
-Pick one:
-
-- **Configure branch protection** to require `submit-pypi-override`
-  instead of `submit-pypi`. The override is posted on every successful
-  run of our `submit-pypi.yml`, so it is always green when the
-  vedic_trainer build/test/gate pass.
-- **Disable the external integration** that produces the failing
-  `submit-pypi` check. This happens at one of:
-  - `12cymatics/.github` repository workflow file (delete or scope it),
-  - Org settings → Actions → Required workflows,
-  - Repo settings → Webhooks (if it's a status-API webhook),
-  - Marketplace app uninstall.
-- **Add a same-name workflow on the default branch.** GitHub does not
-  shadow external checks by name from the same repo, so this only
-  helps if combined with the branch-protection change above.
-
-## Verifying the override
-
-After pushing to any branch:
-
-```bash
-gh api repos/12cymatics/quanqonscious/commits/$(git rev-parse HEAD)/statuses \
-    --jq '.[] | "\(.context): \(.state)"'
-```
-
-You should see `submit-pypi-override: success` once our workflow has
-finished.
-
-## Cleanup
-
-If/when the external `submit-pypi` source is removed, delete:
-
-- `.github/workflows/external-submit-pypi-watchdog.yml`
-- the `Post submit-pypi-override Commit Status` step from
-  `.github/workflows/submit-pypi.yml`.
-
-This keeps the `submit-pypi` check from our own workflow as the
-canonical gate.
+**One thing to check if PRs start hanging.** If branch protection was ever
+configured to *require* the `submit-pypi-override` status, nothing posts it
+any more, so it will sit pending forever and no PR will merge. Point branch
+protection at this repository's own `submit-pypi` check instead. That is the
+only foreseeable consequence of this deletion, and it is a settings change,
+not a code one.
