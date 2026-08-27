@@ -60,20 +60,20 @@ text.
 
 | Layer            | Implemented | Tested locally         |
 | ---------------- | ----------- | ---------------------- |
-| Kernel (ℚ)       | yes         | 1284 tests             |
+| Kernel (ℚ)       | yes         | 1285 tests             |
 | Operands         | yes         | 169 tests              |
 | Composition      | yes         | 37 tests               |
 | Canonical 29     | yes         | 435 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 180 tests              |
+| External sidecar | yes         | 181 tests              |
 | Script validity  | yes         | 40 tests               |
 | Withdrawn numbers | yes        | 26 tests               |
-| Documented paths | yes         | 39 tests               |
+| Documented paths | yes         | 79 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
-| Gates reject     | yes         | 37 tests               |
+| Gates reject     | yes         | 43 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
 | Auxiliary losses | yes         | 15 tests               |
 | Memory           | yes         | covered by trainer     |
@@ -84,9 +84,18 @@ text.
 Counts above are not hand-maintained. `scripts/verify_counts.py --check`
 measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
-`-q` prints no summary line, so the real figure was never on screen.
+`-q` prints no summary line, so the real figure was never on screen. CI runs
+that gate on every push — it cannot run inside the suite, because it runs
+pytest and a test calling it would recurse.
 
-2425 tests are collected and 2425 pass. **Nothing is skipped**, here or in
+**Documented paths** doubled (39 → 79) when the gate stopped reading a
+hand-written list of two documents and started reading every Markdown file
+git tracks. Everything under `docs/` had been outside it for the life of the
+project, and three of those documents were still pointing at
+`vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
+own docstring as the defect it was built to stop.
+
+2473 tests are collected and 2473 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is

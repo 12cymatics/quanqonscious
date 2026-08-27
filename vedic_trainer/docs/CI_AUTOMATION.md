@@ -2,11 +2,12 @@
 
 ## Background
 
-PR #90 is blocked (informationally — it is not a required-status-check
-in branch protection) by an opaque `submit-pypi` check that fails in
-~17 seconds on every commit. The check is **not produced by any
-workflow file in this repository** (verified across all 30 remote
-branches): the only workflows here are `python-app.yml`,
+PR #90 was blocked (informationally — it was not a required-status-check
+in branch protection) by an opaque `submit-pypi` check that failed in
+~17 seconds on every commit. That PR is long closed; this section is kept
+as the reason the automation below exists, in the past tense it belongs in.
+The check was **not produced by any workflow file in this repository**
+(verified across all 30 remote branches at the time): the only workflows here are `python-app.yml`,
 `submit-pypi.yml` (ours), and `external-submit-pypi-watchdog.yml`
 (ours). The external `submit-pypi` therefore comes from one of:
 
@@ -27,13 +28,28 @@ Two workflows handle this from inside the repo:
 
 Our authoritative `submit-pypi` job:
 
-1. Builds the `vedic_trainer` sdist + wheel.
-2. Runs the bit-exact ℚ gate (`scripts/verify_bit_exact.py`).
-3. Runs the full test suite (`pytest -q`).
-4. On tag pushes only (`refs/tags/v*`): uploads to PyPI when
+1. Installs Lean 4 at the version pinned by `vedic_trainer/lean-toolchain`,
+   and verifies `lean --version` matches that pin. Lean is a hard
+   requirement of the suite, not an optional extra: the Lean mirror is the
+   one independent cross-check of the exact-ℚ kernel, and its tests used to
+   carry `skipif` guards that turned "the compiler is absent" into a green
+   run — so the mirror sat broken without anyone noticing.
+2. Builds the `vedic_trainer` sdist + wheel.
+3. Runs the bit-exact ℚ gate (`scripts/verify_bit_exact.py`).
+4. Runs the full test suite (`pytest -q`).
+5. Runs the README count gate (`scripts/verify_counts.py --check`). This
+   cannot live inside the suite — `verify_counts.py` runs pytest, so a test
+   calling it would recurse — so the suite exercises its judgment in
+   isolation and this step is the only place the judgment meets the real
+   README. Its first run caught a defect in the gate itself.
+6. On tag pushes only (`refs/tags/v*`): uploads to PyPI when
    `PYPI_API_TOKEN` is configured; otherwise no-op skip.
-5. On success: posts a Commit Status named `submit-pypi-override`
+7. On success: posts a Commit Status named `submit-pypi-override`
    marked `success` with a link to the workflow run.
+
+If a step is added to `.github/workflows/submit-pypi.yml` and not to this
+list, the list is wrong and nothing here will say so. Read the workflow when
+the two disagree.
 
 ### `external-submit-pypi-watchdog.yml`
 

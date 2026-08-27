@@ -240,3 +240,44 @@ def test_the_identities_are_falsifiable(monkeypatch, operator: str) -> None:
         f"none of the {len(CORRUPTIONS)} corruptions of {operator} broke any "
         f"identity on any of the {len(PAIRS)} pairs — no identity in the "
         f"matrix actually constrains it")
+
+
+# ---------------------------------------------------------- documented size
+
+def test_the_registry_is_the_documented_size() -> None:
+    """`docs/SUTRA_CATALOGUE.md` states this count; nothing checked it.
+
+    Why this exists
+    ---------------
+    That document sat outside every gate for the life of the project — the
+    path gate's `DOCS` was a two-element list naming only README.md and
+    ABLATION_RESULTS.md — so its claims were written once and never compared
+    to anything. Several were wrong when finally checked: it named a module
+    that had been renamed away, and said this test ran on "50 randomized
+    (Ψ, Φ) pairs" long after the randomness was removed.
+
+    A count in prose that nothing recomputes is the same defect the README's
+    test-count table had before `scripts/verify_counts.py` existed. This is
+    that fix, scoped to the one number: the document and the registry are
+    compared, so they cannot drift apart silently.
+    """
+    import re
+    import subprocess
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[3]
+    doc = repo / "docs" / "SUTRA_CATALOGUE.md"
+    tracked = subprocess.run(["git", "-C", str(repo), "ls-files", "docs/SUTRA_CATALOGUE.md"],
+                             capture_output=True, text=True, check=True).stdout.split()
+    assert tracked, "docs/SUTRA_CATALOGUE.md is untracked; a reader would not get it"
+
+    text = doc.read_text(encoding="utf-8")
+    m = re.search(r"exposes (\d+) closed-form identities", text)
+    assert m, ("SUTRA_CATALOGUE.md no longer states the identity count in the "
+               "form this test reads. Restore the sentence or update the "
+               "pattern — silently matching nothing is how the count drifted "
+               "in the first place.")
+    claimed = int(m.group(1))
+    assert claimed == len(INTERACTIONS), (
+        f"SUTRA_CATALOGUE.md says {claimed} closed-form identities; "
+        f"INTERACTIONS holds {len(INTERACTIONS)}")

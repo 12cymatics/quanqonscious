@@ -231,19 +231,59 @@ DP = _load("vedic/kernel/tests/test_documented_paths.py")
 SV = _load("vedic/kernel/tests/test_scripts_are_valid.py")
 
 
-def test_path_gate_accepts_paths_that_exist():
-    assert DP.missing({"README.md"}, DP.TRACKED, set()) == []
+def test_path_gate_accepts_a_path_that_exists():
+    assert DP.is_live("README.md", "README.md")
 
 
 def test_path_gate_rejects_a_renamed_module_still_cited():
-    assert DP.missing({"vedic/kernel/sutras_exact.py"}, DP.TRACKED, set()) == \
-        ["vedic/kernel/sutras_exact.py"]
+    """The defect the whole file exists for: a pointer left behind by a rename."""
+    assert not DP.resolves("vedic/kernel/sutras_never_existed.py", "README.md")
+
+
+def test_path_gate_resolves_a_bare_filename_in_prose():
+    """Documents write `losses.py`, not the full path, and that is a live
+    pointer exactly when one tracked file carries the name."""
+    assert DP.resolves("losses.py", "docs/ARCHITECTURE.md")
+    assert not DP.resolves("definitely_not_a_file_here.py", "docs/ARCHITECTURE.md")
+
+
+def test_path_gate_resolves_above_the_package():
+    """CI_AUTOMATION.md cites workflow files that live above this package.
+    Resolving against the package alone reported every one of them dead."""
+    assert DP.resolves(".github/workflows/submit-pypi.yml", "docs/CI_AUTOMATION.md")
+
+
+def test_path_gate_resolves_relative_to_the_citing_document():
+    """`docs/external/README.md` writes `reference/foo.py`, meaning beside it."""
+    assert DP.resolves("reference/extended_subsutras_palindrome.py",
+                       "docs/external/README.md")
+
+
+def test_path_gate_refuses_an_ambiguous_bare_filename(monkeypatch):
+    """The basename rule fires only when exactly one tracked file carries the
+    name; two or more is not a pointer a reader can follow.
+
+    Exercised on a synthetic name rather than a real one. `__init__.py` has
+    fourteen matches here and still resolves — because a file of that name
+    also sits at the work-tree root, so the *work-tree-relative* rule catches
+    it first and the answer is right for a different reason. Asserting
+    against it would have tested that coincidence instead of this rule.
+    """
+    monkeypatch.setitem(DP.BY_NAME, "twin.py", ["a/twin.py", "b/twin.py"])
+    monkeypatch.setitem(DP.BY_NAME, "lone.py", ["a/lone.py"])
+    assert not DP.resolves("twin.py", "README.md")
+    assert DP.resolves("lone.py", "README.md")
 
 
 def test_path_gate_honours_only_declared_externals():
-    assert DP.missing({"someones_kernel.html"}, DP.TRACKED,
-                      {"someones_kernel.html"}) == []
-    assert DP.missing({"someones_kernel.html"}, DP.TRACKED, set()) != []
+    assert DP.is_live(sorted(DP.EXTERNAL)[0], "README.md")
+    assert not DP.is_live("someones_kernel.html", "README.md")
+
+
+def test_path_gate_honours_only_declared_removals():
+    """A path named because it is gone passes; an undeclared dead one does not."""
+    assert DP.is_live("vedic/kernel/sutras_exact.py", "docs/SUTRA_CATALOGUE.md")
+    assert not DP.is_live("vedic/kernel/sutras_imaginary.py", "docs/SUTRA_CATALOGUE.md")
 
 
 def test_path_gate_rejects_a_generated_artifact_that_is_present_locally():
@@ -254,14 +294,29 @@ def test_path_gate_rejects_a_generated_artifact_that_is_present_locally():
     generated = "data/train.jsonl"
     assert generated not in DP.TRACKED, \
         f"{generated} is tracked now — pick another gitignored path here"
-    assert DP.missing({generated}, DP.TRACKED, set()) == [generated], \
+    assert not DP.is_live(generated, "README.md"), \
         "the path gate accepted a file git does not track"
 
 
 def test_path_gate_reads_a_real_tracked_set():
-    """Without this, an empty TRACKED would make the two rejection tests
-    above pass for the wrong reason."""
+    """Without this, an empty TRACKED would make the rejections above pass
+    for the wrong reason."""
     assert "README.md" in DP.TRACKED and len(DP.TRACKED) > 50
+    assert len(DP.ROOT_TRACKED) > len(DP.TRACKED)
+
+
+def test_path_gate_covers_every_tracked_document():
+    """DOCS was a hand-written two-element list, so everything under docs/
+    sat outside the gate for the life of the project. It is discovered now,
+    and this fails if anyone narrows it back."""
+    import subprocess
+    tracked_md = set(subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "*.md"],
+        capture_output=True, text=True, check=True).stdout.split())
+    assert set(DP.DOCS) == tracked_md, (
+        f"DOCS misses {sorted(tracked_md - set(DP.DOCS))} — a document nothing "
+        f"checks is a document that drifts")
+    assert any(d.startswith("docs/") for d in DP.DOCS)
 
 
 def test_script_gate_accepts_a_driver_whose_references_exist():

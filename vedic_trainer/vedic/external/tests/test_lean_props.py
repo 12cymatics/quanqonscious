@@ -405,3 +405,41 @@ def test_lean_rejects_a_corrupted_form_of_every_identity(label, name, body):
     assert not r.success, (
         f"Lean accepted a corrupted form of {label}/{name} — the mirror "
         f"cannot distinguish a true identity from a false one")
+
+
+def test_the_documented_prop_count_matches_what_is_rendered() -> None:
+    """`docs/external/README.md` states how many identities this mirror covers.
+
+    It said **30** — the size of `INTERACTIONS` — while `build_lean_props`
+    returns 10. The number had been copied from the identity registry rather
+    than measured from the renderer, so it described a different set that
+    happened to sit nearby. The same paragraph also described the props as
+    `Rat` literals, which they have never been since the renderer moved to
+    core-Lean `Int` cross-multiplication.
+
+    Prose that describes how verification works is worth exactly as much as
+    its accuracy. This compares the two.
+    """
+    import re
+    from pathlib import Path
+
+    from vedic.external.lean_props import _enumerate_canonical_psi, build_lean_props
+
+    repo = Path(__file__).resolve().parents[3]
+    text = (repo / "docs" / "external" / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"Renders \*\*(\d+)\*\* of the algebraic identities", text)
+    assert m, ("docs/external/README.md no longer states the rendered-prop "
+               "count in the form this test reads; restore it or update the "
+               "pattern rather than leaving the claim unchecked")
+    claimed = int(m.group(1))
+
+    for label, psi in _enumerate_canonical_psi():
+        rendered = len(build_lean_props(psi))
+        assert rendered == claimed, (
+            f"docs/external/README.md says {claimed} props are rendered; "
+            f"build_lean_props returned {rendered} for {label}")
+
+    assert "Rat" not in " ".join(
+        v for _, psi in _enumerate_canonical_psi()
+        for v in build_lean_props(psi).values()), \
+        "a rendered prop mentions Rat, which core Lean 4 does not have"
