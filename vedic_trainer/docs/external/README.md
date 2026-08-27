@@ -18,7 +18,7 @@ data, or eval layers — they're shipped so users can:
 | ------ | ------------- | ----------------- |
 | `vedic_engine.py` | `codex/replace-blocks-with-fixed-implementations` | `VedicSutraEngine`: 29 sutras as NumPy float operations. |
 | `hypercube.py` | `codex/replace-blocks-with-fixed-implementations` | `Hypercube`: weighted-hypercube, Λ, Ω, Υ operators. |
-| `proof_validation.py` | `codex/replace-blocks-with-fixed-implementations` | `ProofTester`: smoke-test harness for the two adapters above. |
+| `proof_validation.py` | `codex/replace-blocks-with-fixed-implementations` | `ProofTester`: invokes every operator of the two adapters above and records shapes, emptiness and finiteness. It compares no value against a reference, so it does not establish correctness — see the module header, which opens "Not a smoke test." |
 | `executor.py` | `codex/locate-runnable-simulations-in-repos` | `SutraExecutor(mode=...)` running the full ℚ-exact pipeline across many inputs. |
 | `lean4_mirror.py` | `codex/fix-package-exports-in-__all__-definition` | `Lean4Mirror`: drives the Lean 4 compiler over Bool-valued sutra statements. |
 | `lean_props.py` | new | Renders our 30 algebraic identities as Lean 4 `Bool` props using `Rat` literals built from Python `Fraction`s. |
