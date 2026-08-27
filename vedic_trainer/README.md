@@ -11,7 +11,19 @@ package exposes:
   `vedic/kernel/sutras_canonical.py`, which is the single authority for
   their definitions; `vedic/kernel/z2_primitives.py` holds the unweighted
   Z₂⁴ primitives the residuals and generators are built from, and is *not*
-  the 29. `vedic/kernel/sutras_canonical.py` ports the SUTRA_KIND table, the
+  the 29. **`sutras_canonical.py` holds nine distinct maps, not twenty-nine**:
+  `STRICT_SUTRA_KERNEL` dispatches through seven kind templates, two of which
+  branch internally (REFL on `id == 5`, PERM on `axis = (id+1) & 3`), and
+  between two ids of one class the only difference is the scalar
+  α(n) = (n/435)·(strength/100). That is faithful — upstream is nine maps too,
+  matched on 6,380 of 6,380 triples — but nothing used to say it, and "the 29
+  α-weighted sutra operators … the single authority for their definitions"
+  reads as 29 definitions. `test_the_twenty_nine_ids_are_nine_distinct_maps`
+  now measures the partition. **29 genuinely distinct operators do exist in
+  this repository** — `vedic/kernel/z2_primitives.py` (29 distinct, verified
+  pairwise), `vedic_v18.51.1_exact_phi.html`, and `vedic_sutras_complete.hpp`.
+
+  `vedic/kernel/sutras_canonical.py` ports the SUTRA_KIND table, the
   names and the §12Z operator *taxonomy* from `vedic_v18.24_full_kernel.html`,
   which is **tracked at the root of this repository** — this line used to say
   it "lives on the user's machine, not in this repository", and that was
@@ -72,14 +84,14 @@ text.
 | Kernel (ℚ)       | yes         | 1285 tests             |
 | Operands         | yes         | 169 tests              |
 | Composition      | yes         | 37 tests               |
-| Canonical 29     | yes         | 435 tests              |
+| Canonical 29     | yes         | 438 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | External sidecar | yes         | 182 tests              |
 | Script validity  | yes         | 40 tests               |
 | Withdrawn numbers | yes        | 26 tests               |
 | Upstream agreement | yes       | 33 tests               |
-| Documented paths | yes         | 82 tests               |
+| Documented paths | yes         | 84 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
@@ -98,14 +110,14 @@ were previously wrong: they had been read off wrapped `pytest -q` dots, and
 that gate on every push — it cannot run inside the suite, because it runs
 pytest and a test calling it would recurse.
 
-**Documented paths** doubled (39 → 82) when the gate stopped reading a
+**Documented paths** doubled (39 → 84) when the gate stopped reading a
 hand-written list of two documents and started reading every Markdown file
 git tracks. Everything under `docs/` had been outside it for the life of the
 project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2510 tests are collected and 2510 pass. **Nothing is skipped**, here or in
+2515 tests are collected and 2515 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is

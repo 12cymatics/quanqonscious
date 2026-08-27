@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from collections import Counter
 from fractions import Fraction
+from itertools import combinations
 
 import pytest
 
@@ -853,3 +854,83 @@ def test_intensional_evidence_is_labelled_uncertified() -> None:
     decompositions. That label must not be quietly upgraded."""
     for r in K.all_operator_records():
         assert "UNCERTIFIED" in r.intensional
+
+
+# ------------------------------------------------- how many formulas is 29?
+
+#: The 29 ids, partitioned by *identical underlying map*. α(n, s) =
+#: (n/435)·(s/100) is linear in both arguments, so S_i at strength s and S_j at
+#: strength s·i/j receive the same α; if they still agree on every corpus
+#: vector they are the same function, and the id is doing nothing but scale it.
+#:
+#: Measured, not assumed — and the answer is nine, not twenty-nine.
+DISTINCT_MAPS: tuple[tuple[int, ...], ...] = (
+    (1, 10, 14, 15),         # MULT
+    (2, 12, 22, 23),         # REFL, complement average
+    (3, 11, 25),             # CONV
+    (4, 8, 13, 16, 19),      # DIV
+    (5,),                    # REFL, but target = −Ψ_c (S5's special case)
+    (6, 26),                 # PERM on axis 3 = (id+1)&3
+    (7,),                    # PERM on axis 0 — the only id where that differs
+    (9, 17, 27, 28),         # DIFF
+    (18, 20, 21, 24, 29),    # MOD
+)
+
+
+def _same_map(i: int, j: int) -> bool:
+    """True when S_i and S_j are the same function once α is matched."""
+    base = Fraction(50)
+    other = base * Fraction(i, j)
+    return all(tuple(K.apply_sutra(i, psi, base)) == tuple(K.apply_sutra(j, psi, other))
+               for _, psi in PSI_CASES)
+
+
+def test_the_twenty_nine_ids_are_nine_distinct_maps() -> None:
+    """The 29 are not 29 formulas, and this says so in a place that runs.
+
+    `STRICT_SUTRA_KERNEL` dispatches on `SUTRA_KIND[id]` through seven
+    templates. Two of them branch internally — REFL on `id == 5`, PERM on
+    `axis = (id+1) & 3` — so the seven become nine. Every other difference
+    between two ids of the same kind is the scalar α, and nothing else.
+
+    This kernel is *faithful* to upstream here: `test_upstream_agreement.py`
+    shows 6,380 of 6,380 triples matching the real JavaScript, and upstream is
+    nine maps too. What was missing is anyone saying so. The README called this
+    module "the single authority for their definitions" of "the 29 α-weighted
+    sutra operators", which reads as 29 definitions.
+
+    If someone gives the sutras genuinely distinct formulas — v18.51.1 has
+    them, and `z2_primitives.py` already is 29 distinct functions — this test
+    fails, and the documentation it guards has to be rewritten rather than
+    quietly becoming true.
+    """
+    seen: list[list[int]] = []
+    for sid in range(1, 30):
+        for cls in seen:
+            if _same_map(sid, cls[0]):
+                cls.append(sid)
+                break
+        else:
+            seen.append([sid])
+    got = tuple(tuple(c) for c in seen)
+    assert got == DISTINCT_MAPS, (
+        f"the id -> map partition changed.\n  measured: {got}\n  declared: "
+        f"{DISTINCT_MAPS}\nIf the operators genuinely differ now, update "
+        f"DISTINCT_MAPS *and* every document that describes how many formulas "
+        f"this module holds.")
+
+
+def test_ids_sharing_a_map_differ_only_by_alpha() -> None:
+    """The positive statement behind the partition: within a class, the id is
+    a scale factor and nothing more."""
+    for cls in DISTINCT_MAPS:
+        for i, j in zip(cls, cls[1:]):
+            assert _same_map(i, j), f"S{i} and S{j} were declared the same map and are not"
+
+
+def test_the_nine_maps_really_are_pairwise_different() -> None:
+    """Without this the partition could be trivially 'correct' by collapsing
+    everything, or by the comparison silently always returning True."""
+    reps = [c[0] for c in DISTINCT_MAPS]
+    for a, b in combinations(reps, 2):
+        assert not _same_map(a, b), f"S{a} and S{b} are in different classes but agree"

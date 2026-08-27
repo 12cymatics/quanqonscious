@@ -6,7 +6,14 @@ interpretation choices made where the briefing spec was truncated.
 
 **Which file this documents, and which it does not.** The functions named
 here live in `vedic/kernel/z2_primitives.py`, and that file is the authority
-for them. It is *not* the 29 α-weighted sutra operators: those are in
+for them. All 29 are genuinely distinct maps — checked pairwise on the shared
+Ψ corpus, no two produce the same output.
+
+That is worth stating because the *other* 29 in this package are not.
+`vedic/kernel/sutras_canonical.py` holds **nine** distinct maps across its 29
+ids; within a kind, the id contributes only the scalar α. Both files are
+correct and neither is redundant, but "the 29 sutras" names two different
+things depending on which one you mean. It is *not* the 29 α-weighted sutra operators: those are in
 `vedic/kernel/sutras_canonical.py`, they take a strength parameter, they use
 a different numbering, and `z2_primitives.py` says so in its own first
 paragraph. The two are separate things with overlapping names, which is
