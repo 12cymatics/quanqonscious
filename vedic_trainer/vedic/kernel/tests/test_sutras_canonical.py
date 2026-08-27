@@ -30,7 +30,6 @@ Two rules this file follows throughout:
 """
 from __future__ import annotations
 
-import random
 from collections import Counter
 from fractions import Fraction
 
@@ -44,7 +43,7 @@ from vedic.kernel import sutras_canonical as K
 # vectors, so neither file can drift onto a weaker set than the other.
 
 from vedic.kernel.tests.psi_corpus import (        # noqa: E402
-    PSI_CASES, STRENGTHS, LEGACY_PSI, random_psi,
+    BASIS, PSI_CASES, SPANNING_SET, STRENGTHS, TRIPLE_SET, LEGACY_PSI, ZERO,
 )
 
 PSI_LABELS = [label for label, _ in PSI_CASES]
@@ -54,10 +53,6 @@ PSI = LEGACY_PSI
 STRENGTH = Fraction(50)
 
 
-def _random_psi(seed: int):
-    return random_psi(seed)
-
-
 def test_the_corpus_is_not_degenerate() -> None:
     """Guards every corpus-driven test below.
 
@@ -65,7 +60,7 @@ def test_the_corpus_is_not_degenerate() -> None:
     anything, and a corpus of one vector would silently reintroduce exactly
     the weakness this file was rewritten to remove.
     """
-    assert len(PSI_CASES) == 17, f"corpus is {len(PSI_CASES)} vectors"
+    assert len(PSI_CASES) == 29, f"corpus is {len(PSI_CASES)} vectors"
     assert len({psi for _, psi in PSI_CASES}) == len(PSI_CASES), \
         "corpus contains duplicate vectors"
     assert all(len(psi) == 16 for _, psi in PSI_CASES)
@@ -75,8 +70,11 @@ def test_the_corpus_is_not_degenerate() -> None:
     assert K.mean(by["mean_zero"]) == 0
     assert len(set(by["constant"])) == 1
     assert any(x < 0 for x in by["negative"])
-    assert any(x == 0 for x in by["spike_low"])
     assert len(STRENGTHS) >= 5 and Fraction(0) in STRENGTHS
+    # The spanning geometry the completeness argument below rests on.
+    assert len(SPANNING_SET) == 137, f"spanning set is {len(SPANNING_SET)}"
+    assert len(TRIPLE_SET) == 560, f"triple set is {len(TRIPLE_SET)}"
+    assert ZERO in SPANNING_SET and all(b in SPANNING_SET for b in BASIS)
 
 
 # ───────────────────────────────────────────── the per-kind reference formula
@@ -157,6 +155,106 @@ def test_every_sutra_matches_its_kind_formula(sid: int) -> None:
         f"S{sid} ({K.NAMES[sid]}, kind {K.SUTRA_KIND[sid]}) does not match "
         f"its kind formula in {len(mismatches)} case(s):\n  "
         + "\n  ".join(mismatches))
+
+
+def _reconstruct_degree_two(fn, strength):
+    """Recover (c, L, Q) of F(Ψ) = c + L(Ψ) + Q(Ψ,Ψ) from the spanning set.
+
+    Only the 137 evaluations in ``SPANNING_SET`` are used, via the identities
+    in ``psi_corpus``. If ``fn`` has degree at most two this determines it
+    completely.
+    """
+    c = fn(ZERO)
+    fi = [fn(b) for b in BASIS]
+    q = {}
+    for i in range(16):
+        for j in range(i + 1, 16):
+            fij = fn(tuple(a + b for a, b in zip(BASIS[i], BASIS[j])))
+            q[(i, j)] = tuple((a - b - cc + d) / 2
+                              for a, b, cc, d in zip(fij, fi[i], fi[j], c))
+    lin = [tuple(a - b for a, b in zip(fi[i], c)) for i in range(16)]
+    return c, lin, q
+
+
+def _predict(c, lin, q, support):
+    """Evaluate the reconstructed polynomial on a 0/1 vector's support."""
+    out = list(c)
+    for i in support:
+        out = [o + v for o, v in zip(out, lin[i])]
+    for a in range(len(support)):
+        for b in range(a + 1, len(support)):
+            out = [o + 2 * v for o, v in zip(out, q[(support[a], support[b])])]
+    return tuple(out)
+
+
+@pytest.mark.parametrize("sid", K.ALL)
+def test_every_operator_has_degree_at_most_two_in_psi(sid: int) -> None:
+    """Establishes the premise the completeness argument needs.
+
+    The spanning set determines a map only if the map is degree ≤ 2. That is
+    checked, not assumed: the polynomial reconstructed from the 137 spanning
+    evaluations must reproduce the operator on all 560 three-vertex sums,
+    which a map of degree three or higher does not.
+    """
+    strength = STRENGTH
+
+    def fn(psi):
+        return K.apply_sutra(sid, psi, strength)
+
+    c, lin, q = _reconstruct_degree_two(fn, strength)
+    failures = []
+    for t in TRIPLE_SET:
+        support = tuple(i for i, x in enumerate(t) if x != 0)
+        if _predict(c, lin, q, support) != fn(t):
+            failures.append(support)
+    assert not failures, (
+        f"S{sid} is not degree ≤ 2 in Ψ: its degree-2 reconstruction from the "
+        f"spanning set disagrees on {len(failures)} of {len(TRIPLE_SET)} "
+        f"three-vertex sums (first: {failures[0]}). The completeness argument "
+        f"for the spanning set does not apply to it.")
+
+
+@pytest.mark.parametrize("sid", K.ALL)
+def test_the_kind_formula_agrees_on_all_of_q16(sid: int) -> None:
+    """Agreement everywhere, proved rather than sampled.
+
+    Both ``apply_sutra`` and the reference are degree ≤ 2 (established above),
+    so agreeing on the 137-vector spanning set means they are the same map on
+    all of ℚ^16. This replaces a sample of random vectors, which established
+    the property on the vectors drawn and nothing about the rest.
+    """
+    for strength in STRENGTHS:
+        mismatches = []
+        for psi in SPANNING_SET:
+            got = K.apply_sutra(sid, psi, strength)
+            want = reference_output(sid, psi, strength)
+            if got != want:
+                support = tuple(i for i, x in enumerate(psi) if x != 0)
+                mismatches.append(support)
+        assert not mismatches, (
+            f"S{sid} ({K.NAMES[sid]}, kind {K.SUTRA_KIND[sid]}) disagrees with "
+            f"its kind formula at strength {strength} on {len(mismatches)} of "
+            f"{len(SPANNING_SET)} spanning vectors (first support: "
+            f"{mismatches[0]}) — so the two maps differ on ℚ^16")
+
+
+@pytest.mark.parametrize("sid", K.ALL)
+def test_the_reference_is_also_degree_at_most_two(sid: int) -> None:
+    """The completeness argument needs *both* maps to be degree ≤ 2.
+
+    Checking only ``apply_sutra`` would leave the possibility that the
+    reference is higher-degree and merely coincides on the spanning set.
+    """
+    def fn(psi):
+        return reference_output(sid, psi, STRENGTH)
+
+    c, lin, q = _reconstruct_degree_two(fn, STRENGTH)
+    failures = [t for t in TRIPLE_SET
+                if _predict(c, lin, q,
+                            tuple(i for i, x in enumerate(t) if x != 0)) != fn(t)]
+    assert not failures, (
+        f"the reference formula for S{sid} is not degree ≤ 2; agreement on "
+        f"the spanning set would not imply agreement on ℚ^16")
 
 
 @pytest.mark.parametrize("sid", K.ALL)
@@ -263,11 +361,16 @@ def _corpus_pairs() -> tuple[tuple[str, tuple, tuple], ...]:
     out = []
     names = [n for n, _ in PSI_CASES]
     by = dict(PSI_CASES)
-    for i in range(len(names) - 1):
-        a, b = names[i], names[i + 1]
-        out.append((f"{a}+{b}", by[a], by[b]))
-    for s in range(20, 26):
-        out.append((f"random_{s}", _random_psi(s), _random_psi(s + 100)))
+    # Every corpus vector paired with its successor, so each appears on both
+    # sides. No random partners: a pair drawn from a PRNG tests the pair drawn.
+    for i in range(len(names)):
+        a, b = names[i], names[(i + 1) % len(names)]
+        out.append((f"{a}|{b}", by[a], by[b]))
+    # Every basis vector against every other: 120 pairs, exhaustive over the
+    # two-vertex geometry that determines a degree-2 map.
+    for i in range(16):
+        for j in range(i + 1, 16):
+            out.append((f"e{i}|e{j}", BASIS[i], BASIS[j]))
     return tuple(out)
 
 
@@ -275,7 +378,7 @@ PAIRS = _corpus_pairs()
 
 
 def test_there_are_pairs_to_test_superposition_with() -> None:
-    assert len(PAIRS) >= 20
+    assert len(PAIRS) == len(PSI_CASES) + 120, f"{len(PAIRS)} pairs"
     assert all(f != g for _, f, g in PAIRS), \
         "a pair with f == g makes superposition trivially symmetric"
 
@@ -312,28 +415,74 @@ def test_linear_operators_really_are_linear(sid: int) -> None:
         f"{len(failures)} case(s): {failures}")
 
 
-@pytest.mark.parametrize("sid", QUADRATIC_IDS)
-def test_quadratic_operators_really_are_not_linear(sid: int) -> None:
-    """A quadratic operator must fail superposition somewhere.
+def _quadratic_part(sid: int, strength: Fraction) -> dict:
+    """Q(eᵢ,eⱼ) for every i<j, recovered exactly from the spanning set."""
+    def fn(psi):
+        return K.apply_sutra(sid, psi, strength)
+    _, _, q = _reconstruct_degree_two(fn, strength)
+    return q
 
-    Stated as "there exists a witness" and then *counted*, so an operator
-    that is non-linear on one contrived pair and linear on everything else
-    is visible rather than passing on a single lucky case.
+
+@pytest.mark.parametrize("sid", QUADRATIC_IDS)
+def test_quadratic_operators_have_a_nonzero_quadratic_part(sid: int) -> None:
+    """The exact statement, replacing a count of failing pairs.
+
+    An earlier version asserted that superposition failed on at least half of
+    the sampled pairs. That threshold was arbitrary and wrong: for a MULT
+    operator the quadratic term is Ψᵢ·Ψ_{i⊕1}, which is nonzero only when both
+    i and i⊕1 lie in the support — 8 of the 120 basis pairs. "Linear on 127 of
+    149 pairs" was correct arithmetic being reported as a defect.
+
+    What actually distinguishes a quadratic operator from a linear one is
+    whether its bilinear part Q is identically zero, and Q is recovered
+    exactly from the spanning set. This says exactly that, over every
+    strength, with no threshold.
     """
-    witnesses = 0
-    for label, f, g in PAIRS:
-        fg = tuple(a + b for a, b in zip(f, g))
-        lhs = K.apply_sutra(sid, fg, STRENGTH)
-        rhs = tuple(a + b for a, b in zip(K.apply_sutra(sid, f, STRENGTH),
-                                          K.apply_sutra(sid, g, STRENGTH)))
-        if lhs != rhs:
-            witnesses += 1
-    assert witnesses > 0, \
-        f"S{sid} is declared quadratic but behaves linearly on every pair"
-    assert witnesses >= len(PAIRS) // 2, (
-        f"S{sid} is declared quadratic but is linear on "
-        f"{len(PAIRS) - witnesses} of {len(PAIRS)} pairs — the declaration "
-        f"may be describing one special case rather than the operator")
+    for strength in STRENGTHS:
+        q = _quadratic_part(sid, strength)
+        nonzero = [(i, j) for (i, j), v in q.items() if any(x != 0 for x in v)]
+        if strength == 0:
+            # α = 0 is the identity by §12Y, so Q vanishes there for every
+            # operator. Asserting otherwise would contradict that guarantee.
+            assert not nonzero, f"S{sid} has a quadratic part at α = 0"
+            continue
+        assert nonzero, (
+            f"S{sid} is declared quadratic but its bilinear part is "
+            f"identically zero at strength {strength}: it is a linear map")
+
+
+@pytest.mark.parametrize("sid", LINEAR_IDS)
+def test_linear_operators_have_no_quadratic_part(sid: int) -> None:
+    """The converse, and the stronger half of the linearity claim.
+
+    Superposition on a set of pairs is evidence; Q ≡ 0 recovered from the
+    spanning set is the property itself, and it holds for all of ℚ^16.
+    """
+    for strength in STRENGTHS:
+        q = _quadratic_part(sid, strength)
+        nonzero = [(i, j) for (i, j), v in q.items() if any(x != 0 for x in v)]
+        assert not nonzero, (
+            f"S{sid} is declared linear but has a nonzero bilinear part at "
+            f"strength {strength} on {len(nonzero)} vertex pairs "
+            f"(first {nonzero[0]})")
+
+
+@pytest.mark.parametrize("sid", QUADRATIC_IDS)
+def test_quadratic_operators_fail_superposition_somewhere(sid: int) -> None:
+    """A concrete witness, in addition to Q ≠ 0 above.
+
+    Kept because it exercises the operator through its public entry point
+    rather than through a reconstruction, so a bug in the reconstruction
+    cannot make both tests pass.
+    """
+    witnesses = [label for label, f, g in PAIRS
+                 if K.apply_sutra(sid, tuple(a + b for a, b in zip(f, g)), STRENGTH)
+                 != tuple(a + b for a, b in
+                          zip(K.apply_sutra(sid, f, STRENGTH),
+                              K.apply_sutra(sid, g, STRENGTH)))]
+    assert witnesses, \
+        f"S{sid} is declared quadratic but satisfies superposition on all " \
+        f"{len(PAIRS)} pairs"
 
 
 @pytest.mark.parametrize("sid", QUADRATIC_IDS)
@@ -642,12 +791,16 @@ def test_mean_is_the_exact_arithmetic_mean() -> None:
 
 def test_blend_is_exact_linear_interpolation() -> None:
     """blend(c, t, w) = c + (t − c)·w, at the endpoints and in between."""
-    r = random.Random(7)
-    for _ in range(200):
-        c = Fraction(r.randint(-9, 9), r.randint(1, 7))
-        t = Fraction(r.randint(-9, 9), r.randint(1, 7))
-        w = Fraction(r.randint(-4, 8), r.randint(1, 5))
-        assert K.blend(c, t, w) == c + (t - c) * w
+    # An exhaustive grid rather than 200 draws: every combination of these
+    # values is checked, so the result is a statement about the grid instead
+    # of about whichever triples a PRNG produced.
+    values = (Fraction(0), Fraction(1), Fraction(-1), Fraction(3, 5),
+              Fraction(-7, 4), Fraction(9), Fraction(1, 100003))
+    weights = values + (Fraction(1, 2), Fraction(5, 3), Fraction(-2))
+    for c in values:
+        for t in values:
+            for w in weights:
+                assert K.blend(c, t, w) == c + (t - c) * w, f"{c}, {t}, {w}"
     for c, t in ((Fraction(3, 5), Fraction(-2, 7)), (Fraction(0), Fraction(1))):
         assert K.blend(c, t, Fraction(0)) == c
         assert K.blend(c, t, Fraction(1)) == t

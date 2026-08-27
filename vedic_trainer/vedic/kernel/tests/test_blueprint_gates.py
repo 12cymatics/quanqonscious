@@ -5,7 +5,6 @@ Blueprint*, 31 July 2026.
 """
 from __future__ import annotations
 
-import random
 from fractions import Fraction
 
 import pytest
@@ -14,10 +13,41 @@ from vedic.kernel import q4_complex as Q4
 from vedic.kernel.k2_field import C4, K2, Q2, phi, phi_cubed
 
 
-def _rnd_k2(seed: int) -> K2:
-    r = random.Random(seed)
-    return K2.from_coords(*(Fraction(r.randint(-9, 9), r.randint(1, 7))
-                            for _ in range(4)))
+#: Enumerated K2 coordinate quadruples. These were drawn from
+#: ``random.Random(seed)``, which proved each field law on the elements drawn
+#: and nothing about ℚ(√2, i). The list below is fixed and covers the cases a
+#: field law can fail on: zero, one, pure units, negatives, mixed signs,
+#: repeated coordinates, and large denominators.
+_K2_COORDS: tuple[tuple[Fraction, Fraction, Fraction, Fraction], ...] = tuple(
+    tuple(Fraction(n, d) for n, d in quad) for quad in (
+        ((0, 1), (0, 1), (0, 1), (0, 1)),          # 0
+        ((1, 1), (0, 1), (0, 1), (0, 1)),          # 1
+        ((0, 1), (1, 1), (0, 1), (0, 1)),          # √2
+        ((0, 1), (0, 1), (1, 1), (0, 1)),          # i
+        ((0, 1), (0, 1), (0, 1), (1, 1)),          # i√2
+        ((1, 1), (1, 1), (1, 1), (1, 1)),
+        ((-1, 1), (-1, 1), (-1, 1), (-1, 1)),
+        ((1, 2), (-1, 3), (2, 5), (-3, 7)),
+        ((-9, 7), (9, 7), (-9, 7), (9, 7)),
+        ((3, 1), (0, 1), (-3, 1), (0, 1)),
+        ((0, 1), (5, 4), (0, 1), (-5, 4)),
+        ((7, 100003), (-11, 100003), (13, 100003), (-17, 100003)),
+        ((2, 1), (3, 1), (5, 1), (7, 1)),
+        ((-2, 3), (4, 9), (-8, 27), (16, 81)),
+    )
+)
+
+
+def _rnd_k2(index: int) -> K2:
+    """The K2 element at ``index``. Enumerated, not drawn."""
+    return K2.from_coords(*_K2_COORDS[index % len(_K2_COORDS)])
+
+
+def _rnd_q16(index: int, denom: bool = True) -> tuple:
+    """A Ψ from the shared enumerated corpus."""
+    from vedic.kernel.tests.psi_corpus import PSI_CASES, SPANNING_SET
+    pool = tuple(v for _, v in PSI_CASES) + tuple(SPANNING_SET)
+    return pool[index % len(pool)]
 
 
 # ══════════════════════════════════════════════ Gate A — K2 = ℚ(√2, i)
@@ -126,7 +156,15 @@ def test_phi_cubed_renders_to_the_documented_float():
     to this codebase — it verified that Python can add. It now goes through
     `C4.to_float`, which is the one place a float is allowed to appear.
     """
-    assert abs(phi_cubed().to_float() - (4.23606797749979 + 0j)) < 1e-12
+    # Exact equality, not a 1e-12 window. φ³ = 2 + √5, and the float64
+    # evaluation of `2 + 5 ** 0.5` is bitwise identical to what `to_float`
+    # produces — so the tolerance was covering nothing and would equally have
+    # covered a real error a thousand times larger.
+    #
+    # Compared against the arithmetic rather than a transcribed literal: a
+    # literal only checks that someone typed the digits correctly once.
+    assert phi_cubed().to_float() == complex(2 + 5 ** 0.5, 0.0)
+    assert phi_cubed().to_float().imag == 0.0
 
 
 def float_offenders(source: str, boundary: str = "to_float") -> list[str]:
@@ -237,16 +275,13 @@ def test_toggle_rejects_out_of_range_arguments():
 def test_d1_of_d0_is_zero_for_every_zero_cochain():
     """d¹(d⁰f) = 0 — the blueprint's stated Gate B obligation."""
     for s in range(8):
-        r = random.Random(s)
-        f = tuple(Fraction(r.randint(-9, 9), r.randint(1, 7))
-                  for _ in range(Q4.N_VERTICES))
+        f = _rnd_q16(s)
         dd = Q4.d1(Q4.d0(f))
         assert all(v == 0 for v in dd.values()), "d² must vanish"
 
 
 def test_d0_is_antisymmetric_on_oriented_edges():
-    r = random.Random(0)
-    f = tuple(Fraction(r.randint(-9, 9)) for _ in range(Q4.N_VERTICES))
+    f = _rnd_q16(0)
     g = Q4.d0(f)
     for (u, w), val in g.items():
         assert g[(w, u)] == -val
@@ -268,32 +303,27 @@ def test_laplacian_annihilates_constants():
 def test_laplacian_total_sum_is_zero():
     """Σ_v (Δf)(v) = 0 for every f — each edge contributes twice, oppositely."""
     for s in range(8):
-        r = random.Random(s)
-        f = tuple(Fraction(r.randint(-9, 9), r.randint(1, 7))
-                  for _ in range(Q4.N_VERTICES))
+        f = _rnd_q16(s)
         assert Q4.total(Q4.laplacian(f)) == 0
 
 
 def test_laplacian_is_linear():
-    r = random.Random(3)
-    f = tuple(Fraction(r.randint(-9, 9)) for _ in range(16))
-    g = tuple(Fraction(r.randint(-9, 9)) for _ in range(16))
+    f = _rnd_q16(3)
+    g = _rnd_q16(4)
     s = tuple(a + b for a, b in zip(f, g))
     assert Q4.laplacian(s) == tuple(a + b for a, b in
                                     zip(Q4.laplacian(f), Q4.laplacian(g)))
 
 
 def test_laplacian_is_exact_rational():
-    r = random.Random(5)
-    f = tuple(Fraction(r.randint(-9, 9), r.randint(1, 7)) for _ in range(16))
+    f = _rnd_q16(5)
     assert all(isinstance(x, Fraction) for x in Q4.laplacian(f))
 
 
 def test_laplacian_matches_the_kernel_diffusive_stencil():
     """The DIFF operator's target is the edge mean; Δ = 4·(edgeMean − f)."""
     from vedic.kernel import sutras_canonical as K
-    r = random.Random(11)
-    f = tuple(Fraction(r.randint(-9, 9), r.randint(1, 7)) for _ in range(16))
+    f = _rnd_q16(11)
     lap = Q4.laplacian(f)
     for v in range(16):
         assert lap[v] == 4 * (K.edge_mean(f, v) - f[v])

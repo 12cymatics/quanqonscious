@@ -37,28 +37,47 @@ import pytest
 
 from vedic.kernel.interaction_matrix import INTERACTIONS, verify_all
 from vedic.kernel.q import Q16
-from vedic.kernel.tests.psi_corpus import PSI_CASES, random_psi
+from vedic.kernel.tests.psi_corpus import BASIS, PHI, PSI_CASES
 
 IDENTITY_NAMES = tuple(i.name for i in INTERACTIONS)
 
 
 def _pairs() -> tuple[tuple[str, Q16, Q16], ...]:
-    """(label, Ψ, Φ) over the structured corpus plus random pairs.
+    """(label, Ψ, Φ) — structured and exhaustive, with nothing sampled.
 
-    Each structured vector is paired with its successor so every one of them
-    appears on both sides, and with a random partner so no identity is only
-    ever seen against another structured field.
+    Three families, none of them drawn from a generator:
+
+    * each corpus vector against its successor, so every one appears on both
+      sides of a binary identity;
+    * each corpus vector against the fixed second field ``PHI``, so no
+      identity is only ever seen with two structured fields;
+    * every unordered pair of basis vectors — all 120 — which is exhaustive
+      over the two-vertex geometry the arity-2 identities range over.
+
+    The previous version added thirty random pairs. Those established the
+    identities on the thirty pairs drawn and said nothing about any other,
+    and the count was a knob with no justification behind it.
     """
-    out: list[tuple[str, Q16, Q16]] = []
+    # Deduplicated on the (Ψ, Φ) values, first label wins. The corpus
+    # contains basis_0..basis_15, so its successor chain re-derives pairs the
+    # exhaustive basis loop already yields; keeping both would inflate the
+    # count without adding an input and would make the uniqueness guard below
+    # something to relax rather than something to satisfy.
+    seen: dict[tuple, tuple[str, Q16, Q16]] = {}
+
+    def add(label: str, psi: Q16, phi: Q16) -> None:
+        seen.setdefault((psi, phi), (label, psi, phi))
+
     labels = [n for n, _ in PSI_CASES]
     by = dict(PSI_CASES)
     for i, label in enumerate(labels):
         nxt = labels[(i + 1) % len(labels)]
-        out.append((f"{label}|{nxt}", by[label], by[nxt]))
-        out.append((f"{label}|random", by[label], random_psi(500 + i)))
-    for s in range(30):
-        out.append((f"random_{s}", random_psi(600 + s), random_psi(700 + s)))
-    return tuple(out)
+        add(f"{label}|{nxt}", by[label], by[nxt])
+        add(f"{label}|phi", by[label], PHI)
+    for i in range(16):
+        for j in range(i + 1, 16):
+            add(f"e{i}|e{j}", BASIS[i], BASIS[j])
+    return tuple(seen.values())
 
 
 PAIRS = _pairs()
@@ -108,8 +127,14 @@ def test_verify_all_reports_every_identity() -> None:
 
 
 def test_there_are_pairs_to_check() -> None:
-    assert len(PAIRS) >= 60
-    assert len({(p, q) for _, p, q in PAIRS}) == len(PAIRS), "duplicate pairs"
+    # Every basis pair, plus the structured pairs that are not already one.
+    assert len(PAIRS) == len({(p, q) for _, p, q in PAIRS}), "duplicate pairs"
+    basis_pairs = {(BASIS[i], BASIS[j]) for i in range(16) for j in range(i + 1, 16)}
+    present = {(p, q) for _, p, q in PAIRS}
+    assert basis_pairs <= present, (
+        f"{len(basis_pairs - present)} of the 120 basis pairs are missing; "
+        f"the two-vertex geometry is no longer covered exhaustively")
+    assert len(PAIRS) >= 120 + len(PSI_CASES)
 
 
 def test_every_identity_declares_a_supported_arity() -> None:

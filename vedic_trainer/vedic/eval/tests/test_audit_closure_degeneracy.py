@@ -7,7 +7,6 @@ pin that down so the metric cannot quietly be reported as a model score.
 """
 from __future__ import annotations
 
-import random
 from fractions import Fraction
 
 import pytest
@@ -21,7 +20,30 @@ from vedic.eval.compositional_audit import (
 
 ENGLISH = [f"the {w} is not moving north" for w in
            "cat dog tree river stone bird wind cloud".split()] * 60
-NOISE = ["".join(random.Random(i).choices("qxzjkvw ", k=40)) for i in range(480)]
+def _noise(i: int) -> str:
+    """A deterministic 40-character string, distinct for each i, non-English.
+
+    This was ``"".join(random.Random(i).choices("qxzjkvw ", k=40))``. The
+    randomness was never the point: what the test needs is a corpus
+    *unrelated* to the English one. A fixed construction is unrelated in the
+    same way, reproducible without a generator, and readable.
+
+    The first three characters encode ``i`` in base 8 (480 < 8³ = 512), so
+    the strings are pairwise distinct rather than rotations of one another;
+    the remaining 37 continue the same consonant cycle. The alphabet shares
+    no character sequence with ENGLISH, which is what "unrelated" has to mean
+    for this test.
+    """
+    alphabet = "qxzjkvw "
+    base = len(alphabet)
+    if not 0 <= i < base ** 3:
+        raise ValueError(f"i must fit in three base-{base} digits; got {i}")
+    head = "".join(alphabet[(i // base ** k) % base] for k in range(3))
+    tail = "".join(alphabet[(i + k) % base] for k in range(40 - len(head)))
+    return head + tail
+
+
+NOISE = [_noise(i) for i in range(480)]
 
 
 def test_two_unrelated_corpora_give_identical_closure_flags():

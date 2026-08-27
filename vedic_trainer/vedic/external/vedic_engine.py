@@ -135,7 +135,20 @@ class VedicSutraEngine:
         return x - deficit
 
     def vyashtisamanstih(self, whole, parts):
-        return np.isclose(whole, np.sum(parts))
+        """Return ``whole - sum(parts)``: the exact discrepancy, not a verdict.
+
+        This read ``np.isclose(whole, np.sum(parts))``, which returned a Bool
+        under numpy's default tolerances — ``rtol=1e-5``, so on values near
+        1e6 a discrepancy of 10 was reported as "the parts sum to the whole".
+        The caller got a verdict computed to a precision it never chose and
+        could not see, and had no way to recover how far off the sum actually
+        was.
+
+        Returning the difference moves the decision to the caller and makes
+        the exact-zero case exactly representable: ``result == 0`` is a real
+        test of the identity, where ``isclose`` could not express one.
+        """
+        return np.asarray(whole, dtype=np.float64) - np.sum(parts)
 
     def shesanyankena_charamena(self, coeffs, m):
         last_digit = np.mod(m, 10)

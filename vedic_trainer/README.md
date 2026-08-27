@@ -37,19 +37,19 @@ package exposes:
 
 | Layer            | Implemented | Tested locally         |
 | ---------------- | ----------- | ---------------------- |
-| Kernel (ℚ)       | yes         | 1185 tests             |
+| Kernel (ℚ)       | yes         | 1284 tests             |
 | Operands         | yes         | 169 tests              |
 | Composition      | yes         | 37 tests               |
-| Canonical 29     | yes         | 319 tests              |
+| Canonical 29     | yes         | 435 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
 | Data             | yes         | 5 tests                |
 | Split integrity  | yes         | 8 tests                |
-| External sidecar | yes         | 183 tests              |
+| External sidecar | yes         | 190 tests              |
 | Script validity  | yes         | 52 tests               |
 | Reported numbers | yes         | 44 tests               |
 | Documented paths | yes         | 27 tests               |
-| Conservation (torch) | yes     | 111 tests              |
+| Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 6 tests                |
 | Benchmark honesty | yes        | 30 tests               |
 | Gates reject     | yes         | 32 tests               |

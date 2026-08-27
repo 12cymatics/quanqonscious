@@ -236,8 +236,19 @@ def _quoted(cell: str) -> tuple[float, int] | None:
 
 
 def _rounds_to(computed: float, quoted: float, places: int) -> bool:
-    """True iff `quoted` is `computed` correctly rounded to `places` decimals."""
-    return abs(computed - quoted) <= 0.5 * 10 ** (-places) + 1e-12
+    """True iff `quoted` is `computed` correctly rounded to `places` decimals.
+
+    Done in exact rationals. ``Fraction(float)`` is an exact conversion — a
+    float *is* a rational — so the whole comparison is over ℚ and needs no
+    epsilon. The previous form added ``+ 1e-12`` to the half-ulp bound, which
+    widened the accepted window by an amount unrelated to the number of
+    decimal places being checked: at 4 places it was negligible, and at 12 it
+    doubled the tolerance.
+    """
+    from fractions import Fraction
+
+    half_ulp = Fraction(1, 2) * Fraction(1, 10 ** places)
+    return abs(Fraction(computed) - Fraction(quoted)) <= half_ulp
 
 
 # Sections whose numbers this gate does NOT verify, each with the reason.
