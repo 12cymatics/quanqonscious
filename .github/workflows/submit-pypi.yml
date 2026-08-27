@@ -33,6 +33,36 @@ jobs:
           pip install build pytest pydantic pyyaml numpy
           pip install --index-url https://download.pytorch.org/whl/cpu torch
 
+      # Lean 4 is a hard requirement of this package's test suite, not an
+      # optional extra. The Lean mirror is the one independent cross-check of
+      # the exact-Q kernel, and its tests used to carry skipif guards that
+      # turned "the compiler is absent" into a green run -- so the mirror sat
+      # broken (it could not resolve a toolchain at all) without anyone
+      # noticing. The guards are gone, so CI installs the compiler instead.
+      #
+      # The version is read from vedic_trainer/lean-toolchain, the same pin
+      # Lean4Mirror writes beside its generated scripts, so CI and a developer
+      # machine compile under one toolchain rather than whichever each happens
+      # to default to.
+      - name: Install Lean 4 (version pinned by vedic_trainer/lean-toolchain)
+        run: |
+          set -eu
+          TOOLCHAIN="$(cat vedic_trainer/lean-toolchain)"
+          echo "Installing $TOOLCHAIN"
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Lean runs and matches the pin
+        run: |
+          set -eu
+          lean --version
+          EXPECTED="$(cut -d: -f2 < vedic_trainer/lean-toolchain | tr -d 'v')"
+          lean --version | grep -q "version ${EXPECTED}" || {
+            echo "lean --version does not match vedic_trainer/lean-toolchain (${EXPECTED})"
+            exit 1
+          }
+
       - name: Build sdist + wheel for vedic_trainer
         working-directory: vedic_trainer
         run: |
