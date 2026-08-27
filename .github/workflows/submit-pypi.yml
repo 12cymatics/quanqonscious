@@ -81,6 +81,18 @@ jobs:
           PYTHONPATH: .
         run: pytest -q
 
+      # The README's test counts and its "N tests are collected and N pass"
+      # sentence are checked against the measured suite here, not by the
+      # suite. They cannot be checked by it: verify_counts.py runs pytest, so
+      # a test that called it would recurse. The suite exercises its judgment
+      # (reconcile) in isolation; only this step compares the judgment against
+      # the real README and the real suite, which is the part that drifts.
+      - name: vedic_trainer README count gate
+        working-directory: vedic_trainer
+        env:
+          PYTHONPATH: .
+        run: python scripts/verify_counts.py --check
+
       - name: Publish vedic_trainer to PyPI (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: vedic_trainer
