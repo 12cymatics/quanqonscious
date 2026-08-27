@@ -11,10 +11,19 @@ package exposes:
   `vedic/kernel/sutras_canonical.py`, which is the single authority for
   their definitions; `vedic/kernel/z2_primitives.py` holds the unweighted
   Z₂⁴ primitives the residuals and generators are built from, and is *not*
-  the 29. `vedic/kernel/sutras_canonical.py` is a port of the STRICT_SUTRA_KERNEL,
-  SUTRA_KIND table and §12Z coefficients from the user's
-  `vedic_v18.24_full_kernel.html`; that file is the upstream definition
-  and lives on the user's machine, not in this repository.
+  the 29. `vedic/kernel/sutras_canonical.py` ports the SUTRA_KIND table, the
+  names and the §12Z operator *taxonomy* from `vedic_v18.24_full_kernel.html`,
+  which is **tracked at the root of this repository** — this line used to say
+  it "lives on the user's machine, not in this repository", and that was
+  wrong for as long as it stood. So is `vedic_v18.51.1_exact_phi.html`, a
+  later and far more exact revision that nothing here mentions.
+
+  All 29 names, all 29 kinds and all seven operator templates transcribe
+  exactly — verified against the file, operator by operator. The definition
+  is `STRICT_SUTRA_KERNEL` (line 6527), which is float-free; the
+  `SUTRAS[].evolve()` bodies in the same file are the display path and use
+  floats, epsilons and 1e-4 quantisation, which is why they are not what was
+  ported.
 - A composition algebra (`vedic/kernel/composition.py`) that runs any sutra
   queue in **SERIES**, **PARALLEL**, **CONCURRENT** (BSP wavefront,
   W = ⌈√N⌉), **CANONICAL** or **COMPOSITE**, all in exact ℚ with a
@@ -66,10 +75,11 @@ text.
 | Canonical 29     | yes         | 435 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 181 tests              |
+| External sidecar | yes         | 182 tests              |
 | Script validity  | yes         | 40 tests               |
 | Withdrawn numbers | yes        | 26 tests               |
-| Documented paths | yes         | 77 tests               |
+| Upstream agreement | yes       | 33 tests               |
+| Documented paths | yes         | 82 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
@@ -88,14 +98,14 @@ were previously wrong: they had been read off wrapped `pytest -q` dots, and
 that gate on every push — it cannot run inside the suite, because it runs
 pytest and a test calling it would recurse.
 
-**Documented paths** doubled (39 → 77) when the gate stopped reading a
+**Documented paths** doubled (39 → 82) when the gate stopped reading a
 hand-written list of two documents and started reading every Markdown file
 git tracks. Everything under `docs/` had been outside it for the life of the
 project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2471 tests are collected and 2471 pass. **Nothing is skipped**, here or in
+2510 tests are collected and 2510 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
@@ -222,7 +232,7 @@ metric itself has been removed rather than reported.
 **3. Any bit-exactness mismatch between the ℚ kernel and the committed
 fixtures.**
 
-*Not triggered.* `scripts/verify_bit_exact.py` checks all 30 fixture keys —
+*Not triggered — and the stronger question behind it is now answered.* `scripts/verify_bit_exact.py` checks all 30 fixture keys —
 32 inputs, 32 sutra records, 96 conservation records — and an unchecked key
 is itself a failure. It passes.
 
@@ -236,11 +246,15 @@ the α value itself.
 
 **What that gate can and cannot show.** The fixtures are written by the same
 kernel they are compared against, so they detect **drift, not error** — they
-are a regression reference. Correctness against the upstream definition is a
-separate question, answered by exporting from the user's
-`vedic_v18.24_full_kernel.html`, which is external to this repository. The
-distinction matters: an earlier version of this gate rebuilt its own missing
-fixtures, which made it unfalsifiable rather than merely narrow.
+are a regression reference. The distinction matters: an earlier version of
+this gate rebuilt its own missing fixtures, which made it unfalsifiable
+rather than merely narrow.
+
+Correctness against the upstream definition is a separate question, and this
+paragraph used to close it off by saying the upstream was "external to this
+repository". It is not — `vedic_v18.24_full_kernel.html` is tracked at the
+repository root, and the question is answerable. It has now been asked; see
+`docs/BIT_EXACT_PROTOCOL.md` for what the comparison found.
 
 The strict ℚ reference layer is what makes criterion 3 honest: float
 tolerance does not enter the verification path, and every comparison in

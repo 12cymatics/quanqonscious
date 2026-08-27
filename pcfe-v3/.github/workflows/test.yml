@@ -21,6 +21,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r docker/requirements.txt
         
-    - name: Run validation tests
+    # `pytest tests/` used to run here. Its only file was an environment probe
+    # for CUDA-Quantum that skipped itself on every CPU runner, so this step
+    # reported success having executed nothing. The probe is now a script that
+    # exits non-zero when the vendor stack is absent, and it is invoked
+    # directly — `pytest tests/` would now collect zero tests and exit 5.
+    - name: CUDA-Quantum environment probe (expected to fail without a GPU)
+      continue-on-error: true
       run: |
-        python -m pytest tests/
+        python tests/check_cudaq_environment.py

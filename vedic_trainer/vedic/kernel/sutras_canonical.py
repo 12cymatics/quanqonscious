@@ -2,7 +2,8 @@
 
 Source of truth
 ---------------
-Ported character-for-character from ``vedic_v18.24_full_kernel.html``:
+Ported from ``vedic_v18.24_full_kernel.html`` (tracked at the repository
+root, despite several documents having said it was not):
 
 * ``§12Z VERTEX-FIELD SUTRA OPERATORS``  (line 5544) — the seven operator types
 * ``STRICT_SUTRA_KERNEL``                (line 6527) — the exact, float-free path

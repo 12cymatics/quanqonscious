@@ -69,6 +69,7 @@ LAYERS: dict[str, list[str]] = {
     "External sidecar": ["vedic/external/tests"],
     "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
     "Withdrawn numbers": ["vedic/kernel/tests/test_no_withdrawn_number_is_quoted.py"],
+    "Upstream agreement": ["vedic/kernel/tests/test_upstream_agreement.py"],
     "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
     "Audit closure": ["vedic/kernel/tests/test_audit_closure_degeneracy.py"],
