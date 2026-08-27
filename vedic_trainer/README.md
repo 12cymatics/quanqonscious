@@ -73,7 +73,7 @@ text.
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
-| Gates reject     | yes         | 36 tests               |
+| Gates reject     | yes         | 37 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
 | Auxiliary losses | yes         | 15 tests               |
 | Memory           | yes         | covered by trainer     |
@@ -86,7 +86,7 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-2424 tests are collected and 2424 pass. **Nothing is skipped**, here or in
+2425 tests are collected and 2425 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is

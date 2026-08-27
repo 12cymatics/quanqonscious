@@ -23,12 +23,35 @@ Usage
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def child_env() -> dict[str, str]:
+    """Environment for the nested pytest runs.
+
+    This used to be a hand-built dict: PYTHONPATH, and a PATH hardcoded to
+    ``/usr/bin:/usr/local/bin:/bin`` with no HOME at all. That makes the
+    nested suite see a *different machine* from the one the outer suite runs
+    on -- the exact defect this file exists to prevent, one level down. A tool
+    the developer has on their PATH is missing from the child's, so the child
+    reports failures the parent does not have and the gate goes red for a
+    reason that has nothing to do with the counts.
+
+    It bites wherever a toolchain installs outside those three directories.
+    In CI, ``elan`` puts Lean under ``$HOME/.elan/bin`` and the workflow adds
+    that to ``GITHUB_PATH``; the Lean mirror's tests no longer skip when the
+    compiler is absent, so a child that cannot see it fails every one of them.
+
+    The real environment is inherited and only ``PYTHONPATH`` is set, so the
+    child sees what the parent sees.
+    """
+    return {**os.environ, "PYTHONPATH": "."}
 
 # layer name -> pytest paths. This mapping IS the README table's meaning;
 # if a layer is added here it must appear in the README, and vice versa.
@@ -75,7 +98,7 @@ def measure(paths: list[str]) -> int:
         [sys.executable, "-m", "pytest", *paths, "--collect-only", "-q",
          "--no-header"],
         cwd=REPO, capture_output=True, text=True,
-        env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
+        env=child_env(),
     )
     m = _COLLECTED.search(proc.stdout)
     if not m:
@@ -96,7 +119,7 @@ def failures() -> tuple[int, str]:
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", "vedic/", "--no-header"],
         cwd=REPO, capture_output=True, text=True,
-        env={"PYTHONPATH": ".", "PATH": "/usr/bin:/usr/local/bin:/bin"},
+        env=child_env(),
     )
     tail = [ln for ln in proc.stdout.strip().splitlines()
             if " passed" in ln or " failed" in ln or " error" in ln]

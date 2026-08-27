@@ -108,6 +108,29 @@ def test_counts_gate_rejects_a_readme_with_no_prose_total_at_all():
     assert any("states no prose total" in p for p in _counts(prose=None))
 
 
+def test_counts_gate_runs_its_children_on_this_machine():
+    """The nested pytest must see the same PATH the outer suite does.
+
+    `verify_counts.py` shells out to pytest twice. It used to hand the child
+    a hand-built environment -- PYTHONPATH plus a PATH hardcoded to three
+    directories, and no HOME -- so a toolchain installed anywhere else was
+    invisible to the child and visible to the parent. In CI that is Lean:
+    elan installs it under `$HOME/.elan/bin`, the Lean mirror's tests no
+    longer skip when the compiler is missing, and every one of them would
+    fail in the child while passing in the parent. A gate whose verdict
+    depends on which of two environments ran it is the defect this whole
+    file is about.
+    """
+    import os
+    env = VC.child_env()
+    assert env.get("PATH") == os.environ.get("PATH"), \
+        "the nested pytest gets a different PATH from this process"
+    assert env.get("PYTHONPATH") == ".", \
+        "the nested pytest cannot import the package under test"
+    for key in ("HOME", "PATH"):
+        assert key in env, f"the child environment drops {key}"
+
+
 def test_counts_gate_reads_the_real_prose_total():
     """Without this the prose checks could pass on a regex matching nothing."""
     assert VC.readme_prose_total() is not None, \
