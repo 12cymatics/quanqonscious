@@ -62,17 +62,26 @@ int main() {
 
     // Timing comparison
     BigInt n1(9998), n2(9997);
+    // Both arms consume their result identically. This used to guard only the
+    // standard arm with `volatile`, leaving the Vedic arm's product unused and
+    // free for the optimiser to delete -- an unequal comparison that biased in
+    // the Vedic arm's favour. See vedic_benchmark_fair.cpp, which measures all
+    // five of the sutras VEDIC_SUTRAS_AUTHENTIC_COMPLETE.md claimed speedups
+    // for and reports the ratio these two lines never formed.
+    static BigInt sink = 0;
     double nikhilam_time = time_execution([&]() {
-        S2_Nikhilam::multiply(n1, n2, BigInt(10000));
+        sink += S2_Nikhilam::multiply(n1, n2, BigInt(10000)).product;
     }, 10000);
 
     double standard_time = time_execution([&]() {
-        volatile BigInt r = n1 * n2;
+        sink += n1 * n2;
     }, 10000);
 
     std::cout << "TIMING (9998 × 9997, 10000 iterations):\n";
     std::cout << "   Nikhilam:  " << std::fixed << std::setprecision(1) << nikhilam_time << " ns/op\n";
-    std::cout << "   Standard:  " << standard_time << " ns/op\n\n";
+    std::cout << "   Standard:  " << standard_time << " ns/op\n";
+    std::cout << "   Ratio:     " << std::setprecision(2)
+              << (standard_time / nikhilam_time) << "x  (>1 means Nikhilam wins)\n\n";
 
     // =========================================================================
     // BENCHMARK 2: Ūrdhva-Tiryagbhyām (Crosswise)
