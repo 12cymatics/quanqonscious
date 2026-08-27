@@ -1,22 +1,17 @@
-"""Evaluate a trained checkpoint on SCAN + COGS, and optionally audit closure.
+"""Evaluate a trained checkpoint on SCAN + COGS.
 
-``audit_closure_rate`` is written to the results JSON only when
-``--audit-corpus`` supplied a corpus to measure it on. It used to be emitted
-as ``null`` on every run that omitted the flag, which records a measurement
-that was never taken as though it were a value: a reader aggregating result
-files sees a numeric field that is sometimes null and reasonably reads it as
-0.0, or as a measurement that ran and failed.
+There is no audit-closure option. ``--audit-corpus`` used to take a file of
+generated text and write an ``audit_closure_rate`` into the results JSON.
+That metric could not measure a model: R2, R3 and R4 are algebraic identities
+that vanish for every Ψ in ℚ^16 and R1 takes no Ψ at all, so the verdict was
+a function of the loop index — two arms, or two copies of one model, were
+guaranteed the same number. It is proved over all of ℚ^16 in
+``vedic/kernel/tests/test_audit_closure_degeneracy.py``.
 
-Absence is the only faithful encoding of "not measured". A consumer that
-needs the rate now gets a ``KeyError`` from ``payload["audit_closure_rate"]``
-instead of a ``None`` that arithmetic will happily turn into a number.
-
-The flag stays optional rather than becoming required, because the rate needs
-an input the caller may legitimately not have -- a corpus of generated text,
-which is a separate generation step from the SCAN/COGS benchmarks. Requiring
-it would couple those benchmarks to that step, and the likely response would
-be a placeholder corpus passed only to satisfy argparse, which yields a
-real-looking rate computed from nothing. That is worse than an absent key.
+The rate also needed a text→Ψ encoder to exist, and the synthetic encoder
+that supplied one has been removed along with the rest of the generated
+corpus. Both halves are gone rather than one being left as a flag nobody
+can pass an input to.
 """
 from __future__ import annotations
 
@@ -28,11 +23,7 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from vedic.eval import (
-    audit_closure_rate,
-    evaluate_cogs,
-    evaluate_scan,
-)
+from vedic.eval import evaluate_cogs, evaluate_scan
 
 
 def main() -> None:
@@ -41,8 +32,6 @@ def main() -> None:
     parser.add_argument("--adapter", type=Path, required=True,
                         help="LoRA adapter directory (a TrainingConfig output_dir).")
     parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--audit-corpus", type=Path, default=None,
-                        help="Optional file with one generated text per line for audit-closure rate.")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -64,14 +53,6 @@ def main() -> None:
                  for k, v in cogs_results.items()},
     }
 
-    # The key exists only when it was measured. See the module docstring.
-    if args.audit_corpus is not None:
-        with args.audit_corpus.open("r", encoding="utf-8") as f:
-            texts = [line.strip() for line in f if line.strip()]
-        payload["audit_closure_rate"] = audit_closure_rate(texts)
-    else:
-        print("audit closure: not measured (--audit-corpus not given); "
-              "'audit_closure_rate' is omitted from the results file.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)

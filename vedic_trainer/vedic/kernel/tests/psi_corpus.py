@@ -16,11 +16,11 @@ knob nobody could justify.
 It is replaced by two things that are neither random nor samples:
 
 ``STRUCTURED``
-    Nine vectors chosen because each is a *case*: the zero field, a constant
-    field, an alternating field, a low and a high spike, an all-negative
-    field, a field with mean exactly zero, one with six-digit denominators,
-    and the positive monotone vector the tests originally used. Every one
-    exists to exercise a specific way an operator can be wrong.
+    Seven vectors chosen because each is a *case*: the zero field, a constant
+    field, an alternating field, an all-negative field, the positive monotone
+    field the tests originally used, a field with mean exactly zero, and one
+    with six-digit denominators. Every one exists to exercise a specific way
+    an operator can be wrong.
 
 ``SPANNING_SET``
     ``{0} ∪ {eᵢ} ∪ {eᵢ + eⱼ}`` — 137 vectors. For any map of degree at most
@@ -82,7 +82,7 @@ def _structured() -> tuple[tuple[str, tuple], ...]:
     const = tuple(Fraction(3, 7) for _ in range(N))
     alt = tuple(Fraction(1 if v % 2 == 0 else -1) for v in range(N))
     neg = tuple(Fraction(-(v * v + 1), 7) for v in range(N))
-    legacy = tuple(Fraction(v * v + 1, 7) for v in range(N))
+    monotone = tuple(Fraction(v * v + 1, 7) for v in range(N))
     # Σ(2v − 15) for v = 0..15 is 2·120 − 16·15 = 0, so the mean is exactly 0.
     centred = tuple(Fraction(2 * v - 15, 6) for v in range(N))
     # Large denominators: exercises exact ℚ rather than anything float-like.
@@ -93,7 +93,7 @@ def _structured() -> tuple[tuple[str, tuple], ...]:
     # non-degeneracy guard below would have to be relaxed to permit it.
     return (
         ("zero", ZERO), ("constant", const), ("alternating", alt),
-        ("negative", neg), ("legacy_v2_over_7", legacy),
+        ("negative", neg), ("monotone_square_over_7", monotone),
         ("mean_zero", centred), ("fine_denominators", fine),
     )
 
@@ -118,9 +118,10 @@ BY_LABEL: dict[str, tuple] = dict(PSI_CASES)
 BY_LABEL["spike_low"] = BASIS[0]
 BY_LABEL["spike_high"] = BASIS[N - 1]
 
-#: The Ψ the pre-rewrite tests used, so a test genuinely about one particular
-#: input can name it rather than indexing into the corpus.
-LEGACY_PSI = BY_LABEL["legacy_v2_over_7"]
+#: (v² + 1)/7 — the positive monotone field the pre-rewrite tests used, named
+#: so a test genuinely about one particular input can say so rather than
+#: indexing into the corpus.
+MONOTONE_PSI = BY_LABEL["monotone_square_over_7"]
 
 #: A second independent field, for the binary operators (S3, S17, S23).
 PHI = tuple(Fraction(3 * v + 2, 5) for v in range(N))

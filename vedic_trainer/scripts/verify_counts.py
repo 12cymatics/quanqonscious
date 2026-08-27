@@ -43,17 +43,16 @@ LAYERS: dict[str, list[str]] = {
     "Canonical 29": ["vedic/kernel/tests/test_sutras_canonical.py"],
     "Blueprint gates": ["vedic/kernel/tests/test_blueprint_gates.py"],
     "Kernel (torch)": ["vedic/kernel/tests/test_torch_buffers.py"],
-    "Data": ["vedic/data/tests/test_synthetic_quality.py"],
-    "Split integrity": ["vedic/data/tests/test_split_is_disjoint.py"],
     "External sidecar": ["vedic/external/tests"],
     "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],
-    "Reported numbers": ["vedic/kernel/tests/test_reported_ablation.py"],
+    "Withdrawn numbers": ["vedic/kernel/tests/test_no_withdrawn_number_is_quoted.py"],
     "Documented paths": ["vedic/kernel/tests/test_documented_paths.py"],
     "Conservation (torch)": ["vedic/kernel/tests/test_conservation_torch.py"],
-    "Audit closure": ["vedic/eval/tests/test_audit_closure_degeneracy.py"],
+    "Audit closure": ["vedic/kernel/tests/test_audit_closure_degeneracy.py"],
     "Benchmark honesty": ["vedic/eval/tests/test_no_subset_is_quoted_as_a_benchmark.py"],
     "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
-    "Aux checkpoint": ["vedic/training/tests"],
+    "Aux checkpoint": ["vedic/training/tests/test_aux_checkpoint.py"],
+    "Auxiliary losses": ["vedic/training/tests/test_losses.py"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")
@@ -106,6 +105,20 @@ def failures() -> tuple[int, str]:
     return (int(m.group(1)) if m else 0), line.strip()
 
 
+#: The README's prose total: "N tests are collected and N pass". It sits
+#: outside the status table, so the row-by-row check below never saw it and
+#: it drifted two behind the suite. A count nobody verifies is the one defect
+#: this script exists to prevent, whether it is in a table or a sentence.
+_PROSE_TOTAL = re.compile(r"(\d+) tests are collected and (\d+) pass")
+
+
+def readme_prose_total() -> tuple[int, int] | None:
+    """(collected, passing) as the README's prose claims them, or None."""
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    m = _PROSE_TOTAL.search(text)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
 def readme_counts() -> dict[str, int]:
     """Counts the README currently claims, parsed from its status table."""
     text = (REPO / "README.md").read_text(encoding="utf-8")
@@ -124,7 +137,8 @@ def readme_counts() -> dict[str, int]:
 
 def reconcile(measured: dict[str, int], total: int,
               claimed: dict[str, int], n_failed: int = 0,
-              summary: str = "") -> list[str]:
+              summary: str = "",
+              prose: tuple[int, int] | None = None) -> list[str]:
     """Judge measured counts against claimed ones. Pure: no I/O, no pytest.
 
     Split out of `main` so the judgment can be regeneration-tested directly.
@@ -160,6 +174,21 @@ def reconcile(measured: dict[str, int], total: int,
         if name not in measured:
             problems.append(f"README row {name!r} maps to no layer here")
 
+    if prose is None:
+        problems.append(
+            "README states no prose total; the sentence 'N tests are collected "
+            "and N pass' is what a reader takes away, so it must be checkable")
+    else:
+        collected, passing = prose
+        if collected != total:
+            problems.append(
+                f"README prose says {collected} tests are collected, "
+                f"measured {total}")
+        if passing != total - n_failed:
+            problems.append(
+                f"README prose says {passing} pass, measured "
+                f"{total - n_failed}")
+
     return problems
 
 
@@ -183,7 +212,7 @@ def main() -> int:
         return 0
 
     problems = reconcile(measured, total, readme_counts(),
-                         n_failed, summary)
+                         n_failed, summary, readme_prose_total())
 
     if problems:
         print("\nMISMATCH:")

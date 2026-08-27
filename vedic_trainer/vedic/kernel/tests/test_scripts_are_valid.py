@@ -7,18 +7,25 @@ caught it because no test imported or compiled anything under scripts/ --
 the whole directory was outside the suite. A syntax error in a driver is
 invisible until someone runs it, which is exactly when it costs the most.
 
-The same glob then only matched `*.py`, so `reproduce_ablation.sh` went on
-invoking `run_ablation_eval.py` for the entire life of that file and for
-some time after it was deleted. Shell drivers are checked here too, and so
-are the scripts they reference: a driver that calls something which no
-longer exists is broken whether or not it parses.
+The same glob then only matched `*.py`, so the shell driver
+`reproduce_ablation.sh` went on invoking `run_ablation_eval.py` for the
+entire life of that file and for some time after it was deleted. The scripts
+a driver references are therefore checked too: a driver that calls something
+which no longer exists is broken whether or not it parses.
+
+There are no `.sh` drivers left. `reproduce_ablation.sh` was the only one,
+and it went with the synthetic corpus its first step generated — steps 1 and
+4 read files nothing in this repository can now produce. The two tests that
+globbed `*.sh` are gone rather than left asserting over an empty set: a
+`test_there_are_shell_drivers_to_check` that must fail, or be weakened to
+pass on nothing, is worse than no test. `test_referenced_scripts_exist`
+stays and covers every Python driver, which is what caught the dangling
+reference in the first place.
 """
 from __future__ import annotations
 
 import ast
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -79,22 +86,7 @@ def test_script_has_an_entry_point(path: Path):
     assert '__main__' in src, f"{path.name} has no __main__ guard"
 
 
-# ------------------------------------------------------------ shell drivers
-
-SHELL = sorted((Path(__file__).resolve().parents[3] / "scripts").glob("*.sh"))
-
-
-def test_there_are_shell_drivers_to_check():
-    assert SHELL, "no .sh drivers found — the glob is wrong, not the directory"
-
-
-@pytest.mark.parametrize("path", SHELL, ids=[p.name for p in SHELL])
-def test_shell_script_parses(path: Path):
-    bash = shutil.which("bash")
-    assert bash, "bash is required to check shell drivers"
-    proc = subprocess.run([bash, "-n", str(path)], capture_output=True, text=True)
-    assert proc.returncode == 0, f"{path.name} does not parse:\n{proc.stderr}"
-
+# ------------------------------------------------------- cross-references
 
 _REF = re.compile(r"scripts/([A-Za-z0-9_-]+\.(?:py|sh))")
 
@@ -114,8 +106,7 @@ def syntax_error_in(source: str, name: str = "<probe>") -> str | None:
     return None
 
 
-@pytest.mark.parametrize("path", SHELL + DRIVERS,
-                         ids=[p.name for p in SHELL + DRIVERS])
+@pytest.mark.parametrize("path", DRIVERS, ids=[p.name for p in DRIVERS])
 def test_referenced_scripts_exist(path: Path):
     """Every scripts/<name> a driver names must be there to be called."""
     root = path.resolve().parents[1]

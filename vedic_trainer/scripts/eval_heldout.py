@@ -1,4 +1,4 @@
-"""Held-out cross-entropy on the synthetic eval split. Runs in full.
+"""Held-out cross-entropy on the eval split. Runs in full.
 
 This is a *different evaluation* from scripts/eval_benchmarks.py, not a
 faster mode of it. Neither script has a flag that skips work: a run either
@@ -14,10 +14,10 @@ The previous version capped examples at 512 tokens and *recorded* how many
 it cut. Recording is better than hiding, but it still left a knob whose
 default silently decided what the headline number covered, and it made every
 result carry a scope caveat a reader had to check. The cap never bound on
-this corpus -- the longest example in ``data/synthetic_train.jsonl``,
-``synthetic_eval.jsonl`` and ``synthetic_all.jsonl`` is 14 tokens against
-that 512 -- so removing it changes no recorded number and removes the
-mechanism by which a future corpus could be cut.
+the corpus this package used to generate -- its longest example was 14
+tokens against that 512 -- so removing it changed no recorded number, and it
+removes the mechanism by which a future corpus could be cut without anyone
+being told.
 
 Memory is bounded by batching, not by truncating: ``--batch-size`` controls
 the footprint, and every example in every batch is scored whole. Batches are

@@ -11,9 +11,14 @@ Renames are the common case and they are silent by nature: the code keeps
 working, so only the prose breaks. This test makes a stale pointer a test
 failure at the moment of the rename.
 
-External files -- things that live on the user's machine rather than in this
-repository -- are declared below. A path is exempt only by appearing in that
-list, never by failing to be found.
+Two kinds of path are exempt, and only by being declared below -- never by
+failing to be found. ``EXTERNAL`` is for files that live on the user's
+machine rather than in this repository. ``REMOVED`` is for files a document
+names *because they are gone*: a withdrawal notice that cannot say what it
+removed is not a withdrawal. Both lists are checked in both directions --
+an entry nobody cites is deleted, an "external" file that turns up here loses
+its exemption, and a "removed" file that comes back loses its exemption too,
+so neither list can quietly cover a real rename.
 
 Tracked, not present
 --------------------
@@ -43,6 +48,20 @@ DOCS = ("README.md", "ABLATION_RESULTS.md")
 EXTERNAL = {
     "vedic_v18.16_strict_kernel.html",   # the user's JS reference simulator
     "vedic_v18.24_full_kernel.html",     # ditto, the later revision
+}
+
+# Paths named because they no longer exist. ABLATION_RESULTS.md withdraws the
+# figures measured on the synthetic corpus and has to name the pipeline it
+# withdrew with them; a reader cannot check the withdrawal against a
+# description that will not say what was removed. Each entry is asserted to
+# be genuinely absent below, so this list cannot hide a rename.
+REMOVED = {
+    "data/seed_corpus.txt",                    # the 512 seed sentences
+    "scripts/generate_synthetic.py",           # expanded them into 5,120 records
+    "scripts/split_corpus.py",                 # partitioned them by source
+    "vedic/data/tesseract_encode.py",          # the text -> Psi encoder
+    "vedic/data/synthetic_contradiction.py",   # (P, not-P) pair generator
+    "vedic/data/synthetic_paraphrase.py",      # axis-emphasis pair generator
 }
 
 _PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|json|yaml|yml|"
@@ -98,7 +117,7 @@ def test_the_documents_cite_some_paths():
 
 @pytest.mark.parametrize("doc,path", ALL, ids=[f"{d}:{p}" for d, p in ALL])
 def test_documented_path_is_tracked(doc: str, path: str):
-    if path in EXTERNAL:
+    if path in EXTERNAL or path in REMOVED:
         return
     assert path in TRACKED, (
         f"{doc} points at {path}, which git does not track"
@@ -134,3 +153,27 @@ def test_no_external_entry_actually_exists_in_the_repo():
     assert not present, (
         f"{sorted(present)} are marked external but exist here — remove the "
         f"exemption so they are checked like everything else")
+
+
+def test_removed_list_has_no_dead_entries():
+    """Same rule as EXTERNAL: an exemption nobody uses is one waiting to be
+    reused for something it was not written for."""
+    cited = {p for _, p in ALL}
+    stale = REMOVED - cited
+    assert not stale, f"REMOVED exempts paths no document mentions: {sorted(stale)}"
+
+
+def test_no_removed_entry_is_back_in_the_repository():
+    """The exemption says these are gone. If one returns, the document that
+    calls it removed is now wrong, and this list would otherwise hide that —
+    which is exactly the stale-pointer defect the whole file exists for."""
+    back = sorted(p for p in REMOVED if p in TRACKED or (REPO / p).exists())
+    assert not back, (
+        f"{back} are listed as removed but are present again. Update the "
+        f"document that describes them as gone, then drop them from REMOVED.")
+
+
+def test_the_two_exemption_lists_are_disjoint():
+    """A path cannot be both someone else's file and a file deleted here."""
+    both = EXTERNAL & REMOVED
+    assert not both, f"declared both external and removed: {sorted(both)}"

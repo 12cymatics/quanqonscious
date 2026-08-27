@@ -42,8 +42,8 @@ dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.4"]
 # `scripts` on sys.path, colliding with every other project that does the same.
 #
 # These are repo workflows, and the repo runs them that way: `python
-# scripts/train_lora.py --config ...`, as README.md, docs/BIT_EXACT_PROTOCOL.md
-# and scripts/reproduce_ablation.sh all invoke them. Nothing anywhere called the
+# scripts/train_lora.py --config ...`, as README.md and
+# docs/BIT_EXACT_PROTOCOL.md invoke them. Nothing anywhere called the
 # console names. Making them work would mean packaging fixtures/ and configs/ as
 # package data and rewriting the path resolution -- a real change to undertake
 # deliberately, not a line to restore here.

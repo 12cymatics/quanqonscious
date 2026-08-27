@@ -1,381 +1,150 @@
-# Sutra auxiliary-loss ablation — results
+# Sutra auxiliary-loss ablation — withdrawn
 
-First end-to-end execution of the `vedic_trainer` LoRA pipeline. The
-question: do the four sutra-derived auxiliary losses improve
-compositional generalization?
+**Every held-out cross-entropy figure this document reported has been
+withdrawn.** Nothing is claimed in their place: the effect of the four
+sutra-derived auxiliary losses on held-out language modelling is
+**unmeasured** for this package.
 
-**Answer: no. Two of the four cannot affect training at all, and the two
-that can make held-out language modelling consistently worse.**
+The measurements happened. `runs/*.json` still hold them, tracked, and are an
+honest record of what was executed. What has gone is the licence to quote
+them, and this file is the withdrawal rather than the results.
 
-Reproduce with `scripts/reproduce_ablation.sh`.
+## What was measured
 
-> **Read this before the tables.** Every result down to *"After fixing the
-> eval split"* was measured on a train/eval split that leaked completely:
-> all 332 eval source sentences also appeared in train. Held-out CE there was
-> scoring the model on near-duplicate paraphrases of text it had memorised,
-> so every **absolute** figure in those sections is inflated — including
-> "fine-tuning cuts held-out CE by 73.8%" and the pipeline-soundness argument
-> built on it. The **relative** comparison between arms largely survives,
-> because both arms shared the confound; the final section shows by how
-> much. The sections are kept rather than deleted so the correction is
-> checkable.
+A LoRA fine-tune of `HuggingFaceTB/SmolLM2-135M-Instruct` (r=16, α=32, on
+q/k/v/o), one epoch, three seeds, two arms — `full` with the four auxiliary
+losses weighted and `no_sutra` with all four weights zero — scored by a
+separately computed pure-CE held-out loss. Four weightings were run in
+sequence: with two of the losses inert, with all four live at the original
+weights, with all four live at conventional weights, and finally on a
+source-disjoint train/eval split after the original split was found to leak
+every one of its eval source sentences into train.
 
-## Setup
+The reported direction was consistent across all four: adding the losses
+cost held-out cross-entropy. That was the finding, and it is the finding
+being withdrawn.
 
-| | |
-|---|---|
-| Base model | `HuggingFaceTB/SmolLM2-135M-Instruct` (`meta-llama/Llama-3.2-1B-Instruct` is gated) |
-| Adapter | LoRA r=16, α=32, dropout 0.05, on q/k/v/o — 1,843,200 trainable params (1.35%) |
-| Data | 5,120 synthetic records from 512 seed sentences; 4,608 train / 512 eval |
-| Schedule | 1 epoch, 288 optimizer steps, lr 2e-4 cosine, batch 4 × grad-accum 4 |
-| Hardware | 4 CPU cores, fp32 |
-| Arms | `full` (α=0.10, β=0.05, γ=0.02, δ=0.05) vs `no_sutra` (all four = 0) |
+## Why the figures are withdrawn
 
-The two arm configs differ **only** in the four loss weights and
-`output_dir`. Seeds 42, 1, 2.
+**1. The data they were measured on is no longer in this repository, and
+nothing here can regenerate it.**
 
-## Are the four losses differentiable w.r.t. Ψ?
+Every arm trained and evaluated on a *synthetic* corpus: 5,120 records
+expanded by template from 512 seed sentences, ten records per sentence, with
+Ψ vectors produced by a hand-written text encoder. That pipeline —
+`data/seed_corpus.txt`, `scripts/generate_synthetic.py`,
+`scripts/split_corpus.py`, `vedic/data/tesseract_encode.py`,
+`vedic/data/synthetic_contradiction.py` and
+`vedic/data/synthetic_paraphrase.py` — has been removed. It was a stand-in for real training
+data, and it carried the defects a stand-in carries: three of the four
+encoder axes asserted a positive feature when no marker was found in the
+text at all, the polarity axis computed a normalised marker tally and then
+discarded it unread, and the contradiction generator fell back to prefixing
+"It is not the case that" whenever it could not find an auxiliary verb.
 
-`scripts/probe_aux_gradients.py`:
+This repository's own `.gitignore` stated the standard being applied here.
+The generated corpus was ignored and the seed corpus was not, with the reason
+written beside it: *without it, nothing in the repository can regenerate or
+falsify the numbers in ABLATION_RESULTS.md*. That is now the case. A figure
+that cannot be reproduced or falsified from the repository that publishes it
+is a claim, not a result.
 
-| loss | value | weighted | ‖∇Ψ‖₁ | reaches Ψ |
-|---|---|---|---|---|
-| `L_chi` | 5.09e-01 | 5.09e-02 | 7.23e-01 | yes |
-| `L_cons` | 1.75e+01 | 8.75e-01 | **0.00** | **no** |
-| `L_curv` | 1.34e-05 | 2.67e-07 | **no grad_fn** | **no** |
-| `L_dual` | 1.22e+01 | 6.12e-01 | 2.10e+01 | yes |
+**2. The objective is no longer the one that was run.**
 
-- **`L_curv` is identically zero.** It power-iterates from
-  `torch.randn_like(psi)` — a random vector, not Ψ — against `g_ab`.
-  `vedic/kernel/hessian.py`'s own docstring states *"because every contributing
-  operator is linear, g_ab is independent of Ψ"*, confirmed here:
-  `g_ab` is bit-identical for different Ψ. Every batch row therefore
-  shares one matrix, so `relu(kappa - kappa.detach().mean())` is 0.
-- **`L_cons` reduces to `trace_sum²`**, a function of the step counter
-  alone. From the training log: 16, 64, 144, 256 at `trace_sum` =
-  4, 8, 12, 16. It contributes zero gradient but grows quadratically,
-  so it corrupts every reported loss (below).
+`L_chi` and `L_curv` have both changed definition since those runs.
+`L_chi` was the antisymmetric *share* of Ψ's energy, ‖A‖²/‖Ψ‖²; it is now
+‖A‖². `L_curv` was a Rayleigh quotient hinged against `kappa.detach().mean()`
+— a per-example loss shifted by a statistic of whichever examples shared its
+batch; it is now ⟨Ψ, g_ab Ψ⟩. Both denominators were normalisations and both
+are gone, along with the batch-relative baseline. So even with the corpus
+restored, the recorded numbers would describe an objective this package no
+longer implements. See `vedic/training/losses.py`.
 
-The advertised four losses are effectively two; the ablation tests
-`L_CE + 0.10·L_chi + 0.05·L_dual`.
+Re-running with the corpus rebuilt and the old losses restored would not
+rescue the numbers either. It would restore the placeholder data and the
+normalisations in order to reproduce a figure about them, which is the
+opposite of the reason both were removed.
 
-## Reported loss is not the loss being optimised
+## What survives, and where it is established
 
-`L_cons` inflates the logged numbers by ~2000×:
+Three of the things this document reported were never measurements. They are
+properties of the code, they were established by tests rather than by runs,
+and they are unaffected by the withdrawal:
 
-| arm | reported `train_loss` | HF `eval_loss` | true CE |
-|---|---|---|---|
-| `no_sutra` | 9.85 | 1.69 | 1.69 |
-| `full` | **12,293.7** | **3,269.8** | **1.71** |
+- **`L_cons` summing R1..R4 was a constant.** R2, R3 and R4 are algebraic
+  identities that vanish for every Ψ in ℚ¹⁶ and R1 takes no Ψ at all, so the
+  sum had identically zero gradient while growing quadratically in the step
+  counter. Proved over all of ℚ¹⁶ in
+  `vedic/kernel/tests/test_conservation_laws.py` and, for the
+  composition, in
+  `vedic/kernel/tests/test_audit_closure_degeneracy.py`. `L_cons` no longer
+  sums the residuals; its docstring derives what it does instead.
+- **The power-iteration `L_curv` had no gradient path to Ψ at all.** `g_ab`
+  is independent of Ψ — every contributing operator is linear — so iterating
+  toward its top eigenvector from a random vector produced a quantity
+  constant across the batch. `vedic/kernel/hessian.py` states it and
+  `vedic/kernel/tests/test_conservation_laws.py` verifies it. `scripts/probe_aux_gradients.py`
+  is the detector, and it exits non-zero when a loss does not reach Ψ.
+- **Audit closure cannot distinguish two models.** The README named an
+  audit-closure rate at inference as falsification criterion 2. Closure is a
+  function of the trace counter alone, so any two arms — including two copies
+  of one model — are guaranteed the same number and the criterion is met by
+  anything. Proved over all of ℚ¹⁶ in
+  `vedic/kernel/tests/test_audit_closure_degeneracy.py`. The metric has been
+  removed rather than reported.
 
-At `trace_sum = 336`, `L_cons` = 112,896 against a true CE of 4.9 — over
-99% of the logged loss is a zero-gradient constant. Loss curves and any
-loss-based checkpoint selection or early stopping are unusable on the
-`full` arm. This is why the tables below use a separately computed
-pure-CE held-out loss.
+## The raw records
 
-## Held-out CE (the discriminating measure)
+`runs/*.json` are kept. Deleting evidence is not the same as withdrawing a
+claim, and a reader checking this withdrawal needs to see what was actually
+run. Each file records its model, its adapter, and the held-out `ce_loss`,
+`ppl`, `n_tokens` and wall time of one evaluation.
 
-| seed | `no_sutra` | `full` | Δ | rel |
-|---|---|---|---|---|
-| 42 | 1.6477 | 1.7109 | +0.0632 | +3.84% |
-| 1 | 1.6556 | 1.7084 | +0.0528 | +3.19% |
-| 2 | 1.6631 | 1.7182 | +0.0550 | +3.31% |
-| **mean** | **1.6555** | **1.7125** | **+0.0570** | **+3.44%** |
-| sd | 0.0077 | 0.0051 | 0.0055 | |
-
-- The effect is **7.4× the baseline seed spread** (sd 0.0077).
-- The two arms' ranges are **disjoint**: worst `no_sutra` (1.6631) is
-  still better than best `full` (1.7084).
-- Direction is unanimous across all three seeds.
-
-The adapters are genuinely different — all 240 tensors differ, 19.29%
-relative L1 — so `L_chi` and `L_dual` do move the model. They move it
-the wrong way.
-
-## The pipeline itself works
-
-| arm | held-out CE | PPL |
-|---|---|---|
-| base (untuned) | 6.2825 | 535.11 |
-| `no_sutra` | 1.6477 | 5.195 |
-| `full` | 1.7109 | 5.534 |
-
-Fine-tuning cuts held-out CE by **73.8%** (perplexity 535 → 5.2). The
-harness is sound; that is what makes the negative result above
-trustworthy rather than an artifact of a broken setup.
+`vedic/kernel/tests/test_no_withdrawn_number_is_quoted.py` fails if any
+tracked document quotes a figure sourced from them, and fails if the corpus
+pipeline reappears without this withdrawal being revisited.
 
 ## SCAN / COGS — withdrawn
 
-**The figures that were here have been withdrawn.** They were exact-match
-scores over **30 SCAN and 20 COGS examples per split**, against real splits
-of 3,920–21,000. That is 0.1–0.7% of the benchmark, and it was presented as
-the benchmark.
+**The SCAN and COGS figures that were here have also been withdrawn**, and
+for a different reason. They were exact-match scores over 30 SCAN and 20 COGS
+examples per split, against real splits of 3,920–21,000 — that is 0.1–0.7% of
+the benchmark, presented as the benchmark.
 
 They were produced by `--scan-subset 30 --cogs-subset 20` flags on a script
 that no longer exists. `scripts/eval_benchmarks.py`, which replaced it,
 states in its first paragraph: *"There is no `--subset` and no `--skip`: a
 truncated benchmark is not the benchmark, and a flag that shortens it is how
-a partial result gets reported as a complete one."* Keeping numbers produced
-by exactly that mechanism, under a heading asserting what the benchmark can
-and cannot do, contradicted the tool that replaced it.
+a partial result gets reported as a complete one."*
 
-Nothing is claimed in their place. **SCAN and COGS are unmeasured for this
-package.** Running them means the full splits — roughly 36,000 greedy
-decodes — via `scripts/eval_benchmarks.py`, which has no flag to shorten it.
-
-The raw records remain in `runs/eval_*.json` and are honest about what was
-executed: each carries `"n_total": 30` or `"n_total": 20`. They are a record
-of a subset run, not of a benchmark, and
+**SCAN and COGS are unmeasured for this package.** Running them means the
+full splits — roughly 36,000 greedy decodes — via
+`scripts/eval_benchmarks.py`, which has no flag to shorten it. The raw
+records remain in `runs/eval_*.json` and are honest about what was executed:
+each carries `"n_total": 30` or `"n_total": 20`. They are a record of a
+subset run, not of a benchmark, and
 `vedic/eval/tests/test_no_subset_is_quoted_as_a_benchmark.py` fails if any
 document quotes an accuracy sourced from them.
 
-## Notes
+## What it would take to measure this again
 
-- `scripts/verify_bit_exact.py` passes (32 inputs, 32 sutra records, 96
-  conservation records). The exact-ℚ kernel and its torch port do agree;
-  that is a separate, genuine property and is not in question here.
-- 12 of 5,120 generated records come back `audit_closed=True`, worth
-  reconciling with the README's "audit-closed by construction".
-- `TesseractWM` is instantiated outside `self.model`, so its parameters
-  never enter the optimizer — the Ψ projection stays frozen at init.
-  Gradients still flow through it to the LoRA weights.
-- Single base model and one dataset scale. The negative result is solid
-  for this setup; it does not rule out an effect at larger scale or on
-  an in-distribution compositional task.
+The question the ablation asked is a good one and remains open. Answering it
+needs, in order:
 
----
+1. **A real corpus.** Not a template expansion of a seed file — text that
+   exists independently of this package, with the record schema
+   `scripts/train_lora.py` reads (see the README), and a train/eval split
+   partitioned over *sources* rather than records, so that held-out means
+   held out.
+2. **Both arms retrained from scratch** on it, at three or more seeds, with
+   the auxiliary weights scaled so no term dominates cross-entropy — and with
+   that scaling chosen before the results are seen, not after.
+3. **Held-out cross-entropy computed separately from the training loss.**
+   The logged `train_loss` was unusable on the `full` arm for the whole first
+   run, because the then-current `L_cons` added a step-counter square that
+   grew to over 99% of it.
+4. **The full SCAN and COGS splits**, if a compositional claim is to be made
+   at all, through `scripts/eval_benchmarks.py`.
 
-## Re-run on the reworked kernel (operands + composition algebra)
-
-After parameterising all 29 sutras (every operand explicit) and adding the
-SERIES / PARALLEL / CONCURRENT composition algebra, the whole ablation was
-re-run from scratch: fresh adapters, all three seeds, both arms.
-
-| seed | `no_sutra` | `full` | Δ | rel | reproduces prior run |
-|---|---|---|---|---|---|
-| 42 | 1.647661 | 1.710895 | +0.0632 | +3.84% | yes |
-| 1 | 1.655605 | 1.708396 | +0.0528 | +3.19% | yes |
-| 2 | 1.663117 | 1.718151 | +0.0550 | +3.31% | yes |
-| **mean** | **1.655461** | **1.712481** | **+0.0570** | **+3.44%** | |
-| sd | 0.007729 | 0.005067 | | | |
-
-All six runs reproduce the pre-rework held-out CE **bit-for-bit**. The
-operand refactor is behaviour-neutral end to end — not merely at the fixture
-gate but through a full training run — and the conclusion is unchanged:
-
-- effect is **7.4×** the baseline seed sd
-- ranges **disjoint** (worst `no_sutra` 1.6631 < best `full` 1.7084)
-- direction unanimous across seeds
-
-`L_cons` and `L_curv` remain dead after the rework, as expected: their defect
-is structural, not a matter of which operands the sutras take. `L_cons`
-depends only on the step counter; `L_curv` power-iterates a Ψ-independent
-matrix from a random vector.
-
-### Composition modes on the full 29-sutra queue
-
-`python scripts/run_composition.py`
-
-| mode | result | max denominator digits |
-|---|---|---|
-| SERIES | **zero map** | 1 |
-| PARALLEL | 16/16 nonzero | 7 |
-| CONCURRENT | 16/16 nonzero | 220 |
-| CANONICAL | 16/16 nonzero | 7 |
-| COMPOSITE | raises (S17 precondition) | — |
-
-SERIES over the whole queue annihilates every input: S20 projects onto one
-Walsh row (image `c·h₀`), S21 takes absolute values (constant vector `|c|`),
-S22 takes differences over (v, v̄) pairs (exactly 0 on a constant). Any queue
-containing that ordered run is the zero map. CONCURRENT's 220-digit
-denominators show the real cost of exact-ℚ composition.
-
----
-
-## After fixing the structural defects
-
-The runs above were not a fair test of the hypothesis: two of the four
-auxiliary losses had zero gradient and the Tesseract projection was frozen at
-random initialisation. With all four defects fixed (`44ce458`), the ablation
-was re-run from scratch.
-
-| seed | `no_sutra` | `full` | Δ | rel | prior rel (2 dead) |
-|---|---|---|---|---|---|
-| 42 | 1.6501 | 2.1220 | +0.4719 | **+28.60%** | +3.84% |
-| 1 | 1.6566 | 2.1310 | +0.4744 | **+28.64%** | +3.19% |
-| 2 | 1.6630 | 1.9906 | +0.3276 | **+19.70%** | +3.31% |
-| **mean** | **1.6566** | **2.0812** | **+0.4246** | **+25.63%** | +3.44% |
-| sd | 0.0064 | 0.0786 | | | |
-
-- effect is **66×** the baseline seed sd
-- ranges **disjoint** (worst `no_sutra` 1.6630 < best `full` 1.9906)
-- direction unanimous
-- the penalty is **7.4× larger** than when half the objective was inert
-
-Making the losses work made the result worse, not better. The earlier +3.44%
-understated the damage precisely because `L_cons` and `L_curv` contributed
-nothing.
-
-### Caveats
-
-- **Baseline shifted** 1.6477 → 1.6501. Expected: `TesseractWM`'s parameters
-  now enter the optimizer, so AdamW weight-decays them even in the `no_sutra`
-  arm where no auxiliary gradient flows.
-- **`full` variance grew** (sd 0.0051 → 0.0786). Seed 2 lands at +19.7% while
-  42 and 1 sit at +28.6%, so the live objective is less stable across seeds
-  than the inert one was.
-- **Loss scale not retuned.** `L_cons` now contributes ≈1.99 weighted against
-  a CE of ≈1.7 at the configured β = 0.05, i.e. comparable to the main
-  objective. The weights were chosen for the old (inert) scales and were run
-  unchanged rather than retuned to flatter the result. A fair follow-up would
-  rescale the auxiliary weights so each sits an order of magnitude below CE,
-  which is the usual convention. That run is below, and it settles the
-  question.
-
-
-
----
-
-## After rescaling the auxiliary weights
-
-The run above left `L_cons` weighted at ~120% of CE, because the weights had
-been chosen when two of the four losses were inert and were deliberately run
-unchanged rather than retuned to flatter the result. That left one question
-open: **does a properly scaled version of these losses still hurt?**
-
-Each weight was rescaled so its term contributes ~10% of CE at the observed
-raw magnitudes — the usual convention — putting all four at the same
-weighted value rather than one dominating:
-
-| loss | raw | old w | old weighted | new w | new weighted |
-|---|---|---|---|---|---|
-| `L_chi` | 0.5087 | 0.100 | 0.0509 | 0.326317 | 0.1660 |
-| `L_cons` | 39.8677 | 0.050 | **1.9934** | 0.004164 | 0.1660 |
-| `L_curv` | 1.8051 | 0.020 | 0.0361 | 0.091961 | 0.1660 |
-| `L_dual` | 13.7416 | 0.050 | 0.6871 | 0.012080 | 0.1660 |
-
-Same code, same data, same seeds, same `no_sutra` arm (all four weights zero,
-so that arm is unchanged and its runs are reused).
-
-| seed | `no_sutra` | `full` (scaled) | Δ | rel | rel (unscaled) |
-|---|---|---|---|---|---|
-| 42 | 1.6501 | 1.7848 | +0.1346 | **+8.16%** | +28.60% |
-| 1 | 1.6566 | 1.7702 | +0.1135 | **+6.85%** | +28.64% |
-| 2 | 1.6630 | 1.8183 | +0.1553 | **+9.34%** | +19.70% |
-| **mean** | **1.6566** | **1.7911** | **+0.1345** | **+8.12%** | +25.63% |
-| sd | 0.0064 | 0.0247 | 0.0209 | | |
-
-**The answer is yes: properly scaled, the losses still hurt.**
-
-- the penalty is **21× the baseline seed sd** (0.0064)
-- ranges **disjoint**: worst `no_sutra` 1.6630 < best scaled `full` 1.7702
-- direction **unanimous** across all three seeds
-- `full` variance **fell** (sd 0.0786 → 0.0247), so the scaled objective is
-  also more stable — the effect is not an artifact of one bad seed
-
-Scaling reduces the damage to roughly a third (+25.63% → +8.12%) and removes
-the objection that the earlier result was an artifact of one term drowning
-the others. It does not change the direction. Across three weightings — two
-losses inert (+3.44%), all four live at the original weights (+25.63%), and
-all four live at conventional weights (+8.12%) — the sutra auxiliary losses
-made held-out language modelling worse every time, on every seed.
-
-### What is and is not concluded
-
-Concluded, for this setup: adding these four sutra-derived auxiliary losses
-to a LoRA fine-tune of SmolLM2-135M on this synthetic corpus costs held-out
-cross-entropy, and the cost is not a scaling artifact.
-
-Not concluded: nothing here rules out an effect at a larger model scale, on
-a different corpus, or on a genuinely compositional in-distribution task.
-The one benchmark named for that purpose (SCAN/COGS) is **unmeasured** — the
-figures once reported here covered 0.1–0.7% of each split and have been
-withdrawn, so nothing is known about how any arm scores on it.
-
-One objection this does not rest on: truncation. `scripts/eval_heldout.py`
-caps examples at 512 tokens, and the cap was invisible here — in the held-out
-corpus that `scripts/split_corpus.py` writes, the longest example is 14
-tokens, so no held-out evaluation in this document scored a truncated prefix.
-The script now records `n_truncated` and `max_tokens_seen` in every result
-file rather than leaving that to be assumed.
-
-Every number in this document is checked against `runs/*.json` by
-`scripts/verify_ablation.py --check`, which is run by the test suite.
-
-
----
-
-## After fixing the eval split
-
-The split was made by shuffling **records**. The generator emits ten records
-per seed sentence (one contradiction pair, four axis-paraphrase pairs), so
-nine of a sentence's ten records went to train and the tenth to eval:
-
-```
-train 4608  eval 512
-exact record overlap: 0
-distinct sources: train 512  eval 332   SOURCE OVERLAP 332
-```
-
-`scripts/split_corpus.py` partitions **sources** instead, so every record
-derived from a sentence travels with it: 461 train sources / 51 eval
-sources, 0 shared, 0 shared texts.
-`vedic/data/tests/test_split_is_disjoint.py` checks the files the training
-configs actually read, and fails on the historical split.
-
-Same code, same configs, same seeds. Both arms retrained from scratch on the
-corrected split — the `no_sutra` arm too, because its old numbers were
-measured on the leak as well.
-
-| seed | `no_sutra` | `full` (scaled) | Δ | rel | rel (leaking split) |
-|---|---|---|---|---|---|
-| 42 | 1.7315 | 1.8616 | +0.1302 | **+7.52%** | +8.16% |
-| 1 | 1.7160 | 1.8367 | +0.1207 | **+7.03%** | +6.85% |
-| 2 | 1.7246 | 1.8789 | +0.1543 | **+8.95%** | +9.34% |
-| **mean** | **1.7240** | **1.8591** | **+0.1350** | **+7.83%** | +8.12% |
-| sd | 0.0077 | 0.0212 | 0.0174 | | |
-
-**The conclusion survives.** On a genuinely held-out split the sutra
-auxiliary losses still cost held-out cross-entropy:
-
-- the penalty is **17.4× the baseline seed sd** (0.0077)
-- ranges **disjoint**: worst `no_sutra` 1.7315 < best `full` 1.8367
-- direction **unanimous** across all three seeds
-- **+7.83%** against **+8.12%** on the leaking split — a difference of 0.29
-  percentage points
-
-### What the leak did and did not do
-
-Every arm moved **up** once the memorised sentences were gone — `no_sutra`
-from 1.6501/1.6566/1.6630 to 1.7315/1.7160/1.7246 — while the seed spread
-stayed comparable (sd 0.0064 → 0.0077). The leak was shifting the *level*,
-not adding noise, and it shifted both arms by almost the same amount. That
-is what a shared confound does: it inflates the absolute numbers without
-manufacturing a difference between the arms.
-
-So the earlier tables were wrong about **how well the model does** and right
-about **which arm does better**. Both halves matter, and only the second
-was ever the question being asked.
-
-### The four weightings, together
-
-| run | weighting | split | penalty |
-|---|---|---|---|
-| `initial` | two losses inert | leaking | +3.44% |
-| `fixed` | all four live, original weights | leaking | +25.63% |
-| `scaled` | all four live, conventional weights | leaking | +8.12% |
-| `disjoint` | all four live, conventional weights | **source-disjoint** | **+7.83%** |
-
-Four measurements, four times worse. Every figure in this section is checked
-against `runs/disjoint_*.json` by `scripts/verify_ablation.py --check`, which
-the test suite runs.
-
-### Still not concluded
-
-Nothing here rules out an effect at a larger model scale, on a different
-corpus, or on a genuinely compositional in-distribution task. The benchmark
-named for that purpose (SCAN/COGS) is **unmeasured** — the figures once
-reported here were a 30/20-example subset and have been withdrawn. Measuring
-it means the full splits, roughly 36,000 greedy decodes, through
-`scripts/eval_benchmarks.py`.
+Until that exists, this package makes no claim about what the four auxiliary
+losses do to held-out performance.

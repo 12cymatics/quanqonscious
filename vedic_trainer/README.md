@@ -23,15 +23,38 @@ package exposes:
 - A `TesseractWM` working-memory projection from hidden states to a
   16-vertex Boolean cube.
 - Four sutra-derived auxiliary losses applied during LoRA fine-tuning:
-  - `L_χ`   — contradiction (S7 antisymmetric energy)
-  - `L_cons` — conservation (R1..R4)
-  - `L_curv` — curvature (top eigenvalue of `g_ab`)
+  - `L_χ`    — contradiction (S7 antisymmetric energy, ‖A(Ψ)‖²)
+  - `L_cons` — conservation (drift of mass, ‖S‖² and ‖A‖² under S29)
+  - `L_curv` — curvature (the quadratic form ⟨Ψ, g_ab Ψ⟩ at Ψ)
   - `L_dual` — dual-basis coherence ((S5∘S11) Ψ vs WHT axes)
-- Synthetic data generators (contradiction pairs, axis-emphasis
-  paraphrases) that are deterministic. They are **not** audit-closed by
-  construction: 12 of the 5,120 generated records (0.23%) satisfy the
-  audit predicate. An earlier revision of this file claimed otherwise.
-- SCAN / COGS evaluators + at-inference audit-closure rate.
+
+  None of the four divides by a quantity measured from the data. `L_χ` was
+  the antisymmetric *share* of Ψ's energy and `L_curv` a Rayleigh quotient
+  hinged against the batch mean; both normalisations are gone, which makes
+  both terms scale-dependent — see the module docstring in
+  `vedic/training/losses.py`, which states that trade-off rather than
+  burying it. The two divisions by 16 left in `L_dual` are
+  orthogonal-projection coefficients onto basis vectors of norm squared 16,
+  not normalisations.
+- SCAN / COGS evaluators.
+
+**No training data ships with this package, and none is generated.** A
+synthetic corpus used to: 5,120 records expanded by template from 512 seed
+sentences, with Ψ produced by a hand-written text encoder. It was a stand-in
+for real data and it has been removed, along with the figures measured on it
+— see `ABLATION_RESULTS.md`. Point `data.train_path` and `data.eval_path` at
+your own JSONL, one object per line with a `text` field:
+
+```json
+{"text": "the sentence to train on"}
+```
+
+`scripts/train_lora.py` reads only `text`. Nothing truncates: an example
+longer than the config's `max_seq_length` stops the run and names itself
+rather than being cut to fit. Partition train and eval so that no source
+document contributes to both — the original split did not, and every
+held-out number measured under it was scoring paraphrases of memorised
+text.
 
 ## Status
 
@@ -43,17 +66,16 @@ package exposes:
 | Canonical 29     | yes         | 435 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| Data             | yes         | 5 tests                |
-| Split integrity  | yes         | 8 tests                |
-| External sidecar | yes         | 190 tests              |
-| Script validity  | yes         | 52 tests               |
-| Reported numbers | yes         | 44 tests               |
-| Documented paths | yes         | 27 tests               |
+| External sidecar | yes         | 180 tests              |
+| Script validity  | yes         | 40 tests               |
+| Withdrawn numbers | yes        | 26 tests               |
+| Documented paths | yes         | 39 tests               |
 | Conservation (torch) | yes         | 42 tests               |
-| Audit closure    | yes         | 6 tests                |
+| Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 30 tests               |
-| Gates reject     | yes         | 32 tests               |
+| Gates reject     | yes         | 36 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
+| Auxiliary losses | yes         | 15 tests               |
 | Memory           | yes         | covered by trainer     |
 | Training         | yes         | requires HF + LoRA     |
 | Eval             | yes         | requires SCAN/COGS     |
@@ -64,23 +86,22 @@ measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen.
 
-507 tests are collected. The counts above are **collected**, not passed:
-three tests need a Lean toolchain, so a "passed" count would be 506 here (1
-skipped) and 504 in CI (3 skipped) — the same README correct on one machine and
-wrong on the other. Collection is 507 in both.
-`verify_counts.py --check` measures collection and separately fails if any
-test does not pass, so neither question can hide behind the other.
+2424 tests are collected and 2424 pass. **Nothing is skipped**, here or in
+CI. The counts above are *collected* rather than *passed* so that the same
+README is correct on every machine — a passed count moves with the
+environment, and a README that is right on one box and wrong on another is
+not a claim about the suite. `verify_counts.py --check` measures collection
+and separately fails if any test does not pass, so neither question can hide
+behind the other.
 
-Every skip left is an environment capability, and each reason comes from
-asking the compiler rather than looking for a file on `PATH`: an elan shim
-with no toolchain satisfies `shutil.which("lean")`. On this machine Lean 4.10
-is present but Mathlib is not, so one test skips; in CI all three do. The
-assertion that guards the string-literal defect in the generated Lean runs
-everywhere — rendering is pure string work and must not be gated on having a
-compiler. The training
-pipeline has also been run end to end on 4 CPU cores in fp32 — see
-`ABLATION_RESULTS.md` — so CPU is a supported path for the full
-experiment, not only for the gates.
+There are no skips left to explain. The Lean mirror's tests used to carry
+`skipif` guards on a toolchain being present, which meant the one independent
+cross-check of the exact-ℚ kernel reported green in CI while never compiling
+anything; the guards are gone and CI installs the compiler, pinned by
+`vedic_trainer/lean-toolchain`. The training pipeline has also been run end
+to end on 4 CPU cores in fp32, so CPU is a supported path for the full
+experiment and not only for the gates — though the figures that run produced
+are withdrawn, for reasons `ABLATION_RESULTS.md` sets out.
 
 ## Quick reference
 
@@ -88,8 +109,8 @@ experiment, not only for the gates.
 # Bit-exact gate (Fraction kernel ↔ committed fixtures)
 python scripts/verify_bit_exact.py
 
-# All local tests (kernel + data; ℚ-only, no floats)
-python -m pytest vedic/kernel/tests vedic/data/tests -q
+# All local tests
+python -m pytest vedic -q
 
 # Are the four auxiliary losses differentiable w.r.t. Psi?
 python scripts/probe_aux_gradients.py
@@ -98,12 +119,7 @@ python scripts/probe_aux_gradients.py
 python scripts/run_composition.py
 python scripts/run_composition.py --mode CONCURRENT --show-waves
 
-# Generate the synthetic LoRA corpus
-python scripts/generate_synthetic.py \
-    --input data/seed_corpus.txt \
-    --output data/synthetic_train.jsonl
-
-# LoRA fine-tune (Mac Pro / MPS)
+# LoRA fine-tune (Mac Pro / MPS); bring your own corpus, see above
 python scripts/train_lora.py --config configs/ablations/cpu_full.yaml
 
 # Evaluate
@@ -112,7 +128,7 @@ python scripts/eval_heldout.py \
     --base-model HuggingFaceTB/SmolLM2-135M-Instruct \
     --adapter checkpoints/cpu_full \
     --device cpu \
-    --heldout data/synthetic_eval.jsonl \
+    --heldout data/eval.jsonl \
     --output runs/full_eval.json
 
 # SCAN / COGS exact-match (slow: greedy decoding)
@@ -122,8 +138,7 @@ python scripts/eval_benchmarks.py \
     --device cpu \
     --output runs/full_bench.json
 
-# Do the documents still match the measurements?
-python scripts/verify_ablation.py --check
+# Do the documents still match the suite?
 python scripts/verify_counts.py --check
 ```
 
@@ -131,15 +146,15 @@ python scripts/verify_counts.py --check
 
 - Mac Pro 2019 16" with 32 GB unified memory (Apple Silicon MPS).
 - Llama-3.2-1B-Instruct or Qwen2.5-1.5B-Instruct as the intended base
-  model. The runs actually executed use `HuggingFaceTB/SmolLM2-135M-Instruct`,
-  because Llama-3.2 is gated; every number in `ABLATION_RESULTS.md` is on
-  SmolLM2, and no result here has been reproduced on Llama.
+  model. The runs that were executed used
+  `HuggingFaceTB/SmolLM2-135M-Instruct`, because Llama-3.2 is gated; their
+  figures have been withdrawn (`ABLATION_RESULTS.md`) and nothing here has
+  been reproduced on Llama.
 - LoRA rank-16 on q/k/v/o projection matrices.
-- Synthetic corpus of ~10k pairs for one epoch (~30 min on MPS).
 
-CPU runs the whole pipeline, slowly: ~5 min per LoRA arm and ~11 s per
-held-out evaluation at this model size. Full SCAN/COGS generation is the
-one part that is impractical on CPU (~36k greedy decodes).
+CPU runs the whole pipeline, slowly: roughly five minutes per LoRA arm and
+ten seconds per held-out evaluation at this model size. Full SCAN/COGS
+generation is the one part that is impractical on CPU (~36k greedy decodes).
 
 ## Falsification criteria — and the verdict
 
@@ -163,31 +178,37 @@ Note also that this criterion names `configs/ablations/full.yaml`, a config targ
 base model that **was never run**. Every executed result uses the `cpu_*` and
 `scaled*` configs on `HuggingFaceTB/SmolLM2-135M-Instruct`.
 
-The measure that does discriminate is held-out cross-entropy on a
-source-disjoint split, and there the auxiliary losses make the model **worse
-by +7.83%** (three seeds, disjoint ranges, 17.4× the baseline seed spread).
-See `ABLATION_RESULTS.md`; every figure there is checked against
-`runs/*.json` by `scripts/verify_ablation.py --check`.
+The measure that does discriminate is held-out cross-entropy, and that too
+is now **unmeasured**. It was measured, across four weightings and three
+seeds — but on a synthetic corpus this repository no longer contains and
+cannot regenerate, and under two loss definitions it no longer implements.
+Those figures are **withdrawn**; `ABLATION_RESULTS.md` is the withdrawal and
+says what it would take to ask the question again.
+`vedic/kernel/tests/test_no_withdrawn_number_is_quoted.py` fails if any
+document here quotes one of them.
 
 **2. Audit-closure rate at inference for `full` minus `no_sutra` < 10% absolute.**
 
-*Unmeasurable — the criterion cannot discriminate, and this was checked
-rather than assumed.* R2, R3 and R4 are algebraic identities on
-tensor-product-encoded Ψ: exactly zero for every input. Closure therefore
-reduces to R1, which closes when the trace counter is a multiple of
-T(29) = 435 — and the counter is the position in the list. **Audit closure
-is a function of the loop index alone.**
+*Unmeasurable — the criterion cannot discriminate, and this is proved, not
+assumed.* R2, R3 and R4 are algebraic identities: exactly zero for **every**
+Ψ in ℚ¹⁶. Closure therefore reduces to R1, which takes no Ψ at all and
+vanishes exactly when the trace counter is a multiple of T(29) = 435.
+**Audit closure is a function of the counter alone**, so two arms are
+guaranteed the same number and a `full` − `no_sutra` delta below 10% is
+satisfied by any two models whatsoever, including two copies of one.
 
-Measured: 480 English sentences and 480 strings of random consonants produce
-*identical* closure flags and an identical rate of 0.0042 (2 of 480). Across
-960 distinct texts at a fixed trace index the verdict takes exactly one
-value. Two arms are guaranteed the same number, so a `full` − `no_sutra`
-delta below 10% is satisfied by any two models at all, including two copies
-of the same one.
+`vedic/kernel/tests/test_audit_closure_degeneracy.py` establishes this over
+all of ℚ¹⁶ rather than on a sample. R2 and R3 are linear and R4 is quadratic
+in Ψ, so vanishing on `{0} ∪ {eᵢ} ∪ {eᵢ+eⱼ}` — 137 vectors — determines each
+of them as the zero map; the 560 three-vertex sums are checked as well,
+because a cubic map could vanish on the spanning set without being zero and
+that is the premise the argument rests on.
 
-`vedic/eval/tests/test_audit_closure_degeneracy.py` pins this down. If the
-residuals ever become text-dependent those tests fail, and this criterion
-becomes worth measuring.
+An earlier version of this section measured the degeneracy instead: two
+480-string corpora, one English and one not, producing identical closure
+flags. That was evidence about 960 encoded vectors and silent about the rest
+of ℚ¹⁶, and it needed a synthetic text encoder to produce them at all. The
+metric itself has been removed rather than reported.
 
 **3. Any bit-exactness mismatch between the ℚ kernel and the committed
 fixtures.**
@@ -239,11 +260,10 @@ vedic_trainer/
 ├── vedic/
 │   ├── kernel/                 # ℚ reference + torch port + tests
 │   ├── memory/                 # TesseractWM, slot map
-│   ├── data/                   # encoder, contradiction/paraphrase, audit
 │   ├── training/               # config, lora, losses, trainer
-│   └── eval/                   # SCAN, COGS, audit-closure rate
+│   └── eval/                   # SCAN, COGS
 ├── scripts/
-├── configs/                    # 2 base models + 5 ablations
+├── configs/                    # 2 base models + 15 ablation arms
 ├── fixtures/                   # ℚ JSON (bit-exact reference)
 └── docs/                       # ARCHITECTURE, SUTRA_CATALOGUE, BIT_EXACT_PROTOCOL
 ```

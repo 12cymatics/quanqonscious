@@ -43,13 +43,13 @@ from vedic.kernel import sutras_canonical as K
 # vectors, so neither file can drift onto a weaker set than the other.
 
 from vedic.kernel.tests.psi_corpus import (        # noqa: E402
-    BASIS, PSI_CASES, SPANNING_SET, STRENGTHS, TRIPLE_SET, LEGACY_PSI, ZERO,
+    BASIS, PSI_CASES, SPANNING_SET, STRENGTHS, TRIPLE_SET, MONOTONE_PSI, ZERO,
 )
 
 PSI_LABELS = [label for label, _ in PSI_CASES]
 
 #: A single Ψ kept for the tests that are genuinely about one input.
-PSI = LEGACY_PSI
+PSI = MONOTONE_PSI
 STRENGTH = Fraction(50)
 
 
