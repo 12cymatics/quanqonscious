@@ -499,33 +499,53 @@ class BoundednessInvariant(InvariantCheck):
 
 
 class EnergyConservationInvariant(InvariantCheck):
-    """Approximate energy conservation check."""
+    """Total norm² stays within a declared relative tolerance of its initial value.
 
-    def __init__(self, tolerance: float = 0.1):
+    `tolerance` is a declared bound, not an approximation of the arithmetic:
+    the comparison itself is exact over ℚ. Whether an operator *should*
+    conserve norm is a property of that operator, and this check only reports
+    whether it did.
+
+    What this replaces returned True in three separate ways that had nothing
+    to do with the field:
+
+    * `if initial_norm <= 1.0 and current_norm > 10.0: return True` -- a
+      pass-by-default branch, commented as detecting "a nominal placeholder".
+      `tests/test_invariants.py` seeds exactly `1.0`, so this fired on every
+      run and the check never examined anything. A branch that returns True
+      regardless of the state is not an invariant check.
+    * `float(state.total_norm_squared())` -- an exact rational sum over the
+      whole lattice, rounded to a double before comparison.
+    * `max(initial_norm, 1e-10)` -- an epsilon guard for a division whose
+      denominator is now tested for zero exactly.
+    """
+
+    def __init__(self, tolerance: Fraction = Fraction(1, 10)):
         super().__init__(
             name="EnergyConservation",
-            description="Total energy (norm²) approximately conserved"
+            description="Total energy (norm²) conserved within a declared tolerance"
         )
-        self.tolerance = tolerance
+        self.tolerance = Fraction(tolerance)
 
     def check(self, state: FieldState, context: OperatorContext) -> Tuple[bool, str]:
-        current_norm = float(state.total_norm_squared())
         initial_norm = context.get_param('initial_norm_sq')
-
         if initial_norm is None:
             return True, "No initial norm recorded"
 
-        # Some call paths seed `initial_norm_sq` with a nominal placeholder (e.g., 1.0)
-        # rather than the true norm. Detect and normalize this case so invariants remain
-        # meaningful for exact-rational pipelines with large lattice sums.
-        if initial_norm <= 1.0 and current_norm > 10.0:
-            return True, "Initial norm placeholder detected; conservation check normalized"
+        initial_norm = Fraction(initial_norm)
+        current_norm = state.total_norm_squared()
 
-        relative_change = abs(current_norm - initial_norm) / max(initial_norm, 1e-10)
+        if initial_norm == 0:
+            if current_norm == 0:
+                return True, "Energy conserved exactly (both zero)"
+            return False, f"Energy grew from zero to {float(current_norm)}"
+
+        relative_change = abs(current_norm - initial_norm) / initial_norm
         if relative_change <= self.tolerance:
-            return True, f"Energy conserved within {self.tolerance*100}%"
-        else:
-            return False, f"Energy changed by {relative_change*100:.1f}%"
+            return True, (f"Energy conserved within {float(self.tolerance) * 100:g}% "
+                          f"(changed by {float(relative_change) * 100:.1f}%)")
+        return False, (f"Energy changed by {float(relative_change) * 100:.1f}%, "
+                       f"tolerance is {float(self.tolerance) * 100:g}%")
 
 
 @dataclass
@@ -564,7 +584,7 @@ def create_standard_invariants() -> InvariantChecker:
     return InvariantChecker([
         ToroidalClosureInvariant(),
         BoundednessInvariant(),
-        EnergyConservationInvariant(tolerance=0.5),
+        EnergyConservationInvariant(tolerance=Fraction(1, 2)),
     ])
 
 
@@ -598,7 +618,10 @@ def _self_test():
     assert 'TotalNormSquared' in results
 
     # Test invariants
-    context.set_param('initial_norm_sq', float(norm_sq))
+    # Stored exactly. EnergyConservationInvariant compares over Q, so a
+    # float here would seed the comparison with a dyadic approximation of
+    # the true rational and report a change that never happened.
+    context.set_param('initial_norm_sq', norm_sq)
     checker = create_standard_invariants()
     all_passed, _ = checker.verify_all(state, context)
     assert all_passed

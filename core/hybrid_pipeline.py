@@ -444,7 +444,9 @@ class HybridPipeline:
         observable_history = []
 
         # Record initial norm for conservation check
-        context.set_param('initial_norm_sq', float(initial_state.total_norm_squared()))
+        # Exact, not float: the invariant compares over Q (see
+        # EnergyConservationInvariant).
+        context.set_param('initial_norm_sq', initial_state.total_norm_squared())
         context.set_param('max_field_bound', self.config.classical.max_field_bound)
 
         # Evolution loop

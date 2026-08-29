@@ -17,11 +17,12 @@ from fractions import Fraction
 from core.lattice import create_3d_lattice, create_4d_hypercube, LatticePoint
 from core.state import create_zero_field, create_gaussian_field, RationalComplex, state_digest
 from core.operators.base import OperatorContext, OperatorTrace, IdentityOperator
-from core.operators.grvq_ansatz import GRVQAnsatzOperator, create_cymatic_ansatz
+from core.operators.grvq_ansatz import GRVQAnsatzOperator, RadialSuppression, create_cymatic_ansatz
 from core.operators.mstvq import MSTVQCompositeOperator, MSTVQConfig
 from core.operators.r4_coupling import R4CompositeOperator
 from core.operators.sutra_ops import get_all_sutras, get_sutra_by_number, create_sutra_pipeline
-from core.observables import create_standard_invariants, create_standard_observables
+from core.observables import (create_standard_invariants, create_standard_observables,
+                             EnergyConservationInvariant)
 from core.trace import DeterminismVerifier, StateCheckpoint, EvolutionTrace, TraceReplayer
 
 
@@ -71,36 +72,171 @@ def test_determinism():
 
 
 def test_boundedness():
-    """Test CODEX 7.2: Boundedness gate - envelope keeps Ψ within bounds."""
+    """Test CODEX 7.2: Boundedness gate - envelope keeps Psi within bounds.
+
+    The gate is placed after GRVQ, because that is where the envelope acts,
+    and at a bound near the field's actual scale. The version this replaces
+    did neither, and could not fail for the reason it names. Three compounding
+    causes, all measured:
+
+    1. The bound was `Fraction(1000)` against a post-pipeline scale of 0.452.
+    2. `validate_bounded(b)` compares against b**2 while `max_amplitude()`
+       already returns max |Psi|**2 (it is deprecated and misnamed -- exact
+       amplitude would need a square root). So `validate_bounded(1000)`
+       permitted |Psi|**2 <= 1_000_000, and the real headroom was 2.2 million
+       times the field, not the 2212x the raw numbers suggest.
+    3. MSTVQ's envelope R = 1/(1 + S + |T|) is unconditionally <= 1 and runs
+       *after* GRVQ, so it renormalises whatever GRVQ did away before the
+       assertion is reached. Disabling GRVQ's suppression entirely moves the
+       post-GRVQ maximum from 29.086 to 38.601 -- but the post-MSTVQ maximum
+       only from 0.452 to 0.543, which passes any bound the old test would
+       plausibly have used. The masking is the reason the gate has to sit at
+       the intermediate, not at the end.
+
+    So the test asserts the property the envelope exists for, directly, and
+    then proves its own gate discriminates rather than assuming it.
+    """
     print("Testing boundedness invariant...")
 
     lattice = create_3d_lattice(8, 8, 8)
     state = create_gaussian_field(lattice, (4, 4, 4), sigma=1.5, amplitude=1.0)
+
+    class _NoEnvelope(RadialSuppression):
+        """GRVQ with the radial suppression removed -- R(x) = 1 everywhere."""
+
+        def evaluate(self, coords, lattice, context):
+            return Fraction(1)
+
+    after_grvq = GRVQAnsatzOperator()(state, OperatorContext())
+    unsuppressed = GRVQAnsatzOperator(radial_suppression=_NoEnvelope())(
+        state, OperatorContext())
+    after_mstvq = MSTVQCompositeOperator()(after_grvq, OperatorContext())
+
+    # The envelope must actually suppress. This is the property, stated.
+    assert after_grvq.max_amplitude() < unsuppressed.max_amplitude(), (
+        f"radial suppression did not reduce the field: "
+        f"{float(after_grvq.max_amplitude())} vs "
+        f"{float(unsuppressed.max_amplitude())} without it"
+    )
+
+    # The gate, where the envelope acts and at the scale it acts on.
+    grvq_bound = Fraction(6)   # permits |Psi|^2 <= 36; the field reaches 29.086
+    assert after_grvq.validate_bounded(grvq_bound), (
+        f"field exceeds bound {grvq_bound} after GRVQ: "
+        f"max |Psi|^2 = {float(after_grvq.max_amplitude())}"
+    )
+
+    # ... and the gate must be able to fail. Without the envelope the same
+    # field reaches 38.601, over the 36 the bound permits. A gate never seen
+    # to reject anything is not known to be a gate.
+    assert not unsuppressed.validate_bounded(grvq_bound), (
+        f"bound {grvq_bound} does not discriminate: it accepts the field "
+        f"with the envelope disabled (max |Psi|^2 = "
+        f"{float(unsuppressed.max_amplitude())}), so passing it establishes nothing"
+    )
+
+    # Whole-field pins. The exact maxima are 270- and 2124-digit rationals,
+    # too large to write down; the digest covers every site of both states.
+    assert state_digest(after_grvq)[:16] == "46d0149f158ad7dc", \
+        "post-GRVQ field changed"
+    assert state_digest(after_mstvq)[:16] == "b84f2d63f8e7b2f6", \
+        "post-MSTVQ field changed"
+
+    # The standard invariant set, seeded with the TRUE initial norm. The old
+    # test passed the float literal `1.0`, which tripped a branch in
+    # EnergyConservationInvariant reading
+    #     if initial_norm <= 1.0 and current_norm > 10.0: return True
+    # so that check returned True on every run without examining the field.
+    # That branch is gone; the norm is now compared exactly over Q.
     context = OperatorContext()
-
-    # Apply operators
-    grvq = GRVQAnsatzOperator()
-    mstvq = MSTVQCompositeOperator()
-
-    state = grvq(state, context)
-    state = mstvq(state, context)
-
-    # Check boundedness
-    max_bound = Fraction(1000)
-    assert state.validate_bounded(max_bound), f"Field exceeds bound {max_bound}"
-
-    # Use invariant checker
     checker = create_standard_invariants()
-    context.set_param('initial_norm_sq', 1.0)
-    all_passed, results = checker.verify_all(state, context)
+    initial_norm_sq = state.total_norm_squared()
+    context.set_param('initial_norm_sq', initial_norm_sq)
+    _, results = checker.verify_all(after_mstvq, context)
 
     for name, (passed, msg) in results.items():
-        status = "✓" if passed else "✗"
+        status = "\u2713" if passed else "\u2717"
         print(f"    {status} {name}: {msg}")
 
-    assert all_passed, "Boundedness invariants failed"
-    print("  ✓ Boundedness: PASSED")
+    assert results['ToroidalClosure'][0], results['ToroidalClosure'][1]
+    assert results['Boundedness'][0], results['Boundedness'][1]
 
+    # EnergyConservation does NOT hold here, and asserting `all_passed` would
+    # be asserting something false. GRVQ multiplies the field by shape
+    # functions and a Vedic carrier -- it is an ansatz composition, not a
+    # unitary evolution -- so it has no reason to preserve the norm, and
+    # measurably does not: x62.86 through GRVQ, x2.04 net after MSTVQ.
+    #
+    # Whether the standard invariant set should carry an energy check at all
+    # for non-unitary operators is a question about the physics, left to the
+    # maintainer rather than settled by quietly deleting the check. What the
+    # test can do is pin the measured behaviour, so that a change in either
+    # direction shows up: the operators becoming conservative, or the check
+    # regressing to passing by default the way it used to.
+    assert not results['EnergyConservation'][0], (
+        "EnergyConservation now passes on this pipeline. Either an operator "
+        "changed or the check regressed -- it should report ~104% against a "
+        "50% tolerance. Do not 'fix' this by loosening the tolerance."
+    )
+    relative_change = abs(after_mstvq.total_norm_squared() - initial_norm_sq) / initial_norm_sq
+    assert Fraction(104, 100) < relative_change < Fraction(105, 100), (
+        f"norm change moved to {float(relative_change) * 100:.2f}%; it was 104.1%"
+    )
+    print(f"  \u2713 Boundedness: PASSED (GRVQ max |Psi|^2 "
+          f"{float(after_grvq.max_amplitude()):.3f} with the envelope, "
+          f"{float(unsuppressed.max_amplitude()):.3f} without)")
+
+
+def test_energy_invariant_cannot_pass_by_default():
+    """EnergyConservationInvariant must answer from the field, never from the shape of its input.
+
+    Gated separately because `test_boundedness` cannot reach this. That test
+    now seeds the true initial norm, so it no longer supplies the input the
+    old pass-by-default branch keyed on --
+
+        if initial_norm <= 1.0 and current_norm > 10.0:
+            return True, "Initial norm placeholder detected; ..."
+
+    -- and restoring that branch leaves `test_boundedness` green. This feeds
+    the check exactly that shape and requires a real answer.
+    """
+    print("Testing energy invariant cannot pass by default...")
+
+    lattice = create_3d_lattice(4, 4, 4)
+    state = create_zero_field(lattice)
+    for i in range(4):
+        state.set_by_coords((i, 0, 0), RationalComplex(Fraction(3), Fraction(4)))
+    assert state.total_norm_squared() == Fraction(100), state.total_norm_squared()
+
+    check = EnergyConservationInvariant(tolerance=Fraction(1, 10))
+
+    # The placeholder shape: a nominal initial norm of 1 against a current 100.
+    context = OperatorContext()
+    context.set_param('initial_norm_sq', Fraction(1))
+    passed, message = check.check(state, context)
+    assert not passed, f"check passed on a 9900% change: {message}"
+    assert "9900" in message, f"message does not report the real change: {message}"
+
+    # Genuine conservation is reported as such, exactly.
+    context = OperatorContext()
+    context.set_param('initial_norm_sq', Fraction(100))
+    passed, message = check.check(state, context)
+    assert passed, message
+
+    # A change just inside and just outside the tolerance, with no float
+    # anywhere: 110 is exactly 10% away, 111 is more.
+    for initial, want in ((Fraction(1000, 11), True), (Fraction(900, 10), False)):
+        context = OperatorContext()
+        context.set_param('initial_norm_sq', initial)
+        got, message = check.check(state, context)
+        assert got is want, f"initial={initial}: expected {want}, got {got} ({message})"
+
+    # No initial norm recorded is not the same as conserved, but it is the
+    # documented contract, so pin it rather than leave it to drift.
+    passed, message = check.check(state, OperatorContext())
+    assert passed and "No initial norm" in message, message
+
+    print("  \u2713 Energy invariant: answers from the field, not from its input's shape")
 
 def test_trace_replay():
     """Test CODEX 7.2: Trace replay - operator trace replays to identical state."""
@@ -351,6 +487,7 @@ def run_all_tests():
         test_toroidal_closure,
         test_determinism,
         test_boundedness,
+        test_energy_invariant_cannot_pass_by_default,
         test_trace_replay,
         test_sutra_closure,
         test_sutra_golden_values,
