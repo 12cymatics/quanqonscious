@@ -135,8 +135,30 @@ class StressTensorField:
 
             for neighbor, weight in self.lattice.neighbors(point):
                 neighbor_intensity = state.intensity(neighbor)
-                gradient = abs(float(neighbor_intensity) - float(center_intensity))
-                stress += weight * Fraction(gradient).limit_denominator(10000)
+                # `intensity()` returns a Fraction, so take the difference
+                # exactly. This used to be
+                #     abs(float(neighbor_intensity) - float(center_intensity))
+                # -- two exact rationals routed through IEEE-754 and then
+                # approximated back. Measured, that change is behaviour-
+                # preserving: float64 resolves ~1e-16 relative, far finer than
+                # the 1/10000 the bound below keeps, so both paths land on the
+                # same rational and the MSTVQ field digest is unchanged. It is
+                # removed because CODEX says convert to float only at output,
+                # not because it was producing wrong numbers here.
+                #
+                # The `limit_denominator` STAYS, and is load-bearing rather
+                # than decorative. It is the one declared approximation in this
+                # operator, and it is what keeps the operator usable: measured
+                # on a 4^3 Gaussian, denominator digits per MSTVQ application
+                # go 12 -> 237 -> 404 -> 558 -> 725 with the bound, and
+                # 12 -> 1175 -> >4300 without it. It converts multiplicative
+                # growth into additive growth. Dropping it does not buy any
+                # exactness worth having; it makes the operator stop after
+                # three steps. The difference above is exact and the bound is
+                # a stated limit applied to an exact value -- which is a
+                # different thing from a float whose error nobody can state.
+                gradient = abs(neighbor_intensity - center_intensity)
+                stress += weight * gradient.limit_denominator(10000)
 
             # FORBIDDEN: Phase curvature requires atan2 which violates exact arithmetic
             # TODO: Reimplement tension using ONLY Vedic sutra functions

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fractions import Fraction
 from core.lattice import create_3d_lattice, create_4d_hypercube, LatticePoint
-from core.state import create_zero_field, create_gaussian_field, RationalComplex
+from core.state import create_zero_field, create_gaussian_field, RationalComplex, state_digest
 from core.operators.base import OperatorContext, OperatorTrace, IdentityOperator
 from core.operators.grvq_ansatz import GRVQAnsatzOperator, create_cymatic_ansatz
 from core.operators.mstvq import MSTVQCompositeOperator, MSTVQConfig
@@ -193,6 +193,112 @@ def test_sutra_closure():
     assert failed == 0, f"{failed} sutras failed"
 
 
+def test_sutra_golden_values():
+    """Every sutra reproduces an exact, recorded output (CODEX 7.2).
+
+    `test_sutra_closure` above only asks that each sutra runs and stays under
+    `Fraction(10000)` -- some 3000x the scale the field actually reaches. That
+    is a liveness check: inverting Sutra 13's boundary rule from half-damping
+    to 9x amplification leaves it reporting "29/29 passed". This pins values.
+
+    The fixture is a zero field with three exact rationals set by hand rather
+    than a Gaussian, so the goldens are readable and carry no float provenance.
+    Each sutra is pinned two ways: the digest of the whole field, which
+    notices a change at any of the 64 sites, and the value at one probe site,
+    which says what changed when the digest fails.
+
+    Two measured properties of this fixture, recorded because a change to
+    either is worth a failing test:
+      * 6 of the 29 leave the field completely untouched here (6, 8, 16, 17,
+        19, 25). That is a fact about this input, not about those operators in
+        general -- several read context parameters this fixture does not set.
+      * only 24 of the 29 produce distinct fields.
+    """
+    print("Testing sutra golden values...")
+
+    lattice = create_3d_lattice(4, 4, 4)
+
+    def fixture():
+        st = create_zero_field(lattice)
+        st.set_by_coords((2, 2, 2), RationalComplex(Fraction(1), Fraction(0)))
+        st.set_by_coords((1, 3, 0), RationalComplex(Fraction(3, 4), Fraction(-1, 2)))
+        st.set_by_coords((0, 0, 1), RationalComplex(Fraction(-2, 5), Fraction(1, 8)))
+        # A large-denominator site. The three above are too clean to exercise
+        # Sutra 12's quantiser: their quotients land on exact integers, so a
+        # float round trip and a limit_denominator(10000) repair both leave
+        # them alone and the pin cannot see the difference. Here the exact
+        # quantised imaginary part is 21/79784, which limit_denominator(10000)
+        # rewrites to 1/3799 -- so reintroducing that approximation moves the
+        # field digest and this test fails, which is the point of having it.
+        st.set_by_coords((3, 1, 2), RationalComplex(Fraction(7, 9973), Fraction(3, 9973)))
+        return st
+
+    # sutra number -> (whole-field digest prefix, probe real, probe imag)
+    GOLDEN = {
+         1: ("15cd47eb09d11e9d", Fraction(19, 25), Fraction(-1, 2)),   # EkadhikenaPurvena
+         2: ("d7e251d2a6f2772d", Fraction(25, 32), Fraction(-2, 5)),   # NikhilamNavatashcaramam
+         3: ("e9a56d62251ce43b", Fraction(3, 4), Fraction(-1, 2)),   # UrdhvaTiryagbhyam
+         4: ("ff1f10de2bf2c84f", Fraction(9, 16), Fraction(-3, 8)),   # ParavartyaYojayet
+         5: ("ef74214bbc1199bc", Fraction(3, 4), Fraction(-1, 2)),   # ShunyamSamuccaye
+         6: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # Anurupyena
+         7: ("055df00577532dce", Fraction(3, 4), Fraction(-1, 2)),   # SankalanaVyavakalanabhyam
+         8: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # Puranapuranabhyam
+         9: ("c69be2f56f6f0f61", Fraction(3, 4), Fraction(-1, 2)),   # CalanaKalanabhyam
+        10: ("92e78d221b648b6f", Fraction(33, 56), Fraction(-11, 28)),   # Yavadunam
+        11: ("9a1b70b0e4618f7b", Fraction(111, 160), Fraction(-37, 80)),   # VyashtiSamanstih
+        12: ("b9ac5151a777acd9", Fraction(3, 4), Fraction(-63, 128)),   # ShesanyankenaCharmona
+        13: ("93e7ca2c6841b312", Fraction(3, 8), Fraction(-1, 4)),   # Sopantyadvayamantyam
+        14: ("a543bfd8acf6ffcb", Fraction(37, 50), Fraction(-1, 2)),   # EkanyunenaPurvena
+        15: ("c38c17bbeb445454", Fraction(57, 80), Fraction(-19, 40)),   # Gunitasamuccayah
+        16: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # Gunakasamuccayah
+        17: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # AnurupyenaSunyamanyat
+        18: ("ebb1c96b2f1c719b", Fraction(87, 140), Fraction(-29, 70)),   # YavadunamTavadunikritya
+        19: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # Adyamadyenantyamantyena
+        20: ("063e65770a43d1fd", Fraction(111, 140), Fraction(-37, 70)),   # KevalaiSaptakamGunyat
+        21: ("616099e3cb834381", Fraction(1, 2), Fraction(-1, 3)),   # Veshtanam
+        22: ("dbe75b6f37cd0f22", Fraction(441, 640), Fraction(-147, 320)),   # YavadumamTavadumVilokanam
+        23: ("99b45adf109aac19", Fraction(3, 5), Fraction(-3, 20)),   # AntyayorDashakepi
+        24: ("60ac787f516af844", Fraction(9, 16), Fraction(-3, 8)),   # AntyayorEva
+        25: ("8115ee1ab36e006a", Fraction(3, 4), Fraction(-1, 2)),   # Samuccayagunitah
+        26: ("4a557425066661dc", Fraction(3, 4), Fraction(-1, 2)),   # LopanaSthapanabhyam
+        27: ("980d9bdd219a4ef2", Fraction(33, 40), Fraction(-11, 20)),   # Vilokanam
+        28: ("349500e3a38a1f49", Fraction(29, 40), Fraction(-9, 20)),   # GunitasamuccayahSamuccayagunitah
+        29: ("99efbb9804ca1957", Fraction(9, 16), Fraction(-3, 8)),   # DwandwaYoga
+    }
+
+    probe = lattice.point(1, 3, 0)
+    context = OperatorContext()
+    sutras = get_all_sutras()
+    assert len(sutras) == 29, f"expected 29 sutras, got {len(sutras)}"
+
+    for number, (digest_prefix, want_real, want_imag) in GOLDEN.items():
+        op = sutras[number - 1]
+        out = op.apply(fixture(), context)
+
+        got = out.get(probe)
+        assert got.real == want_real and got.imag == want_imag, (
+            f"sutra {number} ({op.name}) at {probe.coords}: "
+            f"expected {want_real}{want_imag:+}i, got {got.real}{got.imag:+}i"
+        )
+        got_digest = state_digest(out)[:16]
+        assert got_digest == digest_prefix, (
+            f"sutra {number} ({op.name}): field digest {got_digest} != {digest_prefix} "
+            f"-- the probe site is unchanged, so some other site moved"
+        )
+
+    digests = {state_digest(sutras[n - 1].apply(fixture(), context)) for n in GOLDEN}
+    assert len(digests) == 24, f"expected 24 distinct fields across the 29 sutras, got {len(digests)}"
+
+    base = state_digest(fixture())
+    untouched = [n for n in GOLDEN
+                 if state_digest(sutras[n - 1].apply(fixture(), context)) == base]
+    assert untouched == [6, 8, 16, 17, 19, 25], \
+        f"the set of sutras that leave this fixture untouched changed: {untouched}"
+
+    print(f"  \u2713 Sutra golden values: 29/29 pinned "
+          f"({len(digests)} distinct fields, {len(untouched)} identity on this fixture)")
+
+
 def test_r4_coupling():
     """Test R4 adjacency kernel and coupling."""
     print("Testing R4 coupling...")
@@ -247,6 +353,7 @@ def run_all_tests():
         test_boundedness,
         test_trace_replay,
         test_sutra_closure,
+        test_sutra_golden_values,
         test_r4_coupling,
         test_observables,
     ]

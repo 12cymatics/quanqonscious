@@ -26,7 +26,7 @@ from typing import List, Tuple, Dict, Optional, Any
 # All 29 Vedic sutra operations MUST use ONLY rational arithmetic
 # NO sqrt, cos, sin, atan2, exp, or other transcendental functions
 
-from .base import Operator, OperatorCategory, OperatorContext
+from .base import Operator, OperatorCategory, OperatorContext, CompositeOperator
 from ..state import FieldState, RationalComplex
 from ..lattice import ToroidalHypercube, LatticePoint
 
@@ -552,16 +552,26 @@ class Sutra12_Shesanyankena(SutraOperator):
         n_levels = context.get_param('shesanya_levels', 8)
         mix = context.get_param('shesanya_mix', Fraction(1, 4))
 
-        # Quantize real and imaginary parts to discrete levels (exact)
+        # Quantize real and imaginary parts to discrete levels (exact).
+        #
+        # This block was commented "(exact)" while doing the rounding in
+        # IEEE-754: `round(float(value.real) / float(step))`, then repairing
+        # the damage with `limit_denominator(10000)`, which is itself a
+        # deliberate rational approximation. Both were unnecessary --
+        # `value.real / step` is a Fraction and `round()` on a Fraction is
+        # exact. Unlike the bound in MSTVQ's stress term, this one was not
+        # load-bearing and was not behaviour-preserving: on a site carrying
+        # 7/9973 + 3i/9973 the exact quantised imaginary part is 21/79784,
+        # which limit_denominator(10000) rewrites to 1/3799. `round(Fraction)
+        # * step` is an exact multiple of the step by construction, so there
+        # is nothing left to limit. test_sutra_golden_values pins it, and
+        # goes red if this round trip is put back.
         max_val = max(abs(value.real), abs(value.imag))
         if max_val > 0:
             step = max_val / n_levels
-            quant_real = round(float(value.real) / float(step)) * step
-            quant_imag = round(float(value.imag) / float(step)) * step
-
             quantized = RationalComplex(
-                Fraction(quant_real).limit_denominator(10000),
-                Fraction(quant_imag).limit_denominator(10000)
+                round(value.real / step) * step,
+                round(value.imag / step) * step,
             )
 
             # Mix with original
@@ -1256,7 +1266,7 @@ def get_sutras_by_category(category: OperatorCategory) -> List[SutraOperator]:
     return [s for s in get_all_sutras() if s.category == category]
 
 
-def create_sutra_pipeline(sutra_numbers: List[int]) -> 'CompositeOperator':
+def create_sutra_pipeline(sutra_numbers: List[int]) -> CompositeOperator:
     """
     Create a composite operator that applies sutras in sequence.
 
@@ -1266,8 +1276,6 @@ def create_sutra_pipeline(sutra_numbers: List[int]) -> 'CompositeOperator':
     Returns:
         Composite operator
     """
-    from .base import CompositeOperator
-
     operators = []
     for num in sutra_numbers:
         sutra = get_sutra_by_number(num)
