@@ -108,3 +108,54 @@ jobs:
           fi
           pip install twine
           twine upload --non-interactive dist/*
+
+  # SutraWS is the repository's only machine-checked proof artifact: 10,311
+  # lines of Lean 4 whose content is the triangular identity sum(delta 1..29)
+  # = 435. Until now nothing built it. The `submit-pypi` job installs Lean
+  # only so vedic_trainer's mirror tests can run, and `python-app.yml` never
+  # touches Lean at all -- so the library could have stopped compiling, or
+  # acquired a `sorry`, and CI would have stayed green.
+  #
+  # A separate job rather than more steps on `submit-pypi`: jobs run in
+  # parallel, so gating the proofs costs ~9 minutes of machine time and close
+  # to nothing in wall clock.
+  #
+  # `lake build` also runs SutraWS/AxiomAudit.lean, which fails the build if
+  # any theorem in the namespace depends on `sorryAx` or on `native_decide`'s
+  # `Lean.ofReduceBool`. Compiling green is not the same as being proved.
+  sutraws-lean:
+    name: sutraws-lean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The root lean-toolchain, not vedic_trainer's. They agree today
+      # (v4.10.0); reading the one that governs this build keeps them free to
+      # diverge without silently compiling SutraWS under the wrong compiler.
+      - name: Install Lean 4 (version pinned by ./lean-toolchain)
+        run: |
+          set -eu
+          TOOLCHAIN="$(cat lean-toolchain)"
+          echo "Installing $TOOLCHAIN"
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Lean matches the pin
+        run: |
+          set -eu
+          lean --version
+          EXPECTED="$(cut -d: -f2 < lean-toolchain | tr -d 'v')"
+          lean --version | grep -q "version ${EXPECTED}" || {
+            echo "lean --version does not match ./lean-toolchain (${EXPECTED})"
+            exit 1
+          }
+
+      # Resolves the dependencies pinned in lake-manifest.json and downloads
+      # mathlib's prebuilt oleans. Building mathlib from source instead would
+      # take hours.
+      - name: Fetch mathlib build cache
+        run: lake exe cache get
+
+      - name: Build SutraWS and run the axiom audit
+        run: lake build

@@ -83,7 +83,7 @@ theorem applyList_y (L : List Sutra) (s : State) :
       simp only [act, sumDelta]
       ring
 
-theorem sumDelta_all : sumDelta Sutra.all = (435 : Rat) := by native_decide
+theorem sumDelta_all : sumDelta Sutra.all = (435 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 theorem applyAll_x (s : State) : (applyAll s).x = s.x + (435 : Rat) := by simp [applyAll, applyList_x, sumDelta_all]
 theorem applyAll_y (s : State) : (applyAll s).y = s.y - (435 : Rat) := by simp [applyAll, applyList_y, sumDelta_all]
 
