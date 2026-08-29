@@ -22,7 +22,7 @@ from core.operators.mstvq import MSTVQCompositeOperator, MSTVQConfig
 from core.operators.r4_coupling import R4CompositeOperator
 from core.operators.sutra_ops import get_all_sutras, get_sutra_by_number, create_sutra_pipeline
 from core.observables import create_standard_invariants, create_standard_observables
-from core.trace import DeterminismVerifier, StateCheckpoint, EvolutionTrace
+from core.trace import DeterminismVerifier, StateCheckpoint, EvolutionTrace, TraceReplayer
 
 
 def test_toroidal_closure():
@@ -133,11 +133,34 @@ def test_trace_replay():
     assert trace.final_checkpoint is not None
     assert len(trace.checkpoints) >= 1
 
-    # Verify initial state hash
-    initial_hash = StateCheckpoint._compute_hash(state)
-    assert initial_hash == trace.initial_checkpoint.state_hash
+    # Replay the recorded evolution from the initial state and require it to
+    # reproduce the run exactly.
+    #
+    # This test used to assert `StateCheckpoint._compute_hash(state) ==
+    # trace.initial_checkpoint.state_hash` and stop -- that is hashing `state`
+    # and comparing it to the hash of `state` taken by `trace.start(state)` one
+    # line above, which is true however broken replay is. It never called
+    # TraceReplayer at all, and replay was in fact broken four separate ways
+    # while this test was green.
+    replayer = TraceReplayer()
+    replayer.register_operators(operators)
+    replayed, verified, errors = replayer.replay(state, trace)
 
-    print(f"  ✓ Trace replay: PASSED (recorded {len(trace.operator_trace.entries)} entries)")
+    assert verified, f"trace did not replay: {errors}"
+    assert replayed.snapshot() == current.snapshot(), \
+        "replayed final state differs from the evolved state"
+
+    # And the replay must be able to notice a wrong starting point, otherwise
+    # `verified` above says nothing.
+    perturbed = state.copy()
+    origin = perturbed.lattice.point(0, 0, 0)
+    perturbed.set(origin, perturbed.get(origin) + RationalComplex(Fraction(1), Fraction(0)))
+    _, verified_bad, errors_bad = replayer.replay(perturbed, trace)
+    assert not verified_bad, "replay accepted a state that differs from the recorded initial state"
+    assert errors_bad, "replay reported failure without saying why"
+
+    print(f"  ✓ Trace replay: PASSED (replayed {len(trace.operator_trace.entries)} entries, "
+          f"{len(trace.checkpoints)} checkpoints)")
 
 
 def test_sutra_closure():
