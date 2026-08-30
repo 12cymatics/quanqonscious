@@ -159,3 +159,46 @@ jobs:
 
       - name: Build SutraWS and run the axiom audit
         run: lake build
+
+  # `primarysutra.py` is the class CLAUDE.md calls the repository's main
+  # VedicSutras entry point, and until now nothing tested it -- because it
+  # cannot be imported without cirq, cudaq and torch, which its own
+  # `_enforce_heavy_dependencies()` treats as hard requirements rather than
+  # optional extras. No test referenced it, so eight of its sixteen sutras
+  # raised in QUANTUM and HYBRID mode indefinitely: two dispatch targets that
+  # were never defined, seven cudaq rotations with their arguments reversed,
+  # two calls to a `cudaq.inverseFQFT` that does not exist, a Toffoli naming
+  # its target as its own control, and three more APIs that no installed
+  # version provides.
+  #
+  # The honest way to test a file with hard dependencies is to install them,
+  # not to guard the import -- `tests/test_nothing_skips.py` would reject the
+  # guard anyway. cudaq brings ~2 GB of NVIDIA wheels and runs on CPU here, so
+  # this is a separate job: it runs in parallel and keeps that cost off the
+  # `submit-pypi` job, which needs none of it.
+  primarysutra:
+    name: primarysutra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the heavy dependencies primarysutra.py requires
+        run: |
+          set -eu
+          python -m pip install --upgrade pip
+          pip install pytest numpy pandas sympy matplotlib
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install cirq-core cudaq
+
+      - name: Verify every dependency the module enforces is importable
+        run: |
+          set -eu
+          python -c "import numpy, pandas, sympy, cirq, cudaq, torch; print('all six present')"
+
+      - name: All 16 sutras, in all execution modes
+        run: pytest tests/test_primarysutra_modes.py -q

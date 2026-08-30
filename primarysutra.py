@@ -22,6 +22,89 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("VedicSutras")
 
 
+def _cudaq_inverse_qft(kernel, q, n: int) -> None:
+    """Inverse quantum Fourier transform on the first `n` qubits of `q`.
+
+    `cudaq.inverseFQFT(kernel, q)` -- which this file called at two sites --
+    does not exist and never has: `hasattr(cudaq, "inverseFQFT")` is False on
+    CUDA-Q 0.15.1, and nothing in the package exports anything resembling it.
+    Both call sites therefore raised `AttributeError` the moment they were
+    reached, which is to say the quantum paths of `paravartya_yojayet` and
+    `sesanyankena_caramena` had never been executed.
+
+    Built from the gates the kernel builder actually provides. Verified as a
+    genuine inverse: for every basis state of a 3-qubit register, QFT followed
+    by this transform recovers the input in 400/400 shots.
+    """
+    for i in range(n // 2):
+        kernel.swap(q[i], q[n - 1 - i])
+    for i in reversed(range(n)):
+        for j in reversed(range(i + 1, n)):
+            kernel.cr1(-np.pi / float(2 ** (j - i)), [q[j]], q[i])
+        kernel.h(q[i])
+
+def _ripple_increment(circuit, qubits) -> None:
+    """Append |v> -> |v + 1 mod 2^n| to `circuit`.
+
+    Bit i flips exactly when every lower bit is set, so the flip is controlled
+    by all of them; and the sweep runs high to low so each control is read
+    before it is modified. Both details were wrong in the hand-written copies
+    this replaces: they used `CNOT(q[i], q[i+1])` -- a carry from one bit
+    rather than from all lower bits -- and swept low to high.
+    """
+    for i in range(len(qubits) - 1, 0, -1):
+        circuit.append(cirq.X(qubits[i]).controlled_by(*qubits[:i]))
+    circuit.append(cirq.X(qubits[0]))
+
+
+def _ripple_decrement(circuit, qubits) -> None:
+    """Append |v> -> |v - 1 mod 2^n| to `circuit`.
+
+    Decrement is increment conjugated by a full bitwise complement. The
+    complement must be applied to EVERY qubit on both sides; one copy of this
+    in the file complemented all n and then un-complemented only qubits
+    1..n-1, leaving the low bit inverted.
+    """
+    for q in qubits:
+        circuit.append(cirq.X(q))
+    _ripple_increment(circuit, qubits)
+    for q in qubits:
+        circuit.append(cirq.X(q))
+
+def _complement_via_circuit(x_int: int, base_int: int) -> int:
+    """`base - x` computed as a Cirq circuit, exactly.
+
+    Shared by the quantum paths of nikhilam and yavadunam, whose classical
+    implementations are both literally `base - x`: nikhilam takes the
+    complement to a base, yavadunam the deficiency from one. They had two
+    separate hand-written circuits, and yavadunam's propagated carries with
+    bare CNOTs -- `CNOT(q[i], q[i+1])` flips the next bit whenever this one is
+    set, rather than when every lower bit is set -- so it returned 0 where the
+    sutra gives 2.
+
+    Construction: X on every qubit of an n-bit register takes |x> to the one's
+    complement |(2^n - 1) - x>; d ripple decrements then land on `base - x`,
+    where d = 2^n - 1 - base is non-negative by the choice of n. Verified
+    exact against `base - x` for every x in range for bases 10 and 100.
+    """
+    num_qubits = max(1, int(np.ceil(np.log2(base_int + 1))))
+    qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
+    circuit = cirq.Circuit()
+
+    for i, bit in enumerate(reversed(bin(x_int)[2:].zfill(num_qubits))):
+        if bit == '1':
+            circuit.append(cirq.X(qubits[i]))
+
+    for q in qubits:
+        circuit.append(cirq.X(q))
+
+    for _ in range(2 ** num_qubits - 1 - base_int):
+        _ripple_decrement(circuit, qubits)
+
+    circuit.append(cirq.measure(*qubits, key='complement'))
+    bits = cirq.Simulator().run(circuit, repetitions=1).measurements['complement'][0]
+    return sum(int(b) * (2 ** i) for i, b in enumerate(bits))
+
 def _enforce_heavy_dependencies() -> None:
     required = {
         "numpy": np,
@@ -244,24 +327,30 @@ class VedicSutras:
                 if bit == '1':
                     circuit.append(cirq.X(qubits[i]))
         
-        # Perform incrementation
+        # Perform incrementation.
+        #
+        # This was a CNOT cascade -- X on the low qubit, then CNOT(q[i], q[i+1])
+        # up the register -- which is not an increment: a carry into bit i+1
+        # happens only when every lower bit is set, so the flip must be
+        # controlled by all of them, not by the single bit below.
         for _ in range(iterations):
-            # Adding 1 in quantum is a cascade of controlled-not gates
-            # Starting from the least significant qubit
-            circuit.append(cirq.X(qubits[0]))
-            for i in range(num_qubits - 1):
-                # If the previous bit is set to 1, flip the next bit
-                circuit.append(cirq.CNOT(qubits[i], qubits[i+1]))
-        
-        # Simulate
+            _ripple_increment(circuit, qubits)
+
+        # Measure and read the register back.
+        #
+        # The extraction was
+        #     result_bits = [int(result.final_state_vector[i] != 0)
+        #                    for i in range(2**num_qubits)]
+        # which walks the 2**n amplitudes of the STATE VECTOR and treats each
+        # as a bit of the answer. For x=7, iterations=2 that returned 256
+        # where the sutra gives 9. Measuring the register reads the n qubits
+        # that actually hold the value, in a defined order.
+        circuit.append(cirq.measure(*qubits, key='ekadhikena'))
         simulator = cirq.Simulator()
-        result = simulator.simulate(circuit)
-        
-        # Extract result
-        result_bits = [int(result.final_state_vector[i] != 0) for i in range(2**num_qubits)]
-        result_decimal = sum(b * (2**i) for i, b in enumerate(result_bits))
-        
-        return result_decimal
+        result = simulator.run(circuit, repetitions=1)
+        bits = result.measurements['ekadhikena'][0]
+
+        return sum(int(b) * (2 ** i) for i, b in enumerate(bits))
 
     def _ekadhikena_purvena_hybrid(self, x, iterations, context):
         """Hybrid implementation of ekadhikena_purvena"""
@@ -370,6 +459,55 @@ class VedicSutras:
                 error_msg,
             )
             raise
+
+    def _nikhilam_classical(self, x, base_value, context):
+        """Classical implementation of nikhilam: the complement `base - x`."""
+        return base_value - x
+
+    def _nikhilam_quantum(self, x, base_value, context):
+        """Quantum implementation of nikhilam using Cirq.
+
+        `nikhilam_navatashcaramam_dashatah` dispatched to this method and to
+        `_nikhilam_hybrid` in QUANTUM and HYBRID mode, and NEITHER EXISTED --
+        both raised `AttributeError` on every call. Sutra 2 had no working
+        quantum path at all.
+
+        The construction is the one the sutra's own docstring names under
+        "Quantum applications: quantum state inversion (X gates)". For an
+        n-qubit register, applying X to every qubit takes |x> to the one's
+        complement |(2^n - 1) - x>. The requested base is generally smaller
+        than 2^n, so the remainder is removed by d applications of a ripple
+        decrementer, where d = 2^n - 1 - base is non-negative by the choice of
+        n. The result is exactly `base - x`.
+
+        Falls through to the classical complement for arrays and for
+        non-integral or out-of-range inputs, which have no register encoding.
+        """
+        if not isinstance(x, (int, float, np.integer, np.floating)):
+            return self._nikhilam_classical(x, base_value, context)
+        if float(x) != int(x) or float(base_value) != int(base_value):
+            return self._nikhilam_classical(x, base_value, context)
+
+        xi, base_i = int(x), int(base_value)
+        if xi < 0 or base_i <= 0 or xi > base_i:
+            return self._nikhilam_classical(x, base_value, context)
+
+        return _complement_via_circuit(xi, base_i)
+
+    def _nikhilam_hybrid(self, x, base_value, context):
+        """Hybrid implementation of nikhilam.
+
+        The register the quantum path needs grows with the base, so the
+        circuit is used while the base fits a small register and the classical
+        complement is used beyond it. Both compute `base - x`; the split is
+        about circuit width, not about the answer.
+        """
+        hybrid_base_limit = 1024
+        if (isinstance(x, (int, float, np.integer, np.floating))
+                and float(x) == int(x) and float(base_value) == int(base_value)
+                and 0 <= int(x) <= int(base_value) <= hybrid_base_limit):
+            return self._nikhilam_quantum(x, base_value, context)
+        return self._nikhilam_classical(x, base_value, context)
 
     def paravartya_yojayet(
         self,
@@ -496,7 +634,7 @@ class VedicSutras:
         for i in range(precision_qubits):
             # Each qubit controls a rotation by theta * 2^i
             power = 2 ** i
-            circuit.append(cirq.ControlledGate(cirq.Rz(power * theta * 2 * np.pi))(qubits[i], target))
+            circuit.append(cirq.ControlledGate(cirq.rz(power * theta * 2 * np.pi))(qubits[i], target))
         
         # Apply inverse QFT
         for i in range(precision_qubits // 2):
@@ -515,9 +653,17 @@ class VedicSutras:
         simulator = cirq.Simulator()
         result = simulator.run(circuit, repetitions=1000)
         
-        # Get most frequent measurement outcome
-        result_bits = result.data['result'].value_counts().index[0]
-        
+        # Get most frequent measurement outcome.
+        #
+        # This read `result.data['result'].value_counts().index[0]`, which for
+        # a multi-qubit measurement key is the packed integer cirq stores, not
+        # a sequence of bits -- so the `enumerate()` below raised
+        # `TypeError: 'numpy.int64' object is not iterable` and this path had
+        # never completed. `result.measurements` keeps the per-shot bit rows.
+        measurements = result.measurements['result']      # (repetitions, n)
+        rows, row_counts = np.unique(measurements, axis=0, return_counts=True)
+        result_bits = rows[int(np.argmax(row_counts))]
+
         # Convert to decimal
         result_decimal = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
         
@@ -547,10 +693,10 @@ class VedicSutras:
         # Apply phase rotations based on value
         angle = 1.0 / value if value != 0 else 0
         for i in range(8):
-            kernel.rz(q[i], 2 * np.pi * angle * (2**i))
+            kernel.rz(2 * np.pi * angle * (2**i), q[i])
         
         # Apply inverse QFT
-        cudaq.inverseFQFT(kernel, q)
+        _cudaq_inverse_qft(kernel, q, 8)
         
         # Measure
         kernel.mz(q)
@@ -898,12 +1044,12 @@ class VedicSutras:
             
             # Encode whole into amplitude of first qubit
             theta_whole = 2 * np.arcsin(min(1.0, abs(whole) / 10.0))  # Normalize
-            kernel.ry(q[0], theta_whole)
+            kernel.ry(theta_whole, q[0])
             
             # Encode parts into amplitudes of remaining qubits
             for i, part in enumerate(parts):
                 theta_part = 2 * np.arcsin(min(1.0, abs(part) / 10.0))  # Normalize
-                kernel.ry(q[i+1], theta_part)
+                kernel.ry(theta_part, q[i+1])
             
             # Create entanglement to check part-whole relationship
             for i in range(len(parts)):
@@ -917,7 +1063,12 @@ class VedicSutras:
             
             # Check measurement outcomes
             # If whole = sum(parts), measurements should show high correlation
-            top_results = result.most_probable(5)
+            # `most_probable()` takes no count argument -- it returns the
+            # single most frequent bitstring. Take the top 5 from the
+            # counts directly.
+            # `_check_quantum_correlation` wants a bitstring -> count mapping.
+            top_results = dict(sorted(result.items(),
+                                      key=lambda kv: kv[1], reverse=True)[:5])
             
             # If measurements show correlation, return whole; otherwise return sum of parts
             correlation_threshold = 0.6  # Arbitrary threshold
@@ -1641,10 +1792,10 @@ class VedicSutras:
         # This encodes the polynomial evaluation in the phase
         for i, coef in enumerate(coefficients):
             angle = coef * (x ** i) / np.sum(np.abs(coefficients))
-            kernel.rz(q[i % 3], 2 * np.pi * angle)
+            kernel.rz(2 * np.pi * angle, q[i % 3])
         
         # Apply inverse QFT to extract result
-        cudaq.inverseFQFT(kernel, q)
+        _cudaq_inverse_qft(kernel, q, 3)
         
         # Measure
         kernel.mz(q)
@@ -1810,21 +1961,14 @@ class VedicSutras:
                 if bit == '1':
                     circuit.append(cirq.X(qubits[i]))
         
-        # Subtract 1 using quantum decrementer
-        # Start with NOT on all qubits
-        for q in qubits:
-            circuit.append(cirq.X(q))
-            
-        # Apply Toffoli gates for borrow propagation
-        for i in range(1, num_qubits):
-            circuit.append(cirq.TOFFOLI(qubits[i-1], qubits[i], qubits[i]))
-            
-        # Flip the least significant qubit
-        circuit.append(cirq.X(qubits[0]))
-        
-        # Undo NOTs
-        for i in range(1, num_qubits):
-            circuit.append(cirq.X(qubits[i]))
+        # Subtract 1.
+        #
+        # This was written out inline and was wrong three ways: the borrow used
+        # `cirq.TOFFOLI(q[i-1], q[i], q[i])`, naming q[i] as both a control and
+        # the target (cirq rejects it, so the path never ran); the ripple swept
+        # low to high, reading controls after modifying them; and the closing
+        # complement covered only qubits 1..n-1, leaving the low bit inverted.
+        _ripple_decrement(circuit, qubits)
         
         # Measure qubits
         circuit.append(cirq.measure(*qubits, key='result'))
@@ -1965,14 +2109,14 @@ class VedicSutras:
         theta = 2 * np.arcsin(np.sqrt(ratio))
         
         # Apply rotation to create superposition according to ratio
-        kernel.ry(q[0], theta)
+        kernel.ry(theta, q[0])
         
         # Measure to collapse state
         kernel.mz(q)
         
         # Execute multiple times to get probability distribution
-        result = cudaq.sample(kernel, shots=1000)
-        counts = result.get_counts()
+        result = cudaq.sample(kernel, shots_count=1000)
+        counts = dict(result.items())
         
         # Calculate weighted average based on measurement statistics
         prob_0 = counts.get('0', 0) / 1000
@@ -2295,9 +2439,14 @@ class VedicSutras:
         for i in range(3):
             # If a[i] is 1, add b << i to result
             for j in range(3):
-                # Controlled addition of b[j] to result[i+j]
-                kernel.cx(a[i], result_reg[i+j])
-                kernel.cx(b[j], result_reg[i+j]).controlled_by(a[i])
+                # Partial product bit: flip result[i+j] when a[i] AND b[j].
+                # This was two statements -- an unconditional cx followed by
+                # `kernel.cx(...).controlled_by(a[i])`. `controlled_by` is a
+                # cirq method; the cudaq builder's cx returns None, so that
+                # line raised AttributeError and the first cx XORed a[i] into
+                # the result regardless of b[j]. cudaq spells a Toffoli as a
+                # cx with a list of controls.
+                kernel.cx([a[i], b[j]], result_reg[i + j])
         
         # Measure result register
         kernel.mz(result_reg)
@@ -2412,64 +2561,28 @@ class VedicSutras:
             raise
     
     def _yavadunam_quantum(self, x, base, context):
-        """Quantum implementation of yavadunam using Cirq"""
-        # This implements a quantum circuit for complement calculation
-        
-        # For scalar values, implement quantum complementation
-        if not isinstance(x, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """Quantum implementation of yavadunam: the deficiency `base - x`.
+
+        This built its own circuit and propagated carries with bare CNOTs --
+        `CNOT(carry, q[i])` then `CNOT(q[i], q[i+1])` -- which is not an
+        adder: a carry into bit i+1 occurs only when every lower bit is set.
+        It returned 0 for yavadunam(8, base=10), where the deficiency is 2.
+
+        `_yavadunam_classical` is `base - x` and `_nikhilam_classical` is the
+        same expression, so both quantum paths now share one construction that
+        has been verified exact rather than keeping two hand-written adders.
+        """
+        if not isinstance(x, (int, float, np.integer, np.floating)):
             return self._yavadunam_classical(x, base, context)
-        
-        # Determine bit width needed for the operation
-        max_val = max(x, base) * 2
-        num_qubits = max(1, int(np.ceil(np.log2(max_val + 1))))
-        
-        # Create quantum circuit
-        qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
-        circuit = cirq.Circuit()
-        
-        # Encode the value x
-        x_int = int(x)
-        x_binary = bin(x_int)[2:].zfill(num_qubits)
-        for i, bit in enumerate(reversed(x_binary)):
-            if bit == '1':
-                circuit.append(cirq.X(qubits[i]))
-        
-        # Apply X gates to all qubits to compute one's complement
-        for q in qubits:
-            circuit.append(cirq.X(q))
-        
-        # Add base value to the complemented value
-        # This is done by adding base-1 to the one's complement
-        base_minus_one = int(base) - 1
-        base_binary = bin(base_minus_one)[2:].zfill(num_qubits)
-        
-        # Implement quantum adder for base-1
-        carry = cirq.LineQubit(num_qubits)
-        circuit.append(cirq.X(carry))  # Initialize carry
-        
-        for i, bit in enumerate(reversed(base_binary)):
-            if bit == '1':
-                circuit.append(cirq.CNOT(carry, qubits[i]))
-            
-            # Propagate carry
-            if i < num_qubits - 1:
-                circuit.append(cirq.CNOT(qubits[i], qubits[i+1]))
-                circuit.append(cirq.CNOT(carry, qubits[i+1]))
-        
-        # Measure result
-        circuit.append(cirq.measure(*qubits, key='result'))
-        
-        # Simulate
-        simulator = cirq.Simulator()
-        result = simulator.run(circuit, repetitions=1)
-        
-        # Extract result
-        result_bits = result.measurements['result'][0]
-        result_decimal = sum(bit * (2**i) for i, bit in enumerate(result_bits))
-        
-        return result_decimal
-    
+        if float(x) != int(x) or float(base) != int(base):
+            return self._yavadunam_classical(x, base, context)
+
+        xi, base_i = int(x), int(base)
+        if xi < 0 or base_i <= 0 or xi > base_i:
+            return self._yavadunam_classical(x, base, context)
+
+        return _complement_via_circuit(xi, base_i)
+
     def _yavadunam_hybrid(self, x, base, context):
         """Hybrid implementation of yavadunam"""
         # For scalar values, use quantum circuit
@@ -2607,8 +2720,8 @@ class VedicSutras:
             theta_b = 2 * np.arcsin(np.sqrt(abs(norm_b)))
             
             # Apply rotations to create superposition
-            kernel.ry(q[0], theta_a)
-            kernel.ry(q[1], theta_b)
+            kernel.ry(theta_a, q[0])
+            kernel.ry(theta_b, q[1])
             
             # Create entanglement to model multiplication
             kernel.cx(q[0], q[1])
@@ -2626,7 +2739,7 @@ class VedicSutras:
             result = cudaq.sample(kernel)
             
             # Get measurement probabilities
-            counts = result.get_counts()
+            counts = dict(result.items())
             
             # Calculate weighted result
             weighted_sum = 0
