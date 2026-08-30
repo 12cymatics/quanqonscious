@@ -9,6 +9,7 @@ Tests:
 - Sutra operator closure
 """
 
+import hashlib
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +25,24 @@ from core.operators.sutra_ops import get_all_sutras, get_sutra_by_number, create
 from core.observables import (create_standard_invariants, create_standard_observables,
                              EnergyConservationInvariant)
 from core.trace import DeterminismVerifier, StateCheckpoint, EvolutionTrace, TraceReplayer
+
+
+def _exact_hash(value: Fraction) -> str:
+    """SHA-256 over a rational's byte form, truncated to 16 hex characters.
+
+    Not `str(value)`: Python caps int-to-str conversion at 4300 digits by
+    default, and some exact quantities here run to five figures of digits
+    (R4's energy is a 12882-digit rational). Bytes skip the decimal
+    conversion, so this works at any size and is much faster.
+    """
+    def _b(n: int) -> bytes:
+        return n.to_bytes((n.bit_length() + 8) // 8, "big", signed=True)
+
+    digest = hashlib.sha256()
+    digest.update(_b(value.numerator))
+    digest.update(b"/")
+    digest.update(_b(value.denominator))
+    return digest.hexdigest()[:16]
 
 
 def test_toroidal_closure():
@@ -47,7 +66,32 @@ def test_toroidal_closure():
     for n in neighbors:
         assert lattice.validate_closure(n), f"Invalid neighbor: {n}"
 
-    print("  ✓ Toroidal closure: PASSED")
+    # `validate_closure` only range-checks coordinates, so the loop above is
+    # satisfied by any subset of the real neighbourhood -- deleting half the
+    # adjacency kernel leaves every surviving neighbour perfectly valid and
+    # this test green. (Measured: it does, while R4's energy moves 37.047 ->
+    # 29.434.) So check the shape of the neighbourhood, not just that its
+    # members are in range.
+    dims = len(lattice.shape)
+    assert len(neighbors) == 2 * dims, (
+        f"von Neumann neighbourhood has {len(neighbors)} members, expected "
+        f"{2 * dims} for a {dims}-dimensional lattice"
+    )
+    assert len(set(n.coords for n in neighbors)) == 2 * dims, \
+        "neighbourhood contains duplicates"
+
+    # It must also be closed under negation: for every offset there is an
+    # opposite one. Dropping the -1 offsets halves the kernel while leaving
+    # every remaining offset valid, and only this catches that.
+    interior = lattice.point(4, 4, 4)
+    offsets = {tuple(a - b for a, b in zip(n.coords, interior.coords))
+               for n in lattice.nearest_neighbors(interior)}
+    assert offsets == {tuple(-c for c in o) for o in offsets}, (
+        f"neighbour offsets are not closed under negation: {sorted(offsets)}"
+    )
+
+    print(f"  \u2713 Toroidal closure: PASSED ({len(neighbors)} neighbours, "
+          f"offsets symmetric)")
 
 
 def test_determinism():
@@ -436,43 +480,102 @@ def test_sutra_golden_values():
 
 
 def test_r4_coupling():
-    """Test R4 adjacency kernel and coupling."""
+    """Test R4 adjacency kernel and coupling.
+
+    Pins the value. What this replaces asserted only that a key existed, that
+    a sum of squares was non-negative, and that the field stayed under
+    `validate_bounded(10000)` -- which permits |Psi|^2 <= 100_000_000 against
+    a field reaching 1.119. Deleting half the adjacency kernel changes the
+    energy 37.047 -> 29.428 and still reports PASSED under all three.
+    """
     print("Testing R4 coupling...")
 
     lattice = create_3d_lattice(8, 8, 8)
     state = create_gaussian_field(lattice, (4, 4, 4), sigma=1.5, amplitude=1.0)
     context = OperatorContext()
 
-    r4 = R4CompositeOperator()
-    result = r4(state, context)
+    result = R4CompositeOperator()(state, context)
 
-    # Check energy was computed
     energy = context.get_param('r4_energy')
     assert energy is not None, "R4 energy not computed"
-    assert energy >= 0, f"R4 energy negative: {energy}"
+    assert isinstance(energy, Fraction), f"R4 energy is {type(energy).__name__}, not exact"
+    # Strictly positive, not `>= 0`: a kernel that computed nothing at all
+    # would yield 0 and satisfy the old assertion.
+    assert energy > 0, f"R4 energy not positive: {float(energy)}"
 
-    # Check result is bounded
-    assert result.validate_bounded(Fraction(10000))
+    # The exact energy is a 12882-digit rational, so it is pinned by hash
+    # rather than written out. Any change to the adjacency kernel moves it.
+    energy_hash = _exact_hash(energy)
+    assert energy_hash == "19f4d2712e8f0982", (
+        f"R4 energy changed (now {float(energy)}, was 37.04723356109884). "
+        f"If this is intended, re-pin; if not, the adjacency kernel moved."
+    )
 
-    print(f"  ✓ R4 coupling: PASSED (energy={float(energy):.4f})")
+    # The operator must actually act, and the whole field is pinned.
+    assert state_digest(result) != state_digest(state), "R4 left the field unchanged"
+    assert state_digest(result)[:16] == "e9a76dcd59b98599", "post-R4 field changed"
+
+    # A bound at the scale the field reaches (1.119), not 10000.
+    assert result.validate_bounded(Fraction(2)), (
+        f"field exceeds bound 2 after R4: max |Psi|^2 = {float(result.max_amplitude())}"
+    )
+
+    print(f"  \u2713 R4 coupling: PASSED (energy={float(energy):.4f}, "
+          f"max |Psi|^2={float(result.max_amplitude()):.4f})")
 
 
 def test_observables():
-    """Test observable computation."""
+    """Test observable computation.
+
+    Pins the values. What this replaces checked only that four names were
+    present as keys and never looked at a single one, so `TotalNormSquared`
+    hardwired to `Fraction(0)` still reported "8 computed" and passed.
+    """
     print("Testing observables...")
 
     lattice = create_3d_lattice(8, 8, 8)
+    sites = len(list(lattice.iterate_all()))
+    assert sites == 512, f"fixture lattice has {sites} sites, not 512"
+
     state = create_gaussian_field(lattice, (4, 4, 4), sigma=1.5, amplitude=1.0)
-    context = OperatorContext()
+    results = create_standard_observables().compute_all(state, OperatorContext())
 
-    obs = create_standard_observables()
-    results = obs.compute_all(state, context)
+    assert sorted(results) == [
+        'CymaticNodeCount', 'MaxAmplitude', 'MeanAmplitude', 'PhaseCoherence',
+        'TotalNormSquared', 'TotalR4Energy', 'TotalStress', 'TotalTension',
+    ], sorted(results)
 
-    required = ['TotalNormSquared', 'MeanAmplitude', 'MaxAmplitude', 'TotalR4Energy']
-    for name in required:
-        assert name in results, f"Missing observable: {name}"
+    exact = {k: Fraction(v['value']) for k, v in results.items()}
 
-    print(f"  ✓ Observables: PASSED ({len(results)} computed)")
+    # The values small enough to read, written out.
+    assert exact['CymaticNodeCount'] == 455
+    assert exact['MaxAmplitude'] == 1
+    assert exact['PhaseCoherence'] == Fraction(239, 256)
+
+    # Stress and tension are exactly zero here, and that is a property of the
+    # fixture rather than of the observables: nothing has induced any. They
+    # are pinned so that a change -- an observable that starts reporting a
+    # value on an unstressed field -- shows up rather than passing silently.
+    assert exact['TotalStress'] == 0
+    assert exact['TotalTension'] == 0
+
+    # A relation between two of them, which no single hardwired value can
+    # satisfy by accident.
+    assert exact['MeanAmplitude'] * sites == exact['TotalNormSquared'], (
+        "MeanAmplitude is no longer TotalNormSquared / sites"
+    )
+
+    # The remaining values run to thousands of digits, so all eight are
+    # pinned jointly by hash over their exact string forms.
+    canonical = "|".join(f"{k}={results[k]['value']}" for k in sorted(results))
+    digest = hashlib.sha256(canonical.encode()).hexdigest()[:16]
+    assert digest == "a5a59ff1c612b85e", (
+        "an observable's exact value changed; the readable assertions above "
+        "narrow down which, and MeanAmplitude/TotalNormSquared/TotalR4Energy "
+        "are the ones not written out"
+    )
+
+    print(f"  \u2713 Observables: PASSED ({len(results)} pinned exactly)")
 
 
 def run_all_tests():
