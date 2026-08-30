@@ -6,7 +6,6 @@ cascade.
 """
 from __future__ import annotations
 
-import random
 from fractions import Fraction
 
 import pytest
@@ -14,23 +13,53 @@ import pytest
 from vedic.kernel import composition as C
 
 
-def _rnd(seed: int) -> tuple:
-    """Random Ψ with Ψ_0 != 0 **by construction**.
+def _build_composition_psi() -> tuple[tuple, ...]:
+    """Enumerated Ψ vectors with Ψ_0 != 0, for queues containing S17.
 
     S17 divides by Ψ_ref, so queues containing it are only defined where that
-    is non-zero. Index 0 is drawn from a range that excludes zero rather than
-    being patched after the fact: a fixture that silently repairs its own
-    input is a fallback, and hides the case it was meant to exercise. The
+    is non-zero. The requirement is met by *selection* — vectors that already
+    satisfy it are kept — rather than by repair: a fixture that patches its
+    own input is a fallback, and hides the case it was meant to exercise. The
     precondition itself is asserted in
     ``test_s17_precondition_raises_on_zero_reference``.
     """
-    r = random.Random(seed)
-    vals = [Fraction(r.choice([-9, -7, -5, -3, -1, 1, 3, 5, 7, 9]), r.randint(1, 7))]
-    vals += [Fraction(r.randint(-9, 9), r.randint(1, 7)) for _ in range(15)]
-    return tuple(vals)
+    from vedic.kernel.tests.psi_corpus import PSI_CASES, SPANNING_SET
+
+    out: list[tuple] = []
+    seen: set[tuple] = set()
+    for psi in tuple(v for _, v in PSI_CASES) + tuple(SPANNING_SET):
+        if psi[0] != 0 and psi not in seen:
+            seen.add(psi)
+            out.append(psi)
+    # A family that varies away from index 0 while keeping the precondition:
+    # e0 plus a distinct multiple of each other basis vector.
+    for i in range(1, 16):
+        v = tuple(Fraction(1) if j == 0
+                  else (Fraction(i + 2) if j == i else Fraction(0))
+                  for j in range(16))
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    if not out:
+        raise AssertionError("no Ψ with a nonzero component 0")
+    return tuple(out)
 
 
-PSI = _rnd(0)
+COMPOSITION_PSI = _build_composition_psi()
+
+
+def _psi_at(index: int) -> tuple:
+    """The Ψ at ``index`` in the enumerated list. Nothing is drawn.
+
+    This was ``_psi_at(seed)``, backed by ``random.Random(seed)``. It
+    established each property on the vectors drawn and nothing about the rest
+    of ℚ^16, and the number of draws was a knob with no justification. Call
+    sites that passed ``seed + k`` now select a definite vector.
+    """
+    return COMPOSITION_PSI[index % len(COMPOSITION_PSI)]
+
+
+PSI = _psi_at(0)
 
 
 # ---------------------------------------------------------------- registry
@@ -107,12 +136,31 @@ def test_series_is_order_sensitive():
     ℚ[Z₂⁴] and therefore commute. S1 and S3 do not.
     """
     ks = [0, 2]
-    assert C.series(PSI, ks) != C.series(PSI, list(reversed(ks)))
+    # Stated as an existence over the enumerated set, because it is one: two
+    # non-commuting operators still agree on particular fields — on a
+    # constant Ψ, S1 and S3 give the same result in either order. Asserting
+    # non-commutation on one hand-picked vector makes the test depend on
+    # which vector that is, which is how it broke when the inputs stopped
+    # being drawn from a PRNG.
+    witnesses = [i for i, psi in enumerate(COMPOSITION_PSI)
+                 if C.series(psi, ks) != C.series(psi, list(reversed(ks)))]
+    assert witnesses, (
+        f"S1 and S3 commute on all {len(COMPOSITION_PSI)} enumerated inputs, "
+        f"so SERIES is order-insensitive for them")
 
 
 def test_translation_invariant_sutras_commute():
-    """S1 (XOR shift) and S9 (Laplacian) are both translation-invariant."""
-    assert C.series(PSI, [0, 8]) == C.series(PSI, [8, 0])
+    """S1 (XOR shift) and S9 (Laplacian) are both translation-invariant.
+
+    Universally quantified over the enumerated inputs: commutation is a
+    property of the operator pair, so a single witness would not establish it
+    and a single counterexample refutes it.
+    """
+    failures = [i for i, psi in enumerate(COMPOSITION_PSI)
+                if C.series(psi, [0, 8]) != C.series(psi, [8, 0])]
+    assert not failures, (
+        f"S1 and S9 fail to commute on {len(failures)} of "
+        f"{len(COMPOSITION_PSI)} inputs (first index {failures[0]})")
 
 
 def test_s17_precondition_raises_on_zero_reference():
@@ -189,7 +237,7 @@ def test_s20_image_is_rank_one():
     """S20 projects onto a single Walsh row, so its image is 1-dimensional."""
     h0 = tuple(Fraction(1 if not (v & 1) else -1) for v in range(16))
     for seed in range(5):
-        out = C.apply_one(19, _rnd(seed + 100))
+        out = C.apply_one(19, _psi_at(seed + 100))
         ratio = out[0] / h0[0]
         assert all(out[v] == ratio * h0[v] for v in range(16))
 
@@ -203,7 +251,7 @@ def test_s20_s21_s22_run_is_the_zero_map():
     is therefore the zero map.
     """
     for seed in range(8):
-        x = _rnd(seed + 200)
+        x = _psi_at(seed + 200)
         out = C.series(x, [19, 20, 21])
         assert all(v == 0 for v in out), "S20→S21→S22 should annihilate"
 
@@ -213,14 +261,14 @@ def test_full_series_cascade_is_degenerate():
     so it annihilates every input. This is a property of the operator set,
     not of any particular Ψ."""
     for seed in range(8):
-        out = C.series(_rnd(seed + 300), C.ALL)
+        out = C.series(_psi_at(seed + 300), C.ALL)
         assert all(v == 0 for v in out)
 
 
 def test_parallel_and_concurrent_are_not_degenerate():
     """The other modes never feed S22 a constant, so they retain signal."""
     for seed in range(5):
-        x = _rnd(seed + 400)
+        x = _psi_at(seed + 400)
         assert any(v != 0 for v in C.parallel(x, C.ALL))
         assert any(v != 0 for v in C.concurrent(x, C.ALL))
         assert any(v != 0 for v in C.canonical(x, C.ALL))
@@ -269,7 +317,7 @@ def test_binary_binding_never_degenerates_to_the_identity():
     complement Φ = S2(Ψ), which degenerates for none of S3/S17/S23.
     """
     for k in (2, 16, 22):
-        identical = all(C.apply_one(k, _rnd(seed + 500)) == _rnd(seed + 500)
+        identical = all(C.apply_one(k, _psi_at(seed + 500)) == _psi_at(seed + 500)
                         for seed in range(4))
         assert not identical, f"T{k+1} is the identity under the current binding"
 
@@ -278,7 +326,7 @@ def test_s17_would_be_the_identity_under_self_binding():
     """Documents the defect the binding policy exists to avoid."""
     import vedic.kernel.z2_primitives as SX
     for seed in range(4):
-        x = _rnd(seed + 510)
+        x = _psi_at(seed + 510)
         assert SX.s17_anurupyena_proportion(x, x) == x
 
 
@@ -299,7 +347,7 @@ def test_t18_and_t27_are_scalar_rescalings():
     """S18 and S27 are natively scalar; the registry lifts them to T(Ψ)=s·Ψ,
     which is a rescaling, never a change of direction."""
     for k in (17, 26):
-        x = _rnd(k + 600)
+        x = _psi_at(k + 600)
         out = C.apply_one(k, x)
         nz = [(o, v) for o, v in zip(out, x) if v != 0]
         ratios = {o / v for o, v in nz}

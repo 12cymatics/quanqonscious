@@ -16,6 +16,7 @@ from fractions import Fraction
 from typing import Dict, Optional, Callable, Tuple, Union, List, Any
 from enum import Enum
 import copy
+import hashlib
 import math
 
 from .lattice import ToroidalHypercube, LatticePoint
@@ -448,7 +449,23 @@ def create_gaussian_field(lattice: ToroidalHypercube,
                           sigma: float,
                           amplitude: float = 1.0,
                           mode: ArithmeticMode = ArithmeticMode.EXACT) -> FieldState:
-    """Create a Gaussian-peaked field centered at given point."""
+    """Create a Gaussian-peaked field centered at given point.
+
+    The seed values are float-derived and this is not fixable: exp(-r²/2σ²)
+    is transcendental, so a true Gaussian has no exact representation in ℚ.
+    `math.exp` produces a double and `RationalComplex.from_real` stores it as
+    the dyadic rational that double denotes -- exactly, but as an exact copy
+    of an approximation, which is why fields from this constructor carry
+    twelve-digit denominators from the start.
+
+    `mode` is therefore not a promise about these values. It sets the
+    arithmetic of everything done to the field afterwards, which is exact;
+    the seed is as exact as a Gaussian can be.
+
+    Anything asserting exactness end to end wants a field built from stated
+    rationals instead -- see the fixtures in `tests/test_invariants.py`, which
+    set a handful of sites by hand for that reason.
+    """
     state = FieldState(lattice=lattice, mode=mode)
     center_point = LatticePoint(center, lattice.shape)
 
@@ -493,6 +510,51 @@ def _self_test():
     # Test bounds validation
     assert state.validate_bounded(Fraction(10))
     assert not state.validate_bounded(Fraction(3))
+
+
+# ---------------------------------------------------------------------------
+# Canonical state digest
+# ---------------------------------------------------------------------------
+#
+# One hash function, used by every consumer that needs to say "this is the
+# same state". There used to be two: StateCheckpoint._compute_hash walked
+# every site and returned 64 hex characters, while OperatorTrace._state_hash
+# hashed a 1-in-(N/100) SAMPLE of sites and truncated to 16. They therefore
+# disagreed on every state, which is why TraceReplayer.replay -- which
+# compares one against the other -- could not pass on any input at all.
+#
+# The sampling version was also the weaker check on its own terms: on a 64
+# lattice it looked at 100 sites and would not have noticed an operator that
+# changed any of the rest.
+
+
+def _safe_fraction_repr(value: Fraction) -> str:
+    """Stringify a rational, degrading only for values too large to print.
+
+    The 4096-bit guard bounds the cost of `str()` on a rational whose
+    denominator has grown without limit. Above it the value is represented by
+    its float magnitude, so two states differing only beyond that point hash
+    alike -- an accepted, bounded loss, applied identically everywhere because
+    every caller reaches this one function.
+    """
+    if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
+        return f"{float(value):.12e}"
+    return str(value)
+
+
+def state_digest(state: "FieldState") -> str:
+    """Deterministic SHA-256 over the whole field.
+
+    Every occupied site in sorted-coordinate order, then the total norm. No
+    sampling and no truncation: two states hash alike exactly when they agree
+    at every site.
+    """
+    data = []
+    for coords in sorted(state._psi.keys()):
+        val = state._psi[coords]
+        data.append((coords, _safe_fraction_repr(val.real), _safe_fraction_repr(val.imag)))
+    data.append(('_norm', _safe_fraction_repr(state.total_norm_squared())))
+    return hashlib.sha256(str(data).encode()).hexdigest()
 
 
 if __name__ == "__main__":

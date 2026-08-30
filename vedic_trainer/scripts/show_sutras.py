@@ -37,11 +37,19 @@ def main() -> int:
     print(f"α(n) = (n/{K.SUTRA_SUM})·(strength/100),  "
           f"{K.SUTRA_SUM} = T(29) = 29·30/2")
     print(f"blend(c,t,w) = c + (t−c)·w\n")
-    print(f"{'id':>3}  {'name':34} {'category':15} {'kind':5} {'coefficient':>26}")
-    print("─" * 92)
+    # Column width is measured from the data, so no name is ever cut. A
+    # fixed 34 with a [:34] slice silently renamed the longer sutras in every
+    # listing this script produced.
+    name_w = max(len("name"), max(len(s.name) for s in K.SUTRAS))
+    coef_w = max(len("coefficient"),
+                 max(len(str(s.coefficient)) for s in K.SUTRAS))
+    rule = 3 + 2 + name_w + 1 + 15 + 1 + 5 + 1 + coef_w
+    print(f"{'id':>3}  {'name':{name_w}} {'category':15} {'kind':5} "
+          f"{'coefficient':>{coef_w}}")
+    print("─" * rule)
     for s in K.SUTRAS:
-        print(f"{s.id:>3}  {s.name[:34]:34} {s.category:15} {s.kind:5} "
-              f"{str(s.coefficient):>26}")
+        print(f"{s.id:>3}  {s.name:{name_w}} {s.category:15} {s.kind:5} "
+              f"{str(s.coefficient):>{coef_w}}")
 
     print("\nOPERATOR FORMULAE (seven structurally different couplings)")
     print("─" * 92)
@@ -87,7 +95,7 @@ def main() -> int:
         print(f"\nDRIFT RANKING at strength {a.drift}  (§3.7: D_k = |Q(S_kΨ) − Q(Ψ)|)")
         print("─" * 92)
         for sid, d in K.rank_by_drift(psi, st):
-            print(f"  S{sid:<3} {K.NAMES[sid][:34]:34} {K.CATEGORY[sid]:15} "
+            print(f"  S{sid:<3} {K.NAMES[sid]:{name_w}} {K.CATEGORY[sid]:15} "
                   f"{float(d):.6e}")
         q0 = K.norm_sq(psi)
         print("\n  conservation cores (§3.8), relative |ΔQ|/Q:")

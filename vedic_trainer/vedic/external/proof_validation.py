@@ -23,12 +23,27 @@ from .hypercube import Hypercube
 from .vedic_engine import VedicSutraEngine
 
 
-def _make_inputs(seed: int = 42) -> Dict[str, np.ndarray]:
-    rng = np.random.default_rng(seed)
+def _make_inputs() -> Dict[str, np.ndarray]:
+    """Deterministic integer-valued inputs, exact in float64.
+
+    These were ``np.abs(rng.standard_normal(...)) + 0.5`` — synthetic random
+    floats with full mantissas. Nothing this harness checks (emptiness,
+    finiteness, shape) needs randomness, and full-mantissa inputs force any
+    downstream comparison into a tolerance. Integers are exact, reproducible
+    without a generator, and distinct and nonzero so an operator returning a
+    constant or its input unchanged is still distinguishable.
+
+    The ``seed`` parameter is gone rather than kept and ignored: a seed that
+    selects nothing is a knob a caller can reasonably expect to matter.
+    """
+    def matrix(n: int, offset: int) -> np.ndarray:
+        return np.array([[float(offset + i * n + j + 1) for j in range(n)]
+                         for i in range(n)], dtype=np.float64)
+
     return {
-        "X": np.abs(rng.standard_normal((8, 8))) + 0.5,
-        "Y": np.abs(rng.standard_normal((8, 8))) + 0.5,
-        "V": np.abs(rng.standard_normal(16)) + 0.5,
+        "X": matrix(8, 0),
+        "Y": matrix(8, 100),
+        "V": np.array([float(i + 1) for i in range(16)], dtype=np.float64),
     }
 
 
@@ -55,7 +70,13 @@ def _sutra_invocations(engine: VedicSutraEngine,
         lambda: engine.puranapuranabyham(X, complement_base=10),
         lambda: engine.chalana_kalanabyham(X, steps=2, direction=1),
         lambda: engine.yavadunam(X, deficit=0.3),
-        lambda: engine.vyashtisamanstih(X + Y, [X, Y]),
+        # Scalar identity: np.sum(parts) totals every element of every part,
+        # so the "whole" is the scalar total, not the elementwise sum. This
+        # passed ``X + Y`` — a matrix — against that scalar, which under the
+        # old isclose-based implementation compared each element to the grand
+        # total and was almost entirely False. Nothing noticed, because this
+        # harness only checks that the result is non-empty and finite.
+        lambda: engine.vyashtisamanstih(float(np.sum(X) + np.sum(Y)), [X, Y]),
         lambda: engine.shesanyankena_charamena(coeffs, int(np.floor(X.mean()))),
         lambda: engine.sopaantyadvayamantyam(X.copy()),
         lambda: engine.ekanyunena_purvena(X),

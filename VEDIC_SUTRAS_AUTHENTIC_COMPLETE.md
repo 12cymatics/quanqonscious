@@ -1602,13 +1602,49 @@ vedic::tests::print_results(results);
 
 ## Performance Characteristics
 
-| Sutra | Speedup vs. Standard | Applicability |
-|-------|---------------------|---------------|
-| S2 Nikhilam | 2× | Numbers near base |
-| S3 Urdhva | 1-1.5× | General, parallelizable |
-| S10 Yavadunam | 3× | Near powers of 10 |
-| S14 Ekanyunena | 4× | Multiplication by 999...9 |
-| US8 Antyayor | 5× | Last digits sum to 10 |
+**Measured. Every speedup this table used to claim is wrong, and wrong in the
+same direction.** The figures below came from `vedic_benchmark_fair.cpp`
+(200,000 iterations per arm, `g++ -O2`, both arms accumulating into a shared
+sink so neither can be optimised away):
+
+| Sutra | Was claimed | Measured | Applicability |
+|-------|-------------|----------|---------------|
+| S2 Nikhilam | 2× faster | **0.20–0.26× — about 4–5× slower** | Numbers near base |
+| S3 Urdhva | 1–1.5× faster | **0.01× — about 100–170× slower** | General, parallelizable |
+| S10 Yavadunam | 3× faster | **0.20× — about 5× slower** | Near powers of 10 |
+| S14 Ekanyunena | 4× faster | **0.23–0.31× — about 3–4× slower** | Multiplication by 999...9 |
+| US8 Antyayor | 5× faster | **0.05–0.07× — about 15–20× slower** | Last digits sum to 10 |
+
+The gap **widens** with operand size rather than closing, which rules out the
+obvious defence that these were measured on numbers too small to show an
+advantage. S3 Urdhva against `a * b`, same harness:
+
+| digits | 4 | 16 | 64 | 128 | 256 |
+|---|---|---|---|---|---|
+| slower by | 94× | 350× | 875× | ~2,000× | ~2,600× |
+
+Urdhva's digit loop is quadratic; Boost dispatches to Karatsuba above a
+threshold and to hardware limb multiplication below it. The asymptotics run the
+wrong way for the claim.
+
+**What this does and does not disprove.** The classical Vedic claim is about
+digit operations performed *by a person*, and this document states it correctly
+two sections earlier: *"~50% fewer digit operations vs. standard
+multiplication — Practical for manual calculation."* That is a different claim
+and nothing here contradicts it. What is disproved is the unqualified reading —
+a table headed "Speedup vs. Standard" under "Performance Characteristics", in a
+repository of code, which any reader takes as a claim about running software.
+
+These implementations also return heavyweight result structs
+(`NikhilamResult` carries six `BigInt`s, `UrdhvaResult` a `cross_products`
+vector), so a speed-tuned rewrite would beat these numbers — but it would not
+close a 2,600× gap.
+
+`vedic_benchmark.cpp` had been printing the S2 result all along: 74 ns/op
+against 10 ns/op, on screen, never read, and never turned into a ratio. It also
+guarded only the *standard* arm with `volatile`, leaving the Vedic arm's result
+unconsumed and free to be optimised away — a bias in the Vedic arm's favour,
+which it lost anyway.
 
 ## Mathematical Completeness
 

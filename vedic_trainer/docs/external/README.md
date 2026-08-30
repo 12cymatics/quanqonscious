@@ -1,8 +1,9 @@
 # `vedic.external` — sidecar adapters
 
 Optional adapters that surface code from sibling branches of the parent
-repository. None of them are imported by the kernel, memory, training,
-data, or eval layers — they're shipped so users can:
+repository. None of them are imported by the kernel, memory, training, or
+eval layers (there is no longer a data layer) — they're shipped so users
+can:
 
 - Compute the **classical-arithmetic** interpretation of the 29 sutras
   (NumPy float64) alongside the **structural Z₂⁴-algebra** interpretation
@@ -18,17 +19,17 @@ data, or eval layers — they're shipped so users can:
 | ------ | ------------- | ----------------- |
 | `vedic_engine.py` | `codex/replace-blocks-with-fixed-implementations` | `VedicSutraEngine`: 29 sutras as NumPy float operations. |
 | `hypercube.py` | `codex/replace-blocks-with-fixed-implementations` | `Hypercube`: weighted-hypercube, Λ, Ω, Υ operators. |
-| `proof_validation.py` | `codex/replace-blocks-with-fixed-implementations` | `ProofTester`: smoke-test harness for the two adapters above. |
+| `proof_validation.py` | `codex/replace-blocks-with-fixed-implementations` | `ProofTester`: invokes every operator of the two adapters above and records shapes, emptiness and finiteness. It compares no value against a reference, so it does not establish correctness — see the module header, which opens "Not a smoke test." |
 | `executor.py` | `codex/locate-runnable-simulations-in-repos` | `SutraExecutor(mode=...)` running the full ℚ-exact pipeline across many inputs. |
 | `lean4_mirror.py` | `codex/fix-package-exports-in-__all__-definition` | `Lean4Mirror`: drives the Lean 4 compiler over Bool-valued sutra statements. |
-| `lean_props.py` | new | Renders our 30 algebraic identities as Lean 4 `Bool` props using `Rat` literals built from Python `Fraction`s. |
+| `lean_props.py` | new | Renders **10** of the algebraic identities as Lean 4 `Bool` props, as integer cross-multiplications. Not all 30: `INTERACTIONS` holds 30 and this mirror covers the subset expressible as a componentwise equality. |
 
 ## Two interpretations, one algebra
 
 The 29 sutras admit at least two formalisations relevant to this
 repository:
 
-1. **Z₂⁴ structural algebra (`vedic.kernel.sutras_exact`)** — every
+1. **Z₂⁴ structural algebra (`vedic.kernel.z2_primitives`)** — every
    sutra is a function on length-16 tuples of `fractions.Fraction`,
    acting on the 16 vertices of the Boolean cube. This is the
    ground-truth implementation for the LLM-training kernel and is the
@@ -80,11 +81,22 @@ for r in results:
     print(f"{r.sutra}: {'✓' if r.success else '✗'} ({r.duration:.2f}s)")
 ```
 
-Each identity is rendered as `decide (lhs = rhs) && decide (lhs = rhs) …`
-over 16 components, using `Rat` literals built from the Python
-`Fraction`'s numerator and denominator — so the Lean compiler must
-agree with the Python rationals on every component for the prop to
-return `true`.
+Each identity is rendered as a conjunction of 16 componentwise equalities,
+one per vertex — but **not over `Rat`**. `Rat` is not in core Lean 4, so a
+prop written over it does not compile at all without Mathlib, and requiring
+Mathlib is what kept this mirror from ever verifying anything. Exact rational
+equality is emitted as integer cross-multiplication instead, which `Int`
+decides in core:
+
+```
+decide ((-3 : Int) * (2 : Int) = (1 : Int) * (7 : Int)) && decide (…) && …
+```
+
+`a/b = c/d ⟺ a·d = c·b`, valid because Python's `Fraction` normalises to a
+positive denominator — `lean_props._exact_equality` raises if it ever sees a
+non-positive one rather than emitting a comparison whose direction it cannot
+justify. So the Lean compiler must agree with the Python rationals on every
+component for the prop to return `true`, with no library beyond core.
 
 If the Lean compiler is not installed locally, the mirror raises
 `FileNotFoundError`; `build_lean_props` itself still works (it only
@@ -96,7 +108,7 @@ emits the Bool string and does not invoke Lean).
   from `claude/run-palindrome-simulations-…`. Catalogues the palindrome
   sub-sutras 10–13 with mathematical foundations and quantum / classical
   / hybrid execution recipes.
-- `reference/extended_subsutras_palindrome.py` (519 lines) — the
+- `reference/extended_subsutras_palindrome.py` (517 lines) — the
   palindrome sub-sutras 10–13 implementation from the same branch. This
   file depends on `primarysutra.VedicSutras` (the older mainline engine)
   and on `cirq` / `cudaq` / `torch`, so it is not wired into the kernel.

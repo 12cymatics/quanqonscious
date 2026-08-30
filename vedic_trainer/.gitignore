@@ -27,19 +27,22 @@ venv/
 .DS_Store
 
 # Project artefacts
-# The generated corpus (3 MB) stays out; the SEED corpus does not. Without
-# it, `reproduce_ablation.sh` step 1 fails on a fresh clone and nothing in
-# the repository can regenerate or falsify the numbers in
-# ABLATION_RESULTS.md. seed_corpus.txt + generate_synthetic.py +
-# split_corpus.py reproduce data/ deterministically.
+# No corpus is tracked and none is generated: the synthetic pipeline that
+# used to fill data/ has been removed, and with it the seed corpus that was
+# kept here so a fresh clone could regenerate and falsify the numbers in
+# ABLATION_RESULTS.md. Those numbers are withdrawn for exactly that reason --
+# see the withdrawal notice. data/ is where you put your own corpus; it is
+# ignored because training data does not belong in a source repository.
 data/*
 !data/.gitkeep
-!data/seed_corpus.txt
 checkpoints/*
 !checkpoints/.gitkeep
-# runs/*.json ARE the evidence behind every number in ABLATION_RESULTS.md
-# and are checked by scripts/verify_ablation.py --check. They are 4 KB in
-# total and must travel with the repo; only the bulky logs are ignored.
+# runs/*.json are the record of what was executed. The figures they hold are
+# withdrawn (see ABLATION_RESULTS.md), and deleting evidence is not the same
+# as withdrawing a claim: a reader checking the withdrawal needs them. They
+# are 4 KB in total and must travel with the repo; only the bulky logs are
+# ignored. vedic/kernel/tests/test_no_withdrawn_number_is_quoted.py reads
+# them and fails if any document quotes one.
 runs/*
 !runs/*.json
 wandb/

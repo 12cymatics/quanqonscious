@@ -19,10 +19,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python 3.11
+    # The step name said 3.11 and the step installed 3.10. `python-version`
+    # was given twice and the second wins silently, so for the life of this
+    # file the name asserted one version and the runner used another --
+    # exactly the kind of claim that reads as verified and is not. The dead
+    # key is gone and the name now matches what actually runs. 3.10 is kept
+    # because that is what CI has been executing; changing the version is a
+    # behaviour change, not a documentation fix.
+    - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
-        python-version: "3.11"
         python-version: "3.10"
     - name: Install CUDA toolkit (runtime only)
       uses: Jimver/cuda-toolkit@v0

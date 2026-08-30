@@ -7,11 +7,13 @@ on:
   pull_request:
     branches: ["**"]
 
+# Only what the job does: check out the repo. The extra grants here --
+# statuses: write, pull-requests: write, checks: write -- existed solely for
+# the `submit-pypi-override` Commit Status and the watchdog that posted it.
+# Both are gone, so the permissions go with them rather than sitting granted
+# and unused.
 permissions:
   contents: read
-  statuses: write
-  pull-requests: write
-  checks: write
 
 jobs:
   submit-pypi:
@@ -33,6 +35,36 @@ jobs:
           pip install build pytest pydantic pyyaml numpy
           pip install --index-url https://download.pytorch.org/whl/cpu torch
 
+      # Lean 4 is a hard requirement of this package's test suite, not an
+      # optional extra. The Lean mirror is the one independent cross-check of
+      # the exact-Q kernel, and its tests used to carry skipif guards that
+      # turned "the compiler is absent" into a green run -- so the mirror sat
+      # broken (it could not resolve a toolchain at all) without anyone
+      # noticing. The guards are gone, so CI installs the compiler instead.
+      #
+      # The version is read from vedic_trainer/lean-toolchain, the same pin
+      # Lean4Mirror writes beside its generated scripts, so CI and a developer
+      # machine compile under one toolchain rather than whichever each happens
+      # to default to.
+      - name: Install Lean 4 (version pinned by vedic_trainer/lean-toolchain)
+        run: |
+          set -eu
+          TOOLCHAIN="$(cat vedic_trainer/lean-toolchain)"
+          echo "Installing $TOOLCHAIN"
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Lean runs and matches the pin
+        run: |
+          set -eu
+          lean --version
+          EXPECTED="$(cut -d: -f2 < vedic_trainer/lean-toolchain | tr -d 'v')"
+          lean --version | grep -q "version ${EXPECTED}" || {
+            echo "lean --version does not match vedic_trainer/lean-toolchain (${EXPECTED})"
+            exit 1
+          }
+
       - name: Build sdist + wheel for vedic_trainer
         working-directory: vedic_trainer
         run: |
@@ -51,6 +83,18 @@ jobs:
           PYTHONPATH: .
         run: pytest -q
 
+      # The README's test counts and its "N tests are collected and N pass"
+      # sentence are checked against the measured suite here, not by the
+      # suite. They cannot be checked by it: verify_counts.py runs pytest, so
+      # a test that called it would recurse. The suite exercises its judgment
+      # (reconcile) in isolation; only this step compares the judgment against
+      # the real README and the real suite, which is the part that drifts.
+      - name: vedic_trainer README count gate
+        working-directory: vedic_trainer
+        env:
+          PYTHONPATH: .
+        run: python scripts/verify_counts.py --check
+
       - name: Publish vedic_trainer to PyPI (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: vedic_trainer
@@ -65,16 +109,53 @@ jobs:
           pip install twine
           twine upload --non-interactive dist/*
 
-      - name: Post submit-pypi-override Commit Status
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # SutraWS is the repository's only machine-checked proof artifact: 10,311
+  # lines of Lean 4 whose content is the triangular identity sum(delta 1..29)
+  # = 435. Until now nothing built it. The `submit-pypi` job installs Lean
+  # only so vedic_trainer's mirror tests can run, and `python-app.yml` never
+  # touches Lean at all -- so the library could have stopped compiling, or
+  # acquired a `sorry`, and CI would have stayed green.
+  #
+  # A separate job rather than more steps on `submit-pypi`: jobs run in
+  # parallel, so gating the proofs costs ~9 minutes of machine time and close
+  # to nothing in wall clock.
+  #
+  # `lake build` also runs SutraWS/AxiomAudit.lean, which fails the build if
+  # any theorem in the namespace depends on `sorryAx` or on `native_decide`'s
+  # `Lean.ofReduceBool`. Compiling green is not the same as being proved.
+  sutraws-lean:
+    name: sutraws-lean
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The root lean-toolchain, not vedic_trainer's. They agree today
+      # (v4.10.0); reading the one that governs this build keeps them free to
+      # diverge without silently compiling SutraWS under the wrong compiler.
+      - name: Install Lean 4 (version pinned by ./lean-toolchain)
         run: |
-          # Determine head SHA — for pull_request events use the PR head,
-          # for push events use the pushed commit.
-          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          gh api "repos/${{ github.repository }}/statuses/${SHA}" \
-            -f state=success \
-            -f context="submit-pypi-override" \
-            -f description="repo-internal submit-pypi gate passed (bit-exact + tests + wheel build)" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          set -eu
+          TOOLCHAIN="$(cat lean-toolchain)"
+          echo "Installing $TOOLCHAIN"
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Lean matches the pin
+        run: |
+          set -eu
+          lean --version
+          EXPECTED="$(cut -d: -f2 < lean-toolchain | tr -d 'v')"
+          lean --version | grep -q "version ${EXPECTED}" || {
+            echo "lean --version does not match ./lean-toolchain (${EXPECTED})"
+            exit 1
+          }
+
+      # Resolves the dependencies pinned in lake-manifest.json and downloads
+      # mathlib's prebuilt oleans. Building mathlib from source instead would
+      # take hours.
+      - name: Fetch mathlib build cache
+        run: lake exe cache get
+
+      - name: Build SutraWS and run the axiom audit
+        run: lake build

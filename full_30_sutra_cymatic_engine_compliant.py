@@ -545,9 +545,13 @@ def subsutra12_puranapuranabhyam(p: Fraction, base: Fraction = Fraction(10)) -> 
 
     COMPLIANT: Pure rational arithmetic.
     """
-    # Round to nearest multiple
+    # Round to nearest multiple. `round()` on a Fraction is already exact, so
+    # the float() this used to carry -- commented "Only float for rounding" --
+    # bought nothing and contradicted the docstring above. It also disagrees
+    # with exact rounding on ties and raises OverflowError once the value
+    # passes ~1.8e308, which this engine's denominators reach quickly.
     scaled = p * 10
-    completed_int = round(float(scaled / base))  # Only float for rounding
+    completed_int = round(scaled / base)
     completed = Fraction(completed_int) * base / 10
     return p * (Fraction(1) + Fraction(5, 100000) * abs(completed - scaled))
 

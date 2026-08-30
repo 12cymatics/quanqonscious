@@ -241,7 +241,7 @@ class R4CoherenceOperator(Operator):
         super().__init__(name="R4Coherence", category=OperatorCategory.CONSTRAINT)
         self.config = config or R4CouplingConfig()
 
-    def compute_local_coherence(self, state: FieldState, point: LatticePoint) -> float:
+    def compute_local_coherence(self, state: FieldState, point: LatticePoint) -> Fraction:
         """
         Compute local phase coherence at a point.
 
@@ -251,7 +251,6 @@ class R4CoherenceOperator(Operator):
         # TODO: Reimplement using ONLY Vedic sutra functions and exact arithmetic
         # - Use amplitude (norm_squared) coherence instead of phase coherence
         # - Use vyashtisamanstih sutra for part/whole relationships
-        # - Return exact Fraction instead of float
         # OLD CODE (FORBIDDEN):
         # center_phase = state.phase(point) - uses atan2
         # Phase operations cannot exist in exact rational arithmetic
@@ -288,11 +287,16 @@ class R4CoherenceOperator(Operator):
             psi = state.get(point)
             coherence = self.compute_local_coherence(state, point)
 
-            # Damp incoherent regions
-            threshold = float(self.config.coherence_threshold)
+            # Damp incoherent regions.
+            #
+            # `coherence_threshold` is a Fraction and `compute_local_coherence`
+            # returns one on every path, so the float() and the
+            # limit_denominator(10000) were converting exact values to
+            # approximate ones and back for no reason.
+            threshold = self.config.coherence_threshold
             if coherence < threshold:
                 damping = coherence / threshold
-                new_psi = psi * RationalComplex.from_real(Fraction(damping).limit_denominator(10000))
+                new_psi = psi * RationalComplex.from_real(damping)
                 new_state.set(point, new_psi)
 
         return new_state

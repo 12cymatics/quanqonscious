@@ -6,7 +6,7 @@
 
 **Repository Type**: Production-grade scientific computing framework
 **Languages**: Python (70%), C++ (15%), React/JSX (10%), Jupyter notebooks (5%)
-**Scale**: ~50MB code, 200K+ lines
+**Scale**: 72,704 lines of tracked Python / C++ / JSX (`git ls-files '*.py' '*.hpp' '*.cpp' '*.jsx' | xargs wc -l`). The working tree is ~306 MB, almost all of it the generated cymatic PNGs rather than code. This line read "~50MB code, 200K+ lines" — both figures were written from impression and neither was ever measured.
 **Primary Domain**: Quantum field simulation, consciousness emergence, cymatic patterns
 
 ---
@@ -76,14 +76,14 @@ cat requirements.txt | head -50
 │   │   ├── grvq_ansatz.py     # GRVQ field dynamics
 │   │   ├── mstvq.py           # Magnetic stress-tension operators
 │   │   ├── r4_coupling.py     # R4 coupling and energy
-│   │   └── sutra_ops.py       # Complete sutra implementations (45KB)
+│   │   └── sutra_ops.py       # Complete sutra implementations
 │   ├── observables.py          # Observable computation & invariant checking
 │   ├── trace.py                # Evolution trace for deterministic replay
 │   └── hybrid_pipeline.py      # Classical + quantum hybrid execution
 │
 ├── pcfe-v3/                     # Proto-Consciousness Field Engine v3
 │   ├── src/                    # Main engine implementation
-│   │   ├── pcfe_v3_core_engine.py        # ~5000+ line main engine
+│   │   ├── pcfe_v3_core_engine.py        # main engine
 │   │   ├── pcfe_final_integration.py     # Production integration
 │   │   ├── pcfe_mpi_visualization.py     # MPI visualization
 │   │   └── pcfe_validation_deployment.py # Validation suite
@@ -111,7 +111,7 @@ cat requirements.txt | head -50
 │   └── colab_notebook_inventory.md
 │
 └── [Root Python Files]          # Core implementations (49 files)
-    ├── primarysutra.py          # Main VedicSutras class (122KB, 3800+ lines)
+    ├── primarysutra.py          # Main VedicSutras class
     ├── sutra_*.py              # Sutra modules (GRVQ, Maya, Sulba, etc.)
     ├── integrated_grvq_tgcr.py # Complete GRVQ-TGCR workflow
     ├── vedic_*.py              # Vedic computation engines
@@ -121,15 +121,24 @@ cat requirements.txt | head -50
 
 ### Key File Purposes
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `core/state.py` | 470 | RationalComplex field state with exact arithmetic |
-| `core/operators/sutra_ops.py` | ~1500 | All 29 Vedic sutra operator implementations |
-| `primarysutra.py` | 3800+ | Main VedicSutras class with 3 execution modes |
-| `pcfe_v3_core_engine.py` | 5000+ | Production PCFE engine with MPI/GPU support |
-| `integrated_grvq_tgcr.py` | 800 | Complete GRVQ-TGCR numeric workflow |
-| `vedic_sutras_complete.hpp` | 2600+ | C++ high-performance sutra implementation |
-| `test_invariants.py` | 256 | CODEX 7.2 invariant verification |
+| File | Purpose |
+|------|---------|
+| `core/state.py` | RationalComplex field state with exact arithmetic |
+| `core/operators/sutra_ops.py` | All 29 Vedic sutra operator implementations |
+| `primarysutra.py` | Main VedicSutras class with 3 execution modes |
+| `pcfe_v3_core_engine.py` | Production PCFE engine with MPI/GPU support |
+| `integrated_grvq_tgcr.py` | Complete GRVQ-TGCR numeric workflow |
+| `vedic_sutras_complete.hpp` | C++ high-performance sutra implementation |
+| `test_invariants.py` | CODEX 7.2 invariant verification (7 tests, all passing) |
+
+**There is deliberately no line-count column.** It used to carry seven
+figures and every one of them was wrong when checked — `primarysutra.py`
+listed at "3800+" is 2,865; `pcfe_v3_core_engine.py` at "5000+" is 2,116;
+`core/operators/base.py`, described elsewhere in this file as "~100 lines",
+is 513. They were written from impression, nothing recomputed them, and they
+aged without anyone noticing. A line count is not a fact a reader of this
+file needs, and the honest options were to gate it or drop it. `wc -l` is
+one command away if you want one.
 
 ---
 
@@ -260,7 +269,7 @@ point = lattice.point(100, 200, 300)  # Auto-wraps to grid size
    - Visualization separate from computation
 
 2. **Module Naming Conventions**
-   - Core modules: `lowercase.py` (e.g., `state.py`, `lattice.py`)
+   - Core modules: lowercase filenames (e.g., `state.py`, `lattice.py`)
    - Sutra modules: `*sutraws.py` or `*sutraaws.py` suffix
    - Runners: `run_*.py` prefix
    - Engines: `*_engine.py` suffix
@@ -1007,20 +1016,20 @@ if torch.cuda.is_available():
 ### Essential Files to Read First
 
 **For `/core` work**:
-1. `core/state.py` - Field state and RationalComplex (470 lines)
-2. `core/lattice.py` - Toroidal topology (~300 lines)
-3. `core/operators/base.py` - Operator interface (~100 lines)
-4. `tests/test_invariants.py` - Invariant tests (256 lines)
+1. `core/state.py` - Field state and RationalComplex
+2. `core/lattice.py` - Toroidal topology
+3. `core/operators/base.py` - Operator interface
+4. `tests/test_invariants.py` - Invariant tests (7 tests)
 
 **For PCFE-v3 work**:
-1. `pcfe-v3/docs/README.md` - Comprehensive guide (540 lines)
-2. `pcfe-v3/src/pcfe_v3_core_engine.py` - Main engine (5000+ lines)
+1. `pcfe-v3/docs/README.md` - Comprehensive guide
+2. `pcfe-v3/src/pcfe_v3_core_engine.py` - Main engine
 3. `pcfe-v3/config/default_config.yaml` - Configuration reference
 
 **For Vedic sutras**:
-1. `primarysutra.py` - Main VedicSutras class (3800+ lines)
-2. `core/operators/sutra_ops.py` - CODEX-compliant operators (45KB)
-3. `vedic_sutras_complete.hpp` - C++ reference (2600+ lines)
+1. `primarysutra.py` - Main VedicSutras class
+2. `core/operators/sutra_ops.py` - CODEX-compliant operators
+3. `vedic_sutras_complete.hpp` - C++ reference
 4. `AGENTS.md` - Worked numerical example
 
 ### External References
@@ -1048,6 +1057,11 @@ if torch.cuda.is_available():
 # Test invariants
 python tests/test_invariants.py
 
+# Every file path named in this repository's documentation must resolve.
+# Runs standalone or under pytest; bare `pytest` at the root picks it up,
+# which is how python-app.yml runs it on main.
+python tests/test_documented_paths.py
+
 # Run minimal simulation
 python -c "from pcfe_final_integration import quick_test_run; quick_test_run()"
 
@@ -1057,8 +1071,15 @@ python -c "import cirq, qiskit, cupy; print('All OK')"
 # View PCFE documentation
 cat pcfe-v3/docs/README.md | head -100
 
-# List all Vedic sutra implementations
-grep -r "def.*sutra" primarysutra.py | wc -l  # Should be 29
+# Count the 29 sutras. Read it from the table that defines them, not by
+# grepping for a naming convention: this recipe used to be
+#   grep -r "def.*sutra" primarysutra.py | wc -l   # Should be 29
+# which returns 1. It was written to express the intent "there are 29", not
+# transcribed from a command anyone had run, so it handed every reader a
+# check that fails while telling them the answer it was supposed to give.
+PYTHONPATH=vedic_trainer python3 -c \
+  "from vedic.kernel.sutras_canonical import SUTRA_KIND; print(len(SUTRA_KIND) - 1)"
+# -> 29   (index 0 is unused so SUTRA_KIND[id] reads with 1-based ids)
 
 # Check CODEX references
 grep -r "CODEX" core/ | head -20
@@ -1066,7 +1087,12 @@ grep -r "CODEX" core/ | head -20
 
 ### Configuration Templates
 
-**Minimal config** (`config/minimal.yaml`):
+These two are **templates to write, not files to read**: no `config/`
+directory exists at the repository root. They are recorded here as the shape
+a PCFE config takes. For configs that exist and are loaded by code, see
+`pcfe-v3/config/` and `vedic_trainer/configs/`.
+
+**Minimal config** (a `config/minimal.yaml` you create):
 ```yaml
 grid_size: 32
 max_iterations: 1000
@@ -1077,7 +1103,7 @@ active_sutras:
 quantum_shots: 1000
 ```
 
-**Production config** (`config/production.yaml`):
+**Production config** (a `config/production.yaml` you create):
 ```yaml
 grid_size: 256
 max_iterations: 50000
@@ -1133,7 +1159,7 @@ mpi_enabled: true
 
 **Primary Documentation**: This file (`CLAUDE.md`)
 
-**Technical Documentation**: `pcfe-v3/docs/README.md` (540 lines, comprehensive)
+**Technical Documentation**: `pcfe-v3/docs/README.md`
 
 **Repository**: `/home/user/quanqonscious`
 

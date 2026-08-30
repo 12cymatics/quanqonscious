@@ -16,7 +16,7 @@ out polarity / S/O / tense / evidentiality independently.
 
 Beyond the four primary axes, downstream sutras decompose Ψ further; the
 catalogue here is the canonical first-order labeling used by the audit
-filter and by the synthetic-data generators.
+filter and by the WHT-axis projection in L_dual.
 """
 from __future__ import annotations
 

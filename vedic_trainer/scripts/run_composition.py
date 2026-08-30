@@ -143,7 +143,9 @@ def main() -> int:
             flag = "ZERO MAP" if r["all_zero"] else "ok"
             print(f"{m:11} {flag:8} {r['nonzero']:>8} {r['max_denominator_digits']:>15}")
         else:
-            print(f"{m:11} {'RAISED':8}  {r['error'][:40]}")
+            # The whole error. A 40-character prefix cuts most precondition
+            # messages exactly where they name the offending value.
+            print(f"{m:11} {'RAISED':8}  {r['error']}")
 
     # Exit 0 even when a mode shows RAISED. This driver's job is to report
     # what each mode does on the given queue and Psi, and "COMPOSITE is out

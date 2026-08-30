@@ -5,9 +5,10 @@ only adds a constant to the reported loss. Two of the four were in exactly
 that state for the whole first ablation, and this script is what found it.
 
 It previously ended with an unconditional ``return 0``. It printed the dead
-list and exited successfully, so ``reproduce_ablation.sh`` -- which runs it
-under ``set -euo pipefail`` -- sailed past a result that should have stopped
-the pipeline. A detector that cannot fail detects nothing.
+list and exited successfully, so the shell driver that ran it under ``set
+-euo pipefail`` sailed past a result that should have stopped the pipeline.
+A detector that cannot fail detects nothing. It exits non-zero on a dead
+loss now, whatever invokes it.
 
 It also hardcoded the loss weights, so its ``weighted`` column described a
 configuration that may not be the one being run. The weights now come from
@@ -46,8 +47,40 @@ def weights_from(config: Path) -> dict[str, float]:
     return {name: float(w[key]) for name, key in _KEY.items()}
 
 
+#: The eight-row Psi batch every loss is probed on. It was
+#: ``torch.randn(8, 16)`` under a fixed manual seed -- deterministic, but
+#: still a draw: a detector whose verdict depends on which vectors a PRNG
+#: happened to produce is reporting on those vectors. These eight are
+#: enumerated and each is a case. Every component is dyadic (k/2^m), so the
+#: probe reads the same on any machine and needs no seed to fix it.
+#:
+#: A loss with a genuine gradient path to Psi is non-zero somewhere on a set
+#: this varied; one with none is zero on all of it, which is what the probe
+#: is looking for.
+PROBE_ROWS: tuple[tuple[float, ...], ...] = (
+    tuple(1.0 if v == 0 else 0.0 for v in range(16)),          # a low spike
+    tuple(1.0 if v == 15 else 0.0 for v in range(16)),         # a high spike
+    tuple(1.0 for _ in range(16)),                             # constant
+    tuple(1.0 if v % 2 == 0 else -1.0 for v in range(16)),     # alternating
+    tuple((v - 8) / 4.0 for v in range(16)),                   # a ramp
+    tuple((8 - v) / 4.0 for v in range(16)),                   # its reverse
+    tuple(1.0 / 2 ** (v % 8) for v in range(16)),              # decaying
+    tuple((-1.0) ** v * (v + 1) / 8.0 for v in range(16)),     # signed fan
+)
+
+#: Two Psi that differ in every component, for the g_ab constancy check.
+CONSTANCY_ROWS: tuple[tuple[float, ...], ...] = (
+    tuple((v + 1) / 8.0 for v in range(16)),
+    tuple((v + 1) / -4.0 for v in range(16)),
+)
+
+
+def _psi(rows: tuple[tuple[float, ...], ...], grad: bool = False) -> torch.Tensor:
+    return torch.tensor([list(r) for r in rows],
+                        dtype=torch.float32, requires_grad=grad)
+
+
 def probe(weights: dict[str, float]) -> dict:
-    torch.manual_seed(0)
     s5, s7, s11, h = S5(), S7(), S11(), HessianModule()
     wht = wht_axis_torch(device="cpu")
     fns = {
@@ -58,7 +91,7 @@ def probe(weights: dict[str, float]) -> dict:
     }
     out: dict = {"losses": {}}
     for name, fn in fns.items():
-        psi = torch.randn(8, 16, requires_grad=True)
+        psi = _psi(PROBE_ROWS, grad=True)
         v = fn(psi)
         if not v.requires_grad:
             grad_l1 = 0.0
@@ -73,7 +106,7 @@ def probe(weights: dict[str, float]) -> dict:
             "grad_l1": grad_l1,
             "reaches_psi": grad_l1 > 0.0,
         }
-    a, b = torch.randn(2, 16), torch.randn(2, 16)
+    a, b = _psi(CONSTANCY_ROWS[:1]), _psi(CONSTANCY_ROWS[1:])
     out["g_ab_constant_in_psi"] = bool(torch.equal(h(a), h(b)))
     out["dead"] = sorted(k for k, v in out["losses"].items()
                          if not v["reaches_psi"])

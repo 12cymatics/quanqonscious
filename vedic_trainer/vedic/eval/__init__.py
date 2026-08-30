@@ -1,16 +1,22 @@
-"""SCAN / COGS evaluators + at-inference audit-closure rate.
+"""SCAN / COGS evaluators.
 
-The SCAN/COGS runners depend on ``transformers`` and ``datasets``; they
-are imported lazily so the kernel-only path (used in CI and by data
-generators) does not pull those heavy dependencies in.
+The runners depend on ``transformers`` and ``datasets``; they are imported
+lazily so the kernel-only path used in CI does not pull those heavy
+dependencies in.
+
+There is no audit-closure metric here any more. ``audit_closure_rate`` and
+``score_audit_psi_batch`` scored generated *text* by encoding it to Ψ with
+the synthetic text encoder and reading the four conservation residuals. The
+encoder is gone, and the metric was never able to measure a model in any
+case: three of the four residuals are algebraic identities and the fourth
+takes no Ψ, so the verdict was a function of the loop index alone. That is
+proved over all of ℚ^16 — not on a sample of encoded strings — in
+``vedic/kernel/tests/test_audit_closure_degeneracy.py``.
 """
 from __future__ import annotations
 
 from importlib import import_module
 from typing import Any
-
-from .compositional_audit import audit_closure_rate, score_audit_psi_batch
-
 
 # Re-exported from the module that validates against it, never redeclared.
 # This constant used to read ("simple", "length", "jump") while scan.py read
@@ -33,6 +39,4 @@ __all__ = [
     "COGS_SPLITS",
     "evaluate_scan",
     "evaluate_cogs",
-    "audit_closure_rate",
-    "score_audit_psi_batch",
 ]

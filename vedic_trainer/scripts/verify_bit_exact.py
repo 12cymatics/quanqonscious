@@ -85,9 +85,13 @@ def _check_canonical(failures: list[str]) -> tuple[int, int]:
 
     Scope, stated rather than implied: these fixtures are written by the same
     kernel compared against them, so they detect DRIFT, not error. They are a
-    regression reference. Correctness against the upstream definition is
-    checked by exporting from the user's vedic_v18.24_full_kernel.html, which
-    is external to this repository.
+    regression reference.
+
+    Correctness against the upstream definition is NOT checked here, and this
+    docstring used to say that was because vedic_v18.24_full_kernel.html "is
+    external to this repository". It is tracked at the repository root. The
+    comparison is possible and has not been made; see README.md's
+    falsification criterion 3 for what a first reading of it found.
     """
     from vedic.kernel import sutras_canonical as K
 

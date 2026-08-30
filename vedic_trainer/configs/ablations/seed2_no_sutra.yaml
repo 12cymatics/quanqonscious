@@ -28,8 +28,8 @@ optim:
   lr_scheduler_type: cosine
 
 data:
-  train_path: data/synthetic_train.jsonl
-  eval_path: data/synthetic_eval.jsonl
+  train_path: data/train.jsonl
+  eval_path: data/eval.jsonl
   max_seq_length: 512
   train_batch_size: 4
   eval_batch_size: 8

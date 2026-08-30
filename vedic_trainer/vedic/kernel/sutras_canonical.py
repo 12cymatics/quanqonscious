@@ -1,8 +1,31 @@
-"""The 29 sutras, canonically defined — exact ℚ, all 29, no omissions.
+"""The 29 α-weighted sutra ids — exact ℚ, all 29 present, **nine distinct maps**.
+
+How many formulas this module holds
+-----------------------------------
+Nine, not twenty-nine. ``STRICT_SUTRA_KERNEL`` dispatches on
+``SUTRA_KIND[id]`` through seven templates; two branch internally (REFL on
+``id == 5``, PERM on ``axis = (id+1) & 3``), so seven become nine. Between two
+ids of the same class the *only* difference is the scalar
+α(n) = (n/435)·(strength/100).
+
+That is faithful to upstream — ``test_upstream_agreement.py`` matches the real
+JavaScript on 6,380 of 6,380 triples, and upstream is nine maps too. It is
+recorded here because nothing said it, and "the 29 sutras, canonically
+defined" (which is how this line read) invites the opposite reading.
+
+``test_sutras_canonical.py::test_the_twenty_nine_ids_are_nine_distinct_maps``
+measures the partition and fails if it changes.
+
+**If you want 29 genuinely distinct operators, they exist elsewhere in this
+repository**: ``vedic/kernel/z2_primitives.py`` is 29 distinct functions
+(verified pairwise), ``vedic_v18.51.1_exact_phi.html`` implements 29 separate
+cases over the C4/K2(√5) extension, and ``vedic_sutras_complete.hpp`` has 29
+C++ implementations. This module is not those, and does not claim to be.
 
 Source of truth
 ---------------
-Ported character-for-character from ``vedic_v18.24_full_kernel.html``:
+Ported from ``vedic_v18.24_full_kernel.html`` (tracked at the repository
+root, despite several documents having said it was not):
 
 * ``§12Z VERTEX-FIELD SUTRA OPERATORS``  (line 5544) — the seven operator types
 * ``STRICT_SUTRA_KERNEL``                (line 6527) — the exact, float-free path

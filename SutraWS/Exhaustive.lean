@@ -15,19 +15,19 @@ theorem act_1_x (st : State) : (act Sutra.S1 st).x = st.x + (1 : Rat) := by rfl
 theorem act_1_y (st : State) : (act Sutra.S1 st).y = st.y - (1 : Rat) := by rfl
 
 
-theorem mem_all_1 : Sutra.S1 ∈ Sutra.all := by native_decide
+theorem mem_all_1 : Sutra.S1 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_1 : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by native_decide
+theorem sum_erase_1 : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_1 (st : State) : (applyList (Sutra.all.erase Sutra.S1) st).x = st.x + (434 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_1 (st : State) : (applyList (Sutra.all.erase Sutra.S1) st).y = st.y - (434 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S1) = (434 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -49,19 +49,19 @@ theorem act_2_x (st : State) : (act Sutra.S2 st).x = st.x + (2 : Rat) := by rfl
 theorem act_2_y (st : State) : (act Sutra.S2 st).y = st.y - (2 : Rat) := by rfl
 
 
-theorem mem_all_2 : Sutra.S2 ∈ Sutra.all := by native_decide
+theorem mem_all_2 : Sutra.S2 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_2 : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by native_decide
+theorem sum_erase_2 : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_2 (st : State) : (applyList (Sutra.all.erase Sutra.S2) st).x = st.x + (433 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_2 (st : State) : (applyList (Sutra.all.erase Sutra.S2) st).y = st.y - (433 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S2) = (433 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -83,19 +83,19 @@ theorem act_3_x (st : State) : (act Sutra.S3 st).x = st.x + (3 : Rat) := by rfl
 theorem act_3_y (st : State) : (act Sutra.S3 st).y = st.y - (3 : Rat) := by rfl
 
 
-theorem mem_all_3 : Sutra.S3 ∈ Sutra.all := by native_decide
+theorem mem_all_3 : Sutra.S3 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_3 : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by native_decide
+theorem sum_erase_3 : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_3 (st : State) : (applyList (Sutra.all.erase Sutra.S3) st).x = st.x + (432 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_3 (st : State) : (applyList (Sutra.all.erase Sutra.S3) st).y = st.y - (432 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S3) = (432 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -117,19 +117,19 @@ theorem act_4_x (st : State) : (act Sutra.S4 st).x = st.x + (4 : Rat) := by rfl
 theorem act_4_y (st : State) : (act Sutra.S4 st).y = st.y - (4 : Rat) := by rfl
 
 
-theorem mem_all_4 : Sutra.S4 ∈ Sutra.all := by native_decide
+theorem mem_all_4 : Sutra.S4 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_4 : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by native_decide
+theorem sum_erase_4 : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_4 (st : State) : (applyList (Sutra.all.erase Sutra.S4) st).x = st.x + (431 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_4 (st : State) : (applyList (Sutra.all.erase Sutra.S4) st).y = st.y - (431 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S4) = (431 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -151,19 +151,19 @@ theorem act_5_x (st : State) : (act Sutra.S5 st).x = st.x + (5 : Rat) := by rfl
 theorem act_5_y (st : State) : (act Sutra.S5 st).y = st.y - (5 : Rat) := by rfl
 
 
-theorem mem_all_5 : Sutra.S5 ∈ Sutra.all := by native_decide
+theorem mem_all_5 : Sutra.S5 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_5 : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by native_decide
+theorem sum_erase_5 : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_5 (st : State) : (applyList (Sutra.all.erase Sutra.S5) st).x = st.x + (430 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_5 (st : State) : (applyList (Sutra.all.erase Sutra.S5) st).y = st.y - (430 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S5) = (430 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -185,19 +185,19 @@ theorem act_6_x (st : State) : (act Sutra.S6 st).x = st.x + (6 : Rat) := by rfl
 theorem act_6_y (st : State) : (act Sutra.S6 st).y = st.y - (6 : Rat) := by rfl
 
 
-theorem mem_all_6 : Sutra.S6 ∈ Sutra.all := by native_decide
+theorem mem_all_6 : Sutra.S6 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_6 : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by native_decide
+theorem sum_erase_6 : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_6 (st : State) : (applyList (Sutra.all.erase Sutra.S6) st).x = st.x + (429 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_6 (st : State) : (applyList (Sutra.all.erase Sutra.S6) st).y = st.y - (429 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S6) = (429 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -219,19 +219,19 @@ theorem act_7_x (st : State) : (act Sutra.S7 st).x = st.x + (7 : Rat) := by rfl
 theorem act_7_y (st : State) : (act Sutra.S7 st).y = st.y - (7 : Rat) := by rfl
 
 
-theorem mem_all_7 : Sutra.S7 ∈ Sutra.all := by native_decide
+theorem mem_all_7 : Sutra.S7 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_7 : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by native_decide
+theorem sum_erase_7 : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_7 (st : State) : (applyList (Sutra.all.erase Sutra.S7) st).x = st.x + (428 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_7 (st : State) : (applyList (Sutra.all.erase Sutra.S7) st).y = st.y - (428 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S7) = (428 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -253,19 +253,19 @@ theorem act_8_x (st : State) : (act Sutra.S8 st).x = st.x + (8 : Rat) := by rfl
 theorem act_8_y (st : State) : (act Sutra.S8 st).y = st.y - (8 : Rat) := by rfl
 
 
-theorem mem_all_8 : Sutra.S8 ∈ Sutra.all := by native_decide
+theorem mem_all_8 : Sutra.S8 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_8 : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by native_decide
+theorem sum_erase_8 : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_8 (st : State) : (applyList (Sutra.all.erase Sutra.S8) st).x = st.x + (427 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_8 (st : State) : (applyList (Sutra.all.erase Sutra.S8) st).y = st.y - (427 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S8) = (427 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -287,19 +287,19 @@ theorem act_9_x (st : State) : (act Sutra.S9 st).x = st.x + (9 : Rat) := by rfl
 theorem act_9_y (st : State) : (act Sutra.S9 st).y = st.y - (9 : Rat) := by rfl
 
 
-theorem mem_all_9 : Sutra.S9 ∈ Sutra.all := by native_decide
+theorem mem_all_9 : Sutra.S9 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_9 : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by native_decide
+theorem sum_erase_9 : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_9 (st : State) : (applyList (Sutra.all.erase Sutra.S9) st).x = st.x + (426 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_9 (st : State) : (applyList (Sutra.all.erase Sutra.S9) st).y = st.y - (426 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S9) = (426 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -321,19 +321,19 @@ theorem act_10_x (st : State) : (act Sutra.S10 st).x = st.x + (10 : Rat) := by r
 theorem act_10_y (st : State) : (act Sutra.S10 st).y = st.y - (10 : Rat) := by rfl
 
 
-theorem mem_all_10 : Sutra.S10 ∈ Sutra.all := by native_decide
+theorem mem_all_10 : Sutra.S10 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_10 : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by native_decide
+theorem sum_erase_10 : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_10 (st : State) : (applyList (Sutra.all.erase Sutra.S10) st).x = st.x + (425 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_10 (st : State) : (applyList (Sutra.all.erase Sutra.S10) st).y = st.y - (425 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S10) = (425 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -355,19 +355,19 @@ theorem act_11_x (st : State) : (act Sutra.S11 st).x = st.x + (11 : Rat) := by r
 theorem act_11_y (st : State) : (act Sutra.S11 st).y = st.y - (11 : Rat) := by rfl
 
 
-theorem mem_all_11 : Sutra.S11 ∈ Sutra.all := by native_decide
+theorem mem_all_11 : Sutra.S11 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_11 : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by native_decide
+theorem sum_erase_11 : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_11 (st : State) : (applyList (Sutra.all.erase Sutra.S11) st).x = st.x + (424 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_11 (st : State) : (applyList (Sutra.all.erase Sutra.S11) st).y = st.y - (424 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S11) = (424 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -389,19 +389,19 @@ theorem act_12_x (st : State) : (act Sutra.S12 st).x = st.x + (12 : Rat) := by r
 theorem act_12_y (st : State) : (act Sutra.S12 st).y = st.y - (12 : Rat) := by rfl
 
 
-theorem mem_all_12 : Sutra.S12 ∈ Sutra.all := by native_decide
+theorem mem_all_12 : Sutra.S12 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_12 : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by native_decide
+theorem sum_erase_12 : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_12 (st : State) : (applyList (Sutra.all.erase Sutra.S12) st).x = st.x + (423 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_12 (st : State) : (applyList (Sutra.all.erase Sutra.S12) st).y = st.y - (423 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S12) = (423 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -423,19 +423,19 @@ theorem act_13_x (st : State) : (act Sutra.S13 st).x = st.x + (13 : Rat) := by r
 theorem act_13_y (st : State) : (act Sutra.S13 st).y = st.y - (13 : Rat) := by rfl
 
 
-theorem mem_all_13 : Sutra.S13 ∈ Sutra.all := by native_decide
+theorem mem_all_13 : Sutra.S13 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_13 : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by native_decide
+theorem sum_erase_13 : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_13 (st : State) : (applyList (Sutra.all.erase Sutra.S13) st).x = st.x + (422 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_13 (st : State) : (applyList (Sutra.all.erase Sutra.S13) st).y = st.y - (422 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S13) = (422 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -457,19 +457,19 @@ theorem act_14_x (st : State) : (act Sutra.S14 st).x = st.x + (14 : Rat) := by r
 theorem act_14_y (st : State) : (act Sutra.S14 st).y = st.y - (14 : Rat) := by rfl
 
 
-theorem mem_all_14 : Sutra.S14 ∈ Sutra.all := by native_decide
+theorem mem_all_14 : Sutra.S14 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_14 : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by native_decide
+theorem sum_erase_14 : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_14 (st : State) : (applyList (Sutra.all.erase Sutra.S14) st).x = st.x + (421 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_14 (st : State) : (applyList (Sutra.all.erase Sutra.S14) st).y = st.y - (421 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S14) = (421 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -491,19 +491,19 @@ theorem act_15_x (st : State) : (act Sutra.S15 st).x = st.x + (15 : Rat) := by r
 theorem act_15_y (st : State) : (act Sutra.S15 st).y = st.y - (15 : Rat) := by rfl
 
 
-theorem mem_all_15 : Sutra.S15 ∈ Sutra.all := by native_decide
+theorem mem_all_15 : Sutra.S15 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_15 : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by native_decide
+theorem sum_erase_15 : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_15 (st : State) : (applyList (Sutra.all.erase Sutra.S15) st).x = st.x + (420 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_15 (st : State) : (applyList (Sutra.all.erase Sutra.S15) st).y = st.y - (420 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S15) = (420 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -525,19 +525,19 @@ theorem act_16_x (st : State) : (act Sutra.S16 st).x = st.x + (16 : Rat) := by r
 theorem act_16_y (st : State) : (act Sutra.S16 st).y = st.y - (16 : Rat) := by rfl
 
 
-theorem mem_all_16 : Sutra.S16 ∈ Sutra.all := by native_decide
+theorem mem_all_16 : Sutra.S16 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_16 : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by native_decide
+theorem sum_erase_16 : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_16 (st : State) : (applyList (Sutra.all.erase Sutra.S16) st).x = st.x + (419 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_16 (st : State) : (applyList (Sutra.all.erase Sutra.S16) st).y = st.y - (419 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S16) = (419 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -559,19 +559,19 @@ theorem act_17_x (st : State) : (act Sutra.S17 st).x = st.x + (17 : Rat) := by r
 theorem act_17_y (st : State) : (act Sutra.S17 st).y = st.y - (17 : Rat) := by rfl
 
 
-theorem mem_all_17 : Sutra.S17 ∈ Sutra.all := by native_decide
+theorem mem_all_17 : Sutra.S17 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_17 : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by native_decide
+theorem sum_erase_17 : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_17 (st : State) : (applyList (Sutra.all.erase Sutra.S17) st).x = st.x + (418 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_17 (st : State) : (applyList (Sutra.all.erase Sutra.S17) st).y = st.y - (418 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S17) = (418 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -593,19 +593,19 @@ theorem act_18_x (st : State) : (act Sutra.S18 st).x = st.x + (18 : Rat) := by r
 theorem act_18_y (st : State) : (act Sutra.S18 st).y = st.y - (18 : Rat) := by rfl
 
 
-theorem mem_all_18 : Sutra.S18 ∈ Sutra.all := by native_decide
+theorem mem_all_18 : Sutra.S18 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_18 : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by native_decide
+theorem sum_erase_18 : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_18 (st : State) : (applyList (Sutra.all.erase Sutra.S18) st).x = st.x + (417 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_18 (st : State) : (applyList (Sutra.all.erase Sutra.S18) st).y = st.y - (417 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S18) = (417 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -627,19 +627,19 @@ theorem act_19_x (st : State) : (act Sutra.S19 st).x = st.x + (19 : Rat) := by r
 theorem act_19_y (st : State) : (act Sutra.S19 st).y = st.y - (19 : Rat) := by rfl
 
 
-theorem mem_all_19 : Sutra.S19 ∈ Sutra.all := by native_decide
+theorem mem_all_19 : Sutra.S19 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_19 : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by native_decide
+theorem sum_erase_19 : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_19 (st : State) : (applyList (Sutra.all.erase Sutra.S19) st).x = st.x + (416 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_19 (st : State) : (applyList (Sutra.all.erase Sutra.S19) st).y = st.y - (416 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S19) = (416 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -661,19 +661,19 @@ theorem act_20_x (st : State) : (act Sutra.S20 st).x = st.x + (20 : Rat) := by r
 theorem act_20_y (st : State) : (act Sutra.S20 st).y = st.y - (20 : Rat) := by rfl
 
 
-theorem mem_all_20 : Sutra.S20 ∈ Sutra.all := by native_decide
+theorem mem_all_20 : Sutra.S20 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_20 : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by native_decide
+theorem sum_erase_20 : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_20 (st : State) : (applyList (Sutra.all.erase Sutra.S20) st).x = st.x + (415 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_20 (st : State) : (applyList (Sutra.all.erase Sutra.S20) st).y = st.y - (415 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S20) = (415 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -695,19 +695,19 @@ theorem act_21_x (st : State) : (act Sutra.S21 st).x = st.x + (21 : Rat) := by r
 theorem act_21_y (st : State) : (act Sutra.S21 st).y = st.y - (21 : Rat) := by rfl
 
 
-theorem mem_all_21 : Sutra.S21 ∈ Sutra.all := by native_decide
+theorem mem_all_21 : Sutra.S21 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_21 : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by native_decide
+theorem sum_erase_21 : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_21 (st : State) : (applyList (Sutra.all.erase Sutra.S21) st).x = st.x + (414 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_21 (st : State) : (applyList (Sutra.all.erase Sutra.S21) st).y = st.y - (414 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S21) = (414 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -729,19 +729,19 @@ theorem act_22_x (st : State) : (act Sutra.S22 st).x = st.x + (22 : Rat) := by r
 theorem act_22_y (st : State) : (act Sutra.S22 st).y = st.y - (22 : Rat) := by rfl
 
 
-theorem mem_all_22 : Sutra.S22 ∈ Sutra.all := by native_decide
+theorem mem_all_22 : Sutra.S22 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_22 : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by native_decide
+theorem sum_erase_22 : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_22 (st : State) : (applyList (Sutra.all.erase Sutra.S22) st).x = st.x + (413 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_22 (st : State) : (applyList (Sutra.all.erase Sutra.S22) st).y = st.y - (413 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S22) = (413 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -763,19 +763,19 @@ theorem act_23_x (st : State) : (act Sutra.S23 st).x = st.x + (23 : Rat) := by r
 theorem act_23_y (st : State) : (act Sutra.S23 st).y = st.y - (23 : Rat) := by rfl
 
 
-theorem mem_all_23 : Sutra.S23 ∈ Sutra.all := by native_decide
+theorem mem_all_23 : Sutra.S23 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_23 : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by native_decide
+theorem sum_erase_23 : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_23 (st : State) : (applyList (Sutra.all.erase Sutra.S23) st).x = st.x + (412 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_23 (st : State) : (applyList (Sutra.all.erase Sutra.S23) st).y = st.y - (412 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S23) = (412 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -797,19 +797,19 @@ theorem act_24_x (st : State) : (act Sutra.S24 st).x = st.x + (24 : Rat) := by r
 theorem act_24_y (st : State) : (act Sutra.S24 st).y = st.y - (24 : Rat) := by rfl
 
 
-theorem mem_all_24 : Sutra.S24 ∈ Sutra.all := by native_decide
+theorem mem_all_24 : Sutra.S24 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_24 : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by native_decide
+theorem sum_erase_24 : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_24 (st : State) : (applyList (Sutra.all.erase Sutra.S24) st).x = st.x + (411 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_24 (st : State) : (applyList (Sutra.all.erase Sutra.S24) st).y = st.y - (411 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S24) = (411 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -831,19 +831,19 @@ theorem act_25_x (st : State) : (act Sutra.S25 st).x = st.x + (25 : Rat) := by r
 theorem act_25_y (st : State) : (act Sutra.S25 st).y = st.y - (25 : Rat) := by rfl
 
 
-theorem mem_all_25 : Sutra.S25 ∈ Sutra.all := by native_decide
+theorem mem_all_25 : Sutra.S25 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_25 : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by native_decide
+theorem sum_erase_25 : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_25 (st : State) : (applyList (Sutra.all.erase Sutra.S25) st).x = st.x + (410 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_25 (st : State) : (applyList (Sutra.all.erase Sutra.S25) st).y = st.y - (410 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S25) = (410 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -865,19 +865,19 @@ theorem act_26_x (st : State) : (act Sutra.S26 st).x = st.x + (26 : Rat) := by r
 theorem act_26_y (st : State) : (act Sutra.S26 st).y = st.y - (26 : Rat) := by rfl
 
 
-theorem mem_all_26 : Sutra.S26 ∈ Sutra.all := by native_decide
+theorem mem_all_26 : Sutra.S26 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_26 : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by native_decide
+theorem sum_erase_26 : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_26 (st : State) : (applyList (Sutra.all.erase Sutra.S26) st).x = st.x + (409 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_26 (st : State) : (applyList (Sutra.all.erase Sutra.S26) st).y = st.y - (409 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S26) = (409 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -899,19 +899,19 @@ theorem act_27_x (st : State) : (act Sutra.S27 st).x = st.x + (27 : Rat) := by r
 theorem act_27_y (st : State) : (act Sutra.S27 st).y = st.y - (27 : Rat) := by rfl
 
 
-theorem mem_all_27 : Sutra.S27 ∈ Sutra.all := by native_decide
+theorem mem_all_27 : Sutra.S27 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_27 : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by native_decide
+theorem sum_erase_27 : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_27 (st : State) : (applyList (Sutra.all.erase Sutra.S27) st).x = st.x + (408 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_27 (st : State) : (applyList (Sutra.all.erase Sutra.S27) st).y = st.y - (408 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S27) = (408 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -933,19 +933,19 @@ theorem act_28_x (st : State) : (act Sutra.S28 st).x = st.x + (28 : Rat) := by r
 theorem act_28_y (st : State) : (act Sutra.S28 st).y = st.y - (28 : Rat) := by rfl
 
 
-theorem mem_all_28 : Sutra.S28 ∈ Sutra.all := by native_decide
+theorem mem_all_28 : Sutra.S28 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_28 : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by native_decide
+theorem sum_erase_28 : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_28 (st : State) : (applyList (Sutra.all.erase Sutra.S28) st).x = st.x + (407 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_28 (st : State) : (applyList (Sutra.all.erase Sutra.S28) st).y = st.y - (407 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S28) = (407 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -967,19 +967,19 @@ theorem act_29_x (st : State) : (act Sutra.S29 st).x = st.x + (29 : Rat) := by r
 theorem act_29_y (st : State) : (act Sutra.S29 st).y = st.y - (29 : Rat) := by rfl
 
 
-theorem mem_all_29 : Sutra.S29 ∈ Sutra.all := by native_decide
+theorem mem_all_29 : Sutra.S29 ∈ Sutra.all := by norm_num [Sutra.all, sumDelta, delta]
 
 
-theorem sum_erase_29 : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by native_decide
+theorem sum_erase_29 : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
 
 
 theorem x_erase_29 (st : State) : (applyList (Sutra.all.erase Sutra.S29) st).x = st.x + (406 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem y_erase_29 (st : State) : (applyList (Sutra.all.erase Sutra.S29) st).y = st.y - (406 : Rat) := by
-  have h : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.erase Sutra.S29) = (406 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
@@ -9404,361 +9404,361 @@ theorem commute_y_29_29 (st : State) :
 
 theorem prefix_x_0 (st : State) :
   (applyList (Sutra.all.take 0) st).x = st.x + (0 : Rat) := by
-  have h : sumDelta (Sutra.all.take 0) = (0 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 0) = (0 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simpa [applyList_x, h]
 
 
 theorem prefix_y_0 (st : State) :
   (applyList (Sutra.all.take 0) st).y = st.y - (0 : Rat) := by
-  have h : sumDelta (Sutra.all.take 0) = (0 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 0) = (0 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simpa [applyList_y, h]
 
 
 theorem prefix_x_1 (st : State) :
   (applyList (Sutra.all.take 1) st).x = st.x + (1 : Rat) := by
-  have h : sumDelta (Sutra.all.take 1) = (1 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 1) = (1 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_1 (st : State) :
   (applyList (Sutra.all.take 1) st).y = st.y - (1 : Rat) := by
-  have h : sumDelta (Sutra.all.take 1) = (1 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 1) = (1 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_2 (st : State) :
   (applyList (Sutra.all.take 2) st).x = st.x + (3 : Rat) := by
-  have h : sumDelta (Sutra.all.take 2) = (3 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 2) = (3 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_2 (st : State) :
   (applyList (Sutra.all.take 2) st).y = st.y - (3 : Rat) := by
-  have h : sumDelta (Sutra.all.take 2) = (3 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 2) = (3 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_3 (st : State) :
   (applyList (Sutra.all.take 3) st).x = st.x + (6 : Rat) := by
-  have h : sumDelta (Sutra.all.take 3) = (6 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 3) = (6 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_3 (st : State) :
   (applyList (Sutra.all.take 3) st).y = st.y - (6 : Rat) := by
-  have h : sumDelta (Sutra.all.take 3) = (6 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 3) = (6 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_4 (st : State) :
   (applyList (Sutra.all.take 4) st).x = st.x + (10 : Rat) := by
-  have h : sumDelta (Sutra.all.take 4) = (10 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 4) = (10 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_4 (st : State) :
   (applyList (Sutra.all.take 4) st).y = st.y - (10 : Rat) := by
-  have h : sumDelta (Sutra.all.take 4) = (10 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 4) = (10 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_5 (st : State) :
   (applyList (Sutra.all.take 5) st).x = st.x + (15 : Rat) := by
-  have h : sumDelta (Sutra.all.take 5) = (15 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 5) = (15 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_5 (st : State) :
   (applyList (Sutra.all.take 5) st).y = st.y - (15 : Rat) := by
-  have h : sumDelta (Sutra.all.take 5) = (15 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 5) = (15 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_6 (st : State) :
   (applyList (Sutra.all.take 6) st).x = st.x + (21 : Rat) := by
-  have h : sumDelta (Sutra.all.take 6) = (21 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 6) = (21 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_6 (st : State) :
   (applyList (Sutra.all.take 6) st).y = st.y - (21 : Rat) := by
-  have h : sumDelta (Sutra.all.take 6) = (21 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 6) = (21 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_7 (st : State) :
   (applyList (Sutra.all.take 7) st).x = st.x + (28 : Rat) := by
-  have h : sumDelta (Sutra.all.take 7) = (28 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 7) = (28 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_7 (st : State) :
   (applyList (Sutra.all.take 7) st).y = st.y - (28 : Rat) := by
-  have h : sumDelta (Sutra.all.take 7) = (28 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 7) = (28 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_8 (st : State) :
   (applyList (Sutra.all.take 8) st).x = st.x + (36 : Rat) := by
-  have h : sumDelta (Sutra.all.take 8) = (36 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 8) = (36 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_8 (st : State) :
   (applyList (Sutra.all.take 8) st).y = st.y - (36 : Rat) := by
-  have h : sumDelta (Sutra.all.take 8) = (36 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 8) = (36 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_9 (st : State) :
   (applyList (Sutra.all.take 9) st).x = st.x + (45 : Rat) := by
-  have h : sumDelta (Sutra.all.take 9) = (45 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 9) = (45 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_9 (st : State) :
   (applyList (Sutra.all.take 9) st).y = st.y - (45 : Rat) := by
-  have h : sumDelta (Sutra.all.take 9) = (45 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 9) = (45 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_10 (st : State) :
   (applyList (Sutra.all.take 10) st).x = st.x + (55 : Rat) := by
-  have h : sumDelta (Sutra.all.take 10) = (55 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 10) = (55 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_10 (st : State) :
   (applyList (Sutra.all.take 10) st).y = st.y - (55 : Rat) := by
-  have h : sumDelta (Sutra.all.take 10) = (55 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 10) = (55 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_11 (st : State) :
   (applyList (Sutra.all.take 11) st).x = st.x + (66 : Rat) := by
-  have h : sumDelta (Sutra.all.take 11) = (66 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 11) = (66 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_11 (st : State) :
   (applyList (Sutra.all.take 11) st).y = st.y - (66 : Rat) := by
-  have h : sumDelta (Sutra.all.take 11) = (66 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 11) = (66 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_12 (st : State) :
   (applyList (Sutra.all.take 12) st).x = st.x + (78 : Rat) := by
-  have h : sumDelta (Sutra.all.take 12) = (78 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 12) = (78 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_12 (st : State) :
   (applyList (Sutra.all.take 12) st).y = st.y - (78 : Rat) := by
-  have h : sumDelta (Sutra.all.take 12) = (78 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 12) = (78 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_13 (st : State) :
   (applyList (Sutra.all.take 13) st).x = st.x + (91 : Rat) := by
-  have h : sumDelta (Sutra.all.take 13) = (91 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 13) = (91 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_13 (st : State) :
   (applyList (Sutra.all.take 13) st).y = st.y - (91 : Rat) := by
-  have h : sumDelta (Sutra.all.take 13) = (91 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 13) = (91 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_14 (st : State) :
   (applyList (Sutra.all.take 14) st).x = st.x + (105 : Rat) := by
-  have h : sumDelta (Sutra.all.take 14) = (105 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 14) = (105 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_14 (st : State) :
   (applyList (Sutra.all.take 14) st).y = st.y - (105 : Rat) := by
-  have h : sumDelta (Sutra.all.take 14) = (105 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 14) = (105 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_15 (st : State) :
   (applyList (Sutra.all.take 15) st).x = st.x + (120 : Rat) := by
-  have h : sumDelta (Sutra.all.take 15) = (120 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 15) = (120 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_15 (st : State) :
   (applyList (Sutra.all.take 15) st).y = st.y - (120 : Rat) := by
-  have h : sumDelta (Sutra.all.take 15) = (120 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 15) = (120 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_16 (st : State) :
   (applyList (Sutra.all.take 16) st).x = st.x + (136 : Rat) := by
-  have h : sumDelta (Sutra.all.take 16) = (136 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 16) = (136 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_16 (st : State) :
   (applyList (Sutra.all.take 16) st).y = st.y - (136 : Rat) := by
-  have h : sumDelta (Sutra.all.take 16) = (136 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 16) = (136 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_17 (st : State) :
   (applyList (Sutra.all.take 17) st).x = st.x + (153 : Rat) := by
-  have h : sumDelta (Sutra.all.take 17) = (153 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 17) = (153 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_17 (st : State) :
   (applyList (Sutra.all.take 17) st).y = st.y - (153 : Rat) := by
-  have h : sumDelta (Sutra.all.take 17) = (153 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 17) = (153 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_18 (st : State) :
   (applyList (Sutra.all.take 18) st).x = st.x + (171 : Rat) := by
-  have h : sumDelta (Sutra.all.take 18) = (171 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 18) = (171 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_18 (st : State) :
   (applyList (Sutra.all.take 18) st).y = st.y - (171 : Rat) := by
-  have h : sumDelta (Sutra.all.take 18) = (171 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 18) = (171 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_19 (st : State) :
   (applyList (Sutra.all.take 19) st).x = st.x + (190 : Rat) := by
-  have h : sumDelta (Sutra.all.take 19) = (190 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 19) = (190 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_19 (st : State) :
   (applyList (Sutra.all.take 19) st).y = st.y - (190 : Rat) := by
-  have h : sumDelta (Sutra.all.take 19) = (190 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 19) = (190 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_20 (st : State) :
   (applyList (Sutra.all.take 20) st).x = st.x + (210 : Rat) := by
-  have h : sumDelta (Sutra.all.take 20) = (210 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 20) = (210 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_20 (st : State) :
   (applyList (Sutra.all.take 20) st).y = st.y - (210 : Rat) := by
-  have h : sumDelta (Sutra.all.take 20) = (210 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 20) = (210 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_21 (st : State) :
   (applyList (Sutra.all.take 21) st).x = st.x + (231 : Rat) := by
-  have h : sumDelta (Sutra.all.take 21) = (231 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 21) = (231 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_21 (st : State) :
   (applyList (Sutra.all.take 21) st).y = st.y - (231 : Rat) := by
-  have h : sumDelta (Sutra.all.take 21) = (231 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 21) = (231 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_22 (st : State) :
   (applyList (Sutra.all.take 22) st).x = st.x + (253 : Rat) := by
-  have h : sumDelta (Sutra.all.take 22) = (253 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 22) = (253 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_22 (st : State) :
   (applyList (Sutra.all.take 22) st).y = st.y - (253 : Rat) := by
-  have h : sumDelta (Sutra.all.take 22) = (253 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 22) = (253 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_23 (st : State) :
   (applyList (Sutra.all.take 23) st).x = st.x + (276 : Rat) := by
-  have h : sumDelta (Sutra.all.take 23) = (276 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 23) = (276 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_23 (st : State) :
   (applyList (Sutra.all.take 23) st).y = st.y - (276 : Rat) := by
-  have h : sumDelta (Sutra.all.take 23) = (276 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 23) = (276 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_24 (st : State) :
   (applyList (Sutra.all.take 24) st).x = st.x + (300 : Rat) := by
-  have h : sumDelta (Sutra.all.take 24) = (300 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 24) = (300 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_24 (st : State) :
   (applyList (Sutra.all.take 24) st).y = st.y - (300 : Rat) := by
-  have h : sumDelta (Sutra.all.take 24) = (300 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 24) = (300 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_25 (st : State) :
   (applyList (Sutra.all.take 25) st).x = st.x + (325 : Rat) := by
-  have h : sumDelta (Sutra.all.take 25) = (325 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 25) = (325 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_25 (st : State) :
   (applyList (Sutra.all.take 25) st).y = st.y - (325 : Rat) := by
-  have h : sumDelta (Sutra.all.take 25) = (325 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 25) = (325 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_26 (st : State) :
   (applyList (Sutra.all.take 26) st).x = st.x + (351 : Rat) := by
-  have h : sumDelta (Sutra.all.take 26) = (351 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 26) = (351 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_26 (st : State) :
   (applyList (Sutra.all.take 26) st).y = st.y - (351 : Rat) := by
-  have h : sumDelta (Sutra.all.take 26) = (351 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 26) = (351 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_27 (st : State) :
   (applyList (Sutra.all.take 27) st).x = st.x + (378 : Rat) := by
-  have h : sumDelta (Sutra.all.take 27) = (378 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 27) = (378 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_27 (st : State) :
   (applyList (Sutra.all.take 27) st).y = st.y - (378 : Rat) := by
-  have h : sumDelta (Sutra.all.take 27) = (378 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 27) = (378 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_28 (st : State) :
   (applyList (Sutra.all.take 28) st).x = st.x + (406 : Rat) := by
-  have h : sumDelta (Sutra.all.take 28) = (406 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 28) = (406 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_28 (st : State) :
   (applyList (Sutra.all.take 28) st).y = st.y - (406 : Rat) := by
-  have h : sumDelta (Sutra.all.take 28) = (406 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 28) = (406 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 
 theorem prefix_x_29 (st : State) :
   (applyList (Sutra.all.take 29) st).x = st.x + (435 : Rat) := by
-  have h : sumDelta (Sutra.all.take 29) = (435 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 29) = (435 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_x, h]
 
 
 theorem prefix_y_29 (st : State) :
   (applyList (Sutra.all.take 29) st).y = st.y - (435 : Rat) := by
-  have h : sumDelta (Sutra.all.take 29) = (435 : Rat) := by native_decide
+  have h : sumDelta (Sutra.all.take 29) = (435 : Rat) := by norm_num [Sutra.all, sumDelta, delta]
   simp [applyList_y, h]
 
 

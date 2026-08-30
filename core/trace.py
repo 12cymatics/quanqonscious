@@ -19,7 +19,7 @@ import hashlib
 import json
 import copy
 
-from .state import FieldState, FieldStateSnapshot, ArithmeticMode, RationalComplex
+from .state import FieldState, FieldStateSnapshot, ArithmeticMode, RationalComplex, state_digest
 from .lattice import ToroidalHypercube
 from .operators.base import Operator, OperatorContext, OperatorTrace, TraceEntry, OperatorCategory
 
@@ -40,14 +40,21 @@ class StateCheckpoint:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_state(cls, state: FieldState, metadata: Dict[str, Any] = None) -> 'StateCheckpoint':
-        """Create checkpoint from current state."""
+    def from_state(cls, state: FieldState, metadata: Dict[str, Any] = None,
+                   timestep: Optional[int] = None) -> 'StateCheckpoint':
+        """Create checkpoint from current state.
+
+        `timestep` overrides `state.timestep`. Operators do not advance a
+        state's own timestep -- the evolution loop owns it -- so a caller that
+        knows which step it is on must say so, or every checkpoint in the run
+        is labelled 0 and none of them can be matched to the step it came from.
+        """
         snapshot = state.snapshot()
         state_hash = cls._compute_hash(state)
         return cls(
             snapshot=snapshot,
             state_hash=state_hash,
-            timestep=state.timestep,
+            timestep=state.timestep if timestep is None else timestep,
             metadata=metadata or {}
         )
 
@@ -59,18 +66,8 @@ class StateCheckpoint:
 
     @staticmethod
     def _compute_hash(state: FieldState) -> str:
-        """Compute deterministic hash of state."""
-        # Use sorted keys for determinism
-        data = []
-        for coords in sorted(state._psi.keys()):
-            val = state._psi[coords]
-            data.append((
-                coords,
-                StateCheckpoint._safe_fraction_repr(val.real),
-                StateCheckpoint._safe_fraction_repr(val.imag),
-            ))
-        data.append(('_norm', StateCheckpoint._safe_fraction_repr(state.total_norm_squared())))
-        return hashlib.sha256(str(data).encode()).hexdigest()
+        """Deterministic hash of state -- the one canonical digest."""
+        return state_digest(state)
 
     def verify(self, state: FieldState) -> bool:
         """Verify state matches this checkpoint."""
@@ -109,7 +106,7 @@ class EvolutionTrace:
     def record_step(self, timestep: int, state: FieldState) -> None:
         """Record a checkpoint if at checkpoint interval."""
         if timestep % self.checkpoint_interval == 0:
-            checkpoint = StateCheckpoint.from_state(state)
+            checkpoint = StateCheckpoint.from_state(state, timestep=timestep)
             self.checkpoints.append(checkpoint)
 
     def finish(self, state: FieldState) -> None:
@@ -194,9 +191,16 @@ class TraceReplayer:
             if not trace.initial_checkpoint.verify(state):
                 errors.append("Initial state hash mismatch")
 
-        # Replay each operator application
-        checkpoint_idx = 0
-        for entry in trace.operator_trace.entries:
+        # Replay each operator application.
+        #
+        # Only depth-0 entries. A composite logs itself *and* each child it
+        # drives, so re-applying every entry would apply the children twice --
+        # once inside the composite and once on their own. `depth` is recorded
+        # by Operator.__call__ precisely to make that distinction here.
+        replayed = [e for e in trace.operator_trace.entries if e.depth == 0]
+        checkpoint_by_timestep = {c.timestep: c for c in trace.checkpoints}
+        last_of_timestep = {e.timestep: e for e in replayed}  # dict keeps the last
+        for entry in replayed:
             op_name = entry.operator_name
 
             if op_name not in self.operator_registry:
@@ -215,13 +219,20 @@ class TraceReplayer:
                 if current_hash != entry.output_hash:
                     errors.append(f"Step {entry.timestep}: hash mismatch (expected {entry.output_hash[:8]}, got {current_hash[:8]})")
 
-            # Check against checkpoints
-            if checkpoint_idx < len(trace.checkpoints):
-                checkpoint = trace.checkpoints[checkpoint_idx]
-                if checkpoint.timestep == entry.timestep:
-                    if not checkpoint.verify(state):
-                        errors.append(f"Checkpoint {checkpoint_idx} at step {checkpoint.timestep}: hash mismatch")
-                    checkpoint_idx += 1
+            # Check against checkpoints.
+            #
+            # A checkpoint is taken by `record_step` once the whole timestep
+            # has run, so it must be verified after the LAST operator of that
+            # timestep -- not the first. Comparing it against the first (which
+            # is what an index that advanced on every entry did) fails
+            # whenever a timestep applies more than one operator, and then
+            # leaves the index misaligned for every later timestep too.
+            if entry is last_of_timestep.get(entry.timestep):
+                checkpoint = checkpoint_by_timestep.get(entry.timestep)
+                if checkpoint is not None and not checkpoint.verify(state):
+                    errors.append(
+                        f"Checkpoint at step {checkpoint.timestep}: hash mismatch"
+                    )
 
         # Verify final state
         if trace.final_checkpoint is not None:

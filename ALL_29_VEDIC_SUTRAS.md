@@ -12,7 +12,7 @@
 **Sanskrit:** एकाधिकेन पूर्वेण
 **Translation:** "By one more than the previous one"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:83-122`
+**File Location:** `core/operators/sutra_ops.py:86-124`
 
 **Mathematical Logic:**
 Implements incremental expansion through recursion. For each field point, computes the average of "previous" (lower-index) neighbors and adds "1 + prev_avg/10" as increment.
@@ -38,7 +38,7 @@ new_value = value + (1 + prev_avg * 0.1) * dt
 **Sanskrit:** निखिलं नवतश्चरमं दशतः
 **Translation:** "All from 9, last from 10"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:124-158`
+**File Location:** `core/operators/sutra_ops.py:127-162`
 
 **Mathematical Logic:**
 Calculate complement with respect to base. Finds local maximum among neighbors and computes complement as (base - value).
@@ -67,7 +67,7 @@ result = value * (1 - mix) + complement * mix
 **Sanskrit:** ऊर्ध्वतिर्यग्भ्याम्
 **Translation:** "Vertically and crosswise"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:160-199`
+**File Location:** `core/operators/sutra_ops.py:165-203`
 
 **Mathematical Logic:**
 Couples vertical and horizontal neighbors via crosswise multiplication. For 2D grids, computes products of perpendicular neighbors.
@@ -96,7 +96,7 @@ result = value + (cross1 + cross2) * coupling
 **Sanskrit:** परावर्त्य योजयेत्
 **Translation:** "Transpose and apply"
 **Category:** Indexing/permutation transforms
-**File Location:** `core/operators/sutra_ops.py:201-229`
+**File Location:** `core/operators/sutra_ops.py:206-233`
 
 **Mathematical Logic:**
 Applies coordinate transposition. Swaps first two coordinates and mixes transposed value with original.
@@ -123,7 +123,7 @@ result = value * (1 - mix) + transposed_value * mix
 **Sanskrit:** शून्यं साम्यसमुच्चये
 **Translation:** "When the samuccaya is the same, that samuccaya is zero"
 **Category:** Constraint/suppression transforms
-**File Location:** `core/operators/sutra_ops.py:231-266`
+**File Location:** `core/operators/sutra_ops.py:236-270`
 
 **Mathematical Logic:**
 Identifies and smooths near-zero regions. When value norm is below threshold, replaces with average of neighbors.
@@ -152,7 +152,7 @@ else:
 **Sanskrit:** आनुरूप्येण
 **Translation:** "Proportionately"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:268-310`
+**File Location:** `core/operators/sutra_ops.py:273-317`
 
 **Mathematical Logic:**
 Enforces local proportionality constraints. Computes ratio between value and neighbor average, then adjusts toward target ratio.
@@ -179,7 +179,7 @@ result = value * adjustment
 **Sanskrit:** संकलन व्यवकलनाभ्याम्
 **Translation:** "By addition and subtraction"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:312-356`
+**File Location:** `core/operators/sutra_ops.py:320-363`
 
 **Mathematical Logic:**
 Balances local sums and differences. Pairs opposite neighbors, computes their sums and differences, then balances.
@@ -207,7 +207,7 @@ result = [(value + avg(sums)) + (value - avg(diffs))] / 2
 **Sanskrit:** पूरणापूरणाभ्याम्
 **Translation:** "By completion or non-completion"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:358-394`
+**File Location:** `core/operators/sutra_ops.py:366-402`
 
 **Mathematical Logic:**
 Completes field to local maximum. Finds maximum norm among neighbors and scales value toward it.
@@ -234,7 +234,7 @@ result = value * [1 + (completion_factor - 1) * strength]
 **Sanskrit:** चलन कलनाभ्याम्
 **Translation:** "Differential calculus"
 **Category:** Field dynamics
-**File Location:** `core/operators/sutra_ops.py:396-437`
+**File Location:** `core/operators/sutra_ops.py:405-445`
 
 **Mathematical Logic:**
 Computes local derivative using discrete differences. Central difference approximation in each dimension.
@@ -260,7 +260,7 @@ result = value + gradient * strength * dt
 **Sanskrit:** यावदूनम्
 **Translation:** "Whatever the extent of its deficiency"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:439-475`
+**File Location:** `core/operators/sutra_ops.py:448-483`
 
 **Mathematical Logic:**
 Compensates for deviation from mean. Computes deficiency from local mean and adds back proportionally.
@@ -287,16 +287,16 @@ result = value + deficiency * compensation
 **Sanskrit:** व्यष्टि समष्टिः
 **Translation:** "Part and whole"
 **Category:** Series/product transforms
-**File Location:** `core/operators/sutra_ops.py:477-518`
+**File Location:** `core/operators/sutra_ops.py:486-527`
 
 **Mathematical Logic:**
 Relates local to global properties. Computes ratio of local contribution to global norm, adjusts toward equal contribution.
 
 **Formula:**
 ```
-ratio = (|value|² / global_norm²) * total_sites
-adjustment = sqrt(target_ratio / ratio)  (clamped to [0.5, 2.0])
-result = value * [1 + (adjustment - 1) * strength]
+ratio_sq      = (|Ψ|² / global_norm²) · total_sites
+adjustment_sq = 1 / ratio_sq        clamped to [1/4, 4]   (i.e. [1/2, 2] squared)
+Ψ'            = Ψ · [1 + (adjustment_sq - 1) · strength]  (strength = 1/10)
 ```
 
 **Classical Applications:**
@@ -314,16 +314,22 @@ result = value * [1 + (adjustment - 1) * strength]
 **Sanskrit:** शेषाण्यङ्केन चरमेण
 **Translation:** "The remainders by the last digit"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:520-552`
+**File Location:** `core/operators/sutra_ops.py:530-580`
 
 **Mathematical Logic:**
-Applies modular constraints. Quantizes phase to discrete levels based on "last digit" concept.
+Applies modular constraints, quantizing to discrete levels on the "last digit"
+principle. The quantization is of the real and imaginary parts, not of the
+phase: phase needs `atan2`, and the code marks that path
+`# OLD CODE (FORBIDDEN)` because it cannot exist in exact rational arithmetic.
 
 **Formula:**
 ```
-quantized_phase = round(phase * n_levels / 2π) * 2π / n_levels
-new_phase = phase * (1 - mix) + quantized_phase * mix
+step      = max(|Re Ψ|, |Im Ψ|) / n_levels          (n_levels = 8)
+quantized = round(Re Ψ / step)·step + i·round(Im Ψ / step)·step
+Ψ'        = Ψ·(1 - mix) + quantized·mix              (mix = 1/4)
 ```
+`round()` on a `Fraction` is exact, and `round(·)·step` is an exact multiple
+of the step, so nothing here leaves ℚ. Ψ = 0 is returned unchanged.
 
 **Classical Applications:**
 - Divisibility tests: by 2, 3, 5, 9, 11
@@ -340,7 +346,7 @@ new_phase = phase * (1 - mix) + quantized_phase * mix
 **Sanskrit:** सोपान्त्यद्वयमन्त्यम्
 **Translation:** "The ultimate and twice the penultimate"
 **Category:** Constraint/suppression transforms
-**File Location:** `core/operators/sutra_ops.py:554-592`
+**File Location:** `core/operators/sutra_ops.py:583-620`
 
 **Mathematical Logic:**
 Handles boundary conditions specially. Applies damping at boundaries, enhancement at penultimate positions.
@@ -370,7 +376,7 @@ else:
 **Sanskrit:** एकन्यूनेन पूर्वेण
 **Translation:** "By one less than the previous"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:594-630`
+**File Location:** `core/operators/sutra_ops.py:623-658`
 
 **Mathematical Logic:**
 Decrement sutra (complement to Sutra 1). Subtracts gradient contribution instead of adding.
@@ -396,7 +402,7 @@ result = value - decrement * dt
 **Sanskrit:** गुणितसमुच्चयः
 **Translation:** "The product of the sum"
 **Category:** Series/product transforms
-**File Location:** `core/operators/sutra_ops.py:632-670`
+**File Location:** `core/operators/sutra_ops.py:661-698`
 
 **Mathematical Logic:**
 Relates local products to neighbor sums. Multiplies value by sum of neighbors, normalizes, and mixes.
@@ -424,7 +430,7 @@ result = value * (1 - mix) + normalized * mix
 **Sanskrit:** गुणकसमुच्चयः
 **Translation:** "The factors of the sum"
 **Category:** Series/product transforms
-**File Location:** `core/operators/sutra_ops.py:672-712`
+**File Location:** `core/operators/sutra_ops.py:701-746`
 
 **Mathematical Logic:**
 Decomposes sums into factor contributions. Computes what factor would multiply value to get neighbor sum.
@@ -453,7 +459,7 @@ result = value * (1 + factor * influence)
 **Sanskrit:** आनुरूप्येण शून्यमन्यत्
 **Translation:** "If one is in ratio, the other is zero"
 **Category:** Constraint transforms
-**File Location:** `core/operators/sutra_ops.py:718-749`
+**File Location:** `core/operators/sutra_ops.py:748-780`
 
 **Mathematical Logic:**
 Detects proportional relationships. If value is in target ratio with any neighbor, reduces contribution by half.
@@ -477,7 +483,7 @@ return value
 **Sanskrit:** यावदूनं तावदूनीकृत्य
 **Translation:** "Whatever deficiency, lessen by that much"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:751-785`
+**File Location:** `core/operators/sutra_ops.py:783-816`
 
 **Mathematical Logic:**
 Similar to Sutra 10 but with reduction. Computes deficiency from mean and reduces by that amount.
@@ -498,7 +504,7 @@ result = value - deficiency * reduction
 **Sanskrit:** आद्यमाद्येनान्त्यमन्त्येन
 **Translation:** "First by first and last by last"
 **Category:** Indexing transforms
-**File Location:** `core/operators/sutra_ops.py:787-819`
+**File Location:** `core/operators/sutra_ops.py:819-851`
 
 **Mathematical Logic:**
 Multiplies boundary values. Gets value at origin (first) and maximum indices (last), applies their product.
@@ -521,16 +527,17 @@ result = value * (1 + product * mix)
 **Sanskrit:** केवलैः सप्तकं गुण्यात्
 **Translation:** "Multiply only by 7"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:821-846`
+**File Location:** `core/operators/sutra_ops.py:854-883`
 
 **Mathematical Logic:**
 Sacred multiplier 7 with phase modulation. Applies modulation based on cos(7 × phase).
 
 **Formula:**
 ```
-modulation = cos(7 × phase) + 1  (ranges 0 to 2)
-factor = 1 + (modulation / 2) * strength
-result = value * factor
+coord_sum  = (x + y + z) mod 7
+modulation = coord_sum / 7                           (exact, 0 ≤ · < 1)
+factor     = 1 + modulation · strength               (strength = 1/10)
+Ψ'         = Ψ · factor
 ```
 
 **Applications:**
@@ -544,7 +551,7 @@ result = value * factor
 **Sanskrit:** वेष्टनम्
 **Translation:** "By osculation"
 **Category:** Coupling transforms
-**File Location:** `core/operators/sutra_ops.py:848-882`
+**File Location:** `core/operators/sutra_ops.py:886-921`
 
 **Mathematical Logic:**
 Osculation method for finding closest-matching neighbor. Finds neighbor with minimum difference and mixes.
@@ -566,7 +573,7 @@ result = value * (1 - mix) + osculating * mix
 **Sanskrit:** यावदूनं तावदूं विलोकनम्
 **Translation:** "Whatever excess, that much observe"
 **Category:** Constraint transforms
-**File Location:** `core/operators/sutra_ops.py:884-921`
+**File Location:** `core/operators/sutra_ops.py:924-961`
 
 **Mathematical Logic:**
 Observes excess over mean and applies damping. If value exceeds mean, reduce by excess amount.
@@ -589,15 +596,16 @@ if excess > 0:
 **Sanskrit:** अन्त्ययोर्दशकेऽपि
 **Translation:** "The last digits also add to ten"
 **Category:** Arithmetic transforms
-**File Location:** `core/operators/sutra_ops.py:923-952`
+**File Location:** `core/operators/sutra_ops.py:964-998`
 
 **Mathematical Logic:**
 Complement to 10 using phase arithmetic. Computes phase complement with respect to π.
 
 **Formula:**
 ```
-complement_phase = (2π - phase) mod 2π
-new_phase = phase * (1 - mix) + complement_phase * mix
+max_mag    = max(|Re Ψ|, |Im Ψ|)
+complement = (max_mag - Re Ψ) + i·(max_mag - Im Ψ)    (reflection, not rotation)
+Ψ'         = Ψ·(1 - mix) + complement·mix            (mix = 1/5)
 ```
 
 **Applications:**
@@ -610,7 +618,7 @@ new_phase = phase * (1 - mix) + complement_phase * mix
 **Sanskrit:** अन्त्ययोरेव
 **Translation:** "Only the last terms"
 **Category:** Indexing transforms
-**File Location:** `core/operators/sutra_ops.py:954-988`
+**File Location:** `core/operators/sutra_ops.py:1001-1034`
 
 **Mathematical Logic:**
 Focuses on last (highest index) dimension. Only considers neighbors along final dimension.
@@ -631,7 +639,7 @@ result = value * (1 - mix) + last_avg * mix
 **Sanskrit:** समुच्चयगुणितः
 **Translation:** "The sum is multiplied"
 **Category:** Series transforms
-**File Location:** `core/operators/sutra_ops.py:990-1019`
+**File Location:** `core/operators/sutra_ops.py:1037-1065`
 
 **Mathematical Logic:**
 Multiplies value by scaled sum of neighbors.
@@ -652,7 +660,7 @@ result = value * (1 + total * scale / n_neighbors)
 **Sanskrit:** लोपनस्थापनाभ्याम्
 **Translation:** "By elimination and retention"
 **Category:** Constraint transforms
-**File Location:** `core/operators/sutra_ops.py:1021-1046`
+**File Location:** `core/operators/sutra_ops.py:1068-1092`
 
 **Mathematical Logic:**
 Gaussian elimination analog. Eliminates values below threshold, retains others.
@@ -676,19 +684,18 @@ else:
 **Sanskrit:** विलोकनम्
 **Translation:** "By observation"
 **Category:** Constraint transforms
-**File Location:** `core/operators/sutra_ops.py:1048-1086`
+**File Location:** `core/operators/sutra_ops.py:1095-1137`
 
 **Mathematical Logic:**
 Pattern recognition via phase regularity detection. Enhances regular patterns, dampens irregular ones.
 
 **Formula:**
 ```
-phase_std = std_dev(neighbor_phases)
-if phase_std < 0.5:  # High regularity
-    factor = 1 + enhance
-else:  # Low regularity
-    factor = 1 - dampen
-result = value * factor
+intensities = [ |Ψ(n)|² for n in nearest_neighbours ]
+variance    = Σ (iₖ - mean)² / |neighbours|          (variance, not σ: no √ in ℚ)
+if variance < 1/4:        factor = 1 + enhance       (enhance = 1/10)
+else:                     factor = 1 - dampen        (dampen  = 1/10)
+Ψ'          = Ψ · factor
 ```
 
 **Applications:**
@@ -702,7 +709,7 @@ result = value * factor
 **Sanskrit:** गुणितसमुच्चयः समुच्चयगुणितः
 **Translation:** "Product sum equals sum product"
 **Category:** Series transforms
-**File Location:** `core/operators/sutra_ops.py:1088-1130`
+**File Location:** `core/operators/sutra_ops.py:1140-1181`
 
 **Mathematical Logic:**
 Verifies distributive property: (a+b)(c+d) = ac + ad + bc + bd. Balances sum-based and product-based contributions.
@@ -725,7 +732,7 @@ result = value * (1 - mix) + balanced * mix
 **Sanskrit:** द्वन्द्व योग
 **Translation:** "Duplex combination"
 **Category:** Coupling transforms
-**File Location:** `core/operators/sutra_ops.py:1132-1160`
+**File Location:** `core/operators/sutra_ops.py:1184-1216`
 
 **Mathematical Logic:**
 Binary pairing via coordinate inversion. Combines value with conjugate of its duplex partner.

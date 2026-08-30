@@ -1,10 +1,27 @@
 # Sutra catalogue
 
-The 29 sutras over **Z₂⁴** (16 vertices, 4-bit indices). Each entry
-states the formula, the corresponding Python function, and any
-interpretation choices made where the briefing spec was truncated. The
-authoritative implementation is `vedic/kernel/sutras_exact.py` — when
-this catalogue and the spec disagree, the simulator is the authority.
+The 29 **unweighted Z₂⁴ primitives** (16 vertices, 4-bit indices). Each
+entry states the formula, the corresponding Python function, and any
+interpretation choices made where the briefing spec was truncated.
+
+**Which file this documents, and which it does not.** The functions named
+here live in `vedic/kernel/z2_primitives.py`, and that file is the authority
+for them. All 29 are genuinely distinct maps — checked pairwise on the shared
+Ψ corpus, no two produce the same output.
+
+That is worth stating because the *other* 29 in this package are not.
+`vedic/kernel/sutras_canonical.py` holds **nine** distinct maps across its 29
+ids; within a kind, the id contributes only the scalar α. Both files are
+correct and neither is redundant, but "the 29 sutras" names two different
+things depending on which one you mean. It is *not* the 29 α-weighted sutra operators: those are in
+`vedic/kernel/sutras_canonical.py`, they take a strength parameter, they use
+a different numbering, and `z2_primitives.py` says so in its own first
+paragraph. The two are separate things with overlapping names, which is
+exactly why one authority is named per fact rather than left to context.
+
+This heading used to read "the authoritative implementation is
+`vedic/kernel/sutras_exact.py`". That file has not existed since it was
+renamed to `z2_primitives.py`, and it named the wrong layer besides.
 
 The complement of `v` is `v̄ = v ⊕ 0b1111`.
 
@@ -70,8 +87,16 @@ The complement of `v` is `v̄ = v ⊕ 0b1111`.
 `vedic/kernel/interaction_matrix.py` exposes 30 closed-form identities
 that the operators must satisfy (S1∘S1 = id, S2∘S2 = id, S15∘S16 = id,
 S28∘S19 = id on the canonical pre-image, S2 acts as ±1 on S/A
-sub-spaces, etc.). The interaction-matrix test runs them on 50
-randomized (Ψ, Φ) pairs.
+sub-spaces, etc.). `INTERACTIONS` holds exactly 30 entries;
+`test_interaction_matrix.py::test_the_registry_is_the_documented_size`
+fails if that stops being true.
+
+The test runs them on an **enumerated** pair set, not on random draws. This
+line used to say "50 randomized (Ψ, Φ) pairs"; a property established on 50
+vectors a PRNG happened to produce is evidence about those 50 and silent
+about the rest of ℚ¹⁶. The pairs are now the structural cases plus the
+two-vertex spanning geometry — at least 120 + the labelled corpus — and each
+is there because it is a case, not because a seed produced it.
 
 ## Conservation residuals
 
@@ -82,6 +107,15 @@ randomized (Ψ, Φ) pairs.
 | R3       | mean(S29 Ψ) − mean(Ψ)                                          |
 | R4       | ⟨S(Ψ), A(Ψ)⟩                                                   |
 
-R2/R3/R4 are algebraic identities and evaluate to exact zero in ℚ. R1
-closes whenever the trace counter is a positive integer multiple of
-T(29) = 435.
+R2/R3/R4 are algebraic identities and evaluate to exact zero in ℚ — for
+**every** Ψ, which is proved rather than sampled in
+`vedic/kernel/tests/test_audit_closure_degeneracy.py`: R2 and R3 are linear
+and R4 quadratic, so vanishing on the 137-vector spanning set determines
+each as the zero map.
+
+R1 closes whenever the trace counter is an integer multiple of T(29) = 435,
+**including zero**. This line used to say "positive integer multiple"; 0 is a
+multiple of 435 and the residual is 0 there, which is precisely why
+`audit_closed` may not default its `trace_sum` argument — a default of 0
+answers a quarter of the audit in the affirmative without consulting the
+caller. The test asserts closure at exactly [0, 435, 870] over two periods.

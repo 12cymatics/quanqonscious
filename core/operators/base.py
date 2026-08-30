@@ -23,7 +23,7 @@ import hashlib
 import json
 import copy
 
-from ..state import FieldState, FieldStateSnapshot, ArithmeticMode
+from ..state import FieldState, FieldStateSnapshot, ArithmeticMode, state_digest
 
 
 class OperatorCategory(Enum):
@@ -109,6 +109,10 @@ class TraceEntry:
     delta_summary: Dict[str, Any]
     invariants_checked: List[str]
     invariants_passed: bool
+    # 0 for an operator the caller applied; 1 for a child of a composite, and
+    # so on. A composite logs itself *and* its children, so a replay that
+    # re-applied every entry would apply the children twice.
+    depth: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -125,6 +129,7 @@ class TraceEntry:
             'delta_summary': self.delta_summary,
             'invariants_checked': self.invariants_checked,
             'invariants_passed': self.invariants_passed,
+            'depth': self.depth,
         }
 
 
@@ -142,12 +147,19 @@ class OperatorTrace:
 
     entries: List[TraceEntry] = field(default_factory=list)
     initial_state_hash: Optional[str] = None
+    # How many operator applications are currently in flight. A composite is
+    # still on the stack while its children run, so a child logs at depth 1.
+    _depth: int = 0
 
-    @staticmethod
-    def _safe_fraction_repr(value: Fraction) -> str:
-        if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
-            return f"{float(value):.12e}"
-        return str(value)
+    def enter(self) -> int:
+        """Mark an operator application as started; return its nesting depth."""
+        depth = self._depth
+        self._depth += 1
+        return depth
+
+    def leave(self) -> None:
+        """Mark the innermost in-flight operator application as finished."""
+        self._depth -= 1
 
     def log(self,
             operator: 'Operator',
@@ -156,7 +168,8 @@ class OperatorTrace:
             output_state: FieldState,
             delta_summary: Dict[str, Any],
             invariants: List[str],
-            passed: bool) -> None:
+            passed: bool,
+            depth: int = 0) -> None:
         """Log an operator application."""
         entry = TraceEntry(
             operator_name=operator.name,
@@ -169,24 +182,22 @@ class OperatorTrace:
             parameters=dict(context.parameters),
             delta_summary=delta_summary,
             invariants_checked=invariants,
-            invariants_passed=passed
+            invariants_passed=passed,
+            depth=depth
         )
         self.entries.append(entry)
 
     def _state_hash(self, state: FieldState) -> str:
-        """Compute hash of field state for determinism verification."""
-        # Hash a representative sample for efficiency
-        sample = []
-        for i, (coords, val) in enumerate(sorted(state._psi.items())):
-            if i % max(1, len(state._psi) // 100) == 0:
-                sample.append((
-                    coords,
-                    self._safe_fraction_repr(val.real),
-                    self._safe_fraction_repr(val.imag),
-                ))
-        total = state.total_norm_squared()
-        sample.append(('_total', self._safe_fraction_repr(total)))
-        return hashlib.sha256(str(sample).encode()).hexdigest()[:16]
+        """Hash of the field state, for determinism verification and replay.
+
+        Delegates to the one canonical digest in `core.state`. This used to
+        hash a 1-in-(N/100) sample of sites and truncate to 16 characters --
+        cheaper, but it disagreed with `StateCheckpoint._compute_hash` on
+        every state, so `TraceReplayer.replay`, which compares the two, could
+        not verify any evolution at all. It was also blind to a change at any
+        site outside the sample.
+        """
+        return state_digest(state)
 
     def verify_determinism(self, other: 'OperatorTrace') -> bool:
         """Check if two traces are identical (determinism test)."""
@@ -313,8 +324,15 @@ class Operator(ABC):
         # Capture input state info
         input_norm = state.total_norm_squared()
 
-        # Apply the operator
-        output_state = self.apply(state, context)
+        # Apply the operator. The depth is taken before `apply` runs, so a
+        # composite records 0 and the children it drives record 1 -- which is
+        # what lets a replay re-apply only what the caller actually applied.
+        depth = context.trace.enter() if context.trace is not None else 0
+        try:
+            output_state = self.apply(state, context)
+        finally:
+            if context.trace is not None:
+                context.trace.leave()
 
         # Check invariants
         invariants, passed = self.check_invariants(output_state, context)
@@ -334,7 +352,7 @@ class Operator(ABC):
             }
             context.trace.log(
                 self, context, state, output_state,
-                delta_summary, invariants, passed
+                delta_summary, invariants, passed, depth
             )
 
         return output_state

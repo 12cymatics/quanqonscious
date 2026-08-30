@@ -80,12 +80,31 @@ def main() -> None:
     eval_ds = _load_jsonl(cfg.data.eval_path)
 
     def _tokenize(batch):
+        # No truncation and no max_length. Training on a silently-cut prefix
+        # of an example teaches the model a different distribution from the
+        # one the corpus describes, and the held-out evaluation this feeds
+        # would then be comparing against a target nobody stated.
+        #
+        # cfg.data.max_seq_length is still read, but as an assertion about
+        # the corpus rather than a cutter applied to it: an example longer
+        # than the declared budget stops the run and names itself, instead of
+        # being quietly shortened.
         out = tokenizer(
             batch["text"],
-            truncation=True,
-            max_length=cfg.data.max_seq_length,
+            truncation=False,
             padding=False,
         )
+        budget = cfg.data.max_seq_length
+        over = [(i, len(ids)) for i, ids in enumerate(out["input_ids"])
+                if len(ids) > budget]
+        if over:
+            worst = max(n for _, n in over)
+            raise ValueError(
+                f"{len(over)} example(s) exceed max_seq_length={budget}; "
+                f"longest is {worst} tokens. Raise max_seq_length in the "
+                f"config to cover the corpus, or shorten the corpus. This "
+                f"used to truncate them, which trains on a prefix and "
+                f"reports the result as if the whole example had been seen.")
         # NOTE: labels are produced by DataCollatorForLanguageModeling(mlm=False),
         # which sets labels = input_ids with pad positions masked to -100.
         # Pre-setting them here makes tokenizer.pad() fail on the ragged list.

@@ -28,7 +28,11 @@ def test_lambda_operator_is_symmetric() -> None:
     alpha = np.ones(16)
     Lambda = cube.lambda_operator(alpha)
     assert Lambda.shape == (8, 8)
-    assert np.allclose(Lambda, Lambda.T)
+    # Λ is built as 0.5 * (result + result.T). Float addition is exactly
+    # commutative, so Λ[i][j] and Λ[j][i] are computed from the same two
+    # values and are bitwise identical — this is an exact equality, and
+    # np.allclose was hiding that by admitting a tolerance it never needed.
+    assert np.array_equal(Lambda, Lambda.T)
 
 
 def test_weighted_hypercube_shape() -> None:

@@ -1,15 +1,58 @@
 #!/usr/bin/env python3
-"""
-Test script to verify CUDA-Quantum implementation in PCFE v3.0
+"""Environment check: is CUDA-Quantum installed and usable for PCFE v3.0?
+
+This is a probe of the *vendor stack*, not a test of this repository. Nothing
+in it imports PCFE: every check builds a `cudaq` kernel, runs phase estimation,
+times a circuit, or exercises cudaq + torch together. What it establishes is
+whether the machine can run PCFE at all.
+
+Why it is no longer named `test_integration.py`
+-----------------------------------------------
+It was collected by pytest and opened with three `pytest.importorskip` calls —
+numpy, torch, and `cudaq`. `cudaq` is not installable without the NVIDIA CUDA
+stack, so on every machine this repository has ever run on, including CI, all
+five checks vanished into a single "1 skipped" line. That is the same defect
+the Lean mirror had: work that reports as not-run and reads as covered.
+
+Skipping was the wrong lever, and so was failing. Making the import fatal under
+pytest would turn the root suite permanently red over a GPU library that a CPU
+runner cannot install — which is not a finding, it is noise. The honest shape
+for "can this machine run the vendor stack" is a script you run when you want
+the answer, which is what this already was: it has had a `main()` returning
+0 or 1 and a `__main__` guard all along. The `importorskip` calls were bolted
+on top to make pytest tolerate a file that was never a pytest test.
+
+So it is a script again, out of collection, and it fails loudly instead of
+skipping. `python pcfe-v3/tests/check_cudaq_environment.py` exits non-zero when
+CUDA-Quantum is missing and says which import failed.
 """
 
-import pytest
-
-np = pytest.importorskip("numpy")
-torch = pytest.importorskip("torch")
-cudaq = pytest.importorskip("cudaq")
-import time
 import sys
+import time
+
+MISSING = []
+try:
+    import numpy as np
+except ImportError as exc:            # pragma: no cover - environment probe
+    MISSING.append(f"numpy ({exc})")
+try:
+    import torch
+except ImportError as exc:            # pragma: no cover - environment probe
+    MISSING.append(f"torch ({exc})")
+try:
+    import cudaq
+except ImportError as exc:            # pragma: no cover - environment probe
+    MISSING.append(f"cudaq ({exc})")
+
+if MISSING:
+    print("CUDA-Quantum environment check: NOT RUNNABLE on this machine.")
+    for m in MISSING:
+        print(f"  missing: {m}")
+    print("\nThis is a probe of the vendor stack, not of PCFE. Install "
+          "CUDA-Quantum\n(and a CUDA-capable GPU) to run it. It reports "
+          "rather than skipping, so\nan absent dependency is visible instead "
+          "of being counted as covered.")
+    sys.exit(1)
 
 def test_cudaq_installation():
     """Test if CUDA-Quantum is properly installed"""

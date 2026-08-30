@@ -69,9 +69,19 @@ VEDIC_SUTRAS: tuple[str, ...] = (
 class Lean4SessionConfig:
     """Configuration parameters for :class:`Lean4Mirror`."""
 
-    imports: Sequence[str] = ("Mathlib",)
+    # No imports by default. The statements this mirror renders
+    # (``vedic.external.lean_props``) are core-Lean ``Int`` arithmetic, so a
+    # bare toolchain compiles them. The previous default was ``("Mathlib",)``,
+    # which nothing in the emitted body used and which made every generated
+    # script unverifiable without a Mathlib build -- forcing the end-to-end
+    # test to skip and the compile test to strip the imports and substitute a
+    # body that needed nothing. A caller whose statements genuinely need
+    # Mathlib passes imports=("Mathlib",) explicitly.
+    imports: Sequence[str] = ()
+    # ``open scoped BigOperators`` is Mathlib syntax and was unused; the two
+    # set_options are core Lean and are kept, since a large emitted
+    # conjunction is exactly what exhausts the default heartbeat budget.
     prelude: str = (
-        "open scoped BigOperators\n"
         "set_option maxHeartbeats 200000\n"
         "set_option maxRecDepth 512\n"
     )
@@ -123,11 +133,45 @@ class Lean4MirrorResult:
 class Lean4Mirror:
     """Lean 4 mirror that validates sutra-driven simulations."""
 
+    #: The toolchain pin this package compiles against, committed at the
+    #: package root. ``elan`` resolves a toolchain from the nearest
+    #: ``lean-toolchain`` file walking up from the invocation directory, so a
+    #: script written into a temp directory resolves nothing and every
+    #: ``lean`` call fails with "no default toolchain configured" -- which is
+    #: what happened here, unnoticed, because the only test that exercised
+    #: ``run_serial`` was skipped for an unrelated reason (a Mathlib import
+    #: the emitted body never used). The pin is copied into every artifact
+    #: directory so the generated scripts compile from any working directory
+    #: under exactly the toolchain the package declares.
+    TOOLCHAIN_PIN = Path(__file__).resolve().parents[2] / "lean-toolchain"
+
     def __init__(self, config: Lean4SessionConfig | None = None):
         self.config = config or Lean4SessionConfig()
         self._artifact_root = Path(tempfile.mkdtemp(prefix="quanqonscious-lean4-"))
         self._artifact_root.mkdir(parents=True, exist_ok=True)
+        self._install_toolchain_pin()
         self._script_counter = itertools.count()
+
+    def _install_toolchain_pin(self) -> None:
+        """Copy the committed toolchain pin beside the generated scripts.
+
+        Raises rather than proceeding without it: running under whichever
+        toolchain elan happens to default to would make the verdict depend on
+        the machine, and a Lean version mismatch is exactly the kind of
+        difference that turns a real failure into a confusing pass.
+        """
+        if not self.TOOLCHAIN_PIN.is_file():
+            raise FileNotFoundError(
+                f"{self.TOOLCHAIN_PIN} is missing. It pins the Lean toolchain "
+                f"this package's generated scripts are compiled under and is "
+                f"tracked in git; restore it rather than letting elan pick a "
+                f"default, which would make the mirror's verdict depend on "
+                f"the machine.")
+        pin = self.TOOLCHAIN_PIN.read_text(encoding="utf-8").strip()
+        if not pin:
+            raise ValueError(f"{self.TOOLCHAIN_PIN} is empty; it must name a toolchain")
+        (self._artifact_root / "lean-toolchain").write_text(
+            pin + "\n", encoding="utf-8")
 
     @property
     def _lean_path(self) -> str:
