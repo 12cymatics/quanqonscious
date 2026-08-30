@@ -497,17 +497,21 @@ class VedicSutras:
     def _nikhilam_hybrid(self, x, base_value, context):
         """Hybrid implementation of nikhilam.
 
-        The register the quantum path needs grows with the base, so the
-        circuit is used while the base fits a small register and the classical
-        complement is used beyond it. Both compute `base - x`; the split is
-        about circuit width, not about the answer.
+        Delegates to the quantum path, which already refuses every input it
+        has no register encoding for (non-scalar, non-integral, out of range)
+        and complements classically there instead.
+
+        An earlier version of this method carried a `hybrid_base_limit = 1024`
+        above which it called the classical complement directly. That was a
+        silent fallback: it swapped the algorithm on the magnitude of the base
+        with nothing logged and nothing returned to say so, and it changed the
+        return type across the boundary -- `int` from the circuit below 1024,
+        `float` from the classical body above it. It was also on this path
+        only; `_yavadunam_hybrid`, which drives the same circuit through the
+        same `_complement_via_circuit`, never had it. The cap is gone: wide
+        bases cost circuit time, which is the honest price of computing them.
         """
-        hybrid_base_limit = 1024
-        if (isinstance(x, (int, float, np.integer, np.floating))
-                and float(x) == int(x) and float(base_value) == int(base_value)
-                and 0 <= int(x) <= int(base_value) <= hybrid_base_limit):
-            return self._nikhilam_quantum(x, base_value, context)
-        return self._nikhilam_classical(x, base_value, context)
+        return self._nikhilam_quantum(x, base_value, context)
 
     def paravartya_yojayet(
         self,
@@ -1465,7 +1469,7 @@ class VedicSutras:
             result = simulator.run(circuit, repetitions=1)
             # Extract result
             result_bits = result.measurements['result'][0]
-            result_int = sum(bit * (2**i) for i, bit in enumerate(result_bits))
+            result_int = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
             return result_int
             
         elif operation == 'subtract':
@@ -1475,7 +1479,7 @@ class VedicSutras:
             result = simulator.run(circuit, repetitions=1)
             # Extract result
             result_bits = result.measurements['result'][0]
-            result_int = sum(bit * (2**i) for i, bit in enumerate(result_bits))
+            result_int = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
             # Convert from two's complement if needed
             if result_bits[-1] == 1:  # Negative number
                 result_int = result_int - (1 << num_qubits)
@@ -1979,7 +1983,7 @@ class VedicSutras:
         
         # Extract result
         result_bits = result.measurements['result'][0]
-        result_decimal = sum(bit * (2**i) for i, bit in enumerate(result_bits))
+        result_decimal = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
         
         return result_decimal
     

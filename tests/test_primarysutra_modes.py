@@ -28,6 +28,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import numpy as np
+
 import primarysutra as ps
 
 MODES = list(ps.SutraMode)
@@ -71,7 +73,17 @@ def test_the_class_exposes_sixteen_sutras():
 
 
 def test_every_sutra_runs_in_every_mode():
-    """80 (sutra, mode) pairs. 16 of them raised before this was written."""
+    """All 16 sutras x all 5 modes. 16 of the 80 pairs raised before this.
+
+    80 pairs, but not 80 distinct code paths. `SutraMode` declares five
+    members and every dispatcher in `primarysutra.py` branches on only three:
+    `MAYA_ILLUSION` and `SULBA` appear at lines 135-136 of that file and
+    nowhere else in it, so both fall through to the classical body. 32 of
+    these 80 pairs therefore re-run code the CLASSICAL 16 already cover, and
+    the distinct-path count is 48. Both modes are still exercised here,
+    because "declared and silently aliased to CLASSICAL" is a fact about the
+    file worth pinning rather than hiding -- but the coverage claim is 48.
+    """
     v = ps.VedicSutras()
     failures = []
     for mode, (name, call) in itertools.product(MODES, CALLS.items()):
@@ -105,7 +117,13 @@ def test_the_exactly_determined_identities_hold_in_every_mode():
         ctx = ps.SutraContext(mode=mode)
         for x, iters in ((7, 2), (15, 1), (0, 3)):
             _check(v.ekadhikena_purvena, x + iters, float(x), iterations=iters, ctx=ctx)
-        for x in (1, 5, 9, 16, 31):
+        # Values either side of 127. Every bit read out of a cirq measurement
+        # is an `np.int8`, and three of the four places this file accumulates
+        # `sum(bit * 2**i)` were missing the `int()` cast that the fourth
+        # (line 672) has. On numpy 2 that raises OverflowError at x = 128; on
+        # numpy 1 it wrapped silently to a negative. The old bounds here all
+        # sat below the cliff, so the suite could not see it.
+        for x in (1, 5, 9, 16, 31, 128, 200, 255, 300):
             _check(v.ekanyunena_purvena, x - 1, float(x), base=10.0, ctx=ctx)
         for base in (10, 100):
             for x in (0, base // 2, base):
@@ -114,11 +132,76 @@ def test_the_exactly_determined_identities_hold_in_every_mode():
                 _check(v.yavadunam, base - x, float(x), base=float(base), ctx=ctx)
 
 
+def test_no_register_encoding_path_overflows_the_int8_cliff():
+    """Every measurement bit is an `np.int8`; the accumulators must cast it.
+
+    Three of the four `sum(bit * 2**i)` sites in `primarysutra.py` were
+    missing the `int()` cast the fourth has. Above x = 127 that raises
+    `OverflowError` on numpy 2, and on numpy 1 wrapped silently to a negative
+    number -- the worse failure, because it returns.
+
+    `ekanyunena` is pinned by value in the identities test above. The
+    `sankalana` sites at lines 1472 and 1482 cannot be pinned by value yet:
+    `_sankalana_vyavakalanabhyam_quantum` is wrong at every magnitude
+    (9 + 4 -> 17, 2 + 3 -> 1, 100 + 27 -> 55; its carry chain uncomputes with
+    the same Toffoli after `b[i]` has already been modified), so asserting the
+    sum here would red for that reason and blame this line.
+
+    So this gate asserts only what the cast is responsible for: that crossing
+    127 does not raise. It deliberately does NOT claim the answer is right.
+    Pin the value here once the adder is fixed, and delete this note.
+    """
+    v = ps.VedicSutras()
+    for mode in (ps.SutraMode.QUANTUM, ps.SutraMode.HYBRID):
+        ctx = ps.SutraContext(mode=mode)
+        for a, b in ((200.0, 50.0), (100.0, 100.0), (255.0, 1.0)):
+            v.sankalana_vyavakalanabhyam(a, b, ctx=ctx)
+
+
+def test_nikhilam_hybrid_uses_the_circuit_at_every_width():
+    """No magnitude cap silently swaps the algorithm.
+
+    `_nikhilam_hybrid` briefly carried `hybrid_base_limit = 1024`, above which
+    it called the classical complement instead. Both branches return `base -
+    x`, so no value assertion could ever see it -- the tell is the return
+    type: `int` out of the circuit, `float` out of the classical body. That is
+    what this pins, at a base above where the cap used to sit.
+    """
+    v = ps.VedicSutras()
+    for mode in (ps.SutraMode.QUANTUM, ps.SutraMode.HYBRID):
+        got = v.nikhilam_navatashcaramam_dashatah(
+            5.0, base=1025.0, ctx=ps.SutraContext(mode=mode))
+        assert float(got) == 1020.0, f"{mode.name}: got {got}, expected 1020"
+        assert isinstance(got, (int, np.integer)) and not isinstance(got, bool), (
+            f"{mode.name}: nikhilam returned {type(got).__name__}, so the "
+            f"classical body ran where the circuit should have"
+        )
+
+
 def test_the_inverse_qft_helper_inverts():
     """`cudaq.inverseFQFT` does not exist; this is what replaced it.
 
     Asserted as a genuine inverse rather than merely as something that runs:
     QFT followed by it must return every basis state unchanged.
+
+    Read off the state vector, not a shot histogram. An earlier version of
+    this test sampled and asserted `len(counts) == 1`, which is a tolerance
+    wearing a shot count: a helper leaking a fraction of a percent of
+    amplitude into other basis states passes that check with high probability
+    and fails it at random. The composed circuit is a permutation of basis
+    states, so the amplitude is exactly checkable and no sampling is needed.
+
+    This gate is not self-fulfilling. The forward QFT below is written out
+    with its own literal angles rather than derived from the helper, so
+    corrupting the helper reddens it -- verified by injecting each defect
+    alone: `cr1` exponent off by one -> red, swap loop deleted -> red.
+
+    What it does NOT cover: the helper inverts a *standard* QFT, which is what
+    is asserted here, but the file's two production call sites
+    (`_quantum_reciprocal` and `_sesanyankena_caramena_quantum`) prepare their
+    register with `h` then `rz(2*pi*phi*2**i)`, and this helper recovers phi
+    from that encoding in only 4 of 16 cases at n = 4. Whichever side is
+    wrong, those two quantum paths return garbage; see the PR discussion.
     """
     import cudaq
     import numpy as np
@@ -137,13 +220,12 @@ def test_the_inverse_qft_helper_inverts():
         for i in range(n // 2):
             kernel.swap(q[i], q[n - 1 - i])
         ps._cudaq_inverse_qft(kernel, q, n)
-        kernel.mz(q)
-
-        counts = dict(cudaq.sample(kernel, shots_count=200).items())
-        assert len(counts) == 1, f"|{basis}> did not come back to a basis state: {counts}"
-        top = next(iter(counts))
-        recovered = sum(int(top[b]) << b for b in range(n))
+        amplitudes = np.array(cudaq.get_state(kernel))
+        recovered = int(np.argmax(np.abs(amplitudes)))
         assert recovered == basis, f"QFT then inverse took |{basis}> to |{recovered}>"
+        assert abs(abs(amplitudes[basis]) - 1.0) < 1e-12, (
+            f"|{basis}> came back with amplitude {abs(amplitudes[basis])}, not 1"
+        )
 
 
 if __name__ == "__main__":
