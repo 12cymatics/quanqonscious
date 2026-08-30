@@ -161,6 +161,85 @@ def test_no_aspirational_entry_actually_exists():
         f"document that describes them as absent, then drop them from here.")
 
 
+# ---------------------------------------------------------------------------
+# Line-range citations
+# ---------------------------------------------------------------------------
+#
+# A citation of the form `path.py:START-END` makes a claim the path check
+# above cannot see: that the named construct is at those lines. Nothing
+# checked it, and every such citation in the repository had drifted --
+# ALL_29_VEDIC_SUTRAS.md's 29 were exact at the commit that added them and
+# then moved +3 to +52 lines as the file changed beneath them, and
+# COMPLETE_SUTRA_DEFINITIONS_SUPERIOR.md's five MSTVQ ranges matched no
+# revision in that file's history at all, tiling it into contiguous blocks
+# that ended exactly on the claimed file length.
+#
+# Checking that START merely lands on some `class`/`def` is not enough: one
+# of those five cited line 412 for MSTVQCouplingOperator, and 412 is a class
+# line -- it is `MSTVQCompositeOperator`. So where the document names a
+# construct in the heading above the citation, the definition at START must
+# be that one.
+
+CITATION = re.compile(
+    r"`([A-Za-z0-9_./-]+\.(?:py|hpp|cpp|lean|js)):(\d+)-(\d+)`"
+)
+DEFINITION = re.compile(r"^(?:class|def)\s+(\w+)")
+
+
+def _cited_ranges(doc: str):
+    """Yield (path, start, end, heading) for each line-range citation."""
+    text = (REPO / doc).read_text(errors="replace")
+    heading = ""
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            heading = line
+        for path, start, end in CITATION.findall(line):
+            yield path, int(start), int(end), heading
+
+
+def test_line_range_citations_point_at_what_they_name():
+    """`path.py:START-END` must start on a definition, and on the right one."""
+    problems = []
+    checked = 0
+
+    for doc in DOCS:
+        for path, start, end, heading in _cited_ranges(doc):
+            target = REPO / path
+            if not target.exists():
+                continue          # the path check above owns this case
+            lines = target.read_text(errors="replace").splitlines()
+
+            if not 1 <= start <= end <= len(lines):
+                problems.append(
+                    f"{doc}: {path}:{start}-{end} is outside the file "
+                    f"({len(lines)} lines)")
+                continue
+
+            checked += 1
+            match = DEFINITION.match(lines[start - 1])
+            if match is None:
+                problems.append(
+                    f"{doc}: {path}:{start} is not a definition, it is "
+                    f"{lines[start - 1].strip()[:60]!r}")
+                continue
+
+            # If the heading names something defined in that file, the
+            # definition at START has to be it.
+            named = [w for w in re.findall(r"\w+", heading)
+                     if re.search(rf"^(?:class|def)\s+{re.escape(w)}\b",
+                                  "\n".join(lines), re.M)]
+            if named and match.group(1) not in named:
+                problems.append(
+                    f"{doc}: {path}:{start} defines {match.group(1)}, but the "
+                    f"heading names {' / '.join(named)}")
+
+    assert checked, "no line-range citations were checked; the regex is wrong"
+    assert not problems, (
+        f"{len(problems)} line-range citation(s) do not point at what they name:\n  "
+        + "\n  ".join(problems)
+        + "\n\nRecompute the range from the file rather than adjusting it by eye."
+    )
+
 def test_the_tracked_set_was_read():
     """An empty TRACKED would fail everything above for the wrong reason."""
     assert len(TRACKED) > 100, f"git ls-files returned {len(TRACKED)} paths"

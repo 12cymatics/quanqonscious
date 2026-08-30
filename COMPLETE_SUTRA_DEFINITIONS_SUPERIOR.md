@@ -898,7 +898,7 @@ class MSTVQConfig:
 
 ### **OPERATOR 1: MSTVQStressOperator**
 
-**File Location**: `core/operators/mstvq.py:200-275`
+**File Location**: `core/operators/mstvq.py:186-252`
 
 **Purpose**: Compute and apply **stress field modifications** to quantum field state.
 
@@ -940,7 +940,7 @@ S = clamp(stress_gradient, min_stress, max_stress)
 
 ### **OPERATOR 2: MSTVQTensionOperator**
 
-**File Location**: `core/operators/mstvq.py:277-345`
+**File Location**: `core/operators/mstvq.py:255-304`
 
 **Purpose**: Apply **tension-induced phase rotation** to field.
 
@@ -979,7 +979,7 @@ T = std_dev(phase_diffs)
 
 ### **OPERATOR 3: MSTVQSuppressionOperator**
 
-**File Location**: `core/operators/mstvq.py:347-410`
+**File Location**: `core/operators/mstvq.py:307-348`
 
 **Purpose**: Modify **radial suppression envelope** based on MSTVQ stress.
 
@@ -1015,7 +1015,7 @@ R(x) = 1 / [1 + S(x) + |T(x)|]
 
 ### **OPERATOR 4: MSTVQCouplingOperator**
 
-**File Location**: `core/operators/mstvq.py:412-480`
+**File Location**: `core/operators/mstvq.py:351-409`
 
 **Purpose**: Adjust **R4 coupling weights** based on stress-tension distribution.
 
@@ -1047,7 +1047,7 @@ w'(x) = w(x) × [1 / (1 + S(x) × st_ratio)]
 
 ### **COMPOSITE OPERATOR: MSTVQCompositeOperator**
 
-**File Location**: `core/operators/mstvq.py:482-525`
+**File Location**: `core/operators/mstvq.py:412-494`
 
 **Purpose**: **Unified MSTVQ pipeline** applying all four operators in sequence.
 

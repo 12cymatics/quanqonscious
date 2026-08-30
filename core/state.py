@@ -449,7 +449,23 @@ def create_gaussian_field(lattice: ToroidalHypercube,
                           sigma: float,
                           amplitude: float = 1.0,
                           mode: ArithmeticMode = ArithmeticMode.EXACT) -> FieldState:
-    """Create a Gaussian-peaked field centered at given point."""
+    """Create a Gaussian-peaked field centered at given point.
+
+    The seed values are float-derived and this is not fixable: exp(-r²/2σ²)
+    is transcendental, so a true Gaussian has no exact representation in ℚ.
+    `math.exp` produces a double and `RationalComplex.from_real` stores it as
+    the dyadic rational that double denotes -- exactly, but as an exact copy
+    of an approximation, which is why fields from this constructor carry
+    twelve-digit denominators from the start.
+
+    `mode` is therefore not a promise about these values. It sets the
+    arithmetic of everything done to the field afterwards, which is exact;
+    the seed is as exact as a Gaussian can be.
+
+    Anything asserting exactness end to end wants a field built from stated
+    rationals instead -- see the fixtures in `tests/test_invariants.py`, which
+    set a handful of sites by hand for that reason.
+    """
     state = FieldState(lattice=lattice, mode=mode)
     center_point = LatticePoint(center, lattice.shape)
 
