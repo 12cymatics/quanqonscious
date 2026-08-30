@@ -452,33 +452,63 @@ checkpoint_interval: 1000
 
 ### Running Vedic Sutra Simulations
 
+This block is executed by `tests/test_primarysutra_modes.py`, so it cannot
+rot again. **Every line of the version that stood here before was wrong** —
+it failed on its own first line, and each of its seven elements named an API
+that does not exist: `ExecutionMode` (the enum is `SutraMode`), the
+`VedicSutras(mode=...)` constructor (it takes `context`), the `use_quantum`
+and `cache_results` context fields (neither exists), the `n=` and `context=`
+argument names on the sutra call (they are `x` and `ctx`), passing the engine
+to `HybridQuantumClassicalSimulator` (it takes a context), a `run_serial()`
+with no argument (it takes the value to feed through), and `report.summary()`
+(the accessor is `to_dict()`). It was written from impression and nobody ran it.
+
 ```python
-from primarysutra import VedicSutras, SutraContext, ExecutionMode
+from primarysutra import VedicSutras, SutraContext, SutraMode
+
+# Configure context. The mode lives here, not on the constructor.
+context = SutraContext(
+    mode=SutraMode.HYBRID,
+    quantum_backend="cirq",
+)
 
 # Create sutra engine
-sutras = VedicSutras(mode=ExecutionMode.HYBRID)
+sutras = VedicSutras(context)
 
-# Configure context
-context = SutraContext(
-    precision=128,
-    use_quantum=True,
-    quantum_backend="cirq",
-    cache_results=True
-)
+# Execute a specific sutra. The argument is `x`; the per-call context
+# override is `ctx`.
+result = sutras.ekadhikena_purvena(12345.0, iterations=1, ctx=context)
+assert result == 12346.0
 
-# Execute specific sutra
-result = sutras.ekadhikena_purvena(
-    n=12345,
-    context=context
-)
-
-# Run all 29 sutras
+# Run all 16 sutras, feeding each one's output into the next.
+# CLASSICAL, deliberately -- see the warning below.
 from sutra_simulator import HybridQuantumClassicalSimulator
 
-simulator = HybridQuantumClassicalSimulator(sutras)
-report = simulator.run_serial()  # or run_concurrent(), run_parallel()
-print(report.summary())
+chained = SutraContext(mode=SutraMode.CLASSICAL)
+report = HybridQuantumClassicalSimulator(chained).run_serial(12345.0)
+assert len(report.to_dict()["executions"]) == 16
 ```
+
+> **The chained run aborts the interpreter in QUANTUM and HYBRID mode.** Not
+> an exception — a hard `std::discrete_distribution` assertion failure inside
+> CUDA-Q that kills the process, so no `try` can catch it and no test can
+> survive it. `run_serial` feeds each sutra's output into the next; a sutra
+> whose coefficients sum to zero makes `angle = coef * x**i /
+> np.sum(np.abs(coefficients))` at `primarysutra.py:1812` evaluate to NaN, and
+> a NaN angle reaching cudaq aborts. That line is in
+> `_sesanyankena_caramena_quantum`, one of the sutras whose quantum path is
+> known wrong (it returns 1.5 where the classical Horner evaluation gives 17).
+> The example therefore chains in CLASSICAL. Do not "fix" this by wrapping the
+> call — the guard belongs on the NaN, and the real repair is the algorithm.
+
+**Sixteen, not twenty-nine.** `VedicSutras` defines 16 sutra methods and no
+sub-sutras. The 29 counted elsewhere in this file live in
+`vedic_trainer/vedic/kernel/sutras_canonical.py`, a different module.
+
+Note that `SutraContext` declares four fields that nothing in
+`primarysutra.py` ever reads — `precision`, `max_iterations`, `visualization`
+and `parallel`. `precision=128` in particular does not raise the precision of
+anything; it is a dataclass default that no code path consults.
 
 ### Git Workflow
 

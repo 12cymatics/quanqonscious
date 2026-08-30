@@ -23,8 +23,9 @@ simply that it imports and that every sutra runs. The arithmetic identities
 below then pin the answers that are exactly determined.
 """
 import itertools
-import sys
 import os
+import re
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -130,6 +131,53 @@ def test_the_exactly_determined_identities_hold_in_every_mode():
                 _check(v.nikhilam_navatashcaramam_dashatah, base - x,
                        float(x), base=float(base), ctx=ctx)
                 _check(v.yavadunam, base - x, float(x), base=float(base), ctx=ctx)
+
+
+def test_the_claude_md_example_actually_runs():
+    """Execute the Python block in CLAUDE.md, verbatim, out of the file.
+
+    Every line of the block that stood there before was wrong -- it failed on
+    its own first line (`ExecutionMode` does not exist; the enum is
+    `SutraMode`), and each of its seven elements named an API that is not
+    there: the `VedicSutras(mode=...)` constructor, the `use_quantum` and
+    `cache_results` context fields, the `n=`/`context=` argument names,
+    passing the engine to `HybridQuantumClassicalSimulator`, a `run_serial()`
+    taking no argument, and `report.summary()`. It was documentation written
+    from impression, and nothing ever ran it.
+
+    Reading the block out of the file rather than copying it here is the whole
+    point: a copy would drift, and this cannot.
+    """
+    md_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CLAUDE.md")
+    with open(md_path, encoding="utf-8") as fh:
+        md = fh.read()
+    match = re.search(
+        r"```python\n(from primarysutra import VedicSutras, SutraContext, "
+        r"SutraMode.*?)```", md, re.S)
+    assert match, "the documented usage block is gone from CLAUDE.md"
+    block = match.group(1)
+    assert "run_serial" in block, "the block no longer exercises the simulator"
+    exec(compile(block, "CLAUDE.md", "exec"), {})
+
+
+def test_the_engine_constructs_in_every_mode():
+    """`VedicSutras(SutraContext(mode=...))` must work for all five modes.
+
+    Every other test here builds the engine with `VedicSutras()` -- default
+    CLASSICAL -- and passes the mode per call as `ctx`. That is the shape the
+    file's own examples use, and it left one branch of `__init__` unreached:
+    when the mode is QUANTUM or HYBRID *and* `quantum_backend` is None, the
+    constructor called `cudaq.get_platform()`, which does not exist in CUDA-Q
+    (the accessor is `get_target()`, and `Target.name` is an attribute, not a
+    method). Constructing the engine in quantum mode raised AttributeError
+    before a single sutra ran.
+    """
+    for mode in MODES:
+        v = ps.VedicSutras(ps.SutraContext(mode=mode))
+        assert float(v.ekadhikena_purvena(7.0, iterations=2)) == 9.0, (
+            f"{mode.name}: engine built in this mode does not compute 7 + 2"
+        )
 
 
 def test_no_register_encoding_path_overflows_the_int8_cliff():

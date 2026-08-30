@@ -152,8 +152,13 @@ class SutraContext:
 
 class VedicSutras:
     """
-    Comprehensive implementation of all 29 Vedic sutras (16 primary + 13 sub-sutras)
-    with full mathematical logic, quantum integration, and inter-sutra interactions.
+    Implementation of the 16 primary Vedic sutras, with full mathematical
+    logic, quantum integration, and inter-sutra interactions.
+
+    Sixteen, not twenty-nine. This line read "all 29 Vedic sutras (16
+    primary + 13 sub-sutras)"; the class defines 16 methods and no
+    sub-sutras, and `tests/test_primarysutra_modes.py` pins that surface.
+    The 29 live in `vedic_trainer/vedic/kernel/sutras_canonical.py`.
     """
     
     def __init__(self, context: Optional[SutraContext] = None):
@@ -179,10 +184,19 @@ class VedicSutras:
         # Initialize quantum backend if in quantum or hybrid mode
         if self.context.mode in [SutraMode.QUANTUM, SutraMode.HYBRID]:
             if self.context.quantum_backend is None:
-                # Default to CUDAQ simulator
-                self.quantum_platform = cudaq.get_platform()
+                # Default to the CUDA-Q simulator target.
+                #
+                # This read `cudaq.get_platform()`, which does not exist in
+                # CUDA-Q and never has -- the accessor is `get_target()`, and
+                # `Target.name` is an attribute, not a method. So constructing
+                # `VedicSutras(SutraContext(mode=SutraMode.QUANTUM))` raised
+                # AttributeError before any sutra ran. It went unseen because
+                # the branch needs `quantum_backend is None`, and every test
+                # and example built the engine in the default CLASSICAL mode
+                # and passed the mode per call instead.
+                self.quantum_platform = cudaq.get_target()
                 logger.info(
-                    f"Using CUDAQ platform: {self.quantum_platform.name()}"
+                    f"Using CUDAQ target: {self.quantum_platform.name}"
                 )
             else:
                 self.quantum_platform = self.context.quantum_backend
