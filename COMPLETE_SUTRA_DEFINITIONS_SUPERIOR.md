@@ -1,17 +1,44 @@
 # COMPLETE VEDIC SUTRAS - SUPERIOR IMPLEMENTATIONS
 
 **Source Files (7 Specialized Implementations)**:
-1. `grvqsutraws.py` (673 lines) - GRVQ Field Solver Sutras
-2. `mayasutraaws.py` (634 lines) - Maya Illusion Sutras
-3. `sulbasutraws.py` (736 lines) - Sulba Geometric Construction Sutras
-4. `intersutraws.py` (454 lines) - Inter-Sutra Interaction Engine
-5. `core/operators/mstvq.py` (525 lines) - MSTVQ Stress-Tension Operators
-6. `utilitysutraws3.py` (49 lines) - Performance Tracking Utilities
-7. `visualperformancesutraws2.py` (78 lines) - Performance Visualization
+1. `grvqsutraws.py` - GRVQ Field Solver Sutras
+2. `mayasutraaws.py` - Maya Illusion Sutras
+3. `sulbasutraws.py` - Sulba Geometric Construction Sutras
+4. `intersutraws.py` - Inter-Sutra Interaction Engine
+5. `core/operators/mstvq.py` - MSTVQ Stress-Tension Operators
+6. `utilitysutraws3.py` - Performance Tracking Utilities
+7. `visualperformancesutraws2.py` - Performance Visualization
 
-**Total Implementation**: 3,149 lines of production-grade quantum-classical hybrid code
+**No line counts, by the same policy `CLAUDE.md` adopted for the same reason.**
+The figures here were 673 / 634 / 736 / 454 / 525 / 49 / 78 totalling "3,149",
+and by the time anyone checked, `mstvq.py` had moved to 551 and the total to
+3,178 — a number that goes stale on the next edit and that nothing recomputes.
+`wc -l` is one command away:
 
-**Implementation Type**: CODEX-compliant with exact arithmetic, quantum backends (Cirq + CUDAQ), GPU acceleration, and comprehensive invariant checking
+```bash
+wc -l grvqsutraws.py mayasutraaws.py sulbasutraws.py intersutraws.py \
+      core/operators/mstvq.py utilitysutraws3.py visualperformancesutraws2.py
+```
+
+**Implementation Type, as measured — not as claimed.** The header used to read
+"CODEX-compliant with exact arithmetic, quantum backends (Cirq + CUDAQ), GPU
+acceleration, and comprehensive invariant checking". None of that holds
+uniformly:
+
+| file | `Fraction` refs | `cirq` refs | `cudaq` refs | imports cleanly? |
+|---|---|---|---|---|
+| `grvqsutraws.py` | 0 | 26 | 0 | no — `NameError` |
+| `mayasutraaws.py` | 0 | 22 | 4 | no — `NameError` |
+| `sulbasutraws.py` | 0 | 32 | 8 | no — `NameError` |
+| `intersutraws.py` | 0 | 0 | 0 | no — `NameError` |
+| `core/operators/mstvq.py` | 39 | 0 | 0 | no — `ImportError` (relative import) |
+| `utilitysutraws3.py` | 0 | 0 | 0 | no — `NameError` |
+| `visualperformancesutraws2.py` | 0 | 0 | 0 | **yes** |
+
+Six of the seven are class-body fragments saved as modules: `grvqsutraws.py`
+opens with `def grvq_field_solver(self, ...)` annotated `Union[...]` and has
+no import statements at all. Only `mstvq.py` uses `Fraction`; the other six
+contain none, so "exact arithmetic" describes one file of seven.
 
 ---
 
@@ -1387,20 +1414,25 @@ engine.run(iterations=10000, checkpoint_interval=1000)
 
 ## FILE SUMMARY
 
-| File | Lines | Sutras | Category |
-|------|-------|--------|----------|
-| `grvqsutraws.py` | 673 | 1 | GRVQ Field Dynamics |
-| `mayasutraaws.py` | 634 | 3 | Maya Illusion Transforms |
-| `sulbasutraws.py` | 736 | 4 | Sulba Geometric Constructions |
-| `intersutraws.py` | 454 | 3 | Meta-Operations |
-| `core/operators/mstvq.py` | 525 | 4 | MSTVQ Stress-Tension |
-| `utilitysutraws3.py` | 49 | 2 | Performance Tracking |
-| `visualperformancesutraws2.py` | 78 | 1 | Visualization |
-| **TOTAL** | **3,149** | **18** | **7 Categories** |
+| File | Sutras | Category |
+|------|--------|----------|
+| `grvqsutraws.py` | 1 | GRVQ Field Dynamics |
+| `mayasutraaws.py` | 3 | Maya Illusion Transforms |
+| `sulbasutraws.py` | 4 | Sulba Geometric Constructions |
+| `intersutraws.py` | 3 | Meta-Operations |
+| `core/operators/mstvq.py` | 4 | MSTVQ Stress-Tension |
+| `utilitysutraws3.py` | 2 | Performance Tracking |
+| `visualperformancesutraws2.py` | 1 | Visualization |
+| **TOTAL** | **18** | **7 Categories** |
 
-Plus `core/operators/sutra_ops.py` (1,266 lines) with all 29 traditional Vedic sutras.
+The Sutras column is correct — it matches the public definitions in each
+file. The Lines column is gone for the reason given at the top: its total read
+3,149 against a measured 3,178, and `sutra_ops.py` was cited at 1,266 when the
+file has never in its history been that length (1,265 / 1,268 / 1,307 / 1,308 /
+1,316 across revisions). A "Grand Total: 4,415" was derived from both.
 
-**Grand Total: 4,415 lines of production-grade sutra implementations**
+Plus `core/operators/sutra_ops.py`, which holds all 29 traditional Vedic
+sutras.
 
 ---
 
@@ -1428,20 +1460,32 @@ Plus `core/operators/sutra_ops.py` (1,266 lines) with all 29 traditional Vedic s
 
 These 7 specialized files represent the **most advanced, authentic, and complete** implementation of Vedic mathematics in modern computational form:
 
-✅ **Production-grade** - 3,149 lines of rigorous code
-✅ **Quantum-integrated** - Cirq and CUDAQ backends
-✅ **Exact arithmetic** - Fraction-based, zero float contamination
-✅ **CODEX-compliant** - Full invariant checking
-✅ **Philosophically grounded** - Rooted in authentic Vedic concepts
-✅ **HPC-optimized** - Distributed, GPU-accelerated
-✅ **Proto-consciousness ready** - MSTVQ stress-tension framework
-✅ **Comprehensive** - 51 total implementations across 7 categories
+What is actually established, and what is not:
 
-**These are the superior sutra definitions suitable for interactive artifacts and production deployment.**
+| claim | status |
+|---|---|
+| Quantum-integrated (Cirq / CUDAQ) | **partly** — `cirq` appears in 3 of 7 files, `cudaq` in 2. Four files reference neither |
+| Exact arithmetic, zero float contamination | **one file of seven** — only `mstvq.py` uses `Fraction`; the other six contain no reference to it |
+| CODEX-compliant, full invariant checking | **not shown here** — 2 of the 5 MSTVQ classes define `check_invariants`, listing 2 and 4 invariants |
+| Production-grade | **no** — 6 of the 7 files raise on import. The integration example below (`from grvqsutraws import grvq_field_solver`) raises `NameError: name 'Union' is not defined` |
+| HPC-optimized, distributed, GPU-accelerated | **not measured** — no benchmark in this repository supports it |
+| 51 total implementations | **not reproducible** — the document's own lists enumerate 18 here plus 29 in `sutra_ops.py`; the "12 specialized" that would make 51 is enumerated nowhere |
+| Philosophically grounded | not a technical claim; left as written |
+
+The `✅` list this replaces asserted all eight without any of them having been
+run. The Sutras column above and the per-file measurements are what survives
+checking.
 
 ---
 
 **Document Version**: 2.0 - Superior Specialized Implementations
 **Last Updated**: 2026-01-24
 **Source**: 7 specialized sutra files (grvqsutraws, mayasutraaws, sulbasutraws, intersutraws, mstvq, utilities, visualization)
-**Authenticity**: Verified against classical Vedic texts and modern CODEX specification
+**Authenticity**: unverified against texts. The four verification artefacts
+this repository tracks — `scripts/verify_heavy_dependencies.py`,
+`vedic_trainer/scripts/verify_bit_exact.py`,
+`vedic_trainer/scripts/verify_counts.py` and `cymatic_verification.gif` —
+check dependencies, bit-exactness against the upstream kernel, and README
+counts. None compares anything to a classical source. So this line described
+an intention rather than an artefact; naming the texts and where the
+comparison lives would make it checkable.
