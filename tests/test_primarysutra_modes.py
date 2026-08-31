@@ -180,31 +180,73 @@ def test_the_engine_constructs_in_every_mode():
         )
 
 
-def test_no_register_encoding_path_overflows_the_int8_cliff():
-    """Every measurement bit is an `np.int8`; the accumulators must cast it.
+def test_the_repaired_arithmetic_sutras_agree_in_every_mode():
+    """Six sutras whose quantum path computed something other than the sutra.
 
-    Three of the four `sum(bit * 2**i)` sites in `primarysutra.py` were
-    missing the `int()` cast the fourth has. Above x = 127 that raises
-    `OverflowError` on numpy 2, and on numpy 1 wrapped silently to a negative
-    number -- the worse failure, because it returns.
+    Each is exactly determined -- there is one right answer -- and each was
+    wrong in QUANTUM and HYBRID until the register arithmetic below replaced
+    the hand-written circuits:
 
-    `ekanyunena` is pinned by value in the identities test above. The
-    `sankalana` sites at lines 1472 and 1482 cannot be pinned by value yet:
-    `_sankalana_vyavakalanabhyam_quantum` is wrong at every magnitude
-    (9 + 4 -> 17, 2 + 3 -> 1, 100 + 27 -> 55; its carry chain uncomputes with
-    the same Toffoli after `b[i]` has already been modified), so asserting the
-    sum here would red for that reason and blame this line.
+      * sankalana's adder cancelled its own carry with a repeated Toffoli, so
+        the carry-in stayed pinned at a[0]: 9 + 4 -> 17, 2 + 3 -> 1;
+      * gunitasamuccayah XORed partial products, giving a carry-less GF(2)
+        product read in reverse bit order: 6 * 7 -> 18;
+      * samuccayagunitah scaled a shot-frequency reading by an unrelated
+        max_val**2, converging to ~265 where (6 + 7)**2 is 169;
+      * chalana_kalana walked a cyclic CNOT ring, which is not an increment;
+      * shunyam fired on a close to b instead of a close to -b, cut by a
+        hardcoded 0.8 sitting inside the sampling noise;
+      * sesanyankena's codomain was 8 multiples of Sum|c|/8, so the true 17
+        was not in the range of the function at all.
 
-    So this gate asserts only what the cast is responsible for: that crossing
-    127 does not raise. It deliberately does NOT claim the answer is right.
-    Pin the value here once the adder is fixed, and delete this note.
+    The values below span both sides of 127, which is where the np.int8
+    measurement bits used to overflow. That cliff is now pinned by value
+    rather than by "does not raise": the earlier gate could only assert the
+    absence of an OverflowError, because the adder was wrong at every
+    magnitude and a value assertion would have redded for that reason and
+    blamed the int() cast.
     """
     v = ps.VedicSutras()
-    for mode in (ps.SutraMode.QUANTUM, ps.SutraMode.HYBRID):
+    for mode in MODES:
         ctx = ps.SutraContext(mode=mode)
-        for a, b in ((200.0, 50.0), (100.0, 100.0), (255.0, 1.0)):
-            v.sankalana_vyavakalanabhyam(a, b, ctx=ctx)
+        for a, b in ((9, 4), (0, 1), (6, 7), (100, 27), (200, 50), (255, 1)):
+            _check(v.sankalana_vyavakalanabhyam, a + b, float(a), float(b), ctx=ctx)
+            _check(v.sankalana_vyavakalanabhyam, a - b, float(a), float(b),
+                   operation='subtract', ctx=ctx)
+            _check(v.gunitasamuccayah, a * b, float(a), float(b), ctx=ctx)
+            _check(v.samuccayagunitah, (a + b) ** 2, float(a), float(b), ctx=ctx)
+            _check(v.samuccayagunitah, a * a + b * b, float(a), float(b),
+                   operation='sum_product', ctx=ctx)
+            _check(v.shunyam_samyasamuccaye, a + b, float(a), float(b), ctx=ctx)
+        for x, steps, direction in ((2, 3, 1), (5, 2, 1), (13, 7, -1), (0, 3, 1)):
+            _check(v.chalana_kalana, x + steps * direction, float(x),
+                   steps=steps, direction=direction, ctx=ctx)
+        # The last three evaluate NEGATIVE. The accumulator register is
+        # unsigned, so `_quantum_polynomial` offsets it by the total of the
+        # negative terms and subtracts that back at the end; without a
+        # negative-result case here that offset can be deleted and every
+        # other polynomial still passes, which is how it first got past me.
+        for coeffs, x in (([1, 2, 3], 2), ([1, 1, 1, 1, 1], 2), ([3, -2, 1], 5),
+                          ([-5], 1), ([1, -3], 4), ([-2, -1], 3)):
+            expected = sum(c * x ** i for i, c in enumerate(coeffs))
+            _check(v.sesanyankena_caramena, expected,
+                   [float(c) for c in coeffs], float(x), ctx=ctx)
 
+
+def test_inputs_with_no_register_encoding_reach_the_classical_body():
+    """Non-integral scalars must not be silently truncated into a register.
+
+    `bin(int(x))` drops the fractional part, so before the domain guard the
+    quantum paths answered a different question than the one asked:
+    `gunitasamuccayah(6.5, 7.5)` returned 18 where the product is 48.75, and
+    `chalana_kalana(2.5, 1)` returned 7 where the answer is 3.5.
+    """
+    v = ps.VedicSutras()
+    for mode in MODES:
+        ctx = ps.SutraContext(mode=mode)
+        _check(v.gunitasamuccayah, 48.75, 6.5, 7.5, ctx=ctx)
+        _check(v.sankalana_vyavakalanabhyam, 14.0, 9.5, 4.5, ctx=ctx)
+        _check(v.chalana_kalana, 3.5, 2.5, steps=1, ctx=ctx)
 
 def test_nikhilam_hybrid_uses_the_circuit_at_every_width():
     """No magnitude cap silently swaps the algorithm.

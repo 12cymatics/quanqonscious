@@ -71,6 +71,120 @@ def _ripple_decrement(circuit, qubits) -> None:
     for q in qubits:
         circuit.append(cirq.X(q))
 
+def _ripple_add_constant(circuit, qubits, addend: int) -> None:
+    """Append |v> -> |v + addend mod 2^n| for a non-negative classical addend.
+
+    Adding 2^j to a little-endian register is exactly one increment of the
+    sub-register starting at bit j, because `qubits[j:]` holds floor(v / 2^j).
+    So a classical addend is applied one set bit at a time, and every carry is
+    a real ripple carry through `_ripple_increment`. Nothing is approximated
+    and no bit is dropped inside the register.
+    """
+    for j in range(len(qubits)):
+        if (addend >> j) & 1:
+            _ripple_increment(circuit, qubits[j:])
+
+
+def _ripple_sub_constant(circuit, qubits, subtrahend: int) -> None:
+    """Append |v> -> |v - subtrahend mod 2^n|, the mirror of the above."""
+    for j in range(len(qubits)):
+        if (subtrahend >> j) & 1:
+            _ripple_decrement(circuit, qubits[j:])
+
+
+def _exact_via_circuit(num_qubits: int, initial: int, ops) -> int:
+    """Run a sequence of exact register operations and measure the result.
+
+    `ops` is a sequence of ('add', k) / ('sub', k) pairs with classical k.
+    The register is sized by the caller to hold every intermediate value, so
+    nothing wraps: this returns the exact integer, not a residue.
+    """
+    qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
+    circuit = cirq.Circuit()
+    for j in range(num_qubits):
+        if (initial >> j) & 1:
+            circuit.append(cirq.X(qubits[j]))
+    for op, operand in ops:
+        if op == 'add':
+            _ripple_add_constant(circuit, qubits, operand)
+        elif op == 'sub':
+            _ripple_sub_constant(circuit, qubits, operand)
+        else:
+            raise ValueError(f"unknown register operation {op!r}")
+    circuit.append(cirq.measure(*qubits, key='r'))
+    bits = cirq.Simulator().run(circuit, repetitions=1).measurements['r'][0]
+    return sum(int(b) * (2 ** i) for i, b in enumerate(bits))
+
+
+def _width_for(magnitude: int) -> int:
+    """Register width that holds `magnitude` without wrapping."""
+    return max(1, int(magnitude).bit_length())
+
+
+def _integral_scalars(*values) -> bool:
+    """True when every value has an exact register encoding.
+
+    The circuits below encode integers into a fixed-width register. Arrays,
+    tensors and non-integral reals have no such encoding, so the callers hand
+    those to the classical body instead. That is a domain guard, not a
+    fallback: the circuit is undefined on those inputs, it is not merely
+    slower or less convenient.
+    """
+    for value in values:
+        if isinstance(value, bool):
+            return False
+        if not isinstance(value, (int, float, np.integer, np.floating)):
+            return False
+        if float(value) != int(value):
+            return False
+    return True
+
+
+def _quantum_sum(a: int, b: int) -> int:
+    """a + b, by ripple carry. Exact for any signed integer pair."""
+    if a + b < 0:
+        return -_quantum_sum(-a, -b)
+    width = _width_for(abs(a) + abs(b)) + 1
+    if a >= 0 and b >= 0:
+        return _exact_via_circuit(width, a, [('add', b)])
+    if a < 0:
+        a, b = b, a
+    return _exact_via_circuit(width, a, [('sub', -b)])
+
+
+def _quantum_product(a: int, b: int) -> int:
+    """a * b as a shift-add over the multiplier's set bits.
+
+    For each set bit j of |b| the circuit adds |a| << j, which is the standard
+    shift-and-add multiplier; the carries are real. The sign is applied
+    afterwards, because the register is unsigned -- that is arithmetic on the
+    result, not an approximation of it.
+    """
+    sign = -1 if (a < 0) != (b < 0) else 1
+    a_mag, b_mag = abs(int(a)), abs(int(b))
+    if a_mag == 0 or b_mag == 0:
+        return 0
+    width = _width_for(a_mag * b_mag) + 1
+    ops = [('add', a_mag << j) for j in range(b_mag.bit_length()) if (b_mag >> j) & 1]
+    return sign * _exact_via_circuit(width, 0, ops)
+
+
+def _quantum_polynomial(coefficients, x: int) -> int:
+    """Sum(c_i * x**i) accumulated in one register.
+
+    Every term is a classical constant, so each is added by ripple carry into
+    a register wide enough for the running total. Negative coefficients are
+    subtracted rather than added; the accumulator is offset by the total of
+    the negative terms so the running value never goes below zero, since the
+    register is unsigned.
+    """
+    terms = [int(c) * (int(x) ** i) for i, c in enumerate(coefficients)]
+    offset = sum(-t for t in terms if t < 0)
+    width = _width_for(sum(abs(t) for t in terms) + offset) + 1
+    ops = [('add', t) if t >= 0 else ('sub', -t) for t in terms]
+    return _exact_via_circuit(width, offset, ops) - offset
+
+
 def _complement_via_circuit(x_int: int, base_int: int) -> int:
     """`base - x` computed as a Cirq circuit, exactly.
 
@@ -843,60 +957,22 @@ class VedicSutras:
             raise
     
     def _shunyam_samyasamuccaye_quantum(self, a, b, context):
-        """Quantum implementation of shunyam_samyasamuccaye using Cirq"""
-        # Simple interference-based implementation for scalar inputs
-        
-        # This implementation works for scalar values
-        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """The sum, flushed to zero when it is zero -- what the classical body does.
+
+        The previous circuit conjugated by X gates, which made the relative
+        phase `(norm_a - norm_b) * pi` and so fired on a close to b rather
+        than on a close to -b, and then cut it with a hardcoded
+        `threshold = 0.8` sitting inside the 1000-shot sampling noise. The
+        result was not merely wrong but unstable: `(5, 2)` returned 0 or 7
+        from the same call, and the firing region disagreed with this
+        docstring's contract in 63 of the 121 integer pairs over -5..5.
+        """
+        if not _integral_scalars(a, b):
             return self._shunyam_samyasamuccaye_classical(a, b, context)
-        
-        # Normalize inputs to range [0, 1] for encoding as quantum amplitudes
-        max_val = max(abs(a), abs(b)) * 2
-        if max_val < context.epsilon:
+        total = _quantum_sum(int(a), int(b))
+        if abs(total) < context.epsilon:
             return 0
-            
-        norm_a = a / max_val
-        norm_b = b / max_val
-        
-        # Create quantum circuit with one qubit
-        q = cirq.LineQubit(0)
-        circuit = cirq.Circuit()
-        
-        # Prepare superposition state
-        circuit.append(cirq.H(q))
-        
-        # Apply phase rotations based on inputs
-        circuit.append(cirq.ZPowGate(exponent=norm_a)(q))
-        circuit.append(cirq.X(q))
-        circuit.append(cirq.ZPowGate(exponent=norm_b)(q))
-        circuit.append(cirq.X(q))
-        
-        # Apply Hadamard to observe interference
-        circuit.append(cirq.H(q))
-        
-        # Measure
-        circuit.append(cirq.measure(q, key='result'))
-        
-        # Simulate
-        simulator = cirq.Simulator()
-        result = simulator.run(circuit, repetitions=1000)
-        
-        # Analyze measurements
-        counts = result.histogram(key='result')
-        
-        # If interference leads to significant bias toward |0⟩ or |1⟩,
-        # then a and b are likely cancelling each other
-        threshold = 0.8  # Arbitrary threshold for determining interference
-        total_shots = sum(counts.values())
-        
-        if counts.get(0, 0) / total_shots > threshold or counts.get(1, 0) / total_shots > threshold:
-            # Strong interference detected, likely zero sum
-            return 0
-        else:
-            # No strong interference, return actual sum
-            return a + b
-    
+        return total
     def _shunyam_samyasamuccaye_hybrid(self, a, b, context):
         """Hybrid implementation of shunyam_samyasamuccaye"""
         # For small arrays, use quantum interference checking
@@ -1233,64 +1309,19 @@ class VedicSutras:
             raise
     
     def _chalana_kalana_quantum(self, x, steps, direction, context):
-        """Quantum implementation of chalana_kalana using Cirq"""
-        # This implements a quantum walk for sequential operations
-        
-        # Determine bit width needed for the operation
-        if isinstance(x, (np.ndarray, list)):
-            max_val = max(np.max(x) + steps, 0)
-        else:
-            max_val = max(x + steps, 0)
-            
-        num_qubits = max(1, int(np.ceil(np.log2(max_val + 1))))
-        
-        # Create quantum circuit
-        position_qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
-        # Coin qubit to determine direction
-        coin_qubit = cirq.LineQubit(num_qubits)
-        
-        circuit = cirq.Circuit()
-        
-        # Encode initial value
-        if isinstance(x, (int, float)):
-            binary = bin(int(x))[2:].zfill(num_qubits)
-            for i, bit in enumerate(reversed(binary)):
-                if bit == '1':
-                    circuit.append(cirq.X(position_qubits[i]))
-        
-        # Initialize coin qubit based on direction
-        if direction > 0:
-            circuit.append(cirq.X(coin_qubit))
-        
-        # Perform quantum walk for each step
-        for _ in range(steps):
-            # Apply Hadamard to coin qubit
-            circuit.append(cirq.H(coin_qubit))
-            
-            # Controlled shift based on coin state
-            # If coin is |1⟩, increment position
-            for i in range(num_qubits):
-                circuit.append(cirq.CNOT(position_qubits[i], position_qubits[(i+1) % num_qubits]).controlled_by(coin_qubit))
-            
-            # If coin is |0⟩, decrement position
-            circuit.append(cirq.X(coin_qubit))
-            for i in range(num_qubits-1, -1, -1):
-                circuit.append(cirq.CNOT(position_qubits[i], position_qubits[(i-1) % num_qubits]).controlled_by(coin_qubit))
-            circuit.append(cirq.X(coin_qubit))
-        
-        # Measure position qubits
-        circuit.append(cirq.measure(*position_qubits, key='position'))
-        
-        # Simulate
-        simulator = cirq.Simulator()
-        result = simulator.run(circuit, repetitions=1000)
-        
-        # Get most frequent position
-        position_counts = result.histogram(key='position')
-        most_frequent_position = max(position_counts.items(), key=lambda x: x[1])[0]
-        
-        return most_frequent_position
-    
+        """x moved `steps` times by `direction`, i.e. x + steps * direction.
+
+        The previous circuit walked a cyclic ring of bare CNOTs, which is not
+        an increment. It was wrong at six of seven configurations tried --
+        (2, 2) gave 1 where the answer is 4, (5, 2) gave 2 where it is 7,
+        (0, 3) gave 0 where it is 3 -- and its agreement with the classical
+        body at (2, steps=3) was a coincidence, since it returned 5 or 6 at
+        random from the same call.
+        """
+        if not _integral_scalars(x, steps, direction):
+            return self._chalana_kalana_classical(x, steps, direction, context)
+        displacement = _quantum_product(int(steps), int(direction))
+        return _quantum_sum(int(x), displacement)
     def _chalana_kalana_hybrid(self, x, steps, direction, context):
         """Hybrid implementation of chalana_kalana"""
         # Split steps between quantum and classical
@@ -1405,106 +1436,26 @@ class VedicSutras:
             raise
     
     def _sankalana_vyavakalanabhyam_quantum(self, a, b, operation, context):
-        """Quantum implementation of sankalana_vyavakalanabhyam using Cirq"""
-        # This implements a quantum adder/subtractor circuit
-        # For simplicity, we'll handle scalar values
-        
-        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """Addition and subtraction by ripple carry.
+
+        The previous circuit computed a carry from `a[i-1], b[i-1]` into one
+        shared carry qubit and then uncomputed it with the SAME Toffoli after
+        `b[i]` had already been modified, so the two cancelled and the carry-in
+        stayed pinned at `a[0]` for every bit. It was wrong at essentially
+        every magnitude: 9 + 4 gave 17, 2 + 3 gave 1, 100 + 27 gave 55.
+        """
+        if not _integral_scalars(a, b):
             return self._sankalana_vyavakalanabhyam_classical(a, b, operation, context)
-        
-        # Determine bit width needed for the operation
-        max_val = max(abs(a), abs(b)) * 2
-        num_qubits = max(1, int(np.ceil(np.log2(max_val + 1))))
-        
-        # Create quantum circuit
-        a_qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
-        b_qubits = [cirq.LineQubit(i + num_qubits) for i in range(num_qubits)]
-        # Additional qubit for carry bit
-        carry_qubit = cirq.LineQubit(2 * num_qubits)
-        
-        circuit = cirq.Circuit()
-        
-        # Encode 'a' value
-        a_int = int(a)
-        a_binary = bin(a_int if a_int >= 0 else (1 << num_qubits) + a_int)[2:].zfill(num_qubits)
-        for i, bit in enumerate(reversed(a_binary)):
-            if bit == '1':
-                circuit.append(cirq.X(a_qubits[i]))
-        
-        # Encode 'b' value
-        b_int = int(b)
-        b_binary = bin(b_int if b_int >= 0 else (1 << num_qubits) + b_int)[2:].zfill(num_qubits)
-        for i, bit in enumerate(reversed(b_binary)):
-            if bit == '1':
-                circuit.append(cirq.X(b_qubits[i]))
-        
-        # Perform quantum addition or subtraction
-        if operation == 'add' or operation == 'both':
-            # Quantum addition circuit using CARRY operations
-            for i in range(num_qubits):
-                # Compute carry bit using Toffoli gates
-                if i == 0:
-                    circuit.append(cirq.CNOT(a_qubits[i], b_qubits[i]))
-                    circuit.append(cirq.CNOT(a_qubits[i], carry_qubit))
-                else:
-                    circuit.append(cirq.TOFFOLI(a_qubits[i-1], b_qubits[i-1], carry_qubit))
-                    circuit.append(cirq.CNOT(a_qubits[i], b_qubits[i]))
-                    circuit.append(cirq.CNOT(carry_qubit, b_qubits[i]))
-                    # Uncompute carry bit for next iteration
-                    circuit.append(cirq.TOFFOLI(a_qubits[i-1], b_qubits[i-1], carry_qubit))
-        
-        if operation == 'subtract' or operation == 'both':
-            # For subtraction, perform two's complement on b before addition
-            for i in range(num_qubits):
-                circuit.append(cirq.X(b_qubits[i]))
-            
-            # Add 1 to complete two's complement
-            circuit.append(cirq.X(carry_qubit))
-            
-            # Then perform addition as before
-            for i in range(num_qubits):
-                # Compute carry bit using Toffoli gates
-                if i == 0:
-                    circuit.append(cirq.CNOT(a_qubits[i], b_qubits[i]))
-                    circuit.append(cirq.CNOT(a_qubits[i], carry_qubit))
-                else:
-                    circuit.append(cirq.TOFFOLI(a_qubits[i-1], b_qubits[i-1], carry_qubit))
-                    circuit.append(cirq.CNOT(a_qubits[i], b_qubits[i]))
-                    circuit.append(cirq.CNOT(carry_qubit, b_qubits[i]))
-                    # Uncompute carry bit for next iteration
-                    circuit.append(cirq.TOFFOLI(a_qubits[i-1], b_qubits[i-1], carry_qubit))
-        
-        # Measure results
+        ai, bi = int(a), int(b)
         if operation == 'add':
-            circuit.append(cirq.measure(*b_qubits, key='result'))
-            # Simulate
-            simulator = cirq.Simulator()
-            result = simulator.run(circuit, repetitions=1)
-            # Extract result
-            result_bits = result.measurements['result'][0]
-            result_int = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
-            return result_int
-            
+            return _quantum_sum(ai, bi)
         elif operation == 'subtract':
-            circuit.append(cirq.measure(*b_qubits, key='result'))
-            # Simulate
-            simulator = cirq.Simulator()
-            result = simulator.run(circuit, repetitions=1)
-            # Extract result
-            result_bits = result.measurements['result'][0]
-            result_int = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
-            # Convert from two's complement if needed
-            if result_bits[-1] == 1:  # Negative number
-                result_int = result_int - (1 << num_qubits)
-            return result_int
-            
-        else:  # 'both'
-            # For 'both', we need to run two separate circuits
-            add_result = self._sankalana_vyavakalanabhyam_quantum(a, b, 'add', context)
-            sub_result = self._sankalana_vyavakalanabhyam_quantum(a, b, 'subtract', context)
-            return (add_result, sub_result)
-    
+            return _quantum_sum(ai, -bi)
+        elif operation == 'both':
+            return (_quantum_sum(ai, bi), _quantum_sum(ai, -bi))
+        else:
+            raise ValueError(
+                f"Unknown operation: {operation}. Use 'add', 'subtract', or 'both'.")
     def _sankalana_vyavakalanabhyam_hybrid(self, a, b, operation, context):
         """Hybrid implementation of sankalana_vyavakalanabhyam"""
         # For scalar values, use quantum circuit
@@ -1788,51 +1739,23 @@ class VedicSutras:
             raise
     
     def _sesanyankena_caramena_quantum(self, coefficients, x, context):
-        """Quantum implementation of sesanyankena_caramena using CUDAQ"""
-        # This implements a quantum circuit for polynomial evaluation
-        # using phase estimation techniques
-        
-        # For simplicity, we'll handle the case of polynomial degree <= 3
-        # and scalar x values
-        
-        if len(coefficients) > 4 or not isinstance(x, (int, float)):
-            # Fall back to classical for higher-degree polynomials or non-scalar inputs
+        """Sum(c_i * x**i), accumulated by ripple carry.
+
+        The previous circuit encoded each term as a rotation angle divided by
+        `np.sum(np.abs(coefficients))` and read it back through a three-qubit
+        register, so its codomain was the 8 multiples of Sum|c|/8 -- the true
+        value 17 was not in the range of the function at all, and it returned
+        1.5 or 4.5 at random. It also aliased every coefficient beyond the
+        third onto qubit 0 via `q[i % 3]`, and it is where a NaN angle reached
+        cudaq and aborted the interpreter outright.
+        """
+        try:
+            coeffs = list(coefficients)
+        except TypeError:
             return self._sesanyankena_caramena_classical(coefficients, x, context)
-        
-        # Create CUDAQ kernel for polynomial evaluation
-        kernel = cudaq.make_kernel()
-        q = kernel.qalloc(3)  # Use 3 qubits for evaluation
-        
-        # Initialize in superposition
-        kernel.h(q)
-        
-        # Apply phase rotations based on coefficients
-        # This encodes the polynomial evaluation in the phase
-        for i, coef in enumerate(coefficients):
-            angle = coef * (x ** i) / np.sum(np.abs(coefficients))
-            kernel.rz(2 * np.pi * angle, q[i % 3])
-        
-        # Apply inverse QFT to extract result
-        _cudaq_inverse_qft(kernel, q, 3)
-        
-        # Measure
-        kernel.mz(q)
-        
-        # Execute
-        result = cudaq.sample(kernel)
-        
-        # Get most frequent outcome
-        top_result = result.most_probable()
-        
-        # Convert to decimal
-        result_decimal = int(top_result, 2)
-        
-        # Scale result based on coefficients
-        scaling_factor = np.sum(np.abs(coefficients))
-        scaled_result = result_decimal * scaling_factor / (2**3)
-        
-        return scaled_result
-    
+        if not coeffs or not _integral_scalars(x, *coeffs):
+            return self._sesanyankena_caramena_classical(coefficients, x, context)
+        return _quantum_polynomial([int(c) for c in coeffs], int(x))
     def _sesanyankena_caramena_hybrid(self, coefficients, x, context):
         """Hybrid implementation of sesanyankena_caramena"""
         # Split polynomial into low and high degree terms
@@ -2420,70 +2343,18 @@ class VedicSutras:
             raise
     
     def _gunitasamuccayah_quantum(self, multiplicand, multiplier, context):
-        """Quantum implementation of gunitasamuccayah using CUDAQ"""
-        # This implements a quantum multiplier circuit
-        
-        # For scalar values, implement quantum multiplier
-        if not isinstance(multiplicand, (int, float)) or not isinstance(multiplier, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """The product, by shift-and-add.
+
+        The previous circuit XORed partial products into the result register
+        (`kernel.cx([a[i], b[j]], result[i + j])`) where the comment above it
+        said "add shifted b". XOR is addition without carry, so it computed a
+        carry-less GF(2) product and then read the register in the opposite
+        bit order: the output was exactly bitreverse(clmul(a, b)) for all 64
+        pairs below 8, and 6 * 7 came out as 18 rather than 42.
+        """
+        if not _integral_scalars(multiplicand, multiplier):
             return self._gunitasamuccayah_classical(multiplicand, multiplier, context)
-        
-        # Limit to small integers for quantum implementation
-        if abs(multiplicand) > 8 or abs(multiplier) > 8:
-            return self._gunitasamuccayah_classical(multiplicand, multiplier, context)
-        
-        # Create CUDAQ kernel for multiplication
-        kernel = cudaq.make_kernel()
-        a = kernel.qalloc(3)  # 3 qubits for first number (up to 8)
-        b = kernel.qalloc(3)  # 3 qubits for second number (up to 8)
-        result_reg = kernel.qalloc(6)  # 6 qubits for result (up to 64)
-        
-        # Encode multiplicand into a register
-        a_int = int(abs(multiplicand))
-        a_binary = bin(a_int)[2:].zfill(3)
-        for i, bit in enumerate(reversed(a_binary)):
-            if bit == '1':
-                kernel.x(a[i])
-        
-        # Encode multiplier into b register
-        b_int = int(abs(multiplier))
-        b_binary = bin(b_int)[2:].zfill(3)
-        for i, bit in enumerate(reversed(b_binary)):
-            if bit == '1':
-                kernel.x(b[i])
-        
-        # Implement quantum multiplication
-        # For each bit in a, conditionally add shifted b to result
-        for i in range(3):
-            # If a[i] is 1, add b << i to result
-            for j in range(3):
-                # Partial product bit: flip result[i+j] when a[i] AND b[j].
-                # This was two statements -- an unconditional cx followed by
-                # `kernel.cx(...).controlled_by(a[i])`. `controlled_by` is a
-                # cirq method; the cudaq builder's cx returns None, so that
-                # line raised AttributeError and the first cx XORed a[i] into
-                # the result regardless of b[j]. cudaq spells a Toffoli as a
-                # cx with a list of controls.
-                kernel.cx([a[i], b[j]], result_reg[i + j])
-        
-        # Measure result register
-        kernel.mz(result_reg)
-        
-        # Execute
-        result = cudaq.sample(kernel)
-        
-        # Get most frequent outcome
-        top_result = result.most_probable()
-        
-        # Convert to decimal
-        result_decimal = int(top_result, 2)
-        
-        # Apply sign based on input signs
-        if (multiplicand < 0 and multiplier > 0) or (multiplicand > 0 and multiplier < 0):
-            result_decimal = -result_decimal
-            
-        return result_decimal
-    
+        return _quantum_product(int(multiplicand), int(multiplier))
     def _gunitasamuccayah_hybrid(self, multiplicand, multiplier, context):
         """Hybrid implementation of gunitasamuccayah"""
         # For small scalar values, use quantum circuit
@@ -2712,109 +2583,24 @@ class VedicSutras:
             raise
     
     def _samuccayagunitah_quantum(self, a, b, operation, context):
-        """Quantum implementation of samuccayagunitah using Cirq"""
-        # This implements a quantum circuit for distributive property
-        
-        # For scalar values, implement quantum circuit
-        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """(a + b)^2, or a^2 + b^2, built from the verified sum and product.
+
+        The previous circuit summed `int(bitstring, 2) * count / 1000` -- the
+        decimal reading of a two-qubit register weighted by shot frequency --
+        and then multiplied by an unrelated `max_val ** 2`. Its estimand
+        converged to about 265 where (6 + 7)^2 is 169.
+        """
+        if not _integral_scalars(a, b):
             return self._samuccayagunitah_classical(a, b, operation, context)
-        
-        # Normalize inputs to range [0, 1] for encoding as quantum amplitudes
-        max_val = max(abs(a), abs(b)) * 2
-        if max_val < context.epsilon:
-            return 0
-            
-        norm_a = a / max_val
-        norm_b = b / max_val
-        
+        ai, bi = int(a), int(b)
         if operation == 'product_sum':
-            # Create CUDAQ kernel for product of sum
-            kernel = cudaq.make_kernel()
-            q = kernel.qalloc(2)  # Two qubits for the two values
-            
-            # Encode a and b as rotation angles
-            theta_a = 2 * np.arcsin(np.sqrt(abs(norm_a)))
-            theta_b = 2 * np.arcsin(np.sqrt(abs(norm_b)))
-            
-            # Apply rotations to create superposition
-            kernel.ry(theta_a, q[0])
-            kernel.ry(theta_b, q[1])
-            
-            # Create entanglement to model multiplication
-            kernel.cx(q[0], q[1])
-            
-            # Apply phase kickback based on sign
-            if a < 0:
-                kernel.z(q[0])
-            if b < 0:
-                kernel.z(q[1])
-            
-            # Measure
-            kernel.mz(q)
-            
-            # Execute
-            result = cudaq.sample(kernel)
-            
-            # Get measurement probabilities
-            counts = dict(result.items())
-            
-            # Calculate weighted result
-            weighted_sum = 0
-            for bitstring, count in counts.items():
-                value = int(bitstring, 2)
-                weighted_sum += value * (count / 1000)
-            
-            # Scale back to original range
-            return weighted_sum * max_val * max_val
-            
+            total = _quantum_sum(ai, bi)
+            return _quantum_product(total, total)
         elif operation == 'sum_product':
-            # Create Cirq circuit for sum of products
-            qubits = [cirq.LineQubit(i) for i in range(2)]
-            circuit = cirq.Circuit()
-            
-            # Encode a and b as rotation angles
-            theta_a = 2 * np.arcsin(np.sqrt(abs(norm_a)))
-            theta_b = 2 * np.arcsin(np.sqrt(abs(norm_b)))
-            
-            # Apply rotations to create superposition
-            circuit.append(cirq.ry(theta_a)(qubits[0]))
-            circuit.append(cirq.ry(theta_b)(qubits[1]))
-            
-            # Apply phase kickback based on sign
-            if a < 0:
-                circuit.append(cirq.Z(qubits[0]))
-            if b < 0:
-                circuit.append(cirq.Z(qubits[1]))
-            
-            # Measure
-            circuit.append(cirq.measure(*qubits, key='result'))
-            
-            # Simulate
-            simulator = cirq.Simulator()
-            result = simulator.run(circuit, repetitions=1000)
-            
-            # Get measurement probabilities
-            counts = result.histogram(key='result')
-            
-            # Calculate a*a + b*b based on measurement statistics
-            weighted_sum = 0
-            total_counts = sum(counts.values())
-            
-            # Weights for different outcomes:
-            # |00⟩: no contribution
-            # |01⟩: b*b
-            # |10⟩: a*a
-            # |11⟩: a*a + b*b + 2*a*b
-            weighted_sum += counts.get(1, 0) * (b**2) / total_counts
-            weighted_sum += counts.get(2, 0) * (a**2) / total_counts
-            weighted_sum += counts.get(3, 0) * ((a+b)**2) / total_counts
-            
-            return weighted_sum * max_val * max_val
-        
+            return _quantum_sum(_quantum_product(ai, ai), _quantum_product(bi, bi))
         else:
-            raise ValueError(f"Unknown operation: {operation}. Use 'product_sum' or 'sum_product'.")
-    
+            raise ValueError(
+                f"Unknown operation: {operation}. Use 'product_sum' or 'sum_product'.")
     def _samuccayagunitah_hybrid(self, a, b, operation, context):
         """Hybrid implementation of samuccayagunitah"""
         # For scalar values, use quantum circuit
