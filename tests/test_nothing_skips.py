@@ -50,6 +50,12 @@ FORBIDDEN = frozenset({
     "unittest.skipIf",
     "unittest.skipUnless",
     "unittest.SkipTest",
+    #: xfail is the same bypass wearing a different word: the test still runs,
+    #: still fails, and still reports green. `xfail(strict=False)` additionally
+    #: reports green when the code starts WORKING, so it hides the fix as well
+    #: as the defect.
+    "pytest.xfail",
+    "pytest.mark.xfail",
 })
 
 
@@ -105,7 +111,10 @@ def test_the_detector_matches_the_real_mechanisms():
                   "pytest.skip('no gpu')",
                   "@pytest.mark.skipif(not HAVE_LEAN, reason='x')\ndef test_x(): pass",
                   "@pytest.mark.skip\ndef test_y(): pass",
-                  "pytestmark = pytest.mark.skipif(True, reason='x')"):
+                  "pytestmark = pytest.mark.skipif(True, reason='x')",
+                  "@pytest.mark.xfail(reason='known broken')\ndef test_z(): pass",
+                  "@pytest.mark.xfail\ndef test_w(): pass",
+                  "pytest.xfail('not implemented')"):
         assert skips_in(probe), f"detector missed: {probe}"
 
 
@@ -114,18 +123,21 @@ def test_the_detector_ignores_prose_that_names_the_mechanisms():
     it has to write `pytest.importorskip` down in order to forbid it."""
     for prose in ('"""This file used to call pytest.importorskip here."""',
                   "# pytest.mark.skipif was removed from this module",
-                  "MESSAGE = 'do not use pytest.skip in this repository'"):
+                  "MESSAGE = 'do not use pytest.skip in this repository'",
+                  "# pytest.mark.xfail is forbidden here too"):
         assert not skips_in(prose), f"detector flagged prose: {prose}"
 
 
-def test_no_tracked_test_skips_itself():
+def test_no_tracked_test_skips_or_xfails_itself():
     found = offenders()
     assert not found, (
-        "a test can skip itself:\n  " + "\n  ".join(found)
-        + "\n\nA skip reports as not-run and reads as covered. Install what "
+        "a test can skip or xfail itself:\n  " + "\n  ".join(found)
+        + "\n\nA skip reports as not-run and reads as covered; an xfail "
+          "reports as green whether the code is broken or fixed. Install what "
           "the test needs, or — if it is probing the environment rather than "
           "testing this code — make it a script that exits non-zero, as "
-          "pcfe-v3/tests/check_cudaq_environment.py does.")
+          "pcfe-v3/tests/check_cudaq_environment.py does. See "
+          "'Tests are not to be bypassed' in CLAUDE.md.")
 
 
 if __name__ == "__main__":

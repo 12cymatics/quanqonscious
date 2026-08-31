@@ -19,6 +19,7 @@
 4. [Critical Conventions](#critical-conventions)
 5. [Development Workflows](#development-workflows)
 6. [Testing Philosophy](#testing-philosophy)
+   - [Tests are not to be bypassed](#tests-are-not-to-be-bypassed)
 7. [Key Technologies & Dependencies](#key-technologies--dependencies)
 8. [Common Tasks Guide](#common-tasks-guide)
 9. [Pitfalls to Avoid](#pitfalls-to-avoid)
@@ -43,6 +44,12 @@ When working with this codebase, understand these fundamental principles:
 4. **29 Vedic Sutras**: All 16 main + 13 sub-sutras must be implemented and tested. Missing or broken sutras are critical failures.
 
 5. **Three Execution Modes**: Most modules support CLASSICAL, QUANTUM, and HYBRID execution modes.
+
+6. **Tests are not to be bypassed.** Never make a red test green by skipping,
+   guarding, widening a tolerance, or narrowing the inputs. Every gate must be
+   proven able to fail before it is trusted. Read
+   [Tests are not to be bypassed](#tests-are-not-to-be-bypassed) before touching
+   any test or adding one.
 
 ### First Steps
 
@@ -534,6 +541,121 @@ git push -u origin claude/add-claude-documentation-hL5KA
 ---
 
 ## Testing Philosophy
+
+### Tests are not to be bypassed
+
+**A failing test means the code is wrong until proven otherwise.** Never make a
+test pass by weakening what it checks. Specifically, never:
+
+- delete, comment out, or soften an assertion;
+- add `pytest.skip`, `skipif`, `importorskip`, or `xfail`;
+- wrap the call in `try/except` and swallow the failure;
+- guard an import so the module "works" without its real dependencies;
+- loosen an exact comparison into a tolerance, or widen an existing one;
+- narrow the input range so the failing case is no longer reached;
+- raise a shot count, add a retry, or reorder cases until a flake disappears;
+- mark a test "legacy", "quick", "smoke", or "minimal" and stop running it.
+
+If a test is genuinely wrong, fix it **and say so explicitly, with the
+measurement that shows the expectation was wrong.** That happens: five
+expectations in `test_all_29_sutras.cpp` were mine, not the code's -- among them
+`factor_common`, which states `k*sum(v) == sum(k*v)` rather than factoring the
+term out, and `to_continued_fraction`, which returns the canonical `[3;7,16]`
+for 355/113 where the equivalent `[3;7,15,1]` had been written. Each was
+checked against the implementation before the test was changed. Changing a test
+because it is red, without establishing which side is wrong, is the bypass this
+section exists to prevent.
+
+### Every gate must be proven able to fail
+
+A gate never seen to fail is not known to work. Before trusting a new test:
+inject the real defect it claims to catch, run it, **require RED**; remove the
+defect, **require GREEN**. Record both outcomes. Inject one defect at a time --
+two at once can cancel.
+
+Two gates in this repository looked sound and were not:
+
+1. **Algebraic cancellation hid a wrong quotient.** `_paravartya_yojayet_quantum`
+   recombines as `q + r/d` where `r` is computed as `n - q*d`. That is an
+   identity: for *any* `q` the result is `n/d`, because an error in `q` cancels
+   exactly against the `r` derived from it. Dropping the highest quotient bit
+   left the whole suite green. What makes `q` meaningful is the invariant
+   `0 <= r < |d|`, and nothing tested it -- so
+   `test_quantum_divmod_returns_the_true_quotient_and_remainder` now asserts the
+   contract directly against Python's `divmod`.
+2. **A one-sided input range hid a load-bearing branch.** Deleting the
+   negative-term offset in `_quantum_polynomial` passed, because every
+   polynomial in the test evaluated positive, where intermediate wraparound is
+   harmless mod 2**n. Three negative-result polynomials now cover it.
+
+### "Does not raise" is not a correctness test
+
+`test_every_sutra_runs_in_every_mode` asserts only that nothing throws. It
+passed while six sutras returned wrong answers -- `gunitasamuccayah` gave 18 for
+6*7, `sesanyankena` gave 1.5 where Horner gives 17. Liveness checks are worth
+having, but never count one as coverage of a value. Where a value is exactly
+determined, pin the value.
+
+### Do not trust self-tests shipped beside the code
+
+`vedic_sutras_complete.hpp` reports **29/29**. That is 29 single-case
+assertions written next to the code they check, and several assert a property
+rather than a value: `S1_Ekadhikena::test()` checks only that the period of
+1/19 has *length* 18, never that the digits are right. Two functions in that
+header were badly wrong -- `divide_by_nine_ender` on 11 of the first 12
+nine-enders, and `divisibility_by_osculation` did not terminate at all -- and
+both passed the suite, because `test()` exercised neither. Verify against a
+reference computed independently, not against the implementation's own opinion.
+
+### Choose bounds that cross the cliff
+
+If a limit, cap, or type boundary exists, test both sides of it. Two defects
+hid behind bounds that stopped short:
+
+- an `np.int8` overflow at x = 128 sat behind `x in (1, 5, 9, 16, 31)`;
+- a `hybrid_base_limit = 1024` sat behind bases 10 and 100.
+
+### Comparisons and counts
+
+- **`float(got) == float(expected)` erases type divergence.** It cannot see an
+  `int` where a `float` was expected, which was the only symptom of a silent
+  algorithm switch. Assert the type when the type is part of the contract.
+- **A shot count is not a tolerance.** `assert len(counts) == 1` over 200 shots
+  passes with high probability even when a circuit leaks amplitude elsewhere.
+  Where the state is exactly checkable, read the state vector.
+- **Count distinct code paths, not parameter combinations.** `SutraMode`
+  declares five members but only three are dispatched: `MAYA_ILLUSION` and
+  `SULBA` fall through to the classical body, so 32 of "80 (sutra, mode) pairs"
+  re-run code the CLASSICAL 16 already cover. The honest figure is 48.
+
+### Refusing is not falling back
+
+When a computation cannot be done exactly, **raise and say why**. Do not
+substitute a different algorithm's answer and return it as though the requested
+one produced it. `_exact_via_circuit` refuses above 24 qubits and names the
+width, because a 31-qubit register is a 16 GiB state vector; CLASSICAL still
+answers, so the choice stays with the caller. A silent substitution is the
+defect; an explicit refusal is not.
+
+### Never guard the import
+
+`primarysutra.py` hard-imports cirq, cudaq and torch, and its
+`_enforce_heavy_dependencies()` treats them as requirements. That is deliberate.
+Install them in CI (see the `primarysutra` job in
+`.github/workflows/submit-pypi.yml`) rather than making the module importable
+without them -- guarding the import is what let eight of sixteen sutras raise in
+QUANTUM mode without anything noticing, and `tests/test_nothing_skips.py` will
+reject it.
+
+### Before you claim a test passes
+
+- [ ] The assertion checks a **value**, not merely that nothing raised
+- [ ] The gate has been regeneration-tested: defect injected -> RED, removed -> GREEN
+- [ ] Inputs cross every cap, cliff, and type boundary the code contains
+- [ ] No skip, xfail, swallowed exception, guarded import, or widened tolerance
+- [ ] Expected values come from an **independent** reference, not from the code under test
+- [ ] Any test you changed is accompanied by the measurement proving the old expectation wrong
+
 
 ### Test Structure
 
