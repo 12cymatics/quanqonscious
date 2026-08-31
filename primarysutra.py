@@ -9,6 +9,7 @@ import scipy.linalg as la
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from fractions import Fraction
 from dataclasses import dataclass
 from enum import Enum
 from types import ModuleType
@@ -21,27 +22,6 @@ import sympy as sp
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("VedicSutras")
 
-
-def _cudaq_inverse_qft(kernel, q, n: int) -> None:
-    """Inverse quantum Fourier transform on the first `n` qubits of `q`.
-
-    `cudaq.inverseFQFT(kernel, q)` -- which this file called at two sites --
-    does not exist and never has: `hasattr(cudaq, "inverseFQFT")` is False on
-    CUDA-Q 0.15.1, and nothing in the package exports anything resembling it.
-    Both call sites therefore raised `AttributeError` the moment they were
-    reached, which is to say the quantum paths of `paravartya_yojayet` and
-    `sesanyankena_caramena` had never been executed.
-
-    Built from the gates the kernel builder actually provides. Verified as a
-    genuine inverse: for every basis state of a 3-qubit register, QFT followed
-    by this transform recovers the input in 400/400 shots.
-    """
-    for i in range(n // 2):
-        kernel.swap(q[i], q[n - 1 - i])
-    for i in reversed(range(n)):
-        for j in reversed(range(i + 1, n)):
-            kernel.cr1(-np.pi / float(2 ** (j - i)), [q[j]], q[i])
-        kernel.h(q[i])
 
 def _ripple_increment(circuit, qubits) -> None:
     """Append |v> -> |v + 1 mod 2^n| to `circuit`.
@@ -92,6 +72,19 @@ def _ripple_sub_constant(circuit, qubits, subtrahend: int) -> None:
             _ripple_decrement(circuit, qubits[j:])
 
 
+# A state vector is 2**n amplitudes, so simulating the register costs memory
+# exponential in its width: 24 qubits is 0.12 GiB, 31 qubits is 16 GiB. This is
+# a property of simulating the circuit, not of the arithmetic.
+#
+# Past this width the honest options are to compute the value exactly or to
+# refuse; they do not include quietly computing it a different way. So
+# `_exact_via_circuit` RAISES here rather than falling through to the classical
+# body. A caller that wants the answer for operands this large should ask for
+# CLASSICAL mode, which is a decision the caller makes and can see, not one
+# this function makes silently on their behalf.
+_MAX_SIMULABLE_QUBITS = 24
+
+
 def _exact_via_circuit(num_qubits: int, initial: int, ops) -> int:
     """Run a sequence of exact register operations and measure the result.
 
@@ -99,6 +92,15 @@ def _exact_via_circuit(num_qubits: int, initial: int, ops) -> int:
     The register is sized by the caller to hold every intermediate value, so
     nothing wraps: this returns the exact integer, not a residue.
     """
+    if num_qubits > _MAX_SIMULABLE_QUBITS:
+        raise ArithmeticError(
+            f"register needs {num_qubits} qubits; simulating it would take "
+            f"{8 * (2 ** num_qubits) / 2 ** 30:.1f} GiB of state vector, above "
+            f"the {_MAX_SIMULABLE_QUBITS}-qubit limit. The value is computable "
+            f"-- ask for SutraMode.CLASSICAL, which evaluates it directly. "
+            f"This refuses rather than substituting the classical answer, so "
+            f"the choice of algorithm stays with the caller."
+        )
     qubits = [cirq.LineQubit(i) for i in range(num_qubits)]
     circuit = cirq.Circuit()
     for j in range(num_qubits):
@@ -167,6 +169,41 @@ def _quantum_product(a: int, b: int) -> int:
     width = _width_for(a_mag * b_mag) + 1
     ops = [('add', a_mag << j) for j in range(b_mag.bit_length()) if (b_mag >> j) & 1]
     return sign * _exact_via_circuit(width, 0, ops)
+
+
+def _quantum_divmod(n: int, d: int):
+    """Exact integer quotient and remainder, with the arithmetic in the register.
+
+    Binary long division. The *schedule* -- which shifted subtractions happen --
+    is classical because both operands are, exactly as the multiplier's set bits
+    are in `_quantum_product`; the arithmetic itself is done by the verified
+    ripple primitives, and the invariant `n = q*d + r` with `0 <= r < |d|` is
+    checked against them rather than assumed.
+
+    This replaces a quantum phase estimation reciprocal that ran the answer
+    through an 8-qubit register, quantising every result to a multiple of
+    1/256. That is an approximation, and an approximation is the one thing this
+    file is not allowed to contain.
+    """
+    if d == 0:
+        raise ZeroDivisionError("paravartya_yojayet: division by zero has no quotient")
+
+    a, b = abs(int(n)), abs(int(d))
+    quotient_bits, remainder = [], 0
+    for i in reversed(range(max(1, a.bit_length()))):
+        remainder = 2 * remainder + ((a >> i) & 1)
+        if remainder >= b:
+            remainder -= b
+            quotient_bits.append(i)
+
+    q_mag = (_exact_via_circuit(_width_for(a) + 1, 0,
+                                [('add', 1 << i) for i in quotient_bits])
+             if quotient_bits else 0)
+    r_mag = _quantum_sum(a, -_quantum_product(q_mag, b))
+    if not 0 <= r_mag < b:
+        raise ArithmeticError(
+            f"divmod invariant violated: {a} = {q_mag}*{b} + {r_mag}")
+    return q_mag, r_mag
 
 
 def _quantum_polynomial(coefficients, x: int) -> int:
@@ -736,114 +773,38 @@ class VedicSutras:
             raise
     
     def _paravartya_yojayet_quantum(self, x, divisor, context):
-        """Quantum implementation of paravartya_yojayet using Cirq"""
-        # Implementation for scalar division using quantum phase estimation
-        # This is applicable for scalar division approximation
-        
-        # Determine precision parameters
-        precision_qubits = 8  # Adjust based on desired precision
-        
-        # Create quantum register
-        qubits = [cirq.LineQubit(i) for i in range(precision_qubits + 1)]
-        
-        # Target qubit for division result
-        target = qubits[-1]
-        
-        # Create circuit
-        circuit = cirq.Circuit()
-        
-        # Initialize target in |1⟩ state
-        circuit.append(cirq.X(target))
-        
-        # Apply Hadamard gates to create superposition
-        for i in range(precision_qubits):
-            circuit.append(cirq.H(qubits[i]))
-        
-        # Calculate rotation angle based on divisor
-        theta = 1.0 / divisor if divisor != 0 else 0
-        
-        # Apply controlled rotations
-        for i in range(precision_qubits):
-            # Each qubit controls a rotation by theta * 2^i
-            power = 2 ** i
-            circuit.append(cirq.ControlledGate(cirq.rz(power * theta * 2 * np.pi))(qubits[i], target))
-        
-        # Apply inverse QFT
-        for i in range(precision_qubits // 2):
-            circuit.append(cirq.SWAP(qubits[i], qubits[precision_qubits - i - 1]))
-            
-        for i in range(precision_qubits):
-            circuit.append(cirq.H(qubits[i]))
-            for j in range(i):
-                phase = -2 * np.pi / (2 ** (i - j))
-                circuit.append(cirq.CZ(qubits[j], qubits[i]) ** (phase / np.pi))
-        
-        # Measure qubits
-        circuit.append(cirq.measure(*qubits[:-1], key='result'))
-        
-        # Simulate
-        simulator = cirq.Simulator()
-        result = simulator.run(circuit, repetitions=1000)
-        
-        # Get most frequent measurement outcome.
-        #
-        # This read `result.data['result'].value_counts().index[0]`, which for
-        # a multi-qubit measurement key is the packed integer cirq stores, not
-        # a sequence of bits -- so the `enumerate()` below raised
-        # `TypeError: 'numpy.int64' object is not iterable` and this path had
-        # never completed. `result.measurements` keeps the per-shot bit rows.
-        measurements = result.measurements['result']      # (repetitions, n)
-        rows, row_counts = np.unique(measurements, axis=0, return_counts=True)
-        result_bits = rows[int(np.argmax(row_counts))]
+        """x / divisor, exactly: integer quotient and remainder, recombined.
 
-        # Convert to decimal
-        result_decimal = sum(int(bit) * (2**i) for i, bit in enumerate(result_bits))
-        
-        # Scale by x
-        return x * result_decimal / (2**precision_qubits)
-    
-    def _paravartya_yojayet_hybrid(self, x, divisor, context):
-        """Hybrid implementation of paravartya_yojayet"""
-        # For hybrid mode, calculate reciprocal quantum-mechanically,
-        # then perform multiplication classically
-        if isinstance(x, (int, float)) and isinstance(divisor, (int, float)):
-            reciprocal = self._quantum_reciprocal(divisor, context)
-            return x * reciprocal
-        else:
-            # For arrays, use classical implementation
+        Division is the one sutra here whose true answer is generally not an
+        integer, so a fixed-width register cannot hold it. It does not follow
+        that the result must be approximated. `_quantum_divmod` computes q and
+        r exactly in the register, and `x/d = q + r/d` is then an exact
+        rational -- converted to float only at the return boundary, to match
+        the type the classical body returns, and that conversion is correctly
+        rounded so it agrees with `x / d` bit for bit.
+
+        What this replaces was an approximation twice over: an 8-qubit phase
+        estimation reciprocal, quantising every answer to a multiple of 1/256,
+        read out through a hand-rolled inverse QFT that recovered the phase in
+        only 4 of 16 cases. It returned 1.5 or 4.5 at random where 12/4 is 3.
+        """
+        if not _integral_scalars(x, divisor) or int(divisor) == 0:
             return self._paravartya_yojayet_classical(x, divisor, context)
-    
-    def _quantum_reciprocal(self, value, context):
-        """Calculate reciprocal using quantum phase estimation"""
-        # Create CUDAQ kernel for reciprocal calculation
-        kernel = cudaq.make_kernel()
-        q = kernel.qalloc(8)  # 8 qubits for precision
-        
-        # Initialize in superposition
-        kernel.h(q)
-        
-        # Apply phase rotations based on value
-        angle = 1.0 / value if value != 0 else 0
-        for i in range(8):
-            kernel.rz(2 * np.pi * angle * (2**i), q[i])
-        
-        # Apply inverse QFT
-        _cudaq_inverse_qft(kernel, q, 8)
-        
-        # Measure
-        kernel.mz(q)
-        
-        # Execute
-        result = cudaq.sample(kernel)
-        
-        # Get most frequent outcome
-        top_result = result.most_probable()
-        
-        # Convert to decimal
-        result_decimal = int(top_result, 2)
-        
-        # Scale to [0,1] and return reciprocal
-        return result_decimal / (2**8)
+        n, d = int(x), int(divisor)
+        q, r = _quantum_divmod(n, d)
+        magnitude = Fraction(q) + Fraction(r, abs(d))
+        exact = -magnitude if (n < 0) != (d < 0) else magnitude
+        return float(exact)
+    def _paravartya_yojayet_hybrid(self, x, divisor, context):
+        """Delegates to the quantum path, which guards its own domain.
+
+        This used to compute a reciprocal by quantum phase estimation and then
+        multiply classically. That is where HYBRID\'s 0.046875 and 11.95 for
+        12 / 4 came from: the reciprocal was quantised to a multiple of 1/256
+        and read out through an inverse QFT that recovered the phase in 4 of 16
+        cases, so the error was multiplied by x rather than corrected by it.
+        """
+        return self._paravartya_yojayet_quantum(x, divisor, context)
     
     def _paravartya_yojayet_classical(self, x, divisor, context):
         """Classical implementation of paravartya_yojayet"""
@@ -2703,63 +2664,26 @@ class VedicSutras:
             raise
     
     def _gunakasamuccayah_quantum(self, a, b, context):
-        """Quantum implementation of gunakasamuccayah using Cirq"""
-        # This implements a quantum circuit for factorization
-        
-        # For scalar values, implement quantum circuit
-        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-            # Fall back to classical for non-scalar inputs
+        """(a + b)(a - b), which is what the classical body and the comment say.
+
+        The sutra's docstring headline -- "the factors of the sum are equal to
+        the sum of the factors" -- names no computable function of two scalars,
+        so the operative specification is the inline comment at the classical
+        body, "we are factoring a^2 - b^2 = (a+b)(a-b)", and the body itself,
+        `return (a + b) * (a - b)`. That is taken here as the spec.
+
+        The previous circuit could not implement it under any reading. It
+        returned `p_11 * (max_val ** 2)` -- a probability times a square -- so
+        its codomain was [0, 196] for these inputs and it could never produce a
+        negative number, while the sutra gives -13 for (6, 7) and must go
+        negative whenever |b| > |a|. The sign was in fact computed, by appending
+        `cirq.Z` gates, and then discarded: Z is diagonal, so it changes no
+        computational-basis measurement probability at all.
+        """
+        if not _integral_scalars(a, b):
             return self._gunakasamuccayah_classical(a, b, context)
-        
-        # Create Cirq circuit for factorization
-        qubits = [cirq.LineQubit(i) for i in range(2)]
-        circuit = cirq.Circuit()
-        
-        # Encode a and b using rotation gates
-        # We use the fact that a^2 - b^2 = (a+b)(a-b)
-        
-        # Normalize inputs to prevent overflow
-        max_val = max(abs(a), abs(b)) * 2
-        if max_val < context.epsilon:
-            return 0
-            
-        norm_a = a / max_val
-        norm_b = b / max_val
-        
-        # Calculate rotation angles for (a+b) and (a-b)
-        theta_sum = np.arcsin(min(1.0, abs(norm_a + norm_b)))
-        theta_diff = np.arcsin(min(1.0, abs(norm_a - norm_b)))
-        
-        # Apply rotations to create superposition
-        circuit.append(cirq.ry(2 * theta_sum)(qubits[0]))
-        circuit.append(cirq.ry(2 * theta_diff)(qubits[1]))
-        
-        # Create entanglement to model multiplication
-        circuit.append(cirq.CNOT(qubits[0], qubits[1]))
-        
-        # Apply phase kickback based on sign
-        if (norm_a + norm_b) < 0:
-            circuit.append(cirq.Z(qubits[0]))
-        if (norm_a - norm_b) < 0:
-            circuit.append(cirq.Z(qubits[1]))
-        
-        # Measure
-        circuit.append(cirq.measure(*qubits, key='result'))
-        
-        # Simulate
-        simulator = cirq.Simulator()
-        result = simulator.run(circuit, repetitions=1000)
-        
-        # Analyze measurements
-        counts = result.histogram(key='result')
-        
-        # Calculate result based on measurement statistics
-        # The probability of measuring |11⟩ corresponds to the product (a+b)(a-b)
-        p_11 = counts.get(3, 0) / 1000
-        
-        # Scale back to original range
-        return p_11 * (max_val ** 2)
-    
+        ai, bi = int(a), int(b)
+        return _quantum_product(_quantum_sum(ai, bi), _quantum_sum(ai, -bi))
     def _gunakasamuccayah_hybrid(self, a, b, context):
         """Hybrid implementation of gunakasamuccayah"""
         # For scalar values, use quantum circuit

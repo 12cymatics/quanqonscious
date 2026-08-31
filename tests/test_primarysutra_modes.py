@@ -11,7 +11,9 @@ noticing:
   * every cudaq rotation in the file passed its arguments in the wrong order
     (`ry(qubit, angle)`; the builder takes `ry(parameter, target)`), all seven
     of them, with no correct call anywhere to compare against;
-  * `cudaq.inverseFQFT` was called twice and does not exist in CUDA-Q;
+  * `cudaq.inverseFQFT` was called twice and does not exist in CUDA-Q --
+    both call sites have since been removed outright, because both were
+    approximations (an 8-bit phase estimate) rather than arithmetic;
   * `cirq.TOFFOLI(q[i-1], q[i], q[i])` named its target as its own control;
   * `.controlled_by(...)` -- a cirq method -- was called on the return of a
     cudaq builder call, which is None;
@@ -268,54 +270,89 @@ def test_nikhilam_hybrid_uses_the_circuit_at_every_width():
         )
 
 
-def test_the_inverse_qft_helper_inverts():
-    """`cudaq.inverseFQFT` does not exist; this is what replaced it.
+def test_the_last_two_sutras_are_exact_in_every_mode():
+    """gunakasamuccayah and paravartya_yojayet -- the two that needed a decision.
 
-    Asserted as a genuine inverse rather than merely as something that runs:
-    QFT followed by it must return every basis state unchanged.
+    Both were held back while the other seven were repaired, because neither
+    was settled by its own docstring:
 
-    Read off the state vector, not a shot histogram. An earlier version of
-    this test sampled and asserted `len(counts) == 1`, which is a tolerance
-    wearing a shot count: a helper leaking a fraction of a percent of
-    amplitude into other basis states passes that check with high probability
-    and fails it at random. The composed circuit is a permutation of basis
-    states, so the amplitude is exactly checkable and no sampling is needed.
+      * `gunakasamuccayah`\'s headline names no computable function of two
+        scalars, so the spec taken here is the inline comment at the classical
+        body and the body itself: (a + b)(a - b), i.e. a**2 - b**2. Its old
+        circuit returned `p_11 * max_val**2` -- a probability times a square --
+        so its codomain was [0, 196] and it could never return the -13 the
+        sutra gives for (6, 7).
+      * `paravartya_yojayet` is division, whose answer is generally not an
+        integer and so does not fit a register. "Exact" is taken to mean exact
+        integer quotient and remainder from the register, recombined as the
+        rational q + r/d. Its old circuit estimated a reciprocal to 8 bits --
+        quantising every answer to a multiple of 1/256 -- and returned 1.5 or
+        4.5 at random where 12/4 is 3.
 
-    This gate is not self-fulfilling. The forward QFT below is written out
-    with its own literal angles rather than derived from the helper, so
-    corrupting the helper reddens it -- verified by injecting each defect
-    alone: `cr1` exponent off by one -> red, swap loop deleted -> red.
-
-    What it does NOT cover: the helper inverts a *standard* QFT, which is what
-    is asserted here, but the file's two production call sites
-    (`_quantum_reciprocal` and `_sesanyankena_caramena_quantum`) prepare their
-    register with `h` then `rz(2*pi*phi*2**i)`, and this helper recovers phi
-    from that encoding in only 4 of 16 cases at n = 4. Whichever side is
-    wrong, those two quantum paths return garbage; see the PR discussion.
+    The division cases below are deliberately mostly NOT divisible, because a
+    remainder of zero would not exercise the recombination at all.
     """
-    import cudaq
-    import numpy as np
+    v = ps.VedicSutras()
+    for mode in MODES:
+        ctx = ps.SutraContext(mode=mode)
+        for a, b in ((6, 7), (0, 1), (12, 5), (200, 255), (7, 7), (255, 1)):
+            _check(v.gunakasamuccayah, (a + b) * (a - b), float(a), float(b), ctx=ctx)
+        for x, d in ((12, 4), (1, 3), (7, 2), (-22, 7), (5, -8), (4095, 7), (0, 9)):
+            _check(v.paravartya_yojayet, x / d, float(x), float(d), ctx=ctx)
 
-    n = 3
-    for basis in range(2 ** n):
-        kernel = cudaq.make_kernel()
-        q = kernel.qalloc(n)
-        for bit in range(n):
-            if (basis >> bit) & 1:
-                kernel.x(q[bit])
-        for i in range(n):                                   # forward QFT
-            kernel.h(q[i])
-            for j in range(i + 1, n):
-                kernel.cr1(np.pi / float(2 ** (j - i)), [q[j]], q[i])
-        for i in range(n // 2):
-            kernel.swap(q[i], q[n - 1 - i])
-        ps._cudaq_inverse_qft(kernel, q, n)
-        amplitudes = np.array(cudaq.get_state(kernel))
-        recovered = int(np.argmax(np.abs(amplitudes)))
-        assert recovered == basis, f"QFT then inverse took |{basis}> to |{recovered}>"
-        assert abs(abs(amplitudes[basis]) - 1.0) < 1e-12, (
-            f"|{basis}> came back with amplitude {abs(amplitudes[basis])}, not 1"
+
+def test_quantum_divmod_returns_the_true_quotient_and_remainder():
+    """The quotient must be right, which the division result cannot show.
+
+    `_paravartya_yojayet_quantum` recombines as q + r/d where r is computed as
+    n - q*d. That is algebraically an identity: for ANY q the result is n/d,
+    because an error in q cancels exactly against the r derived from it. So a
+    wrong quotient is invisible to every value assertion on the sutra -- I
+    found this by injecting "drop the highest quotient bit" and watching the
+    whole suite stay green.
+
+    What makes q meaningful is the invariant 0 <= r < |d| checked inside
+    `_quantum_divmod`. This asserts the contract directly, against Python\'s
+    own divmod, so the quotient is pinned where the sutra cannot pin it.
+    """
+    for n in (0, 1, 7, 12, 100, 4095, -22, -1):
+        for d in (1, 2, 3, 4, 7, 1234, -5):
+            got = ps._quantum_divmod(n, d)
+            assert got == divmod(abs(n), abs(d)), (
+                f"_quantum_divmod({n}, {d}) = {got}, "
+                f"expected {divmod(abs(n), abs(d))}"
+            )
+    try:
+        ps._quantum_divmod(5, 0)
+    except ZeroDivisionError:
+        pass
+    else:
+        raise AssertionError("division by zero returned a quotient")
+
+
+def test_an_unsimulable_register_refuses_instead_of_substituting():
+    """Past 24 qubits the circuit cannot be simulated, so the answer is refused.
+
+    A state vector is 2**n amplitudes: 24 qubits is 0.12 GiB, 31 is 16 GiB.
+    The honest options at that width are to compute the value exactly or to
+    decline; they do not include quietly computing it a different way and
+    returning that as though the circuit had produced it. So this must raise,
+    and CLASSICAL must still answer -- the choice of algorithm stays with the
+    caller rather than being made silently on their behalf.
+    """
+    v = ps.VedicSutras()
+    try:
+        v.paravartya_yojayet(987654321.0, 1234.0,
+                             ctx=ps.SutraContext(mode=ps.SutraMode.QUANTUM))
+    except ArithmeticError as exc:
+        assert "qubits" in str(exc), f"refusal does not name the width: {exc}"
+    else:
+        raise AssertionError(
+            "a 31-qubit register was accepted; it cannot have been simulated, "
+            "so some other path answered"
         )
+    _check(v.paravartya_yojayet, 987654321 / 1234, 987654321.0, 1234.0,
+           ctx=ps.SutraContext(mode=ps.SutraMode.CLASSICAL))
 
 
 if __name__ == "__main__":
