@@ -33,6 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
+from fractions import Fraction
+
 import primarysutra as ps
 
 MODES = list(ps.SutraMode)
@@ -211,15 +213,21 @@ def test_the_repaired_arithmetic_sutras_agree_in_every_mode():
     v = ps.VedicSutras()
     for mode in MODES:
         ctx = ps.SutraContext(mode=mode)
+        # Additive sutras take the WIDE pairs, because they are cheap in
+        # qubits and because crossing 127 is what exposed the np.int8
+        # overflow. Multiplicative sutras take narrow ones: genuine register
+        # multiplication costs 2*(bits(a)+bits(b)) qubits, so 200*50 would
+        # need 28 and is refused rather than approximated.
         for a, b in ((9, 4), (0, 1), (6, 7), (100, 27), (200, 50), (255, 1)):
             _check(v.sankalana_vyavakalanabhyam, a + b, float(a), float(b), ctx=ctx)
             _check(v.sankalana_vyavakalanabhyam, a - b, float(a), float(b),
                    operation='subtract', ctx=ctx)
+            _check(v.shunyam_samyasamuccaye, a + b, float(a), float(b), ctx=ctx)
+        for a, b in ((9, 4), (0, 1), (6, 7), (12, 5), (15, 15), (13, 1)):
             _check(v.gunitasamuccayah, a * b, float(a), float(b), ctx=ctx)
             _check(v.samuccayagunitah, (a + b) ** 2, float(a), float(b), ctx=ctx)
             _check(v.samuccayagunitah, a * a + b * b, float(a), float(b),
                    operation='sum_product', ctx=ctx)
-            _check(v.shunyam_samyasamuccaye, a + b, float(a), float(b), ctx=ctx)
         for x, steps, direction in ((2, 3, 1), (5, 2, 1), (13, 7, -1), (0, 3, 1)):
             _check(v.chalana_kalana, x + steps * direction, float(x),
                    steps=steps, direction=direction, ctx=ctx)
@@ -295,10 +303,157 @@ def test_the_last_two_sutras_are_exact_in_every_mode():
     v = ps.VedicSutras()
     for mode in MODES:
         ctx = ps.SutraContext(mode=mode)
-        for a, b in ((6, 7), (0, 1), (12, 5), (200, 255), (7, 7), (255, 1)):
+        for a, b in ((6, 7), (0, 1), (12, 5), (7, 7), (15, 2), (13, 13)):
             _check(v.gunakasamuccayah, (a + b) * (a - b), float(a), float(b), ctx=ctx)
-        for x, d in ((12, 4), (1, 3), (7, 2), (-22, 7), (5, -8), (4095, 7), (0, 9)):
+        # Mostly NOT divisible, so the rational recombination is exercised.
+        for x, d in ((12, 4), (1, 3), (7, 2), (-22, 7), (5, -8), (255, 7), (0, 9)):
             _check(v.paravartya_yojayet, x / d, float(x), float(d), ctx=ctx)
+
+
+def test_no_sutra_decides_its_answer_by_sampling_or_a_threshold():
+    """Repeated identical calls must return identical values, in every mode.
+
+    Four sutras used to choose their answer from shot statistics against a
+    hardcoded cut, so the same call returned different values run to run:
+
+      * `vyashtisamanstih` scored bitstring "correlation" against 0.6, in a
+        helper whose own comment called it "a simplified approach";
+      * `sunyam_samya_samuccaye` normalised both operands into rotation angles
+        and cut at 0.8, which sat inside the sampling noise;
+      * `purna_apurna_bhyam` clamped its input to [0, 1] before amplitude
+        encoding, so 5 and 500 were indistinguishable;
+      * `anurupyena` measured 1000 shots for a value that is exactly
+        computable -- an unbiased estimate is still an approximation.
+
+    Determinism is the observable that catches all four: an exact computation
+    cannot jitter.
+    """
+    v = ps.VedicSutras()
+    calls = {
+        "vyashtisamanstih": lambda c: v.vyashtisamanstih(10.0, [2.0, 3.0, 5.0], ctx=c),
+        "sunyam_samya_samuccaye": lambda c: v.sunyam_samya_samuccaye(5.0, 2.0, ctx=c),
+        "purna_apurna_bhyam": lambda c: v.purna_apurna_bhyam(7.0, threshold=5.0, ctx=c),
+        "anurupyena": lambda c: v.anurupyena(8.0, 4.0, ctx=c),
+    }
+    for mode in MODES:
+        ctx = ps.SutraContext(mode=mode)
+        for name, call in calls.items():
+            seen = {float(call(ctx)) for _ in range(5)}
+            assert len(seen) == 1, (
+                f"{name} in {mode.name} returned {sorted(seen)} across five "
+                f"identical calls -- it is sampling, not computing"
+            )
+
+
+def test_vyashtisamanstih_distinguishes_the_whole_from_the_parts():
+    """The parts must NOT sum to the whole in most of these cases.
+
+    The classical body returns `whole` when the parts sum to it and the sum
+    otherwise. A case where sum(parts) == whole cannot tell the two apart, so
+    `return whole` unconditionally -- which is what the old heuristic path
+    effectively did whenever its 0.6 "correlation" score happened to clear --
+    passes it. Every case below except the first has sum(parts) != whole.
+    """
+    v = ps.VedicSutras()
+    cases = (
+        (10.0, [2.0, 3.0, 5.0], 10.0),   # parts sum to the whole
+        (10.0, [2.0, 3.0, 1.0], 6.0),    # they do not: the sum is returned
+        (7.0, [1.0, 1.0], 2.0),
+        (0.0, [4.0, 5.0], 9.0),
+        (12.0, [12.0], 12.0),
+        (12.0, [5.0], 5.0),
+    )
+    for whole, parts, expected in cases:
+        for mode in MODES:
+            _check(v.vyashtisamanstih, expected, whole, parts,
+                   ctx=ps.SutraContext(mode=mode))
+
+
+def test_purna_compares_magnitudes_not_a_clamped_stand_in():
+    """Both operands above 1, which is where the old [0,1] clamp destroyed them.
+
+    `x_norm = min(max(x, 0), 1)` mapped every value above 1 onto 1, so 3 and 5
+    became indistinguishable and `3 >= 5` came out true. With the default
+    threshold of 0.5 the clamp is invisible -- x=7 still exceeds 0.5 after
+    being flattened to 1 -- so a test that only uses the default cannot see it.
+    These cases put BOTH operands above the clamp.
+    """
+    v = ps.VedicSutras()
+    for x, threshold in ((3, 5), (5, 3), (9, 9), (2, 8), (100, 40), (1, 200)):
+        expected = 1.0 if x >= threshold else 0.0
+        for mode in MODES:
+            _check(v.purna_apurna_bhyam, expected, float(x),
+                   threshold=float(threshold), ctx=ps.SutraContext(mode=mode))
+
+
+def test_anurupyena_is_exact_where_float_arithmetic_is_not():
+    """The interpolation must give the exactly rounded value, not float drift.
+
+    `8.0 + 0.618*(4.0-8.0)` evaluates to 5.5280000000000005 in floats; the
+    exact value is 5.528. The quantum path computed the exact rational and so
+    DISAGREED with the classical body -- by being right. The classical
+    dispatcher was computing inline and never called its own helper, so fixing
+    the helper changed nothing until the duplicate was removed.
+    """
+    v = ps.VedicSutras()
+    for a, b, ratio in ((8, 4, 0.618), (0, 10, 0.5), (-4, 8, 0.75), (10, 2, 0.1)):
+        exact = float(Fraction(str(a)) + Fraction(str(ratio))
+                      * (Fraction(str(b)) - Fraction(str(a))))
+        for mode in MODES:
+            _check(v.anurupyena, exact, float(a), float(b), ratio=ratio,
+                   ctx=ps.SutraContext(mode=mode))
+
+
+def test_the_arithmetic_is_genuinely_quantum_not_a_classical_schedule():
+    """Both operands in SUPERPOSITION. A classical schedule cannot do this.
+
+    This is the gate that separates real register arithmetic from a circuit
+    replaying a decision already made in Python. An earlier version of these
+    primitives took the second operand as a classical `int` and tested
+    `(addend >> j) & 1` in a Python loop; it produced the right answer on basis
+    states and would pass every other test in this file, but it cannot compute
+    on a superposed operand at all, because there is no classical bit to test.
+
+    `_multiply_registers` controls each partial product on one qubit of each
+    operand, so putting both registers in uniform superposition must leave all
+    64 (a, b) branches carrying their own product simultaneously, with nothing
+    outside them.
+    """
+    import cirq
+    import numpy as np
+
+    na = nb = 3
+    nacc = 6
+    qubits = cirq.LineQubit.range(na + nb + nacc)
+    reg_a, reg_b, acc = qubits[:na], qubits[na:na + nb], qubits[na + nb:]
+
+    circuit = cirq.Circuit()
+    for q in reg_a + reg_b:
+        circuit.append(cirq.H(q))
+    ps._multiply_registers(circuit, reg_a, reg_b, acc)
+
+    state = np.asarray(
+        cirq.Simulator().simulate(circuit, qubit_order=qubits).final_state_vector
+    ).reshape([2] * len(qubits))
+
+    correct = 0.0
+    for a in range(2 ** na):
+        for b in range(2 ** nb):
+            index = ([(a >> j) & 1 for j in range(na)]
+                     + [(b >> j) & 1 for j in range(nb)]
+                     + [((a * b) >> j) & 1 for j in range(nacc)])
+            amplitude = abs(state[tuple(index)]) ** 2
+            assert amplitude > 1e-12, (
+                f"branch a={a} b={b} carries no amplitude on |{a * b}> -- the "
+                f"multiplier is not computing on superposed operands"
+            )
+            correct += amplitude
+
+    leaked = 1.0 - correct
+    assert leaked < 1e-12, (
+        f"{leaked:.2e} of the probability sits outside the correct-product "
+        f"branches; the partial products are not exactly controlled"
+    )
 
 
 def test_quantum_divmod_returns_the_true_quotient_and_remainder():
@@ -315,8 +470,8 @@ def test_quantum_divmod_returns_the_true_quotient_and_remainder():
     `_quantum_divmod`. This asserts the contract directly, against Python\'s
     own divmod, so the quotient is pinned where the sutra cannot pin it.
     """
-    for n in (0, 1, 7, 12, 100, 4095, -22, -1):
-        for d in (1, 2, 3, 4, 7, 1234, -5):
+    for n in (0, 1, 7, 12, 100, 255, -22, -1):
+        for d in (1, 2, 3, 4, 7, 13, -5):
             got = ps._quantum_divmod(n, d)
             assert got == divmod(abs(n), abs(d)), (
                 f"_quantum_divmod({n}, {d}) = {got}, "
@@ -342,16 +497,16 @@ def test_an_unsimulable_register_refuses_instead_of_substituting():
     """
     v = ps.VedicSutras()
     try:
-        v.paravartya_yojayet(987654321.0, 1234.0,
+        v.paravartya_yojayet(1000.0, 9.0,
                              ctx=ps.SutraContext(mode=ps.SutraMode.QUANTUM))
     except ArithmeticError as exc:
         assert "qubits" in str(exc), f"refusal does not name the width: {exc}"
     else:
         raise AssertionError(
-            "a 31-qubit register was accepted; it cannot have been simulated, "
+            "a 29-qubit register was accepted; it cannot have been simulated, "
             "so some other path answered"
         )
-    _check(v.paravartya_yojayet, 987654321 / 1234, 987654321.0, 1234.0,
+    _check(v.paravartya_yojayet, 1000 / 9, 1000.0, 9.0,
            ctx=ps.SutraContext(mode=ps.SutraMode.CLASSICAL))
 
 
