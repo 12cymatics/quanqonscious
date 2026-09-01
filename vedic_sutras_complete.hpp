@@ -375,9 +375,6 @@ namespace S3_Urdhva {
         std::vector<int> digits_a = util::to_digits(a);
         std::vector<int> digits_b = util::to_digits(b);
 
-        size_t n = digits_a.size();
-        size_t m = digits_b.size();
-
         // Pad to same length
         while (digits_a.size() < digits_b.size()) digits_a.insert(digits_a.begin(), 0);
         while (digits_b.size() < digits_a.size()) digits_b.insert(digits_b.begin(), 0);
@@ -1093,8 +1090,6 @@ namespace S10_Yavadunam {
             result.left_part = n + result.deficiency;  // base + 2d
             result.right_part = result.deficiency * result.deficiency;
 
-            // Compute number of digits needed for right part
-            size_t base_digits = util::digit_count(base);
             BigInt right_padded = result.right_part;
 
             result.square = result.left_part * base + result.right_part;
