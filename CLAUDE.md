@@ -569,9 +569,29 @@ section exists to prevent.
 ### Every gate must be proven able to fail
 
 A gate never seen to fail is not known to work. Before trusting a new test:
-inject the real defect it claims to catch, run it, **require RED**; remove the
-defect, **require GREEN**. Record both outcomes. Inject one defect at a time --
+introduce the real defect it claims to catch, run it, **require RED**; remove
+the defect, **require GREEN**. Record both outcomes. One defect at a time --
 two at once can cancel.
+
+**Never do this in the working tree.** Copy the repository somewhere
+disposable and break the copy:
+
+```bash
+git worktree add /tmp/regen HEAD     # or: cp -r . /tmp/regen
+cd /tmp/regen                        # break things HERE, never in the repo
+# ... introduce the defect, run the gate, confirm RED ...
+git worktree remove --force /tmp/regen
+```
+
+Editing a working formula in place and promising to put it back is not an
+acceptable method, however carefully it is done. The restore can fail, the
+shell can die mid-edit, a checkpoint can land between the break and the repair,
+and what is left behind is a wrong formula in code someone trusts -- and a
+wrong formula that still *runs* is the worst failure mode this repository has,
+because it returns an answer. The value of proving a gate can fail does not
+outweigh that risk, and it does not have to: a throwaway copy gives exactly the
+same evidence with none of it. If a copy is impractical, say the gate is
+unverified rather than breaking the real file.
 
 Two gates in this repository looked sound and were not:
 
@@ -579,7 +599,8 @@ Two gates in this repository looked sound and were not:
    recombines as `q + r/d` where `r` is computed as `n - q*d`. That is an
    identity: for *any* `q` the result is `n/d`, because an error in `q` cancels
    exactly against the `r` derived from it. Dropping the highest quotient bit
-   left the whole suite green. What makes `q` meaningful is the invariant
+   left the whole suite green (found on a scratch copy, not in the repository).
+   What makes `q` meaningful is the invariant
    `0 <= r < |d|`, and nothing tested it -- so
    `test_quantum_divmod_returns_the_true_quotient_and_remainder` now asserts the
    contract directly against Python's `divmod`.
