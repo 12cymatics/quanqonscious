@@ -10,3 +10,8 @@ vedic_benchmark
 # Lean / Lake build artifacts and fetched dependencies
 # (lake-manifest.json is tracked on purpose: it pins the dependency revisions)
 .lake/
+
+# built binaries
+vedic
+vedic_pde_tool
+vedic_capability_profile

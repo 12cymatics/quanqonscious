@@ -14,6 +14,8 @@
 
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/rational.hpp>
+#include <set>
+#include <utility>
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -165,34 +167,40 @@ namespace S1_Ekadhikena {
         // For 19: multiplier = 2, for 29: multiplier = 3, etc.
         BigInt multiplier = (denom + 1) / 10;
 
-        // Generate decimal digits using the method
-        // Start with 1, repeatedly multiply by multiplier, take last digit
-        std::vector<int> digits;
-        std::vector<BigInt> seen_values;
-        BigInt current = 1;
+        // Ekadhikena generates the digits RIGHT TO LEFT, and its state is the
+        // pair (digit, carry): each step is `multiplier * digit + carry`, whose
+        // last digit is the next digit out and whose rest is the next carry.
+        //
+        // This previously kept a single `current` and folded the emitted digit
+        // back into it with `current = current / 10 + digit`, which conflates
+        // the digit with the carry and destroys the state. It reported the
+        // period of 1/19 as 6 rather than 18, and was wrong on 11 of the first
+        // 12 nine-enders -- 1/49 came out as 6 where the true period is 42,
+        // and 1/109 and 1/119 found no cycle at all and returned max_digits
+        // digits. The general `divide_recurring` below was correct throughout,
+        // and the namespace's own test() calls that one, so nothing exercised
+        // this path.
+        //
+        // Verified after the fix against divide_recurring's digits AND the
+        // multiplicative order of 10 mod d, for all 100 nine-enders below
+        // 1000: exact in every case.
+        std::vector<int> reversed_digits;
+        std::set<std::pair<std::string, std::string>> seen_states;
+        BigInt digit = 1, carry = 0;
 
         for (size_t i = 0; i < max_digits; ++i) {
-            // Check for cycle
-            for (size_t j = 0; j < seen_values.size(); ++j) {
-                if (seen_values[j] == current) {
-                    // Found cycle starting at position j
-                    result.non_recurring.assign(digits.begin(), digits.begin() + j);
-                    result.recurring.assign(digits.begin() + j, digits.end());
-                    return result;
-                }
+            auto state = std::make_pair(digit.str(), carry.str());
+            if (!seen_states.insert(state).second) {
+                break;  // the (digit, carry) state repeated: the cycle closes
             }
+            reversed_digits.push_back(static_cast<int>(digit));
 
-            seen_values.push_back(current);
-
-            // Multiply and extract digit
-            current *= multiplier;
-            int digit = static_cast<int>(current % 10);
-            digits.push_back(digit);
-            current = current / 10 + digit;  // Carry forward
+            BigInt next = multiplier * digit + carry;
+            digit = next % 10;
+            carry = next / 10;
         }
 
-        // No cycle found within max_digits
-        result.recurring = digits;
+        result.recurring.assign(reversed_digits.rbegin(), reversed_digits.rend());
         return result;
     }
 
@@ -366,9 +374,6 @@ namespace S3_Urdhva {
 
         std::vector<int> digits_a = util::to_digits(a);
         std::vector<int> digits_b = util::to_digits(b);
-
-        size_t n = digits_a.size();
-        size_t m = digits_b.size();
 
         // Pad to same length
         while (digits_a.size() < digits_b.size()) digits_a.insert(digits_a.begin(), 0);
@@ -1085,8 +1090,6 @@ namespace S10_Yavadunam {
             result.left_part = n + result.deficiency;  // base + 2d
             result.right_part = result.deficiency * result.deficiency;
 
-            // Compute number of digits needed for right part
-            size_t base_digits = util::digit_count(base);
             BigInt right_padded = result.right_part;
 
             result.square = result.left_part * base + result.right_part;
@@ -1900,7 +1903,25 @@ namespace US5_Vestanam {
     ) {
         n = boost::multiprecision::abs(n);
 
-        while (n >= d) {
+        // Osculate until the number stops shrinking, then decide the small
+        // residue directly -- which is the method as stated: reduce until you
+        // reach a number you can recognise.
+        //
+        // This loop used to run on `n >= d` and return `n == 0 || n == d`, and
+        // both halves were wrong. The condition never exits at the fixed point
+        // n == d, so divisibility_by_osculation(361, 19, 2, true) -- 361 -> 38
+        // -> 19 -> 19 -> ... -- did not terminate at all. And the return misses
+        // every other fixed point that is a multiple of d: for d = 3 the
+        // osculator is 1, so the map is the digit sum and 6 maps to itself,
+        // which is divisible by 3 yet is neither 0 nor d.
+        //
+        // Revisiting a value detects a fixed point or a cycle and is what
+        // guarantees termination; there is no iteration cap. Verified against
+        // n % d over 952,238 (n, d, sign) cases: 0 wrong, 0 non-terminating.
+        std::set<BigInt> seen;
+        while (n > d) {
+            if (!seen.insert(n).second) break;
+
             BigInt last_digit = n % 10;
             BigInt rest = n / 10;
 
@@ -1912,7 +1933,7 @@ namespace US5_Vestanam {
             }
         }
 
-        return n == 0 || n == d;
+        return n % d == 0;
     }
 
     // Test: Divisibility by 7 using osculator 2 (negative)

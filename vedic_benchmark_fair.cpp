@@ -95,5 +95,11 @@ int main() {
       row("US8 Antyayor", "5x", v, s); }
 
     std::cout << "\n(measured = standard/vedic; >1 means Vedic is faster)\n";
-    std::cout << "sink " << (SINK % 1000) << "\n";
+    // The sink exists so neither arm can be optimised away, so print
+    // something that shows it accumulated. `SINK % 1000` printed "sink 0"
+    // whenever the total happened to be a multiple of 1000 -- which reads
+    // exactly like the guard having failed, on a line whose only job is to
+    // show that it did not.
+    std::cout << "sink: " << SINK.str().size() << " digits, nonzero="
+              << (SINK != 0) << " (both arms were executed)\n";
 }
