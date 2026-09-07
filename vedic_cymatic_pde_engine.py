@@ -10,13 +10,14 @@
   - Exact PDE solvers (Laplace, Wave, Heat, Poisson)
   - Fraction arithmetic (zero float contamination)
   - Proper boundary conditions
-  - Singularity suppression via Vedic complement methods
+  - Exact polar geometry: no epsilon, no singularity to suppress
 
   The mathematics IS the geometry. No approximations.
 ═══════════════════════════════════════════════════════════════════════════════
 """
 
 from fractions import Fraction
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Dict, Optional
 from PIL import Image
@@ -93,8 +94,10 @@ class VedicSutraEngine:
     def S2_nikhilam_complement(value: Fraction, base: Fraction) -> Fraction:
         """
         Nikhilam complement: base - value
-        Used for singularity suppression - when value approaches zero,
-        we work with its complement instead.
+
+        A complement, nothing more. It was once used here to dodge division by
+        a near-zero denominator; that dodge is gone, because the geometry it
+        propped up no longer divides. See ExactPolarGeometry.
         """
         return base - value
 
@@ -160,23 +163,6 @@ class VedicSutraEngine:
         """
         if divisor == 0:
             raise ValueError("S4 Paravartya: Division by zero - use S2 Nikhilam complement")
-        return dividend / divisor
-
-    @staticmethod
-    def S4_paravartya_safe_divide(dividend: Fraction, divisor: Fraction,
-                                   base: Fraction) -> Fraction:
-        """
-        Safe division with singularity suppression.
-        If divisor near zero, use Nikhilam complement.
-        """
-        # Singularity threshold
-        threshold = Fraction(1, 1000000)
-        if abs(divisor) < threshold:
-            # Use complement instead
-            complement = base - divisor
-            if abs(complement) < threshold:
-                return Fraction(0)  # True singularity - return zero
-            return dividend / complement
         return dividend / divisor
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -398,60 +384,157 @@ class BoundaryConditions:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SINGULARITY SUPPRESSION - Vedic Methods
+# EXACT POLAR GEOMETRY - There Is No Singularity To Suppress
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class SingularitySuppression:
+class IrrationalRadius(ArithmeticError):
     """
-    Singularity handling via Vedic complement methods.
-    When values approach zero (singularity), we transform the problem
-    using Nikhilam complements to work in a well-conditioned space.
+    Raised when a quantity needs r = sqrt(r_sq) itself and that root is
+    irrational, so no Fraction can hold it. Raised rather than rounded: a
+    nearby rational would be returned to a caller who believes it is exact.
     """
 
-    def __init__(self, base: Fraction = Fraction(1)):
-        self.base = base
-        self.threshold = Fraction(1, 10**12)  # Singularity threshold
-        self.sutra = VedicSutraEngine()
 
-    def safe_divide(self, num: Fraction, denom: Fraction) -> Fraction:
-        """Division with singularity suppression"""
-        if abs(denom) < self.threshold:
-            # Near singularity - use complement
-            complement = self.sutra.S2_nikhilam_complement(denom, self.base)
-            if abs(complement) < self.threshold:
-                return Fraction(0)  # True singularity
-            # Transform: a/b ≈ a/(base - complement) near singularity
-            return num * complement / (self.base * self.base - complement * complement)
-        return num / denom
+class UndefinedAtOrigin(ArithmeticError):
+    """Raised for J_0(0)*cos(m*theta) with m >= 1, where theta has no value."""
 
-    def safe_inverse_distance(self, r_sq: Fraction) -> Fraction:
+
+class TruncationBoundInvalid(ArithmeticError):
+    """
+    Raised when the Bessel partial sum is requested where its terms are not yet
+    decreasing, so the alternating-series remainder bound does not apply and any
+    bound returned would be a fiction.
+    """
+
+
+class ExactPolarGeometry:
+    """
+    The two polar factors of a Helmholtz mode, each exact over Q.
+
+    The separable solutions of grad^2 u + k^2 u = 0 in polar coordinates are
+    u = J_n(k r) cos(m theta). Taken literally, both factors need r itself:
+    J_n needs k*r, and cos theta = dj / r. On a lattice r = sqrt(di^2 + dj^2)
+    is irrational at all but a handful of points, so neither factor is a
+    Fraction -- and the code this replaces handled that by adding 1e-12 to r^2
+    on every evaluation, singular or not, and calling the result safe.
+
+    Factor them instead:
+
+        J_n(k r)     = r^n * P_n(r^2)         P_n rational in r^2
+        cos(m theta) = H_m(di, dj) / r^m      H_m integer-coefficient
+
+    Every term of the Bessel series carries r^(n+2t), so r^n factors out and
+    what remains is a polynomial in r^2. H_m is the solid harmonic
+    Re((dj + i*di)^m) -- a plain polynomial, no division, no pole. Their
+    product is
+
+        u = P_n(r^2) * H_m(di, dj) * r^(n - m)
+
+    in which r survives only as r^(n - m). When n == m, which is the pairing
+    that actually solves the Helmholtz equation, that factor is 1 and no root
+    is ever taken. When n - m is even it is a power of r^2, still exact. Only
+    an odd n - m needs r itself, and that case raises rather than approximates.
+
+    The origin needs no special handling either. The pole there was manufactured
+    by dividing by r to obtain cos theta; the solid harmonic never divides.
+    """
+
+    @staticmethod
+    def exact_rational_sqrt(value: Fraction) -> Optional[Fraction]:
+        """sqrt(value) when that root is rational, else None. Never rounds."""
+        if value < 0:
+            raise ValueError(f"exact_rational_sqrt: negative argument {value}")
+        num_root = math.isqrt(value.numerator)
+        den_root = math.isqrt(value.denominator)
+        if num_root * num_root != value.numerator:
+            return None
+        if den_root * den_root != value.denominator:
+            return None
+        return Fraction(num_root, den_root)
+
+    @classmethod
+    def radius_power(cls, r_sq: Fraction, exponent: int) -> Fraction:
+        """r^exponent given r^2, exactly -- or raise naming why it cannot be."""
+        if exponent == 0:
+            return Fraction(1)
+        if r_sq == 0:
+            if exponent < 0:
+                raise ZeroDivisionError(
+                    f"radius_power: r = 0 raised to {exponent} is a pole, "
+                    f"not a value to smooth")
+            return Fraction(0)
+        if exponent % 2 == 0:
+            return r_sq ** (exponent // 2)
+        root = cls.exact_rational_sqrt(r_sq)
+        if root is None:
+            raise IrrationalRadius(
+                f"r = sqrt({r_sq}) is irrational and the odd power r^{exponent} "
+                f"needs r itself. Use radial and angular orders differing by an "
+                f"even number -- n == m always works -- or a point where "
+                f"di^2 + dj^2 is a perfect square.")
+        return root ** exponent
+
+    @staticmethod
+    def solid_harmonic_re(m: int, di: Fraction, dj: Fraction) -> Fraction:
         """
-        Compute 1/r with singularity suppression at r=0.
-        Uses Nikhilam complement smoothing.
-        """
-        if r_sq < self.threshold:
-            # Smooth cap at singularity
-            return self.base / self.threshold
-        # Safe computation
-        return self.base / (r_sq + self.threshold)
+        r^m * cos(m*theta) = Re((dj + i*di)^m), exactly.
 
-    def regularize_field(self, field: List[List[Fraction]]) -> List[List[Fraction]]:
+        A polynomial in di and dj: no division, no pole, defined at the origin.
         """
-        Regularize field to suppress numerical singularities.
-        Uses Nikhilam complement averaging near singular points.
+        if m < 0:
+            raise ValueError(f"solid_harmonic_re: angular order must be >= 0, got {m}")
+        real, imag = Fraction(1), Fraction(0)
+        for _ in range(m):
+            real, imag = real * dj - imag * di, real * di + imag * dj
+        return real
+
+    @staticmethod
+    def bessel_radial_polynomial(n: int, k: Fraction, r_sq: Fraction,
+                                 terms: int) -> Tuple[Fraction, Fraction]:
         """
-        n, m = len(field), len(field[0])
-        result = [row[:] for row in field]
+        The partial sum of J_n(k r) / r^n, and an exact bound on what was cut.
 
-        for i in range(1, n - 1):
-            for j in range(1, m - 1):
-                if abs(field[i][j]) > self.base * Fraction(1000):
-                    # Potential singularity - average neighbors
-                    neighbors = (field[i-1][j] + field[i+1][j] +
-                                field[i][j-1] + field[i][j+1])
-                    result[i][j] = neighbors / Fraction(4)
+        `value` is the exact sum of the first `terms` series terms -- not an
+        approximation of that sum -- and `tail_bound` is the exact first omitted
+        term, which bounds the remainder of an alternating series whose terms
+        decrease.
 
-        return result
+        That premise is checked rather than assumed. Consecutive terms shrink by
+        (k/2)^2 r^2 / ((t+1)(n+t+1)), decreasing in t, so it is enough that the
+        factor be <= 1 at the first omitted index. Where it is not, the bound
+        would be a fiction, and this raises instead of returning one.
+        """
+        if terms < 1:
+            raise ValueError(f"bessel_radial_polynomial: terms must be >= 1, got {terms}")
+        if n < 0:
+            raise ValueError(f"bessel_radial_polynomial: order must be >= 0, got {n}")
+
+        half = k / Fraction(2)
+        shrink_numerator = half * half * r_sq
+        shrink_denominator = Fraction(terms * (n + terms))
+        if shrink_numerator > shrink_denominator:
+            raise TruncationBoundInvalid(
+                f"at r^2 = {r_sq}, k = {k}, order {n}: term {terms} exceeds term "
+                f"{terms - 1}, because (k/2)^2 r^2 = {shrink_numerator} > "
+                f"{shrink_denominator} = terms*(n+terms). The alternating-series "
+                f"bound does not hold here, so no honest remainder bound exists "
+                f"for {terms} terms. Raise terms until "
+                f"{shrink_numerator} <= terms*(n+terms).")
+
+        total = Fraction(0)
+        term_magnitude = Fraction(0)
+        for t in range(terms + 1):
+            factorial_t = Fraction(1)
+            for f in range(2, t + 1):
+                factorial_t *= f
+            factorial_nt = Fraction(1)
+            for f in range(2, n + t + 1):
+                factorial_nt *= f
+            term_magnitude = ((half ** (n + 2 * t)) * (r_sq ** t)
+                              / (factorial_t * factorial_nt))
+            if t < terms:
+                total += term_magnitude if t % 2 == 0 else -term_magnitude
+        return total, term_magnitude
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -466,7 +549,6 @@ class VedicPDESolver:
 
     def __init__(self):
         self.sutra = VedicSutraEngine()
-        self.singularity = SingularitySuppression()
         self.bc = BoundaryConditions()
         self.constants = VedicConstants()
 
@@ -640,7 +722,8 @@ class VedicPDESolver:
         Generate cymatic pattern via radial wave equation solution.
         Solves ∇²u + k²u = 0 in polar coordinates (Bessel-like).
 
-        Uses exact arithmetic throughout with singularity suppression.
+        Exact throughout. See ExactPolarGeometry for why no epsilon and no
+        origin special-case are needed.
         """
         field = [[Fraction(0) for _ in range(m)] for _ in range(n)]
 
@@ -655,33 +738,13 @@ class VedicPDESolver:
                 if i == 0 or i == n-1 or j == 0 or j == m-1:
                     boundary[(i, j)] = Fraction(0)
 
-        # Initial condition: radial + angular mode excitation
+        # Initial condition: radial + angular mode excitation, exactly.
         for i in range(n):
             for j in range(m):
                 di = Fraction(i) - center_i
                 dj = Fraction(j) - center_j
-                r_sq = di * di + dj * dj
-
-                # Singularity-safe radius computation
-                r = self.singularity.safe_inverse_distance(r_sq)
-                r = Fraction(1) / r if r != 0 else Fraction(0)
-
-                # Radial mode: approximation to Bessel via polynomial
-                # J_n(x) ≈ (x/2)^n / n! for small x
-                if r_sq > 0:
-                    radial = self._bessel_approx(k * r, mode_radial)
-                else:
-                    radial = Fraction(1) if mode_radial == 0 else Fraction(0)
-
-                # Angular mode via Chebyshev-like polynomial
-                if r_sq > 0:
-                    # cos(n*theta) approximation
-                    cos_theta = self.singularity.safe_divide(dj, r)
-                    angular = self._chebyshev_T(mode_angular, cos_theta)
-                else:
-                    angular = Fraction(1)
-
-                field[i][j] = radial * angular
+                field[i][j] = self._helmholtz_mode_value(
+                    k, di * di + dj * dj, di, dj, mode_radial, mode_angular)
 
         # Iterate to converge
         for _ in range(iterations):
@@ -689,53 +752,34 @@ class VedicPDESolver:
 
         return field
 
-    def _bessel_approx(self, x: Fraction, n: int, terms: int = 10) -> Fraction:
+    def _helmholtz_mode_value(self, k: Fraction, r_sq: Fraction,
+                              di: Fraction, dj: Fraction,
+                              mode_radial: int, mode_angular: int,
+                              terms: int = 10) -> Fraction:
         """
-        Approximate Bessel J_n(x) via power series.
-        J_n(x) = sum_{k=0}^∞ (-1)^k / (k! (n+k)!) * (x/2)^(n+2k)
+        J_n(k r) cos(m theta) at one lattice point, exactly.
+
+        The two factors are computed in the forms that carry no pole -- see
+        ExactPolarGeometry -- and recombined through r^(n - m), the only place
+        r itself can appear.
         """
-        result = Fraction(0)
-        x_half = x / Fraction(2)
+        if r_sq == 0:
+            # J_n(0) = 0 for n >= 1, which annihilates cos(m theta) whatever
+            # value theta would have taken. Nothing to smooth.
+            if mode_radial >= 1:
+                return Fraction(0)
+            if mode_angular == 0:
+                return Fraction(1)                     # J_0(0) cos(0) = 1
+            raise UndefinedAtOrigin(
+                f"J_0(0) cos({mode_angular} theta) has no value at the origin: "
+                f"theta is undefined there and J_0(0) = 1 does not remove it. "
+                f"Use a radial order >= 1, or an angular order of 0.")
 
-        for k in range(terms):
-            # (-1)^k
-            sign = Fraction(1) if k % 2 == 0 else Fraction(-1)
-
-            # k! * (n+k)!
-            factorial_k = Fraction(1)
-            for i in range(1, k + 1):
-                factorial_k *= Fraction(i)
-
-            factorial_nk = Fraction(1)
-            for i in range(1, n + k + 1):
-                factorial_nk *= Fraction(i)
-
-            # (x/2)^(n+2k)
-            power = Fraction(1)
-            for _ in range(n + 2 * k):
-                power *= x_half
-
-            term = sign * power / (factorial_k * factorial_nk)
-            result += term
-
-        return result
-
-    def _chebyshev_T(self, n: int, x: Fraction) -> Fraction:
-        """
-        Chebyshev polynomial T_n(x) via recurrence.
-        T_0 = 1, T_1 = x, T_{n+1} = 2x*T_n - T_{n-1}
-        """
-        if n == 0:
-            return Fraction(1)
-        if n == 1:
-            return x
-
-        T_prev, T_curr = Fraction(1), x
-        for _ in range(2, n + 1):
-            T_next = Fraction(2) * x * T_curr - T_prev
-            T_prev, T_curr = T_curr, T_next
-
-        return T_curr
+        radial, _tail_bound = ExactPolarGeometry.bessel_radial_polynomial(
+            mode_radial, k, r_sq, terms)
+        angular = ExactPolarGeometry.solid_harmonic_re(mode_angular, di, dj)
+        return radial * angular * ExactPolarGeometry.radius_power(
+            r_sq, mode_radial - mode_angular)
 
     def _helmholtz_step(self, field: List[List[Fraction]],
                         k: Fraction,
@@ -906,8 +950,11 @@ class VedicCymaticGenerator:
 
                 field[i][j] = field[i][j] * modulation
 
-        # Regularize for any singularities
-        field = self.solver.singularity.regularize_field(field)
+        # No regularisation pass. The one that stood here replaced any cell
+        # exceeding 1000x base with the mean of its four neighbours -- silently
+        # overwriting computed values with invented ones. Every value above is
+        # an exact Fraction produced by a formula with no pole, so there is
+        # nothing to clip; a genuine blow-up is a result to report, not smooth.
 
         return self.field_to_image(field, color_scheme)
 

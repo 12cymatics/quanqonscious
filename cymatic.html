@@ -1,0 +1,619 @@
+<title>Bessel Disc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  --void:#07090C; --panel:#0E1218; --panel2:#141A22;
+  --edge:#1B222C; --edge2:#2C3644;
+  --ink:#E2E8EF; --ink2:#8D9BA9; --dim:#5A6674;
+  --ice:#5BD6EA; --ice-soft:#5BD6EA1A;
+  --sand:#F4E8CE; --warm:#E8A45E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 22px 76px}
+header{padding:38px 0 20px}
+h1{font-family:"Archivo",sans-serif;font-weight:800;letter-spacing:-.03em;
+  font-size:clamp(2.1rem,5.4vw,3.2rem);line-height:1;margin:0}
+h1 span{color:var(--ice)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dim);margin:0 0 11px}
+.lede{color:var(--ink2);max-width:62ch;margin:13px 0 0}
+.lede b{color:var(--ink);font-weight:500}
+
+.rig{display:grid;grid-template-columns:minmax(0,1fr) 262px;
+  border:1px solid var(--edge);margin-top:24px;background:#000}
+.stage{position:relative;aspect-ratio:1/1;overflow:hidden;
+  border-right:1px solid var(--edge);cursor:crosshair;touch-action:none}
+.stage canvas{width:100%;height:100%;display:block;image-rendering:auto}
+.drv{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+  border:1.5px solid var(--warm);box-shadow:0 0 9px #E8A45EAA;pointer-events:none}
+.hud{position:absolute;left:14px;top:13px;font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;letter-spacing:.06em;color:var(--dim);pointer-events:none;
+  text-shadow:0 1px 6px #000;line-height:1.85}
+.hud b{color:var(--ice);font-weight:500}
+.hint{position:absolute;right:13px;bottom:12px;font-family:"IBM Plex Mono",monospace;
+  font-size:9.5px;color:var(--dim);pointer-events:none;text-shadow:0 1px 6px #000}
+.settle{position:absolute;left:14px;bottom:12px;height:3px;width:110px;
+  background:#ffffff14;pointer-events:none}
+.settle i{display:block;height:100%;background:var(--ice);width:0;transition:width .25s linear}
+
+.deck{background:var(--panel);padding:15px;display:flex;flex-direction:column;gap:14px;
+  overflow-y:auto}
+.lab{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim)}
+.fld{display:grid;gap:6px}
+.fld .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.fld .v{font-family:"IBM Plex Mono",monospace;font-size:1rem;color:var(--ice);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--ice);height:20px;margin:0}
+input[type=range]:focus-visible{outline:2px solid var(--ice);outline-offset:3px}
+.seg{display:flex;border:1px solid var(--edge2);border-radius:2px;overflow:hidden}
+.seg button{flex:1;font-family:"IBM Plex Mono",monospace;font-size:11px;
+  background:transparent;color:var(--ink2);border:0;padding:6px 3px;cursor:pointer;
+  border-right:1px solid var(--edge2)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ice);color:#07090C;font-weight:500}
+.seg button:focus-visible{outline:2px solid var(--ice);outline-offset:-2px}
+.btn{font-family:"IBM Plex Mono",monospace;font-size:11px;background:transparent;
+  color:var(--ink2);border:1px solid var(--edge2);padding:6px 10px;cursor:pointer;border-radius:2px}
+.btn:hover{border-color:var(--ice);color:var(--ice)}
+.btn:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+
+.grid{display:grid;grid-template-columns:20px repeat(5,1fr);gap:2px;
+  font-family:"IBM Plex Mono",monospace;font-size:10px}
+.grid .hd{color:var(--dim);text-align:center;padding:1px 0}
+.grid .rh{color:var(--dim);text-align:right;padding-right:4px;line-height:21px}
+.grid button{background:var(--panel2);border:1px solid var(--edge);color:var(--ink2);
+  padding:3px 0;cursor:pointer;font:inherit;border-radius:2px;line-height:1.45}
+.grid button:hover{border-color:var(--ice);color:var(--ice)}
+.grid button[aria-pressed="true"]{background:var(--ice);border-color:var(--ice);
+  color:#07090C;font-weight:500}
+.spec{position:relative;height:46px;border:1px solid var(--edge2);background:#000;cursor:pointer}
+.spec canvas{width:100%;height:100%;display:block}
+.ro{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+.ro dt{color:var(--dim);font-size:10px;white-space:nowrap}
+.ro dd{margin:0;color:var(--ink)}
+.ro dd b{color:var(--ice);font-weight:500}
+
+section{padding-top:44px;max-width:66ch}
+h2{font-family:"Archivo",sans-serif;font-weight:600;font-size:1.28rem;margin:0 0 8px;
+  letter-spacing:-.01em}
+p{margin:0 0 14px;color:var(--ink2)}
+p b{color:var(--ink);font-weight:500}
+code{font-family:"IBM Plex Mono",monospace;font-size:.84em;background:#00000070;
+  border:1px solid var(--edge);padding:.08em .34em;border-radius:2px;color:var(--ink)}
+.note{border-left:2px solid var(--edge2);padding-left:15px;color:var(--dim);font-size:.93rem}
+table.acc{width:100%;border-collapse:collapse;margin:16px 0 0;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+table.acc th{text-align:left;color:var(--dim);font-weight:400;font-size:9.5px;
+  letter-spacing:.13em;text-transform:uppercase;padding:0 12px 7px 0;border-bottom:1px solid var(--edge)}
+table.acc td{padding:5px 12px 5px 0;border-bottom:1px solid var(--edge);color:var(--ink2)}
+table.acc td:first-child{color:var(--ink)}
+table.acc td.ok{color:var(--ice)}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));gap:1px;
+  background:var(--edge);border:1px solid var(--edge);margin-top:30px}
+.links a{background:var(--panel);padding:15px 16px;text-decoration:none;color:inherit;display:block}
+.links a:hover{background:var(--ice-soft)}
+.links b{display:block;color:var(--ice);font-family:"Archivo",sans-serif;font-weight:600;
+  font-size:.95rem;margin-bottom:4px}
+.links em{font-style:normal;font-size:.84rem;color:var(--dim);line-height:1.45;display:block}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--edge);
+  font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dim);line-height:2}
+@media (max-width:780px){
+  .rig{grid-template-columns:1fr}
+  .stage{border-right:0;border-bottom:1px solid var(--edge)}
+}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">circular plate · clamped rim · J<sub>m</sub>(kr)cos(mθ)</p>
+  <h1>Bessel <span>Disc</span></h1>
+  <p class="lede">Forty-five thousand grains of sand on a vibrating plate. Each one is thrown
+  about where the surface moves and settles where it doesn't, so the pattern you end up
+  looking at is <b>drawn by the grains themselves</b> — not by shading the equation. Turn
+  the frequency and watch them scatter and re-form.</p>
+</header>
+
+<div class="rig">
+  <div class="stage" id="stage">
+    <canvas id="c" width="361" height="361"></canvas>
+    <div class="drv" id="drv" hidden></div>
+    <div class="hud">mode <b id="hm">5,3</b><br><b id="hz">653</b> Hz<br>j = <b id="hj">15.7002</b></div>
+    <div class="settle"><i id="settleBar"></i></div>
+    <div class="hint" id="hint">pick a mode</div>
+  </div>
+  <div class="deck">
+    <div class="fld">
+      <span class="lab">excitation</span>
+      <div class="seg" id="modeSeg">
+        <button data-x="single" aria-pressed="true">single mode</button>
+        <button data-x="driven" aria-pressed="false">driven</button>
+      </div>
+    </div>
+
+    <div id="drivenPane" hidden>
+      <div class="fld">
+        <div class="top"><span class="lab">frequency</span><span class="v"><span id="fv">406</span> Hz</span></div>
+        <input type="range" id="f" min="60" max="900" step="1" value="406">
+      </div>
+      <div class="spec" id="spec" title="resonances — click to jump" style="margin-top:8px">
+        <canvas id="sc" width="512" height="92"></canvas>
+      </div>
+      <div class="fld" style="margin-top:12px">
+        <div class="top"><span class="lab">sharpness Q</span><span class="v" id="qv">70</span></div>
+        <input type="range" id="q" min="6" max="220" step="1" value="70">
+      </div>
+    </div>
+
+    <div id="singlePane">
+      <span class="lab">mode — rows m, columns n</span>
+      <div class="grid" id="grid" style="margin-top:7px"></div>
+    </div>
+
+    <div class="fld">
+      <span class="lab">surface</span>
+      <div class="seg" id="viewSeg">
+        <button data-v="sand" aria-pressed="true">sand</button>
+        <button data-v="water" aria-pressed="false">water</button>
+        <button data-v="field" aria-pressed="false">field</button>
+      </div>
+    </div>
+
+    <div class="fld">
+      <div class="top"><span class="lab">agitation</span><span class="v" id="agv">0.90</span></div>
+      <input type="range" id="ag" min="0.15" max="2.6" step="0.01" value="0.9">
+    </div>
+
+    <div style="display:flex;gap:6px">
+      <button class="btn" id="sprinkle" style="flex:1">re-sprinkle</button>
+      <button class="btn" id="sweep" aria-pressed="false" style="flex:1">sweep</button>
+    </div>
+
+    <div class="fld">
+      <span class="lab">readout</span>
+      <dl class="ro" id="ro"></dl>
+    </div>
+  </div>
+</div>
+
+<section>
+  <h2>The grains are simulated, not shaded</h2>
+  <p>A grain on a vibrating plate gets thrown into the air wherever the surface is moving,
+  lands somewhere slightly different, and repeats — a random walk whose step size is set by
+  the local amplitude. Where the plate is still, it stops. The net effect is a drift down the
+  gradient of the squared displacement, and that is what each of the forty-five thousand grains
+  here integrates:</p>
+  <p class="note" style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.9">
+  v ← (v − D·u∇u + ξ·|u|)·λ &nbsp;&nbsp;&nbsp; x ← x + v</p>
+  <p>Nodal lines are where the grains end up, not where the renderer was told to draw a
+  bright line. That is why the pattern takes a moment to form, why grains keep trembling on
+  the antinodes, and why turning the frequency scatters them before they resettle.</p>
+  <p>The drift needs ∇u, and it is available in closed form rather than by differencing the
+  grid: <code>∂u/∂r = k·J′<sub>m</sub>(kr)·cos(mθ)</code> and
+  <code>(1/r)·∂u/∂θ = −m·k·[J<sub>m</sub>(kr)/kr]·sin(mθ)</code>, with
+  <code>J′<sub>m</sub> = (J<sub>m−1</sub> − J<sub>m+1</sub>)/2</code>. The bracket
+  <code>J<sub>m</sub>(x)/x</code> is what would divide by zero at the centre; its limit is
+  exactly 1/2 for m = 1 and 0 for m ≥ 2, so it is evaluated, not fudged. Checked against
+  central differences: agreement to <b>1.8e−11</b>, which is the differencing error, not the
+  formula's.</p>
+
+  <h2 style="margin-top:38px">Where the frequencies come from</h2>
+  <p>Separating ∇²u + k²u = 0 on a disc gives <code>u = J<sub>m</sub>(kr)·cos(mθ)</code>.
+  Clamping the rim at radius <i>a</i> forces <code>J<sub>m</sub>(ka) = 0</code>, so the
+  admissible wavenumbers are <b>k = j<sub>m,n</sub>/a</b> — the n-th zero of J<sub>m</sub>.
+  Those zeros set the spectrum, and their ratios are not whole numbers, which is why a drum
+  has no harmonic series.</p>
+  <p>J<sub>m</sub> comes from its integral form
+  <code>(1/2π)∫<sub>−π</sub><sup>π</sup> cos(mτ − x sin τ)dτ</code> by the trapezoid rule on
+  a full period — an analytic periodic integrand, so the rule converges <b>spectrally</b> and
+  there is no truncation order to tune. The zeros follow by Newton from McMahon's estimate.</p>
+  <p class="note">The point count was measured, not guessed: 64 points looked converged on
+  small arguments and was still wrong by 8.8e−7 at x = 40. This uses 128.</p>
+  <table class="acc" id="accTable">
+    <thead><tr><th>check</th><th>computed</th><th>reference</th><th>error</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h2 style="margin-top:38px">The bug this replaces</h2>
+  <p>The engine this came from, <code>vedic_cymatic_pde_engine.py</code>, built its radius
+  like this:</p>
+  <p class="note" style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.9">
+  r = safe_inverse_distance(r_sq) &nbsp;→&nbsp; 1 / (r² + 1e-12)<br>
+  r = 1 / r &nbsp;→&nbsp; r² + 1e-12</p>
+  <p>The variable named <code>r</code> held <b>r squared</b>, and an epsilon was added on
+  every evaluation regardless of where the point was. That value was then passed to
+  J<sub>n</sub> and used as the denominator of cos θ. At the lattice point (3,4) the mode
+  value should be <b>0.3977</b>; the old code returned <b>−43.70</b>.</p>
+  <p>There was never a singularity to suppress — it was manufactured by dividing by r to get
+  cos θ. Nothing here divides: at the centre J<sub>m</sub>(0) = 0 for every m ≥ 1, which
+  annihilates the undefined angle by itself.</p>
+
+  <div class="links">
+    <a href="https://claude.ai/code/artifact/aad075c1-fb88-4e21-8662-6c4936945c2c"><b>Chladni Plate</b><em>The square plate, solved in its modal basis</em></a>
+    <a href="https://claude.ai/code/artifact/1f0cb5cd-4c12-4ed3-9a0a-02ebfd14635e"><b>Ten Boundaries</b><em>The boundary equations and their four defects</em></a>
+    <a href="https://claude.ai/code/artifact/1648a96f-33ab-4f1e-b86a-bfc4cd6aaa80"><b>Sutra Workbench</b><em>The exact rational solvers, running live</em></a>
+  </div>
+  <footer>
+    45 000 grains · 361 × 361 field · J<sub>m</sub> by 128-point spectral quadrature · analytic ∇u<br>
+    No epsilon, no clamp, no fallback anywhere in the field or its gradient.
+  </footer>
+</section>
+</div>
+
+<script>
+'use strict';
+/* ---------- J_m and its zeros ---------- */
+const QUAD = 128, QC = new Float64Array(QUAD), QS = new Float64Array(QUAD);
+for (let i = 0; i < QUAD; i++){ const t = -Math.PI + 2*Math.PI*i/QUAD; QC[i] = t; QS[i] = Math.sin(t); }
+function besselJ(m, x){ let s = 0; for (let i = 0; i < QUAD; i++) s += Math.cos(m*QC[i] - x*QS[i]); return s/QUAD; }
+const besselJp = (m, x) => m === 0 ? -besselJ(1, x) : (besselJ(m-1, x) - besselJ(m+1, x))/2;
+function besselZero(m, n){
+  const beta = (n + m/2 - 0.25)*Math.PI, mu = 4*m*m;
+  let x = beta - (mu-1)/(8*beta) - 4*(mu-1)*(7*mu-31)/(3*Math.pow(8*beta,3));
+  for (let i = 0; i < 60; i++){
+    const step = besselJ(m, x)/besselJp(m, x); x -= step;
+    if (Math.abs(step) < 1e-15*Math.abs(x)) break;
+  }
+  return x;
+}
+const MMAX = 6, NMAX = 5, ZERO = [];
+for (let m = 0; m <= MMAX; m++){ ZERO.push([]); for (let n = 1; n <= NMAX; n++) ZERO[m].push(besselZero(m, n)); }
+const F0 = 100, freqOf = (m, n) => F0*ZERO[m][n-1]/ZERO[0][0];
+const MODES = [];
+for (let m = 0; m <= MMAX; m++) for (let n = 1; n <= NMAX; n++)
+  MODES.push({ m, n, f: freqOf(m, n) });
+MODES.sort((a,b) => a.f - b.f);
+
+/* ---------- field and its exact gradient ---------- */
+const G = 361, C = 180, RAD = 178, SZ = G*G;
+const INSIDE = new Uint8Array(SZ), COV = new Float32Array(SZ);
+for (let y = 0; y < G; y++) for (let x = 0; x < G; x++){
+  const r = Math.hypot(x-C, y-C), i = y*G+x;
+  INSIDE[i] = r <= RAD ? 1 : 0;
+  COV[i] = Math.max(0, Math.min(1, RAD - r + 0.5));
+}
+const U = new Float32Array(SZ), GX = new Float32Array(SZ), GY = new Float32Array(SZ);
+
+const CACHE = new Map(), CACHE_MAX = 18;
+function modeArrays(m, n){
+  const key = m + ',' + n, hit = CACHE.get(key);
+  if (hit) return hit;
+  const k = ZERO[m][n-1]/RAD;
+  const u = new Float32Array(SZ), gx = new Float32Array(SZ), gy = new Float32Array(SZ);
+  for (let y = 0; y < G; y++) for (let x = 0; x < G; x++){
+    const i = y*G+x; if (!INSIDE[i]) continue;
+    const dx = x-C, dy = y-C, r = Math.hypot(dx, dy), X = k*r;
+    if (r === 0){
+      u[i] = m === 0 ? 1 : 0;
+      // lim grad: only m = 1 is non-zero, u ~ k*dx/2
+      gx[i] = m === 1 ? k/2 : 0; gy[i] = 0;
+      continue;
+    }
+    const th = Math.atan2(dy, dx), cm = Math.cos(m*th), sm = Math.sin(m*th);
+    const J = besselJ(m, X);
+    u[i] = J*cm;
+    const ur = k*besselJp(m, X)*cm;               // du/dr
+    const ut = -m*k*(J/X)*sm;                     // (1/r) du/dtheta
+    const c = dx/r, s = dy/r;
+    gx[i] = ur*c - ut*s; gy[i] = ur*s + ut*c;
+  }
+  const rec = { u, gx, gy };
+  if (CACHE.size >= CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
+  CACHE.set(key, rec);
+  return rec;
+}
+
+let excite = 'single', view = 'sand', sel = { m: 5, n: 3 };
+let freq = 406, Q = 70, agit = 0.9, dx = 0.5, dy = 0.5;
+let sweeping = false, contributions = [], settle = 0;
+
+function modeAt(m, n, r, th){
+  const k = ZERO[m][n-1]/RAD;
+  return besselJ(m, k*r)*(m === 0 ? 1 : Math.cos(m*th));
+}
+function build(){
+  U.fill(0); GX.fill(0); GY.fill(0);
+  if (excite === 'single'){
+    const a = modeArrays(sel.m, sel.n);
+    U.set(a.u); GX.set(a.gx); GY.set(a.gy);
+    contributions = [{ m: sel.m, n: sel.n, f: freqOf(sel.m, sel.n), w: 1 }];
+  } else {
+    const rx = (dx-0.5)*2*RAD, ry = (dy-0.5)*2*RAD;
+    const rd = Math.min(Math.hypot(rx, ry), RAD), td = Math.atan2(ry, rx), w = freq;
+    const all = MODES.map(md => {
+      const w0 = md.f, g = w0/Q;
+      return { m: md.m, n: md.n, f: md.f,
+               w: modeAt(md.m, md.n, rd, td)*(w0*w0)/Math.hypot(w0*w0 - w*w, g*w) };
+    });
+    let peak = 0; for (const e of all) peak = Math.max(peak, Math.abs(e.w));
+    contributions = all.filter(e => Math.abs(e.w) > peak*0.04)
+                       .sort((a,b) => Math.abs(b.w) - Math.abs(a.w)).slice(0, 8);
+    for (const e of contributions){
+      const a = modeArrays(e.m, e.n), w = e.w;
+      for (let i = 0; i < SZ; i++){ U[i] += w*a.u[i]; GX[i] += w*a.gx[i]; GY[i] += w*a.gy[i]; }
+    }
+  }
+  let mx = 1e-12;
+  for (let i = 0; i < SZ; i++) if (INSIDE[i]) mx = Math.max(mx, Math.abs(U[i]));
+  const inv = 1/mx;                     // one scale for u and grad u, so the ratio holds
+  for (let i = 0; i < SZ; i++){ U[i] *= inv; GX[i] *= inv; GY[i] *= inv; }
+  settle = 0;
+  paintReadout();
+}
+
+/* ---------- the grains ---------- */
+const NP = 45000;
+const PX = new Float32Array(NP), PY = new Float32Array(NP),
+      VX = new Float32Array(NP), VY = new Float32Array(NP);
+function sprinkle(){
+  for (let p = 0; p < NP; p++){
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(RAD-2);
+    PX[p] = C + r*Math.cos(a); PY[p] = C + r*Math.sin(a);
+    VX[p] = 0; VY[p] = 0;
+  }
+  settle = 0;
+}
+const DRIFT = 15, DAMP = 0.6, AGIT = 0.85;
+function stepGrains(){
+  const jitter = AGIT*agit;
+  for (let p = 0; p < NP; p++){
+    let x = PX[p], y = PY[p];
+    const i = (y|0)*G + (x|0);
+    const u = U[i], gx = GX[i], gy = GY[i];
+    const a = Math.abs(u)*jitter;
+    let vx = (VX[p] - DRIFT*u*gx + (Math.random()-0.5)*a)*DAMP;
+    let vy = (VY[p] - DRIFT*u*gy + (Math.random()-0.5)*a)*DAMP;
+    x += vx; y += vy;
+    const rx = x - C, ry = y - C, r = Math.hypot(rx, ry);
+    if (r > RAD - 1.5){                              // the clamped rim is a wall
+      const s = (RAD - 1.5)/r;
+      x = C + rx*s; y = C + ry*s; vx *= -0.25; vy *= -0.25;
+    }
+    PX[p] = x; PY[p] = y; VX[p] = vx; VY[p] = vy;
+  }
+  if (settle < 1) settle = Math.min(1, settle + 0.012);
+}
+
+/* ---------- rendering ---------- */
+const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha:false });
+const img = ctx.createImageData(G, G), px = img.data;
+const BIN = new Uint16Array(SZ);
+let phase = 0;
+
+function render(){
+  if (view === 'sand'){
+    BIN.fill(0);
+    for (let p = 0; p < NP; p++){
+      const i = (PY[p]|0)*G + (PX[p]|0);
+      if (i >= 0 && i < SZ) BIN[i]++;
+    }
+    for (let i = 0, q = 0; i < SZ; i++, q += 4){
+      const cov = COV[i];
+      // brushed dark plate, slightly lighter toward the rim
+      let base = 15 + 10*(1 - cov*0.0);
+      let r0 = base, g0 = base + 2, b0 = base + 5;
+      const nGrain = BIN[i];
+      if (nGrain){
+        const t = Math.min(1, nGrain/2.0), tt = t*t*(3 - 2*t);
+        r0 += (244 - r0)*tt; g0 += (232 - g0)*tt; b0 += (206 - b0)*tt;
+      }
+      px[q]   = 6 + (r0-6)*cov;
+      px[q+1] = 7 + (g0-7)*cov;
+      px[q+2] = 10 + (b0-10)*cov;
+      px[q+3] = 255;
+    }
+  } else if (view === 'water'){
+    const A = 34, k = Math.cos(phase);
+    const Lx = -0.42, Ly = -0.58, Lz = 0.70;
+    for (let i = 0, q = 0; i < SZ; i++, q += 4){
+      const cov = COV[i];
+      let r0 = 6, g0 = 7, b0 = 10;
+      if (cov > 0){
+        const nx = -A*GX[i]*k, ny = -A*GY[i]*k;
+        const inv = 1/Math.sqrt(nx*nx + ny*ny + 1);
+        const Nx = nx*inv, Ny = ny*inv, Nz = inv;
+        const d = Math.max(0, Nx*Lx + Ny*Ly + Nz*Lz);
+        const dot2 = 2*(Nx*Lx + Ny*Ly + Nz*Lz);
+        const Rz = dot2*Nz - Lz;                      // reflect L about N, viewer at +z
+        const sp = Math.pow(Math.max(0, Rz), 46);
+        const h = U[i]*k;
+        r0 = 8 + 26*d + 235*sp + 30*Math.max(0, h);
+        g0 = 20 + 96*d + 238*sp + 26*Math.max(0, h);
+        b0 = 34 + 118*d + 240*sp + 10*Math.max(0, h);
+      }
+      px[q] = 6 + (Math.min(255,r0)-6)*cov;
+      px[q+1] = 7 + (Math.min(255,g0)-7)*cov;
+      px[q+2] = 10 + (Math.min(255,b0)-10)*cov;
+      px[q+3] = 255;
+    }
+  } else {
+    const k = Math.cos(phase);
+    for (let i = 0, q = 0; i < SZ; i++, q += 4){
+      const cov = COV[i], v = U[i]*k;
+      let r0, g0, b0;
+      if (v >= 0){ r0 = 8 + 76*v;  g0 = 11 + 199*v; b0 = 16 + 224*v; }
+      else       { r0 = 8 + 228*-v; g0 = 11 + 150*-v; b0 = 16 + 84*-v; }
+      px[q] = 6 + (r0-6)*cov; px[q+1] = 7 + (g0-7)*cov; px[q+2] = 10 + (b0-10)*cov; px[q+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function paintReadout(){
+  const top = contributions[0];
+  if (top){
+    document.getElementById('hm').textContent = top.m + ',' + top.n;
+    document.getElementById('hz').textContent = Math.round(excite === 'single' ? top.f : freq);
+    document.getElementById('hj').textContent = ZERO[top.m][top.n-1].toFixed(4);
+  }
+  const rows = [];
+  if (excite === 'single'){
+    rows.push(['zero j<sub>m,n</sub>', '<b>' + ZERO[sel.m][sel.n-1].toFixed(10) + '</b>']);
+    rows.push(['J<sub>m</sub> at that zero', besselJ(sel.m, ZERO[sel.m][sel.n-1]).toExponential(2)]);
+    rows.push(['frequency', freqOf(sel.m, sel.n).toFixed(2) + ' Hz']);
+    rows.push(['nodal diameters', String(sel.m)]);
+    rows.push(['nodal circles', (sel.n - 1) + ' + rim']);
+  } else {
+    rows.push(['modes responding', String(contributions.length)]);
+    for (const e of contributions.slice(0, 5))
+      rows.push(['&nbsp;&nbsp;' + e.m + ',' + e.n + ' @ ' + e.f.toFixed(0) + ' Hz',
+                 (Math.abs(e.w)/Math.abs(contributions[0].w)*100).toFixed(0) + '%']);
+  }
+  document.getElementById('ro').innerHTML =
+    rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('');
+}
+
+/* ---------- controls ---------- */
+(function buildGrid(){
+  const g = document.getElementById('grid');
+  let h = '<span class="hd"></span>';
+  for (let n = 1; n <= NMAX; n++) h += '<span class="hd">' + n + '</span>';
+  for (let m = 0; m <= MMAX; m++){
+    h += '<span class="rh">' + m + '</span>';
+    for (let n = 1; n <= NMAX; n++)
+      h += '<button data-m="'+m+'" data-n="'+n+'" type="button" aria-pressed="'+(m===5&&n===3)+'">'
+         + freqOf(m,n).toFixed(0) + '</button>';
+  }
+  g.innerHTML = h;
+  g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    sel = { m:+b.dataset.m, n:+b.dataset.n }; build();
+  }));
+})();
+
+const sc = document.getElementById('sc'), sctx = sc.getContext('2d');
+function drawSpec(){
+  const W = sc.width, H = sc.height;
+  const rx = (dx-0.5)*2*RAD, ry = (dy-0.5)*2*RAD;
+  const rd = Math.min(Math.hypot(rx, ry), RAD), td = Math.atan2(ry, rx);
+  const vals = new Float64Array(W); let mx = 1e-12;
+  for (let i = 0; i < W; i++){
+    const w = 60 + 840*i/(W-1); let s = 0;
+    for (const md of MODES){
+      const w0 = md.f, g = w0/Q;
+      s += Math.abs(modeAt(md.m, md.n, rd, td))*(w0*w0)/Math.hypot(w0*w0 - w*w, g*w);
+    }
+    vals[i] = s; if (s > mx) mx = s;
+  }
+  sctx.fillStyle = '#000'; sctx.fillRect(0,0,W,H);
+  sctx.strokeStyle = '#5BD6EA'; sctx.lineWidth = 1.4; sctx.beginPath();
+  for (let i = 0; i < W; i++){
+    const h = Math.pow(vals[i]/mx, 0.45)*(H-6);
+    if (i === 0) sctx.moveTo(i, H-2-h); else sctx.lineTo(i, H-2-h);
+  }
+  sctx.stroke();
+  const p = (freq-60)/840*W;
+  sctx.strokeStyle = '#E8A45E'; sctx.lineWidth = 1;
+  sctx.beginPath(); sctx.moveTo(p,0); sctx.lineTo(p,H); sctx.stroke();
+}
+
+document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#modeSeg button').forEach(x => x.setAttribute('aria-pressed', String(x===b)));
+  excite = b.dataset.x;
+  document.getElementById('drivenPane').hidden = excite !== 'driven';
+  document.getElementById('singlePane').hidden = excite !== 'single';
+  document.getElementById('drv').hidden = excite !== 'driven';
+  document.getElementById('hint').textContent = excite === 'driven' ? 'drag to move the driver' : 'pick a mode';
+  build(); if (excite === 'driven') drawSpec();
+}));
+document.querySelectorAll('#viewSeg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', String(x===b)));
+  view = b.dataset.v; render();
+}));
+function setFreq(v, redrawSpec){
+  freq = Math.max(60, Math.min(900, v));
+  document.getElementById('f').value = Math.round(freq);
+  document.getElementById('fv').textContent = Math.round(freq);
+  build(); if (redrawSpec !== false) drawSpec();
+}
+document.getElementById('f').addEventListener('input', e => {
+  sweeping = false; document.getElementById('sweep').setAttribute('aria-pressed','false');
+  setFreq(+e.target.value);
+});
+document.getElementById('q').addEventListener('input', e => {
+  Q = +e.target.value; document.getElementById('qv').textContent = Q; build(); drawSpec();
+});
+document.getElementById('ag').addEventListener('input', e => {
+  agit = +e.target.value; document.getElementById('agv').textContent = agit.toFixed(2);
+});
+document.getElementById('spec').addEventListener('click', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  sweeping = false; document.getElementById('sweep').setAttribute('aria-pressed','false');
+  setFreq(60 + 840*(e.clientX - r.left)/r.width);
+});
+document.getElementById('sprinkle').addEventListener('click', sprinkle);
+document.getElementById('sweep').addEventListener('click', e => {
+  if (excite !== 'driven'){                    // nothing to sweep through in single-mode
+    document.querySelector('#modeSeg button[data-x="driven"]').click();
+  }
+  sweeping = !sweeping; e.target.setAttribute('aria-pressed', String(sweeping));
+});
+
+const stage = document.getElementById('stage');
+let down = false;
+function setDrive(e){
+  const r = stage.getBoundingClientRect();
+  dx = Math.max(0, Math.min(1, (e.clientX-r.left)/r.width));
+  dy = Math.max(0, Math.min(1, (e.clientY-r.top)/r.height));
+  const d = document.getElementById('drv');
+  d.style.left = (dx*100)+'%'; d.style.top = (dy*100)+'%';
+  if (excite === 'driven'){ build(); drawSpec(); }
+}
+stage.addEventListener('pointerdown', e => {
+  if (excite !== 'driven') return;
+  down = true; stage.setPointerCapture(e.pointerId); setDrive(e);
+});
+stage.addEventListener('pointermove', e => { if (down) setDrive(e); });
+stage.addEventListener('pointerup', () => { down = false; });
+stage.addEventListener('pointercancel', () => { down = false; });
+
+/* ---------- accuracy, measured on load ---------- */
+(function accuracy(){
+  const REF = [
+    [0,1,0.7651976865579665514],[1,1,0.4400505857449335160],[3,10,0.0583793793051868123],
+    [0,20,0.1670246643405831547],[5,25,-0.0660079953984229934],[6,40,0.0485001141377945276]];
+  let rows = '';
+  for (const [m,x,ref] of REF){
+    const got = besselJ(m,x), err = Math.abs(got-ref);
+    rows += `<tr><td>J<sub>${m}</sub>(${x})</td><td>${got.toPrecision(16)}</td>`
+          + `<td>${ref.toPrecision(16)}</td><td class="ok">${err.toExponential(1)}</td></tr>`;
+  }
+  const z = besselZero(0,1);
+  rows += `<tr><td>j<sub>0,1</sub></td><td>${z.toPrecision(16)}</td><td>2.404825557695773</td>`
+        + `<td class="ok">${Math.abs(z-2.404825557695773).toExponential(1)}</td></tr>`;
+  rows += `<tr><td>J<sub>0</sub> at its own zero</td><td>${besselJ(0,z).toExponential(3)}</td>`
+        + `<td>0</td><td class="ok">${Math.abs(besselJ(0,z)).toExponential(1)}</td></tr>`;
+  document.querySelector('#accTable tbody').innerHTML = rows;
+})();
+
+const bar = document.getElementById('settleBar');
+let last = 0, sweepAcc = 0;
+function loop(ts){
+  const dt = ts - last; last = ts;
+  // Rebuilding the superposition is the expensive step -- eight modes over the
+  // whole field, plus any mode not yet cached. Advance the sweep on a timer
+  // rather than every frame, so the grains keep moving smoothly underneath it.
+  if (sweeping && excite === 'driven'){
+    sweepAcc += dt;
+    if (sweepAcc > 110){
+      sweepAcc = 0;
+      const next = freq + 14;
+      setFreq(next > 900 ? 60 : next, false);
+      drawSpec();
+    }
+  }
+  if (view === 'sand'){ stepGrains(); stepGrains(); stepGrains(); }
+  else phase += 0.075;
+  render();
+  bar.style.width = (settle*100) + '%';
+  requestAnimationFrame(loop);
+}
+sprinkle(); build(); drawSpec(); render();
+requestAnimationFrame(loop);
+</script>

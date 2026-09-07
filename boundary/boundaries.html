@@ -1,0 +1,1070 @@
+<title>Ten Boundaries</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#E9EBE5; --sheet:#F7F8F4; --sheet2:#FFFFFF;
+  --ink:#1A1D19; --ink2:#575D54; --ink3:#838A7E;
+  --rule:#CBD0C4; --rule2:#AEB5A6;
+  --accent:#1B6B63; --accent-soft:#1B6B6314;
+  --bad:#9E2B25; --bad-soft:#9E2B2514; --bad-hatch:#9E2B2540;
+  --warn:#8A6410;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#151814; --sheet:#1D211C; --sheet2:#242822;
+    --ink:#E6E9E2; --ink2:#A3AB9E; --ink3:#767E71;
+    --rule:#333A31; --rule2:#4A5347;
+    --accent:#4FB3A6; --accent-soft:#4FB3A61F;
+    --bad:#E0736A; --bad-soft:#E0736A1F; --bad-hatch:#E0736A4A;
+    --warn:#C99A3A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#151814; --sheet:#1D211C; --sheet2:#242822;
+  --ink:#E6E9E2; --ink2:#A3AB9E; --ink3:#767E71;
+  --rule:#333A31; --rule2:#4A5347;
+  --accent:#4FB3A6; --accent-soft:#4FB3A61F;
+  --bad:#E0736A; --bad-soft:#E0736A1F; --bad-hatch:#E0736A4A;
+  --warn:#C99A3A;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Newsreader",Georgia,serif; font-size:16.5px; line-height:1.6;
+  font-optical-sizing:auto; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px 80px}
+.mono{font-family:"Spline Sans Mono",ui-monospace,SFMono-Regular,monospace;
+  font-variant-numeric:tabular-nums}
+h1,h2,h3,.disp{font-family:"Bricolage Grotesque","Helvetica Neue",sans-serif;
+  font-weight:800; letter-spacing:-.02em; text-wrap:balance}
+
+/* ---------- header ---------- */
+header{padding:44px 0 26px;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:"Spline Sans Mono",monospace;font-size:11px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3);margin:0 0 12px}
+.eyebrow b{color:var(--accent);font-weight:600}
+h1{font-size:clamp(2.3rem,6vw,3.6rem);line-height:.98;margin:0}
+.lede{font-size:1.08rem;color:var(--ink2);max-width:60ch;margin:14px 0 0}
+.lede b{color:var(--ink);font-weight:500}
+.meta{display:flex;flex-wrap:wrap;gap:0 26px;margin:20px 0 0;
+  font-family:"Spline Sans Mono",monospace;font-size:11.5px;color:var(--ink3)}
+.meta span b{color:var(--ink);font-weight:600}
+
+section{padding:52px 0 0}
+h2{font-size:1.55rem;margin:0 0 6px;line-height:1.1}
+.kicker{font-family:"Spline Sans Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--ink3);margin:0 0 9px}
+p{margin:0 0 15px;color:var(--ink2);max-width:64ch}
+p b{color:var(--ink);font-weight:500}
+code{font-family:"Spline Sans Mono",monospace;font-size:.83em;
+  background:var(--sheet);border:1px solid var(--rule);padding:.1em .34em;
+  border-radius:2px;color:var(--ink)}
+a{color:var(--accent)}
+
+/* ---------- chart ---------- */
+.panel{background:var(--sheet);border:1px solid var(--rule);margin-top:22px}
+.panel-hd{display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+  justify-content:space-between;padding:13px 17px;border-bottom:1px solid var(--rule)}
+.panel-ttl{font-family:"Spline Sans Mono",monospace;font-size:11px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3)}
+
+.seg{display:inline-flex;border:1px solid var(--rule2);border-radius:2px;overflow:hidden}
+.seg button{font-family:"Spline Sans Mono",monospace;font-size:11.5px;
+  background:transparent;color:var(--ink2);border:0;padding:6px 13px;cursor:pointer;
+  border-right:1px solid var(--rule2)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper);font-weight:500}
+.seg button:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{font-family:"Spline Sans Mono",monospace;font-size:11.5px;background:transparent;
+  color:var(--ink2);border:1px solid var(--rule2);padding:6px 13px;cursor:pointer;border-radius:2px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+
+.chart{padding:6px 17px 17px}
+.axis{position:relative;height:19px;margin-left:132px;margin-right:78px}
+.axis i{position:absolute;top:0;width:1px;height:6px;background:var(--rule2)}
+.axis u{position:absolute;top:7px;transform:translateX(-50%);text-decoration:none;
+  font-family:"Spline Sans Mono",monospace;font-size:10px;color:var(--ink3)}
+.rowset{display:grid;gap:2px}
+.brow{display:grid;grid-template-columns:132px 1fr 78px;align-items:center;gap:0;
+  cursor:pointer;border:0;background:transparent;padding:0;text-align:left;font:inherit;
+  color:inherit;width:100%}
+.brow:hover .track,.brow[aria-current="true"] .track{background:var(--sheet2)}
+.brow:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bname{font-family:"Spline Sans Mono",monospace;font-size:11.5px;color:var(--ink2);
+  padding-right:11px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brow[aria-current="true"] .bname{color:var(--ink);font-weight:500}
+.track{position:relative;height:23px;border-left:1px solid var(--rule2)}
+.wall{position:absolute;top:0;bottom:0;left:0;pointer-events:none;
+  background:repeating-linear-gradient(-45deg,var(--bad-hatch) 0 4px,transparent 4px 9px);
+  border-right:2px solid var(--bad)}
+.bar{position:absolute;top:5px;height:13px;background:var(--accent);
+  transition:width .5s cubic-bezier(.4,0,.2,1)}
+.brow.unv .bar{background:repeating-linear-gradient(90deg,var(--bad) 0 3px,transparent 3px 6px);
+  border:1px solid var(--bad);height:13px}
+.bval{font-family:"Spline Sans Mono",monospace;font-size:11.5px;text-align:right;
+  padding-left:9px;color:var(--ink)}
+.brow.unv .bval{color:var(--bad)}
+.chart-note{margin:11px 0 0 132px;font-family:"Spline Sans Mono",monospace;
+  font-size:10.5px;color:var(--ink3)}
+.chart-note em{font-style:normal;color:var(--bad)}
+
+/* ---------- record detail ---------- */
+.detail{border-top:1px solid var(--rule);padding:15px 17px;background:var(--sheet2)}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px 22px}
+.dcell .k{font-family:"Spline Sans Mono",monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:3px}
+.dcell .v{font-family:"Spline Sans Mono",monospace;font-size:12.5px;color:var(--ink);
+  word-break:break-word;line-height:1.45}
+.dcell .v.f{font-size:13.5px}
+.verdict{margin-top:14px;padding:11px 13px;font-size:14.5px;line-height:1.5;
+  border-left:2px solid var(--accent);background:var(--accent-soft);color:var(--ink2)}
+.verdict.no{border-left-color:var(--bad);background:var(--bad-soft)}
+.verdict b{color:var(--ink);font-weight:500}
+
+/* ---------- proof figure ---------- */
+.fig{display:grid;grid-template-columns:242px 1fr;gap:26px;align-items:center;
+  margin-top:20px;padding:20px 17px;background:var(--sheet);border:1px solid var(--rule)}
+.fig svg{width:100%;height:auto;display:block}
+.fig p{margin:0 0 11px}
+.fig p:last-child{margin:0}
+
+/* ---------- readouts ---------- */
+.pad{padding:17px}
+.fld{display:grid;gap:6px;margin-bottom:15px}
+.fld .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.lab{font-family:"Spline Sans Mono",monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink3)}
+.fld .num{font-family:"Spline Sans Mono",monospace;font-size:1.02rem;color:var(--accent);
+  font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent);height:20px;margin:0}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.ro{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:baseline;
+  font-family:"Spline Sans Mono",monospace;font-size:12.5px}
+.ro dt{color:var(--ink3);font-size:11px;white-space:nowrap}
+.ro dd{margin:0;color:var(--ink);word-break:break-all}
+.ro dd mark{background:var(--bad-soft);color:var(--bad);padding:0 1px;border-radius:1px}
+.ro dd .same{color:var(--ink3)}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rule)}
+.split > div{background:var(--sheet);padding:15px 17px}
+.split h3{font-family:"Spline Sans Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3);margin:0 0 11px;font-weight:400}
+.split h3 em{font-style:normal;color:var(--bad)}
+.split h3 b{color:var(--accent);font-weight:600}
+
+.strip{position:relative;border:1px solid var(--rule);background:var(--sheet2);
+  height:54px;cursor:pointer;margin-top:4px}
+.strip canvas{width:100%;height:100%;display:block}
+.striplab{display:flex;justify-content:space-between;
+  font-family:"Spline Sans Mono",monospace;font-size:10px;color:var(--ink3);margin-top:4px}
+
+.tally{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:20px}
+.tally div{background:var(--sheet);padding:13px 15px}
+.tally .n{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.5rem;
+  color:var(--ink);line-height:1;font-variant-numeric:tabular-nums}
+.tally .n.bad{color:var(--bad)}
+.tally .t{font-family:"Spline Sans Mono",monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3);margin-top:6px;line-height:1.4}
+
+pre.out{margin:0;padding:15px 17px;background:var(--sheet2);overflow-x:auto;
+  font-family:"Spline Sans Mono",monospace;font-size:12px;line-height:1.65;
+  color:var(--ink2);border-top:1px solid var(--rule)}
+pre.out b{color:var(--accent);font-weight:600}
+pre.out em{font-style:normal;color:var(--bad);font-weight:600}
+
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin-top:34px}
+.links a{background:var(--sheet);padding:15px 17px;text-decoration:none;color:inherit;display:block}
+.links a:hover{background:var(--accent-soft)}
+.links b{display:block;color:var(--accent);font-family:"Bricolage Grotesque",sans-serif;
+  font-weight:600;font-size:.98rem;margin-bottom:4px}
+.links em{font-style:normal;font-size:.85rem;color:var(--ink3);line-height:1.45;display:block;
+  font-family:"Newsreader",serif}
+footer{margin-top:44px;padding-top:17px;border-top:1px solid var(--rule);
+  font-family:"Spline Sans Mono",monospace;font-size:10.5px;color:var(--ink3);line-height:2}
+
+@media (max-width:720px){
+  .fig{grid-template-columns:1fr}
+  .split{grid-template-columns:1fr}
+  .axis{margin-left:96px;margin-right:66px}
+  .brow{grid-template-columns:96px 1fr 66px}
+  .chart-note{margin-left:96px}
+}
+@media (prefers-reduced-motion:reduce){.bar{transition:none}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow"><b>boundary/boundarykernel.js</b> — the real file, running on this page</p>
+  <h1>Ten Boundaries</h1>
+  <p class="lede">Ten closed curves, each published with a perimeter-to-diameter ratio.
+  One of those ratios is <b>geometrically impossible</b>, one is <b>in different units
+  from the other nine</b>, and one came from a divisor that appears in no formula.
+  Every number below is computed here, now, by the kernel itself.</p>
+  <p class="meta">
+    <span><b>10</b> boundaries</span>
+    <span><b>4</b> defects</span>
+    <span><b>2</b> refused</span>
+    <span><b>34</b> tests, 0 failing</span>
+    <span>PR <b>#105</b></span>
+  </p>
+</header>
+<section>
+  <p class="kicker">Defect 1 · 2 · 3</p>
+  <h2>Perimeter over diameter</h2>
+  <p>Every closed convex curve satisfies <b>P ≥ 2D</b>. The hatched band is the region no
+  boundary can occupy. Switch to the values as originally published and watch what happens
+  to the two eggs and the square.</p>
+
+  <div class="panel">
+    <div class="panel-hd">
+      <span class="panel-ttl">P/D, shared scale 0 → 4.4</span>
+      <span class="seg" id="setSeg">
+        <button data-set="now" aria-pressed="true">as shipped</button>
+        <button data-set="was" aria-pressed="false">as published</button>
+      </span>
+    </div>
+    <div class="chart">
+      <div class="axis" id="axis"></div>
+      <div class="rowset" id="rows"></div>
+      <p class="chart-note" id="chartNote"></p>
+    </div>
+    <div class="detail" id="detail"></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">The bound</p>
+  <h2>Why nothing sits left of 2</h2>
+  <div class="fig">
+    <svg viewBox="0 0 220 168" role="img" aria-label="A closed convex curve with its diameter AB marked, split into an upper and a lower arc, each at least as long as AB.">
+      <path id="fgBlob" d="M32 96 C32 52 64 26 108 26 C158 26 194 54 194 88 C194 126 156 150 112 150 C66 150 32 132 32 96 Z"
+            fill="none" stroke="var(--rule2)" stroke-width="1.2"/>
+      <path d="M32 96 C32 52 64 26 108 26 C158 26 194 54 194 88"
+            fill="none" stroke="var(--accent)" stroke-width="2.6"/>
+      <path d="M194 88 C194 126 156 150 112 150 C66 150 32 132 32 96"
+            fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-dasharray="5 3.5"/>
+      <line x1="32" y1="96" x2="194" y2="88" stroke="var(--bad)" stroke-width="1.4"/>
+      <circle cx="32" cy="96" r="3.6" fill="var(--bad)"/>
+      <circle cx="194" cy="88" r="3.6" fill="var(--bad)"/>
+      <text x="22" y="114" fill="var(--ink2)" font-family="Spline Sans Mono, monospace" font-size="11">A</text>
+      <text x="192" y="76" fill="var(--ink2)" font-family="Spline Sans Mono, monospace" font-size="11">B</text>
+      <text x="98" y="106" fill="var(--bad)" font-family="Spline Sans Mono, monospace" font-size="11">D</text>
+      <text x="88" y="20" fill="var(--accent)" font-family="Spline Sans Mono, monospace" font-size="11">arc ≥ D</text>
+      <text x="86" y="166" fill="var(--accent)" font-family="Spline Sans Mono, monospace" font-size="11">arc ≥ D</text>
+    </svg>
+    <div>
+      <p>Take the two points <b>A</b> and <b>B</b> furthest apart on the curve — their
+      separation is the diameter <b>D</b>. They cut the curve into two arcs, and each arc
+      joins A to B, so each is at least as long as the straight line between them.</p>
+      <p>Two arcs, each ≥ D. So <b>P ≥ 2D</b> for every closed curve, with equality only in
+      the degenerate flat limit. Thom Egg II was published at <b>P/D = 1.7124</b>. There is
+      no shape it could describe.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Defect 4</p>
+  <h2>The array order was in the physics</h2>
+  <p>Coupling per boundary was <code>0.016 + anisotropy·0.024 + index·0.0007</code>. That last
+  term reads a boundary's <b>position in the array</b>, so shuffling a list of ten equations —
+  an edit with no geometric meaning — changed the field. Reorder them and watch.</p>
+
+  <div class="panel">
+    <div class="panel-hd">
+      <span class="panel-ttl">factoredBoundaryProduct(arc, 0.9)</span>
+      <span style="display:flex;gap:7px">
+        <button class="btn" id="revBtn">reverse order</button>
+        <button class="btn" id="shufBtn">shuffle</button>
+        <button class="btn" id="resetBtn">restore</button>
+      </span>
+    </div>
+    <div class="pad">
+      <div class="fld">
+        <div class="top"><span class="lab">perimeter arc</span><span class="num" id="arcV">1.700</span></div>
+        <input type="range" id="arc" min="0.05" max="6" step="0.01" value="1.7">
+      </div>
+      <p class="lab" style="margin:0 0 8px">current order</p>
+      <p class="mono" id="orderTxt" style="font-size:11.5px;color:var(--ink2);margin:0 0 4px;max-width:none"></p>
+    </div>
+    <div class="split">
+      <div>
+        <h3>with <em>index · 0.0007</em> — the old coupling</h3>
+        <dl class="ro">
+          <dt>original</dt><dd id="oldA"></dd>
+          <dt>reordered</dt><dd id="oldB"></dd>
+          <dt>drift</dt><dd id="oldD"></dd>
+        </dl>
+      </div>
+      <div>
+        <h3>geometry only — <b>as shipped</b></h3>
+        <dl class="ro">
+          <dt>original</dt><dd id="newA"></dd>
+          <dt>reordered</dt><dd id="newB"></dd>
+          <dt>drift</dt><dd id="newD"></dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <p style="margin-top:15px">The shipped drift is not zero and cannot be: floating-point
+  multiplication is not associative, so reassociating ten factors moves the last bit. What it
+  can be is <b>bounded by the arithmetic</b> rather than by the data — half an ulp, not a
+  tolerance chosen until a test went green.</p>
+</section>
+
+<section>
+  <p class="kicker">The method swap</p>
+  <h2>The fix was worse than the bug</h2>
+  <p>E(m) was a 2048-interval Simpson rule. Replacing it with the arithmetic-geometric mean
+  should have been a straight win — quadratic convergence, six iterations, no interval count
+  silently setting the error. The first AGM version was <b>less accurate than the quadrature
+  it replaced</b>.</p>
+  <p>Once <code>a</code> and <code>b</code> agree to within an ulp, <code>c = (a−b)/2</code>
+  stops shrinking and plateaus near 5.6e-17. An <b>absolute</b> cutoff of 1e-18 is never
+  reached, so the loop runs to its 64-iteration cap while <code>power</code> doubles to 2⁶⁴ —
+  and the terms <code>2ⁿc²</code> start growing again. Terminating <b>relatively</b>, on
+  <code>|c| > ε·a</code>, fixes it.</p>
+
+  <div class="panel">
+    <div class="panel-hd">
+      <span class="panel-ttl">complete elliptic integral E(m)</span>
+      <button class="btn" id="costBtn">measure cost</button>
+    </div>
+    <div class="pad">
+      <div class="fld">
+        <div class="top"><span class="lab">m</span><span class="num" id="mV">0.500</span></div>
+        <input type="range" id="m" min="0.001" max="0.998" step="0.001" value="0.5">
+      </div>
+      <dl class="ro">
+        <dt>AGM, relative exit</dt><dd id="agmOut"></dd>
+        <dt>AGM, absolute exit</dt><dd id="bugOut"></dd>
+        <dt>Simpson, 2048</dt><dd id="simOut"></dd>
+        <dt>absolute-exit error</dt><dd id="errOut"></dd>
+      </dl>
+      <p class="lab" style="margin:18px 0 0">iterations to exit, absolute cutoff, across the whole domain</p>
+      <div class="strip" id="strip" title="click to set m"><canvas id="sc" width="1840" height="108"></canvas></div>
+      <p class="striplab"><span>m = 0</span><span id="stripNote"></span><span>m = 1</span></p>
+      <p class="mono" id="costOut" style="font-size:11.5px;color:var(--ink3);margin:14px 0 0;max-width:none"></p>
+    </div>
+  </div>
+  <div class="tally" id="tally"></div>
+</section>
+
+<section>
+  <p class="kicker">The gate</p>
+  <h2>What the kernel says about itself</h2>
+  <p>Each record carries an <code>evaluate()</code> that recomputes its ratio from the formula
+  printed beside it. <code>verify()</code> compares the two; <code>verifyOrThrow()</code>
+  refuses to load if any derivable record disagrees with its own geometry. This is its real
+  output, produced by the copy of the kernel running on this page.</p>
+  <div class="panel">
+    <div class="panel-hd"><span class="panel-ttl">CymaticaBoundaryKernel.verify()</span></div>
+    <pre class="out" id="verifyOut"></pre>
+  </div>
+  <p style="margin-top:15px">The two eggs are not patched to make this pass. Their perimeters
+  follow from the printed formulas; their <b>diameters do not</b>, and I could not derive
+  either from Thom's constructions. They are marked <code>derived: false</code>, their
+  <code>evaluate()</code> throws, and the reason is carried in the record. An invented divisor
+  would have turned this list green and told you nothing.</p>
+
+  <div class="links">
+    <a href="https://claude.ai/code/artifact/aad075c1-fb88-4e21-8662-6c4936945c2c"><b>Chladni Plate</b><em>A driven square plate, solved in its modal basis</em></a>
+    <a href="https://claude.ai/code/artifact/1648a96f-33ab-4f1e-b86a-bfc4cd6aaa80"><b>Sutra Workbench</b><em>The exact rational solvers, running live</em></a>
+    <a href="https://claude.ai/code/artifact/298e43dd-15f6-4ed9-b28e-cfb4178433bb"><b>Sutra Aperture</b><em>What each of the 29 sutras can and cannot do</em></a>
+  </div>
+
+  <footer>
+    boundary/boundarykernel.js · 10 records · 34 tests, 0 failing · branch claude/boundary-kernel-exactness<br>
+    The kernel source is embedded in this page verbatim. Every figure here is computed in your
+    browser at load; nothing on this page is a stored result.
+  </footer>
+</section>
+</div>
+<script>
+/**
+ * Cymatica boundary kernel — the ten boundary equations.
+ *
+ * Every published number in this file is computed from the `exact` string
+ * printed beside it. `verify()` re-derives each one and compares; a record
+ * whose stored value disagrees with its own formula cannot load. Numbers that
+ * are NOT derivable from their formula are marked `derived: false` and named,
+ * rather than shipped as though they were.
+ *
+ * Changes from the previous kernel, each with the measurement behind it:
+ *
+ *   1. E(m) was a 2048-interval Simpson quadrature. It is now the AGM
+ *      recurrence (Abramowitz & Stegun 17.6), which reaches the same machine
+ *      precision in ~6 iterations instead of 2049 sin+sqrt evaluations, and
+ *      carries no interval count that silently sets the error.
+ *
+ *   2. Thom Egg II published P/D = 1.7124. No closed convex curve can have
+ *      P/D < 2 — going out to the far point and back is already 2D. The
+ *      divisor 20 is wrong. It is no longer used; the record is unverified
+ *      and `verifyOrThrow()` refuses it.
+ *
+ *   3. Thom Egg I published P/D = 2.2185 from a divisor of 18 that appears
+ *      nowhere in its formula. Legal, but below every other Thom figure
+ *      (2.87-3.08) and below both ellipses. Also unverified.
+ *
+ *   4. The square published 4, which is P/side. Every other entry is P/D with
+ *      D the diameter, so the square was in different units. With D the
+ *      diagonal it is 2*sqrt(2). The convention is now explicit per record.
+ *
+ *   5. `coupling` contained `index * 0.0007`, which made the field depend on
+ *      the order of the array. Reordering the equations changed the physics.
+ *      Removed; coupling is now a function of the geometry alone.
+ *
+ *   6. Non-finite input produced silent NaN throughout. Every entry point now
+ *      validates and throws.
+ */
+(function installCymaticaBoundaryKernel(root) {
+  'use strict';
+
+  const PI = Math.PI;
+  const TAU = PI * 2;
+  const PHI = (1 + Math.sqrt(5)) / 2;
+  const SQRT2 = Math.SQRT2;
+  const DEFAULT_R4_SCALES = Object.freeze([0.8, 1.2, 1.8, 2.6]);
+
+  function requireFinite(name, x) {
+    if (typeof x !== 'number' || !Number.isFinite(x)) {
+      throw new TypeError(`${name} must be a finite number, got ${x}`);
+    }
+    return x;
+  }
+
+  /**
+   * Complete elliptic integral of the second kind, E(m), by the
+   * arithmetic-geometric mean.
+   *
+   *   a0 = 1, b0 = sqrt(1-m), c0 = sqrt(m)
+   *   a_{n+1} = (a_n + b_n)/2,  b_{n+1} = sqrt(a_n b_n),  c_{n+1} = (a_n - b_n)/2
+   *   K(m) = pi / (2 a_inf)
+   *   E(m) = K(m) * (1 - sum_{n>=0} 2^{n-1} c_n^2)
+   *
+   * The AGM converges quadratically: the number of correct digits doubles each
+   * step, so double precision is reached in about six iterations regardless of
+   * m. There is no truncation parameter to tune and no error that grows with
+   * the integrand's curvature.
+   */
+  function completeEllipticE(m) {
+    requireFinite('m', m);
+    if (m < 0 || m >= 1) {
+      throw new RangeError(`E(m) is defined here for 0 <= m < 1; got m = ${m}`);
+    }
+    let a = 1;
+    let b = Math.sqrt(1 - m);
+    let c = Math.sqrt(m);
+    let sum = (c * c) / 2;          // the n = 0 term, 2^-1 c0^2
+    let power = 1;
+    // Terminate on |a-b| relative to a, NOT on an absolute |c|. Once a and b
+    // agree to within an ulp, c = (a-b)/2 stops shrinking and plateaus around
+    // 5.6e-17, while `power` keeps doubling -- so the terms 2^n c^2 start to
+    // GROW again. An absolute 1e-18 cutoff is never reached, the loop runs to
+    // its iteration cap, and the junk terms reach ~3e-14. That cost 1.1e-13 of
+    // accuracy at m = 0.5, measured against mpmath at 30 digits.
+    for (let n = 0; n < 64 && Math.abs(c) > Number.EPSILON * a; n++) {
+      const nextA = (a + b) / 2;
+      const nextC = (a - b) / 2;
+      b = Math.sqrt(a * b);
+      a = nextA;
+      c = nextC;
+      power *= 2;
+      sum += (power * c * c) / 2;
+    }
+    return (PI / (2 * a)) * (1 - sum);
+  }
+
+  /** Perimeter of the ellipse with semi-axes a >= b, as a multiple of 2a. */
+  function ellipsePerimeterOverMajorAxis(aOverB) {
+    requireFinite('aOverB', aOverB);
+    if (aOverB < 1) throw new RangeError(`aOverB must be >= 1, got ${aOverB}`);
+    const bOverA = 1 / aOverB;
+    return 2 * completeEllipticE(1 - bOverA * bOverA);   // P/(2a) = 2E(e^2)
+  }
+
+  // Thom Egg perimeters, straight from the printed formula. The 3-4-5 triangle
+  // gives a = 3, b = 4, c = 5, r1 = 5.
+  const EGG_I_PERIMETER = 14 * PI - 6 * Math.atan(4 / 5);      // 2*pi*r1 + pi*b - 2*a*beta
+  const EGG_II_PERIMETER = 10 * PI + 10 - 8 * Math.atan(5 / 4); // 2*pi*r1 + 2*c - 2*b*theta
+
+  // The divisors below came with the original file and appear in none of the
+  // formulas. They are kept only so the numbers are inspectable; nothing
+  // computes with them unless the caller opts in past verifyOrThrow().
+  const EGG_I_UNVERIFIED_DIVISOR = 18;
+  const EGG_II_UNVERIFIED_DIVISOR = 20;
+
+  /**
+   * Each record's `evaluate()` recomputes perimeterRatio from the geometry in
+   * `exact`. verify() calls it and requires agreement, so the string and the
+   * number cannot drift apart.
+   */
+  const BOUNDARY_EQUATIONS = Object.freeze([
+    Object.freeze({
+      key: 'circle', label: 'Circle', species: 'ΓC',
+      exact: 'P/D = π',
+      provenance: 'classical_supporting_formula',
+      diameterConvention: 'diameter',
+      perimeterRatio: PI, minorRatio: 1,
+      derived: true, evaluate: () => PI
+    }),
+    Object.freeze({
+      key: 'ellipse', label: 'Ellipse 3:2', species: 'ΓEll',
+      exact: 'x²/3² + y²/2² = 1; P/D = 2E(5/9)',
+      provenance: 'source_extracted_plus_classical_support',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 2 * completeEllipticE(5 / 9), minorRatio: 2 / 3,
+      derived: true, evaluate: () => ellipsePerimeterOverMajorAxis(3 / 2)
+    }),
+    Object.freeze({
+      key: 'golden-ellipse', label: 'Golden ellipse', species: 'ΓΦ',
+      // a/b = φ gives e² = 1 - 1/φ² = 1 - (2-φ) = φ-1 = 1/φ, so P/D = 2E(1/φ).
+      exact: 'a/b = φ; P/D = 2E(1/φ)',
+      provenance: 'golden_ellipse_supporting_formula',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 2 * completeEllipticE(1 / PHI), minorRatio: 1 / PHI,
+      derived: true, evaluate: () => ellipsePerimeterOverMajorAxis(PHI)
+    }),
+    Object.freeze({
+      key: 'thom-a', label: 'Thom A', species: 'ΓA',
+      exact: 'P/D = 5π/6 + (√7/2)atan(√3/5)',
+      provenance: 'source_extracted',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 5 * PI / 6 + (Math.sqrt(7) / 2) * Math.atan(Math.sqrt(3) / 5),
+      minorRatio: (1 + Math.sqrt(7)) / 4,
+      derived: true,
+      evaluate: () => 5 * PI / 6 + (Math.sqrt(7) / 2) * Math.atan(Math.sqrt(3) / 5)
+    }),
+    Object.freeze({
+      key: 'thom-b', label: 'Thom B', species: 'ΓB',
+      exact: 'P/D = 5π/6 + (√10/3)atan(1/3)',
+      provenance: 'source_extracted',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 5 * PI / 6 + (Math.sqrt(10) / 3) * Math.atan(1 / 3),
+      minorRatio: (2 + Math.sqrt(10)) / 6,
+      derived: true,
+      evaluate: () => 5 * PI / 6 + (Math.sqrt(10) / 3) * Math.atan(1 / 3)
+    }),
+    Object.freeze({
+      key: 'thom-d', label: 'Thom D', species: 'ΓD',
+      exact: 'P/D = 8π/9 + (√13/3)atan(√3/7)',
+      provenance: 'derived_from_source_geometry',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 8 * PI / 9 + (Math.sqrt(13) / 3) * Math.atan(Math.sqrt(3) / 7),
+      minorRatio: (2 + Math.sqrt(13)) / 6,
+      derived: true,
+      evaluate: () => 8 * PI / 9 + (Math.sqrt(13) / 3) * Math.atan(Math.sqrt(3) / 7)
+    }),
+    Object.freeze({
+      key: 'thom-bmod', label: 'Thom B modified', species: 'ΓBmod',
+      exact: 'P/D = 3π/4 + (√5/2)atan(1/2)',
+      provenance: 'derived_from_source_geometry',
+      diameterConvention: 'major_axis',
+      perimeterRatio: 3 * PI / 4 + (Math.sqrt(5) / 2) * Math.atan(1 / 2),
+      minorRatio: (1 + Math.sqrt(5)) / 4,
+      derived: true,
+      evaluate: () => 3 * PI / 4 + (Math.sqrt(5) / 2) * Math.atan(1 / 2)
+    }),
+    Object.freeze({
+      key: 'egg-i', label: 'Thom Egg I', species: 'ΓEggI',
+      exact: 'P = 2πr₁ + πb − 2aβ; tan β = b/c   (a,b,c = 3,4,5; r₁ = 5)',
+      provenance: 'source_extracted',
+      diameterConvention: 'UNVERIFIED',
+      perimeter: EGG_I_PERIMETER,
+      perimeterRatio: EGG_I_PERIMETER / EGG_I_UNVERIFIED_DIVISOR,
+      minorRatio: 2 / 3,
+      derived: false,
+      unverifiedReason:
+        `the formula gives P = ${EGG_I_PERIMETER.toFixed(6)} but no diameter; ` +
+        `the divisor ${EGG_I_UNVERIFIED_DIVISOR} appears in no formula. The ` +
+        `resulting P/D = 2.2185 is legal but below every other Thom figure ` +
+        `(2.87-3.08) and below both ellipses.`,
+      evaluate: () => { throw new Error('egg-i: diameter is not derivable from its formula'); }
+    }),
+    Object.freeze({
+      key: 'egg-ii', label: 'Thom Egg II', species: 'ΓEggII',
+      exact: 'P = 2πr₁ + 2c − 2bθ; tan θ = c/b   (a,b,c = 3,4,5; r₁ = 5)',
+      provenance: 'source_extracted',
+      diameterConvention: 'UNVERIFIED',
+      perimeter: EGG_II_PERIMETER,
+      perimeterRatio: EGG_II_PERIMETER / EGG_II_UNVERIFIED_DIVISOR,
+      minorRatio: 4 / 5,
+      derived: false,
+      unverifiedReason:
+        `P/D = 1.7124 with the divisor ${EGG_II_UNVERIFIED_DIVISOR}. No closed ` +
+        `convex curve can have P/D < 2: reaching the far point and returning ` +
+        `already costs 2D. The divisor is wrong, not merely unsourced.`,
+      evaluate: () => { throw new Error('egg-ii: diameter is not derivable from its formula'); }
+    }),
+    Object.freeze({
+      key: 'polygon', label: 'Square polygon', species: 'ΓPoly',
+      // Every other record is P/D with D the diameter. A square's diameter is
+      // its diagonal s*sqrt(2), so P/D = 4s/(s*sqrt2) = 2*sqrt2. The previous
+      // value 4 was P/side, i.e. a different quantity in the same column.
+      exact: 'P = 2(a+b), a = b; D = a√2; P/D = 2√2',
+      provenance: 'classical_supporting_formula',
+      diameterConvention: 'diameter',
+      perimeterRatio: 2 * SQRT2, minorRatio: 1 / SQRT2,
+      derived: true, evaluate: () => 4 / SQRT2
+    })
+  ]);
+
+  const MIN_CONVEX_RATIO = 2;   // P >= 2D for every closed convex curve
+
+  /** Re-derive every record and report. Nothing here throws; verifyOrThrow does. */
+  function verify(tolerance = 1e-12) {
+    return BOUNDARY_EQUATIONS.map(b => {
+      const issues = [];
+      if (b.derived) {
+        let got;
+        try { got = b.evaluate(); } catch (e) { issues.push(`evaluate() threw: ${e.message}`); }
+        if (got !== undefined && Math.abs(got - b.perimeterRatio) > tolerance) {
+          issues.push(`stored ${b.perimeterRatio} != formula ${got}`);
+        }
+      } else {
+        issues.push(`not derivable from its formula: ${b.unverifiedReason}`);
+      }
+      if (b.perimeterRatio < MIN_CONVEX_RATIO) {
+        issues.push(`P/D = ${b.perimeterRatio.toFixed(6)} < 2, impossible for a closed convex curve`);
+      }
+      if (!(b.minorRatio > 0 && b.minorRatio <= 1)) {
+        issues.push(`minorRatio ${b.minorRatio} outside (0, 1]`);
+      }
+      return { key: b.key, ok: issues.length === 0, issues };
+    });
+  }
+
+  function verifyOrThrow() {
+    const bad = verify().filter(r => !r.ok);
+    if (bad.length) {
+      throw new Error('boundary kernel failed verification:\n' +
+        bad.map(r => `  ${r.key}: ${r.issues.join('; ')}`).join('\n'));
+    }
+    return true;
+  }
+
+  function reinforcedR4(radius, scales = DEFAULT_R4_SCALES) {
+    requireFinite('radius', radius);
+    if (!Array.isArray(scales) || scales.length === 0) {
+      throw new TypeError('scales must be a non-empty array');
+    }
+    const radialFourth = radius ** 4;
+    let product = 1;
+    for (const scale of scales) {
+      requireFinite('scale', scale);
+      if (scale <= 0) throw new RangeError(`R4 scale must be > 0, got ${scale}`);
+      const scaleFourth = scale ** 4;
+      product *= scaleFourth / (radialFourth + scaleFourth);
+    }
+    return product;
+  }
+
+  /**
+   * Coupling per boundary. Previously
+   *     0.016 + anisotropy * 0.024 + index * 0.0007
+   * whose last term made the field depend on the order of BOUNDARY_EQUATIONS —
+   * reordering the array changed the result. Coupling now depends only on the
+   * boundary's own anisotropy, so the set is order-free. The two constants are
+   * the original ones and remain unsourced; they are named here so they can be
+   * replaced by something derived rather than sitting inline.
+   */
+  const COUPLING_BASE = 0.016;
+  const COUPLING_ANISOTROPY_GAIN = 0.024;
+
+  function couplingFor(boundary) {
+    const anisotropy = 1 - boundary.minorRatio;
+    return COUPLING_BASE + anisotropy * COUPLING_ANISOTROPY_GAIN;
+  }
+
+  function boundaryTerms(perimeterArc, sourceDistance) {
+    requireFinite('perimeterArc', perimeterArc);
+    requireFinite('sourceDistance', sourceDistance);
+    const r4 = reinforcedR4(sourceDistance);
+    return BOUNDARY_EQUATIONS.map(boundary => {
+      const perimeterPhase = TAU * perimeterArc / boundary.perimeterRatio;
+      const coupling = couplingFor(boundary);
+      const equationFactor = 1 - coupling * Math.sin(perimeterPhase) ** 2;
+      return Object.freeze({ key: boundary.key, perimeterPhase, coupling, equationFactor, r4 });
+    });
+  }
+
+  function factoredBoundaryProduct(perimeterArc, sourceDistance) {
+    let product = 1;
+    for (const term of boundaryTerms(perimeterArc, sourceDistance)) {
+      product *= term.equationFactor;
+    }
+    // r4 is a property of the source distance, not of any one term; taking it
+    // from terms[0] as before worked only because every term carried a copy.
+    return product * reinforcedR4(sourceDistance);
+  }
+
+  /** Dimensionless perimeter loss at the basin wall. There is no alternate path. */
+  function factoredBoundaryImpedance(perimeterArc, sourceDistance) {
+    return 1 - factoredBoundaryProduct(perimeterArc, sourceDistance);
+  }
+
+  root.CymaticaBoundaryKernel = Object.freeze({
+    PHI,
+    BOUNDARY_EQUATIONS,
+    DEFAULT_R4_SCALES,
+    COUPLING_BASE,
+    COUPLING_ANISOTROPY_GAIN,
+    MIN_CONVEX_RATIO,
+    completeEllipticE,
+    ellipsePerimeterOverMajorAxis,
+    reinforcedR4,
+    couplingFor,
+    boundaryTerms,
+    factoredBoundaryProduct,
+    factoredBoundaryImpedance,
+    factoredBoundaryResponse: factoredBoundaryProduct,
+    verify,
+    verifyOrThrow
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = globalThis.CymaticaBoundaryKernel;
+}
+</script>
+<script>
+'use strict';
+const K = globalThis.CymaticaBoundaryKernel;
+const PI = Math.PI, PHI = K.PHI;
+
+/* ---------------------------------------------------------------------------
+   The previous file's own code, kept so "as published" is reconstructed rather
+   than transcribed: its 2048-interval Simpson E(m), its egg divisors, its 4.
+--------------------------------------------------------------------------- */
+function simpsonE(m){
+  const n = 2048, h = (PI/2)/n; let s = 0;
+  for(let i=0;i<=n;i++){
+    const t = i*h, v = Math.sqrt(1 - m*Math.sin(t)**2);
+    s += ((i===0||i===n) ? 1 : (i%2===0 ? 2 : 4)) * v;
+  }
+  return s*h/3;
+}
+const EGG_I_P  = 14*PI - 6*Math.atan(4/5);
+const EGG_II_P = 10*PI + 10 - 8*Math.atan(5/4);
+const PUBLISHED = {
+  'circle': PI,
+  'ellipse': 2*simpsonE(5/9),
+  'golden-ellipse': 2*simpsonE(1/PHI),
+  'thom-a': 5*PI/6 + Math.sqrt(7)/2*Math.atan(Math.sqrt(3)/5),
+  'thom-b': 5*PI/6 + Math.sqrt(10)/3*Math.atan(1/3),
+  'thom-d': 8*PI/9 + Math.sqrt(13)/3*Math.atan(Math.sqrt(3)/7),
+  'thom-bmod': 3*PI/4 + Math.sqrt(5)/2*Math.atan(1/2),
+  'egg-i': EGG_I_P/18,
+  'egg-ii': EGG_II_P/20,
+  'polygon': 4
+};
+// What changed about each record, beyond its number.
+const CHANGE = {
+  'polygon': 'published 4, which is P/side — the other nine columns are P/D',
+  'egg-i':   'value unchanged; now refused, because its divisor is not derivable',
+  'egg-ii':  'value unchanged; now refused, because no shape has this ratio',
+  'ellipse': 'moved by 1 ulp when Simpson was replaced by the AGM',
+  'golden-ellipse': 'moved by 1 ulp when Simpson was replaced by the AGM'
+};
+
+const EQ = K.BOUNDARY_EQUATIONS;
+const VERIFY = K.verify();
+const vOf = k => VERIFY.find(v => v.key === k);
+const SCALE_MAX = 4.4;
+let currentSet = 'now', selected = 'egg-ii';
+const ratio = (b) => currentSet === 'now' ? b.perimeterRatio : PUBLISHED[b.key];
+const fmt = (x, n=9) => x.toFixed(n);
+
+/* ---------------- axis + bars ---------------- */
+(function drawAxis(){
+  const ax = document.getElementById('axis');
+  let h = '';
+  for(let t=0; t<=SCALE_MAX+1e-9; t+=0.5){
+    const p = (t/SCALE_MAX*100).toFixed(3);
+    h += `<i style="left:${p}%"></i><u style="left:${p}%">${t.toFixed(1)}</u>`;
+  }
+  ax.innerHTML = h;
+})();
+
+function paintRows(){
+  const rows = document.getElementById('rows');
+  rows.innerHTML = EQ.map(b => {
+    const r = ratio(b);
+    const impossible = r < K.MIN_CONVEX_RATIO;
+    const unv = !b.derived;
+    return `<button class="brow${unv?' unv':''}" data-key="${b.key}"
+              aria-current="${b.key===selected}" type="button">
+      <span class="bname">${b.label}</span>
+      <span class="track">
+        <span class="wall" style="width:${(K.MIN_CONVEX_RATIO/SCALE_MAX*100)}%"></span>
+        <span class="bar" style="width:${(r/SCALE_MAX*100).toFixed(3)}%"></span>
+      </span>
+      <span class="bval">${r.toFixed(4)}</span>
+    </button>`;
+  }).join('');
+  rows.querySelectorAll('.brow').forEach(el => {
+    el.addEventListener('click', () => { selected = el.dataset.key; paintRows(); paintDetail(); });
+  });
+
+  const below = EQ.filter(b => ratio(b) < K.MIN_CONVEX_RATIO);
+  document.getElementById('chartNote').innerHTML =
+    `hatched band: P/D &lt; 2, unreachable by any closed convex curve — ` +
+    (below.length
+      ? `<em>${below.map(b=>b.label).join(', ')} ${below.length>1?'sit':'sits'} inside it</em>`
+      : `no record enters it`);
+}
+
+function paintDetail(){
+  const b = EQ.find(x => x.key === selected), v = vOf(selected);
+  const r = ratio(b), was = PUBLISHED[b.key], now = b.perimeterRatio;
+  const moved = Math.abs(was - now) > 0;
+  let derivedLine;
+  if (b.derived){
+    let got; try { got = b.evaluate(); } catch(e){ got = null; }
+    derivedLine = got === null ? 'evaluate() threw'
+      : `${fmt(got,12)}  ${Math.abs(got-b.perimeterRatio) <= 1e-12 ? 'matches stored' : 'DISAGREES'}`;
+  } else {
+    derivedLine = 'refused — diameter not derivable';
+  }
+  document.getElementById('detail').innerHTML = `
+    <div class="dgrid">
+      <div class="dcell"><span class="k">species</span><span class="v">${b.species} · ${b.key}</span></div>
+      <div class="dcell" style="grid-column:span 2"><span class="k">exact</span><span class="v f">${b.exact}</span></div>
+      <div class="dcell"><span class="k">provenance</span><span class="v">${b.provenance.replace(/_/g,' ')}</span></div>
+      <div class="dcell"><span class="k">D taken as</span><span class="v">${b.diameterConvention.replace(/_/g,' ')}</span></div>
+      <div class="dcell"><span class="k">minor ratio</span><span class="v">${fmt(b.minorRatio)}</span></div>
+      <div class="dcell"><span class="k">coupling</span><span class="v">${fmt(K.couplingFor(b),6)}</span></div>
+      <div class="dcell"><span class="k">stored P/D</span><span class="v">${fmt(now,12)}</span></div>
+      <div class="dcell"><span class="k">re-derived</span><span class="v">${derivedLine}</span></div>
+      <div class="dcell"><span class="k">as published</span><span class="v">${fmt(was,12)}${moved?'':'  (unchanged)'}</span></div>
+    </div>
+    <p class="verdict${v.ok?'':' no'}">
+      ${v.ok
+        ? `<b>Verified.</b> The stored ratio and the formula printed beside it agree to
+           better than 1e-12, and the record clears the convexity bound.`
+        : `<b>Refused.</b> ` + v.issues.join('<br>')}
+      ${CHANGE[b.key] ? `<br><span style="color:var(--ink3)">Change: ${CHANGE[b.key]}.</span>` : ''}
+    </p>`;
+}
+
+document.querySelectorAll('#setSeg button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentSet = btn.dataset.set;
+    document.querySelectorAll('#setSeg button').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    paintRows(); paintDetail();
+  });
+});
+
+/* ---------------- order dependence ---------------- */
+const BASE = EQ.slice();
+// Start reordered, so the order-dependence is visible at rest rather than on click.
+let order = EQ.slice().reverse();
+const DIST = 0.9;
+let arc = 1.7;
+
+// The old coupling, verbatim, including the term that read the array index.
+function productWith(list, useIndexTerm){
+  let p = 1;
+  list.forEach((b, i) => {
+    const phase = 2*PI*arc / b.perimeterRatio;
+    const c = K.COUPLING_BASE + (1 - b.minorRatio)*K.COUPLING_ANISOTROPY_GAIN
+            + (useIndexTerm ? i*0.0007 : 0);
+    p *= 1 - c*Math.sin(phase)**2;
+  });
+  return p * K.reinforcedR4(DIST);
+}
+// Show where two readings of the same quantity part company.
+function diverge(a, b){
+  const sa = a.toPrecision(17), sb = b.toPrecision(17);
+  let i = 0; while(i < sa.length && sa[i] === sb[i]) i++;
+  return [`<span class="same">${sa.slice(0,i)}</span><mark>${sa.slice(i)||'·'}</mark>`,
+          `<span class="same">${sb.slice(0,i)}</span><mark>${sb.slice(i)||'·'}</mark>`];
+}
+function paintOrder(){
+  document.getElementById('orderTxt').textContent = order.map(b => b.key).join(' → ');
+  const oA = productWith(BASE, true),  oB = productWith(order, true);
+  const nA = productWith(BASE, false), nB = productWith(order, false);
+  const [oAs, oBs] = diverge(oA, oB), [nAs, nBs] = diverge(nA, nB);
+  document.getElementById('oldA').innerHTML = oAs;
+  document.getElementById('oldB').innerHTML = oBs;
+  document.getElementById('newA').innerHTML = nAs;
+  document.getElementById('newB').innerHTML = nBs;
+  const ulp = x => Math.abs(x)*Number.EPSILON;
+  const line = (a,b) => {
+    const d = Math.abs(a-b);
+    if (d === 0) return 'bit-identical — 0 ulp';
+    return `${d.toExponential(3)}  —  ${(d/ulp(a)).toPrecision(3)} ulp`;
+  };
+  const od = document.getElementById('oldD'), nd = document.getElementById('newD');
+  od.textContent = line(oA, oB); od.style.color = Math.abs(oA-oB) > ulp(oA)*8 ? 'var(--bad)' : '';
+  nd.textContent = line(nA, nB); nd.style.color = 'var(--accent)';
+}
+document.getElementById('revBtn').addEventListener('click', () => {
+  order = order.slice().reverse(); paintOrder();
+});
+document.getElementById('shufBtn').addEventListener('click', () => {
+  const a = order.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  order = a; paintOrder();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  order = BASE.slice(); paintOrder();
+});
+document.getElementById('arc').addEventListener('input', e => {
+  arc = +e.target.value;
+  document.getElementById('arcV').textContent = arc.toFixed(3);
+  paintOrder();
+});
+
+/* ---------------- E(m) ---------------- */
+// The AGM as first written: an absolute cutoff c never falls below.
+function agmAbsolute(m){
+  let a=1, b=Math.sqrt(1-m), c=Math.sqrt(m), sum=c*c/2, power=1, it=0;
+  for(let n=0; n<64 && Math.abs(c) > 1e-18; n++){
+    const nA=(a+b)/2, nC=(a-b)/2;
+    b = Math.sqrt(a*b); a = nA; c = nC; power *= 2; sum += power*c*c/2; it++;
+  }
+  return { v:(PI/(2*a))*(1-sum), it };
+}
+function agmRelativeIters(m){
+  let a=1, b=Math.sqrt(1-m), c=Math.sqrt(m), it=0;
+  for(let n=0; n<64 && Math.abs(c) > Number.EPSILON*a; n++){
+    const nA=(a+b)/2, nC=(a-b)/2; b = Math.sqrt(a*b); a = nA; c = nC; it++;
+  }
+  return it;
+}
+
+const sc = document.getElementById('sc'), sctx = sc.getContext('2d');
+const W = sc.width, H = sc.height;
+let cappedFraction = 0;
+
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function drawStrip(){
+  const bad = css('--bad'), accent = css('--accent'), sheet = css('--sheet2'), rule = css('--rule');
+  sctx.clearRect(0,0,W,H);
+  sctx.fillStyle = sheet; sctx.fillRect(0,0,W,H);
+  let capped = 0;
+  for(let x=0; x<W; x++){
+    const m = (x+0.5)/W;
+    const it = agmAbsolute(m).it;
+    const isCap = it >= 64;
+    if (isCap) capped++;
+    // A full-height madder picket wherever the absolute cutoff is never reached;
+    // a low teal floor, proportional to iteration count, wherever it converges.
+    const h = isCap ? H : Math.max(3, (it/8)*H*0.24);
+    sctx.fillStyle = isCap ? bad : accent;
+    sctx.globalAlpha = isCap ? 0.92 : 0.8;
+    sctx.fillRect(x, H-h, 1, h);
+  }
+  sctx.globalAlpha = 1;
+  cappedFraction = capped/W;
+  sctx.strokeStyle = rule; sctx.lineWidth = 2;
+  sctx.beginPath(); sctx.moveTo(0, H-1); sctx.lineTo(W, H-1); sctx.stroke();
+  const px = mVal*W;
+  sctx.strokeStyle = css('--ink'); sctx.lineWidth = 2;
+  sctx.beginPath(); sctx.moveTo(px,0); sctx.lineTo(px,H); sctx.stroke();
+  document.getElementById('stripNote').innerHTML =
+    `<span style="color:var(--bad)">${(cappedFraction*100).toFixed(1)}% of the domain runs to the 64-iteration cap</span>`;
+  paintTally();
+}
+
+let mVal = 0.5;
+function paintEm(){
+  const good = K.completeEllipticE(mVal);
+  const bug  = agmAbsolute(mVal);
+  const sim  = simpsonE(mVal);
+  const gi   = agmRelativeIters(mVal);
+  const err  = Math.abs(bug.v - good);
+  document.getElementById('agmOut').textContent = `${good.toPrecision(17)}   ${gi} iterations`;
+  const bo = document.getElementById('bugOut');
+  bo.innerHTML = `${bug.v.toPrecision(17)}   ${bug.it} iterations` +
+    (bug.it >= 64 ? ' <mark>ran to the cap</mark>' : '');
+  document.getElementById('simOut').textContent = `${sim.toPrecision(17)}   2049 evaluations`;
+  const eo = document.getElementById('errOut');
+  eo.textContent = err === 0 ? 'exact agreement at this m' : err.toExponential(3);
+  eo.style.color = err > 1e-15 ? 'var(--bad)' : 'var(--ink)';
+}
+document.getElementById('m').addEventListener('input', e => {
+  mVal = +e.target.value;
+  document.getElementById('mV').textContent = mVal.toFixed(3);
+  paintEm(); drawStrip();
+});
+document.getElementById('strip').addEventListener('click', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  mVal = Math.min(0.998, Math.max(0.001, (e.clientX - r.left)/r.width));
+  document.getElementById('m').value = mVal.toFixed(3);
+  document.getElementById('mV').textContent = mVal.toFixed(3);
+  paintEm(); drawStrip();
+});
+
+function paintTally(){
+  const worst = (() => {
+    let w = 0, wm = 0;
+    for(let i=1;i<2000;i++){
+      const m = i/2000, d = Math.abs(agmAbsolute(m).v - K.completeEllipticE(m));
+      if (d > w){ w = d; wm = m; }
+    }
+    return { w, wm };
+  })();
+  document.getElementById('tally').innerHTML = `
+    <div><div class="n bad">${(cappedFraction*100).toFixed(1)}%</div>
+      <div class="t">of m runs to the<br>iteration cap</div></div>
+    <div><div class="n bad">${worst.w.toExponential(1)}</div>
+      <div class="t">worst error, at<br>m = ${worst.wm.toFixed(3)}</div></div>
+    <div><div class="n">3–7</div><div class="t">iterations once the<br>exit is relative</div></div>
+    <div><div class="n">2049</div><div class="t">sin+sqrt per call<br>in the Simpson</div></div>`;
+}
+
+/* cost: measured here, because the ratio is not a stable number to quote */
+document.getElementById('costBtn').addEventListener('click', () => {
+  const out = document.getElementById('costOut');
+  out.textContent = 'measuring…';
+  setTimeout(() => {
+    const MS = []; for(let i=0;i<997;i++) MS.push(i/997*0.997 + 1e-4);
+    const run = (f, reps) => {
+      let s = 0;
+      for(let r=0;r<2;r++) for(const m of MS) s += f(m);        // warm
+      const t0 = performance.now();
+      for(let r=0;r<reps;r++) for(const m of MS) s += f(m);
+      return { ns:(performance.now()-t0)*1e6/(reps*MS.length), s };
+    };
+    const a = run(K.completeEllipticE, 30), b = run(simpsonE, 6);
+    out.innerHTML = `AGM ${a.ns.toFixed(0)} ns/call · Simpson ${b.ns.toFixed(0)} ns/call ` +
+      `· ratio ${(b.ns/a.ns).toFixed(0)}× on this run. ` +
+      `<span style="color:var(--ink2)">Press again: the Simpson stays flat, the AGM keeps ` +
+      `getting faster as the JIT warms, so the ratio is not a fixed figure — it lands ` +
+      `anywhere from 80× to 500× on the same machine.</span>`;
+  }, 20);
+});
+
+/* ---------------- verify() ---------------- */
+(function paintVerify(){
+  const lines = VERIFY.map(r => {
+    const pad = (r.key + '            ').slice(0, 16);
+    return r.ok
+      ? `  <b>ok</b>      ${pad}`
+      : `  <em>FAIL</em>    ${pad}\n` + r.issues.map(i =>
+          '          ' + i.replace(/(.{1,78})(\s|$)/g, '$1\n          ').trimEnd()).join('\n');
+  });
+  const bad = VERIFY.filter(r => !r.ok).length;
+  document.getElementById('verifyOut').innerHTML =
+    lines.join('\n') + `\n\n  ${VERIFY.length - bad} verified, <em>${bad} refused</em>` +
+    `\n  verifyOrThrow() → <em>throws</em>, naming both records`;
+})();
+
+/* ---------------- first paint ---------------- */
+paintRows(); paintDetail(); paintOrder(); paintEm(); drawStrip();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawStrip);
+</script>
