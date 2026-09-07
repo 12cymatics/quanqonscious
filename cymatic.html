@@ -156,7 +156,8 @@ footer b{color:var(--ink2);font-weight:500}
     <div class="fld">
       <span class="lab">render</span>
       <div class="seg" id="viewSeg">
-        <button data-v="optical" aria-pressed="true">optical</button>
+        <button data-v="sand" aria-pressed="true">sand</button>
+        <button data-v="optical" aria-pressed="false">optical</button>
         <button data-v="height" aria-pressed="false">height</button>
         <button data-v="nodal" aria-pressed="false">nodal</button>
       </div>
@@ -169,7 +170,12 @@ footer b{color:var(--ink2);font-weight:500}
         <button data-p="swap" aria-pressed="false">swap</button>
       </div>
     </div>
+    <div class="fld">
+      <div class="top"><span class="lab">agitation</span><span class="v" id="agv">1.15</span></div>
+      <input type="range" id="ag" min="0.15" max="2.4" step="0.01" value="1.15">
+    </div>
     <div style="display:flex;gap:5px">
+      <button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button>
       <button class="btn" id="play" aria-pressed="true" style="flex:1">running</button>
       <button class="btn" id="reset" style="flex:1">re-excite</button>
     </div>
@@ -434,6 +440,10 @@ function shapeOf(m, jp){
 }
 
 const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32Array(NSZ);
+// The grains need grad(u) on the SAME scale as u, because the drift law is
+// u*grad(u). The optical layer needs slope normalised on its own, or the
+// highlight would inherit the height units. So both are kept.
+const PGX = new Float32Array(NSZ), PGY = new Float32Array(NSZ);
 function buildSurface(state){
   ETA.fill(0); NX.fill(0); NY.fill(0);
   for (const s of state.states){
@@ -470,10 +480,54 @@ function buildSurface(state){
     gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
   }
   const inv = 1/mx, ginv = 1/gx;
-  for (let i = 0; i < NSZ; i++){ ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv; }
+  for (let i = 0; i < NSZ; i++){
+    ETA[i] *= inv;
+    PGX[i] = NX[i]*inv; PGY[i] = NY[i]*inv;      // physics: shares u's scale
+    NX[i] *= ginv;      NY[i] *= ginv;           // optics: unit slope field
+  }
 }
 
-let view = 'optical';
+/* ═══ sand: grains drifting down grad(u^2) on the reconstructed surface ═══
+   A grain is thrown about wherever the surface moves and settles where it does
+   not, so it drifts down the gradient of the squared displacement. Run here on
+   the hybrid surface -- empirical fold, Bessel radial structure, panel hints --
+   rather than on a bare J_m(kr)cos(m theta), so the nodal set the grains draw
+   is the atlas morphology.
+   For a water cell this is a nodal-set visualiser, not a model of the 2017
+   apparatus, which was photographed optically with no particles in it. */
+const NP = 60000;
+const PX = new Float32Array(NP), PY = new Float32Array(NP),
+      VX = new Float32Array(NP), VY = new Float32Array(NP);
+const BIN = new Uint16Array(NSZ);
+let settle = 0;
+function sprinkle(){
+  for (let p = 0; p < NP; p++){
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(RR-2);
+    PX[p] = CC + r*Math.cos(a); PY[p] = CC + r*Math.sin(a);
+    VX[p] = 0; VY[p] = 0;
+  }
+  settle = 0;
+}
+const DRIFT = 11, DAMP = 0.62, AGIT = 0.85;
+function stepGrains(gain){
+  const jitter = AGIT*agitation;
+  for (let p = 0; p < NP; p++){
+    let x = PX[p], y = PY[p];
+    const i = (y|0)*GR + (x|0);
+    const u = ETA[i]*gain, gx = PGX[i]*gain, gy = PGY[i]*gain;
+    const a = Math.abs(u)*jitter;
+    let vx = (VX[p] - DRIFT*u*gx + (Math.random()-0.5)*a)*DAMP;
+    let vy = (VY[p] - DRIFT*u*gy + (Math.random()-0.5)*a)*DAMP;
+    x += vx; y += vy;
+    const rx = x-CC, ry = y-CC, r = Math.hypot(rx, ry);
+    if (r > RR-1.5){ const k = (RR-1.5)/r; x = CC+rx*k; y = CC+ry*k; vx *= -0.25; vy *= -0.25; }
+    PX[p] = x; PY[p] = y; VX[p] = vx; VY[p] = vy;
+  }
+  if (settle < 1) settle = Math.min(1, settle + 0.012);
+}
+
+let view = 'sand';
+let agitation = 1.15;
 const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
 function renderSurface(state){
   // Discrete phase sign, not a sinusoid. `expression` is the one-time
@@ -484,12 +538,24 @@ function renderSurface(state){
   const contrast = vs ? Math.max(0.08, Math.min(0.34, vs.contrast)) : 0.2;
   const tex = vs ? Math.min(0.5, vs.textureConc) : 0.2;
   const SLOPE = 0.8;   // on a unit-normalised slope field
+  if (view === 'sand'){
+    BIN.fill(0);
+    for (let p = 0; p < NP; p++){
+      const i = (PY[p]|0)*GR + (PX[p]|0);
+      if (i >= 0 && i < NSZ) BIN[i]++;
+    }
+  }
   for (let i = 0, q = 0; i < NSZ; i++, q += 4){
     const cov = COVER[i];
     let r0 = 5, g0 = 7, b0 = 10;
     if (cov > 0){
       const h = ETA[i]*k;
-      if (view === 'height'){
+      if (view === 'sand'){
+        const n = BIN[i];
+        r0 = 14; g0 = 16; b0 = 20;
+        if (n){ const t = Math.min(1, n/2.0), tt = t*t*(3-2*t);
+          r0 += (246-r0)*tt; g0 += (234-g0)*tt; b0 += (208-b0)*tt; }
+      } else if (view === 'height'){
         if (h >= 0){ r0 = 8 + 70*h;  g0 = 12 + 190*h; b0 = 18 + 220*h; }
         else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
       } else if (view === 'nodal'){
@@ -681,6 +747,8 @@ bind('f', 'fv', v => freq = v);
 bind('a', 'av', v => amp = v);
 bind('t', 'tv', v => temp = v);
 bind('h', 'hv', v => depth = v, v => v.toFixed(1));
+bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
+$('sprinkleBtn').addEventListener('click', sprinkle);
 $('play').addEventListener('click', e => {
   running = !running; e.target.setAttribute('aria-pressed', String(running));
   e.target.textContent = running ? 'running' : 'paused';
@@ -706,9 +774,13 @@ function loop(now){
   if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
   else { state.phase = Math.cos(Math.PI*freq*simT);
          state.expression = amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
+  if (view === 'sand' && running){
+    const gain = phaseSign*state.expression;
+    stepGrains(gain); stepGrains(gain); stepGrains(gain);
+  }
   renderSurface(state);
   paintOverlay();
   requestAnimationFrame(loop);
 }
-recompute(); requestAnimationFrame(loop);
+sprinkle(); recompute(); requestAnimationFrame(loop);
 </script>
