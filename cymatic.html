@@ -161,6 +161,14 @@ footer b{color:var(--ink2);font-weight:500}
         <button data-v="nodal" aria-pressed="false">nodal</button>
       </div>
     </div>
+    <div class="fld">
+      <span class="lab">photographed phase</span>
+      <div class="seg" id="phaseSeg">
+        <button data-p="1" aria-pressed="true">phase I</button>
+        <button data-p="-1" aria-pressed="false">phase II</button>
+        <button data-p="swap" aria-pressed="false">swap</button>
+      </div>
+    </div>
     <div style="display:flex;gap:5px">
       <button class="btn" id="play" aria-pressed="true" style="flex:1">running</button>
       <button class="btn" id="reset" style="flex:1">re-excite</button>
@@ -209,7 +217,11 @@ const TRANSITION = {
 // Reported high-amplitude jumps.
 const AMP_JUMP = { 111: [10, 16], 180: [14, 20] };
 const OVERDRIVE_MV = 430, MIN_MV = 55;
-const DISPLAY_SLOWDOWN = 96;   // rendering only; never applied to state.phase   // apparatus mV, deliberately not converted to g
+// The two states the paper photographs. At f/2 = 55.5 Hz the surface alternates
+// far above flicker fusion, so what an observer sees is a STEADY pattern, not a
+// pulsing one. The two phases are a discrete choice, never a continuous
+// envelope multiplied into the displacement.
+const PHASE_I = 1, PHASE_II = -1;
 
 /* ═══ Bessel core ════════════════════════════════════════════════════════ */
 const QUAD = 128, QC = new Float64Array(QUAD), QS = new Float64Array(QUAD);
@@ -371,13 +383,11 @@ function resolvePatternState(o){
 
   return {
     phase: Math.cos(Math.PI*f*tSec),               // surface at f/2, exact
-    // The real surface runs at f/2 -- 55.5 Hz at 111 Hz drive -- which no
-    // display can show: every frame would land on an arbitrary phase and the
-    // result is aliasing, not motion. The rendered phase is slowed by a stated
-    // factor. The contract value above is untouched.
-    displayPhase: Math.cos(Math.PI*f*tSec/DISPLAY_SLOWDOWN),
+    // The real surface runs at f/2 -- 55.5 Hz at 111 Hz drive. Rendering it
+    // means picking one of the two photographed phases, NOT multiplying the
+    // displacement by a slow envelope: that is amplitude modulation, which the
+    // Faraday response does not do.
     phaseLabel: Math.cos(Math.PI*f*tSec) >= 0 ? 'phase I' : 'phase II',
-    displaySlowdown: DISPLAY_SLOWDOWN,
     responseHz, expression, states, warnings,
     selectedEmpiricalFold: prior && !prior.unclassified ? prior.fold : null,
     empiricalConfidence: prior ? prior.confidence : 0,
@@ -466,7 +476,10 @@ function buildSurface(state){
 let view = 'optical';
 const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
 function renderSurface(state){
-  const k = state.displayPhase*state.expression;
+  // Discrete phase sign, not a sinusoid. `expression` is the one-time
+  // formation gain: it rises once after excitation and stays at 1. Nothing here
+  // oscillates the amplitude.
+  const k = phaseSign*state.expression;
   const vs = state.visualSignature;
   const contrast = vs ? Math.max(0.08, Math.min(0.34, vs.contrast)) : 0.2;
   const tex = vs ? Math.min(0.5, vs.textureConc) : 0.2;
@@ -556,6 +569,7 @@ function drawAtlas(cellKey, f){
 /* ═══ wiring ═════════════════════════════════════════════════════════════ */
 let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
+let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
 
 const $ = id => document.getElementById(id);
 // TFE rises as amplitude falls and as depth grows -- the directions the paper
@@ -631,7 +645,7 @@ function paintOverlay(){
   const s = state;
   $('oF').textContent = freq; $('oR').textContent = s.responseHz.toFixed(1);
   $('oD').textContent = CELLS[cellKey].d.toFixed(2);
-  const pI = s.displayPhase >= 0;
+  const pI = phaseSign > 0;
   $('oPh').className = 'ph' + (pI ? '' : ' two');
   $('oPhT').textContent = pI ? 'phase I' : 'phase II';
   $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
@@ -639,7 +653,7 @@ function paintOverlay(){
   $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
   $('oRisk').textContent = 'risk ' + s.transitionRisk.toFixed(2);
   $('oExp').textContent = 'expression ' + (s.expression*100).toFixed(0) + '%'
-    + '  ·  display slowed ×' + s.displaySlowdown;
+    + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
   const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
   $('oMode').textContent = `J′ mode m=${m.m} n=${m.n}`;
 }
@@ -655,6 +669,10 @@ seg('cellSeg', b => { cellKey = b.dataset.c;
     ? `${CELLS[cellKey].d.toFixed(2)} mm, ${CELLS[cellKey].note}`
     : `${CELLS[cellKey].d.toFixed(2)} mm — ${CELLS[cellKey].note}`; });
 seg('rimSeg', b => { rim = b.dataset.r; });
+seg('phaseSeg', b => {
+  if (b.dataset.p === 'swap'){ swapping = true; }
+  else { swapping = false; phaseSign = +b.dataset.p; }
+});
 seg('viewSeg', b => { view = b.dataset.v; });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
@@ -677,11 +695,16 @@ sc.addEventListener('click', e => {
 let lastBuild = -1;
 function loop(now){
   if (running) simT = (now - t0)/1000;
+  // "swap" alternates between the two photographed states as a discrete flip.
+  // It is a hard switch of sign, never a ramp through zero.
+  if (swapping && running){
+    swapAcc += 16.7;
+    if (swapAcc > 900){ swapAcc = 0; phaseSign = -phaseSign; }
+  }
   // The fast phase changes every frame; the surface only needs rebuilding when
   // a control moves or the formation gain has visibly advanced.
   if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
   else { state.phase = Math.cos(Math.PI*freq*simT);
-         state.displayPhase = Math.cos(Math.PI*freq*simT/DISPLAY_SLOWDOWN);
          state.expression = amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
   renderSurface(state);
   paintOverlay();
