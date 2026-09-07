@@ -1,619 +1,691 @@
-<title>Bessel Disc</title>
+<title>Faraday Cell</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
-  --void:#07090C; --panel:#0E1218; --panel2:#141A22;
-  --edge:#1B222C; --edge2:#2C3644;
-  --ink:#E2E8EF; --ink2:#8D9BA9; --dim:#5A6674;
-  --ice:#5BD6EA; --ice-soft:#5BD6EA1A;
-  --sand:#F4E8CE; --warm:#E8A45E;
+  --void:#070A0D; --panel:#0D1116; --panel2:#141A21; --panel3:#1B222B;
+  --edge:#1D2530; --edge2:#2E3945;
+  --ink:#DFE6EC; --ink2:#8E9DAB; --dim:#5B6874;
+  --cy:#4FD1E0; --cy-soft:#4FD1E01A;
+  --amb:#E9A75C; --red:#E4695E; --grn:#63C08A; --vio:#9B8CE0;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--void);color:var(--ink);
-  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.6;
-  -webkit-font-smoothing:antialiased}
-.wrap{max-width:1060px;margin:0 auto;padding:0 22px 76px}
-header{padding:38px 0 20px}
-h1{font-family:"Archivo",sans-serif;font-weight:800;letter-spacing:-.03em;
-  font-size:clamp(2.1rem,5.4vw,3.2rem);line-height:1;margin:0}
-h1 span{color:var(--ice)}
-.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--dim);margin:0 0 11px}
-.lede{color:var(--ink2);max-width:62ch;margin:13px 0 0}
-.lede b{color:var(--ink);font-weight:500}
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.5;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:0 16px 40px}
+h1{font-family:"Archivo",sans-serif;font-weight:800;letter-spacing:-.025em;
+  font-size:1.5rem;margin:0;line-height:1}
+h1 span{color:var(--cy)}
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding:20px 0 12px}
+header p{margin:0;color:var(--dim);font-size:11px}
+header p b{color:var(--ink2);font-weight:500}
 
-.rig{display:grid;grid-template-columns:minmax(0,1fr) 262px;
-  border:1px solid var(--edge);margin-top:24px;background:#000}
-.stage{position:relative;aspect-ratio:1/1;overflow:hidden;
-  border-right:1px solid var(--edge);cursor:crosshair;touch-action:none}
-.stage canvas{width:100%;height:100%;display:block;image-rendering:auto}
-.drv{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
-  border:1.5px solid var(--warm);box-shadow:0 0 9px #E8A45EAA;pointer-events:none}
-.hud{position:absolute;left:14px;top:13px;font-family:"IBM Plex Mono",monospace;
-  font-size:10.5px;letter-spacing:.06em;color:var(--dim);pointer-events:none;
-  text-shadow:0 1px 6px #000;line-height:1.85}
-.hud b{color:var(--ice);font-weight:500}
-.hint{position:absolute;right:13px;bottom:12px;font-family:"IBM Plex Mono",monospace;
-  font-size:9.5px;color:var(--dim);pointer-events:none;text-shadow:0 1px 6px #000}
-.settle{position:absolute;left:14px;bottom:12px;height:3px;width:110px;
-  background:#ffffff14;pointer-events:none}
-.settle i{display:block;height:100%;background:var(--ice);width:0;transition:width .25s linear}
+.lab{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
 
-.deck{background:var(--panel);padding:15px;display:flex;flex-direction:column;gap:14px;
-  overflow-y:auto}
-.lab{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.15em;
-  text-transform:uppercase;color:var(--dim)}
-.fld{display:grid;gap:6px}
+/* ---- main rig ---- */
+.rig{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:1px;background:var(--edge);
+  border:1px solid var(--edge)}
+.stage{position:relative;background:#000;aspect-ratio:1/1}
+.stage canvas{width:100%;height:100%;display:block}
+.ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
+.ov b{color:var(--cy);font-weight:600}
+.ov.tl{left:11px;top:10px;line-height:1.75}
+.ov.tr{right:11px;top:10px;text-align:right;line-height:1.75}
+.ov.bl{left:11px;bottom:10px}
+.ov.br{right:11px;bottom:10px;text-align:right}
+.ph{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cy);
+  vertical-align:middle;margin-right:5px}
+.ph.two{background:var(--amb)}
+
+.deck{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:11px;
+  max-height:640px;overflow-y:auto}
+.deck::-webkit-scrollbar{width:7px}
+.deck::-webkit-scrollbar-thumb{background:var(--edge2)}
+.fld{display:grid;gap:4px}
 .fld .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.fld .v{font-family:"IBM Plex Mono",monospace;font-size:1rem;color:var(--ice);font-weight:500}
-input[type=range]{width:100%;accent-color:var(--ice);height:20px;margin:0}
-input[type=range]:focus-visible{outline:2px solid var(--ice);outline-offset:3px}
+.fld .v{color:var(--cy);font-weight:600;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--cy);height:17px;margin:0}
+input[type=range]:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
 .seg{display:flex;border:1px solid var(--edge2);border-radius:2px;overflow:hidden}
-.seg button{flex:1;font-family:"IBM Plex Mono",monospace;font-size:11px;
-  background:transparent;color:var(--ink2);border:0;padding:6px 3px;cursor:pointer;
-  border-right:1px solid var(--edge2)}
+.seg button{flex:1;font:inherit;font-size:10.5px;background:transparent;color:var(--ink2);
+  border:0;padding:5px 2px;cursor:pointer;border-right:1px solid var(--edge2)}
 .seg button:last-child{border-right:0}
-.seg button[aria-pressed="true"]{background:var(--ice);color:#07090C;font-weight:500}
-.seg button:focus-visible{outline:2px solid var(--ice);outline-offset:-2px}
-.btn{font-family:"IBM Plex Mono",monospace;font-size:11px;background:transparent;
-  color:var(--ink2);border:1px solid var(--edge2);padding:6px 10px;cursor:pointer;border-radius:2px}
-.btn:hover{border-color:var(--ice);color:var(--ice)}
-.btn:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.seg button[aria-pressed="true"]{background:var(--cy);color:#070A0D;font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--cy);outline-offset:-2px}
+.btn{font:inherit;font-size:10.5px;background:transparent;color:var(--ink2);
+  border:1px solid var(--edge2);padding:5px 9px;cursor:pointer;border-radius:2px}
+.btn:hover{border-color:var(--cy);color:var(--cy)}
+.btn[aria-pressed="true"]{background:var(--cy);border-color:var(--cy);color:#070A0D;font-weight:600}
 
-.grid{display:grid;grid-template-columns:20px repeat(5,1fr);gap:2px;
-  font-family:"IBM Plex Mono",monospace;font-size:10px}
-.grid .hd{color:var(--dim);text-align:center;padding:1px 0}
-.grid .rh{color:var(--dim);text-align:right;padding-right:4px;line-height:21px}
-.grid button{background:var(--panel2);border:1px solid var(--edge);color:var(--ink2);
-  padding:3px 0;cursor:pointer;font:inherit;border-radius:2px;line-height:1.45}
-.grid button:hover{border-color:var(--ice);color:var(--ice)}
-.grid button[aria-pressed="true"]{background:var(--ice);border-color:var(--ice);
-  color:#07090C;font-weight:500}
-.spec{position:relative;height:46px;border:1px solid var(--edge2);background:#000;cursor:pointer}
-.spec canvas{width:100%;height:100%;display:block}
-.ro{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;
-  font-family:"IBM Plex Mono",monospace;font-size:11.5px}
-.ro dt{color:var(--dim);font-size:10px;white-space:nowrap}
-.ro dd{margin:0;color:var(--ink)}
-.ro dd b{color:var(--ice);font-weight:500}
+/* ---- readout table ---- */
+dl.ro{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;align-items:baseline}
+dl.ro dt{color:var(--dim);font-size:10px;white-space:nowrap}
+dl.ro dd{margin:0;color:var(--ink);font-size:11.5px;text-align:right}
+dl.ro dd b{color:var(--cy);font-weight:600}
+dl.ro dd .u{color:var(--dim);font-weight:400}
+.sep{border-top:1px solid var(--edge);margin:3px 0 1px}
 
-section{padding-top:44px;max-width:66ch}
-h2{font-family:"Archivo",sans-serif;font-weight:600;font-size:1.28rem;margin:0 0 8px;
-  letter-spacing:-.01em}
-p{margin:0 0 14px;color:var(--ink2)}
-p b{color:var(--ink);font-weight:500}
-code{font-family:"IBM Plex Mono",monospace;font-size:.84em;background:#00000070;
-  border:1px solid var(--edge);padding:.08em .34em;border-radius:2px;color:var(--ink)}
-.note{border-left:2px solid var(--edge2);padding-left:15px;color:var(--dim);font-size:.93rem}
-table.acc{width:100%;border-collapse:collapse;margin:16px 0 0;
-  font-family:"IBM Plex Mono",monospace;font-size:11.5px}
-table.acc th{text-align:left;color:var(--dim);font-weight:400;font-size:9.5px;
-  letter-spacing:.13em;text-transform:uppercase;padding:0 12px 7px 0;border-bottom:1px solid var(--edge)}
-table.acc td{padding:5px 12px 5px 0;border-bottom:1px solid var(--edge);color:var(--ink2)}
-table.acc td:first-child{color:var(--ink)}
-table.acc td.ok{color:var(--ice)}
-.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));gap:1px;
-  background:var(--edge);border:1px solid var(--edge);margin-top:30px}
-.links a{background:var(--panel);padding:15px 16px;text-decoration:none;color:inherit;display:block}
-.links a:hover{background:var(--ice-soft)}
-.links b{display:block;color:var(--ice);font-family:"Archivo",sans-serif;font-weight:600;
-  font-size:.95rem;margin-bottom:4px}
-.links em{font-style:normal;font-size:.84rem;color:var(--dim);line-height:1.45;display:block}
-footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--edge);
-  font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dim);line-height:2}
-@media (max-width:780px){
-  .rig{grid-template-columns:1fr}
-  .stage{border-right:0;border-bottom:1px solid var(--edge)}
-}
+.warn{border-left:2px solid var(--amb);background:#E9A75C12;padding:7px 9px;
+  font-size:10.5px;color:var(--ink2);line-height:1.5}
+.warn.hard{border-left-color:var(--red);background:#E4695E12}
+.warn b{color:var(--ink)}
+
+/* ---- atlas strip ---- */
+.atlas{border:1px solid var(--edge);border-top:0;background:var(--panel)}
+.atlas-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 12px;border-bottom:1px solid var(--edge);flex-wrap:wrap}
+.legend{display:flex;gap:9px;flex-wrap:wrap;font-size:9.5px;color:var(--dim)}
+.legend i{display:inline-block;width:9px;height:9px;margin-right:3px;vertical-align:-1px}
+.strip{position:relative;padding:9px 12px 4px}
+.strip canvas{width:100%;display:block;cursor:crosshair}
+.axis{display:flex;justify-content:space-between;color:var(--dim);font-size:9.5px;padding:1px 12px 9px}
+
+/* ---- panel inspector ---- */
+.insp{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--edge);border:1px solid var(--edge);border-top:0}
+.insp > div{background:var(--panel);padding:9px 11px}
+.insp .k{font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+  display:block;margin-bottom:3px}
+.insp .val{font-size:12.5px;color:var(--ink)}
+.insp .val b{color:var(--cy);font-weight:600}
+.insp .val.sm{font-size:10.5px;color:var(--ink2);line-height:1.5}
+.reps{display:flex;gap:3px;margin-top:4px}
+.reps span{flex:1;text-align:center;padding:2px 0;font-size:10px;border-radius:2px;
+  background:var(--panel3);color:var(--ink2)}
+.reps span.u{color:var(--dim)}
+footer{margin-top:16px;color:var(--dim);font-size:9.5px;line-height:1.85}
+footer b{color:var(--ink2);font-weight:500}
+@media (max-width:900px){.rig{grid-template-columns:1fr}.deck{max-height:none}}
 </style>
 
 <div class="wrap">
 <header>
-  <p class="eyebrow">circular plate · clamped rim · J<sub>m</sub>(kr)cos(mθ)</p>
-  <h1>Bessel <span>Disc</span></h1>
-  <p class="lede">Forty-five thousand grains of sand on a vibrating plate. Each one is thrown
-  about where the surface moves and settles where it doesn't, so the pattern you end up
-  looking at is <b>drawn by the grains themselves</b> — not by shading the equation. Turn
-  the frequency and watch them scatter and re-form.</p>
+  <h1>Faraday <span>Cell</span></h1>
+  <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,
+  circular quartz cells · surface responds at <b>f/2</b></p>
 </header>
 
 <div class="rig">
-  <div class="stage" id="stage">
-    <canvas id="c" width="361" height="361"></canvas>
-    <div class="drv" id="drv" hidden></div>
-    <div class="hud">mode <b id="hm">5,3</b><br><b id="hz">653</b> Hz<br>j = <b id="hj">15.7002</b></div>
-    <div class="settle"><i id="settleBar"></i></div>
-    <div class="hint" id="hint">pick a mode</div>
+  <div class="stage">
+    <canvas id="c" width="381" height="381"></canvas>
+    <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">55.5</b> Hz<br>
+      cell ⌀ <b id="oD">24.25</b> mm<br>
+      <span class="ph" id="oPh"></span><span id="oPhT">phase I</span></div>
+    <div class="ov tr">empirical <b id="oFold">10</b>-fold<br>
+      m = <b id="oM">5</b> &nbsp; conf <b id="oConf">67%</b><br>
+      <span id="oRisk">risk 0.33</span></div>
+    <div class="ov bl"><span id="oExp">expression 0%</span></div>
+    <div class="ov br"><span id="oMode">J′ mode m=5 n=3</span></div>
   </div>
+
   <div class="deck">
     <div class="fld">
-      <span class="lab">excitation</span>
-      <div class="seg" id="modeSeg">
-        <button data-x="single" aria-pressed="true">single mode</button>
-        <button data-x="driven" aria-pressed="false">driven</button>
+      <span class="lab">cell diameter</span>
+      <div class="seg" id="cellSeg">
+        <button data-c="small" aria-pressed="false">10.00</button>
+        <button data-c="medium" aria-pressed="true">24.25</button>
+        <button data-c="large" aria-pressed="false">49.50</button>
       </div>
     </div>
-
-    <div id="drivenPane" hidden>
-      <div class="fld">
-        <div class="top"><span class="lab">frequency</span><span class="v"><span id="fv">406</span> Hz</span></div>
-        <input type="range" id="f" min="60" max="900" step="1" value="406">
-      </div>
-      <div class="spec" id="spec" title="resonances — click to jump" style="margin-top:8px">
-        <canvas id="sc" width="512" height="92"></canvas>
-      </div>
-      <div class="fld" style="margin-top:12px">
-        <div class="top"><span class="lab">sharpness Q</span><span class="v" id="qv">70</span></div>
-        <input type="range" id="q" min="6" max="220" step="1" value="70">
-      </div>
-    </div>
-
-    <div id="singlePane">
-      <span class="lab">mode — rows m, columns n</span>
-      <div class="grid" id="grid" style="margin-top:7px"></div>
-    </div>
-
     <div class="fld">
-      <span class="lab">surface</span>
+      <div class="top"><span class="lab">drive frequency</span><span class="v"><span id="fv">111</span> Hz</span></div>
+      <input type="range" id="f" min="50" max="199" step="1" value="111">
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180</span> mV</span></div>
+      <input type="range" id="a" min="0" max="600" step="5" value="180">
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
+      <input type="range" id="t" min="5" max="30" step="1" value="20">
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">depth</span><span class="v"><span id="hv">3.0</span> mm</span></div>
+      <input type="range" id="h" min="1" max="10" step="0.1" value="3">
+    </div>
+    <div class="fld">
+      <span class="lab">contact line</span>
+      <div class="seg" id="rimSeg">
+        <button data-r="free" aria-pressed="true">free</button>
+        <button data-r="pinned" aria-pressed="false">pinned</button>
+      </div>
+    </div>
+    <div class="fld">
+      <span class="lab">render</span>
       <div class="seg" id="viewSeg">
-        <button data-v="sand" aria-pressed="true">sand</button>
-        <button data-v="water" aria-pressed="false">water</button>
-        <button data-v="field" aria-pressed="false">field</button>
+        <button data-v="optical" aria-pressed="true">optical</button>
+        <button data-v="height" aria-pressed="false">height</button>
+        <button data-v="nodal" aria-pressed="false">nodal</button>
       </div>
     </div>
-
-    <div class="fld">
-      <div class="top"><span class="lab">agitation</span><span class="v" id="agv">0.90</span></div>
-      <input type="range" id="ag" min="0.15" max="2.6" step="0.01" value="0.9">
+    <div style="display:flex;gap:5px">
+      <button class="btn" id="play" aria-pressed="true" style="flex:1">running</button>
+      <button class="btn" id="reset" style="flex:1">re-excite</button>
     </div>
-
-    <div style="display:flex;gap:6px">
-      <button class="btn" id="sprinkle" style="flex:1">re-sprinkle</button>
-      <button class="btn" id="sweep" aria-pressed="false" style="flex:1">sweep</button>
-    </div>
-
-    <div class="fld">
-      <span class="lab">readout</span>
-      <dl class="ro" id="ro"></dl>
-    </div>
+    <div id="warnBox" style="display:grid;gap:6px"></div>
+    <div class="sep"></div>
+    <span class="lab">state</span>
+    <dl class="ro" id="ro"></dl>
   </div>
 </div>
 
-<section>
-  <h2>The grains are simulated, not shaded</h2>
-  <p>A grain on a vibrating plate gets thrown into the air wherever the surface is moving,
-  lands somewhere slightly different, and repeats — a random walk whose step size is set by
-  the local amplitude. Where the plate is still, it stops. The net effect is a drift down the
-  gradient of the squared displacement, and that is what each of the forty-five thousand grains
-  here integrates:</p>
-  <p class="note" style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.9">
-  v ← (v − D·u∇u + ξ·|u|)·λ &nbsp;&nbsp;&nbsp; x ← x + v</p>
-  <p>Nodal lines are where the grains end up, not where the renderer was told to draw a
-  bright line. That is why the pattern takes a moment to form, why grains keep trembling on
-  the antinodes, and why turning the frequency scatters them before they resettle.</p>
-  <p>The drift needs ∇u, and it is available in closed form rather than by differencing the
-  grid: <code>∂u/∂r = k·J′<sub>m</sub>(kr)·cos(mθ)</code> and
-  <code>(1/r)·∂u/∂θ = −m·k·[J<sub>m</sub>(kr)/kr]·sin(mθ)</code>, with
-  <code>J′<sub>m</sub> = (J<sub>m−1</sub> − J<sub>m+1</sub>)/2</code>. The bracket
-  <code>J<sub>m</sub>(x)/x</code> is what would divide by zero at the centre; its limit is
-  exactly 1/2 for m = 1 and 0 for m ≥ 2, so it is evaluated, not fudged. Checked against
-  central differences: agreement to <b>1.8e−11</b>, which is the differencing error, not the
-  formula's.</p>
-
-  <h2 style="margin-top:38px">Where the frequencies come from</h2>
-  <p>Separating ∇²u + k²u = 0 on a disc gives <code>u = J<sub>m</sub>(kr)·cos(mθ)</code>.
-  Clamping the rim at radius <i>a</i> forces <code>J<sub>m</sub>(ka) = 0</code>, so the
-  admissible wavenumbers are <b>k = j<sub>m,n</sub>/a</b> — the n-th zero of J<sub>m</sub>.
-  Those zeros set the spectrum, and their ratios are not whole numbers, which is why a drum
-  has no harmonic series.</p>
-  <p>J<sub>m</sub> comes from its integral form
-  <code>(1/2π)∫<sub>−π</sub><sup>π</sup> cos(mτ − x sin τ)dτ</code> by the trapezoid rule on
-  a full period — an analytic periodic integrand, so the rule converges <b>spectrally</b> and
-  there is no truncation order to tune. The zeros follow by Newton from McMahon's estimate.</p>
-  <p class="note">The point count was measured, not guessed: 64 points looked converged on
-  small arguments and was still wrong by 8.8e−7 at x = 40. This uses 128.</p>
-  <table class="acc" id="accTable">
-    <thead><tr><th>check</th><th>computed</th><th>reference</th><th>error</th></tr></thead>
-    <tbody></tbody>
-  </table>
-
-  <h2 style="margin-top:38px">The bug this replaces</h2>
-  <p>The engine this came from, <code>vedic_cymatic_pde_engine.py</code>, built its radius
-  like this:</p>
-  <p class="note" style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.9">
-  r = safe_inverse_distance(r_sq) &nbsp;→&nbsp; 1 / (r² + 1e-12)<br>
-  r = 1 / r &nbsp;→&nbsp; r² + 1e-12</p>
-  <p>The variable named <code>r</code> held <b>r squared</b>, and an epsilon was added on
-  every evaluation regardless of where the point was. That value was then passed to
-  J<sub>n</sub> and used as the denominator of cos θ. At the lattice point (3,4) the mode
-  value should be <b>0.3977</b>; the old code returned <b>−43.70</b>.</p>
-  <p>There was never a singularity to suppress — it was manufactured by dividing by r to get
-  cos θ. Nothing here divides: at the centre J<sub>m</sub>(0) = 0 for every m ≥ 1, which
-  annihilates the undefined angle by itself.</p>
-
-  <div class="links">
-    <a href="https://claude.ai/code/artifact/aad075c1-fb88-4e21-8662-6c4936945c2c"><b>Chladni Plate</b><em>The square plate, solved in its modal basis</em></a>
-    <a href="https://claude.ai/code/artifact/1f0cb5cd-4c12-4ed3-9a0a-02ebfd14635e"><b>Ten Boundaries</b><em>The boundary equations and their four defects</em></a>
-    <a href="https://claude.ai/code/artifact/1648a96f-33ab-4f1e-b86a-bfc4cd6aaa80"><b>Sutra Workbench</b><em>The exact rational solvers, running live</em></a>
+<div class="atlas">
+  <div class="atlas-hd">
+    <span class="lab">printed fold classification · 1 Hz steps · <span id="atlasWho">24.25 mm, 3 day-replicates</span></span>
+    <span class="legend" id="legend"></span>
   </div>
-  <footer>
-    45 000 grains · 361 × 361 field · J<sub>m</sub> by 128-point spectral quadrature · analytic ∇u<br>
-    No epsilon, no clamp, no fallback anywhere in the field or its gradient.
-  </footer>
-</section>
+  <div class="strip"><canvas id="sc" width="1500" height="96"></canvas></div>
+  <div class="axis"><span>50 Hz</span><span>100</span><span>150</span><span>199 Hz</span></div>
 </div>
 
+<div class="insp" id="insp"></div>
+
+<footer>
+  <b>Layers are kept separate.</b> Fold labels are the paper's printed classifications.
+  Contrast / centre-bias / ring / texture figures are image descriptors measured from the
+  rendered PDF panels — renderer hints, never the authors' measurements. Bessel modes and
+  water properties are theory, used for diagnostics and outside the atlas.<br>
+  Amplitude stays in apparatus mV: the paper gives no mV→acceleration transfer function, so
+  none is invented. Surface tension is IAPWS R1-76; viscosity is the Vogel–Andrade fit, not IAPWS.
+</footer>
+</div>
 <script>
+const ATLAS={"medium":{"50":{"l":["8","unclassified","unclassified"],"h":[0.2187,1.4032,1.1708,0.2134,0.0629,4.4083],"pk":1.67,"ah":3.33},"51":{"l":["unclassified","unclassified","2"],"h":[0.21,1.2889,1.0379,0.2061,0.0534,4.4411],"pk":3.33,"ah":3.0},"52":{"l":["unclassified","unclassified","unclassified"],"h":[0.2129,1.3317,1.0438,0.2213,0.0474,4.5191],"pk":2.67,"ah":3.67},"53":{"l":["unclassified","unclassified","unclassified"],"h":[0.2396,1.2978,1.0855,0.2325,0.0574,4.4855],"pk":2.33,"ah":3.0},"54":{"l":["6","unclassified","unclassified"],"h":[0.2419,1.6554,0.9653,0.2699,0.0779,4.377],"pk":1.67,"ah":3.33},"55":{"l":["6","6","6"],"h":[0.1938,1.0578,1.015,0.2426,0.0497,4.442],"pk":2.33,"ah":3.0},"56":{"l":["6","6","6"],"h":[0.1962,0.8903,0.93,0.2196,0.0432,4.3951],"pk":2.33,"ah":3.33},"57":{"l":["6","6","6"],"h":[0.2106,1.0177,0.9424,0.2599,0.0505,4.4423],"pk":2.33,"ah":3.0},"58":{"l":["6","6","unclassified"],"h":[0.2247,1.145,0.9406,0.3134,0.0556,4.3647],"pk":2.0,"ah":3.67},"59":{"l":["6","2","2"],"h":[0.2065,0.9205,1.2589,0.1863,0.0633,4.2638],"pk":2.33,"ah":3.33},"60":{"l":["2","2","2"],"h":[0.232,1.6617,1.133,0.2312,0.0789,4.345],"pk":1.67,"ah":3.0},"61":{"l":["2","2","2"],"h":[0.2463,1.9085,1.063,0.1933,0.0956,4.0909],"pk":1.67,"ah":4.0},"62":{"l":["2","unclassified","unclassified"],"h":[0.2496,2.1297,1.1589,0.2303,0.0836,3.681],"pk":1.0,"ah":3.0},"63":{"l":["unclassified","unclassified","unclassified"],"h":[0.2204,1.5192,1.4595,0.246,0.0617,2.877],"pk":1.67,"ah":3.0},"64":{"l":["unclassified","unclassified","unclassified"],"h":[0.2044,1.6017,1.7559,0.2452,0.0584,2.7323],"pk":1.67,"ah":3.0},"65":{"l":["unclassified","unclassified","unclassified"],"h":[0.228,1.245,1.693,0.3059,0.0667,3.5511],"pk":1.67,"ah":3.0},"66":{"l":["unclassified","8","8"],"h":[0.237,1.2354,1.3334,0.2568,0.0703,4.0794],"pk":2.33,"ah":3.0},"67":{"l":["unclassified","8","8"],"h":[0.2063,1.1806,1.5466,0.2953,0.0495,3.6617],"pk":2.0,"ah":3.0},"68":{"l":["8","unclassified","8"],"h":[0.1936,1.0432,1.1676,0.2224,0.0508,4.3559],"pk":1.67,"ah":3.67},"69":{"l":["2","unclassified","2"],"h":[0.1909,1.3663,1.0485,0.2153,0.0521,4.3483],"pk":3.33,"ah":3.0},"70":{"l":["2","2","unclassified"],"h":[0.1923,1.1032,0.9789,0.2365,0.0524,4.4071],"pk":2.0,"ah":3.0},"71":{"l":["2","2","2"],"h":[0.1942,1.1448,0.9924,0.2428,0.0454,4.4714],"pk":3.0,"ah":3.0},"72":{"l":["2","2","2"],"h":[0.2079,1.3739,1.0769,0.1799,0.0628,4.4694],"pk":2.0,"ah":3.0},"73":{"l":["unclassified","unclassified","2"],"h":[0.2175,1.364,1.0919,0.2266,0.0557,4.4315],"pk":2.0,"ah":3.33},"74":{"l":["unclassified","unclassified","4"],"h":[0.2392,1.4912,1.0865,0.2768,0.0727,4.4657],"pk":2.0,"ah":3.33},"75":{"l":["unclassified","unclassified","unclassified"],"h":[0.2729,1.8497,1.1286,0.2925,0.084,4.3016],"pk":2.0,"ah":3.0},"76":{"l":["unclassified","unclassified","unclassified"],"h":[0.2514,1.7842,1.1759,0.2036,0.0843,3.487],"pk":1.67,"ah":3.0},"77":{"l":["unclassified","unclassified","unclassified"],"h":[0.2149,1.4986,1.5424,0.2535,0.0714,2.851],"pk":1.67,"ah":3.33},"78":{"l":["10","10","10"],"h":[0.2289,1.0642,1.1137,0.2769,0.0819,4.1738],"pk":2.0,"ah":3.0},"79":{"l":["10","10","10"],"h":[0.2379,1.1721,1.0512,0.3088,0.0945,4.1665],"pk":0.67,"ah":3.0},"80":{"l":["10","10","10"],"h":[0.267,1.2478,1.1727,0.3386,0.1177,4.0783],"pk":0.67,"ah":4.0},"81":{"l":["10","10","10"],"h":[0.2851,1.4011,1.2615,0.3423,0.117,3.7295],"pk":0.67,"ah":4.33},"82":{"l":["unclassified","unclassified","10"],"h":[0.2248,1.8329,1.5822,0.2461,0.0781,2.8521],"pk":1.67,"ah":3.0},"83":{"l":["unclassified","unclassified","unclassified"],"h":[0.237,1.9134,1.6353,0.2672,0.0861,2.9095],"pk":2.67,"ah":3.0},"84":{"l":["6","6","unclassified"],"h":[0.2309,1.2926,1.0658,0.234,0.0604,4.5823],"pk":1.67,"ah":3.0},"85":{"l":["6","6","6"],"h":[0.2089,1.1945,1.11,0.2327,0.0428,4.496],"pk":2.67,"ah":3.0},"86":{"l":["6","6","6"],"h":[0.2124,1.302,1.1408,0.2552,0.0537,4.4896],"pk":1.33,"ah":3.33},"87":{"l":["2","2","6"],"h":[0.1819,1.1793,1.1314,0.2364,0.0392,4.2852],"pk":3.33,"ah":3.0},"88":{"l":["2","2","2"],"h":[0.1972,1.3228,1.0615,0.1885,0.0427,4.357],"pk":3.0,"ah":3.33},"89":{"l":["2","12","2"],"h":[0.2005,1.2714,0.9042,0.2148,0.0614,4.4337],"pk":2.33,"ah":3.0},"90":{"l":["12","12","unclassified"],"h":[0.2323,1.1147,0.9213,0.3157,0.0677,4.4149],"pk":2.0,"ah":3.0},"91":{"l":["12","12","12"],"h":[0.2256,1.0164,0.9497,0.3071,0.065,4.2633],"pk":2.33,"ah":3.0},"92":{"l":["12","12","12"],"h":[0.2322,1.315,1.1593,0.3267,0.0871,3.8755],"pk":1.67,"ah":3.0},"93":{"l":["12","12","12"],"h":[0.2548,1.6586,1.35,0.3649,0.1176,3.4756],"pk":1.0,"ah":3.0},"94":{"l":["unclassified","unclassified","12"],"h":[0.2043,1.6505,1.6443,0.2645,0.0699,2.8697],"pk":2.33,"ah":3.0},"95":{"l":["unclassified","8","12"],"h":[0.1941,1.1669,1.5393,0.2982,0.0525,3.6533],"pk":2.0,"ah":3.0},"96":{"l":["unclassified","8","2"],"h":[0.1892,1.0913,1.5041,0.2481,0.0474,3.6751],"pk":2.33,"ah":3.0},"97":{"l":["8","8","8"],"h":[0.2039,1.1105,1.0166,0.229,0.0418,4.51],"pk":2.67,"ah":3.0},"98":{"l":["8","8","8"],"h":[0.217,1.1735,1.0398,0.2984,0.0523,4.521],"pk":1.67,"ah":4.67},"99":{"l":["8","8","8"],"h":[0.2237,1.1191,1.0456,0.2515,0.0546,4.5491],"pk":2.67,"ah":3.67},"100":{"l":["unclassified","8","8"],"h":[0.2357,1.7716,1.0494,0.2551,0.0826,4.414],"pk":1.67,"ah":3.67},"101":{"l":["8","8","8"],"h":[0.2578,1.8917,1.2528,0.3065,0.0938,4.2695],"pk":1.67,"ah":3.0},"102":{"l":["8","4","2"],"h":[0.2226,1.2417,1.2337,0.2455,0.0527,4.473],"pk":2.0,"ah":3.0},"103":{"l":["2","unclassified","unclassified"],"h":[0.1865,1.3426,1.0279,0.2318,0.0539,4.3749],"pk":2.33,"ah":3.0},"104":{"l":["unclassified","unclassified","unclassified"],"h":[0.19,1.3583,1.1412,0.2496,0.0631,4.2979],"pk":1.67,"ah":3.33},"105":{"l":["unclassified","unclassified","unclassified"],"h":[0.2092,1.4105,1.0633,0.2565,0.0708,4.3767],"pk":3.33,"ah":3.33},"106":{"l":["unclassified","unclassified","unclassified"],"h":[0.2088,1.3004,1.0824,0.2444,0.0525,4.3764],"pk":3.0,"ah":3.33},"107":{"l":["4","4","unclassified"],"h":[0.2277,1.7927,1.1377,0.2176,0.0701,4.2913],"pk":2.33,"ah":3.0},"108":{"l":["4","unclassified","unclassified"],"h":[0.2116,1.5052,1.1905,0.2333,0.0568,4.3853],"pk":3.0,"ah":3.0},"109":{"l":["unclassified","10","10"],"h":[0.1879,1.3005,1.0851,0.1875,0.0401,4.3491],"pk":2.33,"ah":3.0},"110":{"l":["unclassified","10","unclassified"],"h":[0.2038,1.2677,1.0753,0.1721,0.0465,4.4066],"pk":2.67,"ah":5.0},"111":{"l":["10","10","2"],"h":[0.1891,1.1879,0.9941,0.1844,0.0396,4.4358],"pk":3.0,"ah":3.33},"112":{"l":["10","10","2"],"h":[0.1911,1.2015,0.9862,0.1984,0.0358,4.4462],"pk":3.33,"ah":3.33},"113":{"l":["10","10","10"],"h":[0.2069,1.215,0.9477,0.2591,0.0466,4.4892],"pk":3.0,"ah":3.33},"114":{"l":["10","10","10"],"h":[0.2204,1.36,0.953,0.252,0.0575,4.4889],"pk":2.33,"ah":3.67},"115":{"l":["10","16","10"],"h":[0.2226,1.2885,0.9164,0.3571,0.0726,4.4081],"pk":2.33,"ah":3.33},"116":{"l":["10","16","10"],"h":[0.2325,1.3315,1.053,0.339,0.0905,4.2074],"pk":2.0,"ah":3.33},"117":{"l":["16","6","2"],"h":[0.2105,0.9964,1.2215,0.1648,0.0735,3.9362],"pk":1.0,"ah":3.67},"118":{"l":["16","6","2"],"h":[0.2048,0.8892,1.1989,0.1507,0.0571,3.9032],"pk":2.33,"ah":4.0},"119":{"l":["6","2","2"],"h":[0.2031,1.4105,0.9679,0.1786,0.0545,4.3709],"pk":3.0,"ah":3.33},"120":{"l":["6","2","2"],"h":[0.2107,1.413,0.9419,0.178,0.0589,4.3653],"pk":2.33,"ah":3.33},"121":{"l":["2","2","2"],"h":[0.1999,1.0679,0.9558,0.1963,0.043,4.1473],"pk":3.0,"ah":3.67},"122":{"l":["2","2","2"],"h":[0.2277,1.653,1.1034,0.2341,0.0645,3.9894],"pk":2.0,"ah":3.0},"123":{"l":["2","2","2"],"h":[0.2324,2.1716,1.0347,0.2753,0.0848,3.9619],"pk":2.0,"ah":3.0},"124":{"l":["unclassified","2","unclassified"],"h":[0.2224,1.8132,1.345,0.3178,0.0808,3.3357],"pk":2.0,"ah":3.0},"125":{"l":["unclassified","12","unclassified"],"h":[0.2087,1.1588,1.2443,0.257,0.0616,3.9617],"pk":1.33,"ah":3.0},"126":{"l":["12","12","12"],"h":[0.2178,1.111,1.0079,0.2634,0.0514,4.5276],"pk":2.33,"ah":3.0},"127":{"l":["12","12","12"],"h":[0.2227,1.2572,1.0326,0.2685,0.0674,4.5375],"pk":1.67,"ah":3.0},"128":{"l":["12","12","12"],"h":[0.2226,1.2073,1.0671,0.2582,0.0602,4.5551],"pk":2.0,"ah":3.0},"129":{"l":["12","18","12"],"h":[0.2257,1.1379,1.018,0.2917,0.0559,4.5983],"pk":3.0,"ah":4.67},"130":{"l":["18","8","18"],"h":[0.2229,1.2392,1.1461,0.2068,0.052,4.4843],"pk":3.0,"ah":3.0},"131":{"l":["8","8","2"],"h":[0.2115,1.2707,1.0095,0.193,0.0491,4.5122],"pk":2.67,"ah":3.67},"132":{"l":["8","8","2"],"h":[0.2176,1.283,0.9876,0.1612,0.0573,4.5546],"pk":1.67,"ah":3.67},"133":{"l":["8","8","2"],"h":[0.2182,1.2558,0.9346,0.1798,0.0594,4.507],"pk":1.67,"ah":3.0},"134":{"l":["8","8","2"],"h":[0.2148,1.3253,0.9705,0.1841,0.0551,4.4335],"pk":1.33,"ah":3.0},"135":{"l":["8","2","2"],"h":[0.1911,1.1557,1.0124,0.183,0.0394,4.342],"pk":2.33,"ah":3.0},"136":{"l":["8","unclassified","2"],"h":[0.1873,0.9632,1.0364,0.1812,0.0367,4.3814],"pk":2.67,"ah":3.33},"137":{"l":["2","unclassified","unclassified"],"h":[0.1804,1.1305,0.9544,0.1582,0.0548,4.1707],"pk":3.0,"ah":3.67},"138":{"l":["unclassified","unclassified","unclassified"],"h":[0.1724,1.0924,1.0345,0.1813,0.0423,4.0703],"pk":4.0,"ah":3.0},"139":{"l":["unclassified","unclassified","unclassified"],"h":[0.1896,1.1205,1.004,0.1337,0.0432,4.1506],"pk":3.33,"ah":3.67},"140":{"l":["unclassified","14","unclassified"],"h":[0.2133,1.1735,0.8324,0.224,0.0534,4.3368],"pk":2.67,"ah":3.33},"141":{"l":["14","14","unclassified"],"h":[0.2155,0.9622,0.9183,0.2373,0.0714,4.2139],"pk":1.67,"ah":3.0},"142":{"l":["14","14","14"],"h":[0.2213,0.9267,0.9355,0.2754,0.0701,4.2],"pk":1.0,"ah":3.0},"143":{"l":["14","14","14"],"h":[0.2287,1.0061,0.9716,0.2758,0.0733,4.1459],"pk":1.67,"ah":5.33},"144":{"l":["20","20","20"],"h":[0.2307,1.2716,1.2282,0.3735,0.0936,3.72],"pk":1.0,"ah":3.0},"145":{"l":["20","20","20"],"h":[0.2414,1.7021,1.288,0.3956,0.1112,3.6176],"pk":1.33,"ah":3.0},"146":{"l":["20","20","20"],"h":[0.2363,1.4688,1.3089,0.3732,0.1003,3.5879],"pk":1.0,"ah":3.0},"147":{"l":["20","10","20"],"h":[0.207,1.0243,1.5717,0.3055,0.0573,3.787],"pk":1.33,"ah":3.0},"148":{"l":["10","10","10"],"h":[0.1982,1.1921,0.9469,0.1731,0.0383,4.489],"pk":3.0,"ah":3.67},"149":{"l":["10","10","10"],"h":[0.2077,1.1281,0.9738,0.1998,0.0425,4.5222],"pk":3.0,"ah":3.67},"150":{"l":["10","10","10"],"h":[0.2091,1.3645,0.9887,0.172,0.0538,4.5288],"pk":2.33,"ah":4.0},"151":{"l":["10","2","10"],"h":[0.1967,1.0647,1.102,0.2345,0.0351,4.4731],"pk":3.0,"ah":3.0},"152":{"l":["10","6","10"],"h":[0.2145,1.1342,1.0735,0.2336,0.0387,4.502],"pk":3.67,"ah":3.0},"153":{"l":["2","2","2"],"h":[0.1891,1.2607,1.0715,0.2592,0.0471,4.415],"pk":3.67,"ah":3.0},"154":{"l":["2","2","6"],"h":[0.1859,1.177,1.0751,0.2453,0.0465,4.3448],"pk":3.33,"ah":3.0},"155":{"l":["2","2","2"],"h":[0.1878,1.0676,0.9756,0.2178,0.0403,4.2983],"pk":3.33,"ah":3.0},"156":{"l":["2","2","2"],"h":[0.1931,1.1529,0.9922,0.2154,0.0444,4.3447],"pk":2.67,"ah":3.0},"157":{"l":["2","2","2"],"h":[0.2163,1.3637,0.9504,0.1893,0.0631,4.3412],"pk":2.67,"ah":3.0},"158":{"l":["2","2","2"],"h":[0.2404,1.7487,1.1631,0.2862,0.0808,4.2697],"pk":2.33,"ah":3.0},"159":{"l":["2","unclassified","2"],"h":[0.2571,1.5271,1.1048,0.264,0.1025,4.1345],"pk":1.33,"ah":3.0},"160":{"l":["2","unclassified","2"],"h":[0.264,1.8779,1.2637,0.3067,0.1091,3.6709],"pk":0.67,"ah":4.33},"161":{"l":["2","12","2"],"h":[0.2314,0.9643,1.1965,0.281,0.0507,4.2053],"pk":2.0,"ah":3.67},"162":{"l":["unclassified","12","2"],"h":[0.2166,0.9426,1.3827,0.3123,0.0559,3.8602],"pk":2.67,"ah":3.0},"163":{"l":["12","12","unclassified"],"h":[0.2173,1.1438,0.9735,0.2495,0.0558,4.488],"pk":2.67,"ah":3.0},"164":{"l":["12","12","12"],"h":[0.2187,1.1288,0.9399,0.2413,0.0586,4.5034],"pk":2.0,"ah":3.33},"165":{"l":["12","12","12"],"h":[0.2242,1.2454,1.0069,0.2356,0.0769,4.4837],"pk":2.33,"ah":3.0},"166":{"l":["12","12","12"],"h":[0.2287,1.3192,1.0284,0.2481,0.0841,4.4553],"pk":2.0,"ah":3.0},"167":{"l":["12","12","12"],"h":[0.2291,1.1392,1.0563,0.2668,0.0799,4.42],"pk":2.33,"ah":3.0},"168":{"l":["12","2","12"],"h":[0.2261,0.9377,1.1325,0.2417,0.0682,4.4018],"pk":2.67,"ah":3.0},"169":{"l":["12","2","12"],"h":[0.2313,1.1954,1.0575,0.2042,0.0745,4.3796],"pk":1.33,"ah":3.0},"170":{"l":["2","8","12"],"h":[0.2052,1.3076,1.075,0.2196,0.0538,4.4781],"pk":2.33,"ah":3.0},"171":{"l":["8","8","2"],"h":[0.2026,1.3026,1.117,0.2189,0.0506,4.4273],"pk":2.33,"ah":4.0},"172":{"l":["8","8","2"],"h":[0.198,1.4239,1.1405,0.1959,0.0459,4.3711],"pk":3.33,"ah":3.33},"173":{"l":["8","8","2"],"h":[0.1934,1.4586,1.1601,0.2251,0.0516,4.4022],"pk":1.33,"ah":3.0},"174":{"l":["8","unclassified","2"],"h":[0.1913,1.3056,1.0695,0.2122,0.0427,4.4054],"pk":3.0,"ah":4.0},"175":{"l":["4","unclassified","4"],"h":[0.1869,1.3904,1.1533,0.2416,0.0503,4.3679],"pk":2.67,"ah":3.33},"176":{"l":["unclassified","unclassified","4"],"h":[0.2015,1.4279,1.1401,0.2286,0.0553,4.3348],"pk":3.0,"ah":3.0},"177":{"l":["unclassified","14","4"],"h":[0.1956,1.1599,1.1042,0.2481,0.0417,4.4459],"pk":3.0,"ah":3.33},"178":{"l":["unclassified","14","unclassified"],"h":[0.1917,1.2894,1.0923,0.2398,0.0439,4.4245],"pk":3.67,"ah":3.0},"179":{"l":["14","14","unclassified"],"h":[0.2022,1.0612,1.0602,0.232,0.046,4.4504],"pk":2.33,"ah":3.0},"180":{"l":["14","14","unclassified"],"h":[0.2149,1.0383,1.0426,0.2723,0.0495,4.4664],"pk":2.67,"ah":3.33},"181":{"l":["14","14","14"],"h":[0.2182,0.9451,1.0782,0.2682,0.0539,4.4541],"pk":2.33,"ah":3.0},"182":{"l":["14","14","14"],"h":[0.2345,0.896,1.0902,0.2976,0.0688,4.3702],"pk":2.33,"ah":3.0},"183":{"l":["20","14","14"],"h":[0.2365,0.9348,1.1254,0.2865,0.0677,4.164],"pk":2.33,"ah":3.0},"184":{"l":["20","14","14"],"h":[0.2464,1.0849,1.0843,0.2802,0.0772,4.0639],"pk":1.67,"ah":3.33},"185":{"l":["20","20","14"],"h":[0.2193,1.049,1.0323,0.2665,0.0616,3.9488],"pk":2.67,"ah":3.33},"186":{"l":["20","20","14"],"h":[0.2335,1.3792,1.0887,0.3403,0.083,3.7852],"pk":1.67,"ah":3.33},"187":{"l":["20","20","20"],"h":[0.2261,1.2477,1.09,0.2931,0.0848,3.8435],"pk":1.67,"ah":3.0},"188":{"l":["10","10","20"],"h":[0.2104,1.2245,1.1361,0.2704,0.0447,4.4103],"pk":2.0,"ah":3.0},"189":{"l":["10","20","20"],"h":[0.2321,1.4068,1.0584,0.3486,0.0653,4.2262],"pk":1.67,"ah":3.0},"190":{"l":["10","2","10"],"h":[0.2136,1.3948,1.3125,0.2742,0.062,4.3946],"pk":2.0,"ah":3.0},"191":{"l":["10","2","10"],"h":[0.247,1.5924,1.2536,0.2397,0.0848,4.4033],"pk":2.0,"ah":3.0},"192":{"l":["2","2","10"],"h":[0.2142,1.6094,1.1814,0.2467,0.0646,4.4479],"pk":1.67,"ah":3.67},"193":{"l":["2","2","10"],"h":[0.194,1.3943,1.125,0.2192,0.0482,4.3608],"pk":2.0,"ah":3.0},"194":{"l":["2","2","2"],"h":[0.2011,1.5442,1.1184,0.209,0.0568,4.3819],"pk":2.0,"ah":3.0},"195":{"l":["2","2","2"],"h":[0.2289,1.776,1.2263,0.2449,0.0757,4.4085],"pk":2.67,"ah":3.0},"196":{"l":["2","2","2"],"h":[0.2097,1.5595,1.226,0.2674,0.0544,4.3681],"pk":2.0,"ah":3.0},"197":{"l":["2","2","2"],"h":[0.234,1.6989,1.193,0.2641,0.0693,4.323],"pk":2.0,"ah":3.0},"198":{"l":["16","16","2"],"h":[0.2404,1.2117,1.1327,0.3682,0.0914,4.3131],"pk":1.0,"ah":3.0},"199":{"l":["16","16","2"],"h":[0.246,1.1218,1.1036,0.3333,0.0832,4.2997],"pk":2.67,"ah":3.0}},"small":{"50":{"l":["unclassified"],"h":[0.3025,0.1323,2.2792,0.3774,0.2469,3.6149],"pk":0.0,"ah":3.0},"51":{"l":["unclassified"],"h":[0.2574,0.2439,3.6856,0.4661,0.2163,3.3656],"pk":0.0,"ah":3.0},"52":{"l":["unclassified"],"h":[0.2544,0.7238,9.9063,0.3918,0.211,2.1938],"pk":0.0,"ah":3.0},"53":{"l":["unclassified"],"h":[0.2843,0.279,4.7912,0.4684,0.2567,3.1384],"pk":0.0,"ah":3.0},"54":{"l":["unclassified"],"h":[0.2596,0.2451,3.563,0.4981,0.2103,3.2657],"pk":0.0,"ah":3.0},"55":{"l":["unclassified"],"h":[0.2609,0.2324,3.4609,0.4938,0.2118,3.3721],"pk":0.0,"ah":3.0},"56":{"l":["unclassified"],"h":[0.2571,0.251,3.4207,0.4621,0.1961,3.3645],"pk":0.0,"ah":3.0},"57":{"l":["unclassified"],"h":[0.246,0.2093,2.6966,0.4689,0.1751,3.4372],"pk":0.0,"ah":3.0},"58":{"l":["unclassified"],"h":[0.2946,0.1142,1.4636,0.6709,0.1798,3.8174],"pk":0.0,"ah":3.0},"59":{"l":["2"],"h":[0.1889,0.2546,1.2736,0.294,0.1253,4.3533],"pk":1.0,"ah":3.0},"60":{"l":["2"],"h":[0.2343,0.1512,1.6517,0.4393,0.1588,3.4042],"pk":1.0,"ah":3.0},"61":{"l":["unclassified"],"h":[0.2396,0.3762,4.3242,0.2414,0.1742,2.0721],"pk":0.0,"ah":5.0},"62":{"l":["unclassified"],"h":[0.2401,0.5919,6.8652,0.3189,0.1786,1.7943],"pk":0.0,"ah":3.0},"63":{"l":["unclassified"],"h":[0.2372,0.7416,8.4791,0.3848,0.1769,1.6721],"pk":0.0,"ah":3.0},"64":{"l":["unclassified"],"h":[0.2431,0.7713,9.1792,0.4045,0.1824,1.6279],"pk":0.0,"ah":3.0},"65":{"l":["unclassified"],"h":[0.2343,0.8355,9.4678,0.4229,0.1749,1.6139],"pk":0.0,"ah":3.0},"66":{"l":["unclassified"],"h":[0.1058,1.1752,1.0543,0.3261,0.0151,3.6707],"pk":2.0,"ah":3.0},"67":{"l":["4"],"h":[0.1208,0.936,0.9334,0.1476,0.0299,3.8965],"pk":2.0,"ah":5.0},"68":{"l":["4"],"h":[0.1121,0.9564,0.9076,0.177,0.0172,3.8366],"pk":2.0,"ah":3.0},"69":{"l":["4"],"h":[0.1226,1.0429,0.9533,0.1841,0.0207,3.9467],"pk":2.0,"ah":3.0},"70":{"l":["4"],"h":[0.136,0.8469,0.9336,0.1913,0.0231,4.0651],"pk":3.0,"ah":3.0},"71":{"l":["4"],"h":[0.1386,1.0642,0.9097,0.187,0.0226,4.0988],"pk":2.0,"ah":4.0},"72":{"l":["4"],"h":[0.1237,1.0035,1.009,0.1925,0.0237,3.9449],"pk":2.0,"ah":3.0},"73":{"l":["4"],"h":[0.1319,1.0721,1.1244,0.3179,0.0359,4.0202],"pk":1.0,"ah":3.0},"74":{"l":["4"],"h":[0.1865,1.0816,1.1119,0.2478,0.0437,4.2702],"pk":1.0,"ah":3.0},"75":{"l":["unclassified"],"h":[0.1418,1.2233,0.9388,0.3856,0.0421,4.0435],"pk":2.0,"ah":3.0},"76":{"l":["unclassified"],"h":[0.1308,1.601,0.9631,0.1973,0.0643,3.9785],"pk":1.0,"ah":3.0},"77":{"l":["unclassified"],"h":[0.1648,1.6711,0.8848,0.3625,0.0874,4.1618],"pk":1.0,"ah":3.0},"78":{"l":["unclassified"],"h":[0.193,1.7376,0.9139,0.3121,0.083,4.3007],"pk":1.0,"ah":3.0},"79":{"l":["unclassified"],"h":[0.1983,1.5496,1.0157,0.2279,0.0694,4.3395],"pk":1.0,"ah":3.0},"80":{"l":["unclassified"],"h":[0.165,1.2858,0.9769,0.1526,0.042,4.3001],"pk":1.0,"ah":3.0},"81":{"l":["unclassified"],"h":[0.1631,1.4329,1.355,0.1382,0.0525,4.3144],"pk":2.0,"ah":4.0},"82":{"l":["unclassified"],"h":[0.1463,1.2956,1.4018,0.1462,0.0536,4.1871],"pk":1.0,"ah":3.0},"83":{"l":["unclassified"],"h":[0.1561,1.2515,1.0877,0.1219,0.0482,4.1961],"pk":2.0,"ah":5.0},"84":{"l":["unclassified"],"h":[0.2332,1.9548,1.4426,0.2213,0.1015,4.4251],"pk":0.0,"ah":3.0},"85":{"l":["unclassified"],"h":[0.2281,0.9999,1.9905,0.1866,0.0983,3.708],"pk":1.0,"ah":3.0},"86":{"l":["unclassified"],"h":[0.2061,0.3409,3.2207,0.2486,0.1316,2.425],"pk":0.0,"ah":3.0},"87":{"l":["unclassified"],"h":[0.1782,0.7451,6.4619,0.4487,0.1176,1.7437],"pk":0.0,"ah":3.0},"88":{"l":["unclassified"],"h":[0.1467,0.8831,6.115,0.3843,0.0927,1.5072],"pk":0.0,"ah":3.0},"89":{"l":["unclassified"],"h":[0.1492,0.6889,4.8378,0.3365,0.0907,1.6948],"pk":0.0,"ah":3.0},"90":{"l":["unclassified"],"h":[0.1127,0.9831,4.7079,0.4158,0.0617,1.1241],"pk":0.0,"ah":3.0},"91":{"l":["unclassified"],"h":[0.1055,0.9663,4.2319,0.3912,0.0543,1.0598],"pk":0.0,"ah":3.0},"92":{"l":["unclassified"],"h":[0.0888,0.9759,3.1208,0.3919,0.0385,0.5899],"pk":0.0,"ah":3.0},"93":{"l":["unclassified"],"h":[0.0615,0.9849,2.1354,0.3323,0.0234,0.352],"pk":0.0,"ah":3.0},"94":{"l":["unclassified"],"h":[0.0399,0.9913,1.6024,0.2849,0.0141,0.2422],"pk":0.0,"ah":3.0},"95":{"l":["unclassified"],"h":[0.0382,0.9778,1.5666,0.2624,0.0128,0.221],"pk":0.0,"ah":3.0},"96":{"l":["unclassified"],"h":[0.0175,0.9957,1.2074,0.19,0.0057,0.1128],"pk":0.0,"ah":3.0},"97":{"l":["6"],"h":[0.1254,1.2516,1.0225,0.2472,0.0304,4.0058],"pk":2.0,"ah":3.0},"98":{"l":["6"],"h":[0.117,1.2104,1.1702,0.4286,0.031,3.9226],"pk":2.0,"ah":3.0},"99":{"l":["6"],"h":[0.1181,1.2961,1.116,0.3709,0.0326,3.9328],"pk":3.0,"ah":3.0},"100":{"l":["6"],"h":[0.1417,1.286,1.3397,0.3262,0.0514,4.135],"pk":2.0,"ah":3.0},"101":{"l":["6"],"h":[0.2266,0.5418,1.1065,0.2078,0.0668,4.1808],"pk":1.0,"ah":3.0},"102":{"l":["6"],"h":[0.242,0.2504,1.1156,0.2835,0.1002,3.7461],"pk":0.0,"ah":3.0},"103":{"l":["6"],"h":[0.2376,0.1476,1.2112,0.336,0.1109,3.1362],"pk":0.0,"ah":3.0},"104":{"l":["6"],"h":[0.2151,0.1909,1.2171,0.3903,0.0893,2.4398],"pk":0.0,"ah":4.0},"105":{"l":["6"],"h":[0.148,0.3795,1.2905,0.3812,0.0508,1.3022],"pk":1.0,"ah":4.0},"106":{"l":["2"],"h":[0.1623,1.5508,1.217,0.1642,0.0687,4.2848],"pk":1.0,"ah":4.0},"107":{"l":["2"],"h":[0.1598,1.5943,1.2221,0.1796,0.0714,4.2919],"pk":1.0,"ah":4.0},"108":{"l":["2"],"h":[0.1474,1.3452,1.2273,0.203,0.0458,4.2091],"pk":4.0,"ah":4.0},"109":{"l":["2"],"h":[0.1404,1.2016,1.1355,0.1966,0.0359,4.1797],"pk":4.0,"ah":4.0},"110":{"l":["2"],"h":[0.1437,1.2316,1.1189,0.1862,0.0362,4.201],"pk":4.0,"ah":5.0},"111":{"l":["2"],"h":[0.15,1.1779,1.1555,0.1587,0.0324,4.2472],"pk":3.0,"ah":5.0},"112":{"l":["2"],"h":[0.153,1.1345,1.2171,0.2078,0.0367,4.2789],"pk":7.0,"ah":3.0},"113":{"l":["2"],"h":[0.151,1.0783,1.1079,0.1912,0.0349,4.2524],"pk":3.0,"ah":5.0},"114":{"l":["2"],"h":[0.1574,1.0142,1.0706,0.2624,0.0495,4.241],"pk":2.0,"ah":5.0},"115":{"l":["2"],"h":[0.1771,0.7294,0.9158,0.3167,0.0716,4.3384],"pk":2.0,"ah":5.0},"116":{"l":["2"],"h":[0.2202,0.6547,0.577,0.2397,0.1014,4.4652],"pk":1.0,"ah":5.0},"117":{"l":["2"],"h":[0.2189,0.9552,0.8649,0.2782,0.0343,4.3791],"pk":4.0,"ah":3.0},"118":{"l":["2"],"h":[0.2262,1.7481,1.2201,0.2393,0.0884,4.1267],"pk":1.0,"ah":3.0},"119":{"l":["2"],"h":[0.2735,3.4011,1.2413,0.3618,0.1599,3.4704],"pk":0.0,"ah":4.0},"120":{"l":["2"],"h":[0.2646,2.8263,0.9628,0.3337,0.112,2.8193],"pk":0.0,"ah":3.0},"121":{"l":["2"],"h":[0.2439,2.8634,1.1953,0.2991,0.1265,3.5357],"pk":1.0,"ah":4.0},"122":{"l":["8"],"h":[0.1394,0.9388,0.9438,0.199,0.0374,4.1299],"pk":3.0,"ah":3.0},"123":{"l":["8"],"h":[0.1452,1.0206,1.0041,0.1218,0.0288,4.2004],"pk":4.0,"ah":5.0},"124":{"l":["8"],"h":[0.15,1.1707,1.0394,0.1127,0.0438,4.2384],"pk":2.0,"ah":6.0},"125":{"l":["8"],"h":[0.132,1.0025,1.0112,0.1522,0.0322,4.0923],"pk":4.0,"ah":6.0},"126":{"l":["8"],"h":[0.1286,1.1048,1.0242,0.1488,0.0307,4.0682],"pk":4.0,"ah":6.0},"127":{"l":["8"],"h":[0.1256,1.0331,0.9238,0.1564,0.0295,4.0436],"pk":3.0,"ah":6.0},"128":{"l":["8"],"h":[0.1256,1.0531,0.9395,0.1547,0.0311,4.0408],"pk":2.0,"ah":6.0},"129":{"l":["8"],"h":[0.1432,1.1649,0.8701,0.1213,0.0508,4.2233],"pk":1.0,"ah":6.0},"130":{"l":["8"],"h":[0.1679,1.0454,0.8025,0.1398,0.0542,4.4209],"pk":2.0,"ah":4.0},"131":{"l":["8"],"h":[0.1862,0.8885,0.7661,0.1859,0.0622,4.5165],"pk":3.0,"ah":4.0},"132":{"l":["8"],"h":[0.184,0.722,0.7481,0.241,0.0615,4.4881],"pk":2.0,"ah":3.0},"133":{"l":["8"],"h":[0.2063,0.4657,1.0729,0.2326,0.0823,4.1281],"pk":0.0,"ah":4.0},"134":{"l":["8"],"h":[0.1781,0.6271,0.8963,0.1885,0.0648,4.3707],"pk":2.0,"ah":4.0},"135":{"l":["8"],"h":[0.2215,0.1394,1.0984,0.2395,0.1159,3.3793],"pk":1.0,"ah":4.0},"136":{"l":["8"],"h":[0.2184,0.154,1.2526,0.205,0.1207,2.8516],"pk":0.0,"ah":3.0},"137":{"l":["8"],"h":[0.2207,0.1535,1.2704,0.2018,0.1222,2.9043],"pk":0.0,"ah":3.0},"138":{"l":["8"],"h":[0.202,0.227,1.5989,0.2408,0.1038,2.2122],"pk":0.0,"ah":6.0},"139":{"l":["8"],"h":[0.1248,0.6136,2.1362,0.3608,0.0465,0.9509],"pk":0.0,"ah":6.0},"140":{"l":["2"],"h":[0.1598,0.3657,1.0764,0.1141,0.0741,4.0608],"pk":1.0,"ah":3.0},"141":{"l":["2"],"h":[0.1537,0.378,1.0893,0.1229,0.0728,4.0356],"pk":1.0,"ah":3.0},"142":{"l":["2"],"h":[0.1522,0.3648,1.0057,0.1568,0.0755,4.0507],"pk":1.0,"ah":3.0},"143":{"l":["2"],"h":[0.1536,0.3475,0.9863,0.1871,0.0769,4.0746],"pk":1.0,"ah":3.0},"144":{"l":["2"],"h":[0.1513,0.379,0.9318,0.1412,0.0735,4.0921],"pk":1.0,"ah":3.0},"145":{"l":["2"],"h":[0.1508,0.4094,0.9526,0.1798,0.0704,4.1285],"pk":1.0,"ah":3.0},"146":{"l":["2"],"h":[0.1534,0.4237,1.0386,0.1778,0.0722,4.1801],"pk":1.0,"ah":3.0},"147":{"l":["2"],"h":[0.1589,0.4309,0.9694,0.148,0.0717,4.2577],"pk":1.0,"ah":3.0},"148":{"l":["2/4"],"h":[0.1743,0.4886,0.9702,0.1506,0.0669,4.3341],"pk":4.0,"ah":3.0},"149":{"l":["2/4"],"h":[0.1799,0.551,0.9307,0.1448,0.0644,4.4051],"pk":3.0,"ah":4.0},"150":{"l":["4"],"h":[0.1727,0.6593,0.8568,0.199,0.0564,4.4141],"pk":2.0,"ah":4.0},"151":{"l":["4"],"h":[0.1661,0.7004,0.8299,0.2169,0.05,4.3764],"pk":2.0,"ah":4.0},"152":{"l":["unclassified"],"h":[0.1552,0.6256,1.3638,0.2037,0.0646,4.164],"pk":1.0,"ah":3.0},"153":{"l":["unclassified"],"h":[0.1629,0.6903,1.3953,0.2439,0.0654,4.1603],"pk":2.0,"ah":3.0},"154":{"l":["unclassified"],"h":[0.1786,0.6539,1.3886,0.2655,0.0732,4.2063],"pk":2.0,"ah":3.0},"155":{"l":["unclassified"],"h":[0.1789,0.7995,1.352,0.2783,0.0676,4.2987],"pk":2.0,"ah":3.0},"156":{"l":["unclassified"],"h":[0.1714,0.9272,1.4803,0.2523,0.0619,4.2116],"pk":3.0,"ah":4.0},"157":{"l":["unclassified"],"h":[0.1567,1.3704,1.2898,0.2156,0.054,4.0459],"pk":2.0,"ah":4.0},"158":{"l":["unclassified"],"h":[0.1825,1.5125,1.0826,0.1847,0.0777,4.2024],"pk":2.0,"ah":4.0},"159":{"l":["unclassified"],"h":[0.1831,0.9331,1.1672,0.1736,0.0379,4.2315],"pk":3.0,"ah":3.0},"160":{"l":["5"],"h":[0.215,1.785,1.1369,0.1888,0.1024,4.3458],"pk":1.0,"ah":5.0},"161":{"l":["5"],"h":[0.2115,0.4414,0.868,0.289,0.0877,4.329],"pk":2.0,"ah":3.0},"162":{"l":["5"],"h":[0.1983,0.6467,1.2235,0.1468,0.083,4.0978],"pk":2.0,"ah":3.0},"163":{"l":["5"],"h":[0.2067,0.2861,1.8883,0.1464,0.1092,2.0118],"pk":0.0,"ah":7.0},"164":{"l":["10"],"h":[0.1979,0.283,1.8808,0.1403,0.1028,1.8888],"pk":0.0,"ah":7.0},"165":{"l":["10"],"h":[0.1846,0.3577,2.1375,0.1987,0.0906,1.5856],"pk":0.0,"ah":7.0},"166":{"l":["10"],"h":[0.1901,0.3027,1.9683,0.1409,0.1005,1.8416],"pk":0.0,"ah":7.0},"167":{"l":["10"],"h":[0.1924,0.2684,1.8559,0.1701,0.1057,2.0986],"pk":0.0,"ah":3.0},"168":{"l":["10"],"h":[0.1895,0.3093,2.0123,0.252,0.1032,1.8361],"pk":0.0,"ah":3.0},"169":{"l":["10"],"h":[0.1793,0.4307,2.6493,0.2077,0.0916,1.5314],"pk":0.0,"ah":7.0},"170":{"l":["10"],"h":[0.1397,0.7315,3.1834,0.3522,0.0578,0.9579],"pk":0.0,"ah":8.0},"171":{"l":["10"],"h":[0.1728,0.403,2.4461,0.1295,0.0889,1.6204],"pk":0.0,"ah":3.0},"172":{"l":["10"],"h":[0.1422,0.6785,3.0674,0.3455,0.0619,1.1251],"pk":0.0,"ah":8.0},"173":{"l":["unclassified"],"h":[0.002,0.9992,0.9905,0.0575,0.0003,0.0089],"pk":0.0,"ah":3.0},"174":{"l":["unclassified"],"h":[0.0016,1.0103,0.9898,0.0944,0.0004,0.0006],"pk":0.0,"ah":3.0},"175":{"l":["2"],"h":[0.1478,1.4654,1.3014,0.2924,0.0508,4.1114],"pk":0.0,"ah":4.0},"176":{"l":["2"],"h":[0.1402,1.4197,1.3103,0.2641,0.0509,4.0683],"pk":0.0,"ah":4.0},"177":{"l":["2"],"h":[0.132,1.3414,1.3895,0.2737,0.0512,3.9907],"pk":0.0,"ah":4.0},"178":{"l":["2"],"h":[0.1305,1.256,1.3497,0.2883,0.0448,3.9813],"pk":1.0,"ah":4.0},"179":{"l":["2"],"h":[0.1391,1.3431,1.3812,0.2722,0.0457,4.0217],"pk":1.0,"ah":4.0},"180":{"l":["2"],"h":[0.131,1.3344,1.2666,0.2998,0.0395,3.9692],"pk":0.0,"ah":4.0},"181":{"l":["2"],"h":[0.1309,1.2797,1.224,0.3188,0.0401,3.9746],"pk":0.0,"ah":4.0},"182":{"l":["2"],"h":[0.1326,1.2746,1.2536,0.2943,0.0422,4.0008],"pk":0.0,"ah":4.0},"183":{"l":["2"],"h":[0.1388,1.2962,1.2305,0.2536,0.0376,4.0715],"pk":1.0,"ah":4.0},"184":{"l":["2"],"h":[0.1437,1.2531,1.1716,0.2292,0.0376,4.1257],"pk":0.0,"ah":4.0},"185":{"l":["2"],"h":[0.1473,1.1022,1.0696,0.2002,0.0248,4.1443],"pk":3.0,"ah":4.0},"186":{"l":["2"],"h":[0.1628,1.2501,1.1245,0.2264,0.0333,4.2527],"pk":2.0,"ah":4.0},"187":{"l":["2"],"h":[0.1655,1.1559,0.9689,0.2725,0.0205,4.2931],"pk":3.0,"ah":4.0},"188":{"l":["2/6"],"h":[0.1513,1.2481,0.9098,0.2194,0.0356,4.252],"pk":2.0,"ah":4.0},"189":{"l":["2/6"],"h":[0.1434,1.1995,0.8847,0.1882,0.0348,4.2154],"pk":2.0,"ah":4.0},"190":{"l":["6"],"h":[0.1435,1.2659,0.9135,0.1616,0.0458,4.2262],"pk":1.0,"ah":3.0},"191":{"l":["6"],"h":[0.1468,1.2396,0.9395,0.2018,0.0434,4.2403],"pk":1.0,"ah":3.0},"192":{"l":["6"],"h":[0.1622,1.1734,0.8963,0.1799,0.0401,4.3519],"pk":1.0,"ah":3.0},"193":{"l":["6"],"h":[0.1772,1.2228,0.9087,0.1666,0.0449,4.494],"pk":2.0,"ah":4.0},"194":{"l":["6"],"h":[0.1851,1.3768,0.9326,0.1917,0.06,4.5621],"pk":1.0,"ah":4.0},"195":{"l":["2"],"h":[0.175,1.0509,1.2219,0.2198,0.0548,4.4197],"pk":4.0,"ah":3.0},"196":{"l":["2"],"h":[0.1823,0.8092,1.0503,0.2884,0.0511,4.4645],"pk":3.0,"ah":3.0},"197":{"l":["2"],"h":[0.1723,0.9647,0.9438,0.2579,0.044,4.4136],"pk":3.0,"ah":3.0},"198":{"l":["2"],"h":[0.1591,1.2177,0.9963,0.1788,0.0354,4.3031],"pk":3.0,"ah":3.0},"199":{"l":["2"],"h":[0.1725,1.2901,0.9406,0.1684,0.0438,4.3677],"pk":3.0,"ah":4.0}}};
 'use strict';
-/* ---------- J_m and its zeros ---------- */
+/* ═══ evidence layer 1: the paper's own printed classifications ═══════════ */
+const CELLS = {
+  small:  { d: 10.00, atlas: 'small',  reps: 1, note: 'Figure 16, one sweep' },
+  medium: { d: 24.25, atlas: 'medium', reps: 3, note: 'Figure 11, three day-replicates' },
+  large:  { d: 49.50, atlas: null,     reps: 0, note: 'no atlas; unstable/indistinct above ~65 Hz' }
+};
+// Dedicated transition experiments, stored apart from the broad atlas.
+const TRANSITION = {
+  115: { states: [10, 16], switched: 0.375, note: 'dedicated transition study; Fig 15 caption conflicts, labelling it 10/14' },
+  184: { states: [14, 26], switched: 0.252, note: 'dedicated transition study; the broad atlas at 184 Hz reads 14/20 instead' }
+};
+// Reported high-amplitude jumps.
+const AMP_JUMP = { 111: [10, 16], 180: [14, 20] };
+const OVERDRIVE_MV = 430, MIN_MV = 55;
+const DISPLAY_SLOWDOWN = 96;   // rendering only; never applied to state.phase   // apparatus mV, deliberately not converted to g
+
+/* ═══ Bessel core ════════════════════════════════════════════════════════ */
 const QUAD = 128, QC = new Float64Array(QUAD), QS = new Float64Array(QUAD);
 for (let i = 0; i < QUAD; i++){ const t = -Math.PI + 2*Math.PI*i/QUAD; QC[i] = t; QS[i] = Math.sin(t); }
 function besselJ(m, x){ let s = 0; for (let i = 0; i < QUAD; i++) s += Math.cos(m*QC[i] - x*QS[i]); return s/QUAD; }
 const besselJp = (m, x) => m === 0 ? -besselJ(1, x) : (besselJ(m-1, x) - besselJ(m+1, x))/2;
-function besselZero(m, n){
-  const beta = (n + m/2 - 0.25)*Math.PI, mu = 4*m*m;
-  let x = beta - (mu-1)/(8*beta) - 4*(mu-1)*(7*mu-31)/(3*Math.pow(8*beta,3));
-  for (let i = 0; i < 60; i++){
-    const step = besselJ(m, x)/besselJp(m, x); x -= step;
-    if (Math.abs(step) < 1e-15*Math.abs(x)) break;
-  }
-  return x;
-}
-const MMAX = 6, NMAX = 5, ZERO = [];
-for (let m = 0; m <= MMAX; m++){ ZERO.push([]); for (let n = 1; n <= NMAX; n++) ZERO[m].push(besselZero(m, n)); }
-const F0 = 100, freqOf = (m, n) => F0*ZERO[m][n-1]/ZERO[0][0];
-const MODES = [];
-for (let m = 0; m <= MMAX; m++) for (let n = 1; n <= NMAX; n++)
-  MODES.push({ m, n, f: freqOf(m, n) });
-MODES.sort((a,b) => a.f - b.f);
 
-/* ---------- field and its exact gradient ---------- */
-const G = 361, C = 180, RAD = 178, SZ = G*G;
-const INSIDE = new Uint8Array(SZ), COV = new Float32Array(SZ);
-for (let y = 0; y < G; y++) for (let x = 0; x < G; x++){
-  const r = Math.hypot(x-C, y-C), i = y*G+x;
-  INSIDE[i] = r <= RAD ? 1 : 0;
-  COV[i] = Math.max(0, Math.min(1, RAD - r + 0.5));
-}
-const U = new Float32Array(SZ), GX = new Float32Array(SZ), GY = new Float32Array(SZ);
-
-const CACHE = new Map(), CACHE_MAX = 18;
-function modeArrays(m, n){
-  const key = m + ',' + n, hit = CACHE.get(key);
-  if (hit) return hit;
-  const k = ZERO[m][n-1]/RAD;
-  const u = new Float32Array(SZ), gx = new Float32Array(SZ), gy = new Float32Array(SZ);
-  for (let y = 0; y < G; y++) for (let x = 0; x < G; x++){
-    const i = y*G+x; if (!INSIDE[i]) continue;
-    const dx = x-C, dy = y-C, r = Math.hypot(dx, dy), X = k*r;
-    if (r === 0){
-      u[i] = m === 0 ? 1 : 0;
-      // lim grad: only m = 1 is non-zero, u ~ k*dx/2
-      gx[i] = m === 1 ? k/2 : 0; gy[i] = 0;
-      continue;
-    }
-    const th = Math.atan2(dy, dx), cm = Math.cos(m*th), sm = Math.sin(m*th);
-    const J = besselJ(m, X);
-    u[i] = J*cm;
-    const ur = k*besselJp(m, X)*cm;               // du/dr
-    const ut = -m*k*(J/X)*sm;                     // (1/r) du/dtheta
-    const c = dx/r, s = dy/r;
-    gx[i] = ur*c - ut*s; gy[i] = ur*s + ut*c;
-  }
-  const rec = { u, gx, gy };
-  if (CACHE.size >= CACHE_MAX) CACHE.delete(CACHE.keys().next().value);
-  CACHE.set(key, rec);
-  return rec;
-}
-
-let excite = 'single', view = 'sand', sel = { m: 5, n: 3 };
-let freq = 406, Q = 70, agit = 0.9, dx = 0.5, dy = 0.5;
-let sweeping = false, contributions = [], settle = 0;
-
-function modeAt(m, n, r, th){
-  const k = ZERO[m][n-1]/RAD;
-  return besselJ(m, k*r)*(m === 0 ? 1 : Math.cos(m*th));
-}
-function build(){
-  U.fill(0); GX.fill(0); GY.fill(0);
-  if (excite === 'single'){
-    const a = modeArrays(sel.m, sel.n);
-    U.set(a.u); GX.set(a.gx); GY.set(a.gy);
-    contributions = [{ m: sel.m, n: sel.n, f: freqOf(sel.m, sel.n), w: 1 }];
-  } else {
-    const rx = (dx-0.5)*2*RAD, ry = (dy-0.5)*2*RAD;
-    const rd = Math.min(Math.hypot(rx, ry), RAD), td = Math.atan2(ry, rx), w = freq;
-    const all = MODES.map(md => {
-      const w0 = md.f, g = w0/Q;
-      return { m: md.m, n: md.n, f: md.f,
-               w: modeAt(md.m, md.n, rd, td)*(w0*w0)/Math.hypot(w0*w0 - w*w, g*w) };
-    });
-    let peak = 0; for (const e of all) peak = Math.max(peak, Math.abs(e.w));
-    contributions = all.filter(e => Math.abs(e.w) > peak*0.04)
-                       .sort((a,b) => Math.abs(b.w) - Math.abs(a.w)).slice(0, 8);
-    for (const e of contributions){
-      const a = modeArrays(e.m, e.n), w = e.w;
-      for (let i = 0; i < SZ; i++){ U[i] += w*a.u[i]; GX[i] += w*a.gx[i]; GY[i] += w*a.gy[i]; }
-    }
-  }
-  let mx = 1e-12;
-  for (let i = 0; i < SZ; i++) if (INSIDE[i]) mx = Math.max(mx, Math.abs(U[i]));
-  const inv = 1/mx;                     // one scale for u and grad u, so the ratio holds
-  for (let i = 0; i < SZ; i++){ U[i] *= inv; GX[i] *= inv; GY[i] *= inv; }
-  settle = 0;
-  paintReadout();
-}
-
-/* ---------- the grains ---------- */
-const NP = 45000;
-const PX = new Float32Array(NP), PY = new Float32Array(NP),
-      VX = new Float32Array(NP), VY = new Float32Array(NP);
-function sprinkle(){
-  for (let p = 0; p < NP; p++){
-    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(RAD-2);
-    PX[p] = C + r*Math.cos(a); PY[p] = C + r*Math.sin(a);
-    VX[p] = 0; VY[p] = 0;
-  }
-  settle = 0;
-}
-const DRIFT = 15, DAMP = 0.6, AGIT = 0.85;
-function stepGrains(){
-  const jitter = AGIT*agit;
-  for (let p = 0; p < NP; p++){
-    let x = PX[p], y = PY[p];
-    const i = (y|0)*G + (x|0);
-    const u = U[i], gx = GX[i], gy = GY[i];
-    const a = Math.abs(u)*jitter;
-    let vx = (VX[p] - DRIFT*u*gx + (Math.random()-0.5)*a)*DAMP;
-    let vy = (VY[p] - DRIFT*u*gy + (Math.random()-0.5)*a)*DAMP;
-    x += vx; y += vy;
-    const rx = x - C, ry = y - C, r = Math.hypot(rx, ry);
-    if (r > RAD - 1.5){                              // the clamped rim is a wall
-      const s = (RAD - 1.5)/r;
-      x = C + rx*s; y = C + ry*s; vx *= -0.25; vy *= -0.25;
-    }
-    PX[p] = x; PY[p] = y; VX[p] = vx; VY[p] = vy;
-  }
-  if (settle < 1) settle = Math.min(1, settle + 0.012);
-}
-
-/* ---------- rendering ---------- */
-const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha:false });
-const img = ctx.createImageData(G, G), px = img.data;
-const BIN = new Uint16Array(SZ);
-let phase = 0;
-
-function render(){
-  if (view === 'sand'){
-    BIN.fill(0);
-    for (let p = 0; p < NP; p++){
-      const i = (PY[p]|0)*G + (PX[p]|0);
-      if (i >= 0 && i < SZ) BIN[i]++;
-    }
-    for (let i = 0, q = 0; i < SZ; i++, q += 4){
-      const cov = COV[i];
-      // brushed dark plate, slightly lighter toward the rim
-      let base = 15 + 10*(1 - cov*0.0);
-      let r0 = base, g0 = base + 2, b0 = base + 5;
-      const nGrain = BIN[i];
-      if (nGrain){
-        const t = Math.min(1, nGrain/2.0), tt = t*t*(3 - 2*t);
-        r0 += (244 - r0)*tt; g0 += (232 - g0)*tt; b0 += (206 - b0)*tt;
+// Zeros of J'_m — the free (freely sliding) contact-line condition J'_m(kR) = 0.
+const JPZ = new Map();
+function jpZeros(m, count){
+  const key = m + ':' + count, hit = JPZ.get(key); if (hit) return hit;
+  const out = []; let x = 0.02, prev = besselJp(m, x);
+  while (out.length < count && x < 90){
+    x += 0.08; const cur = besselJp(m, x);
+    if (prev*cur <= 0 && prev !== 0){
+      let a = x - 0.08, b = x;
+      for (let i = 0; i < 70; i++){
+        const mid = (a+b)/2;
+        if (besselJp(m, a)*besselJp(m, mid) <= 0) b = mid; else a = mid;
       }
-      px[q]   = 6 + (r0-6)*cov;
-      px[q+1] = 7 + (g0-7)*cov;
-      px[q+2] = 10 + (b0-10)*cov;
-      px[q+3] = 255;
+      out.push((a+b)/2);
     }
-  } else if (view === 'water'){
-    const A = 34, k = Math.cos(phase);
-    const Lx = -0.42, Ly = -0.58, Lz = 0.70;
-    for (let i = 0, q = 0; i < SZ; i++, q += 4){
-      const cov = COV[i];
-      let r0 = 6, g0 = 7, b0 = 10;
-      if (cov > 0){
-        const nx = -A*GX[i]*k, ny = -A*GY[i]*k;
+    prev = cur;
+  }
+  JPZ.set(key, out); return out;
+}
+
+/* ═══ water properties ═══════════════════════════════════════════════════ */
+const G_ACC = 9.80665;
+function surfaceTension(Tc){                       // IAPWS R1-76, N/m
+  const Tk = Tc + 273.15, tau = 1 - Tk/647.096;
+  return 0.2358*Math.pow(tau, 1.256)*(1 - 0.625*tau);
+}
+function density(Tc){                              // kg/m^3, Kell-type fit
+  return (999.83952 + 16.945176*Tc - 7.9870401e-3*Tc*Tc
+        - 46.170461e-6*Tc**3 + 105.56302e-9*Tc**4 - 280.54253e-12*Tc**5)
+        / (1 + 16.879850e-3*Tc);
+}
+function viscosity(Tc){                            // Pa s, Vogel-Andrade fit
+  return 2.414e-5*Math.pow(10, 247.8/((Tc + 273.15) - 140));
+}
+// gravity-capillary dispersion on finite depth
+function omegaOf(k, sigma, rho, hM){
+  return Math.sqrt((G_ACC*k + sigma*k*k*k/rho)*Math.tanh(k*hM));
+}
+
+/* ═══ atlas queries ══════════════════════════════════════════════════════ */
+function atlasAt(cellKey, f){
+  const cell = CELLS[cellKey];
+  if (!cell.atlas) return null;
+  const rec = ATLAS[cell.atlas][f];
+  return rec ? { labels: rec.l, hints: rec.h, peaks: rec.pk, angHarm: rec.ah } : null;
+}
+// Replicate agreement -> a fold, a confidence, and a competing state if there is one.
+function foldPrior(rec){
+  if (!rec) return null;
+  const classified = rec.labels.filter(l => l !== 'unclassified');
+  if (!classified.length) return { fold: null, confidence: 0, competing: [], unclassified: true };
+  const tally = new Map();
+  for (const l of classified){
+    for (const part of l.split('/')) tally.set(part, (tally.get(part) || 0) + 1/l.split('/').length);
+  }
+  const ranked = [...tally.entries()].sort((a,b) => b[1] - a[1]);
+  const total = classified.length;
+  return {
+    fold: Number(ranked[0][0]),
+    confidence: ranked[0][1]/rec.labels.length,     // over ALL replicates, unclassified included
+    competing: ranked.slice(1).map(([k,v]) => ({ fold: Number(k), share: v/rec.labels.length })),
+    unclassified: false,
+    classifiedCount: total
+  };
+}
+function transitionRisk(prior, rec, f){
+  if (!prior) return 1;
+  if (prior.unclassified) return 1;
+  let r = 1 - prior.confidence;
+  if (rec.labels.some(l => l.includes('/'))) r = Math.max(r, 0.5);
+  if (TRANSITION[f]) r = Math.max(r, TRANSITION[f].switched);
+  return Math.min(1, r);
+}
+
+/* ═══ the state contract ═════════════════════════════════════════════════ */
+function resolvePatternState(o){
+  const { cellKey, f, amplitudeMv, tempC, depthMm, rim, tSec, tfeSec } = o;
+  const cell = CELLS[cellKey];
+  const R = cell.d/2000;                                    // m
+  const sigma = surfaceTension(tempC), rho = density(tempC), mu = viscosity(tempC);
+  const hM = depthMm/1000;
+  const responseHz = f/2;                                   // subharmonic
+  const omegaTarget = 2*Math.PI*responseHz;
+
+  const warnings = [];
+  if (rim === 'pinned') warnings.push({ hard: true, text:
+    'Pinned contact line couples the Bessel modes (Kidambi 2013; Shao et al. 2021; Chu et al. 2026). ' +
+    'The mode below is the FREE J′(kR)=0 basis shown as a diagnostic — it is not a pinned eigenmode solve.' });
+  if (cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
+    'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
+  if (!cell.atlas) warnings.push({ hard: false, text:
+    'No empirical atlas for this diameter. Angular symmetry below is theory only, not observed morphology.' });
+  if (amplitudeMv < MIN_MV) warnings.push({ hard: false, text:
+    'Below the reported minimum drive: no stable Faraday pattern forms.' });
+  if (amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
+    'Overdriven regime: the paper reports the pattern becomes distorted here.' });
+
+  // nearest free-contact-line modes to the half-frequency target
+  const modes = [];
+  for (let m = 0; m <= 14; m++)
+    for (const [idx, z] of jpZeros(m, 7).entries()){
+      const k = z/R, w = omegaOf(k, sigma, rho, hM);
+      modes.push({ m, n: idx+1, jp: z, k, hz: w/(2*Math.PI), mismatch: Math.abs(w - omegaTarget)/omegaTarget });
+    }
+  modes.sort((a,b) => a.mismatch - b.mismatch);
+
+  const rec = atlasAt(cellKey, f);
+  const prior = foldPrior(rec);
+  const risk = transitionRisk(prior, rec, f);
+
+  // Empirical fold sets the angular symmetry; the paper counts 6-fold as m = 3.
+  const states = [];
+  const pushState = (fold, weight) => {
+    if (fold == null) return;
+    const odd = fold % 2 === 1;
+    const m = odd ? fold : fold/2;
+    if (odd) warnings.push({ hard: false, text:
+      `${fold}-fold is odd, so it is not 2m under the paper's convention (6-fold = m 3). ` +
+      `Drawn as m = ${fold}; treat the angular order as unresolved.` });
+    // radial index from theory: nearest J' mode at this m
+    let best = null;
+    for (const [idx, z] of jpZeros(m, 7).entries()){
+      const w = omegaOf(z/R, sigma, rho, hM);
+      const d = Math.abs(w - omegaTarget)/omegaTarget;
+      if (!best || d < best.mismatch) best = { m, n: idx+1, jp: z, k: z/R, hz: w/(2*Math.PI), mismatch: d };
+    }
+    states.push({ fold, m, weight, radial: best });
+  };
+  if (prior && !prior.unclassified){
+    pushState(prior.fold, prior.confidence);
+    for (const c of prior.competing) if (c.share > 0.15) pushState(c.fold, c.share);
+    if (AMP_JUMP[f] && amplitudeMv > 330){
+      const alt = AMP_JUMP[f][1];
+      if (!states.some(s => s.fold === alt)) pushState(alt, 0.45);
+      warnings.push({ hard: false, text:
+        `At ${f} Hz and high amplitude the paper reports a jump to ${alt}-fold` +
+        (f === 180 ? ' (unstable).' : '.') });
+    }
+  } else {
+    const t = modes[0];
+    pushState(t.m ? t.m*2 : 2, 1);                 // theory fallback, flagged by the warning above
+  }
+  const wsum = states.reduce((s, x) => s + x.weight, 0) || 1;
+  for (const s of states) s.weight /= wsum;
+
+  if (TRANSITION[f]) warnings.push({ hard: false, text:
+    `Dedicated transition study at ${f} Hz: ${TRANSITION[f].states.join('/')}-fold competition, ` +
+    `switched in ${(TRANSITION[f].switched*100).toFixed(1)}% of slow amplitude reductions. ${TRANSITION[f].note}.` });
+
+  // Formation gain: monotonic, and entirely separate from the fast phase.
+  const expression = amplitudeMv < MIN_MV ? 0 : 1 - Math.exp(-tSec/Math.max(0.15, tfeSec));
+
+  return {
+    phase: Math.cos(Math.PI*f*tSec),               // surface at f/2, exact
+    // The real surface runs at f/2 -- 55.5 Hz at 111 Hz drive -- which no
+    // display can show: every frame would land on an arbitrary phase and the
+    // result is aliasing, not motion. The rendered phase is slowed by a stated
+    // factor. The contract value above is untouched.
+    displayPhase: Math.cos(Math.PI*f*tSec/DISPLAY_SLOWDOWN),
+    phaseLabel: Math.cos(Math.PI*f*tSec) >= 0 ? 'phase I' : 'phase II',
+    displaySlowdown: DISPLAY_SLOWDOWN,
+    responseHz, expression, states, warnings,
+    selectedEmpiricalFold: prior && !prior.unclassified ? prior.fold : null,
+    empiricalConfidence: prior ? prior.confidence : 0,
+    transitionRisk: risk,
+    replicates: rec ? rec.labels : null,
+    visualSignature: rec ? {
+      contrast: rec.hints[0], centerToMid: rec.hints[1], outerToMid: rec.hints[2],
+      textureConc: rec.hints[3], radialStd: rec.hints[4], entropy: rec.hints[5],
+      peaks: rec.peaks, angHarm: rec.angHarm
+    } : null,
+    nearestTheoryModes: modes.slice(0, 4),
+    transitionStudy: TRANSITION[f] || null,
+    water: { sigma, rho, mu }
+  };
+}
+
+/* ═══ rendering ══════════════════════════════════════════════════════════ */
+// GR must be ODD: CC has to land on a pixel. With an even GR, CC = 189.5 and
+// every shape-table index is fractional, so the typed-array reads return
+// undefined and the whole surface becomes NaN.
+const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha:false });
+const im = ctx.createImageData(GR, GR), pxl = im.data;
+const COVER = new Float32Array(NSZ), RAD = new Float32Array(NSZ), ANG = new Float32Array(NSZ);
+for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
+  const dx = x-CC, dy = y-CC, r = Math.hypot(dx, dy), i = y*GR+x;
+  COVER[i] = Math.max(0, Math.min(1, RR - r + 0.5));
+  RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx);
+}
+// Shape of one state, and its radial slope, cached on the unit disc.
+const SHAPE = new Map();
+function shapeOf(m, jp){
+  const key = m + ':' + jp.toFixed(6), hit = SHAPE.get(key); if (hit) return hit;
+  const half = CC+1, jr = new Float32Array(half*half), dr = new Float32Array(half*half);
+  for (let ay = 0; ay <= CC; ay++) for (let ax = 0; ax <= CC; ax++){
+    const rr = Math.hypot(ax, ay)/RR;
+    if (rr > 1.0001){ continue; }
+    jr[ay*half+ax] = besselJ(m, jp*rr);
+    dr[ay*half+ax] = jp*besselJp(m, jp*rr);
+  }
+  const rec = { jr, dr, half };
+  if (SHAPE.size > 40) SHAPE.delete(SHAPE.keys().next().value);
+  SHAPE.set(key, rec); return rec;
+}
+
+const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32Array(NSZ);
+function buildSurface(state){
+  ETA.fill(0); NX.fill(0); NY.fill(0);
+  for (const s of state.states){
+    const sh = shapeOf(s.m, s.radial.jp), half = sh.half, m = s.m, w = s.weight;
+    for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
+      const i = y*GR+x; if (COVER[i] <= 0) continue;
+      const idx = Math.abs(y-CC)*half + Math.abs(x-CC);
+      const J = sh.jr[idx], dJ = sh.dr[idx], th = ANG[i], r = RAD[i];
+      const cm = Math.cos(m*th), sm = Math.sin(m*th);
+      ETA[i] += w*J*cm;
+      // analytic gradient in disc coords: dr and (1/r)dtheta, rotated to x,y
+      const ur = w*dJ*cm;
+      const ut = r > 1e-6 ? -w*m*J*sm/r : 0;
+      const c = r > 1e-6 ? (x-CC)/(r*RR) : 1, sn = r > 1e-6 ? (y-CC)/(r*RR) : 0;
+      NX[i] += ur*c - ut*sn; NY[i] += ur*sn + ut*c;
+    }
+  }
+  // Panel image descriptors act only here, as renderer hints on presentation.
+  const vs = state.visualSignature;
+  if (vs){
+    const cb = Math.max(0.25, Math.min(2.2, vs.centerToMid));
+    for (let i = 0; i < NSZ; i++){
+      if (COVER[i] <= 0) continue;
+      const g = 1 + (cb - 1)*Math.max(0, 1 - RAD[i]*2.2);
+      ETA[i] *= g; NX[i] *= g; NY[i] *= g;
+    }
+  }
+  // Height and slope are normalised separately. The optical layer reads slope
+  // only, and the contract keeps optics apart from physical surface height --
+  // sharing one scale would make the highlight depend on the height units.
+  let mx = 1e-9, gx = 1e-9;
+  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){
+    mx = Math.max(mx, Math.abs(ETA[i]));
+    gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
+  }
+  const inv = 1/mx, ginv = 1/gx;
+  for (let i = 0; i < NSZ; i++){ ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv; }
+}
+
+let view = 'optical';
+const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
+function renderSurface(state){
+  const k = state.displayPhase*state.expression;
+  const vs = state.visualSignature;
+  const contrast = vs ? Math.max(0.08, Math.min(0.34, vs.contrast)) : 0.2;
+  const tex = vs ? Math.min(0.5, vs.textureConc) : 0.2;
+  const SLOPE = 0.8;   // on a unit-normalised slope field
+  for (let i = 0, q = 0; i < NSZ; i++, q += 4){
+    const cov = COVER[i];
+    let r0 = 5, g0 = 7, b0 = 10;
+    if (cov > 0){
+      const h = ETA[i]*k;
+      if (view === 'height'){
+        if (h >= 0){ r0 = 8 + 70*h;  g0 = 12 + 190*h; b0 = 18 + 220*h; }
+        else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
+      } else if (view === 'nodal'){
+        const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
+        r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
+      } else {
+        // optical: a ring light above the cell, reflected by the tilted surface.
+        // Kept deliberately separate from the height field it reads from.
+        const nx = -NX[i]*SLOPE*k, ny = -NY[i]*SLOPE*k;
         const inv = 1/Math.sqrt(nx*nx + ny*ny + 1);
         const Nx = nx*inv, Ny = ny*inv, Nz = inv;
-        const d = Math.max(0, Nx*Lx + Ny*Ly + Nz*Lz);
-        const dot2 = 2*(Nx*Lx + Ny*Ly + Nz*Lz);
-        const Rz = dot2*Nz - Lz;                      // reflect L about N, viewer at +z
-        const sp = Math.pow(Math.max(0, Rz), 46);
-        const h = U[i]*k;
-        r0 = 8 + 26*d + 235*sp + 30*Math.max(0, h);
-        g0 = 20 + 96*d + 238*sp + 26*Math.max(0, h);
-        b0 = 34 + 118*d + 240*sp + 10*Math.max(0, h);
+        const tilt = Math.hypot(Nx, Ny);
+        const ring = Math.exp(-Math.pow((tilt - 0.34)/0.105, 2));     // annular source
+        const spec = Math.pow(Math.max(0, Nz), 30);
+        const cau = Math.max(0, 1 - Math.abs(h)/contrast);            // bright near nodes
+        r0 = 7 + 168*ring + 20*spec + 30*cau;
+        g0 = 12 + 170*ring + 62*spec + 54*cau;
+        b0 = 20 + 164*ring + 96*spec + 72*cau;
       }
-      px[q] = 6 + (Math.min(255,r0)-6)*cov;
-      px[q+1] = 7 + (Math.min(255,g0)-7)*cov;
-      px[q+2] = 10 + (Math.min(255,b0)-10)*cov;
-      px[q+3] = 255;
+      if (tex > 0.18){
+        const n = (Math.random() - 0.5)*tex*26;
+        r0 += n; g0 += n; b0 += n;
+      }
     }
-  } else {
-    const k = Math.cos(phase);
-    for (let i = 0, q = 0; i < SZ; i++, q += 4){
-      const cov = COV[i], v = U[i]*k;
-      let r0, g0, b0;
-      if (v >= 0){ r0 = 8 + 76*v;  g0 = 11 + 199*v; b0 = 16 + 224*v; }
-      else       { r0 = 8 + 228*-v; g0 = 11 + 150*-v; b0 = 16 + 84*-v; }
-      px[q] = 6 + (r0-6)*cov; px[q+1] = 7 + (g0-7)*cov; px[q+2] = 10 + (b0-10)*cov; px[q+3] = 255;
-    }
+    // Soft shoulder rather than a hard clamp: saturated whites erase the
+    // structure the pattern is supposed to show.
+    pxl[q]   = tone(5 + (r0-5)*cov);
+    pxl[q+1] = tone(7 + (g0-7)*cov);
+    pxl[q+2] = tone(10 + (b0-10)*cov);
+    pxl[q+3] = 255;
   }
-  ctx.putImageData(img, 0, 0);
+  ctx.putImageData(im, 0, 0);
 }
 
-function paintReadout(){
-  const top = contributions[0];
-  if (top){
-    document.getElementById('hm').textContent = top.m + ',' + top.n;
-    document.getElementById('hz').textContent = Math.round(excite === 'single' ? top.f : freq);
-    document.getElementById('hj').textContent = ZERO[top.m][top.n-1].toFixed(4);
+/* ═══ atlas strip ════════════════════════════════════════════════════════ */
+const FOLD_COLOR = { '2':'#4FD1E0','4':'#63C08A','5':'#B9D45C','6':'#E9C65C','8':'#E9A75C',
+  '10':'#E4805E','12':'#E4695E','14':'#D2609B','16':'#9B8CE0','18':'#7C8FE0','20':'#5CA8D4',
+  '26':'#8FA0AF','unclassified':'#222A34' };
+const foldColor = l => FOLD_COLOR[l] || (l && l.includes('/') ? '#6E7A88' : '#222A34');
+const sc = document.getElementById('sc'), sx = sc.getContext('2d');
+function drawAtlas(cellKey, f){
+  const W = sc.width, H = sc.height, cell = CELLS[cellKey];
+  sx.fillStyle = '#0D1116'; sx.fillRect(0, 0, W, H);
+  const n = 150, bw = W/n;
+  const rows = cell.atlas ? CELLS[cellKey].reps : 0;
+  const rh = rows ? Math.floor((H - 22)/rows) : 0;
+  for (let i = 0; i < n; i++){
+    const hz = 50 + i, rec = cell.atlas ? ATLAS[cell.atlas][hz] : null;
+    if (rec){
+      for (let r = 0; r < rows; r++){
+        sx.fillStyle = foldColor(rec.l[r]);
+        sx.fillRect(i*bw, 4 + r*rh, Math.max(1, bw-0.5), rh-1.5);
+      }
+      // disagreement tick
+      const cls = rec.l.filter(l => l !== 'unclassified');
+      if (rows > 1 && new Set(cls).size > 1){
+        sx.fillStyle = '#FFFFFF'; sx.fillRect(i*bw, H-16, Math.max(1, bw-0.5), 3);
+      }
+    } else {
+      sx.fillStyle = '#141A21'; sx.fillRect(i*bw, 4, Math.max(1, bw-0.5), H-22);
+    }
+    if (TRANSITION[hz]){ sx.fillStyle = '#9B8CE0'; sx.fillRect(i*bw, H-10, Math.max(1.5, bw-0.5), 5); }
   }
-  const rows = [];
-  if (excite === 'single'){
-    rows.push(['zero j<sub>m,n</sub>', '<b>' + ZERO[sel.m][sel.n-1].toFixed(10) + '</b>']);
-    rows.push(['J<sub>m</sub> at that zero', besselJ(sel.m, ZERO[sel.m][sel.n-1]).toExponential(2)]);
-    rows.push(['frequency', freqOf(sel.m, sel.n).toFixed(2) + ' Hz']);
-    rows.push(['nodal diameters', String(sel.m)]);
-    rows.push(['nodal circles', (sel.n - 1) + ' + rim']);
-  } else {
-    rows.push(['modes responding', String(contributions.length)]);
-    for (const e of contributions.slice(0, 5))
-      rows.push(['&nbsp;&nbsp;' + e.m + ',' + e.n + ' @ ' + e.f.toFixed(0) + ' Hz',
-                 (Math.abs(e.w)/Math.abs(contributions[0].w)*100).toFixed(0) + '%']);
+  const px = (f - 50 + 0.5)*bw;
+  sx.strokeStyle = '#FFFFFF'; sx.lineWidth = 1.5;
+  sx.beginPath(); sx.moveTo(px, 0); sx.lineTo(px, H); sx.stroke();
+}
+(function legend(){
+  const el = document.getElementById('legend');
+  el.innerHTML = ['2','4','6','8','10','12','14','16','20'].map(k =>
+    `<span><i style="background:${FOLD_COLOR[k]}"></i>${k}</span>`).join('')
+    + `<span><i style="background:#222A34"></i>unclassified</span>`
+    + `<span><i style="background:#FFFFFF"></i>replicates disagree</span>`
+    + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
+})();
+
+/* ═══ wiring ═════════════════════════════════════════════════════════════ */
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
+let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
+
+const $ = id => document.getElementById(id);
+// TFE rises as amplitude falls and as depth grows -- the directions the paper
+// reports. The paper gives no calibrated TFE surface, so this is a caller-side
+// envelope, not a fit to their curves.
+const tfeOf = () => Math.max(0.4, 6.5*(180/Math.max(60, amp))*(0.55 + depth/9));
+
+function recompute(){
+  state = resolvePatternState({ cellKey, f: freq, amplitudeMv: amp, tempC: temp,
+                                depthMm: depth, rim, tSec: simT, tfeSec: tfeOf() });
+  buildSurface(state);
+  paintDeck(); paintInspector();
+  drawAtlas(cellKey, freq);
+  dirty = false;
+}
+function paintDeck(){
+  const s = state;
+  $('warnBox').innerHTML = s.warnings.map(w =>
+    `<div class="warn${w.hard ? ' hard' : ''}">${w.text}</div>`).join('');
+  const m = s.nearestTheoryModes[0], w = s.water;
+  const rows = [
+    ['drive', `${freq} <span class="u">Hz</span>`],
+    ['surface response', `<b>${s.responseHz.toFixed(1)}</b> <span class="u">Hz</span>`],
+    ['empirical fold', s.selectedEmpiricalFold != null
+        ? `<b>${s.selectedEmpiricalFold}</b>-fold` : '<span class="u">none in atlas</span>'],
+    ['confidence', `${(s.empiricalConfidence*100).toFixed(0)}<span class="u">%</span>`],
+    ['transition risk', `${s.transitionRisk.toFixed(2)}`],
+    ['states drawn', s.states.map(x => `${x.fold}f·${(x.weight*100).toFixed(0)}%`).join('  ')],
+    ['SEP', ''],
+    ['nearest J′ mode', `m ${m.m} &nbsp; n ${m.n}`],
+    ['j′<sub>m,n</sub>', m.jp.toFixed(5)],
+    ['predicted', `${m.hz.toFixed(2)} <span class="u">Hz</span>`],
+    ['mismatch', `${(m.mismatch*100).toFixed(1)}<span class="u">%</span>`],
+    ['SEP', ''],
+    ['σ', `${(w.sigma*1000).toFixed(2)} <span class="u">mN/m</span>`],
+    ['ρ', `${w.rho.toFixed(1)} <span class="u">kg/m³</span>`],
+    ['μ', `${(w.mu*1000).toFixed(3)} <span class="u">mPa·s</span>`],
+    ['TFE used', `${tfeOf().toFixed(1)} <span class="u">s</span>`]
+  ];
+  $('ro').innerHTML = rows.map(([k, v]) => k === 'SEP'
+    ? '<dt style="grid-column:1/-1"><div class="sep"></div></dt>'
+    : `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function paintInspector(){
+  const s = state, vs = s.visualSignature;
+  const cells = [];
+  cells.push(['printed classification', s.replicates
+    ? `<b>${s.selectedEmpiricalFold ?? '—'}</b>${s.selectedEmpiricalFold ? '-fold' : ''}
+       <div class="reps">${s.replicates.map(l =>
+         `<span class="${l === 'unclassified' ? 'u' : ''}">${l === 'unclassified' ? '—' : l}</span>`).join('')}</div>`
+    : '<span class="val sm">no atlas for this diameter</span>', false]);
+  if (vs){
+    cells.push(['panel descriptors', `contrast <b>${vs.contrast.toFixed(3)}</b> · entropy <b>${vs.entropy.toFixed(2)}</b> bits
+      <div class="val sm">centre/mid ${vs.centerToMid.toFixed(2)} · outer/mid ${vs.outerToMid.toFixed(2)}
+      · radial peaks ${vs.peaks.toFixed(1)} · texture ${vs.textureConc.toFixed(3)} · ang harm ${vs.angHarm.toFixed(1)}</div>`, false]);
+    const hint = [];
+    hint.push(vs.centerToMid > 1.25 ? 'bright centre' : vs.centerToMid < 0.85 ? 'dark centre' : 'balanced centre');
+    hint.push(vs.peaks >= 3 ? 'ring-rich' : 'radially simple');
+    hint.push(vs.contrast > 0.22 ? 'high contrast' : 'medium contrast');
+    hint.push(vs.textureConc > 0.2 ? 'high texture' : 'low texture');
+    cells.push(['renderer hints', `<span class="val sm">${hint.join(' · ')}</span>`, false]);
   }
-  document.getElementById('ro').innerHTML =
-    rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('');
+  cells.push(['theory modes near f/2', `<span class="val sm">` +
+    s.nearestTheoryModes.map(m => `m${m.m} n${m.n} → ${m.hz.toFixed(1)} Hz (${(m.mismatch*100).toFixed(1)}%)`).join('<br>')
+    + `</span>`, false]);
+  if (s.transitionStudy) cells.push(['dedicated transition', `<b>${s.transitionStudy.states.join(' / ')}</b>-fold
+    <div class="val sm">switched in ${(s.transitionStudy.switched*100).toFixed(1)}% of slow amplitude reductions.
+    Higher atmospheric pressure favoured the higher-order state.</div>`, false]);
+  $('insp').innerHTML = cells.map(([k, v]) =>
+    `<div><span class="k">${k}</span><div class="val">${v}</div></div>`).join('');
+}
+function paintOverlay(){
+  const s = state;
+  $('oF').textContent = freq; $('oR').textContent = s.responseHz.toFixed(1);
+  $('oD').textContent = CELLS[cellKey].d.toFixed(2);
+  const pI = s.displayPhase >= 0;
+  $('oPh').className = 'ph' + (pI ? '' : ' two');
+  $('oPhT').textContent = pI ? 'phase I' : 'phase II';
+  $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
+  $('oM').textContent = s.states.length ? s.states[0].m : '—';
+  $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
+  $('oRisk').textContent = 'risk ' + s.transitionRisk.toFixed(2);
+  $('oExp').textContent = 'expression ' + (s.expression*100).toFixed(0) + '%'
+    + '  ·  display slowed ×' + s.displaySlowdown;
+  const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
+  $('oMode').textContent = `J′ mode m=${m.m} n=${m.n}`;
 }
 
-/* ---------- controls ---------- */
-(function buildGrid(){
-  const g = document.getElementById('grid');
-  let h = '<span class="hd"></span>';
-  for (let n = 1; n <= NMAX; n++) h += '<span class="hd">' + n + '</span>';
-  for (let m = 0; m <= MMAX; m++){
-    h += '<span class="rh">' + m + '</span>';
-    for (let n = 1; n <= NMAX; n++)
-      h += '<button data-m="'+m+'" data-n="'+n+'" type="button" aria-pressed="'+(m===5&&n===3)+'">'
-         + freqOf(m,n).toFixed(0) + '</button>';
-  }
-  g.innerHTML = h;
-  g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    sel = { m:+b.dataset.m, n:+b.dataset.n }; build();
+function seg(id, apply){
+  document.querySelectorAll('#'+id+' button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#'+id+' button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    apply(b); dirty = true;
   }));
-})();
-
-const sc = document.getElementById('sc'), sctx = sc.getContext('2d');
-function drawSpec(){
-  const W = sc.width, H = sc.height;
-  const rx = (dx-0.5)*2*RAD, ry = (dy-0.5)*2*RAD;
-  const rd = Math.min(Math.hypot(rx, ry), RAD), td = Math.atan2(ry, rx);
-  const vals = new Float64Array(W); let mx = 1e-12;
-  for (let i = 0; i < W; i++){
-    const w = 60 + 840*i/(W-1); let s = 0;
-    for (const md of MODES){
-      const w0 = md.f, g = w0/Q;
-      s += Math.abs(modeAt(md.m, md.n, rd, td))*(w0*w0)/Math.hypot(w0*w0 - w*w, g*w);
-    }
-    vals[i] = s; if (s > mx) mx = s;
-  }
-  sctx.fillStyle = '#000'; sctx.fillRect(0,0,W,H);
-  sctx.strokeStyle = '#5BD6EA'; sctx.lineWidth = 1.4; sctx.beginPath();
-  for (let i = 0; i < W; i++){
-    const h = Math.pow(vals[i]/mx, 0.45)*(H-6);
-    if (i === 0) sctx.moveTo(i, H-2-h); else sctx.lineTo(i, H-2-h);
-  }
-  sctx.stroke();
-  const p = (freq-60)/840*W;
-  sctx.strokeStyle = '#E8A45E'; sctx.lineWidth = 1;
-  sctx.beginPath(); sctx.moveTo(p,0); sctx.lineTo(p,H); sctx.stroke();
 }
-
-document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('#modeSeg button').forEach(x => x.setAttribute('aria-pressed', String(x===b)));
-  excite = b.dataset.x;
-  document.getElementById('drivenPane').hidden = excite !== 'driven';
-  document.getElementById('singlePane').hidden = excite !== 'single';
-  document.getElementById('drv').hidden = excite !== 'driven';
-  document.getElementById('hint').textContent = excite === 'driven' ? 'drag to move the driver' : 'pick a mode';
-  build(); if (excite === 'driven') drawSpec();
-}));
-document.querySelectorAll('#viewSeg button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', String(x===b)));
-  view = b.dataset.v; render();
-}));
-function setFreq(v, redrawSpec){
-  freq = Math.max(60, Math.min(900, v));
-  document.getElementById('f').value = Math.round(freq);
-  document.getElementById('fv').textContent = Math.round(freq);
-  build(); if (redrawSpec !== false) drawSpec();
-}
-document.getElementById('f').addEventListener('input', e => {
-  sweeping = false; document.getElementById('sweep').setAttribute('aria-pressed','false');
-  setFreq(+e.target.value);
+seg('cellSeg', b => { cellKey = b.dataset.c;
+  $('atlasWho').textContent = CELLS[cellKey].atlas
+    ? `${CELLS[cellKey].d.toFixed(2)} mm, ${CELLS[cellKey].note}`
+    : `${CELLS[cellKey].d.toFixed(2)} mm — ${CELLS[cellKey].note}`; });
+seg('rimSeg', b => { rim = b.dataset.r; });
+seg('viewSeg', b => { view = b.dataset.v; });
+const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
+  fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
 });
-document.getElementById('q').addEventListener('input', e => {
-  Q = +e.target.value; document.getElementById('qv').textContent = Q; build(); drawSpec();
+bind('f', 'fv', v => freq = v);
+bind('a', 'av', v => amp = v);
+bind('t', 'tv', v => temp = v);
+bind('h', 'hv', v => depth = v, v => v.toFixed(1));
+$('play').addEventListener('click', e => {
+  running = !running; e.target.setAttribute('aria-pressed', String(running));
+  e.target.textContent = running ? 'running' : 'paused';
 });
-document.getElementById('ag').addEventListener('input', e => {
-  agit = +e.target.value; document.getElementById('agv').textContent = agit.toFixed(2);
-});
-document.getElementById('spec').addEventListener('click', e => {
-  const r = e.currentTarget.getBoundingClientRect();
-  sweeping = false; document.getElementById('sweep').setAttribute('aria-pressed','false');
-  setFreq(60 + 840*(e.clientX - r.left)/r.width);
-});
-document.getElementById('sprinkle').addEventListener('click', sprinkle);
-document.getElementById('sweep').addEventListener('click', e => {
-  if (excite !== 'driven'){                    // nothing to sweep through in single-mode
-    document.querySelector('#modeSeg button[data-x="driven"]').click();
-  }
-  sweeping = !sweeping; e.target.setAttribute('aria-pressed', String(sweeping));
+$('reset').addEventListener('click', () => { simT = 0; t0 = performance.now(); dirty = true; });
+sc.addEventListener('click', e => {
+  const r = sc.getBoundingClientRect();
+  freq = Math.max(50, Math.min(199, Math.round(50 + 150*(e.clientX - r.left)/r.width)));
+  $('f').value = freq; $('fv').textContent = freq; dirty = true;
 });
 
-const stage = document.getElementById('stage');
-let down = false;
-function setDrive(e){
-  const r = stage.getBoundingClientRect();
-  dx = Math.max(0, Math.min(1, (e.clientX-r.left)/r.width));
-  dy = Math.max(0, Math.min(1, (e.clientY-r.top)/r.height));
-  const d = document.getElementById('drv');
-  d.style.left = (dx*100)+'%'; d.style.top = (dy*100)+'%';
-  if (excite === 'driven'){ build(); drawSpec(); }
-}
-stage.addEventListener('pointerdown', e => {
-  if (excite !== 'driven') return;
-  down = true; stage.setPointerCapture(e.pointerId); setDrive(e);
-});
-stage.addEventListener('pointermove', e => { if (down) setDrive(e); });
-stage.addEventListener('pointerup', () => { down = false; });
-stage.addEventListener('pointercancel', () => { down = false; });
-
-/* ---------- accuracy, measured on load ---------- */
-(function accuracy(){
-  const REF = [
-    [0,1,0.7651976865579665514],[1,1,0.4400505857449335160],[3,10,0.0583793793051868123],
-    [0,20,0.1670246643405831547],[5,25,-0.0660079953984229934],[6,40,0.0485001141377945276]];
-  let rows = '';
-  for (const [m,x,ref] of REF){
-    const got = besselJ(m,x), err = Math.abs(got-ref);
-    rows += `<tr><td>J<sub>${m}</sub>(${x})</td><td>${got.toPrecision(16)}</td>`
-          + `<td>${ref.toPrecision(16)}</td><td class="ok">${err.toExponential(1)}</td></tr>`;
-  }
-  const z = besselZero(0,1);
-  rows += `<tr><td>j<sub>0,1</sub></td><td>${z.toPrecision(16)}</td><td>2.404825557695773</td>`
-        + `<td class="ok">${Math.abs(z-2.404825557695773).toExponential(1)}</td></tr>`;
-  rows += `<tr><td>J<sub>0</sub> at its own zero</td><td>${besselJ(0,z).toExponential(3)}</td>`
-        + `<td>0</td><td class="ok">${Math.abs(besselJ(0,z)).toExponential(1)}</td></tr>`;
-  document.querySelector('#accTable tbody').innerHTML = rows;
-})();
-
-const bar = document.getElementById('settleBar');
-let last = 0, sweepAcc = 0;
-function loop(ts){
-  const dt = ts - last; last = ts;
-  // Rebuilding the superposition is the expensive step -- eight modes over the
-  // whole field, plus any mode not yet cached. Advance the sweep on a timer
-  // rather than every frame, so the grains keep moving smoothly underneath it.
-  if (sweeping && excite === 'driven'){
-    sweepAcc += dt;
-    if (sweepAcc > 110){
-      sweepAcc = 0;
-      const next = freq + 14;
-      setFreq(next > 900 ? 60 : next, false);
-      drawSpec();
-    }
-  }
-  if (view === 'sand'){ stepGrains(); stepGrains(); stepGrains(); }
-  else phase += 0.075;
-  render();
-  bar.style.width = (settle*100) + '%';
+let lastBuild = -1;
+function loop(now){
+  if (running) simT = (now - t0)/1000;
+  // The fast phase changes every frame; the surface only needs rebuilding when
+  // a control moves or the formation gain has visibly advanced.
+  if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
+  else { state.phase = Math.cos(Math.PI*freq*simT);
+         state.displayPhase = Math.cos(Math.PI*freq*simT/DISPLAY_SLOWDOWN);
+         state.expression = amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
+  renderSurface(state);
+  paintOverlay();
   requestAnimationFrame(loop);
 }
-sprinkle(); build(); drawSpec(); render();
-requestAnimationFrame(loop);
+recompute(); requestAnimationFrame(loop);
 </script>
