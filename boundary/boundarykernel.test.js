@@ -87,5 +87,28 @@ console.log('8. published values');
 for(const b of K.BOUNDARY_EQUATIONS)
   console.log(`  ${b.key.padEnd(15)} P/D = ${b.perimeterRatio.toFixed(9)}  minor = ${b.minorRatio.toFixed(9)}  ${b.derived?'derived':'UNVERIFIED'}`);
 
+console.log('9. the page embeds the real kernel, not a copy of it that has drifted');
+// boundaries.html inlines boundarykernel.js verbatim so every figure on the page
+// is computed by the shipped code. An inlined copy is exactly the kind of thing
+// that rots silently, so require it byte-identical rather than merely disclose it.
+{
+  const fs = require('fs'), path = require('path');
+  const pagePath = path.join(__dirname, 'boundaries.html');
+  const src = fs.readFileSync(path.join(__dirname, 'boundarykernel.js'), 'utf8');
+  if (!fs.existsSync(pagePath)) {
+    check(false, 'boundaries.html is missing — the page cannot embed the kernel');
+  } else {
+    const page = fs.readFileSync(pagePath, 'utf8');
+    const open = page.indexOf('\n<script>\n');
+    const close = page.indexOf('\n</script>\n', open);
+    check(open !== -1 && close !== -1, 'boundaries.html carries an inlined kernel block');
+    const embedded = open === -1 ? '' : page.slice(open + 10, close + 1);
+    check(embedded === src,
+      embedded === src
+        ? `embedded kernel is byte-identical to boundarykernel.js (${src.length} bytes)`
+        : `embedded kernel has DRIFTED: ${embedded.length} bytes embedded vs ${src.length} on disk — rebuild the page`);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
