@@ -41,7 +41,7 @@ header p b{color:var(--ink2);font-weight:500}
 .ph.two{background:var(--amb)}
 
 .deck{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:11px;
-  max-height:640px;overflow-y:auto}
+  overflow-y:auto}
 .deck::-webkit-scrollbar{width:7px}
 .deck::-webkit-scrollbar-thumb{background:var(--edge2)}
 .fld{display:grid;gap:4px}
@@ -98,7 +98,7 @@ dl.ro dd .u{color:var(--dim);font-weight:400}
 .reps span.u{color:var(--dim)}
 footer{margin-top:16px;color:var(--dim);font-size:9.5px;line-height:1.85}
 footer b{color:var(--ink2);font-weight:500}
-@media (max-width:900px){.rig{grid-template-columns:1fr}.deck{max-height:none}}
+@media (max-width:900px){.rig{grid-template-columns:1fr}}
 </style>
 
 <div class="wrap">
@@ -131,12 +131,17 @@ footer b{color:var(--ink2);font-weight:500}
       </div>
     </div>
     <div class="fld">
-      <div class="top"><span class="lab">drive frequency</span><span class="v"><span id="fv">111</span> Hz</span></div>
-      <input type="range" id="f" min="50" max="199" step="1" value="111">
+      <div class="top"><span class="lab">drive frequency</span>
+        <span class="v"><input id="fnum" type="number" min="50" max="5000" step="1" value="111"
+          style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
+          font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px"> Hz</span></div>
+      <input type="range" id="f" min="50" max="5000" step="1" value="111">
+      <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
     </div>
     <div class="fld">
       <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180</span> mV</span></div>
-      <input type="range" id="a" min="0" max="600" step="5" value="180">
+      <input type="range" id="a" min="0" max="1000" step="1" value="229">
+      <span class="lab" id="accLab" style="text-align:right"></span>
     </div>
     <div class="fld">
       <div class="top"><span class="lab">temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
@@ -223,35 +228,137 @@ const TRANSITION = {
 // Reported high-amplitude jumps.
 const AMP_JUMP = { 111: [10, 16], 180: [14, 20] };
 const OVERDRIVE_MV = 430, MIN_MV = 55;
+/* The paper publishes no mV-to-acceleration transfer function for its shaker,
+   so there is none to use. The Mathieu tongue needs an acceleration, so one is
+   declared here as an explicit stand-in with its own name, reported in the
+   interface as an assumption. It is not a calibration and must not be read as
+   one: only the ratio a/a_threshold is meaningful. */
+const MV_TO_G_ASSUMED = 0.004;                 // g per mV, declared, not measured
+const accelOf = mv => mv*MV_TO_G_ASSUMED*9.80665;
 // The two states the paper photographs. At f/2 = 55.5 Hz the surface alternates
 // far above flicker fusion, so what an observer sees is a STEADY pattern, not a
 // pulsing one. The two phases are a discrete choice, never a continuous
 // envelope multiplied into the displacement.
 const PHASE_I = 1, PHASE_II = -1;
 
-/* ═══ Bessel core ════════════════════════════════════════════════════════ */
-const QUAD = 128, QC = new Float64Array(QUAD), QS = new Float64Array(QUAD);
-for (let i = 0; i < QUAD; i++){ const t = -Math.PI + 2*Math.PI*i/QUAD; QC[i] = t; QS[i] = Math.sin(t); }
-function besselJ(m, x){ let s = 0; for (let i = 0; i < QUAD; i++) s += Math.cos(m*QC[i] - x*QS[i]); return s/QUAD; }
-const besselJp = (m, x) => m === 0 ? -besselJ(1, x) : (besselJ(m-1, x) - besselJ(m+1, x))/2;
+/* ═══ Bessel by Miller's backward recurrence ═════════════════════════════
+   J_{m-1} = (2m/z)J_m - J_{m+1}, run downward from a high order and normalised
+   by the Neumann identity J_0 + 2(J_2 + J_4 + ...) = 1.
 
-// Zeros of J'_m — the free (freely sliding) contact-line condition J'_m(kR) = 0.
-const JPZ = new Map();
-function jpZeros(m, count){
-  const key = m + ':' + count, hit = JPZ.get(key); if (hit) return hit;
-  const out = []; let x = 0.02, prev = besselJp(m, x);
-  while (out.length < count && x < 90){
-    x += 0.08; const cur = besselJp(m, x);
-    if (prev*cur <= 0 && prev !== 0){
-      let a = x - 0.08, b = x;
-      for (let i = 0; i < 70; i++){
-        const mid = (a+b)/2;
-        if (besselJp(m, a)*besselJp(m, mid) <= 0) b = mid; else a = mid;
+   This replaces the 128-point spectral quadrature, which is unusable once the
+   drive passes a few hundred Hz. At 5000 Hz the rim argument is kR = 182 and
+   orders run to ~182; there the quadrature returns J_170(100) = -7.5e-2 for a
+   true value of 2.0e-25. Miller agrees with mpmath to 1.4e-16 across the whole
+   range, including that point.                                             */
+function millerAll(mMax, z){
+  const out = new Float64Array(mMax + 1);
+  if (z === 0){ out[0] = 1; return out; }
+  const az = Math.abs(z);
+  const start = mMax + 20 + Math.ceil(Math.sqrt(40*Math.max(mMax, az))) + Math.ceil(az);
+  let jp1 = 0, j = 1e-290, sum = 0;
+  for (let m = start; m >= 1; m--){
+    const jm1 = (2*m/z)*j - jp1;
+    jp1 = j; j = jm1;
+    if (m-1 <= mMax) out[m-1] = j;
+    if ((m-1) % 2 === 0 && m-1 > 0) sum += 2*j;
+    if (Math.abs(j) > 1e250){ const sc = 1e-250; jp1 *= sc; j *= sc; sum *= sc;
+      for (let q = 0; q <= mMax; q++) out[q] *= sc; }
+  }
+  sum += j;
+  const norm = 1/sum;
+  for (let q = 0; q <= mMax; q++) out[q] *= norm;
+  return out;
+}
+const besselJ = (m, z) => millerAll(m, z)[m];
+function besselJp(m, z){
+  if (z === 0) return m === 1 ? 0.5 : 0;
+  const a = millerAll(m + 1, z);
+  return m === 0 ? -a[1] : (a[m-1] - a[m+1])/2;
+}
+// Both J_m and J'_m at once: the shape tables need the pair at every radius.
+function besselPair(m, z){
+  if (z === 0) return [m === 0 ? 1 : 0, m === 1 ? 0.5 : 0];
+  const a = millerAll(m + 1, z);
+  return [a[m], m === 0 ? -a[1] : (a[m-1] - a[m+1])/2];
+}
+
+// Zeros of J'_m -- the freely sliding contact line. J'_m has no zero below
+// roughly m, so the sweep starts there rather than at 0; at kR = 182 a sweep
+// from zero would be both wasted and unstable.
+/* Nearest zero of J'_m to a target argument.
+
+   Bracketed, not bare Newton. Newton alone fails here: at an inflection J''
+   is near zero, the step explodes, and the iterate escapes. The previous
+   version caught that with a floor and returned the FLOOR, so it handed back
+   x = m/2 as though it were a zero -- J'_142 has no zero at 71.2. Those
+   phantom modes then had small k, hence little damping, so they ranked
+   HIGHEST by growth and dominated the mode set.
+
+   This walks outward from the target in both directions until a sign change
+   is bracketed, then bisects. When no zero exists near the target -- which is
+   real, since J'_m has none below roughly m -- it returns null and the order
+   is dropped, rather than inventing one. */
+function jpZeroNear(m, xStar){
+  const floorX = Math.max(0.02, m - 2);
+  const step = 0.3;
+  const seek = dir => {
+    let x = Math.max(floorX, xStar), f = besselJp(m, x);
+    for (let i = 0; i < 400; i++){
+      const nx = x + dir*step;
+      if (nx <= floorX) return null;
+      const nf = besselJp(m, nx);
+      if (nf === 0) return nx;
+      if (f*nf < 0){
+        let p = Math.min(x, nx), q = Math.max(x, nx);
+        for (let k = 0; k < 80; k++){
+          const mid = (p + q)/2;
+          if (besselJp(m, p)*besselJp(m, mid) <= 0) q = mid; else p = mid;
+        }
+        return (p + q)/2;
       }
+      x = nx; f = nf;
+    }
+    return null;
+  };
+  const up = seek(1), down = seek(-1);
+  if (up == null) return down;
+  if (down == null) return up;
+  return Math.abs(up - xStar) <= Math.abs(down - xStar) ? up : down;
+}
+/* The radial index n, counted exactly. The McMahon inverse n ~ z/pi - m/2 + 3/4
+   is only valid for n large against m: at m = 150, z = 183 it returns -16 where
+   the true index is 5. Counting is affordable for the handful of modes that are
+   actually displayed, so the displayed n is counted and never estimated. */
+function radialIndexOf(m, z){
+  const floorX = Math.max(0.02, m - 2), step = 0.3;
+  let count = 0, x = floorX, f = besselJp(m, x);
+  while (x < z){
+    const nx = Math.min(z, x + step), nf = besselJp(m, nx);
+    if (f*nf < 0) count++;
+    x = nx; f = nf;
+    if (count > 5000) break;
+  }
+  return count;
+}
+const JPZ = new Map();
+function jpZeros(m, count, xHint){
+  const key = m + ':' + count + ':' + Math.round(xHint || 0);
+  const hit = JPZ.get(key); if (hit) return hit;
+  const lo = Math.max(0.05, m - 2), hi = Math.max(40, (xHint || 40)*1.4 + 40);
+  const step = Math.max(0.01, (hi - lo)/8000);
+  const out = [];
+  let prev = besselJp(m, lo);
+  for (let x = lo + step; x < hi && out.length < count; x += step){
+    const cur = besselJp(m, x);
+    if (prev*cur <= 0 && prev !== 0){
+      let a = x - step, b = x;
+      for (let i = 0; i < 70; i++){ const mid = (a+b)/2;
+        if (besselJp(m, a)*besselJp(m, mid) <= 0) b = mid; else a = mid; }
       out.push((a+b)/2);
     }
     prev = cur;
   }
+  if (JPZ.size > 400) JPZ.delete(JPZ.keys().next().value);
   JPZ.set(key, out); return out;
 }
 
@@ -272,6 +379,109 @@ function viscosity(Tc){                            // Pa s, Vogel-Andrade fit
 // gravity-capillary dispersion on finite depth
 function omegaOf(k, sigma, rho, hM){
   return Math.sqrt((G_ACC*k + sigma*k*k*k/rho)*Math.tanh(k*hM));
+}
+// Invert it by bisection to machine precision. There is no closed form, and a
+// deep-water or pure-capillary shortcut would be wrong at the low end.
+function kOfOmega(w, sigma, rho, hM){
+  let lo = 1e-9, hi = 1e8;
+  for (let i = 0; i < 300; i++){
+    const mid = Math.sqrt(lo*hi);
+    if (omegaOf(mid, sigma, rho, hM) < w) lo = mid; else hi = mid;
+  }
+  return Math.sqrt(lo*hi);
+}
+
+/* Viscous damping: bulk plus the bottom Stokes layer.
+     gamma = 2 nu k^2 + omega (k delta)/(2 sinh 2kh),   delta = sqrt(2 nu/omega)
+   Both terms are kept. The layer term dies as kh grows, which is why the
+   high-frequency capillary regime is bulk-damped -- that limit is a result, not
+   an assumption baked in. */
+function dampingRate(k, w, nu, hM){
+  const bulk = 2*nu*k*k;
+  const delta = Math.sqrt(2*nu/w);
+  const sh = Math.sinh(2*k*hM);
+  const layer = isFinite(sh) && sh > 0 ? w*(k*delta)/(2*sh) : 0;
+  return { total: bulk + layer, bulk, layer, stokesDepth: delta };
+}
+
+/* Fluid-loaded Kirchhoff-Love base, driven at one point.
+     D = E t^3 / (12(1 - nu^2)),  added mass per area = rho_w/(k tanh kh)
+   Evaluated at the fluid mode's own wavenumber and applied ONCE, inside the
+   coefficient -- never multiplied over the assembled water field a second
+   time, which would count the base twice. */
+const STONE = { E: 5.0e10, thickness: 0.006, poisson: 0.25, density: 2650, lossFactor: 0.01 };
+function plateTransfer(k, w, rhoW, hM){
+  const D = STONE.E*Math.pow(STONE.thickness, 3)/(12*(1 - STONE.poisson*STONE.poisson));
+  const added = rhoW/(k*Math.tanh(k*hM));
+  const stiff = D*Math.pow(k, 4);
+  const inert = w*w*(STONE.density*STONE.thickness + added);
+  const loss = 2*STONE.lossFactor*Math.sqrt(Math.abs(stiff*inert));
+  return { D, added, stiff, inert, magnitude: 1/Math.hypot(stiff - inert, loss) };
+}
+
+/* Damped Mathieu, first (subharmonic) tongue.
+     A'' + 2 gamma A' + [omega0^2 - a k tanh(kh) cos(omega_d t)] A = 0
+     eps = a k tanh(kh)/omega0^2,   Delta = omega_d/(2 omega0) - 1
+     s   = -gamma + (omega0/2) sqrt( (eps/2)^2 - 4 Delta^2 )
+   Threshold at zero detuning is eps_c = 4 gamma/omega0. Every mode with s > 0
+   is retained: a supercritical drive is not collapsed back onto the
+   near-onset equilibrium. */
+function mathieu(omega0, gamma, accel, k, hM, omegaDrive){
+  const th = Math.tanh(k*hM);
+  const eps = accel*k*th/(omega0*omega0);
+  const detune = omegaDrive/(2*omega0) - 1;
+  const rad = (eps/2)*(eps/2) - 4*detune*detune;
+  return { eps, detune,
+           growth: -gamma + (rad > 0 ? (omega0/2)*Math.sqrt(rad) : 0),
+           epsThreshold: 4*gamma/omega0,
+           accelThreshold: 4*gamma*omega0/(k*th) };
+}
+
+/* The ten inherited straight-wall boundary factors. Carried in the corrected
+   form: coupling is geometry-only (the index term made the field depend on
+   array order), the square is P/D with D the diagonal, and the two Thom eggs
+   are refused rather than shipped with a divisor that appears in no formula.
+   Egg II's published 1.7124 is below the convexity bound P >= 2D. */
+const SQRT2 = Math.SQRT2, PHI_C = (1 + Math.sqrt(5))/2;
+function ellipseE(m){                                    // AGM, relative exit
+  let a = 1, b = Math.sqrt(1-m), c = Math.sqrt(m), sum = c*c/2, pw = 1;
+  for (let n = 0; n < 64 && Math.abs(c) > Number.EPSILON*a; n++){
+    const na = (a+b)/2, nc = (a-b)/2; b = Math.sqrt(a*b); a = na; c = nc;
+    pw *= 2; sum += pw*c*c/2;
+  }
+  return (Math.PI/(2*a))*(1 - sum);
+}
+const BOUNDARY = [
+  { key:'circle',        pd: Math.PI,                                          minor: 1 },
+  { key:'ellipse',       pd: 2*ellipseE(5/9),                                  minor: 2/3 },
+  { key:'golden-ellipse',pd: 2*ellipseE(1/PHI_C),                              minor: 1/PHI_C },
+  { key:'thom-a',        pd: 5*Math.PI/6 + (Math.sqrt(7)/2)*Math.atan(Math.sqrt(3)/5),  minor:(1+Math.sqrt(7))/4 },
+  { key:'thom-b',        pd: 5*Math.PI/6 + (Math.sqrt(10)/3)*Math.atan(1/3),   minor:(2+Math.sqrt(10))/6 },
+  { key:'thom-d',        pd: 8*Math.PI/9 + (Math.sqrt(13)/3)*Math.atan(Math.sqrt(3)/7), minor:(2+Math.sqrt(13))/6 },
+  { key:'thom-bmod',     pd: 3*Math.PI/4 + (Math.sqrt(5)/2)*Math.atan(1/2),    minor:(1+Math.sqrt(5))/4 },
+  { key:'egg-i',         pd: null, minor: 2/3, refused: 'divisor 18 appears in no formula' },
+  { key:'egg-ii',        pd: null, minor: 4/5, refused: 'P/D 1.7124 < 2, impossible for a closed convex curve' },
+  { key:'polygon',       pd: 2*SQRT2,                                          minor: 1/SQRT2 }
+];
+const COUPLING_BASE = 0.016, COUPLING_GAIN = 0.024;
+const DEFAULT_R4_SCALES = [0.8, 1.2, 1.8, 2.6];
+function reinforcedR4(radius){                            // prod lam^4/(r^4+lam^4)
+  const r4 = Math.pow(radius, 4);
+  let p = 1;
+  for (const L of DEFAULT_R4_SCALES){ const L4 = Math.pow(L, 4); p *= L4/(r4 + L4); }
+  return p;
+}
+function boundaryImpedance(perimeterArc, sourceDistance){
+  let product = 1, used = 0;
+  for (const b of BOUNDARY){
+    if (b.pd == null) continue;                           // refused, not defaulted
+    const phase = 2*Math.PI*perimeterArc/b.pd;
+    const coupling = COUPLING_BASE + (1 - b.minor)*COUPLING_GAIN;
+    product *= 1 - coupling*Math.pow(Math.sin(phase), 2);
+    used++;
+  }
+  return { impedance: 1 - product*reinforcedR4(sourceDistance), walls: used,
+           refused: BOUNDARY.filter(b => b.pd == null).length };
 }
 
 /* ═══ atlas queries ══════════════════════════════════════════════════════ */
@@ -311,7 +521,7 @@ function transitionRisk(prior, rec, f){
 
 /* ═══ the state contract ═════════════════════════════════════════════════ */
 function resolvePatternState(o){
-  const { cellKey, f, amplitudeMv, tempC, depthMm, rim, tSec, tfeSec } = o;
+  const { cellKey, f, amplitudeMv, tempC, depthMm, rim, tSec, tfeSec, driveR } = o;
   const cell = CELLS[cellKey];
   const R = cell.d/2000;                                    // m
   const sigma = surfaceTension(tempC), rho = density(tempC), mu = viscosity(tempC);
@@ -327,19 +537,58 @@ function resolvePatternState(o){
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!cell.atlas) warnings.push({ hard: false, text:
     'No empirical atlas for this diameter. Angular symmetry below is theory only, not observed morphology.' });
-  if (amplitudeMv < MIN_MV) warnings.push({ hard: false, text:
+  if (f <= 199 && amplitudeMv < MIN_MV) warnings.push({ hard: false, text:
     'Below the reported minimum drive: no stable Faraday pattern forms.' });
-  if (amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
+  if (f <= 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
     'Overdriven regime: the paper reports the pattern becomes distorted here.' });
+  if (f > 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
+    `${amplitudeMv.toFixed(0)} mV is outside the 55-430 mV the paper reports. That range `
+    + `belongs to its 50-199 Hz sweep; the mV axis beyond it is this page extending an `
+    + `apparatus scale, not a measured one. Read the acceleration and the ratio to `
+    + `threshold instead -- those are the physical quantities.` });
 
-  // nearest free-contact-line modes to the half-frequency target
+  // ---- resonant wavenumber, then the modes that sit on it ---------------
+  const nu = mu/rho;
+  const kStar = kOfOmega(omegaTarget, sigma, rho, hM);
+  const xStar = kStar*R;                       // j' target at the rim
+  const damp = dampingRate(kStar, omegaTarget, nu, hM);
+  const plate = plateTransfer(kStar, 2*Math.PI*f, rho, hM);
+  const wavelength = 2*Math.PI/kStar;
+
+  // Angular orders exist up to about kR; sample the whole available range
+  // rather than a fixed low ceiling, which at 5000 Hz would miss every mode
+  // that actually resonates (kR = 182 there, not 14).
+  const mMax = Math.max(2, Math.floor(xStar));
+  const sampleCount = Math.min(mMax + 1, 192);   // 183 orders at 5000 Hz: all of them
+  const orders = [];
+  for (let q = 0; q < sampleCount; q++)
+    orders.push(Math.round(q*mMax/Math.max(1, sampleCount - 1)));
+
+  const rx = 0, ry = 0;
   const modes = [];
-  for (let m = 0; m <= 14; m++)
-    for (const [idx, z] of jpZeros(m, 7).entries()){
-      const k = z/R, w = omegaOf(k, sigma, rho, hM);
-      modes.push({ m, n: idx+1, jp: z, k, hz: w/(2*Math.PI), mismatch: Math.abs(w - omegaTarget)/omegaTarget });
-    }
-  modes.sort((a,b) => a.mismatch - b.mismatch);
+  let ordersWithoutMode = 0;
+  for (const m of new Set(orders)){
+    const z = jpZeroNear(m, xStar);
+    if (z == null || !isFinite(z) || z <= 0){ ordersWithoutMode++; continue; }
+    const k = z/R, w = omegaOf(k, sigma, rho, hM);
+    const g = dampingRate(k, w, nu, hM);
+    const mth = mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f);
+    modes.push({ m, n: null,           // counted later, only for what is shown
+      jp: z, k, hz: w/(2*Math.PI),
+      mismatch: Math.abs(w - omegaTarget)/omegaTarget,
+      gamma: g.total, growth: mth.growth, eps: mth.eps,
+      accelThreshold: mth.accelThreshold,
+      // the base transfer enters here, once, inside the coefficient
+      coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
+  }
+  // Sort FIRST, then take the growing set from the sorted array. Filtering
+  // before the sort kept insertion order, so the "strongest" modes were really
+  // just the lowest angular orders -- at 5000 Hz that drew m = 0..5 while the
+  // fastest-growing mode was m = 112.
+  modes.sort((a,b) => (b.growth - a.growth) || (a.mismatch - b.mismatch));
+  // Every positive-growth mode is retained; a supercritical drive is not
+  // collapsed back onto the near-onset equilibrium.
+  const unstable = modes.filter(x => x.growth > 0);
 
   const rec = atlasAt(cellKey, f);
   const prior = foldPrior(rec);
@@ -354,13 +603,19 @@ function resolvePatternState(o){
     if (odd) warnings.push({ hard: false, text:
       `${fold}-fold is odd, so it is not 2m under the paper's convention (6-fold = m 3). ` +
       `Drawn as m = ${fold}; treat the angular order as unresolved.` });
-    // radial index from theory: nearest J' mode at this m
-    let best = null;
-    for (const [idx, z] of jpZeros(m, 7).entries()){
-      const w = omegaOf(z/R, sigma, rho, hM);
-      const d = Math.abs(w - omegaTarget)/omegaTarget;
-      if (!best || d < best.mismatch) best = { m, n: idx+1, jp: z, k: z/R, hz: w/(2*Math.PI), mismatch: d };
+    // radial root from theory: the J' zero nearest resonance at this m
+    const z = jpZeroNear(m, xStar);
+    if (z == null){
+      warnings.push({ hard: true, text:
+        `No J' zero exists near the resonant argument for m = ${m}, so this fold has no `
+        + `free-contact-line radial root at this frequency. The state is dropped rather `
+        + `than given an invented root.` });
+      return;
     }
+    const wz = omegaOf(z/R, sigma, rho, hM);
+    const best = { m, n: radialIndexOf(m, z),
+                   jp: z, k: z/R, hz: wz/(2*Math.PI),
+                   mismatch: Math.abs(wz - omegaTarget)/omegaTarget };
     states.push({ fold, m, weight, radial: best });
   };
   if (prior && !prior.unclassified){
@@ -374,8 +629,21 @@ function resolvePatternState(o){
         (f === 180 ? ' (unstable).' : '.') });
     }
   } else {
-    const t = modes[0];
-    pushState(t.m ? t.m*2 : 2, 1);                 // theory fallback, flagged by the warning above
+    // No atlas here -- above 199 Hz, or a diameter the paper never swept. The
+    // state set is then the modes the damped-Mathieu analysis says grow,
+    // weighted by growth rate. Not a fold guess dressed as an observation.
+    const pool = (unstable.length ? unstable : modes).slice(0, 16);
+    const poolTotal = unstable.length || modes.length;
+    const gmax = pool.reduce((a, x) => Math.max(a, Math.abs(x.growth)), 0) || 1;
+    for (const t of pool.slice(0, 6))
+      states.push({ fold: t.m*2, m: t.m, weight: Math.max(1e-3, Math.abs(t.growth)/gmax),
+                    radial: { ...t, n: radialIndexOf(t.m, t.jp) }, theoryOnly: true });
+    warnings.push({ hard: false, text: unstable.length
+      ? `Theory only: ${unstable.length} of ${modes.length} angular orders have positive `
+        + `Mathieu growth here, all retained in the count; the 6 fastest-growing are drawn. `
+        + `Angular symmetry is predicted, not observed -- the atlas stops at 199 Hz.`
+      : `No mode reaches Faraday onset at this amplitude. Shown are the least-damped `
+        + `modes, which is a diagnostic, not a pattern.` });
   }
   const wsum = states.reduce((s, x) => s + x.weight, 0) || 1;
   for (const s of states) s.weight /= wsum;
@@ -404,9 +672,19 @@ function resolvePatternState(o){
       textureConc: rec.hints[3], radialStd: rec.hints[4], entropy: rec.hints[5],
       peaks: rec.peaks, angHarm: rec.angHarm
     } : null,
-    nearestTheoryModes: modes.slice(0, 4),
+    nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t, n: radialIndexOf(t.m, t.jp) })),
     transitionStudy: TRANSITION[f] || null,
-    water: { sigma, rho, mu }
+    water: { sigma, rho, mu, nu },
+    wavenumber: kStar, wavelength, cellDiameterMm: cell.d,
+    wavelengthsAcross: 2*R/wavelength,
+    damping: damp, plate,
+    onset: mathieu(omegaTarget, damp.total, accelOf(amplitudeMv), kStar, hM, 2*Math.PI*f),
+    accelAssumed: accelOf(amplitudeMv),
+    unstableCount: unstable.length, ordersScanned: modes.length,
+    growingRetained: unstable.length,
+    ordersWithoutMode,
+    boundary: boundaryImpedance(2*Math.PI*R/wavelength, driveR || 0),
+    aboveAtlas: f > 199
   };
 }
 
@@ -418,24 +696,37 @@ const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha:false });
 const im = ctx.createImageData(GR, GR), pxl = im.data;
 const COVER = new Float32Array(NSZ), RAD = new Float32Array(NSZ), ANG = new Float32Array(NSZ);
+const RSQ = new Int32Array(NSZ);   // exact integer r^2: the shape table's index
 for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
   const dx = x-CC, dy = y-CC, r = Math.hypot(dx, dy), i = y*GR+x;
   COVER[i] = Math.max(0, Math.min(1, RR - r + 0.5));
-  RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx);
+  RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx); RSQ[i] = dx*dx + dy*dy;
 }
 // Shape of one state, and its radial slope, cached on the unit disc.
 const SHAPE = new Map();
 function shapeOf(m, jp){
   const key = m + ':' + jp.toFixed(6), hit = SHAPE.get(key); if (hit) return hit;
-  const half = CC+1, jr = new Float32Array(half*half), dr = new Float32Array(half*half);
-  for (let ay = 0; ay <= CC; ay++) for (let ax = 0; ax <= CC; ax++){
-    const rr = Math.hypot(ax, ay)/RR;
-    if (rr > 1.0001){ continue; }
-    jr[ay*half+ax] = besselJ(m, jp*rr);
-    dr[ay*half+ax] = jp*besselJp(m, jp*rr);
+  // Indexed by integer r^2. dx and dy are integers on this grid, so r^2 is an
+  // exact index -- no interpolation and no quantisation -- and only the radii
+  // that actually occur are evaluated (roughly a third of the integers below
+  // the bound are sums of two squares). besselPair returns J and J' from one
+  // recurrence rather than two.
+  const RSQ_MAX = (RR+2)*(RR+2);
+  const jr = new Float32Array(RSQ_MAX+1), dr = new Float32Array(RSQ_MAX+1);
+  const seen = new Uint8Array(RSQ_MAX+1);
+  let evals = 0;
+  for (let ay = 0; ay <= CC; ay++){
+    const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
+    for (let ax = 0; ax <= CC; ax++){
+      const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
+      if (seen[rs]) continue;
+      seen[rs] = 1; evals++;
+      const pr = besselPair(m, jp*Math.sqrt(rs)/RR);
+      jr[rs] = pr[0]; dr[rs] = jp*pr[1];
+    }
   }
-  const rec = { jr, dr, half };
-  if (SHAPE.size > 40) SHAPE.delete(SHAPE.keys().next().value);
+  const rec = { jr, dr, evals, max: RSQ_MAX };
+  if (SHAPE.size > 24) SHAPE.delete(SHAPE.keys().next().value);
   SHAPE.set(key, rec); return rec;
 }
 
@@ -444,13 +735,22 @@ const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32A
 // u*grad(u). The optical layer needs slope normalised on its own, or the
 // highlight would inherit the height units. So both are kept.
 const PGX = new Float32Array(NSZ), PGY = new Float32Array(NSZ);
+// A mode whose finest structure falls below this many pixels per wavelength is
+// not drawn: aliasing it would invent detail. Its energy is reported as RMS
+// roughness instead, which is what the pixel-per-wavelength gate is for.
+const RES_GATE = 4;
 function buildSurface(state){
   ETA.fill(0); NX.fill(0); NY.fill(0);
+  let unresolved = 0, drawn = 0;
   for (const s of state.states){
-    const sh = shapeOf(s.m, s.radial.jp), half = sh.half, m = s.m, w = s.weight;
+    const pxPerWave = 2*Math.PI*RR/s.radial.jp;
+    s.pxPerWave = pxPerWave;
+    if (pxPerWave < RES_GATE){ unresolved += s.weight*s.weight; s.gated = true; continue; }
+    s.gated = false; drawn++;
+    const sh = shapeOf(s.m, s.radial.jp), m = s.m, w = s.weight;
     for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
       const i = y*GR+x; if (COVER[i] <= 0) continue;
-      const idx = Math.abs(y-CC)*half + Math.abs(x-CC);
+      const idx = RSQ[i]; if (idx > sh.max) continue;
       const J = sh.jr[idx], dJ = sh.dr[idx], th = ANG[i], r = RAD[i];
       const cm = Math.cos(m*th), sm = Math.sin(m*th);
       ETA[i] += w*J*cm;
@@ -479,6 +779,8 @@ function buildSurface(state){
     mx = Math.max(mx, Math.abs(ETA[i]));
     gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
   }
+  state.render = { drawn, gatedRms: Math.sqrt(unresolved),
+                   gated: state.states.filter(x => x.gated).length };
   const inv = 1/mx, ginv = 1/gx;
   for (let i = 0; i < NSZ; i++){
     ETA[i] *= inv;
@@ -619,9 +921,17 @@ function drawAtlas(cellKey, f){
     }
     if (TRANSITION[hz]){ sx.fillStyle = '#9B8CE0'; sx.fillRect(i*bw, H-10, Math.max(1.5, bw-0.5), 5); }
   }
-  const px = (f - 50 + 0.5)*bw;
-  sx.strokeStyle = '#FFFFFF'; sx.lineWidth = 1.5;
-  sx.beginPath(); sx.moveTo(px, 0); sx.lineTo(px, H); sx.stroke();
+  if (f <= 199){
+    const px = (f - 50 + 0.5)*bw;
+    sx.strokeStyle = '#FFFFFF'; sx.lineWidth = 1.5;
+    sx.beginPath(); sx.moveTo(px, 0); sx.lineTo(px, H); sx.stroke();
+  } else {
+    sx.fillStyle = 'rgba(7,10,13,0.72)'; sx.fillRect(0, 0, W, H);
+    sx.fillStyle = '#8D9BA9'; sx.font = '13px "IBM Plex Mono", monospace';
+    sx.textAlign = 'center';
+    sx.fillText(`${f} Hz is beyond the atlas — it ends at 199 Hz`, W/2, H/2 + 4);
+    sx.textAlign = 'left';
+  }
 }
 (function legend(){
   const el = document.getElementById('legend');
@@ -645,7 +955,11 @@ const tfeOf = () => Math.max(0.4, 6.5*(180/Math.max(60, amp))*(0.55 + depth/9));
 
 function recompute(){
   state = resolvePatternState({ cellKey, f: freq, amplitudeMv: amp, tempC: temp,
-                                depthMm: depth, rim, tSec: simT, tfeSec: tfeOf() });
+                                depthMm: depth, rim, tSec: simT, tfeSec: tfeOf(),
+                                // The lineage spec is one centred actuator point, and
+                                // Faraday forcing shakes the whole cell vertically -- there
+                                // is no off-centre source to measure a distance from.
+                                driveR: 0 });
   buildSurface(state);
   paintDeck(); paintInspector();
   drawAtlas(cellKey, freq);
@@ -653,12 +967,42 @@ function recompute(){
 }
 function paintDeck(){
   const s = state;
+  $('accLab').innerHTML = `= ${(s.accelAssumed/9.80665).toFixed(3)} g assumed `
+    + `<span style="color:var(--dim)">(${MV_TO_G_ASSUMED} g/mV, declared)</span>`;
   $('warnBox').innerHTML = s.warnings.map(w =>
     `<div class="warn${w.hard ? ' hard' : ''}">${w.text}</div>`).join('');
   const m = s.nearestTheoryModes[0], w = s.water;
+  const d = s.damping, on = s.onset, R = s.render || {};
   const rows = [
     ['drive', `${freq} <span class="u">Hz</span>`],
     ['surface response', `<b>${s.responseHz.toFixed(1)}</b> <span class="u">Hz</span>`],
+    ['wavelength', `<b>${(s.wavelength*1e6).toFixed(1)}</b> <span class="u">µm</span>`],
+    ['k', `${s.wavenumber.toFixed(1)} <span class="u">m⁻¹</span> · kR ${(s.wavenumber*s.cellDiameterMm/2000).toFixed(1)}`],
+    ['across the cell', `${s.wavelengthsAcross.toFixed(1)} <span class="u">wavelengths</span>`],
+    ['SEP', ''],
+    ['damping γ', `${d.total.toFixed(2)} <span class="u">s⁻¹</span>`],
+    ['  bulk 2νk²', `${d.bulk.toFixed(2)}`],
+    ['  Stokes layer', `${d.layer.toExponential(2)}`],
+    ['  δ', `${(d.stokesDepth*1e6).toFixed(1)} <span class="u">µm</span>`],
+    ['Q = ω/2γ', `${(2*Math.PI*s.responseHz/(2*d.total)).toFixed(1)}`],
+    ['SEP', ''],
+    ['Mathieu ε', `${on.eps.toExponential(2)}`],
+    ['ε threshold', `${on.epsThreshold.toExponential(2)}`],
+    ['ε/ε_c', `<b>${(on.eps/on.epsThreshold).toFixed(2)}</b>`],
+    ['a threshold', `${(on.accelThreshold/9.80665).toExponential(2)} <span class="u">g</span>`],
+    ['growth s', `${on.growth.toFixed(2)} <span class="u">s⁻¹</span>`],
+    ['unstable modes', `<b>${s.unstableCount}</b> of ${s.ordersScanned}`],
+    ['SEP', ''],
+    ['plate |T|', `${s.plate.magnitude.toExponential(2)}`],
+    ['  D', `${s.plate.D.toExponential(2)} <span class="u">N·m</span>`],
+    ['  added mass', `${s.plate.added.toFixed(2)} <span class="u">kg/m²</span>`],
+    ['wall impedance', `${s.boundary.impedance.toExponential(3)}`],
+    ['  walls used', `${s.boundary.walls} <span class="u">of 10, ${s.boundary.refused} refused</span>`],
+    ['SEP', ''],
+    ['px per wavelength', `${(2*Math.PI*181/(s.states[0]?.radial.jp||1)).toFixed(1)}`],
+    ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
+    ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
+    ['SEP', ''],
     ['empirical fold', s.selectedEmpiricalFold != null
         ? `<b>${s.selectedEmpiricalFold}</b>-fold` : '<span class="u">none in atlas</span>'],
     ['confidence', `${(s.empiricalConfidence*100).toFixed(0)}<span class="u">%</span>`],
@@ -743,8 +1087,34 @@ seg('viewSeg', b => { view = b.dataset.v; });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
 });
-bind('f', 'fv', v => freq = v);
-bind('a', 'av', v => amp = v);
+function setFreq(v){
+  freq = Math.max(50, Math.min(5000, Math.round(v)));
+  $('f').value = freq; $('fnum').value = freq; dirty = true;
+}
+$('f').addEventListener('input', e => setFreq(+e.target.value));
+$('fnum').addEventListener('change', e => setFreq(+e.target.value));
+(function anchors(){
+  // 4392 Hz is the historical acceptance case recorded in the lineage notes.
+  const A = [[56,'6-fold'],[111,'10-fold'],[180,'14-fold'],[199,'atlas end'],
+             [4392,'acceptance'],[5000,'top']];
+  $('anchors').innerHTML = A.map(([hz,t]) =>
+    `<button class="btn" data-hz="${hz}" title="${t}" style="padding:3px 6px;font-size:10px">${hz}</button>`).join('');
+  $('anchors').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => setFreq(+b.dataset.hz)));
+})();
+/* Logarithmic travel, 31.6 mV to 63 kV-equivalent. The paper's own apparatus
+   ran 55-430 mV, but that range belongs to its 50-199 Hz sweep: at 5000 Hz the
+   Mathieu threshold is 193 g, which no part of the paper's range reaches. The
+   slider position is a control mapping, not a physical claim -- what is
+   physical is the acceleration and the ratio to threshold, both shown. */
+const MV_MIN_LOG = 1.5, MV_SPAN_LOG = 3.3;
+const mvFromSlider = v => Math.pow(10, MV_MIN_LOG + (v/1000)*MV_SPAN_LOG);
+const sliderFromMv = mv => 1000*(Math.log10(mv) - MV_MIN_LOG)/MV_SPAN_LOG;
+$('a').addEventListener('input', e => {
+  amp = mvFromSlider(+e.target.value);
+  $('av').textContent = amp >= 1000 ? (amp/1000).toFixed(2) + ' k' : amp.toFixed(0);
+  dirty = true;
+});
 bind('t', 'tv', v => temp = v);
 bind('h', 'hv', v => depth = v, v => v.toFixed(1));
 bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
@@ -756,8 +1126,7 @@ $('play').addEventListener('click', e => {
 $('reset').addEventListener('click', () => { simT = 0; t0 = performance.now(); dirty = true; });
 sc.addEventListener('click', e => {
   const r = sc.getBoundingClientRect();
-  freq = Math.max(50, Math.min(199, Math.round(50 + 150*(e.clientX - r.left)/r.width)));
-  $('f').value = freq; $('fv').textContent = freq; dirty = true;
+  setFreq(50 + 150*(e.clientX - r.left)/r.width);
 });
 
 let lastBuild = -1;
