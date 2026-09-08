@@ -340,6 +340,63 @@ function radialIndexOf(m, z){
   }
   return count;
 }
+// The N radial roots nearest the resonant argument, for one angular order.
+// The lineage spec is sixteen angular orders and three near-resonant radial
+// roots -- 48 modes -- not one root apiece.
+function jpZerosNearN(m, xStar, count){
+  const floorX = Math.max(0.02, m - 2), step = 0.3, found = [];
+  const sweep = dir => {
+    let x = Math.max(floorX, xStar), f = besselJp(m, x), got = 0;
+    for (let i = 0; i < 900 && got < count; i++){
+      const nx = x + dir*step;
+      if (nx <= floorX) return;
+      const nf = besselJp(m, nx);
+      if (f*nf < 0){
+        let a = Math.min(x, nx), b = Math.max(x, nx);
+        for (let k = 0; k < 70; k++){ const mid = (a+b)/2;
+          if (besselJp(m, a)*besselJp(m, mid) <= 0) b = mid; else a = mid; }
+        found.push((a+b)/2); got++;
+      }
+      x = nx; f = nf;
+    }
+  };
+  sweep(1); sweep(-1);
+  found.sort((a, b) => Math.abs(a - xStar) - Math.abs(b - xStar));
+  return found.slice(0, count);
+}
+
+/* ═══ disk-integrated cubic overlap ═══════════════════════════════════════
+   Competition coefficients for the amplitude equations
+       dA_i/dt = A_i ( s_i - SUM_j g_ij A_j^2 )
+   with
+       g_ij = INT psi_i^2 psi_j^2 r dr dtheta / (INT psi_i^2)(INT psi_j^2)
+   psi = J_m(k r) cos(m theta), so the angular integral is exact and the radial
+   one is Simpson over a grid fine enough for the oscillation count at this
+   wavenumber. Every pair is computed -- the matrix is complete, not a diagonal
+   with the cross terms dropped. */
+const QUAD_R = 2048;
+function radialProfile(m, jp){                 // psi(r) on [0,R], normalised r
+  const out = new Float64Array(QUAD_R + 1);
+  for (let i = 0; i <= QUAD_R; i++) out[i] = besselJ(m, jp*i/QUAD_R);
+  return out;
+}
+function simpsonR(fn){                          // INT_0^1 fn(rho) rho drho
+  let s = 0;
+  for (let i = 0; i <= QUAD_R; i++){
+    const w = (i === 0 || i === QUAD_R) ? 1 : (i % 2 ? 4 : 2);
+    s += w*fn[i]*(i/QUAD_R);
+  }
+  return s/(3*QUAD_R);
+}
+// INT_0^2pi cos^2(a t) cos^2(b t) dt, exactly.
+function angularQuartic(a, b){
+  if (a === 0 && b === 0) return 2*Math.PI;
+  if (a === 0) return Math.PI;
+  if (b === 0) return Math.PI;
+  return a === b ? 3*Math.PI/4*2 : Math.PI/2*2;   // 3pi/2 when equal, pi otherwise
+}
+const angularSquare = a => a === 0 ? 2*Math.PI : Math.PI;
+
 const JPZ = new Map();
 function jpZeros(m, count, xHint){
   const key = m + ':' + count + ':' + Math.round(xHint || 0);
@@ -443,6 +500,9 @@ function mathieu(omega0, gamma, accel, k, hM, omegaDrive){
    are refused rather than shipped with a divisor that appears in no formula.
    Egg II's published 1.7124 is below the convexity bound P >= 2D. */
 const SQRT2 = Math.SQRT2, PHI_C = (1 + Math.sqrt(5))/2;
+const EGG_I_P  = 14*Math.PI - 6*Math.atan(4/5);      // 2 pi r1 + pi b - 2 a beta
+const EGG_II_P = 10*Math.PI + 10 - 8*Math.atan(5/4);  // 2 pi r1 + 2 c - 2 b theta
+
 function ellipseE(m){                                    // AGM, relative exit
   let a = 1, b = Math.sqrt(1-m), c = Math.sqrt(m), sum = c*c/2, pw = 1;
   for (let n = 0; n < 64 && Math.abs(c) > Number.EPSILON*a; n++){
@@ -459,8 +519,18 @@ const BOUNDARY = [
   { key:'thom-b',        pd: 5*Math.PI/6 + (Math.sqrt(10)/3)*Math.atan(1/3),   minor:(2+Math.sqrt(10))/6 },
   { key:'thom-d',        pd: 8*Math.PI/9 + (Math.sqrt(13)/3)*Math.atan(Math.sqrt(3)/7), minor:(2+Math.sqrt(13))/6 },
   { key:'thom-bmod',     pd: 3*Math.PI/4 + (Math.sqrt(5)/2)*Math.atan(1/2),    minor:(1+Math.sqrt(5))/4 },
-  { key:'egg-i',         pd: null, minor: 2/3, refused: 'divisor 18 appears in no formula' },
-  { key:'egg-ii',        pd: null, minor: 4/5, refused: 'P/D 1.7124 < 2, impossible for a closed convex curve' },
+  // The two eggs: perimeters exact from the printed formulas, diameters absent.
+  // Rather than invent one or drop them, D is BOUNDED. For any closed convex
+  // curve  2D <= P <= pi*D  -- the lower from the two arcs joining the diameter's
+  // endpoints, the upper from Barbier, the maximum being a curve of constant
+  // width. So P/D lies in [2, pi] whatever the construction, and both eggs
+  // enter the product as an interval instead of a point.
+  { key:'egg-i',  pd: null, minor: 2/3, perimeter: EGG_I_P,  published: 18,
+    pdRange: [2, Math.PI],
+    note: 'divisor 18 gives D = 18, inside the admissible [12.711, 19.967] but unsourced' },
+  { key:'egg-ii', pd: null, minor: 4/5, perimeter: EGG_II_P, published: 20,
+    pdRange: [2, Math.PI],
+    note: 'divisor 20 gives D = 20, above the Barbier bound P/2 = 17.124: impossible' },
   { key:'polygon',       pd: 2*SQRT2,                                          minor: 1/SQRT2 }
 ];
 const COUPLING_BASE = 0.016, COUPLING_GAIN = 0.024;
@@ -471,17 +541,32 @@ function reinforcedR4(radius){                            // prod lam^4/(r^4+lam
   for (const L of DEFAULT_R4_SCALES){ const L4 = Math.pow(L, 4); p *= L4/(r4 + L4); }
   return p;
 }
+// All ten walls contribute. Eight have an exact P/D; the two eggs enter through
+// the derived interval, so the result is a range, not a point. A range is the
+// honest form of an unknown that is bounded.
 function boundaryImpedance(perimeterArc, sourceDistance){
-  let product = 1, used = 0;
-  for (const b of BOUNDARY){
-    if (b.pd == null) continue;                           // refused, not defaulted
-    const phase = 2*Math.PI*perimeterArc/b.pd;
-    const coupling = COUPLING_BASE + (1 - b.minor)*COUPLING_GAIN;
-    product *= 1 - coupling*Math.pow(Math.sin(phase), 2);
-    used++;
+  const factor = (pd, minor) => {
+    const coupling = COUPLING_BASE + (1 - minor)*COUPLING_GAIN;
+    return 1 - coupling*Math.pow(Math.sin(2*Math.PI*perimeterArc/pd), 2);
+  };
+  let base = 1, exact = 0;
+  for (const b of BOUNDARY) if (b.pd != null){ base *= factor(b.pd, b.minor); exact++; }
+  // sweep each egg across its admissible P/D and keep the extremes
+  let lo = base, hi = base;
+  const eggs = BOUNDARY.filter(b => b.pdRange);
+  for (const b of eggs){
+    let fLo = Infinity, fHi = -Infinity;
+    for (let t = 0; t <= 200; t++){
+      const pd = b.pdRange[0] + (b.pdRange[1] - b.pdRange[0])*t/200;
+      const v = factor(pd, b.minor);
+      if (v < fLo) fLo = v; if (v > fHi) fHi = v;
+    }
+    lo *= fLo; hi *= fHi;
   }
-  return { impedance: 1 - product*reinforcedR4(sourceDistance), walls: used,
-           refused: BOUNDARY.filter(b => b.pd == null).length };
+  const r4 = reinforcedR4(sourceDistance);
+  return { impedance: 1 - ((lo + hi)/2)*r4,
+           impedanceLo: 1 - hi*r4, impedanceHi: 1 - lo*r4,
+           walls: BOUNDARY.length, exact, bounded: eggs.length };
 }
 
 /* ═══ atlas queries ══════════════════════════════════════════════════════ */
@@ -567,28 +652,93 @@ function resolvePatternState(o){
   const rx = 0, ry = 0;
   const modes = [];
   let ordersWithoutMode = 0;
+  const ANGULAR_ORDERS = 16, RADIAL_ROOTS = 3;   // the lineage spec's 48
+
+  // Rank angular orders by the growth of their best radial root, then keep the
+  // top sixteen and take three roots from each.
+  const orderScore = [];
   for (const m of new Set(orders)){
-    const z = jpZeroNear(m, xStar);
-    if (z == null || !isFinite(z) || z <= 0){ ordersWithoutMode++; continue; }
-    const k = z/R, w = omegaOf(k, sigma, rho, hM);
+    const roots = jpZerosNearN(m, xStar, 1);
+    if (!roots.length){ ordersWithoutMode++; continue; }
+    const k = roots[0]/R, w = omegaOf(k, sigma, rho, hM);
     const g = dampingRate(k, w, nu, hM);
-    const mth = mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f);
-    modes.push({ m, n: null,           // counted later, only for what is shown
-      jp: z, k, hz: w/(2*Math.PI),
-      mismatch: Math.abs(w - omegaTarget)/omegaTarget,
-      gamma: g.total, growth: mth.growth, eps: mth.eps,
-      accelThreshold: mth.accelThreshold,
-      // the base transfer enters here, once, inside the coefficient
-      coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
+    orderScore.push({ m, growth: mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f).growth });
   }
+  orderScore.sort((a, b) => b.growth - a.growth);
+  const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
+
+  for (const m of keptOrders)
+    for (const z of jpZerosNearN(m, xStar, RADIAL_ROOTS)){
+      const k = z/R, w = omegaOf(k, sigma, rho, hM);
+      const g = dampingRate(k, w, nu, hM);
+      const mth = mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f);
+      modes.push({ m, n: null, jp: z, k, hz: w/(2*Math.PI),
+        mismatch: Math.abs(w - omegaTarget)/omegaTarget,
+        gamma: g.total, growth: mth.growth, eps: mth.eps,
+        accelThreshold: mth.accelThreshold,
+        // resonance phase: what sets the phase flux the grains later feel
+        phi: Math.atan2(2*g.total*w, omegaTarget*omegaTarget - w*w),
+        // the base transfer enters here, once, inside the coefficient
+        coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
+    }
   // Sort FIRST, then take the growing set from the sorted array. Filtering
   // before the sort kept insertion order, so the "strongest" modes were really
-  // just the lowest angular orders -- at 5000 Hz that drew m = 0..5 while the
-  // fastest-growing mode was m = 112.
+  // just the lowest angular orders.
   modes.sort((a,b) => (b.growth - a.growth) || (a.mismatch - b.mismatch));
-  // Every positive-growth mode is retained; a supercritical drive is not
-  // collapsed back onto the near-onset equilibrium.
   const unstable = modes.filter(x => x.growth > 0);
+
+  /* ---- nonlinear competition over the complete cubic overlap matrix ------
+     Linear growth alone just ranks modes. What decides which pattern appears
+     is the competition between them, so the amplitudes are evolved to steady
+     state under dA_i/dt = A_i(s_i - SUM_j g_ij A_j^2) with every g_ij present.
+     Modes that lose go to zero on their own; nothing is discarded by hand. */
+  let competition = null;
+  if (modes.length){
+    const N = modes.length;
+    const prof = modes.map(t => radialProfile(t.m, t.jp));
+    const norm = modes.map((t, i) => {
+      const sq = new Float64Array(QUAD_R + 1);
+      for (let q = 0; q <= QUAD_R; q++) sq[q] = prof[i][q]*prof[i][q];
+      return simpsonR(sq)*angularSquare(t.m);
+    });
+    const gmat = [];
+    for (let i = 0; i < N; i++){
+      gmat.push(new Float64Array(N));
+      for (let j = 0; j < N; j++){
+        const quart = new Float64Array(QUAD_R + 1);
+        for (let q = 0; q <= QUAD_R; q++)
+          quart[q] = prof[i][q]*prof[i][q]*prof[j][q]*prof[j][q];
+        gmat[i][j] = simpsonR(quart)*angularQuartic(modes[i].m, modes[j].m)
+                   / Math.max(1e-30, norm[i]*norm[j]);
+      }
+    }
+    // integrate to steady state
+    const A = new Float64Array(N).fill(1e-3);
+    const sMax = Math.max(1e-9, ...modes.map(t => Math.abs(t.growth)));
+    const dt = 0.15/sMax;
+    for (let step = 0; step < 4000; step++){
+      const dA = new Float64Array(N);
+      for (let i = 0; i < N; i++){
+        let sat = 0;
+        for (let j = 0; j < N; j++) sat += gmat[i][j]*A[j]*A[j];
+        dA[i] = A[i]*(modes[i].growth - sat);
+      }
+      let moved = 0;
+      for (let i = 0; i < N; i++){
+        const nv = Math.max(0, A[i] + dt*dA[i]);
+        moved = Math.max(moved, Math.abs(nv - A[i]));
+        A[i] = nv;
+      }
+      if (moved < 1e-12*Math.max(1e-9, Math.max(...A))) break;
+    }
+    const survivors = [];
+    const amax = Math.max(...A);
+    for (let i = 0; i < N; i++) if (A[i] > amax*0.02 && A[i] > 0)
+      survivors.push({ ...modes[i], amp: A[i] });
+    survivors.sort((a,b) => b.amp - a.amp);
+    competition = { size: N, survivors, killed: N - survivors.length,
+                    saturated: amax > 0 };
+  }
 
   const rec = atlasAt(cellKey, f);
   const prior = foldPrior(rec);
@@ -632,16 +782,23 @@ function resolvePatternState(o){
     // No atlas here -- above 199 Hz, or a diameter the paper never swept. The
     // state set is then the modes the damped-Mathieu analysis says grow,
     // weighted by growth rate. Not a fold guess dressed as an observation.
-    const pool = (unstable.length ? unstable : modes).slice(0, 16);
-    const poolTotal = unstable.length || modes.length;
-    const gmax = pool.reduce((a, x) => Math.max(a, Math.abs(x.growth)), 0) || 1;
-    for (const t of pool.slice(0, 6))
-      states.push({ fold: t.m*2, m: t.m, weight: Math.max(1e-3, Math.abs(t.growth)/gmax),
+    // The competition has already decided. Its survivors are the state set;
+    // where nothing saturates (sub-threshold everywhere) fall back to the
+    // least-damped modes and say so.
+    const won = competition && competition.survivors.length ? competition.survivors : null;
+    const pool = won || modes.slice(0, 6);
+    const amax = won ? Math.max(...won.map(t => t.amp))
+                     : Math.max(...pool.map(t => Math.abs(t.growth)), 1e-9);
+    for (const t of pool.slice(0, 8))
+      states.push({ fold: t.m*2, m: t.m,
+                    weight: Math.max(1e-3, (won ? t.amp : Math.abs(t.growth))/amax),
+                    phi: t.phi || 0,
                     radial: { ...t, n: radialIndexOf(t.m, t.jp) }, theoryOnly: true });
     warnings.push({ hard: false, text: unstable.length
-      ? `Theory only: ${unstable.length} of ${modes.length} angular orders have positive `
-        + `Mathieu growth here, all retained in the count; the 6 fastest-growing are drawn. `
-        + `Angular symmetry is predicted, not observed -- the atlas stops at 199 Hz.`
+      ? `Theory only: ${unstable.length} of ${modes.length} modes have positive Mathieu `
+        + `growth, all retained; the cubic overlap competition leaves `
+        + `${competition ? competition.survivors.length : 0} standing. Angular symmetry is `
+        + `predicted, not observed -- the atlas stops at 199 Hz.`
       : `No mode reaches Faraday onset at this amplitude. Shown are the least-damped `
         + `modes, which is a diagnostic, not a pattern.` });
   }
@@ -681,7 +838,8 @@ function resolvePatternState(o){
     onset: mathieu(omegaTarget, damp.total, accelOf(amplitudeMv), kStar, hM, 2*Math.PI*f),
     accelAssumed: accelOf(amplitudeMv),
     unstableCount: unstable.length, ordersScanned: modes.length,
-    growingRetained: unstable.length,
+    growingRetained: unstable.length, competition,
+    angularOrders: keptOrders.length, radialRoots: RADIAL_ROOTS,
     ordersWithoutMode,
     boundary: boundaryImpedance(2*Math.PI*R/wavelength, driveR || 0),
     aboveAtlas: f > 199
@@ -735,12 +893,22 @@ const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32A
 // u*grad(u). The optical layer needs slope normalised on its own, or the
 // highlight would inherit the height units. So both are kept.
 const PGX = new Float32Array(NSZ), PGY = new Float32Array(NSZ);
+/* The transport the grains feel is not u*grad(u). Each mode carries its own
+   resonance phase, so the field is complex, and a Stokes boundary layer moves
+   particles by two distinct terms:
+       intensity gradient   grad I,  I = |Psi|^2
+       phase flux           F = Im(Psi* grad Psi)
+   A pure standing wave has F = 0; a phase spread across competing modes makes
+   it non-zero, which is what carries grains along a nodal line rather than
+   just onto it. Both scale with the Stokes ratio delta/lambda, so temperature,
+   depth and frequency all change transport. */
+const IMF = new Float32Array(NSZ), GIX = new Float32Array(NSZ), GIY = new Float32Array(NSZ);
 // A mode whose finest structure falls below this many pixels per wavelength is
 // not drawn: aliasing it would invent detail. Its energy is reported as RMS
 // roughness instead, which is what the pixel-per-wavelength gate is for.
 const RES_GATE = 4;
 function buildSurface(state){
-  ETA.fill(0); NX.fill(0); NY.fill(0);
+  ETA.fill(0); NX.fill(0); NY.fill(0); IMF.fill(0); GIX.fill(0); GIY.fill(0);
   let unresolved = 0, drawn = 0;
   for (const s of state.states){
     const pxPerWave = 2*Math.PI*RR/s.radial.jp;
@@ -748,17 +916,20 @@ function buildSurface(state){
     if (pxPerWave < RES_GATE){ unresolved += s.weight*s.weight; s.gated = true; continue; }
     s.gated = false; drawn++;
     const sh = shapeOf(s.m, s.radial.jp), m = s.m, w = s.weight;
+    const cph = Math.cos(s.phi || 0), sph = Math.sin(s.phi || 0);
     for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
       const i = y*GR+x; if (COVER[i] <= 0) continue;
       const idx = RSQ[i]; if (idx > sh.max) continue;
       const J = sh.jr[idx], dJ = sh.dr[idx], th = ANG[i], r = RAD[i];
       const cm = Math.cos(m*th), sm = Math.sin(m*th);
-      ETA[i] += w*J*cm;
+      ETA[i] += w*J*cm*cph; IMF[i] += w*J*cm*sph;
       // analytic gradient in disc coords: dr and (1/r)dtheta, rotated to x,y
       const ur = w*dJ*cm;
       const ut = r > 1e-6 ? -w*m*J*sm/r : 0;
       const c = r > 1e-6 ? (x-CC)/(r*RR) : 1, sn = r > 1e-6 ? (y-CC)/(r*RR) : 0;
-      NX[i] += ur*c - ut*sn; NY[i] += ur*sn + ut*c;
+      const gx = ur*c - ut*sn, gy = ur*sn + ut*c;
+      NX[i] += gx*cph; NY[i] += gy*cph;
+      GIX[i] += gx*sph; GIY[i] += gy*sph;
     }
   }
   // Panel image descriptors act only here, as renderer hints on presentation.
@@ -769,6 +940,7 @@ function buildSurface(state){
       if (COVER[i] <= 0) continue;
       const g = 1 + (cb - 1)*Math.max(0, 1 - RAD[i]*2.2);
       ETA[i] *= g; NX[i] *= g; NY[i] *= g;
+      IMF[i] *= g; GIX[i] *= g; GIY[i] *= g;
     }
   }
   // Height and slope are normalised separately. The optical layer reads slope
@@ -782,11 +954,25 @@ function buildSurface(state){
   state.render = { drawn, gatedRms: Math.sqrt(unresolved),
                    gated: state.states.filter(x => x.gated).length };
   const inv = 1/mx, ginv = 1/gx;
+  // Stokes ratio: the layer thickness against the wavelength. Both transport
+  // terms scale with it, so it is computed from the state rather than fixed.
+  const stokes = state.damping ? state.damping.stokesDepth/state.wavelength : 0.02;
+  const KI = 1, KF = 2.2*Math.min(4, stokes/0.014);
+  let dmax = 1e-9;
   for (let i = 0; i < NSZ; i++){
-    ETA[i] *= inv;
-    PGX[i] = NX[i]*inv; PGY[i] = NY[i]*inv;      // physics: shares u's scale
-    NX[i] *= ginv;      NY[i] *= ginv;           // optics: unit slope field
+    ETA[i] *= inv; IMF[i] *= inv;
+    const Re = ETA[i], Im = IMF[i];
+    const gRx = NX[i]*inv, gRy = NY[i]*inv, gIx = GIX[i]*inv, gIy = GIY[i]*inv;
+    const dIx = 2*(Re*gRx + Im*gIx), dIy = 2*(Re*gRy + Im*gIy);   // grad I
+    const fx  = Re*gIx - Im*gRx,     fy  = Re*gIy - Im*gRy;       // phase flux
+    PGX[i] = -KI*dIx + KF*fx;
+    PGY[i] = -KI*dIy + KF*fy;
+    const d = Math.hypot(PGX[i], PGY[i]); if (d > dmax) dmax = d;
+    NX[i] *= ginv; NY[i] *= ginv;                // optics: unit slope field
   }
+  const dinv = 1/dmax;
+  for (let i = 0; i < NSZ; i++){ PGX[i] *= dinv; PGY[i] *= dinv; }
+  state.transport = { stokesRatio: stokes, fluxGain: KF };
 }
 
 /* ═══ sand: grains drifting down grad(u^2) on the reconstructed surface ═══
@@ -810,16 +996,17 @@ function sprinkle(){
   }
   settle = 0;
 }
-const DRIFT = 11, DAMP = 0.62, AGIT = 0.85;
+const DRIFT = 2.2, DAMP = 0.62, AGIT = 0.85;   // on a unit-normalised drift field
 function stepGrains(gain){
   const jitter = AGIT*agitation;
   for (let p = 0; p < NP; p++){
     let x = PX[p], y = PY[p];
     const i = (y|0)*GR + (x|0);
-    const u = ETA[i]*gain, gx = PGX[i]*gain, gy = PGY[i]*gain;
+    // PGX/PGY already hold -KI*grad(I) + KF*flux, the Stokes-layer transport.
+    const u = ETA[i]*gain;
     const a = Math.abs(u)*jitter;
-    let vx = (VX[p] - DRIFT*u*gx + (Math.random()-0.5)*a)*DAMP;
-    let vy = (VY[p] - DRIFT*u*gy + (Math.random()-0.5)*a)*DAMP;
+    let vx = (VX[p] + DRIFT*PGX[i]*gain + (Math.random()-0.5)*a)*DAMP;
+    let vy = (VY[p] + DRIFT*PGY[i]*gain + (Math.random()-0.5)*a)*DAMP;
     x += vx; y += vy;
     const rx = x-CC, ry = y-CC, r = Math.hypot(rx, ry);
     if (r > RR-1.5){ const k = (RR-1.5)/r; x = CC+rx*k; y = CC+ry*k; vx *= -0.25; vy *= -0.25; }
@@ -997,7 +1184,15 @@ function paintDeck(){
     ['  D', `${s.plate.D.toExponential(2)} <span class="u">N·m</span>`],
     ['  added mass', `${s.plate.added.toFixed(2)} <span class="u">kg/m²</span>`],
     ['wall impedance', `${s.boundary.impedance.toExponential(3)}`],
-    ['  walls used', `${s.boundary.walls} <span class="u">of 10, ${s.boundary.refused} refused</span>`],
+    ['  bounded range', `${s.boundary.impedanceLo.toExponential(3)} – ${s.boundary.impedanceHi.toExponential(3)}`],
+    ['  walls', `<b>${s.boundary.walls}</b> <span class="u">of 10 · ${s.boundary.exact} exact, ${s.boundary.bounded} bounded</span>`],
+    ['SEP', ''],
+    ['mode set', `<b>${s.angularOrders}</b> angular × <b>${s.radialRoots}</b> radial = ${s.competition ? s.competition.size : 0}`],
+    ['competition', s.competition
+        ? `<b>${s.competition.survivors.length}</b> survive <span class="u">· ${s.competition.killed} suppressed</span>`
+        : '<span class="u">—</span>'],
+    ['Stokes ratio δ/λ', s.transport ? s.transport.stokesRatio.toFixed(4) : '—'],
+    ['phase-flux gain', s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
     ['SEP', ''],
     ['px per wavelength', `${(2*Math.PI*181/(s.states[0]?.radial.jp||1)).toFixed(1)}`],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
