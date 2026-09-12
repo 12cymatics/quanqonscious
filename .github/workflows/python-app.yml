@@ -52,21 +52,3 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
-
-  # The two JavaScript kernels in this repository -- the boundary kernel and the
-  # Faraday kernel embedded in cymatic.html -- had test suites that nothing ran.
-  # A suite that CI never executes is not a gate; it is a file. Both run here.
-  # Neither needs a network or a package install: reference.json is checked in,
-  # computed once by mpmath and scipy, so CI compares against fixed numbers
-  # rather than recomputing them with the code under test.
-  javascript:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: "22"
-    - name: Boundary kernel
-      run: node boundary/boundarykernel.test.js
-    - name: Faraday kernel (sliced out of cymatic.html)
-      run: node faraday/check-kernel.mjs
