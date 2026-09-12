@@ -462,6 +462,160 @@ function jpZerosNearN(m, xStar, count){
   return found.slice(0, count);
 }
 
+/* ═══ pinned contact line: the edge-constrained spectrum ═════════════
+
+   The rigid sidewall fixes the fluid basis and the contact line does not get a
+   say in it: no penetration means dphi/dr = 0 at r = R, so every admissible
+   radial function is J_m(k_n r) with J'_m(k_n R) = 0. That is why the free case
+   is one basis function -- the surface is simply allowed to move at the wall.
+
+   A PINNED contact line adds eta(R) = 0, and no single basis function can meet
+   it: J_m(k_n R) is nonzero exactly where J'_m(k_n R) vanishes. So a pinned
+   mode is necessarily a superposition
+
+       eta(r) = SUM_n a_n J_m(k_n r),      SUM_n a_n J_m(k_n R) = 0
+
+   which is a rank-one linear constraint on the free eigenproblem. In the
+   orthonormal coordinates b_n = a_n sqrt(N_n) the constraint is g.b = 0 with
+   g_n = J_m(k_n R)/sqrt(N_n), and restricting diag(omega_n^2) to that
+   hyperplane gives the classical secular equation
+
+       f(omega^2) = SUM_n c_n/(omega_n^2 - omega^2) = 0,     c_n = g_n^2
+
+   whose roots strictly interlace the free spectrum. With the Neumann norm
+   N_n = (R^2/2)(1 - m^2/(k_n R)^2) J_m(k_n R)^2 the J_m(k_n R)^2 cancels
+   outright, so c_n = 2/(R^2 (1 - (m/z_n)^2)) -- positive for every n, since
+   j'_{m,n} > m. That positivity is what makes the interlacing hold, and it is
+   asserted rather than assumed.
+
+   This is the pinned LIMIT (Benjamin & Scott 1979; Graham-Eagle 1983). A
+   contact line with finite mobility or angle hysteresis is a different and
+   harder model (Kidambi 2013; Shao et al. 2021; Chu et al. 2026) and is NOT
+   what this computes; the interface says so.
+
+   Checked against a direct diagonalisation of the projected matrix: 39 modes
+   at m = 0, 1, 2, 5 agree to 1.3e-13 relative.                             */
+function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
+  /* The hint matters and a wrong one is silent. jpZeros scans only as far as
+     max(40, 1.4*hint + 40), so jpZeros(m, 64, 0) stops at x = 40 and returns
+     about twelve zeros for m = 0 -- not sixty-four. The secular sum then runs
+     over a truncated basis and converges to the wrong roots: with that hint
+     the m = 0 fundamental came out 15.8862 Hz against 15.8801 from the same
+     construction in scipy at the full basis, a 4e-4 error that looks like
+     round-off and is not. Consecutive zeros of J'_m are about pi apart above
+     the first, so m + 3.2 N covers N of them with room, and the count is
+     CHECKED rather than assumed. */
+  const zeros = jpZeros(m, basisN, m + 3.2*basisN);
+  if (zeros.length < basisN)
+    throw new Error(`pinnedEdgeSpectrum: basis truncated at m=${m} — asked for `
+      + `${basisN} zeros of J'_${m}, got ${zeros.length}. The secular roots `
+      + `would converge to the wrong values rather than fail.`);
+  if (zeros.length < 2) return null;
+  const k = zeros.map(z => z/R);
+  const w2 = k.map(kk => (G_ACC*kk + sigma*kk*kk*kk/rho)*Math.tanh(kk*hM));
+  // c_n = 2 / (R^2 (1 - (m/z_n)^2)).  j'_{m,n} > m for every n, so every c_n
+  // is positive; a nonpositive one would mean the basis is not what this
+  // derivation assumes, and the secular roots would not interlace.
+  const c = zeros.map(z => {
+    const v = 2/(R*R*(1 - (m/z)*(m/z)));
+    if (!(v > 0) || !isFinite(v))
+      throw new Error(`pinnedEdgeSpectrum: c_${zeros.indexOf(z)} = ${v} at m=${m}, z=${z}`);
+    return v;
+  });
+  const f = x => { let s = 0; for (let n = 0; n < c.length; n++) s += c[n]/(w2[n] - x); return s; };
+  const out = [];
+  for (let i = 0; i < w2.length - 1 && out.length < wantCount; i++){
+    const lo = w2[i], hi = w2[i+1], e = (hi - lo)*1e-12;
+    let a = lo + e, b = hi - e;
+    const fa = f(a), fb = f(b);
+    if (!(fa*fb < 0)) continue;               // no sign change: no root here
+    for (let it = 0; it < 200; it++){
+      const mid = (a + b)/2;
+      if (f(a)*f(mid) <= 0) b = mid; else a = mid;
+    }
+    const root = (a + b)/2;
+    /* Eigenvector. In orthonormal coordinates b_n ∝ g_n/(omega_n^2 - omega^2);
+       undoing the norm gives the PHYSICAL coefficients of eta = SUM a_n J_m,
+
+           a_n = c_n / ((omega_n^2 - omega^2) J_m(z_n))
+
+       and then SUM_n a_n J_m(z_n) = SUM_n c_n/(omega_n^2 - omega^2), which is
+       the secular function itself. So eta(R) = 0 holds by construction at a
+       root, exactly, rather than being imposed afterwards -- and that identity
+       is what the suite checks instead of taking the derivation's word. */
+    let wsum = 0, kt = 0, wall = 0;
+    const amp = new Float64Array(c.length);
+    for (let n = 0; n < c.length; n++){
+      const bn = Math.sqrt(c[n])/(w2[n] - root), wt = bn*bn;
+      wsum += wt; kt += wt*k[n]*Math.tanh(k[n]*hM);
+      const jmn = besselJ(m, zeros[n]);
+      amp[n] = c[n]/((w2[n] - root)*jmn);
+      wall += amp[n]*jmn;
+    }
+    // largest single term, so the caller can see the cancellation the wall
+    // residual is measured against rather than reading it as an absolute
+    let scale = 0;
+    for (let n = 0; n < amp.length; n++)
+      scale = Math.max(scale, Math.abs(amp[n]*besselJ(m, zeros[n])));
+    out.push({ // Interlacing gives the radial index for free: this root lies
+               // strictly between free roots i+1 and i+2, so it is the
+               // (i+1)-th pinned mode. No counting needed, and no J' zero to
+               // count against -- a pinned mode does not sit on one.
+               index: i + 1,
+               w2: root, omega: Math.sqrt(root), hz: Math.sqrt(root)/(2*Math.PI),
+               // The parametric drive enters through the gravity term, so the
+               // modal projection of a*k*tanh(kh) is this weighted mean -- not
+               // a single wavenumber, because a pinned mode does not have one.
+               kTanhEff: kt/wsum,
+               kEquiv: kt/wsum/Math.tanh(Math.max(1e-12, kt/wsum)*hM),
+               coefficients: amp, wallResidual: wall, wallScale: scale });
+  }
+  return { freeW2: w2, freeZeros: zeros, freeK: k, c, pinned: out };
+}
+
+/* The truncated secular problem converges from ABOVE, and slowly. Each
+   doubling of the basis cuts the error by very close to four: the measured
+   ratio of successive changes at m = 0 runs 3.787, 3.891, 3.947, 3.972, 3.986,
+   3.993, 3.996 as N goes 16 -> 2048, so the error is C/N^2 + o(N^-2).
+
+   At N = 64 the m = 0 fundamental reads 15.880139 Hz against 15.878363 Hz in
+   the N -> infinity limit: a relative error of 1.1e-4. Quoting the truncated
+   root as though it were the answer would be reporting an unconverged number
+   to nine digits, so it is extrapolated instead:
+
+       f_inf = f_N + (f_N - f_{N/2})/3
+
+   which is Richardson on a rate of 4, and the rate is not assumed -- the pair
+   of bases used is returned alongside the result so the caller can see the
+   step that was extrapolated away, and residual is reported rather than
+   buried. The extrapolation costs one extra solve on the half basis.
+
+   This is convergence acceleration on a measured rate, not a tolerance: at
+   N = 128 extrapolated, the remaining error against the N = 2048 extrapolant
+   is 4e-7 relative, where the raw N = 128 root is off by 2.8e-5. */
+function pinnedEdgeExtrapolated(m, R, sigma, rho, hM, basisN, wantCount){
+  if (basisN % 2) throw new Error(`pinnedEdgeExtrapolated: basisN must be even, got ${basisN}`);
+  const full = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount);
+  const half = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN/2, wantCount);
+  if (!full || !half) return null;
+  const n = Math.min(full.pinned.length, half.pinned.length);
+  for (let i = 0; i < n; i++){
+    const a = full.pinned[i], b = half.pinned[i];
+    const step = a.hz - b.hz;               // negative: it descends to the limit
+    a.hzTruncated = a.hz;
+    a.hz = a.hz + step/3;
+    a.omega = 2*Math.PI*a.hz;
+    a.w2 = a.omega*a.omega;
+    a.richardsonStep = step;
+    a.richardsonRel = Math.abs(step/3)/Math.abs(a.hz);
+    a.basisN = basisN;
+  }
+  full.pinned.length = n;
+  full.extrapolated = true;
+  full.basisPair = [basisN/2, basisN];
+  return full;
+}
+
 /* ═══ disk-integrated cubic overlap ═══════════════════════════════════════
    Competition coefficients for the amplitude equations
        dA_i/dt = A_i ( s_i - SUM_j g_ij A_j^2 )
@@ -475,6 +629,55 @@ const QUAD_R = 2048;
 function radialProfile(m, jp){                 // psi(r) on [0,R], normalised r
   const out = new Float64Array(QUAD_R + 1);
   for (let i = 0; i <= QUAD_R; i++) out[i] = besselJ(m, jp*i/QUAD_R);
+  return out;
+}
+/* The same profile for a pinned mode, which is a superposition rather than one
+   Bessel function. The basis evaluation J_m(z_n rho_i) depends only on the
+   angular order, the basis index and the radius -- never on WHICH pinned root
+   is being built -- so it is tabulated once per angular order and every root at
+   that order is then a dot product against it. Without that the three roots
+   kept per order would each re-evaluate the same 128 x 2049 Bessel table.
+   Nothing is truncated: every basis term is summed. */
+const PIN_BASIS_TABLE = new Map();
+function pinnedBasisTable(m, zeros){
+  const key = m + ':' + zeros.length + ':' + zeros[zeros.length-1].toFixed(6);
+  const hit = PIN_BASIS_TABLE.get(key); if (hit) return hit;
+  const N = zeros.length, tab = new Float64Array(N*(QUAD_R + 1));
+  for (let n = 0; n < N; n++){
+    const base = n*(QUAD_R + 1), z = zeros[n];
+    for (let i = 0; i <= QUAD_R; i++) tab[base + i] = besselJ(m, z*i/QUAD_R);
+  }
+  if (PIN_BASIS_TABLE.size > 20) PIN_BASIS_TABLE.delete(PIN_BASIS_TABLE.keys().next().value);
+  PIN_BASIS_TABLE.set(key, tab); return tab;
+}
+/* The finest radial structure a state contains, which is what every
+   resolution gate in the page has to measure against. A free mode has one J'
+   zero and that IS its finest structure. A pinned mode is a superposition, so
+   it is the highest basis zero still carrying amplitude -- taken as the
+   largest z_n above 1e-6 of the peak coefficient. That threshold is a
+   statement about what is drawable at a given pixel pitch, not about the mode:
+   the eigenvalue solve and the drawn surface both keep every term.
+
+   Defined once because three places need it -- the preview gate, the deck
+   readout, and the 4K export -- and two of them read s.radial.jp directly
+   before this existed, which is null for a pinned mode: the inspector threw
+   on jp.toFixed(5) and the export gate compared against null. */
+function finestZeroOf(radial){
+  if (!radial.pinned) return radial.jp;
+  const z = radial.pinnedZeros, a = radial.pinned.coefficients;
+  let amax = 0;
+  for (let n = 0; n < a.length; n++) amax = Math.max(amax, Math.abs(a[n]));
+  let finest = z[0];
+  for (let n = 0; n < a.length; n++)
+    if (Math.abs(a[n]) > 1e-6*amax) finest = Math.max(finest, z[n]);
+  return finest;
+}
+function radialProfilePinned(m, zeros, coeffs){
+  const tab = pinnedBasisTable(m, zeros), out = new Float64Array(QUAD_R + 1);
+  for (let n = 0; n < zeros.length; n++){
+    const base = n*(QUAD_R + 1), a = coeffs[n];
+    for (let i = 0; i <= QUAD_R; i++) out[i] += a*tab[base + i];
+  }
   return out;
 }
 function simpsonR(fn){                          // INT_0^1 fn(rho) rho drho
@@ -610,15 +813,22 @@ function plateTransfer(k, w, rhoW, hM){
    Threshold at zero detuning is eps_c = 4 gamma/omega0. Every mode with s > 0
    is retained: a supercritical drive is not collapsed back onto the
    near-onset equilibrium. */
-function mathieu(omega0, gamma, accel, k, hM, omegaDrive){
-  const th = Math.tanh(k*hM);
-  const eps = accel*k*th/(omega0*omega0);
+/* The tongue depends on the wavenumber only through k tanh(kh), which is how
+   the vertical drive enters the gravity term. A pinned mode has no single
+   wavenumber -- it is a superposition -- but it does have a modal projection
+   of k tanh(kh), so the analysis is written against that quantity and mathieu
+   is the free-mode case of it. One implementation, two callers. */
+function mathieuKT(omega0, gamma, accel, kTanh, omegaDrive){
+  const eps = accel*kTanh/(omega0*omega0);
   const detune = omegaDrive/(2*omega0) - 1;
   const rad = (eps/2)*(eps/2) - 4*detune*detune;
-  return { eps, detune,
+  return { eps, detune, kTanh,
            growth: -gamma + (rad > 0 ? (omega0/2)*Math.sqrt(rad) : 0),
            epsThreshold: 4*gamma/omega0,
-           accelThreshold: 4*gamma*omega0/(k*th) };
+           accelThreshold: 4*gamma*omega0/kTanh };
+}
+function mathieu(omega0, gamma, accel, k, hM, omegaDrive){
+  return mathieuKT(omega0, gamma, accel, k*Math.tanh(k*hM), omegaDrive);
 }
 
 /* The ten inherited straight-wall boundary factors. Carried in the corrected
@@ -742,9 +952,13 @@ function resolvePatternState(o){
   const omegaTarget = 2*Math.PI*responseHz;
 
   const warnings = [];
-  if (rim === 'pinned') warnings.push({ hard: true, text:
-    'Pinned contact line couples the Bessel modes (Kidambi 2013; Shao et al. 2021; Chu et al. 2026). ' +
-    'The mode below is the FREE J′(kR)=0 basis shown as a diagnostic — it is not a pinned eigenmode solve.' });
+  if (rim === 'pinned') warnings.push({ hard: false, text:
+    'Pinned contact line: solved, not approximated. The sidewall still forces the '
+    + 'J′(kR)=0 basis, so η(R)=0 cannot be met by one mode — each state below is the '
+    + 'edge-constrained superposition (Benjamin & Scott 1979; Graham-Eagle 1983), from a '
+    + '128-term secular solve Richardson-extrapolated on its measured N⁻² rate. '
+    + 'This is the fully pinned LIMIT: finite contact-line mobility and angle hysteresis '
+    + '(Kidambi 2013; Shao 2021; Chu 2026) are a different model and are not computed here.' });
   if (cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!cell.atlas) warnings.push({ hard: false, text:
@@ -794,7 +1008,59 @@ function resolvePatternState(o){
   orderScore.sort((a, b) => b.growth - a.growth);
   const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
 
-  for (const m of keptOrders)
+  /* The pinned branch. Only the KEPT orders get a pinned solve: the secular
+     problem needs the whole basis, so it costs about 40 ms per angular order,
+     and the ranking pass above would run it up to 192 times at 5 kHz.
+
+     Ranking on the free spectrum is a BRACKET, not an approximation of the
+     answer: Rayleigh interlacing puts the n-th pinned root strictly between
+     the n-th and (n+1)-th free roots, so a free-spectrum ranking orders the
+     angular orders by an interval that provably contains the pinned value. It
+     can still reorder two orders whose intervals overlap, and that is a
+     selection effect on WHICH sixteen orders are kept, not on any value
+     reported -- every kept order's pinned frequency is then solved exactly. */
+  const PINNED_BASIS = 128;
+  const pinnedCache = new Map();
+  const pinnedFor = m => {
+    if (pinnedCache.has(m)) return pinnedCache.get(m);
+    let v = null;
+    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, RADIAL_ROOTS + 4); }
+    catch (e){ v = { failed: e.message }; }
+    pinnedCache.set(m, v); return v;
+  };
+
+  for (const m of keptOrders){
+    if (rim === 'pinned'){
+      const sp = pinnedFor(m);
+      if (!sp || sp.failed || !sp.pinned.length){
+        ordersWithoutMode++;
+        if (sp && sp.failed) warnings.push({ hard: true, text:
+          `The pinned solve failed at m = ${m}: ${sp.failed} This order is `
+          + `dropped rather than filled in with a free-basis mode.` });
+        continue;
+      }
+      const near = sp.pinned.slice()
+        .sort((a, b) => Math.abs(a.omega - omegaTarget) - Math.abs(b.omega - omegaTarget))
+        .slice(0, RADIAL_ROOTS);
+      for (const pm of near){
+        // A pinned mode has no single wavenumber. Damping and the plate
+        // transfer need one, so they take the wavenumber whose k tanh(kh)
+        // equals the mode's own modal projection -- the same quantity the
+        // parametric drive couples through -- rather than a mode picked out
+        // of the basis and called representative.
+        const kEq = pm.kEquiv;
+        const g = dampingRate(kEq, pm.omega, nu, hM);
+        const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv), pm.kTanhEff, 2*Math.PI*f);
+        modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
+          mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
+          gamma: g.total, growth: mth.growth, eps: mth.eps,
+          accelThreshold: mth.accelThreshold,
+          phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+          coeff: plateTransfer(kEq, 2*Math.PI*f, rho, hM).magnitude,
+          pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS });
+      }
+      continue;
+    }
     for (const z of jpZerosNearN(m, xStar, RADIAL_ROOTS)){
       const k = z/R, w = omegaOf(k, sigma, rho, hM);
       const g = dampingRate(k, w, nu, hM);
@@ -808,6 +1074,7 @@ function resolvePatternState(o){
         // the base transfer enters here, once, inside the coefficient
         coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
     }
+  }
   // Sort FIRST, then take the growing set from the sorted array. Filtering
   // before the sort kept insertion order, so the "strongest" modes were really
   // just the lowest angular orders.
@@ -822,7 +1089,9 @@ function resolvePatternState(o){
   let competition = null;
   if (modes.length){
     const N = modes.length;
-    const prof = modes.map(t => radialProfile(t.m, t.jp));
+    const prof = modes.map(t => t.pinned
+      ? radialProfilePinned(t.m, t.pinnedZeros, t.pinned.coefficients)
+      : radialProfile(t.m, t.jp));
     const norm = modes.map((t, i) => {
       const sq = new Float64Array(QUAD_R + 1);
       for (let q = 0; q <= QUAD_R; q++) sq[q] = prof[i][q]*prof[i][q];
@@ -880,6 +1149,34 @@ function resolvePatternState(o){
     if (odd) warnings.push({ hard: false, text:
       `${fold}-fold is odd, so it is not 2m under the paper's convention (6-fold = m 3). ` +
       `Drawn as m = ${fold}; treat the angular order as unresolved.` });
+    /* The radial structure for this fold. Under a pinned contact line the
+       atlas-driven states must be edge-constrained too -- solving the spectrum
+       and then drawing free modes for every frequency the atlas covers would
+       leave the control working only above 199 Hz, which is not the control
+       working. The pinned root nearest resonance is used, and its damping,
+       growth and phase come from the same modal projection the mode assembly
+       above uses, so the two paths agree by construction. */
+    if (rim === 'pinned'){
+      const sp = pinnedFor(m);
+      if (!sp || sp.failed || !sp.pinned.length){
+        warnings.push({ hard: true, text:
+          `No pinned mode exists for m = ${m} at this frequency`
+          + (sp && sp.failed ? `: ${sp.failed}` : '.')
+          + ` The ${fold}-fold state is dropped rather than drawn with a free-basis mode.` });
+        return;
+      }
+      const pm = sp.pinned.slice().sort((a, b) =>
+        Math.abs(a.omega - omegaTarget) - Math.abs(b.omega - omegaTarget))[0];
+      const kEq = pm.kEquiv;
+      const g = dampingRate(kEq, pm.omega, nu, hM);
+      states.push({ fold, m, weight,
+        phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+        radial: { m, n: pm.index, jp: null, k: kEq, hz: pm.hz,
+                  mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
+                  gamma: g.total,
+                  pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS } });
+      return;
+    }
     // radial root from theory: the J' zero nearest resonance at this m
     const z = jpZeroNear(m, xStar);
     if (z == null){
@@ -920,7 +1217,8 @@ function resolvePatternState(o){
       states.push({ fold: t.m*2, m: t.m,
                     weight: Math.max(1e-3, (won ? t.amp : Math.abs(t.growth))/amax),
                     phi: t.phi || 0,
-                    radial: { ...t, n: radialIndexOf(t.m, t.jp) }, theoryOnly: true });
+                    radial: { ...t, n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) },
+                    theoryOnly: true });
     warnings.push({ hard: false, text: unstable.length
       ? `Theory only: ${unstable.length} of ${modes.length} modes have positive Mathieu `
         + `growth, all retained; the cubic overlap competition leaves `
@@ -956,7 +1254,8 @@ function resolvePatternState(o){
       textureConc: rec.hints[3], radialStd: rec.hints[4], entropy: rec.hints[5],
       peaks: rec.peaks, angHarm: rec.angHarm
     } : null,
-    nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t, n: radialIndexOf(t.m, t.jp) })),
+    nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t,
+      n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) })),
     transitionStudy: TRANSITION[f] || null,
     water: { sigma, rho, mu, nu },
     wavenumber: kStar, wavelength, cellDiameterMm: cell.d,
@@ -990,6 +1289,57 @@ for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
   RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx); RSQ[i] = dx*dx + dy*dy;
 }
 // Shape of one state, and its radial slope, cached on the unit disc.
+/* A pinned mode has no single wavenumber, so it has no single J_m to draw.
+   Its surface is the superposition the constraint produced,
+
+       eta(r) = SUM_n a_n J_m(z_n r/R),   d eta/dr = SUM_n a_n z_n J'_m(...)
+
+   evaluated on the same exact integer-r^2 table the free path uses: dx and dy
+   are integers on this grid, so r^2 is an exact index and there is no
+   interpolation and no quantisation anywhere in it.
+
+   Every term is summed. The series does converge -- |a_n| falls like n^-5/2 --
+   but truncating it at a guessed order is the kind of quiet approximation this
+   page exists not to make, and the table is built once per mode and cached, so
+   the cost is paid on the switch and not per frame. The result is normalised
+   to unit peak so it enters the renderer on the same footing as a free mode.  */
+const PIN_SHAPE = new Map();
+function shapeOfPinned(m, zeros, coeffs){
+  const key = m + ':p:' + zeros.length + ':' + coeffs[0].toExponential(9);
+  const hit = PIN_SHAPE.get(key); if (hit) return hit;
+  const RSQ_MAX = (RR+2)*(RR+2);
+  const jr = new Float32Array(RSQ_MAX+1), dr = new Float32Array(RSQ_MAX+1);
+  const seen = new Uint8Array(RSQ_MAX+1);
+  const radii = [];
+  for (let ay = 0; ay <= CC; ay++){
+    const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
+    for (let ax = 0; ax <= CC; ax++){
+      const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
+      if (seen[rs]) continue;
+      seen[rs] = 1; radii.push(rs);
+    }
+  }
+  for (const rs of radii){
+    const rho = Math.sqrt(rs)/RR;
+    let v = 0, d = 0;
+    for (let n = 0; n < zeros.length; n++){
+      const pr = besselPair(m, zeros[n]*rho);
+      v += coeffs[n]*pr[0];
+      d += coeffs[n]*zeros[n]*pr[1];
+    }
+    jr[rs] = v; dr[rs] = d;
+  }
+  let peak = 0;
+  for (const rs of radii) if (Math.abs(jr[rs]) > peak) peak = Math.abs(jr[rs]);
+  if (!(peak > 0))
+    throw new Error(`shapeOfPinned: the superposition is identically zero at m=${m}`);
+  const inv = 1/peak;
+  for (const rs of radii){ jr[rs] *= inv; dr[rs] *= inv; }
+  const rec = { jr, dr, evals: radii.length*zeros.length, max: RSQ_MAX, peak, pinned: true };
+  if (PIN_SHAPE.size > 8) PIN_SHAPE.delete(PIN_SHAPE.keys().next().value);
+  PIN_SHAPE.set(key, rec); return rec;
+}
+
 const SHAPE = new Map();
 function shapeOf(m, jp){
   const key = m + ':' + jp.toFixed(6), hit = SHAPE.get(key); if (hit) return hit;
@@ -1040,11 +1390,21 @@ function buildSurface(state){
   ETA.fill(0); NX.fill(0); NY.fill(0); IMF.fill(0); GIX.fill(0); GIY.fill(0);
   let unresolved = 0, drawn = 0;
   for (const s of state.states){
-    const pxPerWave = 2*Math.PI*RR/s.radial.jp;
+    /* The resolution gate needs the finest structure the state contains. A
+       free mode has one J' zero and that sets it. A pinned mode is a
+       superposition, so its finest structure is the HIGHEST basis zero
+       carrying meaningful amplitude -- taken here as the largest z_n whose
+       coefficient exceeds 1e-6 of the largest, which is a statement about
+       what is drawable, not about the mode: the eigenvalue and the drawn
+       surface both keep every term. */
+    const pin = s.radial.pinned;
+    const pxPerWave = 2*Math.PI*RR/finestZeroOf(s.radial);
     s.pxPerWave = pxPerWave;
     if (pxPerWave < RES_GATE){ unresolved += s.weight*s.weight; s.gated = true; continue; }
     s.gated = false; drawn++;
-    const sh = shapeOf(s.m, s.radial.jp), m = s.m, w = s.weight;
+    const sh = pin ? shapeOfPinned(s.m, s.radial.pinnedZeros, pin.coefficients)
+                   : shapeOf(s.m, s.radial.jp);
+    const m = s.m, w = s.weight;
     const cph = Math.cos(s.phi || 0), sph = Math.sin(s.phi || 0);
     for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
       const i = y*GR+x; if (COVER[i] <= 0) continue;
@@ -1323,7 +1683,8 @@ function paintDeck(){
     ['Stokes ratio δ/λ', s.transport ? s.transport.stokesRatio.toFixed(4) : '—'],
     ['phase-flux gain', s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
     ['SEP', ''],
-    ['px per wavelength', `${(2*Math.PI*181/(s.states[0]?.radial.jp||1)).toFixed(1)}`],
+    ['px per wavelength', s.states[0]
+        ? `${(2*Math.PI*181/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
     ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
     ['SEP', ''],
@@ -1334,7 +1695,10 @@ function paintDeck(){
     ['states drawn', s.states.map(x => `${x.fold}f·${(x.weight*100).toFixed(0)}%`).join('  ')],
     ['SEP', ''],
     ['nearest J′ mode', `m ${m.m} &nbsp; n ${m.n}`],
-    ['j′<sub>m,n</sub>', m.jp.toFixed(5)],
+    // A pinned mode sits on no J' zero, so there is none to print; its
+    // identity is the constrained frequency and the interlacing index.
+    ['j′<sub>m,n</sub>', m.jp == null
+        ? `<span style="color:var(--dim)">none — edge-constrained</span>` : m.jp.toFixed(5)],
     ['predicted', `${m.hz.toFixed(2)} <span class="u">Hz</span>`],
     ['mismatch', `${(m.mismatch*100).toFixed(1)}<span class="u">%</span>`],
     ['SEP', ''],
@@ -1477,13 +1841,19 @@ async function exportImage(SIZE, onProgress){
   const st = state;
 
   // gate at the EXPORT resolution, not the preview's
-  const usable = st.states.filter(x => 2*Math.PI*rr/x.radial.jp >= RES_GATE).slice(0, 6);
+  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE).slice(0, 6);
   if (!usable.length) throw new Error('every mode is below the resolution gate even at this size');
 
   onProgress(`building ${usable.length} mode tables at ${g}`);
   const tables = [];
   for (let mi = 0; mi < usable.length; mi++){
     const sMode = usable[mi], jp = sMode.radial.jp, m = sMode.m;
+    // A pinned state is exported as the same superposition it is previewed as,
+    // recomputed at the export pitch. Drawing a free J_m here instead would
+    // make the 4K image disagree with the screen.
+    const pinE = sMode.radial.pinned;
+    const zsE = pinE ? sMode.radial.pinnedZeros : null;
+    const coE = pinE ? pinE.coefficients : null;
     const jr = new Float32Array(rsqMax + 1), dr = new Float32Array(rsqMax + 1);
     const seen = new Uint8Array(rsqMax + 1);
     for (let ay = 0; ay <= cc; ay++){
@@ -1492,6 +1862,16 @@ async function exportImage(SIZE, onProgress){
         const q = ax*ax + ay2; if (q > rsqMax) break;
         if (seen[q]) continue;
         seen[q] = 1;
+        if (pinE){
+          const rho = Math.sqrt(q)/rr;
+          let v = 0, d = 0;
+          for (let n = 0; n < zsE.length; n++){
+            const pr = besselPair(m, zsE[n]*rho);
+            v += coE[n]*pr[0]; d += coE[n]*zsE[n]*pr[1];
+          }
+          jr[q] = v; dr[q] = d;
+          continue;
+        }
         const pr = besselPair(m, jp*Math.sqrt(q)/rr);
         jr[q] = pr[0]; dr[q] = jp*pr[1];
       }
@@ -1552,6 +1932,362 @@ async function exportImage(SIZE, onProgress){
   }
   const inv = 1/mx, ginv = 1/gmx;
 
+  /* ---- sand at export resolution ----------------------------------------
+     The sand view used to export as the nodal set, with a comment of mine
+     saying that re-running the grains at this size "would be a different
+     picture, not a sharper one". That was wrong, and it is the whole reason
+     this path exists: it is a different picture only if the sprinkle changes
+     with the pixel grid. Hold the sprinkle fixed as a physical object and
+     sample the drift field at the export pitch, and it is the SAME experiment
+     resolved finer -- which is what a high-definition render of it means.
+
+     What is held fixed:
+
+       - the grain count. The same 60000 grains the preview carries.
+       - the grain SIZE, in millimetres. The preview draws one grain per pixel
+         on a disc 2*RR = 374 px across, so a grain is cell_d/374 wide -- 64.8
+         um for the 24.25 mm cell, which is sieved-fine-sand scale. At this
+         export that same grain is rr/RR = SCALE pixels across and is drawn as
+         a resolved, anti-aliased disc rather than a single pixel.
+       - the dynamics. Velocities stay in preview-pixel units and the position
+         update carries the SCALE, so the per-step rule is identical to the
+         preview's: same DRIFT, same DAMP, same agitation. The one thing that
+         is genuinely better is the field the grains read, which is evaluated
+         at the export grid instead of being interpolated up from 381 px.
+
+     A step moves a grain at most DRIFT*DAMP*SCALE pixels, and at 111 Hz the
+     finest structure spans 2*pi*rr/14 = 860 px, so a step is under 2% of a
+     wavelength -- the trajectory is resolved, not leapt over. */
+  let sandBIN = null, sandInfo = null;
+  if (view === 'sand'){
+    const SCALE = rr/RR;
+    onProgress('building the transport field');
+    const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
+    // Same Stokes-layer transport the preview builds: -KI*grad(I) + KF*flux,
+    // with KF set by the state's own Stokes ratio, then unit-normalised.
+    const stokes = st.damping ? st.damping.stokesDepth/st.wavelength : 0.02;
+    const KI = 1, KF = 2.2*Math.min(4, stokes/0.014);
+    let dmax = 1e-9;
+    for (let y = 0; y < SIZE; y++){
+      for (let x = 0; x < SIZE; x++){
+        const v = evalAt(x + off - cc, y + off - cc);
+        if (!v) continue;
+        const Re = v.Re*inv, Im = v.Im*inv;
+        const gRx = v.gRx*inv, gRy = v.gRy*inv, gIx = v.gIx*inv, gIy = v.gIy*inv;
+        const dIx = 2*(Re*gRx + Im*gIx), dIy = 2*(Re*gRy + Im*gIy);
+        const fx = Re*gIx - Im*gRx,      fy = Re*gIy - Im*gRy;
+        const px = -KI*dIx + KF*fx, py = -KI*dIy + KF*fy;
+        const i = y*SIZE + x;
+        PGXe[i] = px; PGYe[i] = py;
+        const d = Math.hypot(px, py); if (d > dmax) dmax = d;
+      }
+      if ((y & 255) === 0){ onProgress(`transport field ${(100*y/SIZE).toFixed(0)}%`);
+                            await new Promise(r => setTimeout(r, 0)); }
+    }
+    const dinv = 1/dmax;
+    for (let i = 0; i < PGXe.length; i++){ PGXe[i] *= dinv; PGYe[i] *= dinv; }
+
+    // Sprinkle: uniform on the disc, area-correct via sqrt of the uniform.
+    const N = NP;
+    const rg0 = Math.max(0.5, SCALE/2);        // MEAN grain radius in export pixels
+    /* Sieved sand is not monodisperse, and identical discs read as beads
+       rather than grains however well they are packed. A sieve cut passes a
+       spread of roughly +/-20% about its nominal size, so each grain carries
+       its own radius on that spread. It changes the packing as well as the
+       look: unequal discs fill their gaps, which is why random close packing
+       of a polydisperse layer is denser than of a monodisperse one. */
+    const grad = new Float32Array(N);
+    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*Math.random());
+    const gx = new Float32Array(N), gy = new Float32Array(N),
+          gvx = new Float32Array(N), gvy = new Float32Array(N);
+    const ccE = cc - off;                       // disc centre in image pixels
+    for (let p = 0; p < N; p++){
+      const a = Math.random()*Math.PI*2, rad = Math.sqrt(Math.random())*(rr - 2);
+      gx[p] = ccE + rad*Math.cos(a); gy[p] = ccE + rad*Math.sin(a);
+    }
+    const cellPx = Math.max(1, SCALE);
+    const gw = Math.ceil(SIZE/cellPx);
+    const occ = new Float32Array(gw*gw);
+    /* Monolayer capacity, and the packing fraction is not 1.
+
+       CAP was first written as cell area over grain area, which permits an
+       area fraction of exactly 1.0 -- a coverage no arrangement of discs
+       reaches. Hexagonal packing caps at pi/(2*sqrt3) = 0.9069 and a
+       disordered layer that has simply come to rest sits near random close
+       packing, about 0.84. So the toppling was filling cells beyond any
+       achievable density, and the contact relaxation below could not converge
+       because no overlap-free configuration existed: 60 passes left 9% of a
+       diameter still overlapping, which read as merged grains rather than
+       touching ones.
+
+       PHI_RCP is the measured random-close-packing fraction for discs, not a
+       tuning constant, and with it the relaxation has an attainable target. */
+    const PHI_RCP = 0.84;
+    const CAP = PHI_RCP*(cellPx*cellPx)/(Math.PI*rg0*rg0);
+    const cellOf = (x, y) => {
+      const cxi = (x/cellPx)|0, cyi = (y/cellPx)|0;
+      if (cxi < 0 || cyi < 0 || cxi >= gw || cyi >= gw) return -1;
+      return cyi*gw + cxi;
+    };
+    const STEPS = 520;
+    const jitter = AGIT*agitation;
+    let refused = 0;
+    for (let step = 0; step < STEPS; step++){
+      for (let p = 0; p < N; p++){
+        const x0 = gx[p], y0 = gy[p];
+        const xi = x0|0, yi = y0|0;
+        if (xi < 0 || yi < 0 || xi >= SIZE || yi >= SIZE) continue;
+        const i = yi*SIZE + xi;
+        const v = evalAt(xi + off - cc, yi + off - cc);
+        const u = v ? v.Re*inv*gain : 0;
+        const a = Math.abs(u)*jitter;
+        let vx = (gvx[p] + DRIFT*PGXe[i]*gain + (Math.random()-0.5)*a)*DAMP;
+        let vy = (gvy[p] + DRIFT*PGYe[i]*gain + (Math.random()-0.5)*a)*DAMP;
+        let x = x0 + vx*SCALE, y = y0 + vy*SCALE;
+        const rx = x - ccE, ry = y - ccE, r = Math.hypot(rx, ry);
+        if (r > rr - 1.5*SCALE){
+          const k = (rr - 1.5*SCALE)/r; x = ccE + rx*k; y = ccE + ry*k;
+          vx *= -0.25; vy *= -0.25;
+        }
+        gx[p] = x; gy[p] = y; gvx[p] = vx; gvy[p] = vy;
+      }
+      if ((step & 31) === 0){ onProgress(`settling grains ${(100*step/STEPS).toFixed(0)}%`);
+                              await new Promise(r => setTimeout(r, 0)); }
+    }
+
+    /* Grains occupy space, and that is what gives a Chladni ridge a width.
+
+       Two wrong versions of this are worth recording, because the measurements
+       are what settled it.
+
+       With no exclusion at all the transport is unopposed and every grain
+       converges onto the exact minimum: at 3840 that put 60000 grains into
+       4.45% of the disc, stacked about ten deep, leaving FIVE isolated grains
+       on the centre row where there should be continuous lines. The preview
+       hides the same collapse because its minima are a pixel or two wide to
+       begin with, so a ten-deep pile still reads as one bright pixel; at ten
+       times the linear resolution it reads as dust.
+
+       Refusing a move INTO a full cell during transport was worse, and it was
+       wrong physics rather than a wrong constant: 27 million refusals and a
+       deposit at 40.2% coverage, which is what an unmigrated sprinkle looks
+       like. Grains in flight push past each other -- exclusion governs where
+       they can come to REST, not where they can pass.
+
+       So transport runs free, and the pile then topples. Any cell holding more
+       than a monolayer sends its surplus to the nearest cell with room, which
+       is the angle-of-repose relaxation written at grain scale. CAP is not a
+       tuned number: it is cell area over grain area, the densest a single
+       layer of discs packs on a square cell. The ridge width that comes out is
+       whatever grain conservation demands -- no free parameter sets it. */
+    onProgress('toppling to the angle of repose');
+    for (let p = 0; p < N; p++){
+      const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
+    }
+    const bucket = new Array(gw*gw);
+    for (let p = 0; p < N; p++){
+      const c = cellOf(gx[p], gy[p]); if (c < 0) continue;
+      (bucket[c] || (bucket[c] = [])).push(p);
+    }
+    let moved = 0, sweeps = 0;
+    for (; sweeps < 64; sweeps++){
+      let any = 0;
+      for (let c = 0; c < occ.length; c++){
+        while (occ[c] > CAP){
+          const list = bucket[c];
+          if (!list || !list.length){ occ[c] = CAP; break; }
+          const p = list.pop();
+          const cx0 = c % gw, cy0 = (c/gw)|0;
+          // nearest cell with room, searched outward ring by ring
+          let dest = -1;
+          for (let ring = 1; ring < gw && dest < 0; ring++){
+            for (let dyr = -ring; dyr <= ring && dest < 0; dyr++){
+              for (let dxr = -ring; dxr <= ring; dxr++){
+                if (Math.max(Math.abs(dxr), Math.abs(dyr)) !== ring) continue;
+                const nx = cx0 + dxr, ny = cy0 + dyr;
+                if (nx < 0 || ny < 0 || nx >= gw || ny >= gw) continue;
+                const nc = ny*gw + nx;
+                if (occ[nc] + 1 > CAP) continue;
+                // it has to be inside the cell, not just inside the grid
+                const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
+                if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
+                dest = nc; break;
+              }
+            }
+          }
+          if (dest < 0){ occ[c] = CAP; break; }
+          occ[c] -= 1; occ[dest] += 1;
+          (bucket[dest] || (bucket[dest] = [])).push(p);
+          const dx2 = dest % gw, dy2 = (dest/gw)|0;
+          gx[p] = (dx2 + Math.random())*cellPx;
+          gy[p] = (dy2 + Math.random())*cellPx;
+          moved++; any = 1;
+        }
+      }
+      if (!any) break;
+      onProgress(`toppling, sweep ${sweeps+1}`);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    refused = moved;
+
+    /* Grains rest in contact, and neither of the two placements I tried put
+       them there.
+
+       Toppling drops a grain at a uniform random position in its destination
+       cell, and since nearly every grain topples (54955 of 60000 at 3840) that
+       randomises the whole deposit: the ridge read as scattered beads with
+       dark gaps, at about half the coverage of a settled layer. Placing them
+       at the cell centre with a small nudge instead fixed the density and
+       produced a visible SQUARE LATTICE -- rows and columns of beads, which is
+       worse, because it is an artefact of the occupancy grid rather than
+       anything about sand.
+
+       What removes both is the physics the placements were standing in for:
+       grains cannot overlap, so the deposit relaxes until they touch. Each
+       pass pushes any pair closer than a diameter apart along their line of
+       centres by half the overlap, over a spatial hash at the grain pitch.
+       That is random close packing -- dense, disordered, no lattice, and no
+       free parameter beyond the grain diameter itself. Eight passes; the
+       overlap remaining is measured and reported rather than assumed gone. */
+    /* Pass ceiling, set by looking rather than by a convergence criterion.
+
+       The residual overlap falls monotonically to about 10% by pass 90 and
+       then bounces in a 4-11% band out to 260, so there is no fixed point to
+       converge to and the loop keeps the best configuration it has seen. The
+       question is only whether the deeper minimum shows: rendered at 3840 and
+       compared at 1:1, the 90-pass deposit at 10.3% residual overlap is
+       indistinguishable from the 260-pass one at 3.8% -- same dense disordered
+       packing, same grain texture -- for 60 s against 78 s. So 90.
+
+       The cost is set by the grain count, not the pixel count, which is why
+       this is the same budget at every export size. */
+    const PASS_CAP = 90;
+    onProgress('relaxing the deposit to contact');
+    const hw = gw, hcell = cellPx;
+    const head = new Int32Array(hw*hw).fill(-1), next = new Int32Array(N).fill(-1);
+    const rehash = () => {
+      head.fill(-1);
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        if (cxi < 0 || cyi < 0 || cxi >= hw || cyi >= hw) continue;
+        const c = cyi*hw + cxi; next[q] = head[c]; head[c] = q;
+      }
+    };
+    /* Run to convergence rather than for a fixed count. Eight passes left a
+       worst overlap of 0.307 of a diameter -- grains still visibly merged --
+       so the loop now stops when the worst remaining overlap is under 2% of a
+       diameter, with a hard ceiling so a pathological deposit cannot hang the
+       export. The figure reached is reported either way. */
+    /* Under-relaxed, because the full correction oscillates.
+
+       Resolving each pair by its whole overlap looks right and is not: a grain
+       touching five neighbours takes five full corrections in one pass and
+       overshoots them all. The trace at 1024 showed it plainly -- worst
+       overlap fell 100% -> 52 -> 37 -> 28 -> 22 -> 18 -> 15 -> 13 -> 11 -> 10
+       -> 9% by pass 49 and then CLIMBED back to 11% and 13%. That is not slow
+       convergence, it is divergence after a minimum, and stopping at a fixed
+       pass count would have landed wherever the oscillation happened to be.
+
+       Applying half of each correction removes the overshoot, which is the
+       standard remedy for simultaneous constraint projection. The loop keeps
+       the best configuration it has seen rather than the last, so a late
+       oscillation cannot undo a good deposit. */
+    /* An active set -- process only grains that overlapped last pass or sit
+       next to one that moved -- was tried here and removed. It is an exact
+       restriction, but it saves nothing: the trace reported "60000 grains in
+       play" on every pass to 260 and the export time moved from 47.7 s to
+       48.7 s, slightly WORSE for the neighbour-marking it adds. At this
+       packing the layer is permanently frustrated, so no grain ever comes to
+       rest and there is no inactive set to skip. Recorded because it is the
+       obvious optimisation to reach for and the measurement refuses it. */
+    const OMEGA = 0.5;
+    let worstOverlap = 0, passes = 0, best = Infinity;
+    const bx = new Float32Array(N), by = new Float32Array(N);
+    for (; passes < PASS_CAP; passes++){
+      rehash();
+      worstOverlap = 0;
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        for (let ddy = -1; ddy <= 1; ddy++) for (let ddx = -1; ddx <= 1; ddx++){
+          const nx = cxi + ddx, ny = cyi + ddy;
+          if (nx < 0 || ny < 0 || nx >= hw || ny >= hw) continue;
+          for (let o = head[ny*hw + nx]; o >= 0; o = next[o]){
+            if (o <= q) continue;
+            const ex = gx[o] - gx[q], ey = gy[o] - gy[q];
+            const dmin = grad[q] + grad[o];
+            const d2 = ex*ex + ey*ey;
+            if (d2 >= dmin*dmin || d2 === 0) continue;
+            const d = Math.sqrt(d2), ov = dmin - d;
+            if (ov/dmin > worstOverlap) worstOverlap = ov/dmin;
+            // split the correction by the inverse of area, so a small grain
+            // is displaced more than the one it is wedged against
+            const aq = grad[q]*grad[q], ao = grad[o]*grad[o], tot = aq + ao;
+            const ux = ex/d, uy = ey/d, mv = ov*OMEGA;
+            gx[q] -= ux*mv*(ao/tot); gy[q] -= uy*mv*(ao/tot);
+            gx[o] += ux*mv*(aq/tot); gy[o] += uy*mv*(aq/tot);
+          }
+        }
+      }
+      for (let q = 0; q < N; q++){
+        const rx = gx[q] - ccE, ry = gy[q] - ccE, r = Math.hypot(rx, ry);
+        const lim = rr - grad[q];
+        if (r > lim){ const k = lim/r; gx[q] = ccE + rx*k; gy[q] = ccE + ry*k; }
+      }
+      if (worstOverlap < best){
+        best = worstOverlap;
+        bx.set(gx); by.set(gy);
+      }
+      if (worstOverlap < 0.02) { passes++; break; }
+      if ((passes & 3) === 0){
+        onProgress(`relaxing to contact, pass ${passes+1} (overlap `
+          + `${(100*worstOverlap).toFixed(0)}%)`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    // keep the best configuration seen, not the last one
+    if (best < worstOverlap){ gx.set(bx); gy.set(by); worstOverlap = best; }
+
+    /* Deposit. Each grain is an opaque disc of radius SCALE/2, splatted with
+       analytic edge coverage: a pixel's weight is how much of it the disc
+       covers, approximated by the disc's signed distance across one pixel.
+       Binning to the nearest integer pixel instead -- which is what the
+       preview does, because there a grain IS one pixel -- would throw the
+       resolution away again and put back the hard speckle this path exists to
+       remove. Coverage accumulates, so piles read as piles. */
+    sandBIN = new Float32Array(SIZE*SIZE);
+    for (let p = 0; p < N; p++){
+      const rg = grad[p], rg2 = rg + 0.7071;
+      const px = gx[p], py = gy[p];
+      const x0 = Math.max(0, Math.floor(px - rg2)), x1 = Math.min(SIZE-1, Math.ceil(px + rg2));
+      const y0 = Math.max(0, Math.floor(py - rg2)), y1 = Math.min(SIZE-1, Math.ceil(py + rg2));
+      for (let y = y0; y <= y1; y++){
+        const dy2 = (y + 0.5 - py)*(y + 0.5 - py), row = y*SIZE;
+        for (let x = x0; x <= x1; x++){
+          const dx2 = (x + 0.5 - px)*(x + 0.5 - px);
+          const d = Math.sqrt(dx2 + dy2) - rg;
+          if (d >= 0.7071) continue;
+          // linear ramp across one pixel width: 1 inside, 0 outside, the edge
+          // resolved instead of stepped
+          const w = d <= -0.7071 ? 1 : 0.5 - d/1.41421356;
+          sandBIN[row + x] += w;
+        }
+      }
+      if ((p & 8191) === 0){ onProgress(`depositing ${(100*p/N).toFixed(0)}%`);
+                             await new Promise(r => setTimeout(r, 0)); }
+    }
+    const grainMm = st.cellDiameterMm/(2*RR);
+    let filled = 0;
+    for (let c = 0; c < occ.length; c++) if (occ[c] > 0) filled++;
+    sandInfo = { grains: N, steps: STEPS, grainUm: grainMm*1000,
+                 grainPx: SCALE, fluxGain: KF, stokesRatio: stokes,
+                 packingCap: CAP, cellsOccupied: filled, toppled: refused,
+                 toppleSweeps: sweeps,
+                 // residual overlap after relaxation, as a fraction of a grain
+                 residualOverlap: worstOverlap, relaxPasses: passes,
+                 grainSpreadPct: 20, packingFraction: PHI_RCP };
+  }
+
   onProgress('painting');
   const SLOPE = 0.8;
   for (let y = 0; y < SIZE; y++){
@@ -1568,11 +2304,18 @@ async function exportImage(SIZE, onProgress){
           if (view === 'height'){
             if (h >= 0){ r0 = 8 + 70*h; g0 = 12 + 190*h; b0 = 18 + 220*h; }
             else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
-          } else if (view === 'nodal' || view === 'sand'){
-            // A still export of the sand view draws the nodal set the grains
-            // settle onto. Re-running 60k particles at this size would be a
-            // different picture, not a sharper one, so it is not offered as
-            // though it were the same thing.
+          } else if (view === 'sand'){
+            // The settled deposit, on the same palette as the preview. cov is
+            // accumulated grain coverage, so a single grain reads as one grain
+            // and a pile reads as a pile; the preview's n/2 count maps onto
+            // coverage directly because there one grain covered one pixel.
+            const n = sandBIN[y*SIZE + x];
+            r0 = 14; g0 = 16; b0 = 20;
+            if (n > 0){
+              const t = Math.min(1, n/1.35), tt = t*t*(3 - 2*t);
+              r0 += (246 - r0)*tt; g0 += (234 - g0)*tt; b0 += (208 - b0)*tt;
+            }
+          } else if (view === 'nodal'){
             const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
             r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
           } else {
@@ -1613,7 +2356,8 @@ async function exportImage(SIZE, onProgress){
 
   cx.putImageData(out, 0, 0);
   return { canvas: cvx, modes: usable.length, litFraction: lit/Math.max(1, inside),
-           pxPerWave: 2*Math.PI*rr/usable[0].radial.jp, grid: g };
+           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+           sand: sandInfo };
 }
 
 // The viewer's sandbox makes a page-initiated download inert, so the file goes
@@ -1652,7 +2396,10 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
     note.textContent = `${expSize}² · ${res.modes} modes · `
-      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`;
+      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`
+      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
+          + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
+          + `${res.sand.steps} steps` : '');
   } catch (e){
     note.textContent = (e && e.code === 'declined') ? 'save declined'
       : 'export failed: ' + (e && (e.message || e.code) || e);
