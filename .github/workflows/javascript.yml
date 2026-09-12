@@ -1,0 +1,39 @@
+# The two JavaScript kernels in this repository -- the boundary kernel, and the
+# Faraday kernel embedded in cymatic.html -- had test suites that nothing ran.
+# A suite CI never executes is not a gate, it is a file.
+#
+# This lives in its own workflow rather than as a job in python-app.yml because
+# that one triggers only on `branches: [main]`, so it would not fire on a pull
+# request opened against any other base -- which is how work reaches main here.
+# The trigger below matches submit-pypi.yml's `branches: ["**"]`, so these
+# suites gate every pull request. Putting the JS job inside python-app.yml
+# instead would have shipped a gate that never fired on the branch flow in use.
+#
+# Neither suite needs a network or an install. faraday/reference.json is checked
+# in -- computed once by mpmath, scipy.special and scipy.optimize.brentq -- so
+# CI compares against fixed numbers rather than recomputing them with the code
+# under test.
+name: javascript
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  kernels:
+    name: kernel suites
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Boundary kernel
+      run: node boundary/boundarykernel.test.js
+    - name: Faraday kernel (sliced out of cymatic.html)
+      run: node faraday/check-kernel.mjs
