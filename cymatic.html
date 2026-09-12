@@ -1932,6 +1932,362 @@ async function exportImage(SIZE, onProgress){
   }
   const inv = 1/mx, ginv = 1/gmx;
 
+  /* ---- sand at export resolution ----------------------------------------
+     The sand view used to export as the nodal set, with a comment of mine
+     saying that re-running the grains at this size "would be a different
+     picture, not a sharper one". That was wrong, and it is the whole reason
+     this path exists: it is a different picture only if the sprinkle changes
+     with the pixel grid. Hold the sprinkle fixed as a physical object and
+     sample the drift field at the export pitch, and it is the SAME experiment
+     resolved finer -- which is what a high-definition render of it means.
+
+     What is held fixed:
+
+       - the grain count. The same 60000 grains the preview carries.
+       - the grain SIZE, in millimetres. The preview draws one grain per pixel
+         on a disc 2*RR = 374 px across, so a grain is cell_d/374 wide -- 64.8
+         um for the 24.25 mm cell, which is sieved-fine-sand scale. At this
+         export that same grain is rr/RR = SCALE pixels across and is drawn as
+         a resolved, anti-aliased disc rather than a single pixel.
+       - the dynamics. Velocities stay in preview-pixel units and the position
+         update carries the SCALE, so the per-step rule is identical to the
+         preview's: same DRIFT, same DAMP, same agitation. The one thing that
+         is genuinely better is the field the grains read, which is evaluated
+         at the export grid instead of being interpolated up from 381 px.
+
+     A step moves a grain at most DRIFT*DAMP*SCALE pixels, and at 111 Hz the
+     finest structure spans 2*pi*rr/14 = 860 px, so a step is under 2% of a
+     wavelength -- the trajectory is resolved, not leapt over. */
+  let sandBIN = null, sandInfo = null;
+  if (view === 'sand'){
+    const SCALE = rr/RR;
+    onProgress('building the transport field');
+    const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
+    // Same Stokes-layer transport the preview builds: -KI*grad(I) + KF*flux,
+    // with KF set by the state's own Stokes ratio, then unit-normalised.
+    const stokes = st.damping ? st.damping.stokesDepth/st.wavelength : 0.02;
+    const KI = 1, KF = 2.2*Math.min(4, stokes/0.014);
+    let dmax = 1e-9;
+    for (let y = 0; y < SIZE; y++){
+      for (let x = 0; x < SIZE; x++){
+        const v = evalAt(x + off - cc, y + off - cc);
+        if (!v) continue;
+        const Re = v.Re*inv, Im = v.Im*inv;
+        const gRx = v.gRx*inv, gRy = v.gRy*inv, gIx = v.gIx*inv, gIy = v.gIy*inv;
+        const dIx = 2*(Re*gRx + Im*gIx), dIy = 2*(Re*gRy + Im*gIy);
+        const fx = Re*gIx - Im*gRx,      fy = Re*gIy - Im*gRy;
+        const px = -KI*dIx + KF*fx, py = -KI*dIy + KF*fy;
+        const i = y*SIZE + x;
+        PGXe[i] = px; PGYe[i] = py;
+        const d = Math.hypot(px, py); if (d > dmax) dmax = d;
+      }
+      if ((y & 255) === 0){ onProgress(`transport field ${(100*y/SIZE).toFixed(0)}%`);
+                            await new Promise(r => setTimeout(r, 0)); }
+    }
+    const dinv = 1/dmax;
+    for (let i = 0; i < PGXe.length; i++){ PGXe[i] *= dinv; PGYe[i] *= dinv; }
+
+    // Sprinkle: uniform on the disc, area-correct via sqrt of the uniform.
+    const N = NP;
+    const rg0 = Math.max(0.5, SCALE/2);        // MEAN grain radius in export pixels
+    /* Sieved sand is not monodisperse, and identical discs read as beads
+       rather than grains however well they are packed. A sieve cut passes a
+       spread of roughly +/-20% about its nominal size, so each grain carries
+       its own radius on that spread. It changes the packing as well as the
+       look: unequal discs fill their gaps, which is why random close packing
+       of a polydisperse layer is denser than of a monodisperse one. */
+    const grad = new Float32Array(N);
+    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*Math.random());
+    const gx = new Float32Array(N), gy = new Float32Array(N),
+          gvx = new Float32Array(N), gvy = new Float32Array(N);
+    const ccE = cc - off;                       // disc centre in image pixels
+    for (let p = 0; p < N; p++){
+      const a = Math.random()*Math.PI*2, rad = Math.sqrt(Math.random())*(rr - 2);
+      gx[p] = ccE + rad*Math.cos(a); gy[p] = ccE + rad*Math.sin(a);
+    }
+    const cellPx = Math.max(1, SCALE);
+    const gw = Math.ceil(SIZE/cellPx);
+    const occ = new Float32Array(gw*gw);
+    /* Monolayer capacity, and the packing fraction is not 1.
+
+       CAP was first written as cell area over grain area, which permits an
+       area fraction of exactly 1.0 -- a coverage no arrangement of discs
+       reaches. Hexagonal packing caps at pi/(2*sqrt3) = 0.9069 and a
+       disordered layer that has simply come to rest sits near random close
+       packing, about 0.84. So the toppling was filling cells beyond any
+       achievable density, and the contact relaxation below could not converge
+       because no overlap-free configuration existed: 60 passes left 9% of a
+       diameter still overlapping, which read as merged grains rather than
+       touching ones.
+
+       PHI_RCP is the measured random-close-packing fraction for discs, not a
+       tuning constant, and with it the relaxation has an attainable target. */
+    const PHI_RCP = 0.84;
+    const CAP = PHI_RCP*(cellPx*cellPx)/(Math.PI*rg0*rg0);
+    const cellOf = (x, y) => {
+      const cxi = (x/cellPx)|0, cyi = (y/cellPx)|0;
+      if (cxi < 0 || cyi < 0 || cxi >= gw || cyi >= gw) return -1;
+      return cyi*gw + cxi;
+    };
+    const STEPS = 520;
+    const jitter = AGIT*agitation;
+    let refused = 0;
+    for (let step = 0; step < STEPS; step++){
+      for (let p = 0; p < N; p++){
+        const x0 = gx[p], y0 = gy[p];
+        const xi = x0|0, yi = y0|0;
+        if (xi < 0 || yi < 0 || xi >= SIZE || yi >= SIZE) continue;
+        const i = yi*SIZE + xi;
+        const v = evalAt(xi + off - cc, yi + off - cc);
+        const u = v ? v.Re*inv*gain : 0;
+        const a = Math.abs(u)*jitter;
+        let vx = (gvx[p] + DRIFT*PGXe[i]*gain + (Math.random()-0.5)*a)*DAMP;
+        let vy = (gvy[p] + DRIFT*PGYe[i]*gain + (Math.random()-0.5)*a)*DAMP;
+        let x = x0 + vx*SCALE, y = y0 + vy*SCALE;
+        const rx = x - ccE, ry = y - ccE, r = Math.hypot(rx, ry);
+        if (r > rr - 1.5*SCALE){
+          const k = (rr - 1.5*SCALE)/r; x = ccE + rx*k; y = ccE + ry*k;
+          vx *= -0.25; vy *= -0.25;
+        }
+        gx[p] = x; gy[p] = y; gvx[p] = vx; gvy[p] = vy;
+      }
+      if ((step & 31) === 0){ onProgress(`settling grains ${(100*step/STEPS).toFixed(0)}%`);
+                              await new Promise(r => setTimeout(r, 0)); }
+    }
+
+    /* Grains occupy space, and that is what gives a Chladni ridge a width.
+
+       Two wrong versions of this are worth recording, because the measurements
+       are what settled it.
+
+       With no exclusion at all the transport is unopposed and every grain
+       converges onto the exact minimum: at 3840 that put 60000 grains into
+       4.45% of the disc, stacked about ten deep, leaving FIVE isolated grains
+       on the centre row where there should be continuous lines. The preview
+       hides the same collapse because its minima are a pixel or two wide to
+       begin with, so a ten-deep pile still reads as one bright pixel; at ten
+       times the linear resolution it reads as dust.
+
+       Refusing a move INTO a full cell during transport was worse, and it was
+       wrong physics rather than a wrong constant: 27 million refusals and a
+       deposit at 40.2% coverage, which is what an unmigrated sprinkle looks
+       like. Grains in flight push past each other -- exclusion governs where
+       they can come to REST, not where they can pass.
+
+       So transport runs free, and the pile then topples. Any cell holding more
+       than a monolayer sends its surplus to the nearest cell with room, which
+       is the angle-of-repose relaxation written at grain scale. CAP is not a
+       tuned number: it is cell area over grain area, the densest a single
+       layer of discs packs on a square cell. The ridge width that comes out is
+       whatever grain conservation demands -- no free parameter sets it. */
+    onProgress('toppling to the angle of repose');
+    for (let p = 0; p < N; p++){
+      const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
+    }
+    const bucket = new Array(gw*gw);
+    for (let p = 0; p < N; p++){
+      const c = cellOf(gx[p], gy[p]); if (c < 0) continue;
+      (bucket[c] || (bucket[c] = [])).push(p);
+    }
+    let moved = 0, sweeps = 0;
+    for (; sweeps < 64; sweeps++){
+      let any = 0;
+      for (let c = 0; c < occ.length; c++){
+        while (occ[c] > CAP){
+          const list = bucket[c];
+          if (!list || !list.length){ occ[c] = CAP; break; }
+          const p = list.pop();
+          const cx0 = c % gw, cy0 = (c/gw)|0;
+          // nearest cell with room, searched outward ring by ring
+          let dest = -1;
+          for (let ring = 1; ring < gw && dest < 0; ring++){
+            for (let dyr = -ring; dyr <= ring && dest < 0; dyr++){
+              for (let dxr = -ring; dxr <= ring; dxr++){
+                if (Math.max(Math.abs(dxr), Math.abs(dyr)) !== ring) continue;
+                const nx = cx0 + dxr, ny = cy0 + dyr;
+                if (nx < 0 || ny < 0 || nx >= gw || ny >= gw) continue;
+                const nc = ny*gw + nx;
+                if (occ[nc] + 1 > CAP) continue;
+                // it has to be inside the cell, not just inside the grid
+                const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
+                if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
+                dest = nc; break;
+              }
+            }
+          }
+          if (dest < 0){ occ[c] = CAP; break; }
+          occ[c] -= 1; occ[dest] += 1;
+          (bucket[dest] || (bucket[dest] = [])).push(p);
+          const dx2 = dest % gw, dy2 = (dest/gw)|0;
+          gx[p] = (dx2 + Math.random())*cellPx;
+          gy[p] = (dy2 + Math.random())*cellPx;
+          moved++; any = 1;
+        }
+      }
+      if (!any) break;
+      onProgress(`toppling, sweep ${sweeps+1}`);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    refused = moved;
+
+    /* Grains rest in contact, and neither of the two placements I tried put
+       them there.
+
+       Toppling drops a grain at a uniform random position in its destination
+       cell, and since nearly every grain topples (54955 of 60000 at 3840) that
+       randomises the whole deposit: the ridge read as scattered beads with
+       dark gaps, at about half the coverage of a settled layer. Placing them
+       at the cell centre with a small nudge instead fixed the density and
+       produced a visible SQUARE LATTICE -- rows and columns of beads, which is
+       worse, because it is an artefact of the occupancy grid rather than
+       anything about sand.
+
+       What removes both is the physics the placements were standing in for:
+       grains cannot overlap, so the deposit relaxes until they touch. Each
+       pass pushes any pair closer than a diameter apart along their line of
+       centres by half the overlap, over a spatial hash at the grain pitch.
+       That is random close packing -- dense, disordered, no lattice, and no
+       free parameter beyond the grain diameter itself. Eight passes; the
+       overlap remaining is measured and reported rather than assumed gone. */
+    /* Pass ceiling, set by looking rather than by a convergence criterion.
+
+       The residual overlap falls monotonically to about 10% by pass 90 and
+       then bounces in a 4-11% band out to 260, so there is no fixed point to
+       converge to and the loop keeps the best configuration it has seen. The
+       question is only whether the deeper minimum shows: rendered at 3840 and
+       compared at 1:1, the 90-pass deposit at 10.3% residual overlap is
+       indistinguishable from the 260-pass one at 3.8% -- same dense disordered
+       packing, same grain texture -- for 60 s against 78 s. So 90.
+
+       The cost is set by the grain count, not the pixel count, which is why
+       this is the same budget at every export size. */
+    const PASS_CAP = 90;
+    onProgress('relaxing the deposit to contact');
+    const hw = gw, hcell = cellPx;
+    const head = new Int32Array(hw*hw).fill(-1), next = new Int32Array(N).fill(-1);
+    const rehash = () => {
+      head.fill(-1);
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        if (cxi < 0 || cyi < 0 || cxi >= hw || cyi >= hw) continue;
+        const c = cyi*hw + cxi; next[q] = head[c]; head[c] = q;
+      }
+    };
+    /* Run to convergence rather than for a fixed count. Eight passes left a
+       worst overlap of 0.307 of a diameter -- grains still visibly merged --
+       so the loop now stops when the worst remaining overlap is under 2% of a
+       diameter, with a hard ceiling so a pathological deposit cannot hang the
+       export. The figure reached is reported either way. */
+    /* Under-relaxed, because the full correction oscillates.
+
+       Resolving each pair by its whole overlap looks right and is not: a grain
+       touching five neighbours takes five full corrections in one pass and
+       overshoots them all. The trace at 1024 showed it plainly -- worst
+       overlap fell 100% -> 52 -> 37 -> 28 -> 22 -> 18 -> 15 -> 13 -> 11 -> 10
+       -> 9% by pass 49 and then CLIMBED back to 11% and 13%. That is not slow
+       convergence, it is divergence after a minimum, and stopping at a fixed
+       pass count would have landed wherever the oscillation happened to be.
+
+       Applying half of each correction removes the overshoot, which is the
+       standard remedy for simultaneous constraint projection. The loop keeps
+       the best configuration it has seen rather than the last, so a late
+       oscillation cannot undo a good deposit. */
+    /* An active set -- process only grains that overlapped last pass or sit
+       next to one that moved -- was tried here and removed. It is an exact
+       restriction, but it saves nothing: the trace reported "60000 grains in
+       play" on every pass to 260 and the export time moved from 47.7 s to
+       48.7 s, slightly WORSE for the neighbour-marking it adds. At this
+       packing the layer is permanently frustrated, so no grain ever comes to
+       rest and there is no inactive set to skip. Recorded because it is the
+       obvious optimisation to reach for and the measurement refuses it. */
+    const OMEGA = 0.5;
+    let worstOverlap = 0, passes = 0, best = Infinity;
+    const bx = new Float32Array(N), by = new Float32Array(N);
+    for (; passes < PASS_CAP; passes++){
+      rehash();
+      worstOverlap = 0;
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        for (let ddy = -1; ddy <= 1; ddy++) for (let ddx = -1; ddx <= 1; ddx++){
+          const nx = cxi + ddx, ny = cyi + ddy;
+          if (nx < 0 || ny < 0 || nx >= hw || ny >= hw) continue;
+          for (let o = head[ny*hw + nx]; o >= 0; o = next[o]){
+            if (o <= q) continue;
+            const ex = gx[o] - gx[q], ey = gy[o] - gy[q];
+            const dmin = grad[q] + grad[o];
+            const d2 = ex*ex + ey*ey;
+            if (d2 >= dmin*dmin || d2 === 0) continue;
+            const d = Math.sqrt(d2), ov = dmin - d;
+            if (ov/dmin > worstOverlap) worstOverlap = ov/dmin;
+            // split the correction by the inverse of area, so a small grain
+            // is displaced more than the one it is wedged against
+            const aq = grad[q]*grad[q], ao = grad[o]*grad[o], tot = aq + ao;
+            const ux = ex/d, uy = ey/d, mv = ov*OMEGA;
+            gx[q] -= ux*mv*(ao/tot); gy[q] -= uy*mv*(ao/tot);
+            gx[o] += ux*mv*(aq/tot); gy[o] += uy*mv*(aq/tot);
+          }
+        }
+      }
+      for (let q = 0; q < N; q++){
+        const rx = gx[q] - ccE, ry = gy[q] - ccE, r = Math.hypot(rx, ry);
+        const lim = rr - grad[q];
+        if (r > lim){ const k = lim/r; gx[q] = ccE + rx*k; gy[q] = ccE + ry*k; }
+      }
+      if (worstOverlap < best){
+        best = worstOverlap;
+        bx.set(gx); by.set(gy);
+      }
+      if (worstOverlap < 0.02) { passes++; break; }
+      if ((passes & 3) === 0){
+        onProgress(`relaxing to contact, pass ${passes+1} (overlap `
+          + `${(100*worstOverlap).toFixed(0)}%)`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    // keep the best configuration seen, not the last one
+    if (best < worstOverlap){ gx.set(bx); gy.set(by); worstOverlap = best; }
+
+    /* Deposit. Each grain is an opaque disc of radius SCALE/2, splatted with
+       analytic edge coverage: a pixel's weight is how much of it the disc
+       covers, approximated by the disc's signed distance across one pixel.
+       Binning to the nearest integer pixel instead -- which is what the
+       preview does, because there a grain IS one pixel -- would throw the
+       resolution away again and put back the hard speckle this path exists to
+       remove. Coverage accumulates, so piles read as piles. */
+    sandBIN = new Float32Array(SIZE*SIZE);
+    for (let p = 0; p < N; p++){
+      const rg = grad[p], rg2 = rg + 0.7071;
+      const px = gx[p], py = gy[p];
+      const x0 = Math.max(0, Math.floor(px - rg2)), x1 = Math.min(SIZE-1, Math.ceil(px + rg2));
+      const y0 = Math.max(0, Math.floor(py - rg2)), y1 = Math.min(SIZE-1, Math.ceil(py + rg2));
+      for (let y = y0; y <= y1; y++){
+        const dy2 = (y + 0.5 - py)*(y + 0.5 - py), row = y*SIZE;
+        for (let x = x0; x <= x1; x++){
+          const dx2 = (x + 0.5 - px)*(x + 0.5 - px);
+          const d = Math.sqrt(dx2 + dy2) - rg;
+          if (d >= 0.7071) continue;
+          // linear ramp across one pixel width: 1 inside, 0 outside, the edge
+          // resolved instead of stepped
+          const w = d <= -0.7071 ? 1 : 0.5 - d/1.41421356;
+          sandBIN[row + x] += w;
+        }
+      }
+      if ((p & 8191) === 0){ onProgress(`depositing ${(100*p/N).toFixed(0)}%`);
+                             await new Promise(r => setTimeout(r, 0)); }
+    }
+    const grainMm = st.cellDiameterMm/(2*RR);
+    let filled = 0;
+    for (let c = 0; c < occ.length; c++) if (occ[c] > 0) filled++;
+    sandInfo = { grains: N, steps: STEPS, grainUm: grainMm*1000,
+                 grainPx: SCALE, fluxGain: KF, stokesRatio: stokes,
+                 packingCap: CAP, cellsOccupied: filled, toppled: refused,
+                 toppleSweeps: sweeps,
+                 // residual overlap after relaxation, as a fraction of a grain
+                 residualOverlap: worstOverlap, relaxPasses: passes,
+                 grainSpreadPct: 20, packingFraction: PHI_RCP };
+  }
+
   onProgress('painting');
   const SLOPE = 0.8;
   for (let y = 0; y < SIZE; y++){
@@ -1948,11 +2304,18 @@ async function exportImage(SIZE, onProgress){
           if (view === 'height'){
             if (h >= 0){ r0 = 8 + 70*h; g0 = 12 + 190*h; b0 = 18 + 220*h; }
             else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
-          } else if (view === 'nodal' || view === 'sand'){
-            // A still export of the sand view draws the nodal set the grains
-            // settle onto. Re-running 60k particles at this size would be a
-            // different picture, not a sharper one, so it is not offered as
-            // though it were the same thing.
+          } else if (view === 'sand'){
+            // The settled deposit, on the same palette as the preview. cov is
+            // accumulated grain coverage, so a single grain reads as one grain
+            // and a pile reads as a pile; the preview's n/2 count maps onto
+            // coverage directly because there one grain covered one pixel.
+            const n = sandBIN[y*SIZE + x];
+            r0 = 14; g0 = 16; b0 = 20;
+            if (n > 0){
+              const t = Math.min(1, n/1.35), tt = t*t*(3 - 2*t);
+              r0 += (246 - r0)*tt; g0 += (234 - g0)*tt; b0 += (208 - b0)*tt;
+            }
+          } else if (view === 'nodal'){
             const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
             r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
           } else {
@@ -1993,7 +2356,8 @@ async function exportImage(SIZE, onProgress){
 
   cx.putImageData(out, 0, 0);
   return { canvas: cvx, modes: usable.length, litFraction: lit/Math.max(1, inside),
-           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g };
+           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+           sand: sandInfo };
 }
 
 // The viewer's sandbox makes a page-initiated download inert, so the file goes
@@ -2032,7 +2396,10 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
     note.textContent = `${expSize}² · ${res.modes} modes · `
-      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`;
+      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`
+      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
+          + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
+          + `${res.sand.steps} steps` : '');
   } catch (e){
     note.textContent = (e && e.code === 'declined') ? 'save declined'
       : 'export failed: ' + (e && (e.message || e.code) || e);
