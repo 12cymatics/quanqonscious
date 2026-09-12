@@ -557,7 +557,12 @@ function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
     let scale = 0;
     for (let n = 0; n < amp.length; n++)
       scale = Math.max(scale, Math.abs(amp[n]*besselJ(m, zeros[n])));
-    out.push({ w2: root, omega: Math.sqrt(root), hz: Math.sqrt(root)/(2*Math.PI),
+    out.push({ // Interlacing gives the radial index for free: this root lies
+               // strictly between free roots i+1 and i+2, so it is the
+               // (i+1)-th pinned mode. No counting needed, and no J' zero to
+               // count against -- a pinned mode does not sit on one.
+               index: i + 1,
+               w2: root, omega: Math.sqrt(root), hz: Math.sqrt(root)/(2*Math.PI),
                // The parametric drive enters through the gravity term, so the
                // modal projection of a*k*tanh(kh) is this weighted mean -- not
                // a single wavenumber, because a pinned mode does not have one.
@@ -624,6 +629,55 @@ const QUAD_R = 2048;
 function radialProfile(m, jp){                 // psi(r) on [0,R], normalised r
   const out = new Float64Array(QUAD_R + 1);
   for (let i = 0; i <= QUAD_R; i++) out[i] = besselJ(m, jp*i/QUAD_R);
+  return out;
+}
+/* The same profile for a pinned mode, which is a superposition rather than one
+   Bessel function. The basis evaluation J_m(z_n rho_i) depends only on the
+   angular order, the basis index and the radius -- never on WHICH pinned root
+   is being built -- so it is tabulated once per angular order and every root at
+   that order is then a dot product against it. Without that the three roots
+   kept per order would each re-evaluate the same 128 x 2049 Bessel table.
+   Nothing is truncated: every basis term is summed. */
+const PIN_BASIS_TABLE = new Map();
+function pinnedBasisTable(m, zeros){
+  const key = m + ':' + zeros.length + ':' + zeros[zeros.length-1].toFixed(6);
+  const hit = PIN_BASIS_TABLE.get(key); if (hit) return hit;
+  const N = zeros.length, tab = new Float64Array(N*(QUAD_R + 1));
+  for (let n = 0; n < N; n++){
+    const base = n*(QUAD_R + 1), z = zeros[n];
+    for (let i = 0; i <= QUAD_R; i++) tab[base + i] = besselJ(m, z*i/QUAD_R);
+  }
+  if (PIN_BASIS_TABLE.size > 20) PIN_BASIS_TABLE.delete(PIN_BASIS_TABLE.keys().next().value);
+  PIN_BASIS_TABLE.set(key, tab); return tab;
+}
+/* The finest radial structure a state contains, which is what every
+   resolution gate in the page has to measure against. A free mode has one J'
+   zero and that IS its finest structure. A pinned mode is a superposition, so
+   it is the highest basis zero still carrying amplitude -- taken as the
+   largest z_n above 1e-6 of the peak coefficient. That threshold is a
+   statement about what is drawable at a given pixel pitch, not about the mode:
+   the eigenvalue solve and the drawn surface both keep every term.
+
+   Defined once because three places need it -- the preview gate, the deck
+   readout, and the 4K export -- and two of them read s.radial.jp directly
+   before this existed, which is null for a pinned mode: the inspector threw
+   on jp.toFixed(5) and the export gate compared against null. */
+function finestZeroOf(radial){
+  if (!radial.pinned) return radial.jp;
+  const z = radial.pinnedZeros, a = radial.pinned.coefficients;
+  let amax = 0;
+  for (let n = 0; n < a.length; n++) amax = Math.max(amax, Math.abs(a[n]));
+  let finest = z[0];
+  for (let n = 0; n < a.length; n++)
+    if (Math.abs(a[n]) > 1e-6*amax) finest = Math.max(finest, z[n]);
+  return finest;
+}
+function radialProfilePinned(m, zeros, coeffs){
+  const tab = pinnedBasisTable(m, zeros), out = new Float64Array(QUAD_R + 1);
+  for (let n = 0; n < zeros.length; n++){
+    const base = n*(QUAD_R + 1), a = coeffs[n];
+    for (let i = 0; i <= QUAD_R; i++) out[i] += a*tab[base + i];
+  }
   return out;
 }
 function simpsonR(fn){                          // INT_0^1 fn(rho) rho drho
@@ -898,9 +952,13 @@ function resolvePatternState(o){
   const omegaTarget = 2*Math.PI*responseHz;
 
   const warnings = [];
-  if (rim === 'pinned') warnings.push({ hard: true, text:
-    'Pinned contact line couples the Bessel modes (Kidambi 2013; Shao et al. 2021; Chu et al. 2026). ' +
-    'The mode below is the FREE J′(kR)=0 basis shown as a diagnostic — it is not a pinned eigenmode solve.' });
+  if (rim === 'pinned') warnings.push({ hard: false, text:
+    'Pinned contact line: solved, not approximated. The sidewall still forces the '
+    + 'J′(kR)=0 basis, so η(R)=0 cannot be met by one mode — each state below is the '
+    + 'edge-constrained superposition (Benjamin & Scott 1979; Graham-Eagle 1983), from a '
+    + '128-term secular solve Richardson-extrapolated on its measured N⁻² rate. '
+    + 'This is the fully pinned LIMIT: finite contact-line mobility and angle hysteresis '
+    + '(Kidambi 2013; Shao 2021; Chu 2026) are a different model and are not computed here.' });
   if (cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!cell.atlas) warnings.push({ hard: false, text:
@@ -950,7 +1008,59 @@ function resolvePatternState(o){
   orderScore.sort((a, b) => b.growth - a.growth);
   const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
 
-  for (const m of keptOrders)
+  /* The pinned branch. Only the KEPT orders get a pinned solve: the secular
+     problem needs the whole basis, so it costs about 40 ms per angular order,
+     and the ranking pass above would run it up to 192 times at 5 kHz.
+
+     Ranking on the free spectrum is a BRACKET, not an approximation of the
+     answer: Rayleigh interlacing puts the n-th pinned root strictly between
+     the n-th and (n+1)-th free roots, so a free-spectrum ranking orders the
+     angular orders by an interval that provably contains the pinned value. It
+     can still reorder two orders whose intervals overlap, and that is a
+     selection effect on WHICH sixteen orders are kept, not on any value
+     reported -- every kept order's pinned frequency is then solved exactly. */
+  const PINNED_BASIS = 128;
+  const pinnedCache = new Map();
+  const pinnedFor = m => {
+    if (pinnedCache.has(m)) return pinnedCache.get(m);
+    let v = null;
+    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, RADIAL_ROOTS + 4); }
+    catch (e){ v = { failed: e.message }; }
+    pinnedCache.set(m, v); return v;
+  };
+
+  for (const m of keptOrders){
+    if (rim === 'pinned'){
+      const sp = pinnedFor(m);
+      if (!sp || sp.failed || !sp.pinned.length){
+        ordersWithoutMode++;
+        if (sp && sp.failed) warnings.push({ hard: true, text:
+          `The pinned solve failed at m = ${m}: ${sp.failed} This order is `
+          + `dropped rather than filled in with a free-basis mode.` });
+        continue;
+      }
+      const near = sp.pinned.slice()
+        .sort((a, b) => Math.abs(a.omega - omegaTarget) - Math.abs(b.omega - omegaTarget))
+        .slice(0, RADIAL_ROOTS);
+      for (const pm of near){
+        // A pinned mode has no single wavenumber. Damping and the plate
+        // transfer need one, so they take the wavenumber whose k tanh(kh)
+        // equals the mode's own modal projection -- the same quantity the
+        // parametric drive couples through -- rather than a mode picked out
+        // of the basis and called representative.
+        const kEq = pm.kEquiv;
+        const g = dampingRate(kEq, pm.omega, nu, hM);
+        const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv), pm.kTanhEff, 2*Math.PI*f);
+        modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
+          mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
+          gamma: g.total, growth: mth.growth, eps: mth.eps,
+          accelThreshold: mth.accelThreshold,
+          phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+          coeff: plateTransfer(kEq, 2*Math.PI*f, rho, hM).magnitude,
+          pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS });
+      }
+      continue;
+    }
     for (const z of jpZerosNearN(m, xStar, RADIAL_ROOTS)){
       const k = z/R, w = omegaOf(k, sigma, rho, hM);
       const g = dampingRate(k, w, nu, hM);
@@ -964,6 +1074,7 @@ function resolvePatternState(o){
         // the base transfer enters here, once, inside the coefficient
         coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
     }
+  }
   // Sort FIRST, then take the growing set from the sorted array. Filtering
   // before the sort kept insertion order, so the "strongest" modes were really
   // just the lowest angular orders.
@@ -978,7 +1089,9 @@ function resolvePatternState(o){
   let competition = null;
   if (modes.length){
     const N = modes.length;
-    const prof = modes.map(t => radialProfile(t.m, t.jp));
+    const prof = modes.map(t => t.pinned
+      ? radialProfilePinned(t.m, t.pinnedZeros, t.pinned.coefficients)
+      : radialProfile(t.m, t.jp));
     const norm = modes.map((t, i) => {
       const sq = new Float64Array(QUAD_R + 1);
       for (let q = 0; q <= QUAD_R; q++) sq[q] = prof[i][q]*prof[i][q];
@@ -1036,6 +1149,34 @@ function resolvePatternState(o){
     if (odd) warnings.push({ hard: false, text:
       `${fold}-fold is odd, so it is not 2m under the paper's convention (6-fold = m 3). ` +
       `Drawn as m = ${fold}; treat the angular order as unresolved.` });
+    /* The radial structure for this fold. Under a pinned contact line the
+       atlas-driven states must be edge-constrained too -- solving the spectrum
+       and then drawing free modes for every frequency the atlas covers would
+       leave the control working only above 199 Hz, which is not the control
+       working. The pinned root nearest resonance is used, and its damping,
+       growth and phase come from the same modal projection the mode assembly
+       above uses, so the two paths agree by construction. */
+    if (rim === 'pinned'){
+      const sp = pinnedFor(m);
+      if (!sp || sp.failed || !sp.pinned.length){
+        warnings.push({ hard: true, text:
+          `No pinned mode exists for m = ${m} at this frequency`
+          + (sp && sp.failed ? `: ${sp.failed}` : '.')
+          + ` The ${fold}-fold state is dropped rather than drawn with a free-basis mode.` });
+        return;
+      }
+      const pm = sp.pinned.slice().sort((a, b) =>
+        Math.abs(a.omega - omegaTarget) - Math.abs(b.omega - omegaTarget))[0];
+      const kEq = pm.kEquiv;
+      const g = dampingRate(kEq, pm.omega, nu, hM);
+      states.push({ fold, m, weight,
+        phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+        radial: { m, n: pm.index, jp: null, k: kEq, hz: pm.hz,
+                  mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
+                  gamma: g.total,
+                  pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS } });
+      return;
+    }
     // radial root from theory: the J' zero nearest resonance at this m
     const z = jpZeroNear(m, xStar);
     if (z == null){
@@ -1076,7 +1217,8 @@ function resolvePatternState(o){
       states.push({ fold: t.m*2, m: t.m,
                     weight: Math.max(1e-3, (won ? t.amp : Math.abs(t.growth))/amax),
                     phi: t.phi || 0,
-                    radial: { ...t, n: radialIndexOf(t.m, t.jp) }, theoryOnly: true });
+                    radial: { ...t, n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) },
+                    theoryOnly: true });
     warnings.push({ hard: false, text: unstable.length
       ? `Theory only: ${unstable.length} of ${modes.length} modes have positive Mathieu `
         + `growth, all retained; the cubic overlap competition leaves `
@@ -1112,7 +1254,8 @@ function resolvePatternState(o){
       textureConc: rec.hints[3], radialStd: rec.hints[4], entropy: rec.hints[5],
       peaks: rec.peaks, angHarm: rec.angHarm
     } : null,
-    nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t, n: radialIndexOf(t.m, t.jp) })),
+    nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t,
+      n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) })),
     transitionStudy: TRANSITION[f] || null,
     water: { sigma, rho, mu, nu },
     wavenumber: kStar, wavelength, cellDiameterMm: cell.d,
@@ -1247,11 +1390,21 @@ function buildSurface(state){
   ETA.fill(0); NX.fill(0); NY.fill(0); IMF.fill(0); GIX.fill(0); GIY.fill(0);
   let unresolved = 0, drawn = 0;
   for (const s of state.states){
-    const pxPerWave = 2*Math.PI*RR/s.radial.jp;
+    /* The resolution gate needs the finest structure the state contains. A
+       free mode has one J' zero and that sets it. A pinned mode is a
+       superposition, so its finest structure is the HIGHEST basis zero
+       carrying meaningful amplitude -- taken here as the largest z_n whose
+       coefficient exceeds 1e-6 of the largest, which is a statement about
+       what is drawable, not about the mode: the eigenvalue and the drawn
+       surface both keep every term. */
+    const pin = s.radial.pinned;
+    const pxPerWave = 2*Math.PI*RR/finestZeroOf(s.radial);
     s.pxPerWave = pxPerWave;
     if (pxPerWave < RES_GATE){ unresolved += s.weight*s.weight; s.gated = true; continue; }
     s.gated = false; drawn++;
-    const sh = shapeOf(s.m, s.radial.jp), m = s.m, w = s.weight;
+    const sh = pin ? shapeOfPinned(s.m, s.radial.pinnedZeros, pin.coefficients)
+                   : shapeOf(s.m, s.radial.jp);
+    const m = s.m, w = s.weight;
     const cph = Math.cos(s.phi || 0), sph = Math.sin(s.phi || 0);
     for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
       const i = y*GR+x; if (COVER[i] <= 0) continue;
@@ -1530,7 +1683,8 @@ function paintDeck(){
     ['Stokes ratio δ/λ', s.transport ? s.transport.stokesRatio.toFixed(4) : '—'],
     ['phase-flux gain', s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
     ['SEP', ''],
-    ['px per wavelength', `${(2*Math.PI*181/(s.states[0]?.radial.jp||1)).toFixed(1)}`],
+    ['px per wavelength', s.states[0]
+        ? `${(2*Math.PI*181/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
     ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
     ['SEP', ''],
@@ -1541,7 +1695,10 @@ function paintDeck(){
     ['states drawn', s.states.map(x => `${x.fold}f·${(x.weight*100).toFixed(0)}%`).join('  ')],
     ['SEP', ''],
     ['nearest J′ mode', `m ${m.m} &nbsp; n ${m.n}`],
-    ['j′<sub>m,n</sub>', m.jp.toFixed(5)],
+    // A pinned mode sits on no J' zero, so there is none to print; its
+    // identity is the constrained frequency and the interlacing index.
+    ['j′<sub>m,n</sub>', m.jp == null
+        ? `<span style="color:var(--dim)">none — edge-constrained</span>` : m.jp.toFixed(5)],
     ['predicted', `${m.hz.toFixed(2)} <span class="u">Hz</span>`],
     ['mismatch', `${(m.mismatch*100).toFixed(1)}<span class="u">%</span>`],
     ['SEP', ''],
@@ -1684,13 +1841,19 @@ async function exportImage(SIZE, onProgress){
   const st = state;
 
   // gate at the EXPORT resolution, not the preview's
-  const usable = st.states.filter(x => 2*Math.PI*rr/x.radial.jp >= RES_GATE).slice(0, 6);
+  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE).slice(0, 6);
   if (!usable.length) throw new Error('every mode is below the resolution gate even at this size');
 
   onProgress(`building ${usable.length} mode tables at ${g}`);
   const tables = [];
   for (let mi = 0; mi < usable.length; mi++){
     const sMode = usable[mi], jp = sMode.radial.jp, m = sMode.m;
+    // A pinned state is exported as the same superposition it is previewed as,
+    // recomputed at the export pitch. Drawing a free J_m here instead would
+    // make the 4K image disagree with the screen.
+    const pinE = sMode.radial.pinned;
+    const zsE = pinE ? sMode.radial.pinnedZeros : null;
+    const coE = pinE ? pinE.coefficients : null;
     const jr = new Float32Array(rsqMax + 1), dr = new Float32Array(rsqMax + 1);
     const seen = new Uint8Array(rsqMax + 1);
     for (let ay = 0; ay <= cc; ay++){
@@ -1699,6 +1862,16 @@ async function exportImage(SIZE, onProgress){
         const q = ax*ax + ay2; if (q > rsqMax) break;
         if (seen[q]) continue;
         seen[q] = 1;
+        if (pinE){
+          const rho = Math.sqrt(q)/rr;
+          let v = 0, d = 0;
+          for (let n = 0; n < zsE.length; n++){
+            const pr = besselPair(m, zsE[n]*rho);
+            v += coE[n]*pr[0]; d += coE[n]*zsE[n]*pr[1];
+          }
+          jr[q] = v; dr[q] = d;
+          continue;
+        }
         const pr = besselPair(m, jp*Math.sqrt(q)/rr);
         jr[q] = pr[0]; dr[q] = jp*pr[1];
       }
@@ -1820,7 +1993,7 @@ async function exportImage(SIZE, onProgress){
 
   cx.putImageData(out, 0, 0);
   return { canvas: cvx, modes: usable.length, litFraction: lit/Math.max(1, inside),
-           pxPerWave: 2*Math.PI*rr/usable[0].radial.jp, grid: g };
+           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g };
 }
 
 // The viewer's sandbox makes a page-initiated download inert, so the file goes

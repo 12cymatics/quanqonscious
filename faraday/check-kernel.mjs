@@ -13,10 +13,10 @@
 
    Run: node faraday/check-kernel.mjs
 */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-import vm from 'node:vm';
+import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, '..');
@@ -36,18 +36,32 @@ if (src.length < 5000)
   throw new Error(`sliced kernel is only ${src.length} chars — the markers are not bracketing the physics`);
 
 const EXPORTS = ['millerAll','besselJ','besselJp','besselPair','jpZeroNear','radialIndexOf',
-  'jpZerosNearN','radialProfile','simpsonR','angularQuartic','angularSquare','jpZeros',
+  'jpZerosNearN','radialProfile','radialProfilePinned','finestZeroOf','simpsonR',
+  'angularQuartic','angularSquare','jpZeros',
   'surfaceTension','density','viscosity','omegaOf','kOfOmega','dampingRate','plateTransfer',
-  'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE','reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
+  'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE',
+  'reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
   'transitionRisk','resolvePatternState','CELLS','ATLAS','TRANSITION','BOUNDARY',
   'EGG_I_P','EGG_II_P','G_ACC','QUAD_R','STONE','MIN_MV','OVERDRIVE_MV'];
 
-const sandbox = { Math, Number, Map, Set, Array, Float64Array, Float32Array, Int32Array,
-                  isFinite, isNaN, console, JSON, Object, String, Error, TypeError };
-vm.createContext(sandbox);
-vm.runInContext(src + '\n;globalThis.__K = {' + EXPORTS.join(',') + '};', sandbox,
-                { filename: 'cymatic.html#kernel' });
-const K = sandbox.__K;
+/* The sliced kernel is written to a temporary ES module and imported, rather
+   than run through node:vm in a hand-built sandbox.
+
+   It was the sandbox at first, and that was a mistake worth recording: code in
+   vm.runInContext reaches Math and every other global through the context's
+   global proxy, and the Bessel recurrences run about twenty-five times slower
+   for it. 580k besselPair calls measured 12.2 s inside the sandbox and 0.49 s
+   outside -- which sent me looking for an algorithmic problem in the pinned
+   shape table that did not exist, and would have made this suite a five-minute
+   CI step for no reason.
+
+   A temp module keeps exactly the same guarantee: the source is still sliced
+   out of cymatic.html at run time, so there is still one copy of the physics
+   and nothing that can drift. It just runs as ordinary module code. */
+const tmp = mkdtempSync(join(tmpdir(), 'faraday-kernel-'));
+const modPath = join(tmp, 'kernel.mjs');
+writeFileSync(modPath, src + '\nexport const K = {' + EXPORTS.join(',') + '};\n');
+const { K } = await import(pathToFileURL(modPath).href);
 for (const name of EXPORTS)
   if (K[name] === undefined) throw new Error(`kernel export ${name} is undefined after evaluation`);
 
@@ -375,6 +389,34 @@ for (const cse of REF.pinnedEdge){
        `truncated ${eRaw.toExponential(2)}, extrapolated ${eEx.toExponential(2)}, ` +
        `gain ${(eRaw/eEx).toFixed(1)}x`);
   }
+  /* The reported radial index, checked against the FREE spectrum rather than
+     against itself. Asserting state.radial.n === spectrum.index is
+     self-consistency: injecting a uniform off-by-one (index: i instead of
+     i + 1) left both sides equally wrong and the suite green, which is the
+     regeneration test earning its place. The index of a pinned root is the
+     number of free roots strictly below it -- countable from freeW2, which the
+     index assignment never touches. */
+  for (const pm of raw.pinned){
+    let below = 0;
+    for (const w of raw.freeW2) if (w < pm.w2) below++;
+    eq(pm.index, below,
+       `${tag}: root at ${pm.hz.toFixed(4)} Hz reports the count of free roots below it`);
+    ok(pm.index >= 1, `${tag}: and that count is at least one`, `index ${pm.index}`);
+  }
+  /* Exactly one root per interval, which is WHY the sign-change guard in the
+     solver is unreachable: every c_n is positive, so the secular function runs
+     monotonically from -inf to +inf between consecutive poles and crosses zero
+     once in each. Removing that guard changed nothing and the suite stayed
+     green -- correct, and this is the property that makes it so. Asking for
+     basisN roots must therefore yield basisN - 1. */
+  {
+    const all = K.pinnedEdgeSpectrum(m, R, sg, rh, h, basisN, basisN);
+    eq(all.pinned.length, basisN - 1,
+       `${tag}: one root in every one of the ${basisN - 1} intervals`);
+    for (let i = 1; i < all.pinned.length; i++)
+      ok(all.pinned[i].w2 > all.pinned[i-1].w2,
+         `${tag}: the root sequence is strictly increasing at ${i}`);
+  }
   // Rayleigh: a constraint raises every eigenvalue and the result strictly
   // interlaces the unconstrained spectrum. This is the structural property the
   // whole construction stands on, so it is asserted, not assumed.
@@ -412,7 +454,9 @@ for (const cse of REF.pinnedEdge){
    is the property asserted below, for every basis the suite uses. Forcing the
    guard to fire needs a basis so large the scan runs to x ~ 27000, which is
    too slow to sit in this suite; it is kept as insurance and labelled as such
-   rather than claimed to be a tested gate. */
+   rather than claimed to be a tested gate. Regeneration-tested and confirmed:
+   deleting the guard leaves the suite green, exactly because nothing reaches
+   it. */
 {
   const starved = K.jpZeros(0, 64, 0);
   ok(starved.length < 64,
@@ -652,11 +696,20 @@ function state(over = {}){
      'the drive is above the Mathieu threshold at 5 kHz',
      `eps ${s.onset.eps} vs eps_c ${s.onset.epsThreshold}`);
 }
-// pinned rim must warn hard rather than silently pass off the free basis
+/* The pinned warning used to be HARD, because it was admitting that the mode
+   drawn was the free basis rather than a pinned solve. That is no longer true,
+   so the assertion changed with the behaviour: it is now a soft note saying
+   what IS solved and what is not. The replacement assertions are in the
+   end-to-end block above -- the states must actually be edge-constrained, the
+   text must not claim the hysteresis model, and it must no longer say the mode
+   shown is the free basis. This one only checks that the rim still explains
+   itself at all. */
 {
   const s = state({ rim: 'pinned' });
-  ok(s.warnings.some(w => w.hard && /pinned/i.test(w.text)),
-     'a pinned contact line raises a hard warning');
+  ok(s.warnings.some(w => /pinned contact line/i.test(w.text)),
+     'a pinned contact line still explains itself');
+  ok(!s.warnings.some(w => /not a pinned eigenmode solve/.test(w.text)),
+     'and no longer disclaims being a solve');
 }
 // the large cell above 65 Hz has no atlas morphology and must say so
 {
@@ -698,6 +751,119 @@ function state(over = {}){
   ok(s.competition.survivors[1].amp > s.competition.survivors[2].amp,
      '70 Hz: m=2 outranks m=5 (the doubled matrix inverts this)',
      `m=2 ${s.competition.survivors[1].amp}, m=5 ${s.competition.survivors[2].amp}`);
+}
+
+/* The pinned control, end to end. The point of the solver is that this
+   control does what it says, so what is asserted here is that the states the
+   page DRAWS are edge-constrained -- not merely that a spectrum exists
+   somewhere. 111 Hz is deliberate: the medium cell has an atlas record there,
+   so the states come from the fold prior rather than from the competition, and
+   that was the path still handing back free modes after the solver was wired
+   into the mode assembly. */
+{
+  const fr = state({ rim: 'free',   depthMm: 3 });
+  const pn = state({ rim: 'pinned', depthMm: 3 });
+  eq(pn.states.length, fr.states.length,
+     'pinning does not change how many states the atlas prior yields');
+  for (const st of pn.states){
+    ok(!!st.radial.pinned, `pinned rim: the ${st.fold}-fold state is edge-constrained`,
+       `radial.pinned = ${st.radial.pinned}`);
+    eq(st.radial.jp, null, `pinned rim: the ${st.fold}-fold state sits on no J' zero`);
+    ok(Number.isInteger(st.radial.n) && st.radial.n >= 1,
+       `pinned rim: the ${st.fold}-fold state has an interlacing index`, `n = ${st.radial.n}`);
+    eq(st.radial.pinnedBasis, 128, 'pinned rim: the 128-term basis is recorded');
+  }
+  for (const st of fr.states){
+    ok(!st.radial.pinned, `free rim: the ${st.fold}-fold state is NOT edge-constrained`);
+    ok(st.radial.jp > 0, `free rim: the ${st.fold}-fold state sits on a J' zero`);
+    ok(Math.abs(K.besselJp(st.m, st.radial.jp)) < 1e-8,
+       `free rim: and it is a true zero`);
+  }
+  /* I first asserted here that pinning raises the drawn frequency, on
+     Rayleigh's theorem. That was wrong, and the measurement says so: at
+     111 Hz the fold-10 state reads 55.802 Hz free and 49.301 Hz pinned.
+
+     Rayleigh raises eigenvalues at MATCHED INDEX, and neither path selects by
+     index -- both take the root nearest resonance, which is what the free path
+     has always done through jpZeroNear(m, xStar). Because a pinned root sits
+     above the free root of the same index, the pinned root nearest a fixed
+     target is generally a LOWER index than the free one, and the selected
+     frequency can move either way. 49.301 Hz is pinned index 2.
+
+     The index-matched statement is the real one and it is asserted in section
+     7b, where every pinned root is required to lie strictly between the free
+     roots bracketing it -- including at m = 5. What belongs here instead is
+     the selection property: the drawn root is the nearest available one. */
+  for (let i = 0; i < Math.min(fr.states.length, pn.states.length); i++)
+    eq(pn.states[i].fold, fr.states[i].fold, `state ${i}: the same fold in both rims`);
+  {
+    const R = K.CELLS.medium.d/2000, target = 2*Math.PI*(111/2);
+    for (const st of pn.states){
+      const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20),
+                                          K.density(20), 0.003, 128, 8);
+      let best = sp.pinned[0];
+      for (const r of sp.pinned)
+        if (Math.abs(r.omega - target) < Math.abs(best.omega - target)) best = r;
+      rel(st.radial.hz, best.hz, 12,
+          `fold ${st.fold}: the drawn root is the pinned root nearest resonance`);
+    }
+  }
+  // and the drawn frequency must BE a root of the pinned spectrum for that m,
+  // not merely some larger number
+  for (const st of pn.states){
+    const R = K.CELLS.medium.d/2000;
+    const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20), K.density(20),
+                                        0.003, 128, 8);
+    const hit = sp.pinned.find(x => Math.abs(x.hz - st.radial.hz) < 1e-9*st.radial.hz);
+    ok(!!hit, `fold ${st.fold}: the drawn frequency is a root of the m=${st.m} pinned spectrum`,
+       `drawn ${st.radial.hz}, roots ${sp.pinned.map(x => x.hz.toFixed(4)).join(', ')}`);
+    if (hit) eq(st.radial.n, hit.index, `fold ${st.fold}: and its interlacing index matches`);
+  }
+  // the warning must now describe a solve, not a diagnostic, and must not
+  // claim the hysteresis model it does not implement
+  const w = pn.warnings.find(x => /[Pp]inned contact line/.test(x.text));
+  ok(!!w, 'pinned rim still says what it is doing');
+  ok(w && /solved/.test(w.text) && !/not a pinned eigenmode solve/.test(w.text),
+     'and it no longer says the mode shown is the free basis');
+  ok(w && /LIMIT/.test(w.text) && /hysteresis/.test(w.text),
+     'and it states that finite mobility and hysteresis are NOT computed');
+  ok(w && w.hard === false, 'so the warning is no longer a hard one');
+}
+/* finestZeroOf. Three resolution gates read it -- the preview, the deck
+   readout and the 4K export -- and two of them read radial.jp directly before
+   it existed, which is null under a pinned rim: the inspector threw on
+   jp.toFixed(5) and the export gate compared a wavelength against null. */
+{
+  const fr = state({ rim: 'free' }), pn = state({ rim: 'pinned', depthMm: 3 });
+  for (const st of fr.states)
+    eq(K.finestZeroOf(st.radial), st.radial.jp,
+       `finestZeroOf is the J' zero itself for a free mode (fold ${st.fold})`);
+  for (const st of pn.states){
+    const v = K.finestZeroOf(st.radial);
+    ok(isFinite(v) && v > 0, `finestZeroOf is finite and positive for fold ${st.fold}`, `${v}`);
+    const zs = st.radial.pinnedZeros;
+    ok(v <= zs[zs.length-1] && v >= zs[0],
+       `finestZeroOf for fold ${st.fold} lies inside the basis`, `${v}`);
+    // it must exceed the mode's own equivalent wavenumber scale: the finest
+    // structure is finer than the mean, or it is not the finest
+    ok(v > st.radial.k*(K.CELLS.medium.d/2000),
+       `finestZeroOf for fold ${st.fold} is finer than the modal mean`,
+       `finest ${v} vs kR ${st.radial.k*(K.CELLS.medium.d/2000)}`);
+  }
+}
+// The pinned radial profile must vanish at the wall, like the shape table does.
+{
+  const R = K.CELLS.medium.d/2000;
+  const sp = K.pinnedEdgeExtrapolated(2, R, K.surfaceTension(20), K.density(20), 0.003, 128, 2);
+  const prof = K.radialProfilePinned(2, sp.freeZeros, sp.pinned[0].coefficients);
+  let peak = 0;
+  for (let i = 0; i < prof.length; i++) peak = Math.max(peak, Math.abs(prof[i]));
+  ok(peak > 0, 'the pinned radial profile is not identically zero');
+  ok(Math.abs(prof[prof.length-1]) < 1e-12*peak,
+     'the pinned radial profile vanishes at r = R',
+     `edge ${prof[prof.length-1].toExponential(3)} against peak ${peak.toExponential(3)}`);
+  ok(Math.abs(prof[Math.floor(prof.length/2)]) > 1e-3*peak,
+     'and it is nonzero in the interior (it vanishes at the wall, not everywhere)');
 }
 
 // determinism: same inputs, same state
