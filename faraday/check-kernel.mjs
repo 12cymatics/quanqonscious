@@ -38,7 +38,7 @@ if (src.length < 5000)
 const EXPORTS = ['millerAll','besselJ','besselJp','besselPair','jpZeroNear','radialIndexOf',
   'jpZerosNearN','radialProfile','simpsonR','angularQuartic','angularSquare','jpZeros',
   'surfaceTension','density','viscosity','omegaOf','kOfOmega','dampingRate','plateTransfer',
-  'mathieu','ellipseE','reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
+  'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE','reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
   'transitionRisk','resolvePatternState','CELLS','ATLAS','TRANSITION','BOUNDARY',
   'EGG_I_P','EGG_II_P','G_ACC','QUAD_R','STONE','MIN_MV','OVERDRIVE_MV'];
 
@@ -315,6 +315,125 @@ section('7. damped Mathieu, first tongue');
   // detuning off the tongue must kill it
   ok(K.mathieu(w0, gamma, at*1.5, k, h, wd*1.5).growth <= 0,
      'a drive detuned off the tongue does not grow');
+}
+
+/* ── 7b. pinned contact line: the edge-constrained spectrum ─────────────── */
+section('7b. pinned (edge-constrained) spectrum');
+for (const cse of REF.pinnedEdge){
+  const { m, diameterMm, tempC, depthMm, basisN } = cse;
+  const R = diameterMm/2000, sg = K.surfaceTension(tempC), rh = K.density(tempC);
+  const h = depthMm/1000;
+  const tag = `m=${m}, D=${diameterMm}mm, ${tempC}C, ${depthMm}mm`;
+  const raw = K.pinnedEdgeSpectrum(m, R, sg, rh, h, basisN, 6);
+
+  // the free spectrum this is built on
+  for (let i = 0; i < Math.min(6, cse.freeHz.length); i++)
+    rel(Math.sqrt(raw.freeW2[i])/(2*Math.PI), cse.freeHz[i], 9, `${tag}: free mode ${i+1}`);
+  // c_n = 2/(R^2(1 - (m/z_n)^2)) -- the Neumann norm cancels J_m(z_n)^2 outright
+  for (let i = 0; i < Math.min(6, cse.c.length); i++){
+    rel(raw.c[i], cse.c[i], 12, `${tag}: c_${i+1}`);
+    ok(raw.c[i] > 0, `${tag}: c_${i+1} is positive (the interlacing depends on it)`);
+  }
+
+  const ex = K.pinnedEdgeExtrapolated(m, R, sg, rh, h, basisN, 6);
+  ok(ex.extrapolated === true, `${tag}: result is marked extrapolated`);
+  eq(ex.basisPair.join(','), `${basisN/2},${basisN}`, `${tag}: extrapolated from N/2 and N`);
+  for (let i = 0; i < Math.min(cse.pinned.length, ex.pinned.length); i++){
+    const got = ex.pinned[i], want = cse.pinned[i];
+    rel(got.hz,          want.hz,          9, `${tag}: pinned mode ${i+1}`);
+    rel(got.hzTruncated, want.hzTruncated, 9, `${tag}: pinned mode ${i+1} before extrapolation`);
+    rel(got.kTanhEff,    want.kTanhEff,    9, `${tag}: pinned mode ${i+1} modal k tanh(kh)`);
+    // extrapolation must MOVE the answer and move it the right way: the
+    // truncated root descends to the limit, so the step is negative
+    ok(got.richardsonStep < 0,
+       `${tag}: mode ${i+1} converges from above`, `step ${got.richardsonStep}`);
+    ok(got.hz < got.hzTruncated,
+       `${tag}: extrapolation lowers mode ${i+1} toward the limit`);
+  }
+  /* The extrapolant must be near the converged value, not merely
+     self-consistent, so it is compared against an N=1024 extrapolant computed
+     in scipy. Two claims, both measured rather than picked:
+
+       - the envelope. Across these eight cases the worst extrapolated error is
+         6.55e-6 (m=10, mode 3) and the worst TRUNCATED error is 7.36e-5, so
+         1e-5 is the envelope the method actually holds to at N=128. It is not
+         a tolerance standing in for a wrong answer; raising the basis tightens
+         it, on the N^-2 rate the extrapolation is built on.
+       - the gain, which is the real claim. Extrapolation must beat the
+         truncated root by at least a factor of ten in EVERY case. Measured:
+         184x at m=1 falling to 11.2x at m=10, because the C/N^2 constant grows
+         with the angular order. That fall-off is why the bound above is 1e-5
+         and not 1e-7, and why high m wants a larger basis. */
+  for (let i = 0; i < Math.min(cse.convergedHz.length, ex.pinned.length); i++){
+    const lim = cse.convergedHz[i];
+    const eEx  = Math.abs(ex.pinned[i].hz - lim)/lim;
+    const eRaw = Math.abs(ex.pinned[i].hzTruncated - lim)/lim;
+    ok(eEx < 1e-5, `${tag}: mode ${i+1} is within 1e-5 of the N=1024 limit`,
+       `got ${ex.pinned[i].hz}, limit ${lim}, rel ${eEx.toExponential(2)}`);
+    ok(eRaw/eEx > 10,
+       `${tag}: extrapolation beats the truncated root tenfold on mode ${i+1}`,
+       `truncated ${eRaw.toExponential(2)}, extrapolated ${eEx.toExponential(2)}, ` +
+       `gain ${(eRaw/eEx).toFixed(1)}x`);
+  }
+  // Rayleigh: a constraint raises every eigenvalue and the result strictly
+  // interlaces the unconstrained spectrum. This is the structural property the
+  // whole construction stands on, so it is asserted, not assumed.
+  for (let i = 0; i < Math.min(5, raw.pinned.length); i++){
+    const f0 = Math.sqrt(raw.freeW2[i])/(2*Math.PI);
+    const f1 = Math.sqrt(raw.freeW2[i+1])/(2*Math.PI);
+    ok(raw.pinned[i].hz > f0 && raw.pinned[i].hz < f1,
+       `${tag}: pinned mode ${i+1} lies strictly between free modes ${i+1} and ${i+2}`,
+       `${f0} < ${raw.pinned[i].hz} < ${f1}`);
+  }
+  // eta(R) = 0 -- the constraint the whole thing exists to impose. It holds by
+  // construction (the wall sum IS the secular function), so it must hold to
+  // machine precision against the largest single term, not merely be small.
+  for (const pm of raw.pinned.slice(0, 4))
+    ok(Math.abs(pm.wallResidual) < 1e-12*pm.wallScale,
+       `${tag}: eta(R)=0 at ${pm.hz.toFixed(4)} Hz`,
+       `residual ${pm.wallResidual.toExponential(3)} against largest term ` +
+       `${pm.wallScale.toExponential(3)} — ratio ` +
+       `${(Math.abs(pm.wallResidual)/pm.wallScale).toExponential(2)}`);
+  // the modal projection of k tanh(kh) must lie inside the basis range it
+  // averages, or it is not a weighted mean of anything
+  for (const pm of raw.pinned.slice(0, 3)){
+    const kt = raw.freeK.map(kk => kk*Math.tanh(kk*h));
+    ok(pm.kTanhEff > Math.min(...kt) && pm.kTanhEff < Math.max(...kt),
+       `${tag}: modal k tanh(kh) at ${pm.hz.toFixed(3)} Hz is inside the basis range`,
+       `${pm.kTanhEff}`);
+  }
+}
+/* The truncation guard. What it protects against is real and is demonstrated
+   here directly: jpZeros with a hint of 0 scans only to x=40 and returns about
+   a dozen zeros of J'_0 rather than the 64 asked for, and a secular sum over
+   that basis converges to the wrong roots instead of failing. The guard itself
+   is defensive and NOT reachable through pinnedEdgeSpectrum, because that
+   function computes its own hint (m + 3.2N) and the hint is adequate -- which
+   is the property asserted below, for every basis the suite uses. Forcing the
+   guard to fire needs a basis so large the scan runs to x ~ 27000, which is
+   too slow to sit in this suite; it is kept as insurance and labelled as such
+   rather than claimed to be a tested gate. */
+{
+  const starved = K.jpZeros(0, 64, 0);
+  ok(starved.length < 64,
+     'a zero hint really does starve the basis (what the guard exists for)',
+     `asked 64, got ${starved.length}`);
+  for (const cse of REF.pinnedEdge){
+    const full = K.jpZeros(cse.m, cse.basisN, cse.m + 3.2*cse.basisN);
+    eq(full.length, cse.basisN,
+       `the computed hint supplies a full basis at m=${cse.m}, N=${cse.basisN}`);
+    const half = K.jpZeros(cse.m, cse.basisN/2, cse.m + 3.2*cse.basisN/2);
+    eq(half.length, cse.basisN/2,
+       `and at the half basis used for extrapolation, m=${cse.m}`);
+  }
+}
+// mathieuKT is the same analysis the free path runs, expressed in k tanh(kh)
+for (const [w0, g, acc, k, h, wd] of [[300, 3, 8, 1156, 0.002, 600], [900, 5, 40, 400, 0.005, 1800]]){
+  const a = K.mathieu(w0, g, acc, k, h, wd);
+  const b = K.mathieuKT(w0, g, acc, k*Math.tanh(k*h), wd);
+  rel(b.growth, a.growth, 15, 'mathieuKT reproduces mathieu exactly (growth)');
+  rel(b.eps, a.eps, 15, 'mathieuKT reproduces mathieu exactly (eps)');
+  rel(b.accelThreshold, a.accelThreshold, 15, 'mathieuKT reproduces mathieu exactly (threshold)');
 }
 
 /* ── 8. fluid-loaded plate ──────────────────────────────────────────────── */
