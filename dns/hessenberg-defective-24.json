@@ -1,6 +1,4 @@
 {
- "what": "The 24x24 upper Hessenberg that Arnoldi builds for the Faraday monodromy map, and on which shifted QR without a closed-form 2x2 deflation does not converge. Its dominant two eigenvalues are the Floquet multipliers, coalesced into a near-defective pair: LAPACK splits them as -1.6495911901867406 and -1.6495911749758638, 1.5e-8 apart, which is sqrt(eps) and is all a defective pair admits. The trailing 2x2 the iteration is left with has a subdiagonal that floors at 2.8e-9 to 7.0e-9 and oscillates with period two, so the 1e-16 relative deflation test is never satisfied and the iteration runs to its cap. Committed as a fixture because no small synthetic matrix reproduces it -- see the search recorded in check 12(a) of check-dns.mjs.",
- "generatedBy": "arnoldi(applyPeriodMap, cos(kx) surface perturbation, m=24) from dns/faraday-floquet.js",
  "config": {
   "nx": 32,
   "ns": 32,
@@ -12,11 +10,9 @@
   "omegaD": 609.7,
   "accel": 60.665760000000006,
   "dt": 2e-05,
-  "m": 24,
-  "note": "omegaD and accel are the ROUNDED values this matrix was generated from. check 12 runs at the solver's own unrounded omega and a_c, which produce a different Hessenberg that the pre-fix solver happens to deflate -- which is why the fixture is committed rather than the run being gated."
+  "m": 24
  },
  "eigenvalueModuliReference": {
-  "source": "numpy.linalg.eigvals (LAPACK dgeev), independent of this repository",
   "sortedDescending": [
    1.6495911901867406,
    1.6495911749758638,
