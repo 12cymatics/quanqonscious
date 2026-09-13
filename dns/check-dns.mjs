@@ -45,7 +45,9 @@
 */
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+import { readFileSync } from 'node:fs';
 const { FaradayDNS, curvature } = require('./faraday-dns.js');
+const { floquet, hessenbergEigs } = require('./faraday-floquet.js');
 
 const G = 9.80665, rho = 998.2, h0 = 0.003, gam = 0.07274, nuW = 1.0036e-6;
 const wEx = (k, g) => Math.sqrt((G*k + g*k*k*k/rho)*Math.tanh(k*h0));
@@ -68,6 +70,7 @@ const wEx = (k, g) => Math.sqrt((G*k + g*k*k*k/rho)*Math.tanh(k*h0));
 const bottomLayerDamping = (k, w, nu) =>
   (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h0)/Math.pow(Math.sinh(k*h0), 2);
 let pass = 0; const fail = [];
+let ELEVEN = null;   // check 11 hands its envelope-fit result to check 12
 const ok = (c, label, detail) => {
   if (c) { pass++; return true; }
   fail.push(`${label}${detail ? '  — ' + detail : ''}`); return false;
@@ -650,6 +653,196 @@ const ok = (c, label, detail) => {
      `grew ${(amp[nP-1]/amp[0]).toExponential(2)}x`);
   ok(Number.isFinite(got) && rel < 0.08,
      'and at the damped-Mathieu growth rate', `${(rel*100).toFixed(2)}% off`);
+  ELEVEN = { growth: got, ac, wOwn, gOwn, aRel, L, k, th };
+}
+
+/* 12. THE THRESHOLD ITSELF, by Floquet rather than by fitting an envelope.
+
+   PR #113 left this open and said why: released from rest the state is a
+   mixture of both Floquet branches, and near onset they do not separate inside
+   any window worth running -- at a = 2 a_c the fitted rate still read 1.92
+   against 2.16 after forty periods and was still climbing. That is arithmetic,
+   not bad luck: at onset |mu_+| = 1 while |mu_-| = exp(-2 gamma T_d) = 0.956
+   here, and an envelope fit is power iteration, which separates them as
+   0.956^n.
+
+   dns/faraday-floquet.js computes the multipliers instead, by Arnoldi on the
+   one-drive-period map, so both branches come out of a dozen map applications
+   with no separation required. The threshold is then where max|mu| = 1, which
+   is exact for a linear Floquet problem rather than a fit to an exponential
+   that is not one. */
+{
+  console.log('12. the Faraday threshold, by Floquet:');
+
+  /* (a) The eigensolver, against matrices whose eigenvalues are known on paper.
+     The middle two are the cases that matter here and that an unshifted or
+     Rayleigh-shifted QR cannot do at all: a conjugate pair on the unit circle
+     (what the multipliers are below threshold) and a real pair of EQUAL MODULUS
+     (what they are at the coalescence). Both have H[hi][hi] = 0, so a Rayleigh
+     shift is no shift, and the iteration never deflates -- measured, not
+     asserted: injecting `mu = d` in place of the Wilkinson shift makes both
+     throw `QR did not converge` while the triangular and companion cases still
+     pass. The companion of (x-1)...(x-5) is there because a spectrum spread
+     over 5:1 in modulus is what breaks a solver that deflates in the wrong
+     order. */
+  const eigCheck = (M, n, want, label) => {
+    const got = hessenbergEigs(M, n).map(z => Math.hypot(z.re, z.im)).sort((a,b) => b-a);
+    const w = want.slice().sort((a,b) => b-a);
+    let worst = 0;
+    for (let i = 0; i < n; i++) worst = Math.max(worst, Math.abs(got[i] - w[i]));
+    ok(worst < 1e-9, `eigensolver: ${label}`, `worst |lambda| error ${worst.toExponential(2)}`);
+  };
+  eigCheck([[2,1,1],[0,-3,1],[0,0,0.5]], 3, [2,3,0.5], 'upper triangular');
+  eigCheck([[0,-1],[1,0]], 2, [1,1], 'rotation, a conjugate pair');
+  eigCheck([[0,4],[1,0]], 2, [2,2], 'equal modulus, +-2');
+  /* Defective pairs -- a double root with one eigenvector. Exactly defective
+     with clean entries is the easy half of this: the shift is exact and one
+     sweep deflates. It is the PERTURBED defective pair that the iteration
+     cannot reach, and no small synthetic matrix reproduces it. Searched for one:
+     81 2x2s [[mu+d,b],[c,mu-d]] over nine values of the splitting d^2+bc, three
+     of b and three of d, and 18 real companion matrices with spectra {5, 3,
+     mu+-i d}, {5, 3, 0.7, -0.4, mu+-i d} and {1.1+-0.9i, 0.3, mu+-i d} at six
+     values of d from 0 to 1e-5. The pre-fix solver deflated every one. The
+     reason is that for a REAL 2x2 the Wilkinson shift is an exact root of a real
+     quadratic, so one sweep zeroes the subdiagonal; the stall needs entries
+     already made complex by earlier sweeps of a larger matrix. It takes the
+     Hessenberg that Arnoldi actually builds, which is why (e) below loads that
+     matrix from a fixture rather than constructing one. */
+  eigCheck([[1,1],[-1,3]], 2, [2,2], 'defective 2x2, double root at 2');
+  eigCheck([[5,1,1,1],[0,3,1,1],[0,0,1,1],[0,0,-1,3]], 4, [5,3,2,2],
+           '4x4 whose trailing 2x2 is defective');
+  {
+    const roots = [1,2,3,4,5];
+    let poly = [1];
+    for (const r of roots){ const q = [...poly, 0];
+      for (let i = 0; i < poly.length; i++) q[i+1] -= r*poly[i]; poly = q; }
+    const n = 5, Cm = Array.from({length:n}, () => Array(n).fill(0));
+    for (let i = 1; i < n; i++) Cm[i][i-1] = 1;
+    for (let i = 0; i < n; i++) Cm[i][n-1] = -poly[n-i];
+    eigCheck(Cm, n, roots, 'companion of (x-1)...(x-5)');
+  }
+
+  const { ac, wOwn, aRel, L, k, th } = ELEVEN;
+  const base = { nx:32, ns:32, L, h0, rho, nu:nuW, gamma:gam, omegaD:2*wOwn, dt:2e-5 };
+
+  /* (b) TWO INDEPENDENT METHODS ON THE SAME NUMBER. Check 11 fits an envelope
+     over six periods; this diagonalises the one-period map. They share the
+     solver and nothing else -- no shared fit, no shared sampling, no shared
+     assumption about what the answer should look like.
+
+     This comparison earned its place immediately: it is what found the sampling
+     bias fixed in check 11. Before that alignment the two read 6.230 and 6.400
+     at a = 4 a_c, 2.7% apart, and the Floquet value was the converged one. */
+  const fl6 = floquet({ ...base, accel: aRel*ac, m: 6 });
+  const dGrowth = Math.abs(fl6.growth/ELEVEN.growth - 1);
+  console.log(`     a = ${aRel} a_c: Floquet |mu| = ${fl6.muMax.toFixed(8)}, growth `
+    + `${fl6.growth.toFixed(4)} s^-1 against check 11's envelope fit ${ELEVEN.growth.toFixed(4)}`
+    + ` -- ${(dGrowth*100).toFixed(3)}% apart`);
+  ok(dGrowth < 0.01, 'Floquet and the envelope fit agree on the growth rate',
+     `${(dGrowth*100).toFixed(3)}%`);
+
+  /* (c) The Ritz value is not an artefact of truncating the Krylov space at m.
+
+     Note what this does and does not establish. Sweeping m in this check's own
+     configuration, against m = 6:
+
+         m= 4   3.5e-6        m=16   9.7e-6
+         m= 8   5.2e-10       m=20   3.6e-6
+         m=12   6.1e-10       m=22   9.2e-7
+                              m=24   2.0e-7
+
+     m = 4 to m = 6 is the step that matters, and by m = 8 it is 5e-10, so
+     truncation at the m this check runs is not shaping the answer. It is NOT a
+     claim that the multiplier is converged to machine precision, and the table
+     says why: accuracy is not monotone in m, and the worst dimension is m = 16
+     in the middle rather than either end. That is what a defective pair does --
+     the two Ritz values resolve to the square root of whatever backward error
+     the Krylov space carries, and that error does not shrink with m. The
+     envelope over m >= 6 is 1e-5, which is the tolerance here; the defect it
+     has to reject is percent-level (the noise-start defect lands at 4.7e-1). */
+  const fl4 = floquet({ ...base, accel: aRel*ac, m: 4 });
+  const dM = Math.abs(fl4.muMax/fl6.muMax - 1);
+  ok(dM < 1e-5, 'and the multiplier is independent of the Krylov dimension',
+     `m=4 vs m=6 differ by ${dM.toExponential(2)}`);
+
+  /* (d) THE THRESHOLD. max|mu| = 1 is the definition, so bracketing it around
+     the damped-Mathieu a_c measures how good that formula is -- and this is the
+     number PR #113 could not get at, because an envelope fit near onset is
+     power iteration on two multipliers 4% apart.
+
+     A twelve-evaluation bisection puts the true threshold at a_c(DNS) = 2.55291
+     against the formula's 2.52776: THE FORMULA IS 0.99% LOW. Twelve evaluations
+     is too slow for CI, so what is gated is the +-5% bracket that bisection
+     lives inside, which is the same statement to coarser resolution: the
+     renderer's threshold formula is right to within 5%.
+
+     The bracket is not a coin toss in either direction. It is stated in a,
+     where the true threshold sits 6.3% above the low end and 3.8% below the
+     high end, and it reads out in |mu|, where the margins are -1.33e-3 and
+     +8.79e-4 -- some 300x the m=4-vs-m=6 spread that (c) measures, so the
+     verdicts are not truncation noise. Regeneration-tested by halving the
+     formula in check 11: 'above 1.05 a_c it is unstable' goes RED. */
+  const lo = floquet({ ...base, accel: 0.95*ac, m: 6 });
+  const hi = floquet({ ...base, accel: 1.05*ac, m: 6 });
+  console.log(`     |mu|(0.95 a_c) = ${lo.muMax.toFixed(8)}  |mu|(1.05 a_c) = ${hi.muMax.toFixed(8)}`
+    + `   (bisected threshold 2.55291, formula ${ac.toFixed(5)}, formula 0.99% low)`);
+  ok(lo.muMax < 1, 'below 0.95 a_c the mode is stable', `|mu| = ${lo.muMax.toFixed(8)}`);
+  ok(hi.muMax > 1, 'above 1.05 a_c it is unstable', `|mu| = ${hi.muMax.toFixed(8)}`);
+  ok(lo.muMax < 1 && hi.muMax > 1,
+     'so the damped-Mathieu threshold the renderer uses is right to within 5%',
+     `bracketed in [${(0.95*ac).toFixed(4)}, ${(1.05*ac).toFixed(4)}]`);
+
+  /* (e) THE HESSENBERG THE EIGENSOLVER ACTUALLY BROKE ON.
+
+     Pushing the Krylov sweep past what (c) covers found a real defect in
+     dns/faraday-floquet.js: at m = 22 and m = 24 the solver THREW, `QR did not
+     converge on the block ending at 1`, after deflating the other Ritz values
+     without trouble. The trailing 2x2 held the two Floquet multipliers, which
+     had coalesced into a near-defective pair -- diagonal -1.6496 +- 7e-11 i --
+     and its subdiagonal stagnated between 2.8e-9 and 7.0e-9, oscillating with
+     period two. It cannot do better: perturbing a double root by eps splits it
+     by sqrt(eps), so a defective pair's subdiagonal floors at
+     O(sqrt(eps)||H||) = 2.4e-8 here while the deflation test asks for 1e-16
+     relative. The fix deflates a trailing 2x2 from the quadratic instead of
+     iterating it. That case is not a corner: the multipliers ARE a defective
+     pair at the threshold, which is the regime the module exists for.
+
+     WHY A FIXTURE AND NOT A RUN. The first version of this gate called
+     floquet({...base, m: 24}) and cost 35 s, and regeneration-testing it
+     against the pre-fix solver came back GREEN -- so it caught nothing. The
+     throw had been measured at omega = 304.850 and a_c = 2.52774 rounded,
+     while check 12 runs at the solver's own 304.850001793 and 2.527742492.
+     Different operator, different Hessenberg, and the pre-fix QR happens to
+     deflate that one. So the matrix that does break it is committed instead,
+     in dns/hessenberg-defective-24.json, with the configuration that generated
+     it. It costs microseconds, and with the pre-fix solver it THROWS.
+
+     The expected moduli are numpy.linalg.eigvals on the same matrix -- LAPACK,
+     independent of anything here. LAPACK splits the dominant pair into
+     1.649591190187 and 1.649591174976, 1.5e-8 apart, because it is subject to
+     the same sqrt(eps) floor; this solver returns their mean to 1e-12. The
+     tolerance is therefore set at that floor, 5e-8, not at machine precision.
+     It is measured at 7.6e-9, and a wrong multiplier is percent-level. */
+  {
+    const fx = JSON.parse(readFileSync(new URL('./hessenberg-defective-24.json',
+                                               import.meta.url), 'utf8'));
+    const want = fx.eigenvalueModuliReference.sortedDescending;
+    let threw = null, got = null;
+    try { got = hessenbergEigs(fx.matrix, fx.matrix.length)
+            .map(z => Math.hypot(z.re, z.im)).sort((a, b) => b - a); }
+    catch (e) { threw = e.message; }
+    ok(threw === null, 'the eigensolver converges on the defective Hessenberg',
+       threw || 'no throw');
+    let worst = Infinity;
+    if (got){
+      worst = 0;
+      for (let i = 0; i < want.length; i++) worst = Math.max(worst, Math.abs(got[i] - want[i]));
+      console.log(`     defective 24x24 fixture: |mu|max ${got[0].toFixed(12)} vs LAPACK `
+        + `${want[0].toFixed(12)}, worst of 24 moduli ${worst.toExponential(2)}`);
+    }
+    ok(worst < 5e-8, 'and matches LAPACK across all 24 eigenvalues',
+       `worst ${worst.toExponential(2)}`);
+  }
 }
 
 console.log('\n' + '─'.repeat(66));
