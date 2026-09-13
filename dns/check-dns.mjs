@@ -524,7 +524,15 @@ const ok = (c, label, detail) => {
      -- the dissipation integral over the potential flow gives 4 nu k^2 for the
      energy whatever the depth) plus the bottom layer derived above. Both are
      leading-order in delta; here delta/h = 0.11, and the tolerance is sized for
-     that, not for round-off. */
+     that, not for round-off.
+
+     Measured, the ratio to that reference falls with refinement rather than
+     sitting still: 1.083 at nx=32 ns=32 dt=2e-4, 1.073 at nx=32 ns=48 dt=1e-4,
+     1.068 at nx=48 ns=64 dt=1e-4 (168 s, 479 s and 2055 s respectively). So
+     part of the gap is resolution and part is the reference's own leading
+     order, and it is not worth deciding which without a finer reference than
+     two asymptotic formulas added together. 15% covers both with room; free
+     slip, which is what this row exists to catch, misses by 95.7%. */
   {
     const L = 0.060, k = 2*Math.PI/L, nu = nuW, w0 = wEx(k, gam);
     const ref = 2*nu*k*k + bottomLayerDamping(k, w0, nu);
@@ -532,8 +540,9 @@ const ok = (c, label, detail) => {
     /* nx=16, ns=32, dt=1e-3, five periods -- eight seconds. Checked against
        nx=32, dt=2e-4, eight periods, which costs 168 s and gives 0.53750
        against this configuration's 0.54190: 0.8% apart. dt=5e-4 gives 0.54082,
-       so it is dt-converged too. The cheap one is used because a gate nobody
-       can afford to run is not a gate. */
+       so it is dt-converged too, and the whole refinement ladder above moves
+       the answer by 2.4%. The cheap one is used because a gate nobody can
+       afford to run is not a gate. */
     const got = measure(16, 32, 1e-3, L, nu, 5);
     const rel = Math.abs(got/ref - 1);
     console.log(`     SHALLOW kh=${(k*h0).toFixed(2)}, L=60mm: ${got.toFixed(5)} s^-1 vs`
