@@ -49,6 +49,24 @@ const { FaradayDNS, curvature } = require('./faraday-dns.js');
 
 const G = 9.80665, rho = 998.2, h0 = 0.003, gam = 0.07274, nuW = 1.0036e-6;
 const wEx = (k, g) => Math.sqrt((G*k + g*k*k*k/rho)*Math.tanh(k*h0));
+
+/* Amplitude damping from the bottom Stokes layer, for a standing wave over a
+   rigid no-slip bottom. Derived rather than quoted, because the first version
+   of this line had a factor of two wrong and the wrong value happened to sit
+   inside the tolerance it was decorating:
+
+     Stokes layer under a free stream u = U cos(wt) dissipates
+        D = mu Int (du/dz)^2 dz = (rho/2) U^2 sqrt(nu w/2)   per unit area
+     standing wave eta = a cos(kx) cos(wt):
+        U(x) = a w sin(kx)/sinh(kh),  <U^2>_x = (a w/sinh kh)^2 / 2
+        E    = (1/4) rho w^2 a^2/(k tanh kh)     per unit horizontal area
+     so the ENERGY decays at <D>/E = sqrt(nu w/2) k tanh(kh)/sinh^2(kh)
+     and the AMPLITUDE at half that.
+
+   Valid while the layer is thin against both the depth and the wavelength;
+   at kh = 0.31 below, delta/h = 0.11 and k delta = 0.035. */
+const bottomLayerDamping = (k, w, nu) =>
+  (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h0)/Math.pow(Math.sinh(k*h0), 2);
 let pass = 0; const fail = [];
 const ok = (c, label, detail) => {
   if (c) { pass++; return true; }
@@ -481,19 +499,127 @@ const ok = (c, label, detail) => {
     /* The residual is POSITIVE at both points and grows as nu falls, which is
        the bottom Stokes layer: the root above is the deep-water one and this
        cell is kh = 3.14, so the solver carries a damping the reference does
-       not. Its classical rate is (k/4) sqrt(nu omega/2) tanh(kh)/sinh^2(kh),
-       printed below -- 0.48% of the total at the first point and 0.90% at the
-       second, which is most of each residual and has the right trend, since it
-       scales as sqrt(nu) against the bulk's nu. 3% leaves room for that plus
-       the O(dx^2) of a 32-cell wavelength; the defect it has to catch missed
-       by 44%. */
-    const gb = (k/4)*Math.sqrt(nu*w0/2)*Math.tanh(k*h0)/Math.pow(Math.sinh(k*h0), 2);
+       not. Its rate is `bottomLayerDamping` below -- 0.95% of the total at the
+       first point and 1.79% at the second, which accounts for the 0.69% and
+       1.99% measured and has the right trend, since it scales as sqrt(nu)
+       against the bulk's nu. 3% leaves room for that plus the O(dx^2) of a
+       32-cell wavelength; the defect it has to catch missed by 44%. */
+    const gb = bottomLayerDamping(k, w0, nu);
     console.log(`       bottom Stokes layer, not in the deep-water root: `
       + `${gb.toFixed(4)} s^-1 = ${(100*gb/exact).toFixed(2)}% of it`);
     ok(Number.isFinite(got) && rel < 0.03,
       `damping matches the exact viscous root at nu = ${nu.toExponential(2)}`,
       `${(rel*100).toFixed(2)}% off`);
   }
+
+  /* SHALLOW, where the bottom layer is the dissipation rather than a 1%
+     correction. This row exists because of a regeneration test that came back
+     GREEN: replacing the no-slip bottom with free slip passed all 29 checks.
+     Nothing above could see it -- at kh = 3.14 the bottom carries under 1% of
+     the damping, well inside the 3% tolerance, and no other check touches u at
+     the bottom at all. At kh = 0.31 it carries 91%, and free slip then misses
+     by a factor of eleven.
+
+     The reference is the bulk rate (Lamb's 2 nu k^2, which is depth-independent
+     -- the dissipation integral over the potential flow gives 4 nu k^2 for the
+     energy whatever the depth) plus the bottom layer derived above. Both are
+     leading-order in delta; here delta/h = 0.11, and the tolerance is sized for
+     that, not for round-off. */
+  {
+    const L = 0.060, k = 2*Math.PI/L, nu = nuW, w0 = wEx(k, gam);
+    const ref = 2*nu*k*k + bottomLayerDamping(k, w0, nu);
+    const bot = bottomLayerDamping(k, w0, nu);
+    /* nx=16, ns=32, dt=1e-3, five periods -- eight seconds. Checked against
+       nx=32, dt=2e-4, eight periods, which costs 168 s and gives 0.53750
+       against this configuration's 0.54190: 0.8% apart. dt=5e-4 gives 0.54082,
+       so it is dt-converged too. The cheap one is used because a gate nobody
+       can afford to run is not a gate. */
+    const got = measure(16, 32, 1e-3, L, nu, 5);
+    const rel = Math.abs(got/ref - 1);
+    console.log(`     SHALLOW kh=${(k*h0).toFixed(2)}, L=60mm: ${got.toFixed(5)} s^-1 vs`
+      + ` bulk+bottom ${ref.toFixed(5)} (${(100*bot/ref).toFixed(0)}% of it is the bottom`
+      + ` layer), ${(rel*100).toFixed(1)}% off`);
+    ok(Number.isFinite(got) && rel < 0.15,
+      'shallow damping matches bulk + bottom Stokes layer (gates the no-slip bottom)',
+      `${(rel*100).toFixed(1)}% off`);
+  }
+}
+
+/* 11. THE FARADAY INSTABILITY ITSELF, against the damped-Mathieu prediction
+   that cymatic.html's renderer uses to decide which modes are excited.
+
+   Oscillating the container's gravity, g(t) = g + a cos(omega_d t), modulates
+   only the gravitational part of the restoring force, so the mode amplitude
+   obeys
+
+       eta'' + 2 gamma eta' + [omega^2 + a k tanh(kh) cos(omega_d t)] eta = 0,
+
+   a damped Mathieu equation whose principal (subharmonic) tongue at
+   omega_d = 2 omega grows at
+
+       sigma = eps omega/4 - gamma,   eps = a k tanh(kh)/omega^2,
+
+   so the threshold is a_c = 4 gamma omega /(k tanh kh). This is the ONLY check
+   that exercises the time-dependent drive at all, and the drive is what the
+   page is about.
+
+   omega and gamma are taken from the solver's OWN free decay rather than from
+   theory, so this measures the parametric mechanism and not the dispersion and
+   damping that checks 8 and 10 already measure against exact references. It
+   also removes a detuning: the solver's omega is 0.9964 of the inviscid one, so
+   driving at twice the THEORETICAL frequency sits about half a linewidth off
+   resonance and quietly raises the threshold.
+
+   The drive is put well above threshold on purpose. From a rest start the state
+   is a mixture of both Floquet branches, and near onset they do not separate
+   inside any window worth running in CI -- at a = 4 a_c an envelope fit reads
+   4.99 over 10 periods and converges to a rock-steady 6.23 only by 40, against
+   a prediction of 6.49. That is a property of the measurement, not of the
+   solver. At a = 24 a_c the branches separate by e^10 within five periods and
+   the fit is clean immediately. The 8% tolerance covers the leading-order
+   Mathieu formula's own O(eps^2) error, which at these amplitudes is the
+   largest term in the comparison. */
+{
+  const L = 0.006, k = 2*Math.PI/L, th = Math.tanh(k*h0);
+  const nx = 32, ns = 32, dt = 2e-5, nu = nuW;
+  const S = new FaradayDNS({nx, ns, L, h0, rho, nu, gamma:gam});
+  for (let i = 0; i < nx; i++) S.H[i] = h0 + 1e-9*Math.cos(k*(i+0.5)*S.dx);
+  const w0 = wEx(k, gam);
+  const cr = [], pk = []; let prev = null, p2 = null, p1 = null, t1 = 0;
+  for (let n = 0, N = Math.ceil(12*2*Math.PI/w0/dt); n < N; n++){
+    S.step(dt);
+    let m = 0; for (let i = 0; i < nx; i++) m += S.H[i]; m /= nx;
+    const e = S.H[0] - m;
+    if (prev !== null && prev > 0 && e <= 0){ const f = prev/(prev - e); cr.push(S.t - dt + f*dt); }
+    if (p1 !== null && p2 !== null && p1 > p2 && p1 >= e && p1 > 0) pk.push([t1, p1]);
+    prev = e; p2 = p1; p1 = e; t1 = S.t;
+  }
+  const wOwn = 2*Math.PI/((cr[cr.length-1] - cr[0])/(cr.length - 1));
+  const gOwn = -Math.log(pk[pk.length-1][1]/pk[0][1])/(pk[pk.length-1][0] - pk[0][0]);
+  const ac = 4*gOwn*wOwn/(k*th), T = 2*Math.PI/wOwn;
+  console.log(`11. Faraday instability vs the damped Mathieu tongue the renderer uses:`);
+  console.log(`     solver's own omega ${wOwn.toFixed(3)} rad/s (${(wOwn/w0).toFixed(5)} of inviscid),`
+    + ` gamma ${gOwn.toFixed(4)} s^-1`);
+  console.log(`     threshold a_c = 4 gamma omega/(k tanh kh) = ${ac.toFixed(4)} m/s^2`);
+
+  const aRel = 24, nP = 6;
+  const D = new FaradayDNS({nx, ns, L, h0, rho, nu, gamma:gam, accel:aRel*ac, omegaD:2*wOwn});
+  for (let i = 0; i < nx; i++) D.H[i] = h0 + 1e-9*Math.cos(k*(i+0.5)*D.dx);
+  const per = Math.round(T/dt), amp = [];
+  for (let p = 0; p < nP; p++){ for (let n = 0; n < per; n++) D.step(dt); amp.push(D.surfaceAmplitude()); }
+  let sx = 0, sy = 0, sxx = 0, sxy = 0, c = 0;
+  for (let p = Math.floor(nP*0.4); p < nP; p++){
+    const t = (p+1)*T, y = Math.log(amp[p]); sx += t; sy += y; sxx += t*t; sxy += t*y; c++;
+  }
+  const got = (c*sxy - sx*sy)/(c*sxx - sx*sx);
+  const eps = aRel*ac*k*th/(wOwn*wOwn), pred = eps*wOwn/4 - gOwn;
+  const rel = Math.abs(got/pred - 1);
+  console.log(`     driven at a = ${aRel} a_c (eps = ${eps.toFixed(4)}), omega_d = 2 omega:`
+    + ` grew at ${got.toFixed(3)} s^-1 against ${pred.toFixed(3)} predicted, ${(rel*100).toFixed(2)}% off`);
+  ok(amp[nP-1] > amp[0]*10, 'the parametric drive makes the surface go unstable',
+     `grew ${(amp[nP-1]/amp[0]).toExponential(2)}x`);
+  ok(Number.isFinite(got) && rel < 0.08,
+     'and at the damped-Mathieu growth rate', `${(rel*100).toFixed(2)}% off`);
 }
 
 console.log('\n' + '─'.repeat(66));
