@@ -624,8 +624,19 @@ const ok = (c, label, detail) => {
   const aRel = 24, nP = 6;
   const D = new FaradayDNS({nx, ns, L, h0, rho, nu, gamma:gam, accel:aRel*ac, omegaD:2*wOwn});
   for (let i = 0; i < nx; i++) D.H[i] = h0 + 1e-9*Math.cos(k*(i+0.5)*D.dx);
-  const per = Math.round(T/dt), amp = [];
-  for (let p = 0; p < nP; p++){ for (let n = 0; n < per; n++) D.step(dt); amp.push(D.surfaceAmplitude()); }
+  /* The step is ALIGNED to the response period: dtA = T/per, so `per` steps are
+     exactly one period and the sampling phase cannot drift.
+
+     This was `per = round(T/dt)` sampled at the unaligned dt, and that is a
+     real bias, not a nicety. per*dt misses T by 0.045% per period here, which
+     walks the sampling phase through the oscillation and tilts the fitted
+     slope. Measured at a = 4 a_c, where the effect is largest because the
+     window holds less growth: the unaligned fit reads 6.2293 and the aligned
+     one 6.3989, against 6.3999 from the Floquet solve in dns/faraday-floquet.js
+     -- so aligned agrees with an independent method to 0.016% and unaligned is
+     2.7% low. At the a = 24 a_c this check runs, the bias is 0.38%. */
+  const per = Math.round(T/dt), dtA = T/per, amp = [];
+  for (let p = 0; p < nP; p++){ for (let n = 0; n < per; n++) D.step(dtA); amp.push(D.surfaceAmplitude()); }
   let sx = 0, sy = 0, sxx = 0, sxy = 0, c = 0;
   for (let p = Math.floor(nP*0.4); p < nP; p++){
     const t = (p+1)*T, y = Math.log(amp[p]); sx += t; sy += y; sxx += t*t; sxy += t*y; c++;
