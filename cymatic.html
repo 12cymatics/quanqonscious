@@ -778,17 +778,91 @@ function kOfOmega(w, sigma, rho, hM){
   return Math.sqrt(lo*hi);
 }
 
-/* Viscous damping: bulk plus the bottom Stokes layer.
-     gamma = 2 nu k^2 + omega (k delta)/(2 sinh 2kh),   delta = sqrt(2 nu/omega)
-   Both terms are kept. The layer term dies as kh grows, which is why the
-   high-frequency capillary regime is bulk-damped -- that limit is a result, not
-   an assumption baked in. */
+/* The EXACT linear viscous free-surface root, solved rather than expanded.
+
+     (2 nu k^2 + lambda)^2 + omega0^2 = 4 nu^2 k^4 sqrt(1 + lambda/(nu k^2))
+
+   Non-dimensionalised with x = lambda/(nu k^2) and W = omega0/(nu k^2) this is
+   (2 + x)^2 + W^2 = 4 sqrt(1 + x), and -Re(x) nu k^2 is the amplitude decay
+   rate. Complex Newton from x = -2 + iW, which is the potential-flow answer;
+   it lands in five to seven iterations over the whole input box.
+
+   Lamb's 2 nu k^2 is the W -> infinity limit of this, and the page used to use
+   it directly. The difference is not a rounding detail. Expanded,
+
+       -Re(x) = 2 - delta k - delta k^3/4 + O(delta k^5),   delta = sqrt(2 nu/omega)
+
+   (the delta k^3 coefficient is 1/4 to six digits; see check-kernel section 6),
+   so the asymptotic form overstates the damping by delta k/2 -- 3.6% at 50 Hz
+   and 8.5% at 5 kHz on the default cell, up to 10.4% at the corner of the input
+   box. The Faraday threshold a_c = 4 gamma omega/(k tanh kh) is linear in
+   gamma, so the threshold this page reported was too high by the same margin.
+
+   WHAT WAS MISSING is not the free-surface rotational layer itself -- Lamb's
+   2 nu k^2 already carries its leading contribution, and is twice what a
+   potential flow with only the viscous normal stress would give. What was
+   missing is that the layer has a FINITE THICKNESS: delta k is how thick it is
+   against a wavelength, and it is 0.07 to 0.21 here, not zero. A resolved
+   Navier-Stokes solve of this exact configuration (dns/faraday-dns.js)
+   reproduces the root above to 0.69% while sitting 12% from the asymptotic
+   value -- which is how the omission was found.
+
+   WHY A DEEP-WATER RELATION IS USED AT FINITE DEPTH. The relation above is the
+   deep-water one, and kh falls to 0.749 at the shallow corner of the input box,
+   where e^-2kh is 0.22. It is still the right thing to evaluate, because the
+   deep-water assumption does no work in the quantity taken from it: the bulk
+   dissipation 2 nu k^2 is depth-independent (the dissipation integral over the
+   potential flow gives 4 nu k^2 for the energy at ANY depth), and the surface
+   layer is local to the surface, so neither term can see the bottom while
+   delta << h -- worst case delta/h = 0.11 here. Measured across the whole
+   input box, -Re(x)/2 differs from the depth-independent 1 - delta k/2 by at
+   most 1.1e-3, which is that argument coming back as a number. The bottom is
+   accounted for separately, by the layer term below. */
+function viscousFreeSurfaceRe(W){
+  if (!(W > 0) || !isFinite(W))
+    throw new Error(`viscousFreeSurfaceRe: W = omega/(nu k^2) must be finite and positive, got ${W}`);
+  let xr = -2, xi = W;
+  for (let i = 0; i < 60; i++){
+    // s = sqrt(1 + x), principal branch
+    const ar = 1 + xr, ai = xi, r = Math.hypot(ar, ai);
+    const sr = Math.sqrt((r + ar)/2), si = (ai < 0 ? -1 : 1)*Math.sqrt((r - ar)/2);
+    // F  = (2 + x)^2 + W^2 - 4 s
+    const Fr = (2 + xr)*(2 + xr) - xi*xi + W*W - 4*sr, Fi = 2*(2 + xr)*xi - 4*si;
+    // F' = 2(2 + x) - 2/s
+    const sd = sr*sr + si*si;
+    const dr = 2*(2 + xr) - 2*sr/sd, di = 2*xi + 2*si/sd;
+    const dd = dr*dr + di*di;
+    if (dd === 0) break;
+    const str = (Fr*dr + Fi*di)/dd, sti = (Fi*dr - Fr*di)/dd;
+    xr -= str; xi -= sti;
+    if (Math.hypot(str, sti) <= 1e-15*Math.hypot(xr, xi)) return xr;
+  }
+  /* Refusing, not returning the potential-flow value instead. A damping that is
+     quietly wrong by a few percent does not look like a solver failure, it
+     looks like physics -- and it moves every Faraday threshold on the page. */
+  throw new Error(`viscousFreeSurfaceRe: Newton did not converge for W = ${W}`);
+}
+
+/* Viscous damping: the free-surface rate above, plus the bottom Stokes layer.
+     gamma = -Re(x) nu k^2 + omega (k delta)/(2 sinh 2kh),  delta = sqrt(2 nu/omega)
+   The layer term is unchanged and was already right: it is algebraically
+   (k/2) sqrt(nu omega/2) tanh(kh)/sinh^2(kh), which is what the Stokes-layer
+   dissipation integral gives for a standing wave over a rigid bottom. It dies
+   as kh grows, which is why the high-frequency capillary regime is bulk-damped
+   -- that limit is a result, not an assumption baked in.
+
+   `bulkPotential` is kept alongside so the readout can show what the
+   asymptotic form alone would have given, rather than silently replacing a
+   number readers may have written down. */
 function dampingRate(k, w, nu, hM){
-  const bulk = 2*nu*k*k;
+  const nk2 = nu*k*k;
+  const bulk = -viscousFreeSurfaceRe(w/nk2)*nk2;
+  const bulkPotential = 2*nk2;
   const delta = Math.sqrt(2*nu/w);
   const sh = Math.sinh(2*k*hM);
   const layer = isFinite(sh) && sh > 0 ? w*(k*delta)/(2*sh) : 0;
-  return { total: bulk + layer, bulk, layer, stokesDepth: delta };
+  return { total: bulk + layer, bulk, bulkPotential,
+           surfaceLayer: bulk - bulkPotential, layer, stokesDepth: delta };
 }
 
 /* Fluid-loaded Kirchhoff-Love base, driven at one point.
@@ -1728,8 +1802,9 @@ function paintDeck(){
     ['across the cell', `${s.wavelengthsAcross.toFixed(1)} <span class="u">wavelengths</span>`],
     ['SEP', ''],
     ['damping γ', `${d.total.toFixed(2)} <span class="u">s⁻¹</span>`],
-    ['  bulk 2νk²', `${d.bulk.toFixed(2)}`],
-    ['  Stokes layer', `${d.layer.toExponential(2)}`],
+    ['  bulk + surface layer', `${d.bulk.toFixed(2)}`],
+    ['    2νk² alone', `<span style="color:var(--dim)">${d.bulkPotential.toFixed(2)}</span>`],
+    ['  bottom Stokes layer', `${d.layer.toExponential(2)}`],
     ['  δ', `${(d.stokesDepth*1e6).toFixed(1)} <span class="u">µm</span>`],
     ['Q = ω/2γ', `${(2*Math.PI*s.responseHz/(2*d.total)).toFixed(1)}`],
     ['SEP', ''],

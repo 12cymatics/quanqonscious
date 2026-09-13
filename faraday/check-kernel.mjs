@@ -39,6 +39,7 @@ const EXPORTS = ['millerAll','besselJ','besselJp','besselPair','jpZeroNear','rad
   'jpZerosNearN','radialProfile','radialProfilePinned','finestZeroOf','simpsonR',
   'angularQuartic','angularSquare','jpZeros',
   'surfaceTension','density','viscosity','omegaOf','kOfOmega','dampingRate','plateTransfer',
+  'viscousFreeSurfaceRe',
   'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE',
   'reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
   'transitionRisk','resolvePatternState','CELLS','ATLAS','TRANSITION','BOUNDARY',
@@ -292,20 +293,92 @@ for (const { f, T, h_mm, k, lambda } of REF.dispersion){
 
 /* ── 6. damping ─────────────────────────────────────────────────────────── */
 section('6. viscous damping');
+
+/* THE `bulk term is 2 nu k^2` ASSERTION THAT USED TO BE HERE WAS WRONG, and it
+   was wrong about the physics rather than about the code: it pinned the bulk
+   rate to Lamb's ASYMPTOTIC value, which is the delta k -> 0 limit of the exact
+   linear viscous free-surface root and overstates the damping by delta k/2.
+   Measured on the page's own inputs that is 3.6% at 50 Hz, 8.5% at 5 kHz and
+   10.4% at the corner of the input box; the Faraday threshold is linear in
+   gamma, so every threshold the page reported was high by the same margin.
+
+   What established it was not an argument. dns/faraday-dns.js solves the
+   resolved Navier-Stokes problem for this configuration and reproduces the
+   exact root to 0.69%, while the asymptotic value sits 12% away at that test's
+   delta k. The expectation moved because the measurement said so. */
 {
+  const R6 = REF.viscousFreeSurface;
+  ok(Array.isArray(R6 && R6.points) && R6.points.length >= 6,
+     'reference carries the viscous free-surface root', `${R6 && R6.points && R6.points.length} points`);
+  let worst = 0, worstW = null;
+  for (const p of R6.points){
+    const got = K.viscousFreeSurfaceRe(p.W);
+    const e = Math.abs(got - p.re)/Math.abs(p.re);
+    if (e > worst){ worst = e; worstW = p.W; }
+  }
+  ok(worst < 1e-13, 'Re(x) matches mpmath at every reference W',
+     `worst ${worst.toExponential(2)} at W = ${worstW}`);
+
+  /* The asymptotic form is the W -> infinity limit, so the root approaches -2
+     from above and the leading gap is delta k = sqrt(2/W). Read off the
+     reference points, the structure is sharper than that:
+
+         Re(x) = -2 + delta k + delta k^3/4 + O(delta k^5)
+
+     with the third-order coefficient measured at 0.2454 (W=5), 0.2512 (W=47.3),
+     0.2503 (W=200) and 0.250012 (W=5000). Asserting the coefficient is a much
+     tighter statement than bracketing the root, and both sides come from the
+     reference rather than from the kernel. My first attempt here bracketed it
+     as -2 < Re < -2 + 0.75 delta k, which is simply false -- the correction is
+     ABOVE -2 + delta k, not below it -- and the numbers above are what said so. */
+  for (const p of R6.points){
+    const dk = Math.sqrt(2/p.W);
+    const c3 = (p.re - (-2 + dk))/(dk*dk*dk);
+    ok(p.re > -2 + dk, `root is above -2 + delta k at W = ${p.W}`, `Re(x) = ${p.re}`);
+    ok(c3 > 0.24 && c3 < 0.26,
+       `third-order coefficient is 1/4 at W = ${p.W}`, `got ${c3.toFixed(6)}`);
+  }
+  const big = R6.points[R6.points.length - 1];
+  const dkBig = Math.sqrt(2/big.W);
+  rel((big.re - (-2 + dkBig))/(dkBig*dkBig*dkBig), 0.25, 4,
+      'and converges to exactly 1/4 at the largest W');
+
   const nu = K.viscosity(20)/K.density(20);
   const k = 1156.359261, w = 2*Math.PI*55.5, h = 0.002;
   const d = K.dampingRate(k, w, nu, h);
-  rel(d.bulk, 2*nu*k*k, 15, 'bulk term is 2 nu k^2');
+  const nk2 = nu*k*k;
+  rel(d.bulkPotential, 2*nk2, 15, 'bulkPotential is still exactly 2 nu k^2');
+  rel(d.bulk, -K.viscousFreeSurfaceRe(w/nk2)*nk2, 15,
+      'bulk is the exact free-surface root, not the asymptotic form');
+  ok(d.surfaceLayer < 0, 'the surface layer REDUCES the damping', `${d.surfaceLayer}`);
+  rel(d.surfaceLayer, -nk2*Math.sqrt(2*nu/w)*k, 2,
+      'and its size is nu k^2 delta k to two digits');
+  ok(d.bulk < d.bulkPotential,
+     'so the exact rate is below Lamb asymptotic',
+     `${d.bulk.toFixed(4)} < ${d.bulkPotential.toFixed(4)}`);
+
   rel(d.stokesDepth, Math.sqrt(2*nu/w), 15, 'Stokes depth is sqrt(2 nu/omega)');
   rel(d.layer, w*(k*d.stokesDepth)/(2*Math.sinh(2*k*h)), 14, 'layer term matches its formula');
+  /* The bottom layer is unchanged and was already right. Stated the other way,
+     from the Stokes-layer dissipation integral for a standing wave over a rigid
+     bottom, it is (k/2) sqrt(nu omega/2) tanh(kh)/sinh^2(kh) -- the same thing,
+     asserted here so the two forms cannot drift apart. */
+  rel(d.layer, (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h)/Math.pow(Math.sinh(k*h), 2), 13,
+      'layer equals the dissipation-integral form');
   rel(d.total, d.bulk + d.layer, 15, 'total is the sum of both terms');
   ok(d.layer > 0, 'the bottom layer term is kept, not dropped', `layer = ${d.layer}`);
-  // the layer term must die as kh grows -- a result, not an assumption
+
   const deep = K.dampingRate(k, w, nu, 0.5);
   ok(deep.layer < d.layer*1e-6, 'layer term vanishes in deep water',
      `shallow ${d.layer.toExponential(3)} vs deep ${deep.layer.toExponential(3)}`);
   rel(deep.total, deep.bulk, 6, 'deep water is bulk-damped');
+
+  /* Refuses rather than substituting the potential-flow answer. */
+  let threw = 0;
+  for (const bad of [0, -1, NaN, Infinity]){
+    try { K.viscousFreeSurfaceRe(bad); } catch { threw++; }
+  }
+  eq(threw, 4, 'viscousFreeSurfaceRe refuses a non-finite or non-positive W');
 }
 
 /* ── 7. Mathieu tongue ──────────────────────────────────────────────────── */
@@ -731,6 +804,51 @@ function state(over = {}){
    axisymmetric mode that the correct matrix kills survives, and at 70 Hz the
    m = 2 / m = 5 order inverts. Both are deterministic: the amplitudes come
    from a fixed-seed ODE integrated to steady state. */
+/* WHERE THE DAMPING FIX CHANGES WHAT THE PAGE DRAWS.
+
+   A 3-10% threshold shift is only worth making if it moves the output, and it
+   does. Scanning 50-400 Hz at 229 mV on the medium cell, the unstable-mode
+   count changes at eight frequencies, and the onset cut-off -- the drive above
+   which nothing reaches Faraday onset -- moves from 204 Hz to 210 Hz.
+
+   203 Hz is pinned here because it is the sharpest case: eps/eps_c was 1.0030
+   with the asymptotic damping and is 1.0548 with the exact root, and the page
+   went from showing NO mode at onset to showing three. A frequency that sat
+   just the wrong side of a threshold that was itself 5% too high is exactly the
+   kind of thing this fix exists to correct, and exactly the kind of thing that
+   silently regresses. */
+{
+  const s = state({ f: 203, amplitudeMv: 430 });
+  ok(s.onset.eps/s.onset.epsThreshold > 1,
+     '203 Hz at 430 mV is above onset', `eps/eps_c = ${(s.onset.eps/s.onset.epsThreshold).toFixed(4)}`);
+  const t = state({ f: 203, amplitudeMv: 229 });
+  ok(t.onset.eps/t.onset.epsThreshold > 1.02,
+     '203 Hz at 229 mV clears onset by more than 2%, which the asymptotic damping did not',
+     `eps/eps_c = ${(t.onset.eps/t.onset.epsThreshold).toFixed(4)}`);
+  ok(t.unstableCount > 0,
+     'and so at least one mode is unstable there, where the page used to show none',
+     `${t.unstableCount} unstable of ${t.ordersScanned}`);
+}
+
+/* THE SATURATED AMPLITUDES MOVED WHEN THE DAMPING MODEL DID, and they had to.
+   Replacing Lamb's asymptotic bulk rate with the exact free-surface root lowers
+   gamma by 4.8% at 184 Hz and 3.4% at 70 Hz, which raises the growth rate and
+   so raises the amplitude a cubic saturation settles at. Measured:
+
+       184 Hz  m=13   2.21260 -> 2.25629   (+1.97%)
+       184 Hz  m= 7   2.13145 -> 2.18436   (+2.48%)
+        70 Hz  m= 0   2.92950 -> 2.93469   (+0.18%)
+        70 Hz  m= 2   2.50716 -> 2.51282   (+0.23%)
+        70 Hz  m= 5   2.49881 -> 2.50953   (+0.43%)
+
+   The 70 Hz shifts are small because 430 mV is far above threshold there, so
+   the growth rate is dominated by the forcing rather than by gamma.
+
+   What these pins exist to protect is the competition OUTCOME -- which modes
+   survive -- and that is unchanged: 13,7 and 0,2,5 as before, with the
+   axisymmetric mode still killed at 184 Hz. The amplitudes are the quantitative
+   record alongside it, and they are re-pinned here rather than loosened, so the
+   next model change has to come and say so too. */
 {
   const s = state({ f: 184, amplitudeMv: 430 });
   const m = s.competition.survivors.map(v => v.m);
@@ -738,16 +856,16 @@ function state(over = {}){
   ok(!m.includes(0),
      '184 Hz: the axisymmetric mode is killed, not kept by an under-penalised overlap',
      `survivors ${m.join(',')}`);
-  rel(s.competition.survivors[0].amp, 2.21260, 4, '184 Hz: m=13 saturates at 2.2126');
-  rel(s.competition.survivors[1].amp, 2.13145, 4, '184 Hz: m=7 saturates at 2.1315');
+  rel(s.competition.survivors[0].amp, 2.25629, 4, '184 Hz: m=13 saturates at 2.2563');
+  rel(s.competition.survivors[1].amp, 2.18436, 4, '184 Hz: m=7 saturates at 2.1844');
 }
 {
   const s = state({ f: 70, amplitudeMv: 430 });
   const m = s.competition.survivors.map(v => v.m);
   eq(m.join(','), '0,2,5', '70 Hz at 430 mV: m=0, then m=2, then m=5');
-  rel(s.competition.survivors[0].amp, 2.92950, 4, '70 Hz: m=0 saturates at 2.9295');
-  rel(s.competition.survivors[1].amp, 2.50716, 4, '70 Hz: m=2 saturates at 2.5072');
-  rel(s.competition.survivors[2].amp, 2.49881, 4, '70 Hz: m=5 saturates at 2.4988');
+  rel(s.competition.survivors[0].amp, 2.93469, 4, '70 Hz: m=0 saturates at 2.9347');
+  rel(s.competition.survivors[1].amp, 2.51282, 4, '70 Hz: m=2 saturates at 2.5128');
+  rel(s.competition.survivors[2].amp, 2.50953, 4, '70 Hz: m=5 saturates at 2.5095');
   ok(s.competition.survivors[1].amp > s.competition.survivors[2].amp,
      '70 Hz: m=2 outranks m=5 (the doubled matrix inverts this)',
      `m=2 ${s.competition.survivors[1].amp}, m=5 ${s.competition.survivors[2].amp}`);

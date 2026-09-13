@@ -457,17 +457,27 @@ const ok = (c, label, detail) => {
   const csqrt = (a) => { const r = Math.hypot(a[0],a[1]);
     const re = Math.sqrt((r+a[0])/2); let im = Math.sqrt((r-a[0])/2);
     if (a[1] < 0) im = -im; return [re, im]; };
+  /* Deliberately a second implementation of the same root, independent of the
+     page kernel's `viscousFreeSurfaceRe`: this file gates the DNS, and both are
+     checked against the same mpmath values in faraday/check-kernel.mjs.
+
+     The convergence test is RELATIVE. It was absolute (`< 1e-15`) at first,
+     which for a root whose imaginary part is W ~ 41 can never be met, so the
+     loop always ran its full 200 iterations and then accepted whatever it held
+     -- correct here only by luck, since Newton had already converged. With a
+     relative test it lands in five to seven, and it raises rather than
+     returning an unconverged root. */
   const viscousRoot = (W) => {
     let x = [-2, W];
-    for (let i = 0; i < 200; i++){
+    for (let i = 0; i < 60; i++){
       const sq = csqrt([1+x[0], x[1]]);
       const F  = csub(cadd(cmul(cadd([2,0],x), cadd([2,0],x)), [W*W,0]), [4*sq[0], 4*sq[1]]);
       const dF = csub([2*(2+x[0]), 2*x[1]], cdiv([2,0], sq));
       const st = cdiv(F, dF);
       x = csub(x, st);
-      if (Math.hypot(st[0], st[1]) < 1e-15) break;
+      if (Math.hypot(st[0], st[1]) <= 1e-15*Math.hypot(x[0], x[1])) return x;
     }
-    return x;
+    throw new Error(`viscousRoot: Newton did not converge for W = ${W}`);
   };
   const measure = (nx, ns, dt, L, nu, nT) => {
     const k = 2*Math.PI/L, A = 1e-9;
