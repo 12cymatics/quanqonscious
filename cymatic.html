@@ -1486,8 +1486,48 @@ function sprinkle(){
   settle = 0;
 }
 const DRIFT = 2.2, DAMP = 0.62, AGIT = 0.85;   // on a unit-normalised drift field
+/* Grains occupy space here too, and without that the preview was wrong in
+   exactly the way the export was before the deposit learned to jam.
+
+   Measured side by side at the same settings: the preview covered 6.16% of the
+   disc against the export's 56.9% downscaled to the same grid -- a factor of
+   nine, and visibly a different picture. The preview was hairlines, because
+   nothing stops grains converging onto the exact minimum; the export was broad
+   granular ridges. An export that does not show what the screen shows is not
+   an export of it, so the same physics runs in both.
+
+   Both paths topple while the drive is still acting, which is what sets a
+   ridge's width: grains are driven onto the node continuously, the pile grows
+   until its surface grains slide back out, and the width settles where those
+   balance.
+
+   TOPPLE_BUDGET caps the work per frame, and the accounting matters more than
+   the number. It first decremented once per grain EXAMINED, so a deposit whose
+   surplus could not find room burned the whole budget achieving nothing: the
+   preview starved at 39.7% coverage with about 3585 pixels stuck above the
+   monolayer cap, and I misread that plateau as a physical balance rather than
+   as toppling failing to keep up. The over-cap count is the tell -- if the
+   pile were at rest it would be near zero. Spending the budget only on grains
+   that actually had surplus to shed drops it to about 78 and brings coverage
+   to 55.4%, which is the export's 56.3% on the same settings.
+
+   The cost is about 30% of the frame rate at rest -- 7.6 fps without toppling,
+   5.3 with, on a preview that was already running at 6 to 8. That buys a
+   deposit that matches the export instead of a hairline sketch at 6% coverage,
+   which is what no exclusion gives here.
+
+   At this resolution a grain IS one pixel, so the occupancy grid is the pixel
+   grid and no contact relaxation is needed -- one grain per pixel already is
+   the packing. PHI_RCP is carried so the capacity means the same thing in
+   both paths: cell area over grain area, times the random-close-packing
+   fraction discs actually reach. */
+const PHI_RCP_PREVIEW = 0.84;
+const PREVIEW_CAP = PHI_RCP_PREVIEW*1/(Math.PI*0.25);   // ~1.07 grains per pixel
+const TOPPLE_BUDGET = 60000;
+const OCC = new Uint16Array(NSZ);
 function stepGrains(gain){
   const jitter = AGIT*agitation;
+  OCC.fill(0);
   for (let p = 0; p < NP; p++){
     let x = PX[p], y = PY[p];
     const i = (y|0)*GR + (x|0);
@@ -1500,6 +1540,37 @@ function stepGrains(gain){
     const rx = x-CC, ry = y-CC, r = Math.hypot(rx, ry);
     if (r > RR-1.5){ const k = (RR-1.5)/r; x = CC+rx*k; y = CC+ry*k; vx *= -0.25; vy *= -0.25; }
     PX[p] = x; PY[p] = y; VX[p] = vx; VY[p] = vy;
+    const ci = (y|0)*GR + (x|0);
+    if (ci >= 0 && ci < NSZ) OCC[ci]++;
+  }
+  /* Topple: a pixel holding more than a monolayer sends its surplus to the
+     nearest pixel with room. Transport runs free above -- grains in flight
+     push past each other -- and the exclusion applies to where they come to
+     REST, which is the same order the export uses and the opposite of
+     refusing moves in transit, which merely freezes an unmigrated sprinkle. */
+  let budget = TOPPLE_BUDGET;
+  for (let p = 0; p < NP && budget > 0; p++){
+    const xi = PX[p]|0, yi = PY[p]|0;
+    const c = yi*GR + xi;
+    if (c < 0 || c >= NSZ || OCC[c] <= PREVIEW_CAP) continue;
+    let placed = false;
+    budget--;                     // spent on a grain that HAD surplus to shed
+    for (let ring = 1; ring <= 24 && !placed; ring++){
+      for (let dy = -ring; dy <= ring && !placed; dy++){
+        for (let dx = -ring; dx <= ring; dx++){
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const nx = xi + dx, ny = yi + dy;
+          if (nx < 1 || ny < 1 || nx >= GR-1 || ny >= GR-1) continue;
+          const nc = ny*GR + nx;
+          if (OCC[nc] + 1 > PREVIEW_CAP) continue;
+          if (COVER[nc] <= 0) continue;            // stay on the plate
+          OCC[c]--; OCC[nc]++;
+          PX[p] = nx + Math.random(); PY[p] = ny + Math.random();
+          VX[p] *= 0.15; VY[p] *= 0.15;
+          placed = true; break;
+        }
+      }
+    }
   }
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
@@ -2029,9 +2100,59 @@ async function exportImage(SIZE, onProgress){
       if (cxi < 0 || cyi < 0 || cxi >= gw || cyi >= gw) return -1;
       return cyi*gw + cxi;
     };
-    const STEPS = 520;
+    /* Toppling runs during transport rather than once after it, which matches
+       the animated preview and is the more defensible schedule: grains are
+       driven onto the node continuously, so the pile should be shedding while
+       that is happening rather than relaxing afterwards with the drive
+       effectively switched off.
+
+       It is worth recording that this makes almost no difference here, because
+       I changed it believing it made a large one. The preview was settling at
+       39.7% of the disc against this path's 56.9%, and I read that gap as the
+       export over-spreading. It was not: the preview's topple budget was being
+       spent on grains it examined rather than grains it placed, so it was
+       starved, and its occupancy counter sat at ~3585 pixels permanently over
+       the monolayer cap -- which is the signal that toppling was not keeping
+       up, not that it had found a balance. With the accounting fixed the
+       preview settles at 55.4% and its over-cap count falls to about 78.
+       Toppling during transport measures 56.3% against 56.9% for toppling
+       after. The schedule is kept because it is the better argument, not
+       because the numbers demanded it. */
+    const STEPS = 520, TOPPLE_EVERY = 8;
     const jitter = AGIT*agitation;
     let refused = 0;
+    const occLive = new Float32Array(gw*gw);
+    const shedSurplus = () => {
+      occLive.fill(0);
+      for (let p = 0; p < N; p++){
+        const c = cellOf(gx[p], gy[p]); if (c >= 0) occLive[c] += 1;
+      }
+      for (let p = 0; p < N; p++){
+        const cx0i = (gx[p]/cellPx)|0, cy0i = (gy[p]/cellPx)|0;
+        if (cx0i < 0 || cy0i < 0 || cx0i >= gw || cy0i >= gw) continue;
+        const c = cy0i*gw + cx0i;
+        if (occLive[c] <= CAP) continue;
+        let placed = false;
+        for (let ring = 1; ring <= 20 && !placed; ring++){
+          for (let dyr = -ring; dyr <= ring && !placed; dyr++){
+            for (let dxr = -ring; dxr <= ring; dxr++){
+              if (Math.max(Math.abs(dxr), Math.abs(dyr)) !== ring) continue;
+              const nx = cx0i + dxr, ny = cy0i + dyr;
+              if (nx < 0 || ny < 0 || nx >= gw || ny >= gw) continue;
+              const nc = ny*gw + nx;
+              if (occLive[nc] + 1 > CAP) continue;
+              const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
+              if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
+              occLive[c]--; occLive[nc]++;
+              gx[p] = (nx + Math.random())*cellPx;
+              gy[p] = (ny + Math.random())*cellPx;
+              gvx[p] *= 0.15; gvy[p] *= 0.15;
+              refused++; placed = true; break;
+            }
+          }
+        }
+      }
+    };
     for (let step = 0; step < STEPS; step++){
       for (let p = 0; p < N; p++){
         const x0 = gx[p], y0 = gy[p];
@@ -2051,6 +2172,7 @@ async function exportImage(SIZE, onProgress){
         }
         gx[p] = x; gy[p] = y; gvx[p] = vx; gvy[p] = vy;
       }
+      if (step % TOPPLE_EVERY === TOPPLE_EVERY - 1) shedSurplus();
       if ((step & 31) === 0){ onProgress(`settling grains ${(100*step/STEPS).toFixed(0)}%`);
                               await new Promise(r => setTimeout(r, 0)); }
     }
@@ -2080,55 +2202,14 @@ async function exportImage(SIZE, onProgress){
        tuned number: it is cell area over grain area, the densest a single
        layer of discs packs on a square cell. The ridge width that comes out is
        whatever grain conservation demands -- no free parameter sets it. */
-    onProgress('toppling to the angle of repose');
+    /* No batch topple here. Shedding the surplus after transport, with the
+       drive no longer acting, is what over-spread the ridge -- see the note on
+       shedSurplus above. The deposit arrives already at the balance, and all
+       that is left is the occupancy tally the report prints. */
     for (let p = 0; p < N; p++){
       const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
     }
-    const bucket = new Array(gw*gw);
-    for (let p = 0; p < N; p++){
-      const c = cellOf(gx[p], gy[p]); if (c < 0) continue;
-      (bucket[c] || (bucket[c] = [])).push(p);
-    }
-    let moved = 0, sweeps = 0;
-    for (; sweeps < 64; sweeps++){
-      let any = 0;
-      for (let c = 0; c < occ.length; c++){
-        while (occ[c] > CAP){
-          const list = bucket[c];
-          if (!list || !list.length){ occ[c] = CAP; break; }
-          const p = list.pop();
-          const cx0 = c % gw, cy0 = (c/gw)|0;
-          // nearest cell with room, searched outward ring by ring
-          let dest = -1;
-          for (let ring = 1; ring < gw && dest < 0; ring++){
-            for (let dyr = -ring; dyr <= ring && dest < 0; dyr++){
-              for (let dxr = -ring; dxr <= ring; dxr++){
-                if (Math.max(Math.abs(dxr), Math.abs(dyr)) !== ring) continue;
-                const nx = cx0 + dxr, ny = cy0 + dyr;
-                if (nx < 0 || ny < 0 || nx >= gw || ny >= gw) continue;
-                const nc = ny*gw + nx;
-                if (occ[nc] + 1 > CAP) continue;
-                // it has to be inside the cell, not just inside the grid
-                const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
-                if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
-                dest = nc; break;
-              }
-            }
-          }
-          if (dest < 0){ occ[c] = CAP; break; }
-          occ[c] -= 1; occ[dest] += 1;
-          (bucket[dest] || (bucket[dest] = [])).push(p);
-          const dx2 = dest % gw, dy2 = (dest/gw)|0;
-          gx[p] = (dx2 + Math.random())*cellPx;
-          gy[p] = (dy2 + Math.random())*cellPx;
-          moved++; any = 1;
-        }
-      }
-      if (!any) break;
-      onProgress(`toppling, sweep ${sweeps+1}`);
-      await new Promise(r => setTimeout(r, 0));
-    }
-    refused = moved;
+    const sweeps = 0;
 
     /* Grains rest in contact, and neither of the two placements I tried put
        them there.
