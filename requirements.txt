@@ -36,7 +36,7 @@ llvmlite
 # ============================================================
 # QUANTUM STACKS (CIRCUITS / SIMULATORS / TOOLKITS)
 # ============================================================
-cirq
+cirq==1.7.0
 cirq-core
 cirq-google
 cirq-ionq
@@ -126,6 +126,8 @@ tomlkit
 # ============================================================
 # SCI/ENG UTILITIES (GEOMETRY / GRAPHS / SIGNALS / IMAGING)
 # ============================================================
+cadquery==2.8.0
+Pillow==12.3.0
 networkx
 shapely
 pyvista
