@@ -969,14 +969,28 @@ function boundaryImpedance(perimeterArc, sourceDistance){
   // sweep each egg across its admissible P/D and keep the extremes
   let lo = base, hi = base;
   const eggs = BOUNDARY.filter(b => b.pdRange);
-  for (const b of eggs){
-    let fLo = Infinity, fHi = -Infinity;
-    for (let t = 0; t <= 200; t++){
-      const pd = b.pdRange[0] + (b.pdRange[1] - b.pdRange[0])*t/200;
-      const v = factor(pd, b.minor);
-      if (v < fLo) fLo = v; if (v > fHi) fHi = v;
+  const sinSqRange = (a, b) => {
+    if (b - a >= Math.PI) return [0, 1];
+    let s0 = Math.sin(a)**2, s1 = Math.sin(b)**2;
+    let mn = Math.min(s0, s1), mx = Math.max(s0, s1);
+    const k0 = Math.ceil(a/(Math.PI/2)), k1 = Math.floor(b/(Math.PI/2));
+    for (let k = k0; k <= k1; k++){
+      const v = (k % 2 === 0) ? 0 : 1;
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+      if (mn === 0 && mx === 1) break;
     }
-    lo *= fLo; hi *= fHi;
+    return [mn, mx];
+  };
+  for (const b of eggs){
+    const [p0, p1] = b.pdRange;
+    if (!(p0 > 0 && p1 >= p0 && perimeterArc > 0)) throw new RangeError(
+      `boundaryImpedance: P/D range [${p0}, ${p1}] with arc ${perimeterArc}. `
+      + `The phase 2*pi*arc/pd is not monotone over this interval.`);
+    const coupling = COUPLING_BASE + (1 - b.minor)*COUPLING_GAIN;
+    const [s2lo, s2hi] = sinSqRange(2*Math.PI*perimeterArc/p1, 2*Math.PI*perimeterArc/p0);
+    lo *= 1 - coupling*s2hi;
+    hi *= 1 - coupling*s2lo;
   }
   const r4 = reinforcedR4(sourceDistance);
   return { impedance: 1 - ((lo + hi)/2)*r4,
@@ -1063,10 +1077,8 @@ function resolvePatternState(o){
   // rather than a fixed low ceiling, which at 5000 Hz would miss every mode
   // that actually resonates (kR = 182 there, not 14).
   const mMax = Math.max(2, Math.floor(xStar));
-  const sampleCount = Math.min(mMax + 1, 192);   // 183 orders at 5000 Hz: all of them
   const orders = [];
-  for (let q = 0; q < sampleCount; q++)
-    orders.push(Math.round(q*mMax/Math.max(1, sampleCount - 1)));
+  for (let q = 0; q <= mMax; q++) orders.push(q);
 
   const rx = 0, ry = 0;
   const modes = [];
@@ -2777,24 +2789,31 @@ function evaluate(opts = {}){
   const sigmaS = [P[0].mul(F[0]), P[1].mul(F[1]), P[2].mul(F[2])];   // P Fᵀ / J, J = 1
 
   // ---- liquid -----------------------------------------------------------
-  const divU   = a.add(a).sub(Q.of(2n).mul(a));             // a + a − 2a
+  const gradU  = [a, a, Q.of(-2n).mul(a)];
+  const gradUdot = [aDot, aDot, Q.of(-2n).mul(aDot)];
+  const divU   = gradU[0].add(gradU[1]).add(gradU[2]);
   const p      = Q.of(2n).mul(sigR).add(sigZ).div(Q.of(3n)).neg();
-  const sigmaF = [p.neg().add(Q.of(2n).mul(mu).mul(a)),
-                  p.neg().add(Q.of(2n).mul(mu).mul(a)),
-                  p.neg().sub(Q.of(4n).mul(mu).mul(a))];
+  const sigmaF = gradU.map(L => p.neg().add(Q.of(2n).mul(mu).mul(L)));
   // b_f = ((ȧ+a²)x, (ȧ+a²)y, (−2ȧ+4a²)z); the momentum residual is
   //   ρ_f(∂ₜu + (u·∇)u − b_f) − ∇·σ_f, and ∇·σ_f = 0 because σ_f is uniform.
-  const bfXY   = aDot.add(a.pow(2));
-  const bfZ    = Q.of(-2n).mul(aDot).add(Q.of(4n).mul(a.pow(2)));
-  const convXY = aDot.add(a.pow(2));                        // ∂ₜu + (u·∇)u, x,y
-  const convZ  = Q.of(-2n).mul(aDot).add(Q.of(4n).mul(a.pow(2)));
-  const fluidMomentum = [rhoF.mul(convXY.sub(bfXY)), rhoF.mul(convXY.sub(bfXY)),
-                         rhoF.mul(convZ.sub(bfZ))];
+  const bf     = [aDot.add(a.pow(2)), aDot.add(a.pow(2)),
+                  Q.of(-2n).mul(aDot).add(Q.of(4n).mul(a.pow(2)))];
+  const conv   = gradU.map((L, i) => gradUdot[i].add(L.pow(2)));
+  const fluidMomentum = conv.map((c, i) => rhoF.mul(c.sub(bf[i])));
   // b_s = χ_tt, and Div P = 0 because P is uniform.
   const solidMomentum = Q.ZERO;
   const stressMatch   = [sigmaF[0].sub(sigmaS[0]), sigmaF[1].sub(sigmaS[1]),
                          sigmaF[2].sub(sigmaS[2])];
-  const angularMomentum = Q.ZERO;                           // σ_s diagonal ⇒ symmetric
+  const sigmaSFull = [[Q.ZERO,Q.ZERO,Q.ZERO],[Q.ZERO,Q.ZERO,Q.ZERO],
+                      [Q.ZERO,Q.ZERO,Q.ZERO]];
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      for (let k = 0; k < 3; k++)
+        sigmaSFull[i][j] = sigmaSFull[i][j].add(
+          (i === k ? P[i] : Q.ZERO).mul(j === k ? F[j] : Q.ZERO));
+  const angularMomentum = [sigmaSFull[0][1].sub(sigmaSFull[1][0]),
+                           sigmaSFull[0][2].sub(sigmaSFull[2][0]),
+                           sigmaSFull[1][2].sub(sigmaSFull[2][1])];
 
   // ---- free surface z = s⁻², radius s; flat, so curvature vanishes -------
   // S(A,B,t) = (sA, sB, s⁻²) and u at that point are equal componentwise:
@@ -2831,7 +2850,7 @@ function evaluate(opts = {}){
                  s.pow(3).sub(s).sub(s.pow(-9)).add(s.pow(-5)));
   const WdotResidual = dWds.mul(sDot).sub(Wdot);
   // the closure the whole construction rests on
-  const closureResidual = six.mul(mu).mul(a).sub(d);
+  const closureResidual = six.mul(mu).mul(f).div(s).sub(d);
 
   // Body-force power against kinetic-energy rate, computed independently on
   // both sides. Without this the domain's second moments (31/2 radial, 7/3
