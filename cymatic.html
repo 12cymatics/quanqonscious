@@ -292,8 +292,32 @@ const OVERDRIVE_MV = 430, MIN_MV = 55;
    declared here as an explicit stand-in with its own name, reported in the
    interface as an assumption. It is not a calibration and must not be read as
    one: only the ratio a/a_threshold is meaningful. */
-const MV_TO_G_ASSUMED = 0.004;                 // g per mV, declared, not measured
-const accelOf = mv => mv*MV_TO_G_ASSUMED*9.80665;
+const DRIVE_CALIBRATION = {
+  small:  { gPerMv: 0.004, measured: false,
+            source: 'declared stand-in: no transfer function is published for the 10.00 mm cell' },
+  medium: { gPerMv: 0.004, measured: false,
+            source: 'declared stand-in: no transfer function is published for the 24.25 mm cell' },
+  large:  { gPerMv: 0.004, measured: false,
+            source: 'declared stand-in: no atlas and no transfer function for the 49.50 mm cell' }
+};
+let driveCalMeasured = null;
+function driveCalibration(cellKey){
+  const g = DRIVE_CALIBRATION[cellKey];
+  if (!g) throw new RangeError(
+    `no drive calibration group for cell "${cellKey}". A shaker's mV-to-`
+    + `acceleration sensitivity depends on the driven mass, so every cell needs `
+    + `its own entry. Refusing rather than borrowing another cell's number.`);
+  if (driveCalMeasured !== null){
+    if (!(typeof driveCalMeasured === 'number' && isFinite(driveCalMeasured)
+          && driveCalMeasured > 0)) throw new RangeError(
+      `measured sensitivity ${driveCalMeasured} g/mV is not a positive finite `
+      + `number.`);
+    return { gPerMv: driveCalMeasured, measured: true,
+             source: 'measured sensitivity supplied in the interface' };
+  }
+  return g;
+}
+const accelOf = (mv, cellKey) => mv*driveCalibration(cellKey).gPerMv*9.80665;
 // The two states the paper photographs. At f/2 = 55.5 Hz the surface alternates
 // far above flicker fusion, so what an observer sees is a STEADY pattern, not a
 // pulsing one. The two phases are a discrete choice, never a continuous
@@ -1093,7 +1117,7 @@ function resolvePatternState(o){
     if (!roots.length){ ordersWithoutMode++; continue; }
     const k = roots[0]/R, w = omegaOf(k, sigma, rho, hM);
     const g = dampingRate(k, w, nu, hM);
-    orderScore.push({ m, growth: mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f).growth });
+    orderScore.push({ m, growth: mathieu(w, g.total, accelOf(amplitudeMv, cellKey), k, hM, 2*Math.PI*f).growth });
   }
   orderScore.sort((a, b) => b.growth - a.growth);
   const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
@@ -1140,7 +1164,7 @@ function resolvePatternState(o){
         // of the basis and called representative.
         const kEq = pm.kEquiv;
         const g = dampingRate(kEq, pm.omega, nu, hM);
-        const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv), pm.kTanhEff, 2*Math.PI*f);
+        const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv, cellKey), pm.kTanhEff, 2*Math.PI*f);
         modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
           mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
           gamma: g.total, growth: mth.growth, eps: mth.eps,
@@ -1154,7 +1178,7 @@ function resolvePatternState(o){
     for (const z of jpZerosNearN(m, xStar, RADIAL_ROOTS)){
       const k = z/R, w = omegaOf(k, sigma, rho, hM);
       const g = dampingRate(k, w, nu, hM);
-      const mth = mathieu(w, g.total, accelOf(amplitudeMv), k, hM, 2*Math.PI*f);
+      const mth = mathieu(w, g.total, accelOf(amplitudeMv, cellKey), k, hM, 2*Math.PI*f);
       modes.push({ m, n: null, jp: z, k, hz: w/(2*Math.PI),
         mismatch: Math.abs(w - omegaTarget)/omegaTarget,
         gamma: g.total, growth: mth.growth, eps: mth.eps,
@@ -1397,8 +1421,9 @@ function resolvePatternState(o){
     wavenumber: kStar, wavelength, cellDiameterMm: cell.d,
     wavelengthsAcross: 2*R/wavelength,
     damping: damp, plate,
-    onset: mathieu(omegaTarget, damp.total, accelOf(amplitudeMv), kStar, hM, 2*Math.PI*f),
-    accelAssumed: accelOf(amplitudeMv),
+    onset: mathieu(omegaTarget, damp.total, accelOf(amplitudeMv, cellKey), kStar, hM, 2*Math.PI*f),
+    accelAssumed: accelOf(amplitudeMv, cellKey),
+    driveCalibration: driveCalibration(cellKey),
     unstableCount: unstable.length, ordersScanned: modes.length,
     growingRetained: unstable.length, competition,
     angularOrders: keptOrders.length, radialRoots: RADIAL_ROOTS,
@@ -1560,7 +1585,7 @@ function buildSurface(state){
   // Panel image descriptors act only here, as renderer hints on presentation.
   const vs = state.visualSignature;
   if (vs){
-    const cb = Math.max(0.25, Math.min(2.2, vs.centerToMid));
+    const cb = vs.centerToMid;
     for (let i = 0; i < NSZ; i++){
       if (COVER[i] <= 0) continue;
       const g = 1 + (cb - 1)*Math.max(0, 1 - RAD[i]*2.2);
@@ -1582,7 +1607,7 @@ function buildSurface(state){
   // Stokes ratio: the layer thickness against the wavelength. Both transport
   // terms scale with it, so it is computed from the state rather than fixed.
   const stokes = state.damping ? state.damping.stokesDepth/state.wavelength : 0.02;
-  const KI = 1, KF = 2.2*Math.min(4, stokes/0.014);
+  const KI = 1, KF = 2.2*stokes/0.014;
   let dmax = 1e-9;
   for (let i = 0; i < NSZ; i++){
     ETA[i] *= inv; IMF[i] *= inv;
@@ -1615,7 +1640,7 @@ const BIN = new Uint16Array(NSZ);
 let settle = 0;
 function sprinkle(){
   for (let p = 0; p < NP; p++){
-    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(RR-2);
+    const a = rnd()*Math.PI*2, r = Math.sqrt(rnd())*(RR-2);
     PX[p] = CC + r*Math.cos(a); PY[p] = CC + r*Math.sin(a);
     VX[p] = 0; VY[p] = 0;
   }
@@ -1670,8 +1695,8 @@ function stepGrains(gain){
     // PGX/PGY already hold -KI*grad(I) + KF*flux, the Stokes-layer transport.
     const u = ETA[i]*gain;
     const a = Math.abs(u)*jitter;
-    let vx = (VX[p] + DRIFT*PGX[i]*gain + (Math.random()-0.5)*a)*DAMP;
-    let vy = (VY[p] + DRIFT*PGY[i]*gain + (Math.random()-0.5)*a)*DAMP;
+    let vx = (VX[p] + DRIFT*PGX[i]*gain + (rnd()-0.5)*a)*DAMP;
+    let vy = (VY[p] + DRIFT*PGY[i]*gain + (rnd()-0.5)*a)*DAMP;
     x += vx; y += vy;
     const rx = x-CC, ry = y-CC, r = Math.hypot(rx, ry);
     if (r > RR-1.5){ const k = (RR-1.5)/r; x = CC+rx*k; y = CC+ry*k; vx *= -0.25; vy *= -0.25; }
@@ -1701,7 +1726,7 @@ function stepGrains(gain){
           if (OCC[nc] + 1 > PREVIEW_CAP) continue;
           if (COVER[nc] <= 0) continue;            // stay on the plate
           OCC[c]--; OCC[nc]++;
-          PX[p] = nx + Math.random(); PY[p] = ny + Math.random();
+          PX[p] = nx + rnd(); PY[p] = ny + rnd();
           VX[p] *= 0.15; VY[p] *= 0.15;
           placed = true; break;
         }
@@ -1713,15 +1738,35 @@ function stepGrains(gain){
 
 let view = 'sand';
 let agitation = 1.15;
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const RENDER_SEED = 0x9E3779B9;
+let rnd = mulberry32(RENDER_SEED);
+const reseed = () => { rnd = mulberry32(RENDER_SEED); };
+function fieldRms(field, cover){
+  let sum = 0, n = 0;
+  for (let i = 0; i < field.length; i++)
+    if (cover[i] > 0){ sum += field[i]*field[i]; n++; }
+  if (!n) throw new Error('fieldRms: no covered cells to measure the field over');
+  return Math.sqrt(sum/n);
+}
+
 const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
 function renderSurface(state){
+  reseed();
   // Discrete phase sign, not a sinusoid. `expression` is the one-time
   // formation gain: it rises once after excitation and stays at 1. Nothing here
   // oscillates the amplitude.
   const k = phaseSign*state.expression;
   const vs = state.visualSignature;
-  const contrast = vs ? Math.max(0.08, Math.min(0.34, vs.contrast)) : 0.2;
-  const tex = vs ? Math.min(0.5, vs.textureConc) : 0.2;
+  const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+  const tex = vs ? vs.textureConc : 0;
   const SLOPE = 0.8;   // on a unit-normalised slope field
   if (view === 'sand'){
     BIN.fill(0);
@@ -1761,7 +1806,7 @@ function renderSurface(state){
         b0 = 20 + 164*ring + 96*spec + 72*cau;
       }
       if (tex > 0.18){
-        const n = (Math.random() - 0.5)*tex*26;
+        const n = (rnd() - 0.5)*tex*26;
         r0 += n; g0 += n; b0 += n;
       }
     }
@@ -1834,7 +1879,24 @@ const $ = id => document.getElementById(id);
 // TFE rises as amplitude falls and as depth grows -- the directions the paper
 // reports. The paper gives no calibrated TFE surface, so this is a caller-side
 // envelope, not a fit to their curves.
-const tfeOf = () => Math.max(0.4, 6.5*(180/Math.max(60, amp))*(0.55 + depth/9));
+const TFE_ENVELOPE = {
+  measured: false,
+  source: 'declared envelope: the directions are reported (TFE rises as amplitude '
+        + 'falls and as depth grows) but no calibrated TFE surface is published',
+  scaleSec: 6.5, refMv: 180, minMv: 60, depthBias: 0.55, depthPerMm: 9, floorSec: 0.4
+};
+let tfeMeasuredSec = null;
+function tfeOf(){
+  if (tfeMeasuredSec !== null){
+    if (!(typeof tfeMeasuredSec === 'number' && isFinite(tfeMeasuredSec)
+          && tfeMeasuredSec > 0)) throw new RangeError(
+      `measured TFE ${tfeMeasuredSec} s is not a positive finite number.`);
+    return tfeMeasuredSec;
+  }
+  const e = TFE_ENVELOPE;
+  return Math.max(e.floorSec,
+    e.scaleSec*(e.refMv/Math.max(e.minMv, amp))*(e.depthBias + depth/e.depthPerMm));
+}
 
 function recompute(){
   state = resolvePatternState({ cellKey, f: freq, amplitudeMv: amp, tempC: temp,
@@ -1850,8 +1912,10 @@ function recompute(){
 }
 function paintDeck(){
   const s = state;
-  $('accLab').innerHTML = `= ${(s.accelAssumed/9.80665).toFixed(3)} g assumed `
-    + `<span style="color:var(--dim)">(${MV_TO_G_ASSUMED} g/mV, declared)</span>`;
+  const dc = s.driveCalibration;
+  $('accLab').innerHTML = `= ${(s.accelAssumed/9.80665).toFixed(3)} g`
+    + `${dc.measured ? '' : ' assumed'} `
+    + `<span style="color:var(--dim)">(${dc.gPerMv} g/mV — ${dc.source})</span>`;
   $('warnBox').innerHTML = s.warnings.map(w =>
     `<div class="warn${w.hard ? ' hard' : ''}">${w.text}</div>`).join('');
   const m = s.nearestTheoryModes[0], w = s.water;
@@ -2039,6 +2103,7 @@ sc.addEventListener('click', e => {
    centred SIZE x SIZE region, cropped, never resampled. */
 let exporting = false;
 async function exportImage(SIZE, onProgress){
+  reseed();
   // ODD, and check it. (SIZE|1)+1 looks like a rounding-up idiom and is not:
   // for an even SIZE it lands back on even, the centre falls on x.5, every
   // integer-r^2 index goes fractional, and the export is a black PNG.
@@ -2049,7 +2114,7 @@ async function exportImage(SIZE, onProgress){
   const st = state;
 
   // gate at the EXPORT resolution, not the preview's
-  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE).slice(0, 6);
+  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE);
   if (!usable.length) throw new Error('every mode is below the resolution gate even at this size');
 
   onProgress(`building ${usable.length} mode tables at ${g}`);
@@ -2096,8 +2161,8 @@ async function exportImage(SIZE, onProgress){
   const op = out.data;
   const off = Math.floor((g - SIZE)/2);
   const vs = st.visualSignature;
-  const cbias = vs ? Math.max(0.25, Math.min(2.2, vs.centerToMid)) : 1;
-  const contrast = vs ? Math.max(0.08, Math.min(0.34, vs.contrast)) : 0.2;
+  const cbias = vs ? vs.centerToMid : 1;
+  let contrast = vs ? vs.contrast : null;
   const gain = phaseSign*Math.max(st.expression, 0.35);
 
   // one pass to find the field's extent, then one to paint: the normalisation
@@ -2129,16 +2194,22 @@ async function exportImage(SIZE, onProgress){
   };
 
   onProgress('measuring field extent');
-  let mx = 1e-9, gmx = 1e-9;
-  for (let y = 0; y < SIZE; y += 3){
-    for (let x = 0; x < SIZE; x += 3){
+  let mx = 1e-9, gmx = 1e-9, sumsq = 0, nSamp = 0;
+  for (let y = 0; y < SIZE; y++){
+    for (let x = 0; x < SIZE; x++){
       const v = evalAt(x + off - cc, y + off - cc);
       if (!v) continue;
       mx = Math.max(mx, Math.abs(v.Re));
       gmx = Math.max(gmx, Math.hypot(v.gRx, v.gRy));
+      sumsq += v.Re*v.Re; nSamp++;
     }
   }
   const inv = 1/mx, ginv = 1/gmx;
+  if (contrast === null){
+    if (!nSamp) throw new Error(
+      'export: no covered pixels to measure the field contrast over');
+    contrast = Math.sqrt(sumsq/nSamp)*inv;
+  }
 
   /* ---- sand at export resolution ----------------------------------------
      The sand view used to export as the nodal set, with a comment of mine
@@ -2174,7 +2245,7 @@ async function exportImage(SIZE, onProgress){
     // Same Stokes-layer transport the preview builds: -KI*grad(I) + KF*flux,
     // with KF set by the state's own Stokes ratio, then unit-normalised.
     const stokes = st.damping ? st.damping.stokesDepth/st.wavelength : 0.02;
-    const KI = 1, KF = 2.2*Math.min(4, stokes/0.014);
+    const KI = 1, KF = 2.2*stokes/0.014;
     let dmax = 1e-9;
     for (let y = 0; y < SIZE; y++){
       for (let x = 0; x < SIZE; x++){
@@ -2205,12 +2276,12 @@ async function exportImage(SIZE, onProgress){
        look: unequal discs fill their gaps, which is why random close packing
        of a polydisperse layer is denser than of a monodisperse one. */
     const grad = new Float32Array(N);
-    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*Math.random());
+    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*rnd());
     const gx = new Float32Array(N), gy = new Float32Array(N),
           gvx = new Float32Array(N), gvy = new Float32Array(N);
     const ccE = cc - off;                       // disc centre in image pixels
     for (let p = 0; p < N; p++){
-      const a = Math.random()*Math.PI*2, rad = Math.sqrt(Math.random())*(rr - 2);
+      const a = rnd()*Math.PI*2, rad = Math.sqrt(rnd())*(rr - 2);
       gx[p] = ccE + rad*Math.cos(a); gy[p] = ccE + rad*Math.sin(a);
     }
     const cellPx = Math.max(1, SCALE);
@@ -2282,8 +2353,8 @@ async function exportImage(SIZE, onProgress){
               const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
               if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
               occLive[c]--; occLive[nc]++;
-              gx[p] = (nx + Math.random())*cellPx;
-              gy[p] = (ny + Math.random())*cellPx;
+              gx[p] = (nx + rnd())*cellPx;
+              gy[p] = (ny + rnd())*cellPx;
               gvx[p] *= 0.15; gvy[p] *= 0.15;
               refused++; placed = true; break;
             }
@@ -2300,8 +2371,8 @@ async function exportImage(SIZE, onProgress){
         const v = evalAt(xi + off - cc, yi + off - cc);
         const u = v ? v.Re*inv*gain : 0;
         const a = Math.abs(u)*jitter;
-        let vx = (gvx[p] + DRIFT*PGXe[i]*gain + (Math.random()-0.5)*a)*DAMP;
-        let vy = (gvy[p] + DRIFT*PGYe[i]*gain + (Math.random()-0.5)*a)*DAMP;
+        let vx = (gvx[p] + DRIFT*PGXe[i]*gain + (rnd()-0.5)*a)*DAMP;
+        let vy = (gvy[p] + DRIFT*PGYe[i]*gain + (rnd()-0.5)*a)*DAMP;
         let x = x0 + vx*SCALE, y = y0 + vy*SCALE;
         const rx = x - ccE, ry = y - ccE, r = Math.hypot(rx, ry);
         if (r > rr - 1.5*SCALE){
@@ -2618,7 +2689,9 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`
       + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
-          + `${res.sand.steps} steps` : '');
+          + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
+          + `${res.sand.relaxPasses} relax passes leaving `
+          + `${(100*res.sand.residualOverlap).toFixed(1)}% residual overlap` : '');
   } catch (e){
     note.textContent = (e && e.code === 'declined') ? 'save declined'
       : 'export failed: ' + (e && (e.message || e.code) || e);
