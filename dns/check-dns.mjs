@@ -9,6 +9,17 @@ const wEx = (k, g) => Math.sqrt((G*k + g*k*k*k/rho)*Math.tanh(k*h0));
 
 const bottomLayerDamping = (k, w, nu) =>
   (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h0)/Math.pow(Math.sinh(k*h0), 2);
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rand = mulberry32(0x9E3779B9);
+const R = () => rand() - 0.5;
+
 let pass = 0; const fail = [];
 let ELEVEN = null;
 const ok = (c, label, detail) => {
@@ -77,8 +88,8 @@ const ok = (c, label, detail) => {
 {
   const S = new FaradayDNS({nx:8, ns:6, L:0.006, h0, rho, nu:0, gamma:0});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.2*Math.sin(2*Math.PI*i/S.nx));
-  const u = new Float64Array(S.nx*S.ns).map(() => Math.random()-0.5);
-  const w = new Float64Array(S.nx*(S.ns+1)).map(() => Math.random()-0.5);
+  const u = new Float64Array(S.nx*S.ns).map(R);
+  const w = new Float64Array(S.nx*(S.ns+1)).map(R);
   let worst = 0;
   for (let i = 0; i < S.nx; i++)
     worst = Math.max(worst, Math.abs(S.vFlux(u, w, i, 0, S.Hx(i)) - w[i*(S.ns+1)]));
@@ -89,20 +100,26 @@ const ok = (c, label, detail) => {
 {
   const S = new FaradayDNS({nx:16, ns:12, L:0.006, h0, rho, nu:nuW, gamma:gam});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.15*Math.sin(2*Math.PI*i/S.nx));
-  const R = () => Math.random() - 0.5;
   const u = new Float64Array(S.nx*S.ns).map(R), w = new Float64Array(S.nx*(S.ns+1)).map(R);
   for (let i = 0; i < S.nx; i++) w[i*(S.ns+1)] = 0;
   const q = new Float64Array(S.nx*S.ns).map(R);
   const d = new Float64Array(S.nx*S.ns); S.divergence(u, w, d);
-  let lhs = 0; for (let c = 0; c < d.length; c++) lhs += d[c]*q[c];
+  let lhs = 0, scale = 0;
+  for (let c = 0; c < d.length; c++){ lhs += d[c]*q[c]; scale += Math.abs(d[c]*q[c]); }
   const gu = new Float64Array(u.length), gw = new Float64Array(w.length); S.gradient(q, gu, gw);
   let rhs = 0;
   for (let i = 0; i < S.nx; i++)
-    for (let j = 0; j < S.ns; j++) rhs += u[i*S.ns+j]*gu[i*S.ns+j]*S.metricWeight('u', i, j);
+    for (let j = 0; j < S.ns; j++){
+      const t = u[i*S.ns+j]*gu[i*S.ns+j]*S.metricWeight('u', i, j);
+      rhs += t; scale += Math.abs(t);
+    }
   for (let i = 0; i < S.nx; i++)
-    for (let j = 0; j <= S.ns; j++) rhs += w[i*(S.ns+1)+j]*gw[i*(S.ns+1)+j]*S.metricWeight('w', i, j);
-  const rel = Math.abs(lhs + rhs)/Math.abs(lhs);
-  ok(rel < 1e-13, 'D and G are adjoint in the metric inner product', rel.toExponential(2));
+    for (let j = 0; j <= S.ns; j++){
+      const t = w[i*(S.ns+1)+j]*gw[i*(S.ns+1)+j]*S.metricWeight('w', i, j);
+      rhs += t; scale += Math.abs(t);
+    }
+  const rel = Math.abs(lhs + rhs)/scale;
+  ok(rel < 1e-15, 'D and G are adjoint in the metric inner product', rel.toExponential(2));
   console.log(`3. <Du,q> + <Gq,u>_H = ${rel.toExponential(2)} relative (15% surface deformation)`);
 }
 
@@ -110,14 +127,17 @@ const ok = (c, label, detail) => {
   const S = new FaradayDNS({nx:12, ns:10, L:0.006, h0, rho, nu:nuW, gamma:gam});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.12*Math.sin(2*Math.PI*i/S.nx));
   const n = S.nx*S.ns;
-  const a = new Float64Array(n).map(() => Math.random()-0.5);
-  const b = new Float64Array(n).map(() => Math.random()-0.5);
+  const a = new Float64Array(n).map(R);
+  const b = new Float64Array(n).map(R);
   const La = new Float64Array(n), Lb = new Float64Array(n);
   S.applyL(a, La); S.applyL(b, Lb);
-  let ab = 0, ba = 0, qd = 0;
-  for (let i = 0; i < n; i++){ ab += La[i]*b[i]; ba += a[i]*Lb[i]; qd += a[i]*La[i]; }
-  const sym = Math.abs(ab - ba)/Math.abs(ab);
-  ok(sym < 1e-12, 'L is symmetric', sym.toExponential(2));
+  let ab = 0, ba = 0, qd = 0, sc = 0;
+  for (let i = 0; i < n; i++){
+    ab += La[i]*b[i]; ba += a[i]*Lb[i]; qd += a[i]*La[i];
+    sc += Math.abs(La[i]*b[i]) + Math.abs(a[i]*Lb[i]);
+  }
+  const sym = Math.abs(ab - ba)/sc;
+  ok(sym < 1e-15, 'L is symmetric', sym.toExponential(2));
   ok(qd < 0, 'L is negative definite');
   console.log(`4. L symmetry ${sym.toExponential(2)} relative, <a,La> = ${qd.toExponential(3)} < 0`);
 }
@@ -261,7 +281,7 @@ const ok = (c, label, detail) => {
 {
   let worst = 0;
   for (let t = 0; t < 2000; t++){
-    const ux = (Math.random()-0.5)*4, Hx = (Math.random()-0.5)*1.2;
+    const ux = R()*4, Hx = R()*1.2;
     const Exx = ux, Ezz = -ux;
     const Exz = 2*Hx*ux/(1 - Hx*Hx);
     const def = (Hx*Hx*Exx - 2*Hx*Exz + Ezz)/(1 + Hx*Hx);

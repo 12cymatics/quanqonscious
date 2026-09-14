@@ -425,7 +425,14 @@ for (const cse of REF.pinnedEdge){
   const ex = K.pinnedEdgeExtrapolated(m, R, sg, rh, h, basisN, 6);
   ok(ex.extrapolated === true, `${tag}: result is marked extrapolated`);
   eq(ex.basisPair.join(','), `${basisN/2},${basisN}`, `${tag}: extrapolated from N/2 and N`);
-  for (let i = 0; i < Math.min(cse.pinned.length, ex.pinned.length); i++){
+  eq(ex.pinned.length, cse.pinned.length,
+     `${tag}: the solver returned as many pinned roots as the case expects`);
+  if (ex.pinned.length < cse.pinned.length) throw new Error(
+    `${tag}: pinnedEdgeExtrapolated returned ${ex.pinned.length} roots where the `
+    + `case expects ${cse.pinned.length}. Refusing to compare the prefix: a `
+    + `shortened list silently removes assertions while the suite still reports `
+    + `0 failed.`);
+  for (let i = 0; i < cse.pinned.length; i++){
     const got = ex.pinned[i], want = cse.pinned[i];
     rel(got.hz,          want.hz,          9, `${tag}: pinned mode ${i+1}`);
     rel(got.hzTruncated, want.hzTruncated, 9, `${tag}: pinned mode ${i+1} before extrapolation`);
@@ -451,7 +458,12 @@ for (const cse of REF.pinnedEdge){
          184x at m=1 falling to 11.2x at m=10, because the C/N^2 constant grows
          with the angular order. That fall-off is why the bound above is 1e-5
          and not 1e-7, and why high m wants a larger basis. */
-  for (let i = 0; i < Math.min(cse.convergedHz.length, ex.pinned.length); i++){
+  eq(ex.pinned.length >= cse.convergedHz.length, true,
+     `${tag}: enough pinned roots returned to compare every converged limit`);
+  if (ex.pinned.length < cse.convergedHz.length) throw new Error(
+    `${tag}: ${ex.pinned.length} pinned roots against ${cse.convergedHz.length} `
+    + `converged limits. Refusing to compare the prefix.`);
+  for (let i = 0; i < cse.convergedHz.length; i++){
     const lim = cse.convergedHz[i];
     const eEx  = Math.abs(ex.pinned[i].hz - lim)/lim;
     const eRaw = Math.abs(ex.pinned[i].hzTruncated - lim)/lim;
@@ -469,6 +481,8 @@ for (const cse of REF.pinnedEdge){
      regeneration test earning its place. The index of a pinned root is the
      number of free roots strictly below it -- countable from freeW2, which the
      index assignment never touches. */
+  ok(raw.pinned.length > 0, `${tag}: the pinned spectrum is non-empty`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned){
     let below = 0;
     for (const w of raw.freeW2) if (w < pm.w2) below++;
@@ -493,7 +507,11 @@ for (const cse of REF.pinnedEdge){
   // Rayleigh: a constraint raises every eigenvalue and the result strictly
   // interlaces the unconstrained spectrum. This is the structural property the
   // whole construction stands on, so it is asserted, not assumed.
-  for (let i = 0; i < Math.min(5, raw.pinned.length); i++){
+  ok(raw.pinned.length >= 5, `${tag}: at least five pinned roots to interlace`,
+     `${raw.pinned.length}`);
+  if (raw.pinned.length < 5) throw new Error(
+    `${tag}: ${raw.pinned.length} pinned roots, need five to check interlacing.`);
+  for (let i = 0; i < 5; i++){
     const f0 = Math.sqrt(raw.freeW2[i])/(2*Math.PI);
     const f1 = Math.sqrt(raw.freeW2[i+1])/(2*Math.PI);
     ok(raw.pinned[i].hz > f0 && raw.pinned[i].hz < f1,
@@ -503,6 +521,8 @@ for (const cse of REF.pinnedEdge){
   // eta(R) = 0 -- the constraint the whole thing exists to impose. It holds by
   // construction (the wall sum IS the secular function), so it must hold to
   // machine precision against the largest single term, not merely be small.
+  ok(raw.pinned.length >= 4, `${tag}: four pinned roots for the wall residual`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned.slice(0, 4))
     ok(Math.abs(pm.wallResidual) < 1e-12*pm.wallScale,
        `${tag}: eta(R)=0 at ${pm.hz.toFixed(4)} Hz`,
@@ -511,6 +531,8 @@ for (const cse of REF.pinnedEdge){
        `${(Math.abs(pm.wallResidual)/pm.wallScale).toExponential(2)}`);
   // the modal projection of k tanh(kh) must lie inside the basis range it
   // averages, or it is not a weighted mean of anything
+  ok(raw.pinned.length >= 3, `${tag}: three pinned roots for the kTanhEff bound`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned.slice(0, 3)){
     const kt = raw.freeK.map(kk => kk*Math.tanh(kk*h));
     ok(pm.kTanhEff > Math.min(...kt) && pm.kTanhEff < Math.max(...kt),
@@ -928,6 +950,8 @@ function state(over = {}){
   }
   // and the drawn frequency must BE a root of the pinned spectrum for that m,
   // not merely some larger number
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes to check',
+     `${pn.states.length}`);
   for (const st of pn.states){
     const R = K.CELLS.medium.d/2000;
     const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20), K.density(20),
@@ -953,9 +977,13 @@ function state(over = {}){
    jp.toFixed(5) and the export gate compared a wavelength against null. */
 {
   const fr = state({ rim: 'free' }), pn = state({ rim: 'pinned', depthMm: 3 });
+  ok(fr.states.length > 0, 'the free state carries drawn modes to check',
+     `${fr.states.length}`);
   for (const st of fr.states)
     eq(K.finestZeroOf(st.radial), st.radial.jp,
        `finestZeroOf is the J' zero itself for a free mode (fold ${st.fold})`);
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes for finestZeroOf',
+     `${pn.states.length}`);
   for (const st of pn.states){
     const v = K.finestZeroOf(st.radial);
     ok(isFinite(v) && v > 0, `finestZeroOf is finite and positive for fold ${st.fold}`, `${v}`);
@@ -1009,6 +1037,18 @@ function state(over = {}){
 
 /* ---- report ------------------------------------------------------------ */
 console.log('\n' + '─'.repeat(66));
+/* A silently shortened loop removes assertions without removing a check, so the
+   suite can lose coverage and still print "0 failed". Regeneration-tested: a
+   kernel patched to return four pinned roots where six were asked for took the
+   count from 2451 to 2331 and the suite stayed green. The per-loop length
+   assertions above catch that case; this total catches every other way an
+   assertion can stop running. Update it deliberately when adding checks. */
+const EXPECTED_ASSERTIONS = 2502;
+if (pass !== EXPECTED_ASSERTIONS)
+  failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
+    + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
+else pass++;
+
 if (failures.length){
   console.log(`${pass} passed, ${failures.length} FAILED\n`);
   for (const f of failures) console.log('  FAIL  ' + f);
