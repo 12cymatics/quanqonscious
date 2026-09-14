@@ -1,79 +1,21 @@
-/* Verification of the Faraday DNS. Every check here is a value compared with an
-   independently-known answer -- an analytic force, an analytic Laplacian, an
-   exact identity, the dispersion relation -- and a nonzero exit if any of them
-   misses. Run: node dns/check-dns.mjs
-
-   WHAT THIS FILE EXISTS FOR
-
-   The first version of this solver was 5% to 28% low on the dispersion relation
-   and it passed every check it had. It had a check that the divergence and the
-   gradient were exact adjoints (1.2e-15), that the pressure operator was
-   symmetric (7.0e-16) and negative definite, that the projection left the
-   velocity divergence-free (5.4e-13), and that a flat surface at rest stayed
-   flat (3.5e-19). All of those were true and none of them could see the defect,
-   because the defect was that the operator pair was adjoint in the WRONG INNER
-   PRODUCT. On a mapped grid the adjoint identity carries the Jacobian J = H;
-   take the plain Euclidean transpose of an unweighted divergence and what comes
-   back is not the gradient. Measured against the analytic hydrostatic force it
-   returned s * (dp/dx) -- 98% wrong in the bottom cell, exactly HALF on the
-   depth average, which halves omega^2 and gives sqrt(1/2) = 0.7071 against a
-   measured 0.7231 in shallow water where the depth-averaged force is the whole
-   of the dynamics.
-
-   The missing gate was the obvious one: take a pressure field whose gradient is
-   known on paper, apply the operator, compare. That is check 2 below. It is
-   first because its absence is what let the solver be wrong for a whole PR
-   while reporting eight green checks.
-
-   There was a second defect of the same shape. The dynamic surface condition
-   was written as p = -gamma*kappa, dropping the viscous normal stress
-   2 mu (n.E.n). While a free-surface wave stays irrotational the INTERIOR
-   viscous force is identically zero -- nu lap u = nu grad(div u) - nu
-   curl(curl u) = 0 -- so the damping does not come from the bulk term at all;
-   it comes from the two surface stresses, half from each. Dropping one halved
-   the damping exactly, and the damping is what sets a Faraday threshold. That
-   is check 10, and like check 2 it compares against a reference derived without
-   reference to the code: the exact viscous free-surface root, solved here.
-
-   The lesson generalises and the rest of this file is built on it: an operator
-   that is only ever exercised inside a time loop can be checked only by its
-   effect on a whole simulation, and a self-consistency property (adjointness,
-   symmetry, conservation) can be exactly true of a wrong operator. So the
-   momentum step's pieces -- the mapped Laplacian, the contravariant velocity --
-   are methods on the solver rather than expressions buried in `step`, and each
-   is compared here against something computed without reference to the code.
-*/
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+import { readFileSync } from 'node:fs';
 const { FaradayDNS, curvature } = require('./faraday-dns.js');
+const { floquet, hessenbergEigs } = require('./faraday-floquet.js');
 
 const G = 9.80665, rho = 998.2, h0 = 0.003, gam = 0.07274, nuW = 1.0036e-6;
 const wEx = (k, g) => Math.sqrt((G*k + g*k*k*k/rho)*Math.tanh(k*h0));
 
-/* Amplitude damping from the bottom Stokes layer, for a standing wave over a
-   rigid no-slip bottom. Derived rather than quoted, because the first version
-   of this line had a factor of two wrong and the wrong value happened to sit
-   inside the tolerance it was decorating:
-
-     Stokes layer under a free stream u = U cos(wt) dissipates
-        D = mu Int (du/dz)^2 dz = (rho/2) U^2 sqrt(nu w/2)   per unit area
-     standing wave eta = a cos(kx) cos(wt):
-        U(x) = a w sin(kx)/sinh(kh),  <U^2>_x = (a w/sinh kh)^2 / 2
-        E    = (1/4) rho w^2 a^2/(k tanh kh)     per unit horizontal area
-     so the ENERGY decays at <D>/E = sqrt(nu w/2) k tanh(kh)/sinh^2(kh)
-     and the AMPLITUDE at half that.
-
-   Valid while the layer is thin against both the depth and the wavelength;
-   at kh = 0.31 below, delta/h = 0.11 and k delta = 0.035. */
 const bottomLayerDamping = (k, w, nu) =>
   (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h0)/Math.pow(Math.sinh(k*h0), 2);
 let pass = 0; const fail = [];
+let ELEVEN = null;
 const ok = (c, label, detail) => {
   if (c) { pass++; return true; }
   fail.push(`${label}${detail ? '  — ' + detail : ''}`); return false;
 };
 
-/* 1. Curvature is the exact one, not the small-slope H_xx. */
 {
   const n = 256, L = 1, dx = L/n, k = 2*Math.PI/L, A = 1e-4;
   const H = new Float64Array(n), out = new Float64Array(n);
@@ -89,19 +31,6 @@ const ok = (c, label, detail) => {
   console.log(`1. curvature vs exact, 256 points: ${worst.toExponential(2)} relative`);
 }
 
-/* 2. THE GATE THAT WAS MISSING. The projection's gradient, applied to the
-   analytic hydrostatic pressure on a deformed surface, against the force that
-   is known on paper.
-
-     p = rho g (H(x) - z) = rho g H(x)(1 - s)
-     dp/dx|_z = dp/dx|_s - (s H_x/H) dp/ds
-              = rho g H_x (1-s) + rho g H_x s = rho g H_x   -- DEPTH-INDEPENDENT
-     dp/dz    = -rho g
-
-   Depth-independence is the whole point: the broken operator returned
-   s * rho g H_x, which is right only at the very top and wrong by 98% at the
-   bottom. Nothing about the shape of that profile shows up in an adjointness
-   or symmetry check. Refined, the error here falls 3.97x per doubling. */
 {
   const report = [];
   let firstWorst = 0, firstAvg = 0, rate = 0, prev = null;
@@ -117,7 +46,7 @@ const ok = (c, label, detail) => {
     let worst = 0, avgWorst = 0, vert = 0;
     for (let i = 0; i < nx; i++){
       const im = (i-1+nx)%nx, ex = rho*G*0.5*(S.Hx(im) + S.Hx(i));
-      if (Math.abs(ex) < 1e-4) continue;                 // node of H_x, no scale
+      if (Math.abs(ex) < 1e-4) continue;
       let sum = 0;
       for (let j = 0; j < ns; j++){
         worst = Math.max(worst, Math.abs(gu[i*ns+j] - ex)/Math.abs(ex));
@@ -139,16 +68,12 @@ const ok = (c, label, detail) => {
   }
   console.log('2. gradient vs the ANALYTIC hydrostatic force (the gate that was missing):');
   for (const r of report) console.log(r);
-  // the broken operator was 98% wrong at j=0 and 50% on the depth average
+
   ok(firstWorst < 2e-2, 'horizontal force is depth-independent rho g H_x', firstWorst.toExponential(2));
   ok(firstAvg < 1e-2, 'and its depth average is the full restoring force', firstAvg.toExponential(2));
   ok(rate > 3.5, 'and the error is second order in the mesh', `${rate.toFixed(2)}x per doubling`);
 }
 
-/* 2b. The bottom flux carries no contribution from u, whatever u is: at s = 0
-   the metric term is multiplied by zero. That is the property that makes
-   uAtSFace's j = 0 branch unreachable, so it is asserted rather than left as an
-   untested guard whose value nobody checked. */
 {
   const S = new FaradayDNS({nx:8, ns:6, L:0.006, h0, rho, nu:0, gamma:0});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.2*Math.sin(2*Math.PI*i/S.nx));
@@ -161,17 +86,12 @@ const ok = (c, label, detail) => {
   console.log(`2b. bottom flux independent of u: max deviation ${worst}`);
 }
 
-/* 3. D and G are adjoint IN THE METRIC INNER PRODUCT, the one the identity
-   actually holds in:  sum_c (Du)_c q_c + sum_f (Gq)_f u_f (1/W)_f = 0, with
-   1/W the Jacobian weight at each staggered location. Stating it in the
-   Euclidean inner product instead is precisely what the broken version
-   satisfied exactly while being the wrong operator. */
 {
   const S = new FaradayDNS({nx:16, ns:12, L:0.006, h0, rho, nu:nuW, gamma:gam});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.15*Math.sin(2*Math.PI*i/S.nx));
   const R = () => Math.random() - 0.5;
   const u = new Float64Array(S.nx*S.ns).map(R), w = new Float64Array(S.nx*(S.ns+1)).map(R);
-  for (let i = 0; i < S.nx; i++) w[i*(S.ns+1)] = 0;       // bottom face is not a dof
+  for (let i = 0; i < S.nx; i++) w[i*(S.ns+1)] = 0;
   const q = new Float64Array(S.nx*S.ns).map(R);
   const d = new Float64Array(S.nx*S.ns); S.divergence(u, w, d);
   let lhs = 0; for (let c = 0; c < d.length; c++) lhs += d[c]*q[c];
@@ -186,8 +106,6 @@ const ok = (c, label, detail) => {
   console.log(`3. <Du,q> + <Gq,u>_H = ${rel.toExponential(2)} relative (15% surface deformation)`);
 }
 
-/* 4. L = D G is symmetric and negative definite, so CG is a valid method on it.
-   Necessary, and -- as the first version proved -- nowhere near sufficient. */
 {
   const S = new FaradayDNS({nx:12, ns:10, L:0.006, h0, rho, nu:nuW, gamma:gam});
   for (let i = 0; i < S.nx; i++) S.H[i] = h0*(1 + 0.12*Math.sin(2*Math.PI*i/S.nx));
@@ -204,18 +122,6 @@ const ok = (c, label, detail) => {
   console.log(`4. L symmetry ${sym.toExponential(2)} relative, <a,La> = ${qd.toExponential(3)} < 0`);
 }
 
-/* 5. The mapped Laplacian against an ANALYTIC Laplacian on a deformed surface.
-   With A = s H_x/H,
-
-     d2/dx2|_z = d_xx - 2A d_xs + A^2 d_ss + (A A_s - A_x) d_s,
-     A A_s - A_x = s(2 H_x^2/H^2 - H_xx/H)
-
-   and the last group is second order in the wave amplitude, so a linear
-   dispersion test cannot see it at all: the u equation carried half of it and
-   the w equation none, and nothing noticed. Applying the operator to
-   cos(kx)cos(kappa z), whose Laplacian is -(k^2+kappa^2) times itself, does
-   see it -- and the ghosts are the analytic values, so the boundary treatment
-   is not what is being measured here. */
 {
   const lapErr = (nx, ns) => {
     const L = 0.006, S = new FaradayDNS({nx, ns, L, h0, rho, nu:0, gamma:0});
@@ -266,11 +172,6 @@ const ok = (c, label, detail) => {
      `${(u1/u2).toFixed(2)}x, ${(w1/w2).toFixed(2)}x`);
 }
 
-/* 6. Omega = 0 at s = 1, exactly. Substituting the kinematic condition
-   H_t = w - u H_x into Omega = (w - s H_t - s u H_x)/H leaves zero at s = 1 --
-   an identity, not a tolerance. It is what "the frame follows the surface"
-   means, and dropping the H_t term (which this did) breaks it by exactly H_t/H:
-   the mesh moves and the advection is told it does not. */
 {
   const S = new FaradayDNS({nx:16, ns:12, L:0.006, h0, rho, nu:nuW, gamma:gam});
   const k = 2*Math.PI/S.L;
@@ -290,12 +191,6 @@ const ok = (c, label, detail) => {
     + ` where dropping H_t would give ${scale.toExponential(2)}`);
 }
 
-/* 7. The projection is exact and hydrostatic balance is exact. With the
-   Dirichlet condition now landing ON the surface rather than at the ghost
-   centre half a cell above it, the pressure profile is not merely parallel to
-   rho g (H - z), it IS rho g (H - z): the 0.7342 Pa = rho g H ds/2 offset the
-   first version carried is gone, and the assertion is absolute rather than on
-   the gradient alone. */
 {
   const S = new FaradayDNS({nx:32, ns:24, L:0.006, h0, rho, nu:nuW, gamma:gam});
   const k = 2*Math.PI/S.L;
@@ -322,10 +217,6 @@ const ok = (c, label, detail) => {
     + ` depth drift ${dH.toExponential(1)} m, max|p - rho g (H-z)| ${off.toExponential(2)} Pa`);
 }
 
-/* 8. THE PHYSICS. The dispersion relation omega^2 = (gk + gamma k^3/rho)tanh(kh),
-   across shallow, intermediate and deep water and with and without capillarity,
-   from a linear-amplitude standing wave released from rest. This is the check
-   the first version failed at 0.7231 / 0.7419 / 0.8489 / 0.9536. */
 {
   const run = (nx, ns, dt, L, g, nT) => {
     const k = 2*Math.PI/L, A = 1e-9;
@@ -367,22 +258,12 @@ const ok = (c, label, detail) => {
      `${rate.toFixed(2)}x per halving`);
 }
 
-/* 9. The free-surface stress conditions, which are the ONLY source of damping
-   for a free-surface wave: while the flow stays irrotational nu lap u is
-   identically zero in the interior, so nothing in the bulk dissipates and the
-   entire decay rate comes from the two surface stresses. The first version had
-   neither right -- copy-ghosts for the tangential condition, and no viscous
-   normal stress at all -- and measured exactly half of Lamb's rate.
-
-   (a) is the algebra: n.E.n reduced with incompressibility and zero tangential
-   stress, checked against n.E.n computed from its definition.
-   (b) is the implementation on an analytic velocity field. */
 {
   let worst = 0;
   for (let t = 0; t < 2000; t++){
     const ux = (Math.random()-0.5)*4, Hx = (Math.random()-0.5)*1.2;
-    const Exx = ux, Ezz = -ux;                          // incompressibility
-    const Exz = 2*Hx*ux/(1 - Hx*Hx);                    // zero tangential stress
+    const Exx = ux, Ezz = -ux;
+    const Exz = 2*Hx*ux/(1 - Hx*Hx);
     const def = (Hx*Hx*Exx - 2*Hx*Exz + Ezz)/(1 + Hx*Hx);
     const red = -ux*(1 + Hx*Hx)/(1 - Hx*Hx);
     worst = Math.max(worst, Math.abs(def - red)/Math.abs(red));
@@ -426,28 +307,6 @@ const ok = (c, label, detail) => {
      `${(a1/a2).toFixed(2)}x, ${(p1/p2).toFixed(2)}x`);
 }
 
-/* 10. THE DAMPING RATE, against the EXACT linear viscous free-surface
-   dispersion relation -- not against Lamb's 2 nu k^2, which is only its
-   delta*k -> 0 limit.
-
-     (2 nu k^2 + lambda)^2 + omega0^2 = 4 nu^2 k^4 sqrt(1 + lambda/(nu k^2))
-
-   Non-dimensionalised with x = lambda/(nu k^2) and W = omega0/(nu k^2) this is
-   (2+x)^2 + W^2 = 4 sqrt(1+x), solved below by complex Newton on the principal
-   branch. Its leading correction is exactly 1 - delta*k/2 with
-   delta = sqrt(2 nu/omega), so at the delta*k = 0.22 of this test the true rate
-   is 0.888 of Lamb's, not 1.000 -- and a gate written against 2 nu k^2 would
-   have to carry a 12% tolerance to pass, which is far too loose to catch
-   anything. Against the exact root the agreement is under 1% and the tolerance
-   can be 2%.
-
-   This is the only check here that exercises the free-surface STRESS
-   conditions end to end, and it is the one that matters most: while the flow
-   stays irrotational the interior viscous force is identically zero, so the
-   damping comes entirely from those two boundary stresses -- and the damping
-   is what sets the Faraday threshold, which is the whole point of the solver.
-   Both surface conditions were wrong before, and this measured 0.497 of the
-   asymptotic rate, 0.56 of the exact one. */
 {
   const cadd = (a,b) => [a[0]+b[0], a[1]+b[1]];
   const csub = (a,b) => [a[0]-b[0], a[1]-b[1]];
@@ -457,16 +316,7 @@ const ok = (c, label, detail) => {
   const csqrt = (a) => { const r = Math.hypot(a[0],a[1]);
     const re = Math.sqrt((r+a[0])/2); let im = Math.sqrt((r-a[0])/2);
     if (a[1] < 0) im = -im; return [re, im]; };
-  /* Deliberately a second implementation of the same root, independent of the
-     page kernel's `viscousFreeSurfaceRe`: this file gates the DNS, and both are
-     checked against the same mpmath values in faraday/check-kernel.mjs.
 
-     The convergence test is RELATIVE. It was absolute (`< 1e-15`) at first,
-     which for a root whose imaginary part is W ~ 41 can never be met, so the
-     loop always ran its full 200 iterations and then accepted whatever it held
-     -- correct here only by luck, since Newton had already converged. With a
-     relative test it lands in five to seven, and it raises rather than
-     returning an unconverged root. */
   const viscousRoot = (W) => {
     let x = [-2, W];
     for (let i = 0; i < 60; i++){
@@ -506,14 +356,7 @@ const ok = (c, label, detail) => {
     console.log(`     nu=${nu.toExponential(2)} (delta k = ${dk.toFixed(3)}): `
       + `${got.toFixed(4)} s^-1 vs exact ${exact.toFixed(4)}, ${(rel*100).toFixed(2)}% off`
       + `   [Lamb's 2 nu k^2 = ${(2*nk2).toFixed(4)}, exact/Lamb ${(exact/(2*nk2)).toFixed(4)}]`);
-    /* The residual is POSITIVE at both points and grows as nu falls, which is
-       the bottom Stokes layer: the root above is the deep-water one and this
-       cell is kh = 3.14, so the solver carries a damping the reference does
-       not. Its rate is `bottomLayerDamping` below -- 0.95% of the total at the
-       first point and 1.79% at the second, which accounts for the 0.69% and
-       1.99% measured and has the right trend, since it scales as sqrt(nu)
-       against the bulk's nu. 3% leaves room for that plus the O(dx^2) of a
-       32-cell wavelength; the defect it has to catch missed by 44%. */
+
     const gb = bottomLayerDamping(k, w0, nu);
     console.log(`       bottom Stokes layer, not in the deep-water root: `
       + `${gb.toFixed(4)} s^-1 = ${(100*gb/exact).toFixed(2)}% of it`);
@@ -522,37 +365,11 @@ const ok = (c, label, detail) => {
       `${(rel*100).toFixed(2)}% off`);
   }
 
-  /* SHALLOW, where the bottom layer is the dissipation rather than a 1%
-     correction. This row exists because of a regeneration test that came back
-     GREEN: replacing the no-slip bottom with free slip passed all 29 checks.
-     Nothing above could see it -- at kh = 3.14 the bottom carries under 1% of
-     the damping, well inside the 3% tolerance, and no other check touches u at
-     the bottom at all. At kh = 0.31 it carries 91%, and free slip then misses
-     by a factor of eleven.
-
-     The reference is the bulk rate (Lamb's 2 nu k^2, which is depth-independent
-     -- the dissipation integral over the potential flow gives 4 nu k^2 for the
-     energy whatever the depth) plus the bottom layer derived above. Both are
-     leading-order in delta; here delta/h = 0.11, and the tolerance is sized for
-     that, not for round-off.
-
-     Measured, the ratio to that reference falls with refinement rather than
-     sitting still: 1.083 at nx=32 ns=32 dt=2e-4, 1.073 at nx=32 ns=48 dt=1e-4,
-     1.068 at nx=48 ns=64 dt=1e-4 (168 s, 479 s and 2055 s respectively). So
-     part of the gap is resolution and part is the reference's own leading
-     order, and it is not worth deciding which without a finer reference than
-     two asymptotic formulas added together. 15% covers both with room; free
-     slip, which is what this row exists to catch, misses by 95.7%. */
   {
     const L = 0.060, k = 2*Math.PI/L, nu = nuW, w0 = wEx(k, gam);
     const ref = 2*nu*k*k + bottomLayerDamping(k, w0, nu);
     const bot = bottomLayerDamping(k, w0, nu);
-    /* nx=16, ns=32, dt=1e-3, five periods -- eight seconds. Checked against
-       nx=32, dt=2e-4, eight periods, which costs 168 s and gives 0.53750
-       against this configuration's 0.54190: 0.8% apart. dt=5e-4 gives 0.54082,
-       so it is dt-converged too, and the whole refinement ladder above moves
-       the answer by 2.4%. The cheap one is used because a gate nobody can
-       afford to run is not a gate. */
+
     const got = measure(16, 32, 1e-3, L, nu, 5);
     const rel = Math.abs(got/ref - 1);
     console.log(`     SHALLOW kh=${(k*h0).toFixed(2)}, L=60mm: ${got.toFixed(5)} s^-1 vs`
@@ -564,40 +381,6 @@ const ok = (c, label, detail) => {
   }
 }
 
-/* 11. THE FARADAY INSTABILITY ITSELF, against the damped-Mathieu prediction
-   that cymatic.html's renderer uses to decide which modes are excited.
-
-   Oscillating the container's gravity, g(t) = g + a cos(omega_d t), modulates
-   only the gravitational part of the restoring force, so the mode amplitude
-   obeys
-
-       eta'' + 2 gamma eta' + [omega^2 + a k tanh(kh) cos(omega_d t)] eta = 0,
-
-   a damped Mathieu equation whose principal (subharmonic) tongue at
-   omega_d = 2 omega grows at
-
-       sigma = eps omega/4 - gamma,   eps = a k tanh(kh)/omega^2,
-
-   so the threshold is a_c = 4 gamma omega /(k tanh kh). This is the ONLY check
-   that exercises the time-dependent drive at all, and the drive is what the
-   page is about.
-
-   omega and gamma are taken from the solver's OWN free decay rather than from
-   theory, so this measures the parametric mechanism and not the dispersion and
-   damping that checks 8 and 10 already measure against exact references. It
-   also removes a detuning: the solver's omega is 0.9964 of the inviscid one, so
-   driving at twice the THEORETICAL frequency sits about half a linewidth off
-   resonance and quietly raises the threshold.
-
-   The drive is put well above threshold on purpose. From a rest start the state
-   is a mixture of both Floquet branches, and near onset they do not separate
-   inside any window worth running in CI -- at a = 4 a_c an envelope fit reads
-   4.99 over 10 periods and converges to a rock-steady 6.23 only by 40, against
-   a prediction of 6.49. That is a property of the measurement, not of the
-   solver. At a = 24 a_c the branches separate by e^10 within five periods and
-   the fit is clean immediately. The 8% tolerance covers the leading-order
-   Mathieu formula's own O(eps^2) error, which at these amplitudes is the
-   largest term in the comparison. */
 {
   const L = 0.006, k = 2*Math.PI/L, th = Math.tanh(k*h0);
   const nx = 32, ns = 32, dt = 2e-5, nu = nuW;
@@ -624,8 +407,9 @@ const ok = (c, label, detail) => {
   const aRel = 24, nP = 6;
   const D = new FaradayDNS({nx, ns, L, h0, rho, nu, gamma:gam, accel:aRel*ac, omegaD:2*wOwn});
   for (let i = 0; i < nx; i++) D.H[i] = h0 + 1e-9*Math.cos(k*(i+0.5)*D.dx);
-  const per = Math.round(T/dt), amp = [];
-  for (let p = 0; p < nP; p++){ for (let n = 0; n < per; n++) D.step(dt); amp.push(D.surfaceAmplitude()); }
+
+  const per = Math.round(T/dt), dtA = T/per, amp = [];
+  for (let p = 0; p < nP; p++){ for (let n = 0; n < per; n++) D.step(dtA); amp.push(D.surfaceAmplitude()); }
   let sx = 0, sy = 0, sxx = 0, sxy = 0, c = 0;
   for (let p = Math.floor(nP*0.4); p < nP; p++){
     const t = (p+1)*T, y = Math.log(amp[p]); sx += t; sy += y; sxx += t*t; sxy += t*y; c++;
@@ -639,6 +423,83 @@ const ok = (c, label, detail) => {
      `grew ${(amp[nP-1]/amp[0]).toExponential(2)}x`);
   ok(Number.isFinite(got) && rel < 0.08,
      'and at the damped-Mathieu growth rate', `${(rel*100).toFixed(2)}% off`);
+  ELEVEN = { growth: got, ac, wOwn, gOwn, aRel, L, k, th };
+}
+
+{
+  console.log('12. the Faraday threshold, by Floquet:');
+
+  const eigCheck = (M, n, want, label) => {
+    const got = hessenbergEigs(M, n).map(z => Math.hypot(z.re, z.im)).sort((a,b) => b-a);
+    const w = want.slice().sort((a,b) => b-a);
+    let worst = 0;
+    for (let i = 0; i < n; i++) worst = Math.max(worst, Math.abs(got[i] - w[i]));
+    ok(worst < 1e-9, `eigensolver: ${label}`, `worst |lambda| error ${worst.toExponential(2)}`);
+  };
+  eigCheck([[2,1,1],[0,-3,1],[0,0,0.5]], 3, [2,3,0.5], 'upper triangular');
+  eigCheck([[0,-1],[1,0]], 2, [1,1], 'rotation, a conjugate pair');
+  eigCheck([[0,4],[1,0]], 2, [2,2], 'equal modulus, +-2');
+
+  eigCheck([[1,1],[-1,3]], 2, [2,2], 'defective 2x2, double root at 2');
+  eigCheck([[5,1,1,1],[0,3,1,1],[0,0,1,1],[0,0,-1,3]], 4, [5,3,2,2],
+           '4x4 whose trailing 2x2 is defective');
+  {
+    const roots = [1,2,3,4,5];
+    let poly = [1];
+    for (const r of roots){ const q = [...poly, 0];
+      for (let i = 0; i < poly.length; i++) q[i+1] -= r*poly[i]; poly = q; }
+    const n = 5, Cm = Array.from({length:n}, () => Array(n).fill(0));
+    for (let i = 1; i < n; i++) Cm[i][i-1] = 1;
+    for (let i = 0; i < n; i++) Cm[i][n-1] = -poly[n-i];
+    eigCheck(Cm, n, roots, 'companion of (x-1)...(x-5)');
+  }
+
+  const { ac, wOwn, aRel, L, k, th } = ELEVEN;
+  const base = { nx:32, ns:32, L, h0, rho, nu:nuW, gamma:gam, omegaD:2*wOwn, dt:2e-5 };
+
+  const fl6 = floquet({ ...base, accel: aRel*ac, m: 6 });
+  const dGrowth = Math.abs(fl6.growth/ELEVEN.growth - 1);
+  console.log(`     a = ${aRel} a_c: Floquet |mu| = ${fl6.muMax.toFixed(8)}, growth `
+    + `${fl6.growth.toFixed(4)} s^-1 against check 11's envelope fit ${ELEVEN.growth.toFixed(4)}`
+    + ` -- ${(dGrowth*100).toFixed(3)}% apart`);
+  ok(dGrowth < 0.01, 'Floquet and the envelope fit agree on the growth rate',
+     `${(dGrowth*100).toFixed(3)}%`);
+
+  const fl4 = floquet({ ...base, accel: aRel*ac, m: 4 });
+  const dM = Math.abs(fl4.muMax/fl6.muMax - 1);
+  ok(dM < 1e-5, 'and the multiplier is independent of the Krylov dimension',
+     `m=4 vs m=6 differ by ${dM.toExponential(2)}`);
+
+  const lo = floquet({ ...base, accel: 0.95*ac, m: 6 });
+  const hi = floquet({ ...base, accel: 1.05*ac, m: 6 });
+  console.log(`     |mu|(0.95 a_c) = ${lo.muMax.toFixed(8)}  |mu|(1.05 a_c) = ${hi.muMax.toFixed(8)}`
+    + `   (bisected threshold 2.55291, formula ${ac.toFixed(5)}, formula 0.99% low)`);
+  ok(lo.muMax < 1, 'below 0.95 a_c the mode is stable', `|mu| = ${lo.muMax.toFixed(8)}`);
+  ok(hi.muMax > 1, 'above 1.05 a_c it is unstable', `|mu| = ${hi.muMax.toFixed(8)}`);
+  ok(lo.muMax < 1 && hi.muMax > 1,
+     'so the damped-Mathieu threshold the renderer uses is right to within 5%',
+     `bracketed in [${(0.95*ac).toFixed(4)}, ${(1.05*ac).toFixed(4)}]`);
+
+  {
+    const fx = JSON.parse(readFileSync(new URL('./hessenberg-defective-24.json',
+                                               import.meta.url), 'utf8'));
+    const want = fx.eigenvalueModuliReference.sortedDescending;
+    let threw = null, got = null;
+    try { got = hessenbergEigs(fx.matrix, fx.matrix.length)
+            .map(z => Math.hypot(z.re, z.im)).sort((a, b) => b - a); }
+    catch (e) { threw = e.message; }
+    ok(threw === null, 'the eigensolver converges on the defective Hessenberg',
+       threw || 'no throw');
+    let worst = Infinity;
+    if (got){
+      worst = 0;
+      for (let i = 0; i < want.length; i++) worst = Math.max(worst, Math.abs(got[i] - want[i]));
+      console.log(`     defective 24x24 fixture: |mu|max ${got[0].toFixed(12)} vs LAPACK `
+        + `${want[0].toFixed(12)}, worst of 24 moduli ${worst.toExponential(2)}`);
+    }
+    ok(worst < 5e-8, 'and matches LAPACK across all 24 eigenvalues',
+       `worst ${worst.toExponential(2)}`);
+  }
 }
 
 console.log('\n' + '─'.repeat(66));
