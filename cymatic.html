@@ -528,7 +528,12 @@ function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
     const lo = w2[i], hi = w2[i+1], e = (hi - lo)*1e-12;
     let a = lo + e, b = hi - e;
     const fa = f(a), fb = f(b);
-    if (!(fa*fb < 0)) continue;               // no sign change: no root here
+    if (!(fa*fb < 0)) throw new Error(
+      `pinnedEdgeSpectrum: no sign change in (${lo}, ${hi}), f(a)=${fa}, f(b)=${fb}. `
+      + `The secular function must run -infinity to +infinity between consecutive `
+      + `poles because every c_n > 0. Refusing rather than skipping the interval: `
+      + `the caller pairs bases by array position, so a skipped root renumbers `
+      + `every mode above it.`);
     for (let it = 0; it < 200; it++){
       const mid = (a + b)/2;
       if (f(a)*f(mid) <= 0) b = mid; else a = mid;
@@ -859,8 +864,7 @@ function dampingRate(k, w, nu, hM){
   const bulk = -viscousFreeSurfaceRe(w/nk2)*nk2;
   const bulkPotential = 2*nk2;
   const delta = Math.sqrt(2*nu/w);
-  const sh = Math.sinh(2*k*hM);
-  const layer = isFinite(sh) && sh > 0 ? w*(k*delta)/(2*sh) : 0;
+  const layer = w*k*delta*Math.exp(-2*k*hM)/(-Math.expm1(-4*k*hM));
   return { total: bulk + layer, bulk, bulkPotential,
            surfaceLayer: bulk - bulkPotential, layer, stokesDepth: delta };
 }
@@ -1178,36 +1182,78 @@ function resolvePatternState(o){
         const quart = new Float64Array(QUAD_R + 1);
         for (let q = 0; q <= QUAD_R; q++)
           quart[q] = prof[i][q]*prof[i][q]*prof[j][q]*prof[j][q];
+        if (!(norm[i] > 0 && norm[j] > 0)) throw new Error(
+          `competition: mode norm is ${norm[i]}, ${norm[j]} for m = ${modes[i].m}, `
+          + `${modes[j].m}. A norm is the integral of psi^2 r dr times the angular `
+          + `square and is positive by construction, so this cannot be clamped away.`);
         gmat[i][j] = simpsonR(quart)*angularQuartic(modes[i].m, modes[j].m)
-                   / Math.max(1e-30, norm[i]*norm[j]);
+                   / (norm[i]*norm[j]);
       }
     }
-    // integrate to steady state
-    const A = new Float64Array(N).fill(1e-3);
-    const sMax = Math.max(1e-9, ...modes.map(t => Math.abs(t.growth)));
-    const dt = 0.15/sMax;
-    for (let step = 0; step < 4000; step++){
-      const dA = new Float64Array(N);
-      for (let i = 0; i < N; i++){
+
+    const solveLinear = (M, rhs) => {
+      const n = rhs.length;
+      const a = M.map((row, r) => { const v = Array.from(row); v.push(rhs[r]); return v; });
+      for (let c = 0; c < n; c++){
+        let piv = c;
+        for (let r = c + 1; r < n; r++)
+          if (Math.abs(a[r][c]) > Math.abs(a[piv][c])) piv = r;
+        if (a[piv][c] === 0) return null;
+        if (piv !== c){ const t = a[piv]; a[piv] = a[c]; a[c] = t; }
+        for (let r = c + 1; r < n; r++){
+          const f = a[r][c]/a[c][c];
+          if (f === 0) continue;
+          for (let k = c; k <= n; k++) a[r][k] -= f*a[c][k];
+        }
+      }
+      const x = new Float64Array(n);
+      for (let r = n - 1; r >= 0; r--){
+        let sum = a[r][n];
+        for (let k = r + 1; k < n; k++) sum -= a[r][k]*x[k];
+        x[r] = sum/a[r][r];
+      }
+      return x;
+    };
+
+    const cand = [];
+    for (let i = 0; i < N; i++) if (modes[i].growth > 0) cand.push(i);
+    const x = new Float64Array(N);
+    let S = cand.slice(), resolved = false;
+    for (let pass = 0; pass < 4*N + 8 && !resolved; pass++){
+      if (!S.length){ resolved = true; break; }
+      const sol = solveLinear(S.map(i => S.map(j => gmat[i][j])),
+                              S.map(i => modes[i].growth));
+      if (sol === null) throw new Error(
+        `competition: the overlap matrix is singular on the ${S.length}-mode `
+        + `support {${S.map(i => modes[i].m).join(',')}}. Refusing rather than `
+        + `returning a pattern the equations do not determine.`);
+      let worst = -1;
+      for (let t = 0; t < S.length; t++)
+        if (sol[t] <= 0 && (worst < 0 || sol[t] < sol[worst])) worst = t;
+      if (worst >= 0){ S.splice(worst, 1); continue; }
+      x.fill(0);
+      for (let t = 0; t < S.length; t++) x[S[t]] = sol[t];
+      let best = -1, bestRate = 0;
+      for (const k of cand){
+        if (S.indexOf(k) >= 0) continue;
         let sat = 0;
-        for (let j = 0; j < N; j++) sat += gmat[i][j]*A[j]*A[j];
-        dA[i] = A[i]*(modes[i].growth - sat);
+        for (let j = 0; j < N; j++) sat += gmat[k][j]*x[j];
+        const rate = modes[k].growth - sat;
+        if (rate > bestRate){ bestRate = rate; best = k; }
       }
-      let moved = 0;
-      for (let i = 0; i < N; i++){
-        const nv = Math.max(0, A[i] + dt*dA[i]);
-        moved = Math.max(moved, Math.abs(nv - A[i]));
-        A[i] = nv;
-      }
-      if (moved < 1e-12*Math.max(1e-9, Math.max(...A))) break;
+      if (best >= 0){ S.push(best); S.sort((p, q) => p - q); continue; }
+      resolved = true;
     }
+    if (!resolved) throw new Error(
+      `competition: the coexistence set did not settle in ${4*N + 8} exchanges `
+      + `over ${N} modes. Refusing rather than reporting the last set tried.`);
+
     const survivors = [];
-    const amax = Math.max(...A);
-    for (let i = 0; i < N; i++) if (A[i] > amax*0.02 && A[i] > 0)
-      survivors.push({ ...modes[i], amp: A[i] });
-    survivors.sort((a,b) => b.amp - a.amp);
+    for (let i = 0; i < N; i++) if (x[i] > 0)
+      survivors.push({ ...modes[i], amp: Math.sqrt(x[i]) });
+    survivors.sort((a, b) => b.amp - a.amp);
     competition = { size: N, survivors, killed: N - survivors.length,
-                    saturated: amax > 0 };
+                    saturated: survivors.length > 0 };
   }
 
   const rec = atlasAt(cellKey, f);
@@ -1287,9 +1333,9 @@ function resolvePatternState(o){
     const pool = won || modes.slice(0, 6);
     const amax = won ? Math.max(...won.map(t => t.amp))
                      : Math.max(...pool.map(t => Math.abs(t.growth)), 1e-9);
-    for (const t of pool.slice(0, 8))
+    for (const t of pool)
       states.push({ fold: t.m*2, m: t.m,
-                    weight: Math.max(1e-3, (won ? t.amp : Math.abs(t.growth))/amax),
+                    weight: (won ? t.amp : Math.abs(t.growth))/amax,
                     phi: t.phi || 0,
                     radial: { ...t, n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) },
                     theoryOnly: true });
@@ -1301,7 +1347,11 @@ function resolvePatternState(o){
       : `No mode reaches Faraday onset at this amplitude. Shown are the least-damped `
         + `modes, which is a diagnostic, not a pattern.` });
   }
-  const wsum = states.reduce((s, x) => s + x.weight, 0) || 1;
+  const wsum = states.reduce((s, x) => s + x.weight, 0);
+  if (states.length && !(wsum > 0)) throw new Error(
+    `state weights sum to ${wsum} over ${states.length} drawn modes. Every weight `
+    + `is an amplitude the competition solved for or a growth rate, both positive `
+    + `by construction, so this cannot be divided away.`);
   for (const s of states) s.weight /= wsum;
 
   if (TRANSITION[f]) warnings.push({ hard: false, text:
@@ -1830,7 +1880,7 @@ function paintDeck(){
     ['phase-flux gain', s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
     ['SEP', ''],
     ['px per wavelength', s.states[0]
-        ? `${(2*Math.PI*181/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
+        ? `${(2*Math.PI*RR/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
     ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
     ['SEP', ''],
@@ -2195,9 +2245,10 @@ async function exportImage(SIZE, onProgress){
        because the numbers demanded it. */
     const STEPS = 520, TOPPLE_EVERY = 8;
     const jitter = AGIT*agitation;
-    let refused = 0;
+    let refused = 0, toppleSweeps = 0;
     const occLive = new Float32Array(gw*gw);
     const shedSurplus = () => {
+      toppleSweeps++;
       occLive.fill(0);
       for (let p = 0; p < N; p++){
         const c = cellOf(gx[p], gy[p]); if (c >= 0) occLive[c] += 1;
@@ -2284,7 +2335,7 @@ async function exportImage(SIZE, onProgress){
     for (let p = 0; p < N; p++){
       const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
     }
-    const sweeps = 0;
+    const sweeps = toppleSweeps;
 
     /* Grains rest in contact, and neither of the two placements I tried put
        them there.
