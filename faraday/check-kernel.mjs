@@ -66,6 +66,35 @@ const { K } = await import(pathToFileURL(modPath).href);
 for (const name of EXPORTS)
   if (K[name] === undefined) throw new Error(`kernel export ${name} is undefined after evaluation`);
 
+/* ---- and the exact coupled benchmark, sliced from the same page -------- */
+/* cymatic.html carries a second, independent region below the kernel: the
+   coupled affine benchmark, exact rational arithmetic over BigInt, whose 19
+   residual terms are zero over Q rather than small. Nothing in this file
+   touched it until now -- no `evaluate`, no `allResidualsZero` anywhere -- and
+   that is how residuals in it came to be tautologies without anything
+   noticing: terms that restate their own defining line and cannot be nonzero
+   whatever the arithmetic does. Section 12 says which ones, and how that was
+   measured. It is sliced by its own two anchors, the same way and for the same
+   reason as the kernel above: one copy of the construction, nothing that can
+   drift away from the page. */
+const B_ANCHOR = 'exact coupled benchmark, inlined verbatim';
+const B_TAIL   = 'const API = { Q, evaluate, allResidualsZero, DEFAULTS, S_MIN, S_MAX };';
+const ba = HTML.indexOf(B_ANCHOR), bt = HTML.indexOf(B_TAIL);
+// back up to the '/*' opening the banner comment that carries the anchor, so
+// the slice starts on a statement boundary rather than inside a comment
+const bb = ba < 0 ? -1 : HTML.lastIndexOf('/*', ba);
+if (bb < 0 || bt < 0 || bt <= bb)
+  throw new Error(`benchmark anchors missing or out of order in cymatic.html (begin=${bb}, end=${bt})`);
+const bsrc = HTML.slice(bb, bt);
+if (bsrc.length < 8000)
+  throw new Error(`sliced benchmark is only ${bsrc.length} chars — the anchors are not bracketing it`);
+const B_EXPORTS = ['Q','evaluate','allResidualsZero','DEFAULTS','S_MIN','S_MAX'];
+const benchPath = join(tmp, 'benchmark.mjs');
+writeFileSync(benchPath, bsrc + '\nexport const B = {' + B_EXPORTS.join(',') + '};\n');
+const { B } = await import(pathToFileURL(benchPath).href);
+for (const name of B_EXPORTS)
+  if (B[name] === undefined) throw new Error(`benchmark export ${name} is undefined after evaluation`);
+
 /* ---- harness ----------------------------------------------------------- */
 let pass = 0; const failures = [];
 function ok(cond, label, detail){
@@ -1035,6 +1064,197 @@ function state(over = {}){
      `${lo.unstableCount} then ${hi.unstableCount}`);
 }
 
+/* ── 12. the exact coupled benchmark ────────────────────────────────────── */
+/* This is the second region of cymatic.html, not the Faraday kernel: a
+   manufactured coupled solution carried in exact rationals, where every local
+   residual is claimed to be ZERO over Q rather than small. Until now it had no
+   coverage at all.
+
+   What this section can and cannot establish, stated plainly, because that
+   distinction is exactly what let the tautologies survive unnoticed.
+
+   Nine of the nineteen terms are zero as a consequence of their own defining
+   lines rather than of the construction being right. solidMomentum and
+   freeSurfaceCurvature are the literal constant Q.ZERO. incompressibility is
+   a + a − 2a, from gradU as written. The three angularMomentum terms are
+   off-diagonal entries of a product of two diagonal matrices. The three
+   fluidMomentum terms subtract a body force b_f that is DEFINED, three lines
+   above, as the convective term it is subtracted from. An edit to those lines
+   would move them; an error in the material law, the closure or the geometry
+   cannot. Asserting them is close to free and it is not coverage.
+
+   The rest is what the four regeneration defects actually moved, and I had
+   two of these wrong before measuring:
+
+     - a wrong sigma_Z exponent  ->  fluidSolidStressMatch[2], storedEnergyRate
+     - a wrong closure constant  ->  fluidSolidStressMatch[0..2],
+                                     freeSurfaceTraction, energyBalance
+     - a wrong geometry moment   ->  NOTHING. All nineteen stay exactly zero,
+                                     which is why the moments are asserted
+                                     separately below
+     - allResidualsZero returning an empty list -> nothing either, except the
+                                     term COUNT, which is the only thing
+                                     standing between a residual that passed
+                                     and a residual that stopped being
+                                     collected
+
+   I had written freeSurfaceTraction and energyBalance off as identities; they
+   are not. Both are zero only because a = d/(6 mu), so both go nonzero when
+   that constant is wrong. viscousElasticClosure really is self-cancelling in
+   it -- six*mu*f/s − d with f = s*d/(six*mu) is d − d for ANY value of six --
+   and stayed exactly zero under that injection. freeSurfaceKinematic and the
+   two kinetic-power terms were not moved by any defect tried here, so nothing
+   below claims they are covered. */
+section('12. exact coupled benchmark (exact rationals over Q)');
+{
+  const { Q, evaluate, allResidualsZero } = B;
+
+  /* The count is asserted beside allZero because "no nonzero residual" is
+     vacuously true of an empty list, and that is not hypothetical here: the
+     page's first walk handled Q values and arrays but not plain objects, so it
+     collected nothing out of r.residuals and reported allZero over zero terms.
+     A count that shrinks is a residual that stopped being collected, and that
+     reads exactly like a residual that passed. */
+  const TERMS = 19;
+  const KEYS = ['incompressibility','fluidMomentum','solidMomentum',
+    'fluidSolidStressMatch','angularMomentum','freeSurfaceKinematic',
+    'freeSurfaceTraction','freeSurfaceCurvature','energyBalance',
+    'storedEnergyRate','viscousElasticClosure','fluidKineticPower',
+    'solidKineticPower'];
+
+  for (const s of ['5/4', '11/8', '3/2', '7/5']){
+    const r = evaluate({ stretch: s });
+    const z = allResidualsZero(r);
+    eq(z.count, TERMS, `s=${s}: all ${TERMS} residual terms were collected`);
+    ok(z.allZero === true, `s=${s}: every residual is exactly zero over Q`,
+       `nonzero: ${z.nonzero.join(', ')}`);
+    ok(r.scope.stretchInRange === true, `s=${s} lies inside the declared interval`);
+    /* det F = 1 exactly. F is diag(s, s, s^-2), so this is a cancellation
+       between three rationals and not a no-op: the stretch is strictly above
+       one at every case here, which is asserted so that a future case pinned
+       at s = 1 cannot make det F = 1 true for free. */
+    ok(r.state.s.cmp(Q.of(1n)) > 0, `s=${s} is genuinely stretched, so det F = 1 is a cancellation`,
+       `s = ${r.state.s}`);
+    eq(r.state.detF.toString(), '1', `s=${s}: det F = 1 exactly (isochoric)`);
+  }
+
+  // every named residual is present. The count catches a term that stops being
+  // collected; this says which one it was.
+  {
+    const res = evaluate({ stretch: '5/4' }).residuals;
+    for (const k of KEYS) ok(res[k] !== undefined, `residual ${k} is present`);
+    eq(Object.keys(res).length, KEYS.length, 'and no residual term beyond those thirteen');
+  }
+
+  /* Geometry. The page integrates the moments from the declared radii and
+     heights rather than writing 31/2 and 7/3 in by hand, so what is asserted
+     is that the integration reproduces the figures the construction is stated
+     over, per the common factor pi: liquid (unit disk, unit height) volume 1,
+     INT(X²+Y²) = 1/2, INT Z² = 1/3; wall 1<r<2 over 0<z<1 giving 3, 15/2, 1;
+     bottom r<2 over −1<z<0 giving 4, 8, 4/3; solid the sum, 7, 31/2, 7/3.
+
+     The page's own comment says no local residual constrains these, and it is
+     right -- every term they enter carries them on BOTH sides, so a wrong
+     moment moves the two together and all nineteen residuals stay exactly
+     zero. Regeneration-tested: turning the radial /2 into /3 leaves allZero
+     true at every stretch and only these assertions go red. They are therefore
+     the whole of the geometry's coverage, not a supplement to it. */
+  {
+    const g = evaluate({ stretch: '11/8' }).geometry;
+    const moment = (region, key, want) =>
+      eq(g[region][key].toString(), want, `geometry: ${region} ${key} = ${want}`);
+    moment('liquid', 'volume',   '1');
+    moment('liquid', 'radial',   '1/2');
+    moment('liquid', 'vertical', '1/3');
+    moment('wall',   'volume',   '3');
+    moment('wall',   'radial',   '15/2');
+    moment('wall',   'vertical', '1');
+    moment('bottom', 'volume',   '4');
+    moment('bottom', 'radial',   '8');
+    moment('bottom', 'vertical', '4/3');
+    moment('solid',  'volume',   '7');
+    moment('solid',  'radial',   '31/2');
+    moment('solid',  'vertical', '7/3');
+    eq(g.totalVolume.toString(), '8', 'geometry: total volume is 1 + 7 = 8');
+  }
+
+  /* Q refuses binary64 on the way in, which is the boundary the whole
+     exactness claim stands on: admit one float anywhere and "exactly zero over
+     the rationals" becomes "zero to within rounding", a different and much
+     weaker statement. An integral float is refused too -- 2 does not get in
+     just because it happens to be representable. */
+  for (const bad of [1.25, 0.5, 2, 0, NaN]){
+    let e = null;
+    try { Q.of(bad); } catch (err) { e = err; }
+    ok(e instanceof TypeError, `Q.of(${bad}) refuses a binary64 input`,
+       `threw ${e === null ? 'nothing' : e.constructor.name}`);
+  }
+  // the second argument is a denominator, not decoration. It was being dropped:
+  // Q.of(8n, 3n) returned 8, and every fractional constant in the energy ledger
+  // was wrong while all nineteen residuals still read zero.
+  eq(Q.of(8n, 3n).toString(), '8/3', 'Q.of(8n,3n) is 8/3, not 8');
+  eq(Q.of(8n).toString(), '8', 'Q.of(8n) is 8');
+  // and the exact routes the TypeError points the caller at must work
+  eq(Q.of('1.25').toString(), '5/4', "Q.of('1.25') reads the decimal exactly");
+  eq(Q.of('5/4').toString(),  '5/4', "Q.of('5/4') reads the fraction");
+  eq(Q.of('-3/9').toString(), '-1/3', 'Q.of normalises sign and gcd');
+
+  /* allResidualsZero refuses an empty collection rather than reporting allZero
+     over nothing, which is what it did when its walk missed plain objects.
+     Both branches are exercised: it refuses the empty case, and it does report
+     a genuine nonzero -- a checker that has only ever returned true is not
+     known to be able to return false. */
+  for (const [label, arg] of [['an empty residual object', { residuals: {} }],
+                              ['only empty containers', { residuals: { a: {}, b: [], c: { d: [] } } }]]){
+    let e = null;
+    try { allResidualsZero(arg); } catch (err) { e = err; }
+    ok(e !== null && /collected no residuals/.test(e.message),
+       `allResidualsZero refuses ${label}`,
+       `threw ${e === null ? 'nothing' : e.message}`);
+  }
+  {
+    const z = allResidualsZero({ residuals:
+      { good: Q.ZERO, bad: Q.of('7/3'), arr: [Q.ZERO, Q.of(-1n)] } });
+    eq(z.count, 4, 'allResidualsZero walks plain objects and arrays alike');
+    ok(z.allZero === false, 'and reports a collection that is not all zero',
+       `got ${JSON.stringify(z)}`);
+    eq(z.nonzero.join(' '), 'bad=7/3 arr[1]=-1',
+       'naming each offending term by path and exact value');
+  }
+
+  /* Non-positive material parameters are refused rather than divided by. mu = 0
+     would make every rate in the construction a division by zero, and a
+     negative rhoF would report a negative kinetic energy as though it meant
+     something. Each of the five is checked separately, so a check that covers
+     four of them is not mistaken for one that covers all five. */
+  for (const key of ['rhoF','mu','rhoS','G','gamma']){
+    for (const bad of ['0','-1','-1/3']){
+      let e = null;
+      try { evaluate({ [key]: bad }); } catch (err) { e = err; }
+      ok(e instanceof RangeError && e.message.startsWith(`${key} must be positive`),
+         `evaluate refuses ${key} = ${bad}`,
+         `threw ${e === null ? 'nothing' : e.constructor.name + ': ' + e.message}`);
+    }
+  }
+  // ...and a positive, non-unit material set still closes exactly, so the
+  // residuals are not an artefact of every material constant being 1.
+  {
+    const z = allResidualsZero(evaluate({ stretch: '11/8', rhoF: '3/2', mu: '7/5',
+                                          rhoS: '11/4', G: '13/7', gamma: '5/3' }));
+    eq(z.count, TERMS, 'a non-unit material set still collects all 19 terms');
+    ok(z.allZero === true, 'and every residual there is exactly zero too',
+       `nonzero: ${z.nonzero.join(', ')}`);
+  }
+
+  // The T* bracket is ordered the right way round: f is increasing across the
+  // interval, so the LARGER bound comes from the slower end s = 5/4.
+  {
+    const c = evaluate({ stretch: '5/4' }).clock;
+    ok(c.tStarLower.cmp(c.tStarUpper) < 0, 'the T* bracket is ordered',
+       `${c.tStarLower} .. ${c.tStarUpper}`);
+  }
+}
+
 /* ---- report ------------------------------------------------------------ */
 console.log('\n' + '─'.repeat(66));
 /* A silently shortened loop removes assertions without removing a check, so the
@@ -1043,7 +1263,7 @@ console.log('\n' + '─'.repeat(66));
    count from 2451 to 2331 and the suite stayed green. The per-loop length
    assertions above catch that case; this total catches every other way an
    assertion can stop running. Update it deliberately when adding checks. */
-const EXPECTED_ASSERTIONS = 2502;
+const EXPECTED_ASSERTIONS = 2582;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
