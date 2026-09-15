@@ -20,6 +20,67 @@ function mulberry32(a){
 const rand = mulberry32(0x9E3779B9);
 const R = () => rand() - 0.5;
 
+/* Every tolerance here carries the two measurements that fix it, as data
+   rather than as a comment: `admits` is the largest value CORRECT code has been
+   measured to produce, `rejects` is the smallest value the DEFECT the gate
+   exists to catch was measured to produce. The ordering admits < value <
+   rejects is asserted at load, so widening a bound past the defect it must
+   reject -- or tightening it below what correct code produces -- fails here
+   instead of silently later. An entry with no `rejects` has no injected-defect
+   measurement yet and says so by its absence. */
+const TOL = {
+  curvature:        { value: 1e-4,  admits: 5.02e-5,
+    why: '256-point discrete curvature vs H_xx/(1+H_x^2)^{3/2}' },
+  gradientWorst:    { value: 2e-2,  admits: 9.40e-3, rejects: 0.98,
+    why: 'nx=32; the pre-metric gradient was 98% wrong at j=0' },
+  gradientDepthAvg: { value: 1e-2,  admits: 4.85e-3, rejects: 0.50,
+    why: 'nx=32; the pre-metric gradient was 50% wrong on the depth average' },
+  adjointness:      { value: 1e-15, admits: 2.063e-16,
+    why: 'max over 3000 draws against the non-cancelling denominator; the '
+       + 'cancelling |lhs| divisor it replaced reached 2.573e-13 and failed '
+       + 'its own 1e-13 bound in 2 of 3000 runs' },
+  symmetry:         { value: 1e-15, admits: 2.063e-16,
+    why: 'same non-cancelling denominator and the same round-off scale as '
+       + 'adjointness; L is assembled from the same metric weights' },
+  omegaSurface:     { value: 1e-12, admits: 2.97e-18, rejects: 5.40e-2,
+    why: 'relative to the term scale; dropping H_t gives 5.40e-2' },
+  flatStaysFlat:    { value: 1e-15, admits: 3.25e-19,
+    why: '100 steps under gravity, max|w|' },
+  dispersion:       { value: 1e-2,  admits: 3.99e-3, rejects: 0.2769,
+    why: 'nx=32 ns=24; the pre-metric operator read 0.7231 of exact' },
+  nEnReduction:     { value: 1e-14, admits: 4.90e-16,
+    why: '2000 deterministic states spanning all four sign quadrants' },
+  surfaceAnalytic:  { value: 1e-2,  admits: 3.21e-3,
+    why: 'nx=32 ns=24 surface pressure; falls 3.99x per refinement' },
+  dampingDeep:      { value: 0.03,  admits: 0.0199, rejects: 0.44,
+    why: 'the bottom Stokes layer is 1.99% of the root here and is not in it; '
+       + 'the defect this catches missed by 44%' },
+  dampingShallow:   { value: 0.15,  admits: 0.092,  rejects: 0.957,
+    why: 'kh=0.31, where 96% of the damping is the bottom layer; a free-slip '
+       + 'bottom misses by 95.7%' },
+  mathieuGrowth:    { value: 0.08,  admits: 0.0241,
+    why: 'covers the leading-order Mathieu formula own O(eps^2) error, the '
+       + 'largest term in the comparison at these amplitudes' },
+  floquetVsFit:     { value: 0.01,  admits: 0.00058, rejects: 0.4997,
+    why: 'two independent methods on one number; reporting the growth over the '
+       + 'response period instead of the drive period lands at 49.97%' },
+  krylov:           { value: 1e-5,  admits: 3.5e-6,  rejects: 0.47,
+    why: 'the envelope over m >= 6; a noise start vector lands at 4.7e-1' },
+  fixtureModuli:    { value: 5e-8,  admits: 7.604e-9,
+    why: 'above the sqrt(eps) floor a defective pair admits, which LAPACK is '
+       + 'subject to as well: it splits the dominant pair by 1.5e-8' }
+};
+for (const [k, t] of Object.entries(TOL)){
+  if (!(t.admits < t.value)) throw new Error(
+    `TOL.${k}: bound ${t.value} is not above ${t.admits}, the largest value `
+    + `correct code was measured to produce. A gate tighter than correct code `
+    + `is a gate that fails on correct code.`);
+  if (t.rejects !== undefined && !(t.value < t.rejects)) throw new Error(
+    `TOL.${k}: bound ${t.value} is not below ${t.rejects}, the smallest value `
+    + `the defect it exists to catch was measured to produce. Widening a gate `
+    + `past its defect makes the defect invisible.`);
+}
+
 let pass = 0; const fail = [];
 let ELEVEN = null;
 const ok = (c, label, detail) => {
@@ -38,7 +99,7 @@ const ok = (c, label, detail) => {
     const ex = Hxx/Math.pow(1 + Hx*Hx, 1.5);
     worst = Math.max(worst, Math.abs(out[i] - ex)/Math.abs(ex));
   }
-  ok(worst < 1e-4, 'curvature matches the exact expression', worst.toExponential(2));
+  ok(worst < TOL.curvature.value, 'curvature matches the exact expression', worst.toExponential(2));
   console.log(`1. curvature vs exact, 256 points: ${worst.toExponential(2)} relative`);
 }
 
@@ -80,8 +141,8 @@ const ok = (c, label, detail) => {
   console.log('2. gradient vs the ANALYTIC hydrostatic force (the gate that was missing):');
   for (const r of report) console.log(r);
 
-  ok(firstWorst < 2e-2, 'horizontal force is depth-independent rho g H_x', firstWorst.toExponential(2));
-  ok(firstAvg < 1e-2, 'and its depth average is the full restoring force', firstAvg.toExponential(2));
+  ok(firstWorst < TOL.gradientWorst.value, 'horizontal force is depth-independent rho g H_x', firstWorst.toExponential(2));
+  ok(firstAvg < TOL.gradientDepthAvg.value, 'and its depth average is the full restoring force', firstAvg.toExponential(2));
   ok(rate > 3.5, 'and the error is second order in the mesh', `${rate.toFixed(2)}x per doubling`);
 }
 
@@ -119,7 +180,7 @@ const ok = (c, label, detail) => {
       rhs += t; scale += Math.abs(t);
     }
   const rel = Math.abs(lhs + rhs)/scale;
-  ok(rel < 1e-15, 'D and G are adjoint in the metric inner product', rel.toExponential(2));
+  ok(rel < TOL.adjointness.value, 'D and G are adjoint in the metric inner product', rel.toExponential(2));
   console.log(`3. <Du,q> + <Gq,u>_H = ${rel.toExponential(2)} relative (15% surface deformation)`);
 }
 
@@ -137,7 +198,7 @@ const ok = (c, label, detail) => {
     sc += Math.abs(La[i]*b[i]) + Math.abs(a[i]*Lb[i]);
   }
   const sym = Math.abs(ab - ba)/sc;
-  ok(sym < 1e-15, 'L is symmetric', sym.toExponential(2));
+  ok(sym < TOL.symmetry.value, 'L is symmetric', sym.toExponential(2));
   ok(qd < 0, 'L is negative definite');
   console.log(`4. L symmetry ${sym.toExponential(2)} relative, <a,La> = ${qd.toExponential(3)} < 0`);
 }
@@ -205,7 +266,7 @@ const ok = (c, label, detail) => {
   }
   ok(scale > 0, 'the surface is actually moving, so the identity is not vacuous',
      `max|H_t/H| = ${scale.toExponential(2)}`);
-  ok(worst < 1e-12*scale, 'Omega vanishes at the free surface identically',
+  ok(worst < TOL.omegaSurface.value*scale, 'Omega vanishes at the free surface identically',
      `${worst.toExponential(2)} against a broken-term size of ${scale.toExponential(2)}`);
   console.log(`6. Omega(s=1) = ${worst.toExponential(2)} s^-1 on a moving surface`
     + ` where dropping H_t would give ${scale.toExponential(2)}`);
@@ -229,7 +290,7 @@ const ok = (c, label, detail) => {
   for (let i = 0; i < F.nx; i++)
     for (let j = 0; j < F.ns; j++)
       off = Math.max(off, Math.abs(F.p[i*F.ns+j] - rho*G*(F.H[i] - (j+0.5)*F.ds*F.H[i])));
-  ok(wmax < 1e-15, 'a flat surface at rest stays at rest', `max|w| ${wmax.toExponential(2)}`);
+  ok(wmax < TOL.flatStaysFlat.value, 'a flat surface at rest stays at rest', `max|w| ${wmax.toExponential(2)}`);
   ok(dH === 0, 'and the depth does not drift', dH.toExponential(2));
   ok(off < 1e-10, 'the hydrostatic pressure is rho g (H - z) with no offset',
      `${off.toExponential(2)} Pa`);
@@ -261,7 +322,7 @@ const ok = (c, label, detail) => {
     ['gravity, L= 6mm (kh=3.14, deep)   ', 0.006, 0,   2e-5, 6],
     ['gravity+capillary, L=6mm          ', 0.006, gam, 1e-5, 61]]){
     const r = run(32, 24, dt, L, g, 2.2);
-    ok(Number.isFinite(r) && Math.abs(1 - r) < 1e-2, `dispersion: ${tag.trim()}`, r.toFixed(5));
+    ok(Number.isFinite(r) && Math.abs(1 - r) < TOL.dispersion.value, `dispersion: ${tag.trim()}`, r.toFixed(5));
     console.log(`     ${tag}: ${r.toFixed(5)}   (was ${was[wk].toFixed(4)})`);
   }
   console.log('   joint refinement, nx, ns and dt all halved together:');
@@ -288,7 +349,7 @@ const ok = (c, label, detail) => {
     const red = -ux*(1 + Hx*Hx)/(1 - Hx*Hx);
     worst = Math.max(worst, Math.abs(def - red)/Math.abs(red));
   }
-  ok(worst < 1e-14, 'the n.E.n reduction equals n.E.n from its definition', worst.toExponential(2));
+  ok(worst < TOL.nEnReduction.value, 'the n.E.n reduction equals n.E.n from its definition', worst.toExponential(2));
   console.log(`9. n.E.n reduction vs definition, 2000 random states: ${worst.toExponential(2)}`);
 
   const probe = (nx, ns) => {
@@ -321,7 +382,7 @@ const ok = (c, label, detail) => {
   console.log(`     nx=32 ns=24: du/dx|_z ${a1.toExponential(2)}, p_surface ${p1.toExponential(2)}`);
   console.log(`     nx=64 ns=48: du/dx|_z ${a2.toExponential(2)}, p_surface ${p2.toExponential(2)}`
     + `   (fell ${(a1/a2).toFixed(2)}x, ${(p1/p2).toFixed(2)}x)`);
-  ok(a1 < 1e-2 && p1 < 1e-2, 'surfaceUx and surfacePressure match analytic values',
+  ok(a1 < TOL.surfaceAnalytic.value && p1 < TOL.surfaceAnalytic.value, 'surfaceUx and surfacePressure match analytic values',
      `${a1.toExponential(2)}, ${p1.toExponential(2)}`);
   ok(a1/a2 > 3.5 && p1/p2 > 3.5, 'and both are second order in the mesh',
      `${(a1/a2).toFixed(2)}x, ${(p1/p2).toFixed(2)}x`);
@@ -380,7 +441,7 @@ const ok = (c, label, detail) => {
     const gb = bottomLayerDamping(k, w0, nu);
     console.log(`       bottom Stokes layer, not in the deep-water root: `
       + `${gb.toFixed(4)} s^-1 = ${(100*gb/exact).toFixed(2)}% of it`);
-    ok(Number.isFinite(got) && rel < 0.03,
+    ok(Number.isFinite(got) && rel < TOL.dampingDeep.value,
       `damping matches the exact viscous root at nu = ${nu.toExponential(2)}`,
       `${(rel*100).toFixed(2)}% off`);
   }
@@ -395,7 +456,7 @@ const ok = (c, label, detail) => {
     console.log(`     SHALLOW kh=${(k*h0).toFixed(2)}, L=60mm: ${got.toFixed(5)} s^-1 vs`
       + ` bulk+bottom ${ref.toFixed(5)} (${(100*bot/ref).toFixed(0)}% of it is the bottom`
       + ` layer), ${(rel*100).toFixed(1)}% off`);
-    ok(Number.isFinite(got) && rel < 0.15,
+    ok(Number.isFinite(got) && rel < TOL.dampingShallow.value,
       'shallow damping matches bulk + bottom Stokes layer (gates the no-slip bottom)',
       `${(rel*100).toFixed(1)}% off`);
   }
@@ -441,7 +502,7 @@ const ok = (c, label, detail) => {
     + ` grew at ${got.toFixed(3)} s^-1 against ${pred.toFixed(3)} predicted, ${(rel*100).toFixed(2)}% off`);
   ok(amp[nP-1] > amp[0]*10, 'the parametric drive makes the surface go unstable',
      `grew ${(amp[nP-1]/amp[0]).toExponential(2)}x`);
-  ok(Number.isFinite(got) && rel < 0.08,
+  ok(Number.isFinite(got) && rel < TOL.mathieuGrowth.value,
      'and at the damped-Mathieu growth rate', `${(rel*100).toFixed(2)}% off`);
   ELEVEN = { growth: got, ac, wOwn, gOwn, aRel, L, k, th };
 }
@@ -482,12 +543,12 @@ const ok = (c, label, detail) => {
   console.log(`     a = ${aRel} a_c: Floquet |mu| = ${fl6.muMax.toFixed(8)}, growth `
     + `${fl6.growth.toFixed(4)} s^-1 against check 11's envelope fit ${ELEVEN.growth.toFixed(4)}`
     + ` -- ${(dGrowth*100).toFixed(3)}% apart`);
-  ok(dGrowth < 0.01, 'Floquet and the envelope fit agree on the growth rate',
+  ok(dGrowth < TOL.floquetVsFit.value, 'Floquet and the envelope fit agree on the growth rate',
      `${(dGrowth*100).toFixed(3)}%`);
 
   const fl4 = floquet({ ...base, accel: aRel*ac, m: 4 });
   const dM = Math.abs(fl4.muMax/fl6.muMax - 1);
-  ok(dM < 1e-5, 'and the multiplier is independent of the Krylov dimension',
+  ok(dM < TOL.krylov.value, 'and the multiplier is independent of the Krylov dimension',
      `m=4 vs m=6 differ by ${dM.toExponential(2)}`);
 
   const lo = floquet({ ...base, accel: 0.95*ac, m: 6 });
@@ -517,7 +578,7 @@ const ok = (c, label, detail) => {
       console.log(`     defective 24x24 fixture: |mu|max ${got[0].toFixed(12)} vs LAPACK `
         + `${want[0].toFixed(12)}, worst of 24 moduli ${worst.toExponential(2)}`);
     }
-    ok(worst < 5e-8, 'and matches LAPACK across all 24 eigenvalues',
+    ok(worst < TOL.fixtureModuli.value, 'and matches LAPACK across all 24 eigenvalues',
        `worst ${worst.toExponential(2)}`);
   }
 }
