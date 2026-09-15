@@ -1098,13 +1098,21 @@ function state(over = {}){
                                      and a residual that stopped being
                                      collected
 
-   I had written freeSurfaceTraction and energyBalance off as identities; they
-   are not. Both are zero only because a = d/(6 mu), so both go nonzero when
-   that constant is wrong. viscousElasticClosure really is self-cancelling in
-   it -- six*mu*f/s − d with f = s*d/(six*mu) is d − d for ANY value of six --
-   and stayed exactly zero under that injection. freeSurfaceKinematic and the
-   two kinetic-power terms were not moved by any defect tried here, so nothing
-   below claims they are covered. */
+   freeSurfaceTraction and energyBalance had been written off as identities.
+   They are not: both are zero only because a = d/(6 mu), so both go nonzero
+   when that constant is wrong.
+
+   viscousElasticClosure WAS self-cancelling, and the measurement is what
+   showed it. Written as six*mu*f/s − d with f = s*d/(six*mu) it is d − d for
+   any value of six, so it stayed exactly zero under that injection while
+   claiming to be the check on it. It now reads a back out of the stress match
+   -- a = (sigma_s + p)/(2 mu), which is built from P and F and carries no
+   factor of six -- so a wrong constant moves it: measured 37357803/200000000
+   at s = 5/4 under six = 7n, and exactly zero at all four stretches when the
+   constant is right.
+
+   freeSurfaceKinematic and the two kinetic-power terms were not moved by any
+   defect tried here, so nothing below claims they are covered. */
 section('12. exact coupled benchmark (exact rationals over Q)');
 {
   const { Q, evaluate, allResidualsZero } = B;

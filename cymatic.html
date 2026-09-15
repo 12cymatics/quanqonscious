@@ -2923,7 +2923,8 @@ function evaluate(opts = {}){
                  s.pow(3).sub(s).sub(s.pow(-9)).add(s.pow(-5)));
   const WdotResidual = dWds.mul(sDot).sub(Wdot);
   // the closure the whole construction rests on
-  const closureResidual = six.mul(mu).mul(f).div(s).sub(d);
+  const aFromStress = sigmaS[0].add(p).div(Q.of(2n).mul(mu));
+  const closureResidual = six.mul(mu).mul(aFromStress).sub(d);
 
   // Body-force power against kinetic-energy rate, computed independently on
   // both sides. Without this the domain's second moments (31/2 radial, 7/3
