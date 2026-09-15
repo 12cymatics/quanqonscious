@@ -130,8 +130,17 @@ function arnoldi(applyFn, v0, m){
 function floquet(o){
   const { nx, ns, L, h0, rho, nu, gamma, accel, omegaD } = o;
   const m = o.m || 12;
+  if (!(typeof omegaD === 'number' && Number.isFinite(omegaD) && omegaD > 0))
+    throw new TypeError(
+      `omegaD = ${omegaD}: the monodromy map is the map over one DRIVE period, `
+      + `so a positive drive frequency is required. Refusing rather than letting `
+      + `Td = 2*PI/omegaD be non-finite, which makes the step count non-finite, `
+      + `takes zero time steps and returns the identity map as a Floquet result.`);
+  const dtIn = o.dt === undefined ? 2e-5 : o.dt;
+  if (!(typeof dtIn === 'number' && Number.isFinite(dtIn) && dtIn > 0))
+    throw new TypeError(`dt = ${dtIn}: the step must be a finite positive number.`);
   const Td = 2*Math.PI/omegaD;
-  const steps = Math.max(1, Math.round(Td/(o.dt || 2e-5)));
+  const steps = Math.max(1, Math.round(Td/dtIn));
   const dt = Td/steps;
   const S = new FaradayDNS({ nx, ns, L, h0, rho, nu, gamma, accel, omegaD });
   const n = stateSize(nx, ns);

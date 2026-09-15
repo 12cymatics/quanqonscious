@@ -15,14 +15,22 @@ function curvature(H, dx, out){
 
 module.exports = { G0, curvature };
 
+function requireFinite(v, name){
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new TypeError(
+    `${name} = ${typeof v === 'number' ? v : typeof v}: the drive must be a finite `
+    + `number. Refusing rather than coercing to zero, which would report a `
+    + `confident stability verdict for a drive that does not exist.`);
+  return v;
+}
+
 class FaradayDNS {
   constructor(o){
     this.nx = o.nx; this.ns = o.ns;
     this.L = o.L; this.h0 = o.h0;
     this.rho = o.rho; this.nu = o.nu; this.gamma = o.gamma;
     this.g = o.g === undefined ? G0 : o.g;
-    this.accel = o.accel || 0;
-    this.omegaD = o.omegaD || 0;
+    this.accel = o.accel === undefined ? 0 : requireFinite(o.accel, 'accel');
+    this.omegaD = o.omegaD === undefined ? 0 : requireFinite(o.omegaD, 'omegaD');
     if (!(this.ns >= 3)) throw new Error(
       `ns = ${this.ns}: the free-surface stress balance needs three cells of `
       + `depth to difference against. Refusing rather than falling back to a `
