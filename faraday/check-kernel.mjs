@@ -13,87 +13,43 @@
 
    Run: node faraday/check-kernel.mjs
 */
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const ROOT = join(here, '..');
 const HTML = readFileSync(join(ROOT, 'cymatic.html'), 'utf8');
 const REF  = JSON.parse(readFileSync(join(here, 'reference.json'), 'utf8'));
 
-/* ---- slice the kernel out of the page ---------------------------------- */
-const BEGIN = 'FARADAY KERNEL BEGIN';
-const END   = 'FARADAY KERNEL END';
-const bi = HTML.indexOf(BEGIN), ei = HTML.indexOf(END);
-if (bi < 0 || ei < 0 || ei <= bi)
-  throw new Error(`kernel markers missing or out of order in cymatic.html (begin=${bi}, end=${ei})`);
-// start after the comment that carries the BEGIN marker, end before the one
-// that carries END
-const src = HTML.slice(HTML.indexOf('*/', bi) + 2, HTML.lastIndexOf('/*', ei));
-if (src.length < 5000)
-  throw new Error(`sliced kernel is only ${src.length} chars — the markers are not bracketing the physics`);
+/* ---- the physics, required straight from its own files ------------------
+   cymatic.html loads faraday/kernel.js and faraday/benchmark.js as classic
+   scripts; node requires the same two files here. There is still exactly one
+   copy of the physics and of the coupled construction, and the boundary is now
+   the FILE rather than a pair of marker comments inside the page. The previous
+   arrangement sliced both regions out of the HTML between comments, which meant
+   deleting a comment silently removed every assertion that depended on it. */
+const K = require(join(here, 'kernel.js'));
+const B = require(join(here, 'benchmark.js'));
 
-const EXPORTS = ['millerAll','besselJ','besselJp','besselPair','jpZeroNear','radialIndexOf',
-  'jpZerosNearN','radialProfile','radialProfilePinned','finestZeroOf','simpsonR',
-  'angularQuartic','angularSquare','jpZeros',
-  'surfaceTension','density','viscosity','omegaOf','kOfOmega','dampingRate','plateTransfer',
-  'viscousFreeSurfaceRe',
-  'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE',
-  'reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
-  'transitionRisk','resolvePatternState','CELLS','ATLAS','TRANSITION','BOUNDARY',
-  'EGG_I_P','EGG_II_P','G_ACC','QUAD_R','STONE','MIN_MV','OVERDRIVE_MV'];
+const EXPORTS = Object.keys(K);
+if (EXPORTS.length < 40) throw new Error(
+  `faraday/kernel.js exported ${EXPORTS.length} names; the suite needs the whole `
+  + `kernel surface. Refusing rather than testing a fragment of it.`);
+for (const n of EXPORTS)
+  if (K[n] === undefined) throw new Error(`kernel export ${n} is undefined`);
+for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MAX'])
+  if (B[n] === undefined) throw new Error(`benchmark export ${n} is undefined`);
 
-/* The sliced kernel is written to a temporary ES module and imported, rather
-   than run through node:vm in a hand-built sandbox.
-
-   It was the sandbox at first, and that was a mistake worth recording: code in
-   vm.runInContext reaches Math and every other global through the context's
-   global proxy, and the Bessel recurrences run about twenty-five times slower
-   for it. 580k besselPair calls measured 12.2 s inside the sandbox and 0.49 s
-   outside -- which sent me looking for an algorithmic problem in the pinned
-   shape table that did not exist, and would have made this suite a five-minute
-   CI step for no reason.
-
-   A temp module keeps exactly the same guarantee: the source is still sliced
-   out of cymatic.html at run time, so there is still one copy of the physics
-   and nothing that can drift. It just runs as ordinary module code. */
-const tmp = mkdtempSync(join(tmpdir(), 'faraday-kernel-'));
-const modPath = join(tmp, 'kernel.mjs');
-writeFileSync(modPath, src + '\nexport const K = {' + EXPORTS.join(',') + '};\n');
-const { K } = await import(pathToFileURL(modPath).href);
-for (const name of EXPORTS)
-  if (K[name] === undefined) throw new Error(`kernel export ${name} is undefined after evaluation`);
-
-/* ---- and the exact coupled benchmark, sliced from the same page -------- */
-/* cymatic.html carries a second, independent region below the kernel: the
-   coupled affine benchmark, exact rational arithmetic over BigInt, whose 19
-   residual terms are zero over Q rather than small. Nothing in this file
-   touched it until now -- no `evaluate`, no `allResidualsZero` anywhere -- and
-   that is how residuals in it came to be tautologies without anything
-   noticing: terms that restate their own defining line and cannot be nonzero
-   whatever the arithmetic does. Section 12 says which ones, and how that was
-   measured. It is sliced by its own two anchors, the same way and for the same
-   reason as the kernel above: one copy of the construction, nothing that can
-   drift away from the page. */
-const B_ANCHOR = 'exact coupled benchmark, inlined verbatim';
-const B_TAIL   = 'const API = { Q, evaluate, allResidualsZero, DEFAULTS, S_MIN, S_MAX };';
-const ba = HTML.indexOf(B_ANCHOR), bt = HTML.indexOf(B_TAIL);
-// back up to the '/*' opening the banner comment that carries the anchor, so
-// the slice starts on a statement boundary rather than inside a comment
-const bb = ba < 0 ? -1 : HTML.lastIndexOf('/*', ba);
-if (bb < 0 || bt < 0 || bt <= bb)
-  throw new Error(`benchmark anchors missing or out of order in cymatic.html (begin=${bb}, end=${bt})`);
-const bsrc = HTML.slice(bb, bt);
-if (bsrc.length < 8000)
-  throw new Error(`sliced benchmark is only ${bsrc.length} chars — the anchors are not bracketing it`);
-const B_EXPORTS = ['Q','evaluate','allResidualsZero','DEFAULTS','S_MIN','S_MAX'];
-const benchPath = join(tmp, 'benchmark.mjs');
-writeFileSync(benchPath, bsrc + '\nexport const B = {' + B_EXPORTS.join(',') + '};\n');
-const { B } = await import(pathToFileURL(benchPath).href);
-for (const name of B_EXPORTS)
-  if (B[name] === undefined) throw new Error(`benchmark export ${name} is undefined after evaluation`);
+/* The page must actually load both files, or the browser gets a kernel the
+   tests never see. Asserted here because it is the one thing requiring the
+   modules directly can no longer notice. */
+for (const f of ['faraday/kernel.js', 'faraday/benchmark.js'])
+  if (!HTML.includes(`src="${f}"`)) throw new Error(
+    `cymatic.html does not load ${f}. The page and this suite would be running `
+    + `different code.`);
 
 /* ---- harness ----------------------------------------------------------- */
 let pass = 0; const failures = [];
