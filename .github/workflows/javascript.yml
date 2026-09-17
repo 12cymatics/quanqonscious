@@ -9,10 +9,18 @@
 # suites gate every pull request. Putting the JS job inside python-app.yml
 # instead would have shipped a gate that never fired on the branch flow in use.
 #
-# Neither suite needs a network or an install. faraday/reference.json is checked
+# No suite here needs a network or an install. faraday/reference.json is checked
 # in -- computed once by mpmath, scipy.special and scipy.optimize.brentq -- so
 # CI compares against fixed numbers rather than recomputing them with the code
 # under test.
+#
+# dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
+# rather than a twenty-second one, and because it gates something different: not
+# a library of special functions but a solver, checked against analytic forces,
+# analytic Laplacians, exact identities and the dispersion relation. It runs in
+# CI for the reason the others do -- the first version of that solver was wrong
+# by 28% on the physics while reporting eight green checks, and the gate that
+# now catches it has to be executed by something other than me remembering to.
 name: javascript
 
 on:
@@ -37,3 +45,14 @@ jobs:
       run: node boundary/boundarykernel.test.js
     - name: Faraday kernel (sliced out of cymatic.html)
       run: node faraday/check-kernel.mjs
+
+  dns:
+    name: faraday DNS
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Free-surface Navier-Stokes solver
+      run: node dns/check-dns.mjs
