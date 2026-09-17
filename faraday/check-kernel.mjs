@@ -13,57 +13,43 @@
 
    Run: node faraday/check-kernel.mjs
 */
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const ROOT = join(here, '..');
 const HTML = readFileSync(join(ROOT, 'cymatic.html'), 'utf8');
 const REF  = JSON.parse(readFileSync(join(here, 'reference.json'), 'utf8'));
 
-/* ---- slice the kernel out of the page ---------------------------------- */
-const BEGIN = 'FARADAY KERNEL BEGIN';
-const END   = 'FARADAY KERNEL END';
-const bi = HTML.indexOf(BEGIN), ei = HTML.indexOf(END);
-if (bi < 0 || ei < 0 || ei <= bi)
-  throw new Error(`kernel markers missing or out of order in cymatic.html (begin=${bi}, end=${ei})`);
-// start after the comment that carries the BEGIN marker, end before the one
-// that carries END
-const src = HTML.slice(HTML.indexOf('*/', bi) + 2, HTML.lastIndexOf('/*', ei));
-if (src.length < 5000)
-  throw new Error(`sliced kernel is only ${src.length} chars — the markers are not bracketing the physics`);
+/* ---- the physics, required straight from its own files ------------------
+   cymatic.html loads faraday/kernel.js and faraday/benchmark.js as classic
+   scripts; node requires the same two files here. There is still exactly one
+   copy of the physics and of the coupled construction, and the boundary is now
+   the FILE rather than a pair of marker comments inside the page. The previous
+   arrangement sliced both regions out of the HTML between comments, which meant
+   deleting a comment silently removed every assertion that depended on it. */
+const K = require(join(here, 'kernel.js'));
+const B = require(join(here, 'benchmark.js'));
 
-const EXPORTS = ['millerAll','besselJ','besselJp','besselPair','jpZeroNear','radialIndexOf',
-  'jpZerosNearN','radialProfile','radialProfilePinned','finestZeroOf','simpsonR',
-  'angularQuartic','angularSquare','jpZeros',
-  'surfaceTension','density','viscosity','omegaOf','kOfOmega','dampingRate','plateTransfer',
-  'mathieu','mathieuKT','pinnedEdgeSpectrum','pinnedEdgeExtrapolated','ellipseE',
-  'reinforcedR4','boundaryImpedance','atlasAt','foldPrior',
-  'transitionRisk','resolvePatternState','CELLS','ATLAS','TRANSITION','BOUNDARY',
-  'EGG_I_P','EGG_II_P','G_ACC','QUAD_R','STONE','MIN_MV','OVERDRIVE_MV'];
+const EXPORTS = Object.keys(K);
+if (EXPORTS.length < 40) throw new Error(
+  `faraday/kernel.js exported ${EXPORTS.length} names; the suite needs the whole `
+  + `kernel surface. Refusing rather than testing a fragment of it.`);
+for (const n of EXPORTS)
+  if (K[n] === undefined) throw new Error(`kernel export ${n} is undefined`);
+for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MAX'])
+  if (B[n] === undefined) throw new Error(`benchmark export ${n} is undefined`);
 
-/* The sliced kernel is written to a temporary ES module and imported, rather
-   than run through node:vm in a hand-built sandbox.
-
-   It was the sandbox at first, and that was a mistake worth recording: code in
-   vm.runInContext reaches Math and every other global through the context's
-   global proxy, and the Bessel recurrences run about twenty-five times slower
-   for it. 580k besselPair calls measured 12.2 s inside the sandbox and 0.49 s
-   outside -- which sent me looking for an algorithmic problem in the pinned
-   shape table that did not exist, and would have made this suite a five-minute
-   CI step for no reason.
-
-   A temp module keeps exactly the same guarantee: the source is still sliced
-   out of cymatic.html at run time, so there is still one copy of the physics
-   and nothing that can drift. It just runs as ordinary module code. */
-const tmp = mkdtempSync(join(tmpdir(), 'faraday-kernel-'));
-const modPath = join(tmp, 'kernel.mjs');
-writeFileSync(modPath, src + '\nexport const K = {' + EXPORTS.join(',') + '};\n');
-const { K } = await import(pathToFileURL(modPath).href);
-for (const name of EXPORTS)
-  if (K[name] === undefined) throw new Error(`kernel export ${name} is undefined after evaluation`);
+/* The page must actually load both files, or the browser gets a kernel the
+   tests never see. Asserted here because it is the one thing requiring the
+   modules directly can no longer notice. */
+for (const f of ['faraday/kernel.js', 'faraday/benchmark.js'])
+  if (!HTML.includes(`src="${f}"`)) throw new Error(
+    `cymatic.html does not load ${f}. The page and this suite would be running `
+    + `different code.`);
 
 /* ---- harness ----------------------------------------------------------- */
 let pass = 0; const failures = [];
@@ -292,20 +278,92 @@ for (const { f, T, h_mm, k, lambda } of REF.dispersion){
 
 /* ── 6. damping ─────────────────────────────────────────────────────────── */
 section('6. viscous damping');
+
+/* THE `bulk term is 2 nu k^2` ASSERTION THAT USED TO BE HERE WAS WRONG, and it
+   was wrong about the physics rather than about the code: it pinned the bulk
+   rate to Lamb's ASYMPTOTIC value, which is the delta k -> 0 limit of the exact
+   linear viscous free-surface root and overstates the damping by delta k/2.
+   Measured on the page's own inputs that is 3.6% at 50 Hz, 8.5% at 5 kHz and
+   10.4% at the corner of the input box; the Faraday threshold is linear in
+   gamma, so every threshold the page reported was high by the same margin.
+
+   What established it was not an argument. dns/faraday-dns.js solves the
+   resolved Navier-Stokes problem for this configuration and reproduces the
+   exact root to 0.69%, while the asymptotic value sits 12% away at that test's
+   delta k. The expectation moved because the measurement said so. */
 {
+  const R6 = REF.viscousFreeSurface;
+  ok(Array.isArray(R6 && R6.points) && R6.points.length >= 6,
+     'reference carries the viscous free-surface root', `${R6 && R6.points && R6.points.length} points`);
+  let worst = 0, worstW = null;
+  for (const p of R6.points){
+    const got = K.viscousFreeSurfaceRe(p.W);
+    const e = Math.abs(got - p.re)/Math.abs(p.re);
+    if (e > worst){ worst = e; worstW = p.W; }
+  }
+  ok(worst < 1e-13, 'Re(x) matches mpmath at every reference W',
+     `worst ${worst.toExponential(2)} at W = ${worstW}`);
+
+  /* The asymptotic form is the W -> infinity limit, so the root approaches -2
+     from above and the leading gap is delta k = sqrt(2/W). Read off the
+     reference points, the structure is sharper than that:
+
+         Re(x) = -2 + delta k + delta k^3/4 + O(delta k^5)
+
+     with the third-order coefficient measured at 0.2454 (W=5), 0.2512 (W=47.3),
+     0.2503 (W=200) and 0.250012 (W=5000). Asserting the coefficient is a much
+     tighter statement than bracketing the root, and both sides come from the
+     reference rather than from the kernel. My first attempt here bracketed it
+     as -2 < Re < -2 + 0.75 delta k, which is simply false -- the correction is
+     ABOVE -2 + delta k, not below it -- and the numbers above are what said so. */
+  for (const p of R6.points){
+    const dk = Math.sqrt(2/p.W);
+    const c3 = (p.re - (-2 + dk))/(dk*dk*dk);
+    ok(p.re > -2 + dk, `root is above -2 + delta k at W = ${p.W}`, `Re(x) = ${p.re}`);
+    ok(c3 > 0.24 && c3 < 0.26,
+       `third-order coefficient is 1/4 at W = ${p.W}`, `got ${c3.toFixed(6)}`);
+  }
+  const big = R6.points[R6.points.length - 1];
+  const dkBig = Math.sqrt(2/big.W);
+  rel((big.re - (-2 + dkBig))/(dkBig*dkBig*dkBig), 0.25, 4,
+      'and converges to exactly 1/4 at the largest W');
+
   const nu = K.viscosity(20)/K.density(20);
   const k = 1156.359261, w = 2*Math.PI*55.5, h = 0.002;
   const d = K.dampingRate(k, w, nu, h);
-  rel(d.bulk, 2*nu*k*k, 15, 'bulk term is 2 nu k^2');
+  const nk2 = nu*k*k;
+  rel(d.bulkPotential, 2*nk2, 15, 'bulkPotential is still exactly 2 nu k^2');
+  rel(d.bulk, -K.viscousFreeSurfaceRe(w/nk2)*nk2, 15,
+      'bulk is the exact free-surface root, not the asymptotic form');
+  ok(d.surfaceLayer < 0, 'the surface layer REDUCES the damping', `${d.surfaceLayer}`);
+  rel(d.surfaceLayer, -nk2*Math.sqrt(2*nu/w)*k, 2,
+      'and its size is nu k^2 delta k to two digits');
+  ok(d.bulk < d.bulkPotential,
+     'so the exact rate is below Lamb asymptotic',
+     `${d.bulk.toFixed(4)} < ${d.bulkPotential.toFixed(4)}`);
+
   rel(d.stokesDepth, Math.sqrt(2*nu/w), 15, 'Stokes depth is sqrt(2 nu/omega)');
   rel(d.layer, w*(k*d.stokesDepth)/(2*Math.sinh(2*k*h)), 14, 'layer term matches its formula');
+  /* The bottom layer is unchanged and was already right. Stated the other way,
+     from the Stokes-layer dissipation integral for a standing wave over a rigid
+     bottom, it is (k/2) sqrt(nu omega/2) tanh(kh)/sinh^2(kh) -- the same thing,
+     asserted here so the two forms cannot drift apart. */
+  rel(d.layer, (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h)/Math.pow(Math.sinh(k*h), 2), 13,
+      'layer equals the dissipation-integral form');
   rel(d.total, d.bulk + d.layer, 15, 'total is the sum of both terms');
   ok(d.layer > 0, 'the bottom layer term is kept, not dropped', `layer = ${d.layer}`);
-  // the layer term must die as kh grows -- a result, not an assumption
+
   const deep = K.dampingRate(k, w, nu, 0.5);
   ok(deep.layer < d.layer*1e-6, 'layer term vanishes in deep water',
      `shallow ${d.layer.toExponential(3)} vs deep ${deep.layer.toExponential(3)}`);
   rel(deep.total, deep.bulk, 6, 'deep water is bulk-damped');
+
+  /* Refuses rather than substituting the potential-flow answer. */
+  let threw = 0;
+  for (const bad of [0, -1, NaN, Infinity]){
+    try { K.viscousFreeSurfaceRe(bad); } catch { threw++; }
+  }
+  eq(threw, 4, 'viscousFreeSurfaceRe refuses a non-finite or non-positive W');
 }
 
 /* ── 7. Mathieu tongue ──────────────────────────────────────────────────── */
@@ -352,7 +410,14 @@ for (const cse of REF.pinnedEdge){
   const ex = K.pinnedEdgeExtrapolated(m, R, sg, rh, h, basisN, 6);
   ok(ex.extrapolated === true, `${tag}: result is marked extrapolated`);
   eq(ex.basisPair.join(','), `${basisN/2},${basisN}`, `${tag}: extrapolated from N/2 and N`);
-  for (let i = 0; i < Math.min(cse.pinned.length, ex.pinned.length); i++){
+  eq(ex.pinned.length, cse.pinned.length,
+     `${tag}: the solver returned as many pinned roots as the case expects`);
+  if (ex.pinned.length < cse.pinned.length) throw new Error(
+    `${tag}: pinnedEdgeExtrapolated returned ${ex.pinned.length} roots where the `
+    + `case expects ${cse.pinned.length}. Refusing to compare the prefix: a `
+    + `shortened list silently removes assertions while the suite still reports `
+    + `0 failed.`);
+  for (let i = 0; i < cse.pinned.length; i++){
     const got = ex.pinned[i], want = cse.pinned[i];
     rel(got.hz,          want.hz,          9, `${tag}: pinned mode ${i+1}`);
     rel(got.hzTruncated, want.hzTruncated, 9, `${tag}: pinned mode ${i+1} before extrapolation`);
@@ -378,7 +443,12 @@ for (const cse of REF.pinnedEdge){
          184x at m=1 falling to 11.2x at m=10, because the C/N^2 constant grows
          with the angular order. That fall-off is why the bound above is 1e-5
          and not 1e-7, and why high m wants a larger basis. */
-  for (let i = 0; i < Math.min(cse.convergedHz.length, ex.pinned.length); i++){
+  eq(ex.pinned.length >= cse.convergedHz.length, true,
+     `${tag}: enough pinned roots returned to compare every converged limit`);
+  if (ex.pinned.length < cse.convergedHz.length) throw new Error(
+    `${tag}: ${ex.pinned.length} pinned roots against ${cse.convergedHz.length} `
+    + `converged limits. Refusing to compare the prefix.`);
+  for (let i = 0; i < cse.convergedHz.length; i++){
     const lim = cse.convergedHz[i];
     const eEx  = Math.abs(ex.pinned[i].hz - lim)/lim;
     const eRaw = Math.abs(ex.pinned[i].hzTruncated - lim)/lim;
@@ -396,6 +466,8 @@ for (const cse of REF.pinnedEdge){
      regeneration test earning its place. The index of a pinned root is the
      number of free roots strictly below it -- countable from freeW2, which the
      index assignment never touches. */
+  ok(raw.pinned.length > 0, `${tag}: the pinned spectrum is non-empty`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned){
     let below = 0;
     for (const w of raw.freeW2) if (w < pm.w2) below++;
@@ -420,7 +492,11 @@ for (const cse of REF.pinnedEdge){
   // Rayleigh: a constraint raises every eigenvalue and the result strictly
   // interlaces the unconstrained spectrum. This is the structural property the
   // whole construction stands on, so it is asserted, not assumed.
-  for (let i = 0; i < Math.min(5, raw.pinned.length); i++){
+  ok(raw.pinned.length >= 5, `${tag}: at least five pinned roots to interlace`,
+     `${raw.pinned.length}`);
+  if (raw.pinned.length < 5) throw new Error(
+    `${tag}: ${raw.pinned.length} pinned roots, need five to check interlacing.`);
+  for (let i = 0; i < 5; i++){
     const f0 = Math.sqrt(raw.freeW2[i])/(2*Math.PI);
     const f1 = Math.sqrt(raw.freeW2[i+1])/(2*Math.PI);
     ok(raw.pinned[i].hz > f0 && raw.pinned[i].hz < f1,
@@ -430,6 +506,8 @@ for (const cse of REF.pinnedEdge){
   // eta(R) = 0 -- the constraint the whole thing exists to impose. It holds by
   // construction (the wall sum IS the secular function), so it must hold to
   // machine precision against the largest single term, not merely be small.
+  ok(raw.pinned.length >= 4, `${tag}: four pinned roots for the wall residual`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned.slice(0, 4))
     ok(Math.abs(pm.wallResidual) < 1e-12*pm.wallScale,
        `${tag}: eta(R)=0 at ${pm.hz.toFixed(4)} Hz`,
@@ -438,6 +516,8 @@ for (const cse of REF.pinnedEdge){
        `${(Math.abs(pm.wallResidual)/pm.wallScale).toExponential(2)}`);
   // the modal projection of k tanh(kh) must lie inside the basis range it
   // averages, or it is not a weighted mean of anything
+  ok(raw.pinned.length >= 3, `${tag}: three pinned roots for the kTanhEff bound`,
+     `${raw.pinned.length}`);
   for (const pm of raw.pinned.slice(0, 3)){
     const kt = raw.freeK.map(kk => kk*Math.tanh(kk*h));
     ok(pm.kTanhEff > Math.min(...kt) && pm.kTanhEff < Math.max(...kt),
@@ -731,6 +811,51 @@ function state(over = {}){
    axisymmetric mode that the correct matrix kills survives, and at 70 Hz the
    m = 2 / m = 5 order inverts. Both are deterministic: the amplitudes come
    from a fixed-seed ODE integrated to steady state. */
+/* WHERE THE DAMPING FIX CHANGES WHAT THE PAGE DRAWS.
+
+   A 3-10% threshold shift is only worth making if it moves the output, and it
+   does. Scanning 50-400 Hz at 229 mV on the medium cell, the unstable-mode
+   count changes at eight frequencies, and the onset cut-off -- the drive above
+   which nothing reaches Faraday onset -- moves from 204 Hz to 210 Hz.
+
+   203 Hz is pinned here because it is the sharpest case: eps/eps_c was 1.0030
+   with the asymptotic damping and is 1.0548 with the exact root, and the page
+   went from showing NO mode at onset to showing three. A frequency that sat
+   just the wrong side of a threshold that was itself 5% too high is exactly the
+   kind of thing this fix exists to correct, and exactly the kind of thing that
+   silently regresses. */
+{
+  const s = state({ f: 203, amplitudeMv: 430 });
+  ok(s.onset.eps/s.onset.epsThreshold > 1,
+     '203 Hz at 430 mV is above onset', `eps/eps_c = ${(s.onset.eps/s.onset.epsThreshold).toFixed(4)}`);
+  const t = state({ f: 203, amplitudeMv: 229 });
+  ok(t.onset.eps/t.onset.epsThreshold > 1.02,
+     '203 Hz at 229 mV clears onset by more than 2%, which the asymptotic damping did not',
+     `eps/eps_c = ${(t.onset.eps/t.onset.epsThreshold).toFixed(4)}`);
+  ok(t.unstableCount > 0,
+     'and so at least one mode is unstable there, where the page used to show none',
+     `${t.unstableCount} unstable of ${t.ordersScanned}`);
+}
+
+/* THE SATURATED AMPLITUDES MOVED WHEN THE DAMPING MODEL DID, and they had to.
+   Replacing Lamb's asymptotic bulk rate with the exact free-surface root lowers
+   gamma by 4.8% at 184 Hz and 3.4% at 70 Hz, which raises the growth rate and
+   so raises the amplitude a cubic saturation settles at. Measured:
+
+       184 Hz  m=13   2.21260 -> 2.25629   (+1.97%)
+       184 Hz  m= 7   2.13145 -> 2.18436   (+2.48%)
+        70 Hz  m= 0   2.92950 -> 2.93469   (+0.18%)
+        70 Hz  m= 2   2.50716 -> 2.51282   (+0.23%)
+        70 Hz  m= 5   2.49881 -> 2.50953   (+0.43%)
+
+   The 70 Hz shifts are small because 430 mV is far above threshold there, so
+   the growth rate is dominated by the forcing rather than by gamma.
+
+   What these pins exist to protect is the competition OUTCOME -- which modes
+   survive -- and that is unchanged: 13,7 and 0,2,5 as before, with the
+   axisymmetric mode still killed at 184 Hz. The amplitudes are the quantitative
+   record alongside it, and they are re-pinned here rather than loosened, so the
+   next model change has to come and say so too. */
 {
   const s = state({ f: 184, amplitudeMv: 430 });
   const m = s.competition.survivors.map(v => v.m);
@@ -738,16 +863,16 @@ function state(over = {}){
   ok(!m.includes(0),
      '184 Hz: the axisymmetric mode is killed, not kept by an under-penalised overlap',
      `survivors ${m.join(',')}`);
-  rel(s.competition.survivors[0].amp, 2.21260, 4, '184 Hz: m=13 saturates at 2.2126');
-  rel(s.competition.survivors[1].amp, 2.13145, 4, '184 Hz: m=7 saturates at 2.1315');
+  rel(s.competition.survivors[0].amp, 2.25629, 4, '184 Hz: m=13 saturates at 2.2563');
+  rel(s.competition.survivors[1].amp, 2.18436, 4, '184 Hz: m=7 saturates at 2.1844');
 }
 {
   const s = state({ f: 70, amplitudeMv: 430 });
   const m = s.competition.survivors.map(v => v.m);
   eq(m.join(','), '0,2,5', '70 Hz at 430 mV: m=0, then m=2, then m=5');
-  rel(s.competition.survivors[0].amp, 2.92950, 4, '70 Hz: m=0 saturates at 2.9295');
-  rel(s.competition.survivors[1].amp, 2.50716, 4, '70 Hz: m=2 saturates at 2.5072');
-  rel(s.competition.survivors[2].amp, 2.49881, 4, '70 Hz: m=5 saturates at 2.4988');
+  rel(s.competition.survivors[0].amp, 2.93469, 4, '70 Hz: m=0 saturates at 2.9347');
+  rel(s.competition.survivors[1].amp, 2.51282, 4, '70 Hz: m=2 saturates at 2.5128');
+  rel(s.competition.survivors[2].amp, 2.50953, 4, '70 Hz: m=5 saturates at 2.5095');
   ok(s.competition.survivors[1].amp > s.competition.survivors[2].amp,
      '70 Hz: m=2 outranks m=5 (the doubled matrix inverts this)',
      `m=2 ${s.competition.survivors[1].amp}, m=5 ${s.competition.survivors[2].amp}`);
@@ -810,6 +935,8 @@ function state(over = {}){
   }
   // and the drawn frequency must BE a root of the pinned spectrum for that m,
   // not merely some larger number
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes to check',
+     `${pn.states.length}`);
   for (const st of pn.states){
     const R = K.CELLS.medium.d/2000;
     const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20), K.density(20),
@@ -835,9 +962,13 @@ function state(over = {}){
    jp.toFixed(5) and the export gate compared a wavelength against null. */
 {
   const fr = state({ rim: 'free' }), pn = state({ rim: 'pinned', depthMm: 3 });
+  ok(fr.states.length > 0, 'the free state carries drawn modes to check',
+     `${fr.states.length}`);
   for (const st of fr.states)
     eq(K.finestZeroOf(st.radial), st.radial.jp,
        `finestZeroOf is the J' zero itself for a free mode (fold ${st.fold})`);
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes for finestZeroOf',
+     `${pn.states.length}`);
   for (const st of pn.states){
     const v = K.finestZeroOf(st.radial);
     ok(isFinite(v) && v > 0, `finestZeroOf is finite and positive for fold ${st.fold}`, `${v}`);
@@ -889,8 +1020,219 @@ function state(over = {}){
      `${lo.unstableCount} then ${hi.unstableCount}`);
 }
 
+/* ── 12. the exact coupled benchmark ────────────────────────────────────── */
+/* This is the second region of cymatic.html, not the Faraday kernel: a
+   manufactured coupled solution carried in exact rationals, where every local
+   residual is claimed to be ZERO over Q rather than small. Until now it had no
+   coverage at all.
+
+   What this section can and cannot establish, stated plainly, because that
+   distinction is exactly what let the tautologies survive unnoticed.
+
+   Nine of the nineteen terms are zero as a consequence of their own defining
+   lines rather than of the construction being right. solidMomentum and
+   freeSurfaceCurvature are the literal constant Q.ZERO. incompressibility is
+   a + a − 2a, from gradU as written. The three angularMomentum terms are
+   off-diagonal entries of a product of two diagonal matrices. The three
+   fluidMomentum terms subtract a body force b_f that is DEFINED, three lines
+   above, as the convective term it is subtracted from. An edit to those lines
+   would move them; an error in the material law, the closure or the geometry
+   cannot. Asserting them is close to free and it is not coverage.
+
+   The rest is what the four regeneration defects actually moved, and I had
+   two of these wrong before measuring:
+
+     - a wrong sigma_Z exponent  ->  fluidSolidStressMatch[2], storedEnergyRate
+     - a wrong closure constant  ->  fluidSolidStressMatch[0..2],
+                                     freeSurfaceTraction, energyBalance
+     - a wrong geometry moment   ->  NOTHING. All nineteen stay exactly zero,
+                                     which is why the moments are asserted
+                                     separately below
+     - allResidualsZero returning an empty list -> nothing either, except the
+                                     term COUNT, which is the only thing
+                                     standing between a residual that passed
+                                     and a residual that stopped being
+                                     collected
+
+   freeSurfaceTraction and energyBalance had been written off as identities.
+   They are not: both are zero only because a = d/(6 mu), so both go nonzero
+   when that constant is wrong.
+
+   viscousElasticClosure WAS self-cancelling, and the measurement is what
+   showed it. Written as six*mu*f/s − d with f = s*d/(six*mu) it is d − d for
+   any value of six, so it stayed exactly zero under that injection while
+   claiming to be the check on it. It now reads a back out of the stress match
+   -- a = (sigma_s + p)/(2 mu), which is built from P and F and carries no
+   factor of six -- so a wrong constant moves it: measured 37357803/200000000
+   at s = 5/4 under six = 7n, and exactly zero at all four stretches when the
+   constant is right.
+
+   freeSurfaceKinematic and the two kinetic-power terms were not moved by any
+   defect tried here, so nothing below claims they are covered. */
+section('12. exact coupled benchmark (exact rationals over Q)');
+{
+  const { Q, evaluate, allResidualsZero } = B;
+
+  /* The count is asserted beside allZero because "no nonzero residual" is
+     vacuously true of an empty list, and that is not hypothetical here: the
+     page's first walk handled Q values and arrays but not plain objects, so it
+     collected nothing out of r.residuals and reported allZero over zero terms.
+     A count that shrinks is a residual that stopped being collected, and that
+     reads exactly like a residual that passed. */
+  const TERMS = 19;
+  const KEYS = ['incompressibility','fluidMomentum','solidMomentum',
+    'fluidSolidStressMatch','angularMomentum','freeSurfaceKinematic',
+    'freeSurfaceTraction','freeSurfaceCurvature','energyBalance',
+    'storedEnergyRate','viscousElasticClosure','fluidKineticPower',
+    'solidKineticPower'];
+
+  for (const s of ['5/4', '11/8', '3/2', '7/5']){
+    const r = evaluate({ stretch: s });
+    const z = allResidualsZero(r);
+    eq(z.count, TERMS, `s=${s}: all ${TERMS} residual terms were collected`);
+    ok(z.allZero === true, `s=${s}: every residual is exactly zero over Q`,
+       `nonzero: ${z.nonzero.join(', ')}`);
+    ok(r.scope.stretchInRange === true, `s=${s} lies inside the declared interval`);
+    /* det F = 1 exactly. F is diag(s, s, s^-2), so this is a cancellation
+       between three rationals and not a no-op: the stretch is strictly above
+       one at every case here, which is asserted so that a future case pinned
+       at s = 1 cannot make det F = 1 true for free. */
+    ok(r.state.s.cmp(Q.of(1n)) > 0, `s=${s} is genuinely stretched, so det F = 1 is a cancellation`,
+       `s = ${r.state.s}`);
+    eq(r.state.detF.toString(), '1', `s=${s}: det F = 1 exactly (isochoric)`);
+  }
+
+  // every named residual is present. The count catches a term that stops being
+  // collected; this says which one it was.
+  {
+    const res = evaluate({ stretch: '5/4' }).residuals;
+    for (const k of KEYS) ok(res[k] !== undefined, `residual ${k} is present`);
+    eq(Object.keys(res).length, KEYS.length, 'and no residual term beyond those thirteen');
+  }
+
+  /* Geometry. The page integrates the moments from the declared radii and
+     heights rather than writing 31/2 and 7/3 in by hand, so what is asserted
+     is that the integration reproduces the figures the construction is stated
+     over, per the common factor pi: liquid (unit disk, unit height) volume 1,
+     INT(X²+Y²) = 1/2, INT Z² = 1/3; wall 1<r<2 over 0<z<1 giving 3, 15/2, 1;
+     bottom r<2 over −1<z<0 giving 4, 8, 4/3; solid the sum, 7, 31/2, 7/3.
+
+     The page's own comment says no local residual constrains these, and it is
+     right -- every term they enter carries them on BOTH sides, so a wrong
+     moment moves the two together and all nineteen residuals stay exactly
+     zero. Regeneration-tested: turning the radial /2 into /3 leaves allZero
+     true at every stretch and only these assertions go red. They are therefore
+     the whole of the geometry's coverage, not a supplement to it. */
+  {
+    const g = evaluate({ stretch: '11/8' }).geometry;
+    const moment = (region, key, want) =>
+      eq(g[region][key].toString(), want, `geometry: ${region} ${key} = ${want}`);
+    moment('liquid', 'volume',   '1');
+    moment('liquid', 'radial',   '1/2');
+    moment('liquid', 'vertical', '1/3');
+    moment('wall',   'volume',   '3');
+    moment('wall',   'radial',   '15/2');
+    moment('wall',   'vertical', '1');
+    moment('bottom', 'volume',   '4');
+    moment('bottom', 'radial',   '8');
+    moment('bottom', 'vertical', '4/3');
+    moment('solid',  'volume',   '7');
+    moment('solid',  'radial',   '31/2');
+    moment('solid',  'vertical', '7/3');
+    eq(g.totalVolume.toString(), '8', 'geometry: total volume is 1 + 7 = 8');
+  }
+
+  /* Q refuses binary64 on the way in, which is the boundary the whole
+     exactness claim stands on: admit one float anywhere and "exactly zero over
+     the rationals" becomes "zero to within rounding", a different and much
+     weaker statement. An integral float is refused too -- 2 does not get in
+     just because it happens to be representable. */
+  for (const bad of [1.25, 0.5, 2, 0, NaN]){
+    let e = null;
+    try { Q.of(bad); } catch (err) { e = err; }
+    ok(e instanceof TypeError, `Q.of(${bad}) refuses a binary64 input`,
+       `threw ${e === null ? 'nothing' : e.constructor.name}`);
+  }
+  // the second argument is a denominator, not decoration. It was being dropped:
+  // Q.of(8n, 3n) returned 8, and every fractional constant in the energy ledger
+  // was wrong while all nineteen residuals still read zero.
+  eq(Q.of(8n, 3n).toString(), '8/3', 'Q.of(8n,3n) is 8/3, not 8');
+  eq(Q.of(8n).toString(), '8', 'Q.of(8n) is 8');
+  // and the exact routes the TypeError points the caller at must work
+  eq(Q.of('1.25').toString(), '5/4', "Q.of('1.25') reads the decimal exactly");
+  eq(Q.of('5/4').toString(),  '5/4', "Q.of('5/4') reads the fraction");
+  eq(Q.of('-3/9').toString(), '-1/3', 'Q.of normalises sign and gcd');
+
+  /* allResidualsZero refuses an empty collection rather than reporting allZero
+     over nothing, which is what it did when its walk missed plain objects.
+     Both branches are exercised: it refuses the empty case, and it does report
+     a genuine nonzero -- a checker that has only ever returned true is not
+     known to be able to return false. */
+  for (const [label, arg] of [['an empty residual object', { residuals: {} }],
+                              ['only empty containers', { residuals: { a: {}, b: [], c: { d: [] } } }]]){
+    let e = null;
+    try { allResidualsZero(arg); } catch (err) { e = err; }
+    ok(e !== null && /collected no residuals/.test(e.message),
+       `allResidualsZero refuses ${label}`,
+       `threw ${e === null ? 'nothing' : e.message}`);
+  }
+  {
+    const z = allResidualsZero({ residuals:
+      { good: Q.ZERO, bad: Q.of('7/3'), arr: [Q.ZERO, Q.of(-1n)] } });
+    eq(z.count, 4, 'allResidualsZero walks plain objects and arrays alike');
+    ok(z.allZero === false, 'and reports a collection that is not all zero',
+       `got ${JSON.stringify(z)}`);
+    eq(z.nonzero.join(' '), 'bad=7/3 arr[1]=-1',
+       'naming each offending term by path and exact value');
+  }
+
+  /* Non-positive material parameters are refused rather than divided by. mu = 0
+     would make every rate in the construction a division by zero, and a
+     negative rhoF would report a negative kinetic energy as though it meant
+     something. Each of the five is checked separately, so a check that covers
+     four of them is not mistaken for one that covers all five. */
+  for (const key of ['rhoF','mu','rhoS','G','gamma']){
+    for (const bad of ['0','-1','-1/3']){
+      let e = null;
+      try { evaluate({ [key]: bad }); } catch (err) { e = err; }
+      ok(e instanceof RangeError && e.message.startsWith(`${key} must be positive`),
+         `evaluate refuses ${key} = ${bad}`,
+         `threw ${e === null ? 'nothing' : e.constructor.name + ': ' + e.message}`);
+    }
+  }
+  // ...and a positive, non-unit material set still closes exactly, so the
+  // residuals are not an artefact of every material constant being 1.
+  {
+    const z = allResidualsZero(evaluate({ stretch: '11/8', rhoF: '3/2', mu: '7/5',
+                                          rhoS: '11/4', G: '13/7', gamma: '5/3' }));
+    eq(z.count, TERMS, 'a non-unit material set still collects all 19 terms');
+    ok(z.allZero === true, 'and every residual there is exactly zero too',
+       `nonzero: ${z.nonzero.join(', ')}`);
+  }
+
+  // The T* bracket is ordered the right way round: f is increasing across the
+  // interval, so the LARGER bound comes from the slower end s = 5/4.
+  {
+    const c = evaluate({ stretch: '5/4' }).clock;
+    ok(c.tStarLower.cmp(c.tStarUpper) < 0, 'the T* bracket is ordered',
+       `${c.tStarLower} .. ${c.tStarUpper}`);
+  }
+}
+
 /* ---- report ------------------------------------------------------------ */
 console.log('\n' + '─'.repeat(66));
+/* A silently shortened loop removes assertions without removing a check, so the
+   suite can lose coverage and still print "0 failed". Regeneration-tested: a
+   kernel patched to return four pinned roots where six were asked for took the
+   count from 2451 to 2331 and the suite stayed green. The per-loop length
+   assertions above catch that case; this total catches every other way an
+   assertion can stop running. Update it deliberately when adding checks. */
+const EXPECTED_ASSERTIONS = 2582;
+if (pass !== EXPECTED_ASSERTIONS)
+  failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
+    + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
+else pass++;
+
 if (failures.length){
   console.log(`${pass} passed, ${failures.length} FAILED\n`);
   for (const f of failures) console.log('  FAIL  ' + f);
