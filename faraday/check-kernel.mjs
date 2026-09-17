@@ -523,6 +523,18 @@ for (const cse of REF.pinnedEdge){
     ok(pm.kTanhEff > Math.min(...kt) && pm.kTanhEff < Math.max(...kt),
        `${tag}: modal k tanh(kh) at ${pm.hz.toFixed(3)} Hz is inside the basis range`,
        `${pm.kTanhEff}`);
+    // kEquiv must SOLVE kEquiv*tanh(kEquiv*h) = kTanhEff, not approximate it.
+    // The previous expression was kTanhEff/tanh(kTanhEff*h), a single
+    // fixed-point substitution: exact as h grows (tanh -> 1) and badly wrong
+    // as h shrinks. At h = 1 mm it returned 1067.3 where the true inverse is
+    // 727.8, an 86% error in k tanh(kh) and 4.6x in the k^4 plate term. No
+    // assertion here pinned kEquiv, which is why it survived; this one states
+    // the defining relation itself, so no depth can hide a wrong inverse.
+    const resid = Math.abs(pm.kEquiv*Math.tanh(pm.kEquiv*h)/pm.kTanhEff - 1);
+    ok(resid < 1e-14,
+       `${tag}: kEquiv inverts k tanh(kh) at ${pm.hz.toFixed(3)} Hz`,
+       `kEquiv ${pm.kEquiv} gives ${pm.kEquiv*Math.tanh(pm.kEquiv*h)} ` +
+       `against kTanhEff ${pm.kTanhEff} — relative ${resid.toExponential(2)}`);
   }
 }
 /* The truncation guard. What it protects against is real and is demonstrated
@@ -1227,7 +1239,7 @@ console.log('\n' + '─'.repeat(66));
    count from 2451 to 2331 and the suite stayed green. The per-loop length
    assertions above catch that case; this total catches every other way an
    assertion can stop running. Update it deliberately when adding checks. */
-const EXPECTED_ASSERTIONS = 2582;
+const EXPECTED_ASSERTIONS = 2606;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
