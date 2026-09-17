@@ -75,6 +75,17 @@ ASPIRATIONAL = {
     # the repository does not contain. Same aspiration as `src/julia/`, which
     # holds one `.gitkeep`.
     "test/runtests.jl",
+    # docs/RESEARCH_LINEAGE.md names this as a file in the seller-supplied
+    # third-party `vedic-cymatic-math` repository, in the same paragraph that
+    # states no code from that repository is incorporated here. Its absence is
+    # the point being made: if it ever appears, the disclaimer is false.
+    "chladni.py",
+    # README_11STRING_22EDO_FREECAD.md names this as an output the generator
+    # *writes* -- `11string_22edo_acoustic_electric_FULL_CAD.py:244` writes
+    # `master_parameters.json` into the `data` subdirectory of `--output-dir`,
+    # which defaults to `cad_build`. It does not exist until that runs, and a
+    # build artefact committed to the tree would be the defect, not the fix.
+    "cad_build/data/master_parameters.json",
 }
 
 _PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|json|yaml|yml|jsonl|"
