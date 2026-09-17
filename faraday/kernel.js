@@ -149,6 +149,24 @@ function jpZerosNearN(m, xStar, count){
   return found.slice(0, count);
 }
 
+const PINNED_SPECTRUM_CACHE = new Map();
+
+function invertKTanh(target, hM){
+  if (!(target > 0) || !Number.isFinite(target))
+    throw new Error(`invertKTanh: target must be finite and positive, got ${target}`);
+  if (!(hM > 0) || !Number.isFinite(hM))
+    throw new Error(`invertKTanh: hM must be finite and positive, got ${hM}`);
+  const f = k => k*Math.tanh(k*hM);
+  let lo = target, hi = target/Math.tanh(target*hM);
+  if (!Number.isFinite(hi) || hi <= lo) return lo;
+  for (let i = 0; i < 200 && hi - lo > Number.EPSILON*hi; i++){
+    const mid = lo + (hi - lo)/2;
+    if (mid <= lo || mid >= hi) break;
+    if (f(mid) < target) lo = mid; else hi = mid;
+  }
+  return lo + (hi - lo)/2;
+}
+
 function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
 
   const zeros = jpZeros(m, basisN, m + 3.2*basisN);
@@ -203,7 +221,7 @@ function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
                w2: root, omega: Math.sqrt(root), hz: Math.sqrt(root)/(2*Math.PI),
 
                kTanhEff: kt/wsum,
-               kEquiv: kt/wsum/Math.tanh(Math.max(1e-12, kt/wsum)*hM),
+               kEquiv: invertKTanh(kt/wsum, hM),
                coefficients: amp, wallResidual: wall, wallScale: scale });
   }
   return { freeW2: w2, freeZeros: zeros, freeK: k, c, pinned: out };
@@ -562,13 +580,15 @@ function resolvePatternState(o){
   const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
 
   const PINNED_BASIS = 128;
-  const pinnedCache = new Map();
   const pinnedFor = m => {
-    if (pinnedCache.has(m)) return pinnedCache.get(m);
+    const want = RADIAL_ROOTS + 4;
+    const key = `${m}|${R}|${sigma}|${rho}|${hM}|${PINNED_BASIS}|${want}`;
+    const hit = PINNED_SPECTRUM_CACHE.get(key);
+    if (hit !== undefined) return hit;
     let v = null;
-    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, RADIAL_ROOTS + 4); }
+    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, want); }
     catch (e){ v = { failed: e.message }; }
-    pinnedCache.set(m, v); return v;
+    PINNED_SPECTRUM_CACHE.set(key, v); return v;
   };
 
   for (const m of keptOrders){
@@ -772,11 +792,19 @@ function resolvePatternState(o){
 
     const won = competition && competition.survivors.length ? competition.survivors : null;
     const pool = won || modes.slice(0, 6);
-    const amax = won ? Math.max(...won.map(t => t.amp))
-                     : Math.max(...pool.map(t => Math.abs(t.growth)), 1e-9);
+    let gBest = -Infinity;
+    if (!won){
+      for (const t of pool) if (t.growth > gBest) gBest = t.growth;
+      if (!(gBest < 0)) throw new Error(
+        `least-damped diagnostic: the pool has a mode with growth ${gBest} >= 0 but the `
+        + `competition returned no survivors. Prominence here is the ratio of decay rates, `
+        + `which is only defined when every pooled mode decays. Refusing rather than `
+        + `weighting an unstable mode by a rate that is not a decay.`);
+    }
+    const amax = won ? Math.max(...won.map(t => t.amp)) : 1;
     for (const t of pool)
       states.push({ fold: t.m*2, m: t.m,
-                    weight: (won ? t.amp : Math.abs(t.growth))/amax,
+                    weight: won ? t.amp/amax : gBest/t.growth,
                     phi: t.phi || 0,
                     radial: { ...t, n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) },
                     theoryOnly: true });
@@ -835,6 +863,7 @@ function resolvePatternState(o){
 }
 
 const FARADAY_KERNEL = {
+  invertKTanh,
   millerAll,
   besselJ,
   besselJp,
