@@ -376,6 +376,29 @@ section('7. damped Mathieu, first tongue');
   rel(m.eps, m.epsThreshold, 12, 'at threshold acceleration, eps = eps_c');
   ok(Math.abs(m.growth) < 1e-9, 'growth is exactly zero at threshold', `got ${m.growth}`);
   eq(m.detune, 0, 'zero detuning at omega_d = 2 omega_0');
+  rel(m.accelOnset, at, 13, 'accelOnset equals accelThreshold when undetuned');
+  // accelOnset is the drive at which THIS mode's growth crosses zero, detuning
+  // included. accelThreshold is the undetuned value and understates the drive
+  // whenever the mode sits off 2:1 -- which is why a "raise the drive to X"
+  // figure built from accelThreshold does not reach onset. The contract is that
+  // growth is exactly zero at accelOnset, at any detuning, so assert that
+  // directly across the tongue rather than only at its centre.
+  for (const r of [0.80, 0.93, 1.0, 1.07, 1.25]){
+    const wdr = 2*w0*r;
+    const mm = K.mathieu(w0, gamma, 1, k, h, wdr);
+    const a0 = mm.accelOnset;
+    const gAt = K.mathieu(w0, gamma, a0, k, h, wdr).growth;
+    ok(Math.abs(gAt) < 1e-9*Math.max(1, gamma),
+       `growth is zero at accelOnset, drive ratio ${r}`,
+       `accelOnset ${a0} gives growth ${gAt}`);
+    ok(K.mathieu(w0, gamma, a0*0.99, k, h, wdr).growth < 0,
+       `just below accelOnset decays, drive ratio ${r}`);
+    ok(K.mathieu(w0, gamma, a0*1.01, k, h, wdr).growth > 0,
+       `just above accelOnset grows, drive ratio ${r}`);
+    if (r !== 1) ok(a0 > m.accelThreshold,
+       `detuned onset needs more drive than the undetuned threshold, ratio ${r}`,
+       `accelOnset ${a0} vs accelThreshold ${m.accelThreshold}`);
+  }
   // and it must cross: below threshold negative, above positive
   ok(K.mathieu(w0, gamma, at*0.9, k, h, wd).growth < 0, 'sub-threshold drive decays');
   ok(K.mathieu(w0, gamma, at*1.5, k, h, wd).growth > 0, 'super-threshold drive grows');
@@ -1239,7 +1262,7 @@ console.log('\n' + '─'.repeat(66));
    count from 2451 to 2331 and the suite stayed green. The per-loop length
    assertions above catch that case; this total catches every other way an
    assertion can stop running. Update it deliberately when adding checks. */
-const EXPECTED_ASSERTIONS = 2606;
+const EXPECTED_ASSERTIONS = 2626;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
