@@ -404,7 +404,8 @@ function mathieuKT(omega0, gamma, accel, kTanh, omegaDrive){
   return { eps, detune, kTanh,
            growth: -gamma + (rad > 0 ? (omega0/2)*Math.sqrt(rad) : 0),
            epsThreshold: 4*gamma/omega0,
-           accelThreshold: 4*gamma*omega0/kTanh };
+           accelThreshold: 4*gamma*omega0/kTanh,
+           accelOnset: 4*omega0*omega0*Math.hypot(gamma/omega0, detune)/kTanh };
 }
 function mathieu(omega0, gamma, accel, k, hM, omegaDrive){
   return mathieuKT(omega0, gamma, accel, k*Math.tanh(k*hM), omegaDrive);
@@ -546,17 +547,24 @@ function resolvePatternState(o){
     'Below the reported minimum drive: no stable Faraday pattern forms.' });
   if (f <= 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
     'Overdriven regime: the paper reports the pattern becomes distorted here.' });
-  if (f > 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
-    `${amplitudeMv.toFixed(0)} mV is outside the 55-430 mV the paper reports. That range `
-    + `belongs to its 50-199 Hz sweep; the mV axis beyond it is this page extending an `
-    + `apparatus scale, not a measured one. Read the acceleration and the ratio to `
-    + `threshold instead -- those are the physical quantities.` });
 
   const nu = mu/rho;
   const kStar = kOfOmega(omegaTarget, sigma, rho, hM);
   const xStar = kStar*R;
   const damp = dampingRate(kStar, omegaTarget, nu, hM);
   const plate = plateTransfer(kStar, 2*Math.PI*f, rho, hM);
+  if (f > 199 && amplitudeMv > OVERDRIVE_MV){
+    const aNow = accelOf(amplitudeMv, cellKey);
+    const mStar = mathieu(omegaTarget, damp.total, aNow, kStar, hM, 2*Math.PI*f);
+    warnings.push({ hard: false, text:
+      `${amplitudeMv.toFixed(0)} mV is outside the 55-430 mV the paper reports. That range `
+      + `belongs to its 50-199 Hz sweep; the mV axis beyond it is this page extending an `
+      + `apparatus scale, not a measured one. The physical quantities: this drive is `
+      + `${aNow.toFixed(2)} m/s^2, and onset for the resonant wavenumber here is `
+      + `${mStar.accelOnset.toFixed(2)} m/s^2, a ratio of `
+      + `${(aNow/mStar.accelOnset).toFixed(3)}.` });
+  }
+
   const wavelength = 2*Math.PI/kStar;
 
   const mMax = Math.max(2, Math.floor(xStar));
@@ -612,7 +620,7 @@ function resolvePatternState(o){
         modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
           mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
           gamma: g.total, growth: mth.growth, eps: mth.eps,
-          accelThreshold: mth.accelThreshold,
+          accelThreshold: mth.accelThreshold, accelOnset: mth.accelOnset,
           phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
           coeff: plateTransfer(kEq, 2*Math.PI*f, rho, hM).magnitude,
           pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS });
@@ -626,7 +634,7 @@ function resolvePatternState(o){
       modes.push({ m, n: null, jp: z, k, hz: w/(2*Math.PI),
         mismatch: Math.abs(w - omegaTarget)/omegaTarget,
         gamma: g.total, growth: mth.growth, eps: mth.eps,
-        accelThreshold: mth.accelThreshold,
+        accelThreshold: mth.accelThreshold, accelOnset: mth.accelOnset,
 
         phi: Math.atan2(2*g.total*w, omegaTarget*omegaTarget - w*w),
 
@@ -813,8 +821,22 @@ function resolvePatternState(o){
         + `growth, all retained; the cubic overlap competition leaves `
         + `${competition ? competition.survivors.length : 0} standing. Angular symmetry is `
         + `predicted, not observed -- the atlas stops at 199 Hz.`
-      : `No mode reaches Faraday onset at this amplitude. Shown are the least-damped `
-        + `modes, which is a diagnostic, not a pattern.` });
+      : (() => {
+          const aNow = accelOf(amplitudeMv, cellKey);
+          let aMin = Infinity, mMin = null;
+          for (const t of modes)
+            if (t.accelOnset > 0 && t.accelOnset < aMin){ aMin = t.accelOnset; mMin = t.m; }
+          if (!Number.isFinite(aMin) || !(aNow > 0))
+            return `No mode reaches Faraday onset at this amplitude, and no finite threshold was `
+              + `computed to compare it against. Shown are the least-damped modes, which is a `
+              + `diagnostic, not a pattern.`;
+          const mvNeed = amplitudeMv*aMin/aNow;
+          return `No mode reaches Faraday onset: the drive is ${aNow.toFixed(2)} m/s^2 against `
+            + `${aMin.toFixed(2)} m/s^2 for the easiest mode here, m = ${mMin}, a ratio of `
+            + `${(aNow/aMin).toFixed(3)}. Onset needs about ${mvNeed.toFixed(0)} mV at this `
+            + `frequency, which the drive axis reaches. Shown meanwhile are the least-damped `
+            + `modes, which is a diagnostic, not a pattern.`;
+        })() });
   }
   const wsum = states.reduce((s, x) => s + x.weight, 0);
   if (states.length && !(wsum > 0)) throw new Error(
