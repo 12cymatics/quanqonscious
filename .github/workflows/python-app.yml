@@ -69,6 +69,31 @@ jobs:
         pip install numpy scipy sympy mpmath matplotlib pandas Pillow pydantic pyyaml
         pip install --index-url https://download.pytorch.org/whl/cpu torch
         pip install cirq-core cudaq
+    # 63 of these tests are vedic_trainer/vedic/external/tests/test_lean_props.py,
+    # which compile rendered identities with the real `lean` binary and fail with
+    # FileNotFoundError without it. They are not skippable and they do not need
+    # Mathlib: the renderer emits core-Lean Int cross-multiplication precisely so
+    # a bare toolchain can verify it, and the suite asserts no `Rat` literal
+    # appears for exactly that reason. So this installs the toolchain the way
+    # sutraws-lean does, and stops there -- no `lake exe cache get`, no
+    # `lake build`.
+    - name: Install Lean 4 (version pinned by ./lean-toolchain)
+      run: |
+        set -eu
+        TOOLCHAIN="$(cat lean-toolchain)"
+        echo "Installing $TOOLCHAIN"
+        curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+        sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+        echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+    - name: Verify Lean matches the pin
+      run: |
+        set -eu
+        lean --version
+        EXPECTED="$(cut -d: -f2 < lean-toolchain | tr -d 'v')"
+        lean --version | grep -q "version ${EXPECTED}" || {
+          echo "lean --version does not match ./lean-toolchain (${EXPECTED})"
+          exit 1
+        }
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
