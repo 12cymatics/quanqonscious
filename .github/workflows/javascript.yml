@@ -3,11 +3,15 @@
 # A suite CI never executes is not a gate, it is a file.
 #
 # This lives in its own workflow rather than as a job in python-app.yml because
-# that one triggers only on `branches: [main]`, so it would not fire on a pull
-# request opened against any other base -- which is how work reaches main here.
-# The trigger below matches submit-pypi.yml's `branches: ["**"]`, so these
-# suites gate every pull request. Putting the JS job inside python-app.yml
-# instead would have shipped a gate that never fired on the branch flow in use.
+# that one used to trigger only on `branches: [main]`, so it would not fire on a
+# pull request opened against any other base -- which is how work reaches the
+# default branch here. python-app.yml has since been repointed at the real
+# default branch, but these suites stay separate: they need node and no Python,
+# and `branches: ["**"]` below gates every pull request regardless.
+#
+# The push trigger named `main` for the same reason python-app.yml's did, and
+# this repository has no `main` -- so the push half never fired once. It now
+# names the default branch, `codex/create-github-repository-for-pcfe-v3.0`.
 #
 # No suite here needs a network or an install. faraday/reference.json is checked
 # in -- computed once by mpmath, scipy.special and scipy.optimize.brentq -- so
@@ -25,7 +29,7 @@ name: javascript
 
 on:
   push:
-    branches: [main]
+    branches: [codex/create-github-repository-for-pcfe-v3.0]
   pull_request:
     branches: ["**"]
 
@@ -45,6 +49,8 @@ jobs:
       run: node boundary/boundarykernel.test.js
     - name: Faraday kernel (sliced out of cymatic.html)
       run: node faraday/check-kernel.mjs
+    - name: Single-file build is self-contained
+      run: node faraday/check-standalone.mjs
 
   dns:
     name: faraday DNS

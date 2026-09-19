@@ -15,3 +15,7 @@ vedic_benchmark
 vedic
 vedic_pde_tool
 vedic_capability_profile
+
+# Generated single-file build of cymatic.html (node faraday/build-standalone.mjs).
+# Never committed: a second copy of the kernel would drift from the original.
+faraday-cell-standalone.html
