@@ -36,6 +36,7 @@ import numpy as np
 from fractions import Fraction
 
 import primarysutra as ps
+import sutra_simulator
 
 MODES = list(ps.SutraMode)
 
@@ -163,6 +164,69 @@ def test_the_claude_md_example_actually_runs():
     block = match.group(1)
     assert "run_serial" in block, "the block no longer exercises the simulator"
     exec(compile(block, "CLAUDE.md", "exec"), {})
+
+
+def test_the_chained_run_refuses_in_the_quantum_modes():
+    """The chained run declines in QUANTUM and HYBRID by raising, catchably.
+
+    This pins the prose warning under the CLAUDE.md block, which
+    `test_the_claude_md_example_actually_runs` above does NOT cover: that test
+    executes the code block, and the block chains in CLASSICAL, so the
+    paragraph describing the other two modes was gated by nothing. It rotted
+    there, asserting a hard `std::discrete_distribution` abort inside CUDA-Q
+    that "kills the process, so no `try` can catch it and no test can survive
+    it", from a NaN angle that is no longer in the file.
+
+    Measured instead: an `ArithmeticError` from `_check_width`, caught here,
+    twice per mode, in this interpreter, which then goes on to run the rest of
+    the suite. That this test exists at all is the refutation -- under the
+    abort the paragraph claimed, it could not have been written.
+
+    The message is pinned verbatim in both numbers because CLAUDE.md quotes
+    it. If the cap or the chained magnitudes change, the quote is wrong and
+    this reds, which is the only reason the quote is safe to keep there.
+
+    Regeneration-tested on a throwaway `git worktree`, never in the tree.
+    Each of the three arms was driven RED by a separate injected defect, one
+    at a time, and GREEN again on restore:
+
+      * `_MAX_SIMULABLE_QUBITS = 24` -- the cap drifts, CLAUDE.md's quoted
+        "26-qubit limit" goes stale, and the limit assertion reds;
+      * `delta = int(b) - int(a)` in place of the `_quantum_sum` call in
+        `_anurupyena_quantum` -- a silent classical substitution for the
+        refusal. The chain then runs past the subtraction and refuses at the
+        NEXT width instead ("multiplication needs 46 qubits"), so the width
+        assertion reds;
+      * early `return a + b` / `a * b` / the Horner sum in `_quantum_sum`,
+        `_quantum_product` and `_quantum_polynomial` -- every register
+        primitive silently classical. The chain then completes all sixteen and
+        the no-refusal arm reds, which is the only defect that reaches it.
+    """
+    for mode in (ps.SutraMode.QUANTUM, ps.SutraMode.HYBRID):
+        for trial in (1, 2):
+            ctx = ps.SutraContext(mode=mode)
+            sim = sutra_simulator.HybridQuantumClassicalSimulator(ctx)
+            try:
+                sim.run_serial(12345.0)
+            except ArithmeticError as exc:
+                message = str(exc)
+            else:
+                raise AssertionError(
+                    f"{mode.name} trial {trial}: run_serial(12345.0) completed. "
+                    f"The chained magnitudes no longer exceed the qubit cap, so "
+                    f"the refusal CLAUDE.md documents is stale -- update it.")
+            assert "needs 30 qubits" in message, (
+                f"{mode.name} trial {trial}: refused, but not at the width "
+                f"CLAUDE.md quotes: {message!r}")
+            assert "26-qubit limit" in message, (
+                f"{mode.name} trial {trial}: the cap named in the refusal is "
+                f"not the 26 CLAUDE.md quotes: {message!r}")
+
+    # CLASSICAL is the mode the documented example uses, and the remedy the
+    # refusal itself names. It must carry all sixteen through.
+    classical = sutra_simulator.HybridQuantumClassicalSimulator(
+        ps.SutraContext(mode=ps.SutraMode.CLASSICAL)).run_serial(12345.0)
+    assert len(classical.to_dict()["executions"]) == 16
 
 
 def test_the_engine_constructs_in_every_mode():
