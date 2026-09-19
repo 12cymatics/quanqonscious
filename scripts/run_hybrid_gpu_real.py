@@ -144,16 +144,16 @@ def configure_cudaq_gpu_target() -> str:
 @cudaq.kernel
 def _phase_probe_kernel(theta: float):
     q = cudaq.qvector(4)
-    h(q[0])
-    h(q[1])
-    h(q[2])
-    h(q[3])
-    rz(theta, q[0])
-    rx(theta * 0.5, q[1])
-    ry(theta * 0.25, q[2])
-    cx(q[0], q[3])
-    cx(q[1], q[2])
-    mz(q)
+    h(q[0])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    h(q[1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    h(q[2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    h(q[3])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    rz(theta, q[0])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    rx(theta * 0.5, q[1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    ry(theta * 0.25, q[2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    cx(q[0], q[3])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    cx(q[1], q[2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+    mz(q)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
 
 
 def quantum_phase_gain(theta: float, shots: int) -> float:

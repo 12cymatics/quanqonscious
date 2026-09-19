@@ -15,6 +15,7 @@ import hypothesis
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 import cupy as cp
+from mpi4py import MPI
 import cudaq
 import cirq
 from scipy.stats import ks_2samp, chi2_contingency

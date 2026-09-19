@@ -24,7 +24,9 @@ import pyvista as pv
 from mayavi import mlab
 import napari
 import time
-from typing import List, Dict, Tuple, Optional, Union
+import json
+import contextlib
+from typing import List, Dict, Tuple, Optional, Union, Any, TYPE_CHECKING
 import logging
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
@@ -32,6 +34,9 @@ import asyncio
 import h5py
 import zarr
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from pcfe_v3_core_engine import PCFEConfig
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  MPI DOMAIN DECOMPOSITION ENGINE                                         ║
@@ -1167,7 +1172,7 @@ class DistributedPCFE:
     • Fault-tolerant checkpointing across nodes
     """
     
-    def __init__(self, config: PCFEConfig):
+    def __init__(self, config: "PCFEConfig"):
         self.config = config
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()

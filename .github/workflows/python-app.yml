@@ -3,11 +3,19 @@
 
 name: Python application
 
+# This repository has no `main` branch. The default branch is
+# codex/create-github-repository-for-pcfe-v3.0, and work reaches it from
+# feature branches, so `branches: [main]` meant this workflow had never run
+# once -- neither on a push nor on a pull request. The two suites it carries,
+# tests/test_documented_paths.py and tests/test_invariants.py, were therefore
+# ungated, and a red documented-paths gate sat unobserved on the default
+# branch. The pattern below matches javascript.yml and submit-pypi.yml, which
+# gate every pull request regardless of base.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "codex/create-github-repository-for-pcfe-v3.0" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 permissions:
   contents: read
