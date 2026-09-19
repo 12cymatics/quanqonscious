@@ -496,17 +496,41 @@ report = HybridQuantumClassicalSimulator(chained).run_serial(12345.0)
 assert len(report.to_dict()["executions"]) == 16
 ```
 
-> **The chained run aborts the interpreter in QUANTUM and HYBRID mode.** Not
-> an exception — a hard `std::discrete_distribution` assertion failure inside
-> CUDA-Q that kills the process, so no `try` can catch it and no test can
-> survive it. `run_serial` feeds each sutra's output into the next; a sutra
-> whose coefficients sum to zero makes `angle = coef * x**i /
-> np.sum(np.abs(coefficients))` at `primarysutra.py:1812` evaluate to NaN, and
-> a NaN angle reaching cudaq aborts. That line is in
-> `_sesanyankena_caramena_quantum`, one of the sutras whose quantum path is
-> known wrong (it returns 1.5 where the classical Horner evaluation gives 17).
-> The example therefore chains in CLASSICAL. Do not "fix" this by wrapping the
-> call — the guard belongs on the NaN, and the real repair is the algorithm.
+> **The chained run refuses in QUANTUM and HYBRID mode, by raising.** It
+> raises `ArithmeticError`, which is catchable, and the interpreter survives:
+> *subtraction needs 30 qubits; simulating it would take 8.0 GiB of state
+> vector, above the 26-qubit limit.* `run_serial` feeds each sutra's output
+> into the next, so magnitudes grow until `anurupyena` asks for a register
+> wider than the cap, and the refusal in `_check_width` declines rather than
+> substituting the classical answer. That is the documented contract of
+> [Refusing is not falling back](#refusing-is-not-falling-back) working as
+> designed, not a defect. The example chains in CLASSICAL because CLASSICAL is
+> the mode that evaluates 12345.0 through all sixteen; the refusal names that
+> remedy itself.
+>
+> **This paragraph previously described an uncatchable abort, and every part of
+> that was false when measured.** It read: a hard
+> `std::discrete_distribution` assertion inside CUDA-Q that "kills the
+> process, so no `try` can catch it and no test can survive it", caused by a
+> NaN from `angle = coef * x**i / np.sum(np.abs(coefficients))` at
+> `primarysutra.py:1812`. Measured on 2026-09-19: four chained runs, QUANTUM
+> and HYBRID twice each, all four raising `ArithmeticError` and all four
+> caught in **one** interpreter that then exited 0. No `discrete_distribution`
+> and no assertion text appears in either log. The cited formula is not in the
+> file at all — it survives only inside the docstring of
+> `_sesanyankena_caramena_quantum` recording the defect it replaced, and line
+> 1812 is now part of the classical Horner loop. That quantum path was
+> repaired to a ripple-carry accumulation and its value is pinned across all
+> three modes in `tests/test_primarysutra_modes.py`, negative results
+> included; it no longer returns 1.5 for a polynomial worth 17.
+>
+> **How it rotted under a sentence saying it could not.** The paragraph above
+> the block claims execution by `tests/test_primarysutra_modes.py` keeps it
+> honest. That gate executes the *code block*, which chains in CLASSICAL —
+> the prose was covered by nothing. The claim is now gated too, by
+> `test_the_chained_run_refuses_in_the_quantum_modes`, which is only
+> *possible* because the behaviour is an ordinary exception: under the
+> abort this paragraph used to assert, no test could have survived to make it.
 
 **Sixteen, not twenty-nine.** `VedicSutras` defines 16 sutra methods and no
 sub-sutras. The 29 counted elsewhere in this file live in
