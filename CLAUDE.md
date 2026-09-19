@@ -737,16 +737,39 @@ def test_new_invariant():
 
 ### CI/CD Pipeline
 
-**GitHub Actions**: `.github/workflows/python-app.yml`
+**GitHub Actions**: `python-app.yml`, `javascript.yml`, `submit-pypi.yml`
 
-**Triggers**: Push/PR to `main` branch
+**`python-app.yml` triggers**: push to `codex/create-github-repository-for-pcfe-v3.0`
+(the default branch; there is no `main`) and pull requests against any base.
 
-**Steps**:
-1. Python 3.10 setup
-2. CUDA 11.8 toolkit installation
-3. Install dependencies (including `cupy-cuda11x`)
-4. Flake8 linting (E9, F63, F7, F82)
-5. Pytest execution
+Every line of this section used to be wrong, and the trigger line was the
+reason. It said "Push/PR to `main` branch", which is what the file said -- and
+this repository has no `main`, so **the workflow had never run once**. The two
+suites it carries were ungated, which is how a red `tests/test_documented_paths.py`
+sat unobserved on the default branch. Three defects were waiting in it when it
+finally ran: an action reference (`Jimver/cuda-toolkit@v0`) to a version that
+does not exist, `pip install -r requirements.txt` asking a GPU-less runner for
+two conflicting cupy wheels and CUDA torch, and a missing `lean` binary that
+failed 63 tests. A trigger nobody exercises is not a pipeline, and a documented
+step list nobody ran is not a record of anything.
+
+**Steps** (read from the file, in order):
+1. `actions/checkout@v4`
+2. `actions/setup-python@v5`, Python 3.10
+3. Install dependencies: an explicit list, torch from the CPU wheel index.
+   `requirements.txt` is deliberately **not** installed -- no workflow here
+   installs it, and it asks for `cupy-cuda11x` and `cupy-cuda12x` together
+   plus `cuda-quantum` on a runner with no GPU. The list was measured to be
+   sufficient: with it, bare `pytest` collects and passes the whole suite.
+4. Install Lean 4 via elan, pinned by `./lean-toolchain`, then verify
+   `lean --version` matches the pin. `vedic_trainer/vedic/external/tests/test_lean_props.py`
+   compiles rendered identities with the real binary; Mathlib is not needed,
+   because the renderer emits core-Lean `Int` arithmetic for that purpose.
+5. Flake8, blocking: `--select=E9,F63,F7,F82`, no `--exit-zero`. Reports 0.
+6. Flake8 again, `--exit-zero`, advisory only.
+7. `pytest`
+
+**Measured**, first green run (2026-09-19): **2555 passed**, 8 checks green.
 
 **Local pre-commit checks**:
 ```bash
@@ -1231,8 +1254,9 @@ if torch.cuda.is_available():
 python tests/test_invariants.py
 
 # Every file path named in this repository's documentation must resolve.
-# Runs standalone or under pytest; bare `pytest` at the root picks it up,
-# which is how python-app.yml runs it on main.
+# Runs standalone or under pytest; bare `pytest` at the root picks it up, which
+# is how python-app.yml runs it. That line used to say "on main" -- there is no
+# main branch, so it named the one place the gate could never have run.
 python tests/test_documented_paths.py
 
 # Run minimal simulation
