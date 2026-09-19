@@ -66,8 +66,8 @@ def test_cudaq_installation():
         @cudaq.kernel
         def simple_test():
             q = cudaq.qubit()
-            h(q)
-            mz(q)
+            h(q)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+            mz(q)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         result = cudaq.sample(simple_test, shots_count=100)
         print("✓ Basic quantum circuit execution successful")
@@ -87,13 +87,13 @@ def test_vedic_sutra_quantum():
         qvec = cudaq.qvector(n_qubits)
         # Initialize with Hadamard superposition
         for i in range(n_qubits):
-            h(qvec[i])
+            h(qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         # Apply rotation based on iteration
         for i in range(n_qubits):
-            ry(theta * (i + 1), qvec[i])
+            ry(theta * (i + 1), qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         # Entangle adjacent qubits
         for i in range(n_qubits - 1):
-            cx(qvec[i], qvec[i + 1])
+            cx(qvec[i], qvec[i + 1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
     
     try:
         result = cudaq.sample(ekadhikena_kernel, 4, 0.5, shots_count=1000)
@@ -109,9 +109,9 @@ def test_vedic_sutra_quantum():
         qvec = cudaq.qvector(n_qubits)
         
         for i in range(min(len(angles), n_qubits)):
-            ry(angles[i], qvec[i])
+            ry(angles[i], qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             if i < n_qubits - 1:
-                cx(qvec[i], qvec[i + 1])
+                cx(qvec[i], qvec[i + 1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
     
     try:
         angles = [0.1, 0.2, 0.3, 0.4]
@@ -135,23 +135,23 @@ def test_quantum_phase_estimation():
         eigenstate = cudaq.qubit()
         
         # Initialize eigenstate
-        x(eigenstate)
+        x(eigenstate)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Apply Hadamard to precision qubits
         for i in range(n_precision):
-            h(precision_qubits[i])
+            h(precision_qubits[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Controlled rotations
         for i in range(n_precision):
             for j in range(2**i):
-                cu(precision_qubits[i], eigenstate, 0, 0, 0, phase * 2**i)
+                cu(precision_qubits[i], eigenstate, 0, 0, 0, phase * 2**i)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Inverse QFT (simplified)
         for i in range(n_precision // 2):
-            swap(precision_qubits[i], precision_qubits[n_precision - 1 - i])
+            swap(precision_qubits[i], precision_qubits[n_precision - 1 - i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         for i in range(n_precision):
-            h(precision_qubits[i])
+            h(precision_qubits[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
     
     try:
         result = cudaq.sample(qpe_kernel, 4, np.pi/4, shots_count=1000)
@@ -172,12 +172,12 @@ def test_performance_comparison():
         for _ in range(depth):
             # Layer of single-qubit gates
             for i in range(n_qubits):
-                h(qvec[i])
-                rz(0.1, qvec[i])
+                h(qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+                rz(0.1, qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             
             # Layer of two-qubit gates
             for i in range(0, n_qubits - 1, 2):
-                cx(qvec[i], qvec[i + 1])
+                cx(qvec[i], qvec[i + 1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
     
     # Test different circuit sizes
     for n_qubits in [4, 6, 8]:
@@ -216,10 +216,10 @@ def test_integration_with_torch():
                 # Encode magnitude
                 if mags[i] > 0:
                     angle = 2 * np.arcsin(min(1.0, mags[i]))
-                    ry(angle, qvec[i])
+                    ry(angle, qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 
                 # Encode phase
-                rz(phases[i], qvec[i])
+                rz(phases[i], qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         result = cudaq.sample(torch_integration_kernel, magnitudes, phases, shots_count=100)
         print("✓ PyTorch tensor processing with CUDA-Quantum successful")

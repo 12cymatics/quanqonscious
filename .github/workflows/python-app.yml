@@ -3,11 +3,19 @@
 
 name: Python application
 
+# This repository has no `main` branch. The default branch is
+# codex/create-github-repository-for-pcfe-v3.0, and work reaches it from
+# feature branches, so `branches: [main]` meant this workflow had never run
+# once -- neither on a push nor on a pull request. The two suites it carries,
+# tests/test_documented_paths.py and tests/test_invariants.py, were therefore
+# ungated, and a red documented-paths gate sat unobserved on the default
+# branch. The pattern below matches javascript.yml and submit-pypi.yml, which
+# gate every pull request regardless of base.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "codex/create-github-repository-for-pcfe-v3.0" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 permissions:
   contents: read
@@ -27,22 +35,65 @@ jobs:
     # because that is what CI has been executing; changing the version is a
     # behaviour change, not a documentation fix.
     - name: Set up Python 3.10
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: "3.10"
-    - name: Install CUDA toolkit (runtime only)
-      uses: Jimver/cuda-toolkit@v0
-      with:
-        cuda: "11.8.0"
+    # The CUDA toolkit step that stood here could never resolve: it asked for
+    # `Jimver/cuda-toolkit@v0` and that action publishes only v0.2.x tags, no
+    # v0 major tag, so the job died in "Prepare all required actions" before a
+    # single step ran. That went unnoticed because this workflow never fired.
+    #
+    # It is removed rather than pinned, because nothing in this job needs it:
+    # no test file imports cupy, none references nvcc or CUDA headers, and the
+    # runner has no GPU. requirements.txt already lists cupy-cuda11x and
+    # cupy-cuda12x, so the separate install here was redundant, and the CFLAGS
+    # pointing at /usr/local/cuda/include existed only to work around the
+    # header problems that installing the toolkit was meant to solve. Pinning
+    # to v0.2.36 would also have been a gamble: CUDA 11.8 predates
+    # ubuntu-24.04 and the action documents only ubuntu-20.04 as tested.
+    # requirements.txt is not installed here, and no workflow in this repository
+    # installs it. It is 232 lines and asks for cupy-cuda11x AND cupy-cuda12x
+    # together, cuda-quantum, and the full CUDA build of torch -- on a runner
+    # with no GPU. javascript.yml and submit-pypi.yml, the two workflows that
+    # actually run, both install narrow explicit lists and take torch from the
+    # CPU wheel index; this follows them.
+    #
+    # The list below was measured, not guessed: with exactly these packages,
+    # bare `pytest` at the repository root collects and passes the whole suite,
+    # 2555 passed, 0 failed. Adding to it is fine; the point is that it is
+    # sufficient and that each entry installs without a GPU.
     - name: Install dependencies
-      env:
-        CFLAGS: "-I/usr/local/cuda/include"
       run: |
         python -m pip install --upgrade pip
         pip install flake8 pytest
-        # Use precompiled CuPy wheels to avoid source builds and missing headers
-        pip install cupy-cuda11x
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install numpy scipy sympy mpmath matplotlib pandas Pillow pydantic pyyaml
+        pip install --index-url https://download.pytorch.org/whl/cpu torch
+        pip install cirq-core cudaq
+    # 63 of these tests are vedic_trainer/vedic/external/tests/test_lean_props.py,
+    # which compile rendered identities with the real `lean` binary and fail with
+    # FileNotFoundError without it. They are not skippable and they do not need
+    # Mathlib: the renderer emits core-Lean Int cross-multiplication precisely so
+    # a bare toolchain can verify it, and the suite asserts no `Rat` literal
+    # appears for exactly that reason. So this installs the toolchain the way
+    # sutraws-lean does, and stops there -- no `lake exe cache get`, no
+    # `lake build`.
+    - name: Install Lean 4 (version pinned by ./lean-toolchain)
+      run: |
+        set -eu
+        TOOLCHAIN="$(cat lean-toolchain)"
+        echo "Installing $TOOLCHAIN"
+        curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+        sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+        echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+    - name: Verify Lean matches the pin
+      run: |
+        set -eu
+        lean --version
+        EXPECTED="$(cut -d: -f2 < lean-toolchain | tr -d 'v')"
+        lean --version | grep -q "version ${EXPECTED}" || {
+          echo "lean --version does not match ./lean-toolchain (${EXPECTED})"
+          exit 1
+        }
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names

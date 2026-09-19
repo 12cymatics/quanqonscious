@@ -27,8 +27,12 @@ from fractions import Fraction
 from typing import List, Tuple, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 
-# Bessel functions via pure Python
-SCIPY_AVAILABLE = False
+try:
+    from scipy.special import jv as bessel_jv
+    SCIPY_AVAILABLE = True
+except ImportError:
+    bessel_jv = None
+    SCIPY_AVAILABLE = False
 
 from PIL import Image
 

@@ -718,13 +718,13 @@ class VedicSutraEngine:
             qvec = cudaq.qvector(n_qubits)
             # Initialize with Hadamard superposition
             for i in range(n_qubits):
-                h(qvec[i])
+                h(qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             # Apply rotation based on iteration
             for i in range(n_qubits):
-                ry(theta * (i + 1), qvec[i])
+                ry(theta * (i + 1), qvec[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             # Entangle adjacent qubits
             for i in range(n_qubits - 1):
-                cx(qvec[i], qvec[i + 1])
+                cx(qvec[i], qvec[i + 1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         circuits['ekadhikena'] = ekadhikena_kernel
         
@@ -825,15 +825,15 @@ class VedicSutraEngine:
             # Encode patterns into quantum states
             for idx in range(min(3, n_qubits // 2)):
                 if idx < len(v_angles):
-                    ry(v_angles[idx], qvec[idx * 2])
+                    ry(v_angles[idx], qvec[idx * 2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 if idx < len(h_angles):
-                    ry(h_angles[idx], qvec[idx * 2])
-                    cx(qvec[idx * 2], qvec[idx * 2 + 1])
+                    ry(h_angles[idx], qvec[idx * 2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+                    cx(qvec[idx * 2], qvec[idx * 2 + 1])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 if idx < len(d_angles):
-                    rz(d_angles[idx], qvec[idx * 2])
+                    rz(d_angles[idx], qvec[idx * 2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                     if idx < n_qubits // 2 - 1:
-                        cy(qvec[idx * 2], qvec[idx * 2 + 2])
-                    rx(d_angles[idx], qvec[idx * 2])
+                        cy(qvec[idx * 2], qvec[idx * 2 + 2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
+                    rx(d_angles[idx], qvec[idx * 2])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Prepare angles from field slices
         v_angles = [float(torch.angle(v)) for v in vertical[:3]]
@@ -874,11 +874,11 @@ class VedicSutraEngine:
             eigenstate = cudaq.qubit()
             
             # Initialize eigenstate
-            x(eigenstate)
+            x(eigenstate)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             
             # Apply Hadamard to precision qubits
             for i in range(n_precision):
-                h(precision_qubits[i])
+                h(precision_qubits[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             
             # Controlled unitary operations
             for i in range(n_precision):
@@ -886,17 +886,17 @@ class VedicSutraEngine:
                 # Controlled phase rotation representing division
                 angle = 2 * np.pi * power / (divisor_phase + 1e-10)
                 for _ in range(int(power)):
-                    cu(precision_qubits[i], eigenstate, 0, 0, 0, angle)
+                    cu(precision_qubits[i], eigenstate, 0, 0, 0, angle)  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             
             # Inverse QFT on precision qubits
             for i in range(n_precision // 2):
-                swap(precision_qubits[i], precision_qubits[n_precision - 1 - i])
+                swap(precision_qubits[i], precision_qubits[n_precision - 1 - i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
             
             for i in range(n_precision):
                 for j in range(i):
-                    cu(precision_qubits[j], precision_qubits[i], 
+                    cu(precision_qubits[j], precision_qubits[i],  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                        0, 0, 0, -np.pi / (2**(i - j)))
-                h(precision_qubits[i])
+                h(precision_qubits[i])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Run QPE
         n_precision = min(8, self.config.num_qubits - 1)
@@ -936,17 +936,17 @@ class VedicSutraEngine:
             for idx in range(n_pairs):
                 # Create interference based on magnitude
                 if magnitudes[idx] < 1e-6:  # Near zero
-                    x(qvec[idx])  # Flip to |1⟩
+                    x(qvec[idx])  # Flip to |1⟩  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 else:
                     angle = 2 * np.arcsin(np.sqrt(min(1, magnitudes[idx])))
-                    ry(angle, qvec[idx])
+                    ry(angle, qvec[idx])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 
                 # Apply phase
-                rz(phases[idx], qvec[idx])
+                rz(phases[idx], qvec[idx])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
                 
                 # Entangle adjacent qubits for interference
                 if idx > 0:
-                    cz(qvec[idx-1], qvec[idx])
+                    cz(qvec[idx-1], qvec[idx])  # noqa: F821 - CUDA-Q kernel gate, resolved by the cudaq compiler
         
         # Prepare data for quantum circuit
         magnitudes = [float(torch.abs(ps)) for ps in sum_pairs[:self.config.num_qubits]]

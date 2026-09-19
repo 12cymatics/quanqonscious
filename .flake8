@@ -1,14 +1,22 @@
 [flake8]
 max-line-length = 120
-exclude = \
-    H2_MST_Dashboard_Rank.py,\
-    H2_MST_Dashboard_Rank2.py,\
-    H2_MST_Dashboard_Rank3.py,\
-    grvq_field_solver_quantum.py,\
-    grvqsutraws.py,\
-    intersutraws.py,\
-    mayasutraaws.py,\
-    primarysutraaws2.py,\
-    sulbasutraws.py,\
-    utilitysutraws3.py,\
+
+# extend-exclude, not exclude: setting `exclude` REPLACES flake8's defaults
+# (.git, __pycache__, .tox, .eggs, *.egg, build, dist), which is why `.git/`
+# was being walked -- a remote branch ref named
+# codex/fix-indentation-issues-in-primarysutra.py was linted as a source file.
+# .lake holds vendored Lean/mathlib; its Sage helper uses Sage builtins (QQ)
+# that are not Python names.
+extend-exclude =
+    .lake,
+    H2_MST_Dashboard_Rank.py,
+    H2_MST_Dashboard_Rank2.py,
+    H2_MST_Dashboard_Rank3.py,
+    grvq_field_solver_quantum.py,
+    grvqsutraws.py,
+    intersutraws.py,
+    mayasutraaws.py,
+    primarysutraaws2.py,
+    sulbasutraws.py,
+    utilitysutraws3.py,
     visualperformancesutraws2.py
