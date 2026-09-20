@@ -1262,7 +1262,98 @@ console.log('\n' + '─'.repeat(66));
    count from 2451 to 2331 and the suite stayed green. The per-loop length
    assertions above catch that case; this total catches every other way an
    assertion can stop running. Update it deliberately when adding checks. */
-const EXPECTED_ASSERTIONS = 2626;
+section('13. response phase, and that every state carries one');
+
+/* Three defects the 2626 assertions above did not gate, all found by audit
+   rather than by this suite.
+
+   (a) The forced-oscillator lag had BOTH arguments wrong. For
+       x'' + 2gx' + w0^2 x = F cos(wd t) the lag is atan2(2*g*wd, w0^2 - wd^2);
+       the kernel had atan2(2*g*w0, wd^2 - w0^2), which is the answer to the
+       problem with drive and natural frequency exchanged. Verified against RK4
+       integration to steady state: numeric 0.02822 / textbook 0.02817 /
+       old kernel 3.10979 at (w0, wd, g) = (350, 310, 1.2).
+
+       The denominator negation alone maps phi -> pi - phi, which preserves
+       cos(phi) sign patterns but NEGATES sin(phi2 - phi1) -- and the sand
+       transport term fx = Re*gIx - Im*gRx reduces to that difference. So the
+       grains were driven the wrong way.
+
+   (b) The free-rim atlas branch pushed no `phi` at all. The renderer reads
+       `s.phi || 0`, so sin(phi) = 0 killed the phase-flux transport outright
+       on the DEFAULT configuration and the whole 50-199 Hz atlas range.
+
+   The expectation below is the textbook formula written out independently,
+   not a value copied from the kernel. */
+{
+  const forcedLag = (w0, wd, g) => Math.atan2(2*g*wd, w0*w0 - wd*wd);
+
+  for (const rim of ['free', 'pinned']){
+    const s = state({ rim });
+    ok(s.states.length > 0, `${rim}: resolvePatternState returned states`);
+    for (const t of s.states){
+      ok(typeof t.phi === 'number' && Number.isFinite(t.phi),
+         `${rim} fold${t.fold}: phi is a finite number`,
+         `got ${t.phi} -- a state without phi renders at phase 0 and silently `
+         + `zeroes the phase-flux transport`);
+      ok(typeof t.radial.gamma === 'number' && t.radial.gamma > 0,
+         `${rim} fold${t.fold}: the state carries its damping rate`);
+      const w0 = 2*Math.PI*t.radial.hz;
+      const wd = 2*Math.PI*s.responseHz;
+      rel(t.phi, forcedLag(w0, wd, t.radial.gamma), 10,
+          `${rim} fold${t.fold}: phi is the forced-oscillator lag`);
+      ok(t.phi >= 0 && t.phi <= Math.PI,
+         `${rim} fold${t.fold}: a damped lag lies in [0, pi]`, `got ${t.phi}`);
+    }
+  }
+
+  /* Below the reported minimum drive the kernel says no pattern forms. The
+     export path floored the gain at 0.35 and drew one anyway -- a demo mode
+     that guaranteed the picture was never blank, disagreeing with the preview,
+     which never had a floor. Asserted on the source because the floor lived in
+     the renderer, not here. */
+  const page = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  ok(!/Math\.max\(\s*st\.expression\s*,/.test(page),
+     'the export gain has no floor under the formation envelope',
+     'cymatic.html reintroduced Math.max(st.expression, ...) -- that draws a '
+     + 'pattern the kernel reports as non-existent');
+  /* Every pinned state must be DRAWABLE at the page's own resolution gate.
+     finestZeroOf used to threshold the basis coefficient (|a_n| > 1e-6*max)
+     rather than the term's contribution to the profile. The pinned edge kink
+     decays like n^-2.3, so the 128th term always cleared it and `finest` was
+     z_128 ~ 401..412 for every m -- 2.9 px/wave against RES_GATE = 4. Measured:
+     every pinned state at every frequency was gated out and the page drew a
+     uniform disc with no nodal lines, as though that were the answer.
+
+     The three assertions this file already had on finestZeroOf -- finite and
+     positive, inside the basis, finer than the modal mean -- all passed
+     throughout. RR and RES_GATE are read from cymatic.html so this cannot
+     drift from the renderer it is protecting. */
+  {
+    const RR = Number(/const GR = (\d+)/.exec(page)[1]);
+    const rr = (RR - 1)/2 - 3;
+    const resGate = Number(/const RES_GATE = ([\d.]+)/.exec(page)[1]);
+    ok(rr > 0 && resGate > 0, 'render constants read out of cymatic.html',
+       `rr=${rr} resGate=${resGate}`);
+    for (const f of [56, 111, 180, 199]){
+      const s2 = state({ f, rim: 'pinned', depthMm: 3 });
+      ok(s2.states.length > 0, `pinned f=${f}: states exist`);
+      for (const t of s2.states){
+        const px = 2*Math.PI*rr/K.finestZeroOf(t.radial);
+        ok(px >= resGate,
+           `pinned f=${f} fold${t.fold}: resolvable at the page's gate`,
+           `${px.toFixed(2)} px/wave < RES_GATE ${resGate} -- this state is `
+           + `silently dropped and the disc renders blank`);
+      }
+    }
+  }
+
+  const belowMin = state({ amplitudeMv: 40, tSec: 5, tfeSec: 1 });
+  eq(belowMin.expression, 0,
+     'expression is exactly zero below the reported minimum drive');
+}
+
+const EXPECTED_ASSERTIONS = 2657;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from fractions import Fraction
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -17,7 +18,10 @@ class HybridSimulationConfig:
     n_mode: int = 5
     angle_xw: float = 0.4
     execution_mode: str = "concurrent"
-    max_workers: int = 8
+    #: Canonical alpha control: alpha(n) = (n/435)*(strength/100). This
+    #: replaced `max_workers`, which sized a thread pool that the canonical
+    #: composition modes do not use.
+    sutra_strength: Fraction = Fraction(100)
     sutra_mode: SutraMode = SutraMode.CLASSICAL
     sutra_base: float = 10.0
 
@@ -42,7 +46,7 @@ class HybridGRVQToroidalSimulator:
         self.sutra_plan = SutraExecutionPlan(
             context=self.sutra_context,
             execution_mode=config.execution_mode,
-            max_workers=config.max_workers,
+            strength=config.sutra_strength,
         )
         self.system = GRVQToroidalHypercube(
             R_major=R_major,
@@ -56,7 +60,7 @@ class HybridGRVQToroidalSimulator:
         local_plan = SutraExecutionPlan(
             context=self.sutra_context,
             execution_mode=execution_mode,
-            max_workers=self.config.max_workers,
+            strength=self.config.sutra_strength,
         )
         result = self.system.compute_full_system(
             n_points=self.config.n_points,

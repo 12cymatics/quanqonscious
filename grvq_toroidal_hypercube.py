@@ -26,10 +26,12 @@ Based on methods from:
 
 import logging
 import math
+import os
+import sys
 import numpy as np
 import primarysutra
 from fractions import Fraction
-from typing import List, Tuple, Dict, Any, Union, Optional
+from typing import List, Tuple, Dict, Any, Union, Optional, Sequence
 from dataclasses import dataclass, field, replace
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from primarysutra import SutraContext, SutraMode, VedicSutras
@@ -124,282 +126,142 @@ class R4SingularitySuppression:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 3: 16 PRIMARY VEDIC SUTRAS
+# SECTION 3-5: THE CANONICAL 29 SUTRAS
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+# What stood here was 29 functions named for the sutras that did not implement
+# them: `sutra04_paravartya` was `p * exp(0.0005 * p)`, `subsutra05_stabilization`
+# -- docstringed "Veṣṭanam - Osculation" -- was `np.clip(params, 0.0, 1.0)`, and
+# 24 magic coefficients (0.001, 0.002, 0.0005, ...) stood in for the arithmetic.
+# Measured before replacement: that clip turned [7.83, 432.0] into [1.0, 1.0],
+# shifting the 13-sub-sutra mean by -1.88 and -31.64.
+#
+# Around them sat four `np.nan_to_num(nan=0.0, posinf=1e6, neginf=-1e6)` calls
+# and three `np.clip(-1e6, 1e6)`. Those were load-bearing: `sutra04`'s unbounded
+# exponential diverges past |p| ~ 1e5, and at 1e5 the real value 2.06e187 was
+# handed back as exactly 1000000.0, indistinguishable from a result.
+#
+# This now delegates to `vedic.kernel.sutras_canonical`, the repository's exact
+# implementation: every value a Fraction, and in its own words "no floats, no
+# epsilons, no clamps, no fallbacks. Out-of-domain arguments raise."
 
-def sutra01_ekadhikena(params: np.ndarray) -> np.ndarray:
-    """Ekādhikena Pūrveṇa - By one more than the previous."""
-    return np.array([p + 0.001 * math.sin(p) for p in params])
+_VEDIC_TRAINER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vedic_trainer")
+if _VEDIC_TRAINER not in sys.path:
+    sys.path.insert(0, _VEDIC_TRAINER)
 
-def sutra02_nikhilam(params: np.ndarray) -> np.ndarray:
-    """Nikhilam - All from 9, last from 10."""
-    return np.array([p - 0.002 * (1.0 - p) for p in params])
+# Hard import, deliberately. `vedic_trainer` is not pip-installed, so the line
+# above makes it locatable; if the package is genuinely absent this raises at
+# import rather than letting the module load with a silent stand-in.
+from vedic.kernel.sutras_canonical import N_SUTRAS, compose  # noqa: E402
+from vedic.kernel.tesseract import NUM_VERTICES  # noqa: E402
 
-def sutra03_urdhva_tiryagbhyam(params: np.ndarray) -> np.ndarray:
-    """Ūrdhva-Tiryagbhyām - Vertically and crosswise."""
-    return np.array([p * (1.0 + 0.003 * math.cos(p)) for p in params])
+#: Canonical ids 1..16 are the primary sutras, 17..29 the sub-sutras.
+PRIMARY_IDS: Tuple[int, ...] = tuple(range(1, 17))
+SUB_IDS: Tuple[int, ...] = tuple(range(17, N_SUTRAS + 1))
 
-def sutra04_paravartya(params: np.ndarray) -> np.ndarray:
-    """Parāvartya Yojayet - Transpose and adjust."""
-    return np.array([p * math.exp(0.0005 * p) for p in params])
-
-def sutra05_shunyam(params: np.ndarray) -> np.ndarray:
-    """Śūnyam Sāmyasamuccaye - If sum is same, result is zero."""
-    reversed_arr = params[::-1]
-    return np.array([v + 0.0008 for v in reversed_arr])
-
-def sutra06_anurupye(params: np.ndarray) -> np.ndarray:
-    """Ānurūpye Śūnyamanyat - If proportional, other is zero."""
-    return np.array([p + 0.1 if abs(p) <= 0.1 else p for p in params])
-
-def sutra07_sankalana(params: np.ndarray) -> np.ndarray:
-    """Saṅkalana-Vyavakalanābhyām - By addition and subtraction."""
-    avg = np.mean(params)
-    return np.array([p * (1.0 + 0.0003 * (p - avg)) for p in params])
-
-def sutra08_puranapurana(params: np.ndarray) -> np.ndarray:
-    """Pūraṇāpūraṇābhyām - By completion and non-completion."""
-    result = []
-    for i in range(0, len(params) - 1, 2):
-        avg = 0.5 * (params[i] + params[i + 1])
-        result.extend([avg, avg])
-    if len(params) % 2 == 1:
-        result.append(params[-1])
-    return np.array(result)
-
-def sutra09_chalana(params: np.ndarray) -> np.ndarray:
-    """Calanā Kalanābhyām - By motion and rest."""
-    half = len(params) // 2
-    if half == 0:
-        return params
-    factor = np.mean(params[:half])
-    return np.array([p + 0.0007 * factor for p in params])
-
-def sutra10_yavadunam(params: np.ndarray) -> np.ndarray:
-    """Yāvadūnam - By the deficiency."""
-    half_start = len(params) // 2
-    if half_start == len(params):
-        return params
-    factor = np.mean(params[half_start:])
-    return np.array([p * (1.0 + 0.0004 * factor) for p in params])
-
-def sutra11_vyashti(params: np.ndarray) -> np.ndarray:
-    """Vyaṣṭisamaṣṭiḥ - Part and whole."""
-    return np.array([p + 0.0015 * math.sin(2.0 * p) for p in params])
-
-def sutra12_sheshanyankena(params: np.ndarray) -> np.ndarray:
-    """Śeṣāṇyaṅkena Carameṇa - Remainder by the last digit."""
-    return np.array([p * (1.0 + 0.0006 * abs(p)) for p in params])
-
-def sutra13_sopantya(params: np.ndarray) -> np.ndarray:
-    """Sopāntyadvayamantyam - Ultimate and twice the penultimate."""
-    s = np.sum(params)
-    return np.array([p + 0.0002 * s for p in params])
-
-def sutra14_ekanyunena(params: np.ndarray) -> np.ndarray:
-    """Ekanyūnena Pūrveṇa - By one less than the previous."""
-    return np.array([p + 0.0005 * math.sin(float(i)) for i, p in enumerate(params)])
-
-def sutra15_gunitasamuccaya(params: np.ndarray) -> np.ndarray:
-    """Guṇitasamuccayaḥ - Product of sums is sum of products."""
-    result = []
-    for i in range(len(params) - 1):
-        result.append(0.5 * (params[i] + params[i + 1]))
-    if len(params) > 0:
-        result.append(params[-1])
-    return np.array(result)
-
-def sutra16_gunakasamuccaya(params: np.ndarray) -> np.ndarray:
-    """Guṇakasamuccayaḥ - Sum of products is product of sums."""
-    indices = np.linspace(1.0, float(len(params)), len(params))
-    total = np.sum(indices)
-    weighted = sum(p * idx for p, idx in zip(params, indices))
-    w_avg = weighted / total if total != 0 else 0.0
-    return np.array([p + 0.0003 * w_avg for p in params])
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 4: 13 SUB-SUTRAS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def subsutra01_refinement(params: np.ndarray) -> np.ndarray:
-    """Ānurūpyeṇa - Proportionately (refinement)."""
-    return np.array([p + 0.0001 * p**2 for p in params])
-
-def subsutra02_correction(params: np.ndarray) -> np.ndarray:
-    """Śiṣyate Śeṣasaṃjñaḥ - Remainder unchanged (correction)."""
-    return np.array([p - 0.0002 * (p - 0.5) for p in params])
-
-def subsutra03_recursion(params: np.ndarray) -> np.ndarray:
-    """Ādyamādyenāntyamantyena - First by first, last by last."""
-    shifted = np.roll(params, 1)
-    return 0.5 * (params + shifted)
-
-def subsutra04_convergence(params: np.ndarray) -> np.ndarray:
-    """Kevalaḥ Saptakaṃ Guṇyāt - Multiply by 7 alone."""
-    return np.array([0.9 * p for p in params])
-
-def subsutra05_stabilization(params: np.ndarray) -> np.ndarray:
-    """Veṣṭanam - Osculation (stabilization)."""
-    return np.clip(params, 0.0, 1.0)
-
-def subsutra06_simplification(params: np.ndarray) -> np.ndarray:
-    """Yāvadūnaṃ Tāvadūnam - Deficiency as deficiency."""
-    return np.array([round(p, 4) for p in params])
-
-def subsutra07_interpolation(params: np.ndarray) -> np.ndarray:
-    """Yāvadūnaṃ Tāvadūnīkṛtya - Square the deficiency."""
-    return np.array([p + 0.00005 for p in params])
-
-def subsutra08_extrapolation(params: np.ndarray) -> np.ndarray:
-    """Antyayordaśake'pi - Last two digits sum to 10."""
-    if len(params) < 2:
-        return params
-    xvals = np.arange(len(params), dtype=float)
-    poly = np.polyfit(xvals, params, 1)
-    correction = np.polyval(poly, float(len(params)))
-    return np.array([p + 0.0001 * correction for p in params])
-
-def subsutra09_error_reduction(params: np.ndarray) -> np.ndarray:
-    """Antyayoreva - Only the last two."""
-    sd = float(np.std(params))
-    return np.array([p - 0.0001 * sd for p in params])
-
-def subsutra10_optimization(params: np.ndarray) -> np.ndarray:
-    """Samuccayagunitah - Sum multiplied."""
-    mean_val = float(np.mean(params))
-    return np.array([p + 0.0002 * (mean_val - p) for p in params])
-
-def subsutra11_adjustment(params: np.ndarray) -> np.ndarray:
-    """Lopanasthāpanābhyām - By elimination and retention."""
-    return np.array([p + 0.0003 * math.cos(p) for p in params])
-
-def subsutra12_modulation(params: np.ndarray) -> np.ndarray:
-    """Vilokanam - By mere observation."""
-    return np.array([p * (1.0 + 0.00005 * float(i)) for i, p in enumerate(params)])
-
-def subsutra13_differentiation(params: np.ndarray) -> np.ndarray:
-    """Gunitasamuccayah Samuccayagunitah - Product=sum identity."""
-    if len(params) < 2:
-        return params
-    gradient = np.gradient(params)
-    return np.array([p + 0.0001 * g for p, g in zip(params, gradient)])
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SECTION 5: VEDIC SUTRA ENGINE
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class VedicSutraEngine:
-    """
-    Complete 29-sutra Vedic arithmetic engine.
+    """The canonical 29 sutras over the 16 vertices of the tesseract.
 
-    PRIMARY SUTRAS (16):
-    1.  Ekādhikena Pūrveṇa - By one more than the previous
-    2.  Nikhilam Navataścaramam - All from 9, last from 10
-    3.  Ūrdhva-Tiryagbhyām - Vertically and crosswise
-    4.  Parāvartya Yojayet - Transpose and adjust
-    5.  Śūnyam Sāmyasamuccaye - If sum is same, result is zero
-    6.  Ānurūpye Śūnyamanyat - If proportional, other is zero
-    7.  Saṅkalana-Vyavakalanābhyām - By addition and subtraction
-    8.  Pūraṇāpūraṇābhyām - By completion and non-completion
-    9.  Calanā Kalanābhyām - By motion and rest
-    10. Yāvadūnam - By the deficiency
-    11. Vyaṣṭisamaṣṭiḥ - Part and whole
-    12. Śeṣāṇyaṅkena Carameṇa - Remainder by last digit
-    13. Sopāntyadvayamantyam - Ultimate and twice penultimate
-    14. Ekanyūnena Pūrveṇa - By one less than previous
-    15. Guṇitasamuccayaḥ - Product of sums = sum of products
-    16. Guṇakasamuccayaḥ - Sum of products = product of sums
+    The state is Psi, one exact rational per vertex of the 4-cube -- the same
+    substrate `Tesseract4D` below describes (16 vertices, (+/-1,+/-1,+/-1,+/-1)).
 
-    SUB-SUTRAS (13):
-    17-29. See sub-sutra implementations above.
+    `strength` is the single external control: alpha(n) = (n/435)*(strength/100),
+    so strength = 0 makes every operator the identity. It has no default,
+    because a default is exactly what the magic coefficients this replaced
+    were -- a number nobody chose, applied to everything.
     """
 
-    PRIMARY_SUTRAS = [
-        sutra01_ekadhikena, sutra02_nikhilam, sutra03_urdhva_tiryagbhyam,
-        sutra04_paravartya, sutra05_shunyam, sutra06_anurupye,
-        sutra07_sankalana, sutra08_puranapurana, sutra09_chalana,
-        sutra10_yavadunam, sutra11_vyashti, sutra12_sheshanyankena,
-        sutra13_sopantya, sutra14_ekanyunena, sutra15_gunitasamuccaya,
-        sutra16_gunakasamuccaya,
-    ]
+    #: Execution strategy -> canonical composition mode.
+    MODES = {
+        "serial": "SERIES",
+        "parallel": "PARALLEL",
+        "concurrent": "CONCURRENT",
+        "inverse": "INVERSE",
+    }
 
-    SUB_SUTRAS = [
-        subsutra01_refinement, subsutra02_correction, subsutra03_recursion,
-        subsutra04_convergence, subsutra05_stabilization, subsutra06_simplification,
-        subsutra07_interpolation, subsutra08_extrapolation, subsutra09_error_reduction,
-        subsutra10_optimization, subsutra11_adjustment, subsutra12_modulation,
-        subsutra13_differentiation,
-    ]
+    @staticmethod
+    def to_exact(params: np.ndarray) -> Tuple[Fraction, ...]:
+        """Psi as exact rationals.
 
-    @classmethod
-    def apply_primary_sutras(cls, params: np.ndarray) -> np.ndarray:
-        """Apply all 16 primary sutras sequentially."""
-        result = params.copy()
-        for sutra in cls.PRIMARY_SUTRAS:
-            result = sutra(result)
-            # Sanitize after each sutra to prevent overflow cascade
-            result = np.nan_to_num(result, nan=0.0, posinf=1e6, neginf=-1e6)
-            result = np.clip(result, -1e6, 1e6)
-        return result
+        Every binary64 IS a rational, so `Fraction(float)` is a conversion and
+        not a rounding: nothing is lost on the way in.
+        """
+        arr = np.asarray(params, dtype=np.float64)
+        if arr.ndim != 1 or arr.size != NUM_VERTICES:
+            raise ValueError(
+                f"Psi must be a 1-D state of {NUM_VERTICES} vertex amplitudes, one "
+                f"per tesseract vertex; got shape {arr.shape}. The canonical sutras "
+                f"are defined on the 4-cube's vertices and nowhere else.")
+        bad = ~np.isfinite(arr)
+        if bad.any():
+            raise ValueError(
+                f"Psi carries {int(bad.sum())} non-finite amplitude(s) at "
+                f"index/indices {np.flatnonzero(bad).tolist()}. This refuses rather "
+                f"than substituting a finite stand-in: a NaN here means the "
+                f"computation that produced Psi failed, and replacing it with 0.0 "
+                f"would hide which one.")
+        return tuple(Fraction(float(v)) for v in arr)
 
-    @classmethod
-    def apply_subsutras_serial(cls, params: np.ndarray) -> np.ndarray:
-        """Apply all 13 sub-sutras sequentially and average results."""
-        results = []
-        for sub in cls.SUB_SUTRAS:
-            results.append(sub(params))
-        stacked = np.vstack(results)
-        return np.mean(stacked, axis=0)
+    @staticmethod
+    def to_float(psi: Sequence[Fraction]) -> np.ndarray:
+        """Psi back to binary64. One-way, at the boundary only.
 
-    @classmethod
-    def apply_subsutras_concurrent(cls, params: np.ndarray,
-                                   max_workers: int = 8) -> np.ndarray:
-        """Apply all 13 sub-sutras concurrently with threads and average results."""
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(sub, params) for sub in cls.SUB_SUTRAS]
-            results = [f.result() for f in futures]
-
-        stacked = np.vstack(results)
-        return np.mean(stacked, axis=0)
-
-    @classmethod
-    def apply_subsutras_parallel(cls, params: np.ndarray,
-                                 max_workers: int = 8) -> np.ndarray:
-        """Apply all 13 sub-sutras in parallel with processes and average results."""
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(sub, params) for sub in cls.SUB_SUTRAS]
-            results = [f.result() for f in futures]
-
-        stacked = np.vstack(results)
-        return np.mean(stacked, axis=0)
+        MULT and CONV are quadratic (`_mult` is Psi_i * (1 + w*Psi_{i^1})), so a
+        large enough Psi leaves a rational too big for binary64. That is a real
+        result the destination type cannot hold, so it refuses and says which
+        vertex -- rather than returning inf, and rather than the +/-1e6 clip
+        this engine used to apply.
+        """
+        out = np.empty(len(psi), dtype=np.float64)
+        for i, v in enumerate(psi):
+            try:
+                out[i] = float(v)
+            except OverflowError as exc:
+                raise OverflowError(
+                    f"Psi[{i}] is {v.numerator.bit_length()} bits over "
+                    f"{v.denominator.bit_length()}, too large for binary64. The "
+                    f"quadratic sutras (MULT, CONV) amplify, so a large input "
+                    f"state grows past the float range in exact arithmetic. The "
+                    f"rational is correct; the destination type cannot hold it. "
+                    f"Reduce |Psi| or the strength.") from exc
+        return out
 
     @classmethod
-    def apply_all_29_sutras(cls, params: np.ndarray,
-                            max_workers: int = 8,
+    def _compose(cls, params: np.ndarray, strength: Fraction,
+                 order: Sequence[int], execution_mode: str) -> np.ndarray:
+        if execution_mode not in cls.MODES:
+            raise ValueError(
+                f"unknown execution mode {execution_mode!r}; expected one of "
+                f"{sorted(cls.MODES)}. There is no default: the mode changes the "
+                f"arithmetic, so it is the caller's to state.")
+        psi = compose(cls.MODES[execution_mode], cls.to_exact(params),
+                      Fraction(strength), order)
+        return cls.to_float(psi)
+
+    @classmethod
+    def apply_primary_sutras(cls, params: np.ndarray, strength: Fraction,
+                             execution_mode: str = "serial") -> np.ndarray:
+        """The 16 primary sutras (canonical ids 1..16)."""
+        return cls._compose(params, strength, PRIMARY_IDS, execution_mode)
+
+    @classmethod
+    def apply_subsutras(cls, params: np.ndarray, strength: Fraction,
+                        execution_mode: str) -> np.ndarray:
+        """The 13 sub-sutras (canonical ids 17..29)."""
+        return cls._compose(params, strength, SUB_IDS, execution_mode)
+
+    @classmethod
+    def apply_all_29_sutras(cls, params: np.ndarray, strength: Fraction,
                             execution_mode: str = "concurrent") -> np.ndarray:
-        """Apply all 29 sutras with selectable execution strategy."""
-        # Sanitize input - replace NaN/Inf with bounded values
-        params = np.nan_to_num(params, nan=0.0, posinf=1e6, neginf=-1e6)
-        params = np.clip(params, -1e6, 1e6)
+        """All 29: the 16 primary in series, then the 13 sub-sutras.
 
-        intermediate = cls.apply_primary_sutras(params)
-
-        # Sanitize intermediate
-        intermediate = np.nan_to_num(intermediate, nan=0.0, posinf=1e6, neginf=-1e6)
-        intermediate = np.clip(intermediate, -1e6, 1e6)
-
-        if execution_mode == "serial":
-            final = cls.apply_subsutras_serial(intermediate)
-        elif execution_mode == "parallel":
-            final = cls.apply_subsutras_parallel(intermediate, max_workers)
-        else:
-            final = cls.apply_subsutras_concurrent(intermediate, max_workers)
-
-        # Sanitize output
-        final = np.nan_to_num(final, nan=0.0, posinf=1e6, neginf=-1e6)
-        return final
+        No sanitisation between the two halves. If Psi leaves the primaries
+        non-finite, `to_exact` refuses on the way into the sub-sutras and names
+        the vertex, rather than clipping it to +/-1e6 and carrying on.
+        """
+        intermediate = cls.apply_primary_sutras(params, strength, "serial")
+        return cls.apply_subsutras(intermediate, strength, execution_mode)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -417,14 +279,25 @@ class SutraExecutionPlan:
     """Execution plan for 29-sutra runs with optional quantum augmentation."""
     context: SutraContext = field(default_factory=SutraContext)
     execution_mode: str = "concurrent"
-    max_workers: int = 8
+    #: The canonical alpha control: alpha(n) = (n/435)*(strength/100).
+    #: 0 makes every operator the identity.
+    strength: Fraction = Fraction(100)
 
     def effective_context(self) -> SutraContext:
+        """The context as given. A missing quantum backend RAISES here.
+
+        This used to downgrade QUANTUM and HYBRID to CLASSICAL behind a
+        `logger.warning` and return the classical answer as though the
+        requested mode had produced it -- the substitution CLAUDE.md's
+        "Refusing is not falling back" exists to prevent. The caller asked
+        for a quantum run; CLASSICAL is available to them by asking for it.
+        """
         if self.context.mode in (SutraMode.QUANTUM, SutraMode.HYBRID) and not _quantum_available():
-            logger.warning(
-                "Quantum backend unavailable; downgrading sutra execution to classical mode."
-            )
-            return replace(self.context, mode=SutraMode.CLASSICAL)
+            raise RuntimeError(
+                f"{self.context.mode.name} was requested but no quantum backend is "
+                f"importable (neither cirq.Simulator nor cudaq). This refuses rather "
+                f"than returning the CLASSICAL result under the {self.context.mode.name} "
+                f"label. Install the backend, or ask for SutraMode.CLASSICAL explicitly.")
         return self.context
 
 
@@ -465,7 +338,7 @@ class HybridSutraCoordinator:
         effective_context = self.plan.effective_context()
         transformed = VedicSutraEngine.apply_all_29_sutras(
             params,
-            max_workers=self.plan.max_workers,
+            strength=self.plan.strength,
             execution_mode=self.plan.execution_mode,
         )
 
@@ -932,9 +805,11 @@ def verify_components():
 
     # 3. Vedic sutras
     print("\n3. Vedic Sutra Engine:")
-    test_params = np.array([0.75, 0.2, 0.91, 0.47, 0.01])
+    # Psi is one amplitude per tesseract vertex, so the state is 16 long.
+    test_params = np.array([(v % 5) / 4.0 for v in range(NUM_VERTICES)])
     print(f"   Initial: {test_params}")
-    transformed = VedicSutraEngine.apply_all_29_sutras(test_params)
+    transformed = VedicSutraEngine.apply_all_29_sutras(
+        test_params, strength=Fraction(100), execution_mode="concurrent")
     print(f"   After 29 sutras: {transformed}")
 
     # 4. Tesseract geometry
