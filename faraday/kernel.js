@@ -621,7 +621,7 @@ function resolvePatternState(o){
           mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
           gamma: g.total, growth: mth.growth, eps: mth.eps,
           accelThreshold: mth.accelThreshold, accelOnset: mth.accelOnset,
-          phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+          phi: Math.atan2(2*g.total*omegaTarget, pm.omega*pm.omega - omegaTarget*omegaTarget),
           coeff: plateTransfer(kEq, 2*Math.PI*f, rho, hM).magnitude,
           pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS });
       }
@@ -636,7 +636,7 @@ function resolvePatternState(o){
         gamma: g.total, growth: mth.growth, eps: mth.eps,
         accelThreshold: mth.accelThreshold, accelOnset: mth.accelOnset,
 
-        phi: Math.atan2(2*g.total*w, omegaTarget*omegaTarget - w*w),
+        phi: Math.atan2(2*g.total*omegaTarget, w*w - omegaTarget*omegaTarget),
 
         coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
     }
@@ -764,7 +764,7 @@ function resolvePatternState(o){
       const kEq = pm.kEquiv;
       const g = dampingRate(kEq, pm.omega, nu, hM);
       states.push({ fold, m, weight,
-        phi: Math.atan2(2*g.total*pm.omega, omegaTarget*omegaTarget - pm.omega*pm.omega),
+        phi: Math.atan2(2*g.total*omegaTarget, pm.omega*pm.omega - omegaTarget*omegaTarget),
         radial: { m, n: pm.index, jp: null, k: kEq, hz: pm.hz,
                   mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
                   gamma: g.total,
@@ -781,10 +781,20 @@ function resolvePatternState(o){
       return;
     }
     const wz = omegaOf(z/R, sigma, rho, hM);
+    // The free branch used to push no `phi` at all, while both sibling
+    // branches set one. `cymatic.html` reads `s.phi || 0`, so every free-rim
+    // atlas state ran at phase 0: sin(phi) = 0 made IMF, GIX and GIY
+    // identically zero and killed the phase-flux transport term outright,
+    // while the deck went on printing "phase-flux gain" as though it acted.
+    // That is the default configuration and the whole 50-199 Hz atlas range.
+    const gz = dampingRate(z/R, wz, nu, hM);
     const best = { m, n: radialIndexOf(m, z),
                    jp: z, k: z/R, hz: wz/(2*Math.PI),
+                   gamma: gz.total,
                    mismatch: Math.abs(wz - omegaTarget)/omegaTarget };
-    states.push({ fold, m, weight, radial: best });
+    states.push({ fold, m, weight,
+                  phi: Math.atan2(2*gz.total*omegaTarget, wz*wz - omegaTarget*omegaTarget),
+                  radial: best });
   };
   if (prior && !prior.unclassified){
     pushState(prior.fold, prior.confidence);

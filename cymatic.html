@@ -883,7 +883,11 @@ async function exportImage(SIZE, onProgress){
   const vs = st.visualSignature;
   const cbias = vs ? vs.centerToMid : 1;
   let contrast = vs ? vs.contrast : null;
-  const gain = phaseSign*Math.max(st.expression, 0.35);
+  // No floor. `resolvePatternState` sets expression = 0 exactly when the drive
+  // is below the reported minimum, with the warning "no stable Faraday pattern
+  // forms"; the 0.35 that stood here drew a 46x-amplified pattern anyway and
+  // saved it as a PNG. The preview has never had a floor -- the two disagreed.
+  const gain = phaseSign*st.expression;
 
   const evalAt = (dx, dy) => {
     const q = dx*dx + dy*dy;

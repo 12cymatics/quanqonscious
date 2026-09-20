@@ -1262,7 +1262,67 @@ console.log('\n' + '─'.repeat(66));
    count from 2451 to 2331 and the suite stayed green. The per-loop length
    assertions above catch that case; this total catches every other way an
    assertion can stop running. Update it deliberately when adding checks. */
-const EXPECTED_ASSERTIONS = 2626;
+section('13. response phase, and that every state carries one');
+
+/* Three defects the 2626 assertions above did not gate, all found by audit
+   rather than by this suite.
+
+   (a) The forced-oscillator lag had BOTH arguments wrong. For
+       x'' + 2gx' + w0^2 x = F cos(wd t) the lag is atan2(2*g*wd, w0^2 - wd^2);
+       the kernel had atan2(2*g*w0, wd^2 - w0^2), which is the answer to the
+       problem with drive and natural frequency exchanged. Verified against RK4
+       integration to steady state: numeric 0.02822 / textbook 0.02817 /
+       old kernel 3.10979 at (w0, wd, g) = (350, 310, 1.2).
+
+       The denominator negation alone maps phi -> pi - phi, which preserves
+       cos(phi) sign patterns but NEGATES sin(phi2 - phi1) -- and the sand
+       transport term fx = Re*gIx - Im*gRx reduces to that difference. So the
+       grains were driven the wrong way.
+
+   (b) The free-rim atlas branch pushed no `phi` at all. The renderer reads
+       `s.phi || 0`, so sin(phi) = 0 killed the phase-flux transport outright
+       on the DEFAULT configuration and the whole 50-199 Hz atlas range.
+
+   The expectation below is the textbook formula written out independently,
+   not a value copied from the kernel. */
+{
+  const forcedLag = (w0, wd, g) => Math.atan2(2*g*wd, w0*w0 - wd*wd);
+
+  for (const rim of ['free', 'pinned']){
+    const s = state({ rim });
+    ok(s.states.length > 0, `${rim}: resolvePatternState returned states`);
+    for (const t of s.states){
+      ok(typeof t.phi === 'number' && Number.isFinite(t.phi),
+         `${rim} fold${t.fold}: phi is a finite number`,
+         `got ${t.phi} -- a state without phi renders at phase 0 and silently `
+         + `zeroes the phase-flux transport`);
+      ok(typeof t.radial.gamma === 'number' && t.radial.gamma > 0,
+         `${rim} fold${t.fold}: the state carries its damping rate`);
+      const w0 = 2*Math.PI*t.radial.hz;
+      const wd = 2*Math.PI*s.responseHz;
+      rel(t.phi, forcedLag(w0, wd, t.radial.gamma), 10,
+          `${rim} fold${t.fold}: phi is the forced-oscillator lag`);
+      ok(t.phi >= 0 && t.phi <= Math.PI,
+         `${rim} fold${t.fold}: a damped lag lies in [0, pi]`, `got ${t.phi}`);
+    }
+  }
+
+  /* Below the reported minimum drive the kernel says no pattern forms. The
+     export path floored the gain at 0.35 and drew one anyway -- a demo mode
+     that guaranteed the picture was never blank, disagreeing with the preview,
+     which never had a floor. Asserted on the source because the floor lived in
+     the renderer, not here. */
+  const page = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  ok(!/Math\.max\(\s*st\.expression\s*,/.test(page),
+     'the export gain has no floor under the formation envelope',
+     'cymatic.html reintroduced Math.max(st.expression, ...) -- that draws a '
+     + 'pattern the kernel reports as non-existent');
+  const belowMin = state({ amplitudeMv: 40, tSec: 5, tfeSec: 1 });
+  eq(belowMin.expression, 0,
+     'expression is exactly zero below the reported minimum drive');
+}
+
+const EXPECTED_ASSERTIONS = 2646;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
