@@ -270,15 +270,51 @@ function pinnedBasisTable(m, zeros){
   PIN_BASIS_TABLE.set(key, tab); return tab;
 }
 
+/* How much of the radial profile a truncation is allowed to lose, as a
+   fraction of its L2(r dr) norm. This is a RENDER resolution question -- how
+   fine is the structure actually present -- not a tolerance on the physics:
+   the full basis is still what gets drawn. */
+const PROFILE_TAIL_TOL = 1e-3;
+
 function finestZeroOf(radial){
   if (!radial.pinned) return radial.jp;
   const z = radial.pinnedZeros, a = radial.pinned.coefficients;
-  let amax = 0;
-  for (let n = 0; n < a.length; n++) amax = Math.max(amax, Math.abs(a[n]));
-  let finest = z[0];
-  for (let n = 0; n < a.length; n++)
-    if (Math.abs(a[n]) > 1e-6*amax) finest = Math.max(finest, z[n]);
-  return finest;
+
+  /* This used to threshold the COEFFICIENT: the largest z_n whose |a_n|
+     cleared 1e-6 of the maximum. That is a test on the basis amplitude, not
+     on what the term contributes to the field, and the pinned edge kink makes
+     the coefficients decay only like n^-2.3 -- so the 128th term always
+     cleared it. `finest` was therefore z_128 ~ 401..412 for every m, which at
+     RR = 187 is 2.9 px/wave, permanently under cymatic.html's RES_GATE of 4.
+     Measured: every pinned state at every frequency was gated out, and the
+     page rendered a uniform disc with no nodal lines as though it were a
+     result. The basis tail carries no field -- truncating at N = 32 already
+     reproduces the 128-term profile to ~1e-3 relative RMS.
+
+     The question is how fine the structure in the PROFILE is, so the profile
+     is what gets measured: accumulate the series term by term and stop at the
+     first N whose residual against the full sum falls under the tolerance. */
+  const full = radialProfilePinned(radial.m, z, a);
+  const tab = pinnedBasisTable(radial.m, z);
+  const sq = new Float64Array(full.length);
+  for (let i = 0; i < full.length; i++) sq[i] = full[i]*full[i];
+  const total = Math.sqrt(simpsonR(sq));
+  if (!(total > 0) || !Number.isFinite(total))
+    throw new Error(
+      `finestZeroOf: the pinned profile for m = ${radial.m} has L2 norm ${total}. `
+      + `An identically-zero radial profile is a failed reduction, not a shape.`);
+
+  const partial = new Float64Array(full.length);
+  for (let n = 0; n < z.length; n++){
+    const base = n*(QUAD_R + 1), an = a[n];
+    for (let i = 0; i <= QUAD_R; i++) partial[i] += an*tab[base + i];
+    for (let i = 0; i < full.length; i++){
+      const d = full[i] - partial[i];
+      sq[i] = d*d;
+    }
+    if (Math.sqrt(simpsonR(sq)) <= PROFILE_TAIL_TOL*total) return z[n];
+  }
+  return z[z.length - 1];
 }
 function radialProfilePinned(m, zeros, coeffs){
   const tab = pinnedBasisTable(m, zeros), out = new Float64Array(QUAD_R + 1);

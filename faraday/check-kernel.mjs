@@ -1317,12 +1317,43 @@ section('13. response phase, and that every state carries one');
      'the export gain has no floor under the formation envelope',
      'cymatic.html reintroduced Math.max(st.expression, ...) -- that draws a '
      + 'pattern the kernel reports as non-existent');
+  /* Every pinned state must be DRAWABLE at the page's own resolution gate.
+     finestZeroOf used to threshold the basis coefficient (|a_n| > 1e-6*max)
+     rather than the term's contribution to the profile. The pinned edge kink
+     decays like n^-2.3, so the 128th term always cleared it and `finest` was
+     z_128 ~ 401..412 for every m -- 2.9 px/wave against RES_GATE = 4. Measured:
+     every pinned state at every frequency was gated out and the page drew a
+     uniform disc with no nodal lines, as though that were the answer.
+
+     The three assertions this file already had on finestZeroOf -- finite and
+     positive, inside the basis, finer than the modal mean -- all passed
+     throughout. RR and RES_GATE are read from cymatic.html so this cannot
+     drift from the renderer it is protecting. */
+  {
+    const RR = Number(/const GR = (\d+)/.exec(page)[1]);
+    const rr = (RR - 1)/2 - 3;
+    const resGate = Number(/const RES_GATE = ([\d.]+)/.exec(page)[1]);
+    ok(rr > 0 && resGate > 0, 'render constants read out of cymatic.html',
+       `rr=${rr} resGate=${resGate}`);
+    for (const f of [56, 111, 180, 199]){
+      const s2 = state({ f, rim: 'pinned', depthMm: 3 });
+      ok(s2.states.length > 0, `pinned f=${f}: states exist`);
+      for (const t of s2.states){
+        const px = 2*Math.PI*rr/K.finestZeroOf(t.radial);
+        ok(px >= resGate,
+           `pinned f=${f} fold${t.fold}: resolvable at the page's gate`,
+           `${px.toFixed(2)} px/wave < RES_GATE ${resGate} -- this state is `
+           + `silently dropped and the disc renders blank`);
+      }
+    }
+  }
+
   const belowMin = state({ amplitudeMv: 40, tSec: 5, tfeSec: 1 });
   eq(belowMin.expression, 0,
      'expression is exactly zero below the reported minimum drive');
 }
 
-const EXPECTED_ASSERTIONS = 2646;
+const EXPECTED_ASSERTIONS = 2657;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
