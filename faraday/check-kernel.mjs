@@ -1353,7 +1353,248 @@ section('13. response phase, and that every state carries one');
      'expression is exactly zero below the reported minimum drive');
 }
 
-const EXPECTED_ASSERTIONS = 2657;
+section('14. centre-bias envelope and the product rule');
+
+/* The envelope multiplies the SURFACE. A caller that scales a field by g must
+   scale its gradient by grad(g*f) = g*grad(f) + f*grad(g); both renderers
+   dropped the second term and scaled the stored gradient by g alone.
+
+   Measured against central differences before the fix: the gradient was wrong
+   by 5.1% at cb = 1.1879, 50.4% at cb = 0.1323, and 192.2% at cb = 3.4011 --
+   the last reversing its direction over part of the inner disc, which pushes
+   the sand the wrong way there.
+
+   `centreBiasEnvelope` now returns g AND dg from one definition that both
+   renderers call, so the term cannot be dropped at one site and kept at the
+   other. The checks below are against finite differences, not against the
+   kernel's own opinion. */
+{
+  const FD = 1e-7;
+  const CBS = [1.1879, 3.4011, 0.1323, 1.0383, 1.0];
+  const brk = 1/K.CENTRE_BIAS_SLOPE;
+
+  for (const cb of CBS){
+    // dg is the derivative of g, away from the corner at rho = 1/slope.
+    for (const rho of [0.02, 0.10, 0.20, 0.30, 0.40, 0.44, 0.50, 0.70, 0.95]){
+      if (Math.abs(rho - brk) < 1e-3) continue;      // the corner is not differentiable
+      const fd = (K.centreBiasEnvelope(rho + FD, cb).g
+                - K.centreBiasEnvelope(rho - FD, cb).g)/(2*FD);
+      const { dg } = K.centreBiasEnvelope(rho, cb);
+      ok(Math.abs(dg - fd) <= 1e-5*Math.max(1, Math.abs(fd)),
+         `cb=${cb} rho=${rho}: dg is the derivative of g`,
+         `dg=${dg} vs central difference ${fd}`);
+    }
+    // Beyond the breakpoint the envelope is exactly inert.
+    for (const rho of [brk + 1e-9, 0.6, 1.0, 2.0]){
+      const e = K.centreBiasEnvelope(rho, cb);
+      eq(e.g, 1, `cb=${cb} rho=${rho}: g is exactly 1 beyond the breakpoint`);
+      eq(e.dg, 0, `cb=${cb} rho=${rho}: dg is exactly 0 beyond the breakpoint`);
+    }
+  }
+
+  // cb = 1 is the identity envelope at every radius.
+  for (const rho of [0.0, 0.2, 0.45, 0.9]){
+    const e = K.centreBiasEnvelope(rho, 1);
+    eq(e.g, 1, `cb=1 rho=${rho}: identity envelope`);
+    eq(e.dg, 0, `cb=1 rho=${rho}: identity envelope has no slope`);
+  }
+
+  /* The whole point: the renderer's radial derivative of the ENVELOPED mode,
+     w*cm*(dJ*g + J*dg), against a central difference of w*J*cm*g itself.
+     Without the dg term this fails by the percentages quoted above. */
+  for (const [m, jp, cb] of [[5, 16.0, 1.1879], [1, 5.33, 3.4011], [2, 6.71, 0.1323]]){
+    const eta = rho => K.besselJ(m, jp*rho)*K.centreBiasEnvelope(rho, cb).g;
+    for (const rho of [0.05, 0.15, 0.25, 0.35, 0.43, 0.55, 0.80]){
+      if (Math.abs(rho - brk) < 1e-3) continue;
+      const pr = K.besselPair(m, jp*rho);
+      const { g, dg } = K.centreBiasEnvelope(rho, cb);
+      const analytic = jp*pr[1]*g + pr[0]*dg;
+      const fd = (eta(rho + FD) - eta(rho - FD))/(2*FD);
+      ok(Math.abs(analytic - fd) <= 1e-4*Math.max(1, Math.abs(fd)),
+         `m=${m} cb=${cb} rho=${rho}: d/drho of the enveloped mode`,
+         `analytic ${analytic} vs central difference ${fd}`);
+    }
+  }
+
+  // Out-of-domain arguments refuse rather than returning a number.
+  for (const bad of [NaN, -1, Infinity]){
+    let threw = false;
+    try { K.centreBiasEnvelope(bad, 1.2); } catch { threw = true; }
+    ok(threw, `centreBiasEnvelope refuses rho = ${bad}`);
+  }
+  {
+    let threw = false;
+    try { K.centreBiasEnvelope(0.2, NaN); } catch { threw = true; }
+    ok(threw, 'centreBiasEnvelope refuses a non-finite centerToMid');
+  }
+
+  /* One definition, not three. If a renderer grows its own copy of the
+     envelope again it can drop dg at that site alone, which is exactly how
+     the two copies came to disagree. */
+  const pageSrc = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  /* Regeneration exposed a hole in an earlier version of this check: it
+     required an opening paren immediately before the 1, so it missed the
+     realistic reintroduction `Math.max(0, 1 - RAD[i]*2.2)`, where the
+     paren is followed by `0,`. It now matches the shape wherever it sits. */
+  ok(!/1\s*-\s*[^;)\n]*2\.2/.test(pageSrc),
+     'cymatic.html carries no open-coded centre-bias envelope',
+     'a bare (1 - rho*2.2) reappeared -- call centreBiasEnvelope instead');
+}
+
+section('15. assumed constants are declared as assumed');
+
+/* Three numbers were printed in the deck as though they were measured:
+   `phase-flux gain` (an unsourced 2.2, scaled against the Stokes ratio at the
+   page's own default condition), `plate |T|` and friends (computed from
+   textbook granite that the source never specifies), and `wall impedance`
+   (unsourced coupling constants). None of them is wrong -- they are
+   assumptions, and the defect was presenting them as results.
+
+   This does not check the VALUES, which are unchanged. It checks that the
+   declaration travels with them, so the next reader meets the assumption. */
+{
+  const src = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+
+  // The transport gain: one definition, and it refuses rather than inventing
+  // a Stokes ratio. The dead `: 0.02` fallback stood in for exactly that.
+  const tc = K.transportCoefficients({ stokesDepth: 1.388e-4 }, 1e-2);
+  eq(tc.intensityGain, 1, 'intensity gain is the unit scale');
+  eq(tc.fluxGainAssumed, true, 'the flux gain declares itself assumed');
+  rel(tc.stokesRatio, 1.388e-2, 12, 'stokes ratio is depth over wavelength');
+  rel(tc.fluxGain,
+      K.PHASE_FLUX_GAIN_AT_REFERENCE*1.388e-2/K.STOKES_RATIO_AT_REFERENCE, 12,
+      'flux gain scales linearly from the reference condition');
+  for (const bad of [null, undefined, {}, { stokesDepth: NaN }]){
+    let threw = false;
+    try { K.transportCoefficients(bad, 1e-2); } catch { threw = true; }
+    ok(threw, `transportCoefficients refuses damping = ${JSON.stringify(bad)}`,
+       'a missing damping record must not yield a stand-in ratio');
+  }
+  ok(!/:\s*0\.02\s*;/.test(src) && !/2\.2\s*\*\s*stokes\s*\/\s*0\.014/.test(src),
+     'cymatic.html open-codes neither the gain nor its dead 0.02 fallback');
+
+  // The plate and wall constants carry their declarations.
+  eq(K.STONE.assumed, true, 'STONE declares itself assumed');
+  ok(typeof K.STONE.note === 'string' && K.STONE.note.length > 20,
+     'STONE says why it is assumed');
+  eq(K.COUPLING_ASSUMED, true, 'the wall-coupling constants declare themselves unsourced');
+
+  // reinforcedR4 is exactly inert at the radius the page actually passes, so
+  // DEFAULT_R4_SCALES changes nothing as shipped. Pinned, because the comment
+  // saying so is only true while this holds.
+  eq(K.reinforcedR4(0), 1, 'reinforcedR4 is exactly 1 at driveR = 0');
+  ok(K.reinforcedR4(1) < 1, 'reinforcedR4 does bite at a non-zero radius');
+  ok(/driveR:\s*0\b/.test(src), 'the page still passes driveR = 0');
+
+  // The deck must not present an assumption as a measurement.
+  for (const label of ['phase-flux gain (assumed)',
+                       'plate |T| (assumed base)',
+                       'wall impedance (unsourced)'])
+    ok(src.includes(label), `the deck labels: ${label}`,
+       'an assumed quantity lost its label and reads as measured again');
+}
+
+section('16. pinned modal damping is the weighted mean, not gamma at the mean k');
+
+/* The pinned mode is a superposition and damping is a per-component rate
+   convex in k, so evaluating it once at the reduced wavenumber under-reports
+   it and puts onset early. Measured at 3 mm, 20 C: gamma rises 6.0-13.8% and
+   the reported onset rises 2.4-6.0%.
+
+   The weights are not assumed. d(omega0^2)/dg, computed by perturbing gravity
+   in the eigensolve end to end, matches the b^2-weighted mean of k*tanh(kh) to
+   1e-12 -- which is also why the HARMONIC mean proposed for the forcing
+   coefficient is wrong and eps was left alone: it disagrees with that same
+   measurement by 4-17%.
+
+   The checks below are properties, not a second copy of the implementation:
+   a one-component mode must reduce exactly, the mean must sit inside the range
+   of what it averages, and an uncoverable mode must refuse. */
+{
+  const R = 24.25e-3/2, sig = 0.0728, rhoW = 998.2, hM = 3e-3, nu = 1.0034e-6;
+
+  for (const m of [0, 3, 5, 8]){
+    const sp = K.pinnedEdgeSpectrum(m, R, sig, rhoW, hM, 128, 1);
+    const pm = sp.pinned[0], w = pm.omega;
+    const md = K.pinnedModalDamping(sp, pm, w, nu, hM);
+
+    ok(md.covered >= 1 - 1e-6,
+       `m=${m}: the averaged terms carry the mode`, `covered ${md.covered}`);
+
+    // It must lie inside the range of the per-component rates it averages --
+    // true of any weighted mean, and false of a value taken from elsewhere.
+    let lo = Infinity, hi = -Infinity;
+    for (let n = 0; n < sp.c.length; n++){
+      let gn; try { gn = K.dampingRate(sp.freeK[n], w, nu, hM).total; } catch { continue; }
+      lo = Math.min(lo, gn); hi = Math.max(hi, gn);
+    }
+    ok(md.total >= lo && md.total <= hi,
+       `m=${m}: the modal damping lies within the component rates`,
+       `${md.total} outside [${lo}, ${hi}]`);
+
+    // Jensen: gamma is convex in k, so averaging the rate exceeds the rate at
+    // the reduced wavenumber. This is the defect's direction, pinned.
+    const atMean = K.dampingRate(pm.kEquiv, w, nu, hM).total;
+    ok(md.total > atMean,
+       `m=${m}: averaging exceeds gamma at the reduced k`,
+       `${md.total} vs ${atMean} -- if this inverts, the mode is no longer `
+       + `being averaged and onset goes back to being reported early`);
+
+    // and the onset moves the way that implies
+    const mk = g => K.mathieuKT(w, g, 1.0, pm.kTanhEff, 2*Math.PI*(w/Math.PI));
+    ok(mk(md.total).accelOnset > mk(atMean).accelOnset,
+       `m=${m}: more damping means a later onset`);
+  }
+
+  // A one-component mode has nothing to average: the mean must be exactly the
+  // component's own rate.
+  {
+    const w = 100, kOne = 300;
+    const fake = { freeW2: [1e9], freeK: [kOne], c: [4] };
+    const md = K.pinnedModalDamping(fake, { w2: 0 }, w, nu, hM);
+    eq(md.total, K.dampingRate(kOne, w, nu, hM).total,
+       'a one-component mode reduces to that component exactly');
+    eq(md.covered, 1, 'a one-component mode is fully covered');
+  }
+
+  // A mode whose components all refuse must refuse, not average nothing.
+  {
+    let threw = null;
+    const bad = { freeW2: [1e9, 1e9], freeK: [5e5, 6e5], c: [4, 4] };
+    try { K.pinnedModalDamping(bad, { w2: 0 }, 100, nu, hM); }
+    catch (e) { threw = e; }
+    ok(threw !== null, 'an uncoverable mode refuses rather than averaging a fragment');
+    ok(/weight/.test(threw ? threw.message : ''),
+       'the refusal says the uncovered weight is why');
+  }
+
+  /* The state REPORTED by resolvePatternState must carry the weighted value.
+     Regeneration exposed this hole: with the checks above alone, reverting
+     both call sites to dampingRate(kEquiv, ...) left the suite fully green --
+     the function was proven correct and then not used. This ties the two
+     together, which is the thing that actually protects the page. */
+  for (const f of [56, 111]){
+    const st = state({ f, rim: 'pinned', depthMm: 3, tempC: 20 });
+    const nu20 = K.viscosity(20)/K.density(20);
+    ok(st.states.length > 0, `pinned f=${f}: states exist`);
+    for (const t of st.states){
+      const atMean = K.dampingRate(t.radial.k, t.radial.pinned.omega, nu20, 3e-3).total;
+      ok(t.radial.gamma > atMean,
+         `pinned f=${f} fold${t.fold}: the reported gamma is the averaged one`,
+         `reported ${t.radial.gamma} is not above gamma(k_bar) = ${atMean}, so the `
+         + `call site is using the mean-k value again and onset is early`);
+    }
+  }
+
+  // The forcing coefficient is NOT changed: eps must still use the arithmetic
+  // k*tanh(kh), which is what d(omega0^2)/dg measures.
+  ok(/kTanhEff:\s*kt\/wsum/.test(readFileSync(new URL('./kernel.js', import.meta.url), 'utf8')),
+     'kTanhEff remains the b^2-weighted arithmetic mean',
+     'the harmonic mean disagrees with d(omega0^2)/dg by 4-17% and must not be '
+     + 'substituted here');
+}
+
+const EXPECTED_ASSERTIONS = 2820;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
