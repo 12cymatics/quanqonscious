@@ -276,6 +276,136 @@ function pinnedBasisTable(m, zeros){
    the full basis is still what gets drawn. */
 const PROFILE_TAIL_TOL = 1e-3;
 
+/* Grain transport coefficients.
+
+   PGX = -KI*grad(I) + KF*fx pushes grains down the intensity gradient and
+   along the phase flux. KI = 1 sets the scale; KF is the ratio of the two, and
+   it is NOT derived from anything.
+
+   What is known about it:
+     * 2.2 is an empirical gain. No source, no derivation. It is the value the
+       page was tuned to look right at, and it is reported in the deck as
+       "phase-flux gain", which reads like a computed quantity. It is not.
+     * 0.014 is not independent of it: measured, the Stokes ratio
+       (stokesDepth/wavelength) at this page's DEFAULT condition -- medium
+       cell, 111 Hz, 2-3 mm, 20 C -- is 0.01388..0.01396. So 0.014 is that
+       ratio rounded to two figures, and KF is "2.2 at the default condition,
+       scaling linearly with the Stokes ratio away from it".
+
+   Both are kept at their existing values so this changes no output. They are
+   named and declared here so that a reader meets the assumption instead of a
+   bare literal, in the same spirit as BOUNDARY's unsourced egg divisors. */
+const PHASE_FLUX_GAIN_AT_REFERENCE = 2.2;
+const STOKES_RATIO_AT_REFERENCE = 0.014;
+
+function transportCoefficients(damping, wavelength){
+  if (!damping || !Number.isFinite(damping.stokesDepth))
+    throw new Error(
+      'transportCoefficients: no damping record, so the Stokes ratio is '
+      + 'unknown. This refuses rather than substituting a stand-in ratio: the '
+      + 'grain transport balance would then be reported as a number nobody '
+      + 'computed. `resolvePatternState` always returns `damping`.');
+  if (!(wavelength > 0) || !Number.isFinite(wavelength))
+    throw new Error(
+      `transportCoefficients: wavelength must be finite and positive, got ${wavelength}`);
+  const stokesRatio = damping.stokesDepth/wavelength;
+  return {
+    stokesRatio,
+    intensityGain: 1,
+    fluxGain: PHASE_FLUX_GAIN_AT_REFERENCE*stokesRatio/STOKES_RATIO_AT_REFERENCE,
+    fluxGainAssumed: true
+  };
+}
+
+/* Centre-bias envelope.
+
+   `centerToMid` is an image descriptor measured off the rendered paper panels
+   (the ratio of centre brightness to mid-radius brightness), so this is an
+   amplitude RE-WEIGHTING of the eigenfunction, not a term of the physics. It
+   does not move the nodal set: g > 0 everywhere and factors out of the sum.
+
+   The 2.2 is the one free number in it and it is NOT derived -- it places the
+   breakpoint at rho = 1/2.2 = 0.4545, the mid-radius the descriptor is
+   measured against. It is declared here, once, rather than repeated as a bare
+   literal at the three places that used to carry it.
+
+   Returns the envelope AND its derivative, because a caller that scales a
+   field by g must scale that field's gradient by grad(g*f) = g*grad(f) +
+   f*grad(g). Both renderers dropped the second term; measured against central
+   differences, the gradient was wrong by 5.1% at cb = 1.19 and by 192% at
+   cb = 3.40, the latter reversing its direction. Handing back dg alongside g
+   is what makes that term hard to forget again. */
+const CENTRE_BIAS_SLOPE = 2.2;
+
+function centreBiasEnvelope(rho, centerToMid){
+  if (!(rho >= 0) || !Number.isFinite(rho))
+    throw new Error(`centreBiasEnvelope: rho must be finite and >= 0, got ${rho}`);
+  if (!Number.isFinite(centerToMid))
+    throw new Error(
+      `centreBiasEnvelope: centerToMid must be finite, got ${centerToMid}`);
+  const reach = rho*CENTRE_BIAS_SLOPE;
+  // d/drho is discontinuous at the breakpoint: the envelope has a corner
+  // there. The jump is a property of this envelope shape, so it is reported
+  // rather than smoothed away.
+  // dg is written as slope*(1 - cb) rather than -slope*(cb - 1) so that an
+  // identity envelope (cb = 1) yields +0 and not -0. A negative zero in a
+  // gradient component survives into atan2 and flips the direction it reports.
+  return reach < 1
+    ? { g: 1 + (centerToMid - 1)*(1 - reach), dg: CENTRE_BIAS_SLOPE*(1 - centerToMid) }
+    : { g: 1, dg: 0 };
+}
+
+/* Modal damping of a pinned state.
+
+   The pinned mode is a superposition, and damping is a PER-COMPONENT rate:
+   gamma ~ 2*nu*k^2 to leading order, so it is convex in k. Evaluating it once
+   at the reduced wavenumber, gamma(k_bar), is therefore not the modal damping;
+   by Jensen it is a LOWER bound on it, and the state is reported as less
+   damped than it is -- which puts predicted Faraday onset early.
+
+   The right reduction follows from the same structure as omega0^2. In the b
+   coordinates the mass matrix is the identity: d(omega0^2)/dg computed by
+   perturbing gravity in the eigensolve matches the b^2-weighted mean of
+   k*tanh(kh) to 1e-12, which is what fixes the weights. Rayleigh dissipation
+   F = (1/2)*sum(2*gamma_n*bdot_n^2) with a frozen shape bdot_n = b_n*Adot then
+   gives gamma_eff = sum(gamma_n*b_n^2)/sum(b_n^2) -- the same weighting.
+
+   Measured against gamma(k_bar) at 3 mm, 20 C: +9.2% at m=0, +13.8% at m=3,
+   +11.8% at m=5, +6.0% at m=8.
+
+   `dampingRate` refuses on the high-k tail of the basis, where
+   `viscousFreeSurfaceRe` has no converged root. That tail carries ~1.5e-8 of
+   the b^2 weight, so the average over the rest is the modal damping to far
+   better than it is known -- but the coverage is CHECKED rather than assumed,
+   and a tail that ever carries real weight makes this refuse instead of
+   quietly averaging part of the mode. */
+const MODAL_DAMPING_MIN_COVERAGE = 1 - 1e-6;
+
+function pinnedModalDamping(spectrum, pinnedMode, w, nu, hM){
+  const w2 = spectrum.freeW2, k = spectrum.freeK, c = spectrum.c;
+  const root = pinnedMode.w2;
+  let num = 0, den = 0, total = 0, refused = 0;
+  for (let n = 0; n < c.length; n++){
+    const bn = Math.sqrt(c[n])/(w2[n] - root), b2 = bn*bn;
+    total += b2;
+    let gn;
+    try { gn = dampingRate(k[n], w, nu, hM).total; }
+    catch { refused++; continue; }
+    num += b2*gn; den += b2;
+  }
+  if (!(total > 0))
+    throw new Error('pinnedModalDamping: the mode carries no weight');
+  const covered = den/total;
+  if (!(covered >= MODAL_DAMPING_MIN_COVERAGE))
+    throw new Error(
+      `pinnedModalDamping: dampingRate refused on ${refused} basis terms carrying `
+      + `${((1 - covered)*100).toExponential(2)}% of the mode's weight, above the `
+      + `${((1 - MODAL_DAMPING_MIN_COVERAGE)*100).toExponential(0)}% this will ignore. `
+      + `The modal damping is not computable for this state; it is not averaged `
+      + `over the part that happened to converge.`);
+  return { total: num/den, covered, refused };
+}
+
 function finestZeroOf(radial){
   if (!radial.pinned) return radial.jp;
   const z = radial.pinnedZeros, a = radial.pinned.coefficients;
@@ -423,7 +553,22 @@ function dampingRate(k, w, nu, hM){
            surfaceLayer: bulk - bulkPotential, layer, stokesDepth: delta };
 }
 
-const STONE = { E: 5.0e10, thickness: 0.006, poisson: 0.25, density: 2650, lossFactor: 0.01 };
+/* Plate constants for the cell's base.
+
+   ASSUMED, not measured. These are textbook granite -- E = 50 GPa, rho = 2650
+   kg/m3, nu = 0.25, 6 mm thick, loss factor 0.01 -- and no part of the source
+   material states what the apparatus's base actually is or how thick. Nothing
+   here was fitted to an observation.
+
+   That matters because the deck prints `plate |T|`, `D` and `added mass` in the
+   same column as quantities that ARE computed from the fluid state, where they
+   read as measured. `assumed: true` travels with the record so the renderer can
+   say which is which. */
+const STONE = {
+  E: 5.0e10, thickness: 0.006, poisson: 0.25, density: 2650, lossFactor: 0.01,
+  assumed: true,
+  note: 'textbook granite; the apparatus base is not specified in the source'
+};
 function plateTransfer(k, w, rhoW, hM){
   const D = STONE.E*Math.pow(STONE.thickness, 3)/(12*(1 - STONE.poisson*STONE.poisson));
   const added = rhoW/(k*Math.tanh(k*hM));
@@ -476,7 +621,18 @@ const BOUNDARY = [
     note: 'divisor 20 gives D = 20, above the Barbier bound P/2 = 17.124: impossible' },
   { key:'polygon',       pd: 2*SQRT2,                                          minor: 1/SQRT2 }
 ];
+/* Wall-coupling constants. UNSOURCED, in the same sense as BOUNDARY's egg
+   divisors above: no derivation and no citation. They set `boundaryImpedance`,
+   which the deck prints as `wall impedance`.
+
+   DEFAULT_R4_SCALES is additionally INERT as the page ships. `reinforcedR4(r)`
+   is a product of L^4/(r^4 + L^4), so at r = 0 every factor is exactly 1, and
+   `cymatic.html` passes `driveR: 0` at its only call site. The four lengths
+   therefore change nothing today; they are kept because the function is
+   reachable with a non-zero radius, and flagged because a reader meeting
+   [0.8, 1.2, 1.8, 2.6] has no way to tell that from a tuned result. */
 const COUPLING_BASE = 0.016, COUPLING_GAIN = 0.024;
+const COUPLING_ASSUMED = true;
 const DEFAULT_R4_SCALES = [0.8, 1.2, 1.8, 2.6];
 function reinforcedR4(radius){
   const r4 = Math.pow(radius, 4);
@@ -651,14 +807,13 @@ function resolvePatternState(o){
       for (const pm of near){
 
         const kEq = pm.kEquiv;
-        const g = dampingRate(kEq, pm.omega, nu, hM);
+        const g = pinnedModalDamping(sp, pm, pm.omega, nu, hM);
         const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv, cellKey), pm.kTanhEff, 2*Math.PI*f);
         modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
           mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
           gamma: g.total, growth: mth.growth, eps: mth.eps,
           accelThreshold: mth.accelThreshold, accelOnset: mth.accelOnset,
           phi: Math.atan2(2*g.total*omegaTarget, pm.omega*pm.omega - omegaTarget*omegaTarget),
-          coeff: plateTransfer(kEq, 2*Math.PI*f, rho, hM).magnitude,
           pinned: pm, pinnedZeros: sp.freeZeros, pinnedBasis: PINNED_BASIS });
       }
       continue;
@@ -674,7 +829,7 @@ function resolvePatternState(o){
 
         phi: Math.atan2(2*g.total*omegaTarget, w*w - omegaTarget*omegaTarget),
 
-        coeff: plateTransfer(k, 2*Math.PI*f, rho, hM).magnitude });
+});
     }
   }
 
@@ -798,7 +953,7 @@ function resolvePatternState(o){
       const pm = sp.pinned.slice().sort((a, b) =>
         Math.abs(a.omega - omegaTarget) - Math.abs(b.omega - omegaTarget))[0];
       const kEq = pm.kEquiv;
-      const g = dampingRate(kEq, pm.omega, nu, hM);
+      const g = pinnedModalDamping(sp, pm, pm.omega, nu, hM);
       states.push({ fold, m, weight,
         phi: Math.atan2(2*g.total*omegaTarget, pm.omega*pm.omega - omegaTarget*omegaTarget),
         radial: { m, n: pm.index, jp: null, k: kEq, hz: pm.hz,
@@ -932,6 +1087,14 @@ function resolvePatternState(o){
 
 const FARADAY_KERNEL = {
   invertKTanh,
+  pinnedModalDamping,
+  STONE,
+  COUPLING_ASSUMED,
+  transportCoefficients,
+  PHASE_FLUX_GAIN_AT_REFERENCE,
+  STOKES_RATIO_AT_REFERENCE,
+  centreBiasEnvelope,
+  CENTRE_BIAS_SLOPE,
   millerAll,
   besselJ,
   besselJp,

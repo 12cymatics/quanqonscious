@@ -375,11 +375,26 @@ function buildSurface(state){
   const vs = state.visualSignature;
   if (vs){
     const cb = vs.centerToMid;
+    /* The envelope multiplies the SURFACE, so the stored gradient has to be
+       the gradient OF the enveloped surface:
+
+           grad(g*eta) = g*grad(eta) + eta*grad(g)
+
+       This block used to scale ETA and NX/NY by the same g and stop, dropping
+       the eta*grad(g) term entirely. NX/NY are derivatives with respect to the
+       NORMALISED radius rho = RAD[i] (see the accumulation above: ut divides by
+       r = RAD[i], and c/sn are the unit radial direction), so grad(g) is taken
+       in the same coordinate. `centreBiasEnvelope` in faraday/kernel.js is the
+       single definition of g and dg/drho -- including why its derivative jumps
+       at the breakpoint -- and the export path below calls the same one. */
     for (let i = 0; i < NSZ; i++){
       if (COVER[i] <= 0) continue;
-      const g = 1 + (cb - 1)*Math.max(0, 1 - RAD[i]*2.2);
-      ETA[i] *= g; NX[i] *= g; NY[i] *= g;
-      IMF[i] *= g; GIX[i] *= g; GIY[i] *= g;
+      const { g, dg } = centreBiasEnvelope(RAD[i], cb);
+      const th = ANG[i], c = Math.cos(th), sn = Math.sin(th);
+      const eta0 = ETA[i], imf0 = IMF[i];
+      NX[i]  = g*NX[i]  + eta0*dg*c;   NY[i]  = g*NY[i]  + eta0*dg*sn;
+      GIX[i] = g*GIX[i] + imf0*dg*c;   GIY[i] = g*GIY[i] + imf0*dg*sn;
+      ETA[i] = g*eta0;                 IMF[i] = g*imf0;
     }
   }
 
@@ -392,8 +407,8 @@ function buildSurface(state){
                    gated: state.states.filter(x => x.gated).length };
   const inv = 1/mx, ginv = 1/gx;
 
-  const stokes = state.damping ? state.damping.stokesDepth/state.wavelength : 0.02;
-  const KI = 1, KF = 2.2*stokes/0.014;
+  const tc = transportCoefficients(state.damping, state.wavelength);
+  const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
   let dmax = 1e-9;
   for (let i = 0; i < NSZ; i++){
     ETA[i] *= inv; IMF[i] *= inv;
@@ -408,7 +423,7 @@ function buildSurface(state){
   }
   const dinv = 1/dmax;
   for (let i = 0; i < NSZ; i++){ PGX[i] *= dinv; PGY[i] *= dinv; }
-  state.transport = { stokesRatio: stokes, fluxGain: KF };
+  state.transport = { stokesRatio: stokes, fluxGain: KF, fluxGainAssumed: true };
 }
 
 const NP = 60000;
@@ -672,10 +687,15 @@ function paintDeck(){
     ['growth s', `${on.growth.toFixed(2)} <span class="u">s⁻¹</span>`],
     ['unstable modes', `<b>${s.unstableCount}</b> of ${s.ordersScanned}`],
     ['SEP', ''],
-    ['plate |T|', `${s.plate.magnitude.toExponential(2)}`],
+    // The plate row is computed from ASSUMED granite constants (see STONE in
+    // faraday/kernel.js): the source does not state what the apparatus base
+    // is. The wall-coupling constants are likewise unsourced. Both sat here
+    // unlabelled, in the same column as quantities derived from the fluid
+    // state, where they read as measured.
+    ['plate |T| (assumed base)', `${s.plate.magnitude.toExponential(2)}`],
     ['  D', `${s.plate.D.toExponential(2)} <span class="u">N·m</span>`],
     ['  added mass', `${s.plate.added.toFixed(2)} <span class="u">kg/m²</span>`],
-    ['wall impedance', `${s.boundary.impedance.toExponential(3)}`],
+    ['wall impedance (unsourced)', `${s.boundary.impedance.toExponential(3)}`],
     ['  bounded range', `${s.boundary.impedanceLo.toExponential(3)} – ${s.boundary.impedanceHi.toExponential(3)}`],
     ['  walls', `<b>${s.boundary.walls}</b> <span class="u">of 10 · ${s.boundary.exact} exact, ${s.boundary.bounded} bounded</span>`],
     ['SEP', ''],
@@ -684,7 +704,8 @@ function paintDeck(){
         ? `<b>${s.competition.survivors.length}</b> survive <span class="u">· ${s.competition.killed} suppressed</span>`
         : '<span class="u">—</span>'],
     ['Stokes ratio δ/λ', s.transport ? s.transport.stokesRatio.toFixed(4) : '—'],
-    ['phase-flux gain', s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
+    ['phase-flux gain (assumed)',
+     s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
     ['SEP', ''],
     ['px per wavelength', s.states[0]
         ? `${(2*Math.PI*RR/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
@@ -900,12 +921,16 @@ async function exportImage(SIZE, onProgress){
       const J = t.jr[q], dJ = t.dr[q];
       const cm = Math.cos(t.m*th), sm = Math.sin(t.m*th);
       const cp = Math.cos(t.phi), sp = Math.sin(t.phi);
-      const gscale = 1 + (cbias - 1)*Math.max(0, 1 - (r/rr)*2.2);
+      const rn = r/rr;
+      const { g: gscale, dg: dgs } = centreBiasEnvelope(rn, cbias);
       const base = t.w*J*cm*gscale;
       Re += base*cp; Im += base*sp;
 
-      const rn = r/rr;
-      const ur = t.w*dJ*cm*gscale;
+      /* Product rule, as in the preview block: d/drn (g*w*J*cm) is
+         w*cm*(g*dJ + J*dg). The dg term was missing, so the exported gradient
+         was g*grad(eta) rather than grad(g*eta). The angular component needs
+         no correction -- g depends on r alone. */
+      const ur = t.w*cm*(dJ*gscale + J*dgs);
       const ut = rn > 1e-6 ? -t.w*t.m*J*sm/rn*gscale : 0;
       const c = r > 1e-6 ? dx/r : 1, sn = r > 1e-6 ? dy/r : 0;
       const gx = ur*c - ut*sn, gy = ur*sn + ut*c;
@@ -938,8 +963,8 @@ async function exportImage(SIZE, onProgress){
     onProgress('building the transport field');
     const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
 
-    const stokes = st.damping ? st.damping.stokesDepth/st.wavelength : 0.02;
-    const KI = 1, KF = 2.2*stokes/0.014;
+    const tc = transportCoefficients(st.damping, st.wavelength);
+    const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
     let dmax = 1e-9;
     for (let y = 0; y < SIZE; y++){
       for (let x = 0; x < SIZE; x++){
