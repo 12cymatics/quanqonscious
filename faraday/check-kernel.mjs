@@ -1626,7 +1626,66 @@ section('17. grain relocation has no preferred direction');
      'first-hit selection is back, which biases every relocation up and left');
 }
 
-const EXPECTED_ASSERTIONS = 2823;
+section('18. the viscous domain miss is not an exception');
+
+/* pinnedModalDamping averages over a 128-term basis and meets the viscous
+   solver's domain edge on most of the tail. Measured, that cost 15.85 us per
+   failing call when it threw and 6.77 us when it returns null -- the throw
+   alone was 57% of it -- and the failing terms were 56% of the calls but 93%
+   of the time. Routing the average through a null-returning face took
+   resolvePatternState from 129.3 ms to 105.8 ms with NO numerical change:
+   modal damping compared bit-identical across 54 configurations.
+
+   The throwing face is unchanged and still refuses, because a caller that
+   needs a root must not get null silently. What follows checks both faces
+   agree, that null is a domain answer rather than an error, and that a
+   malformed argument still throws on BOTH. */
+{
+  const nu = 1.0034e-6, hM = 3e-3;
+
+  // Where a root exists, the two faces agree exactly.
+  let agreed = 0, tested = 0;
+  for (const k of [10, 50, 100, 300, 800, 2000])
+    for (const w of [50, 200, 700]){
+      const a = K.dampingRateOrNull(k, w, nu, hM);
+      if (a === null) continue;
+      tested++;
+      const b = K.dampingRate(k, w, nu, hM);
+      if (Object.is(a.total, b.total) && Object.is(a.bulk, b.bulk)
+          && Object.is(a.layer, b.layer) && Object.is(a.stokesDepth, b.stokesDepth)) agreed++;
+    }
+  ok(tested > 0, 'the throwing and null faces were compared on real arguments');
+  eq(agreed, tested, 'both faces return exactly the same record where a root exists');
+
+  // Where no root exists, one returns null and the other refuses.
+  let nulls = 0;
+  for (const k of [3e4, 1e5, 3e5]){
+    const a = K.dampingRateOrNull(k, 100, nu, hM);
+    if (a !== null) continue;
+    nulls++;
+    let threw = false;
+    try { K.dampingRate(k, 100, nu, hM); } catch { threw = true; }
+    ok(threw, `k=${k}: the throwing face still refuses where the null face returns null`);
+  }
+  ok(nulls > 0, 'the domain edge was actually reached', 'no k sampled fell outside the domain');
+
+  // A malformed W is a caller bug on both faces, not a domain answer.
+  for (const bad of [NaN, -1, 0, Infinity]){
+    let threwNull = false, threwThrow = false;
+    try { K.viscousFreeSurfaceReOrNull(bad); } catch { threwNull = true; }
+    try { K.viscousFreeSurfaceRe(bad); } catch { threwThrow = true; }
+    ok(threwNull, `viscousFreeSurfaceReOrNull refuses W = ${bad} rather than returning null`,
+       'a malformed argument must not be reported as an empty domain');
+    ok(threwThrow, `viscousFreeSurfaceRe refuses W = ${bad}`);
+  }
+
+  // The solver converges in a handful of steps where it converges at all, so
+  // the 60-iteration cap is only ever reached by a genuine domain miss.
+  ok(K.viscousFreeSurfaceReOrNull(1) !== null, 'W = 1 has a root');
+  ok(K.viscousFreeSurfaceReOrNull(0.3) === null, 'W = 0.3 is outside the domain');
+}
+
+const EXPECTED_ASSERTIONS = 2839;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
