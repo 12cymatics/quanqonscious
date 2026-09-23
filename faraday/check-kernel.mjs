@@ -1594,7 +1594,39 @@ section('16. pinned modal damping is the weighted mean, not gamma at the mean k'
      + 'substituted here');
 }
 
-const EXPECTED_ASSERTIONS = 2820;
+section('17. grain relocation has no preferred direction');
+
+/* The cell is horizontal and vibrated along its normal, so gravity has no
+   in-plane component: nothing inside the disc may prefer a direction.
+
+   The topple step used to hand an over-dense cell's grain to the FIRST
+   admissible neighbour in scan order, dy running -ring..+ring outside dx.
+   That is a direction. Measured over 200k relocations against random
+   occupancy, the chosen cell carried a mean offset of (-0.47, -0.80) cells --
+   up and to the left, the vertical component about twice the horizontal
+   because dy is the outer loop. Accumulated over topple passes it drifts the
+   bed and reads as directional streaking. With every admissible cell in the
+   ring equally likely the same measurement gives (-0.002, +0.002).
+
+   This is a SOURCE check, and says so: the selection lives in the renderer's
+   hot loop, where routing it through a kernel function for the sake of a
+   numeric test would cost a closure per relocation at 60000 relocations a
+   pass. It catches the specific regression -- first-hit returning. */
+{
+  const src = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  const topple = src.slice(src.indexOf('let budget = TOPPLE_BUDGET'),
+                           src.indexOf('if (settle < 1)'));
+  ok(topple.length > 200, 'the topple block was located in the page');
+  ok(/rnd\(\)\s*\*\s*seen\s*<\s*1/.test(topple),
+     'relocation picks uniformly among the admissible cells in the ring',
+     'the reservoir pick is gone -- a fixed scan order reintroduces a '
+     + 'direction the physics does not have');
+  ok(!/placed\s*=\s*true;\s*break;/.test(topple),
+     'relocation does not take the first cell in scan order',
+     'first-hit selection is back, which biases every relocation up and left');
+}
+
+const EXPECTED_ASSERTIONS = 2823;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
