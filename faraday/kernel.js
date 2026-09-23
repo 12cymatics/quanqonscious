@@ -388,10 +388,9 @@ function pinnedModalDamping(spectrum, pinnedMode, w, nu, hM){
   for (let n = 0; n < c.length; n++){
     const bn = Math.sqrt(c[n])/(w2[n] - root), b2 = bn*bn;
     total += b2;
-    let gn;
-    try { gn = dampingRate(k[n], w, nu, hM).total; }
-    catch { refused++; continue; }
-    num += b2*gn; den += b2;
+    const gn = dampingRateOrNull(k[n], w, nu, hM);
+    if (gn === null){ refused++; continue; }
+    num += b2*gn.total; den += b2;
   }
   if (!(total > 0))
     throw new Error('pinnedModalDamping: the mode carries no weight');
@@ -520,7 +519,19 @@ function kOfOmega(w, sigma, rho, hM){
   return Math.sqrt(lo*hi);
 }
 
-function viscousFreeSurfaceRe(W){
+/* Returns the free-surface root, or null where Newton does not converge.
+
+   Null is a DOMAIN answer, not an error: below roughly W ~ 0.76 (and in a few
+   patches above it -- the domain is not a single clean boundary; sampling W
+   over [1e-3, 1e4] finds five sign changes) there is no root here to find. A
+   caller that averages over a basis meets that case for most of the tail and
+   must not pay for an exception each time: measured, a failing call costs
+   15.85 us when it throws and 6.77 us when it returns null, so the throw alone
+   is 57% of it. Across the 128-term basis the failing terms are 56% of the
+   calls and 93% of the time.
+
+   Malformed W still throws -- that is a caller bug, not a domain miss. */
+function viscousFreeSurfaceReOrNull(W){
   if (!(W > 0) || !isFinite(W))
     throw new Error(`viscousFreeSurfaceRe: W = omega/(nu k^2) must be finite and positive, got ${W}`);
   let xr = -2, xi = W;
@@ -540,12 +551,34 @@ function viscousFreeSurfaceRe(W){
     if (Math.hypot(str, sti) <= 1e-15*Math.hypot(xr, xi)) return xr;
   }
 
-  throw new Error(`viscousFreeSurfaceRe: Newton did not converge for W = ${W}`);
+  return null;
+}
+
+/* The throwing face of the solver, unchanged in behaviour: a caller that wants
+   a root and cannot proceed without one still gets a refusal naming W. */
+function viscousFreeSurfaceRe(W){
+  const root = viscousFreeSurfaceReOrNull(W);
+  if (root === null)
+    throw new Error(`viscousFreeSurfaceRe: Newton did not converge for W = ${W}`);
+  return root;
+}
+
+/* As dampingRate, but null where the viscous root does not exist. Used by
+   pinnedModalDamping, which meets that case on most of the basis tail. */
+function dampingRateOrNull(k, w, nu, hM){
+  const nk2 = nu*k*k;
+  const root = viscousFreeSurfaceReOrNull(w/nk2);
+  if (root === null) return null;
+  return dampingFrom(root, k, w, nu, hM, nk2);
 }
 
 function dampingRate(k, w, nu, hM){
   const nk2 = nu*k*k;
-  const bulk = -viscousFreeSurfaceRe(w/nk2)*nk2;
+  return dampingFrom(viscousFreeSurfaceRe(w/nk2), k, w, nu, hM, nk2);
+}
+
+function dampingFrom(root, k, w, nu, hM, nk2){
+  const bulk = -root*nk2;
   const bulkPotential = 2*nk2;
   const delta = Math.sqrt(2*nu/w);
   const layer = w*k*delta*Math.exp(-2*k*hM)/(-Math.expm1(-4*k*hM));
@@ -1087,6 +1120,8 @@ function resolvePatternState(o){
 
 const FARADAY_KERNEL = {
   invertKTanh,
+  dampingRateOrNull,
+  viscousFreeSurfaceReOrNull,
   pinnedModalDamping,
   STONE,
   COUPLING_ASSUMED,
