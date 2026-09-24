@@ -266,8 +266,8 @@ const VERSION = Object.freeze({
   slug:       'v18_51_0',
   name:       'strict_cquad_wheeler_geometry_kernel',
   title:      'Strict CQuad Wheeler Geometry Kernel',
-  sourceFile: 'vedic_v18_51_0_strict_core.html',
-  leanMirror: 'VedicFractal.lean@v18.51.0'
+  sourceFile: 'vedic_v18.51.1_exact_phi.html',
+  leanMirror: 'SutraWS.lean@v18.51.0'
 });
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
@@ -2036,7 +2036,10 @@ const LEAN_PROVED = Object.freeze({
   removedCeilingDen: 16,
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
-  kernelChecked: ['masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','rho_num_nonneg','rho_num_le_den','rho_zero_eps','rho_den_pos_of_hw_pos','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','norm_preserving_not_reducing','projective_not_invertible'],
+  /* Proved in SutraWS/RenderCertificates.lean and SutraWS/DECComplex.lean,
+     built by `lake build SutraWS`. tools/check_citations.mjs fails the build
+     if any name here has no theorem behind it. */
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','euler_characteristic_zero','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero'],
   /* Wheeler geometry. Lean source is in the repository at WheelerGeometry.lean,
      in the SutraWS package alongside Exhaustive.lean. Every statement is a
      decidable identity over Rat, so each also carries an executable decision
@@ -2053,7 +2056,9 @@ const LEAN_PROVED = Object.freeze({
      composing and superposing to the cross term, which is what the mode panel
      measures on the live active set; STRICT_V5.modeComparison decides it. */
   modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine'],
-  compilerTrusted: ['d1_d2_zero','d2_d3_zero','d3_d4_zero','euler_characteristic_zero','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect']
+  /* Empty by construction: SutraWS.AxiomAudit fails the build for any theorem
+     resting on Lean.ofReduceBool, so nothing here is native_decide-trusted. */
+  compilerTrusted: []
 });
 /* Every visual channel names the theorems it rests on and the predicate that
    decides, right now, whether those theorems still hold of the running state.

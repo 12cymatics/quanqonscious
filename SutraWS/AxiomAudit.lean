@@ -7,6 +7,9 @@ import SutraWS.Exhaustive
 import SutraWS.Vertex
 import SutraWS.VertexProofs
 import SutraWS.Contracts
+import SutraWS.WheelerGeometry
+import SutraWS.RenderCertificates
+import SutraWS.DECComplex
 import Lean
 
 /-!

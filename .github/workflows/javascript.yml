@@ -52,6 +52,21 @@ jobs:
     - name: Single-file build is self-contained
       run: node faraday/check-standalone.mjs
 
+  lean-citations:
+    name: lean citations
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    # lean_provenance.json is checked in for the same reason
+    # faraday/reference.json is: it is the record of what `lake build SutraWS`
+    # actually proved, so CI can hold the page to it without a mathlib build.
+    # Regenerate it with `lake env lean --run ProvenanceExport.lean`.
+    - name: Every theorem the page cites exists in the built environment
+      run: node tools/check_citations.mjs
+
   dns:
     name: faraday DNS
     runs-on: ubuntu-latest
