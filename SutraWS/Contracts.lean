@@ -90,6 +90,26 @@ def family : Sutra → Family
   -- MODULAR [S18, S20, S21, S24, S29]
   | Sutra.S18 | Sutra.S20 | Sutra.S21 | Sutra.S24 | Sutra.S29 => Family.modular
 
+/-- No sutra is assigned `conservation`: the constructor exists but the §12Z
+table never uses it, so the dispatch is over seven families, not eight. -/
+theorem family_never_conservation : ∀ u : Sutra, family u ≠ Family.conservation := by decide
+
+/-- The family sizes of the §12Z table, in the order the table lists them:
+`4 + 5 + 3 + 5 + 4 + 3 + 5 = 29`. -/
+theorem family_sizes :
+    (Sutra.all.countP (fun u => decide (family u = Family.multiplicative)),
+     Sutra.all.countP (fun u => decide (family u = Family.reflective)),
+     Sutra.all.countP (fun u => decide (family u = Family.convolutive)),
+     Sutra.all.countP (fun u => decide (family u = Family.divisive)),
+     Sutra.all.countP (fun u => decide (family u = Family.diffusive)),
+     Sutra.all.countP (fun u => decide (family u = Family.permutative)),
+     Sutra.all.countP (fun u => decide (family u = Family.modular)))
+      = (4, 5, 3, 5, 4, 3, 5) := by decide
+
+/-- The dispatch is total: the seven family sizes account for all 29 sutras. -/
+theorem family_dispatch_total : 4 + 5 + 3 + 5 + 4 + 3 + 5 = Sutra.all.length := by
+  rw [Sutra.all_length]
+
 /-- The kernel's per-operator map, left abstract. -/
 abbrev OpMap := Sutra → Psi → Psi
 

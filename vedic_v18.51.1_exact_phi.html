@@ -2040,12 +2040,11 @@ const LEAN_PROVED = Object.freeze({
      built by `lake build SutraWS`. tools/check_citations.mjs fails the build
      if any name here has no theorem behind it. */
   kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','euler_characteristic_zero','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero'],
-  /* Wheeler geometry. Lean source is in the repository at WheelerGeometry.lean,
-     in the SutraWS package alongside Exhaustive.lean. Every statement is a
-     decidable identity over Rat, so each also carries an executable decision
-     procedure -- wheelerAudit() below -- that re-decides it in this page over
-     the same exact arithmetic the renderer uses. These are NOT among the
-     VedicKernel oleans; they are listed separately and reported separately. */
+  /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
+     `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
+     an executable decision procedure -- wheelerAudit() below -- that re-decides
+     it in this page over the same exact arithmetic the renderer uses, so the
+     compiled proof and the drawn pixels are held to the same claim. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
   /* GOLDENPYTHAGOREAN identities. Lean source is in the same file as the
      Wheeler block; the runtime decision is KX's own identity array, which
@@ -2166,7 +2165,7 @@ const PROVENANCE = Object.freeze({
   leanOleans: ['VedicKernel/Q4Topology.olean','VedicKernel/OperatorClass.olean','VedicKernel/R4Gate.olean','Main.olean'],
   leanAxiomsKernelChecked: 18,
   leanAxiomsCompilerTrusted: 8,
-  wheelerLeanSource: 'WheelerGeometry.lean',
+  wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
@@ -3972,11 +3971,11 @@ const DEC_LGT_REGGE = {
           'DEC/LGT non-flatness from explicit S22/S3/S28/S5 sutra edge formula',
           'Sutra Regge hinge action over Q4 square faces',
           'negative controls proving the curvature path can fail',
-          'Lean VedicFractal contract: 12-role Sutra29.role dispatch',
-          'Lean R4KernelContract: exact_formula and reciprocal_formula in ℚ',
-          'Lean RecursiveScaleGeometryBridge: 8 layer flags + energy contract'
+          'Lean SutraWS.Contracts: 7-family dispatch total over all 29 sutras',
+          'Lean SutraWS.RenderCertificates: R4 gate rho in [0,1] and the tau bounds, in ℚ'
         ],
         notClaimed: [
+          'Lean-verified RecursiveScaleGeometryBridge layer/energy contract',
           'presentation modules are strict kernel formulas',
           'cryptographic security',
           'physical wormhole formation',
