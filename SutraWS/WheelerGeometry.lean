@@ -123,14 +123,26 @@ theorem wheeler_omega_additive
       = omega s H gammaW f v + omega s H gammaW g v := by
   simp only [omega, magnetic, dielectricTrace]; ring
 
-/-- **5. The radial factor is bounded by `phi^3`**, via `0 ≤ rho ≤ 1`. -/
-theorem wheeler_radial_factor_bounded_by_phi_cubed
+/-- `0 ≤ rho ≤ 1` for the profile itself. -/
+theorem wheeler_rho_mem_unit_interval
     (r eps : Rat) (h : eps ≠ 0) : 0 ≤ rho r eps ∧ rho r eps ≤ 1 := by
   have he : 0 < eps ^ 2 := by positivity
   have hpos : 0 < r ^ 2 + eps ^ 2 := by nlinarith [sq_nonneg r]
   constructor
   · exact div_nonneg (sq_nonneg eps) hpos.le
   · rw [rho, div_le_one hpos]; nlinarith [sq_nonneg r]
+
+/-- **5. The radial factor is bounded by `phi^3`.**  What the renderer caches in
+`_RADF` is `radialFactorQ = phi^3 * rho` (`simulation:2628,2636`), not `rho`, so
+the advertised bound is on the scaled value.  `phi^3` is irrational and has no
+`Rat` representative, so the scale is an abstract nonnegative `c` over an
+ordered field; `A4` is one and `phi^3 = 2 + sqrt 5` lives in it. -/
+theorem wheeler_radial_factor_bounded_by_phi_cubed {K : Type*} [LinearOrderedField K]
+    (c ρ : K) (hc : 0 ≤ c) (h0 : 0 ≤ ρ) (h1 : ρ ≤ 1) :
+    0 ≤ c * ρ ∧ c * ρ ≤ c := by
+  constructor
+  · exact mul_nonneg hc h0
+  · nlinarith
 
 theorem wheeler_rho_zero_eps (eps : Rat) (h : eps ≠ 0) : rho 0 eps = 1 := by
   have h2 : eps ^ 2 ≠ 0 := pow_ne_zero 2 h

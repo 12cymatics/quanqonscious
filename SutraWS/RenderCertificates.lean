@@ -141,13 +141,32 @@ theorem masks_card_2 : (Finset.univ.filter (fun i : Vertex => hw i = 2)).card = 
 theorem masks_card_3 : (Finset.univ.filter (fun i : Vertex => hw i = 3)).card = 4 := by decide
 theorem masks_card_4 : (Finset.univ.filter (fun i : Vertex => hw i = 4)).card = 1 := by decide
 
-/-- `LEAN_PROVED.cellCounts`: 16 copies of each mask class. -/
-def cellCounts : List ℕ := [16, 64, 96, 64, 16]
+/-- `LEAN_PROVED.cellCounts` is **not** the f-vector of the tesseract, despite
+the name the page gives it. It counts `(vertex, k-mask)` pairs, `16 * choose 4 k`,
+and since a genuine k-cell has `2^k` vertices it counts each one `2^k` times. -/
+def vertexMaskIncidences : List ℕ := [16, 64, 96, 64, 16]
 
-theorem cellCounts_eq : cellCounts = (List.range 5).map (fun k => 16 * Nat.choose 4 k) := by decide
+theorem vertex_mask_incidences_eq :
+    vertexMaskIncidences = (List.range 5).map (fun k => 16 * Nat.choose 4 k) := by decide
 
+/-- The tesseract's actual f-vector: `choose 4 k * 2^(4-k)` k-cells. -/
+def cellCounts : List ℕ := [16, 32, 24, 8, 1]
+
+theorem cellCounts_eq :
+    cellCounts = (List.range 5).map (fun k => Nat.choose 4 k * 2 ^ (4 - k)) := by decide
+
+/-- The two tables differ by exactly the `2^k` over-count. -/
+theorem incidences_eq_cells_times_two_pow :
+    vertexMaskIncidences = (List.range 5).map (fun k => cellCounts[k]! * 2 ^ k) := by decide
+
+/-- The incidence table's alternating sum vanishes -- it is `16 * (1-1)^4`. -/
 theorem euler_characteristic_zero :
     ((16 : ℤ) - 64 + 96 - 64 + 16) = 0 := by decide
+
+/-- The solid 4-cube's Euler characteristic is 1, not 0; its boundary's is 0
+(`SutraWS.DEC.dec_euler_characteristic_zero`). Neither is the number above. -/
+theorem cell_counts_euler_characteristic_one :
+    ((16 : ℤ) - 32 + 24 - 8 + 1) = 1 := by decide
 
 /-! ### Per-sutra channel — declared class versus measured behaviour -/
 
