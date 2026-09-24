@@ -1527,6 +1527,44 @@ const STRICT_V5_FACTORY = () => {
     }
     return Object.freeze({modes:MODES3,states,energies,pairwise,allDistinct,composedAgrees});
   };
+  /* Decision procedure for the Modes theorems of SutraWS/WheelerGeometry.lean,
+     in the same shape wheelerAudit returns. Which statements are decidable
+     depends on how many sutras are active -- the theorems are stated for the
+     empty, singleton and pair cases -- so it reports one record per statement
+     it can decide on the live set, and the mode channel is gated on it. Before
+     this the channel's predicate only asked that three trace arrays existed,
+     which no theorem constrains. */
+  const modeAudit = (psi,active) => {
+    const list=active.slice().sort((a,b)=>a.id-b.id);
+    const R=[];
+    const claim=(name,ok,detail)=>{R.push({name,ok:!!ok,detail:detail||''});return !!ok;};
+    const same=(a,b)=>a.every((z,i)=>C4.eq(z,b[i]));
+    const full=s=>x=>applySutra(s.id,x,argsFor(s));
+    const half=s=>x=>applySutra(s.id,x,argsFor(s,Q.HALF));
+    const ser=applySutraCore(psi,list,"SERIES");
+    const par=applySutraCore(psi,list,"PARALLEL");
+    const con=applySutraCore(psi,list,"SYMMETRIC_CONCURRENT");
+    if(list.length===0){
+      claim('series_nil',same(ser,psi));
+      claim('parallel_nil',same(par,psi));
+      claim('concurrent_nil',same(con,psi));
+    } else if(list.length===1){
+      const f=full(list[0]),h=half(list[0]);
+      claim('series_eq_parallel_singleton',same(ser,par),`S${list[0].id}`);
+      claim('concurrent_singleton',same(con,h(h(psi))),`S${list[0].id} at half strength, twice`);
+      void f;
+    } else if(list.length===2){
+      const f1=full(list[0]),f2=full(list[1]);
+      /* series - parallel = disp f2 (f1 psi) - disp f2 psi, with disp f x = f x - x */
+      const lhs=stateSub(ser,par);
+      const d1=stateSub(f2(f1(psi)),f1(psi));
+      const d2=stateSub(f2(psi),psi);
+      claim('series_sub_parallel_pair',same(lhs,stateSub(d1,d2)),
+            `S${list[0].id} then S${list[1].id}`);
+    }
+    const ok=R.every(x=>x.ok);
+    return Object.freeze({ok,results:Object.freeze(R),active:list.length});
+  };
   const operatorDistinctness = () => {
     /* Two operators are the same operator only if they agree as functions of
        BOTH state and strength. Agreeing at a single strength is a coincidence
@@ -1701,7 +1739,7 @@ const STRICT_V5_FACTORY = () => {
       energyMethod: last.energyMethod
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
+  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
 };
 const STRICT_V5 = STRICT_V5_FACTORY();
 /* Release manifest: one object a buyer or reviewer can diff against a shipped
@@ -2112,7 +2150,11 @@ const VISUAL_CERTIFICATE = {
     modes: {
       draws: 'series / parallel / concurrency comparison panel',
       theorems: LEAN_PROVED.modeChecked,
-      holds: () => MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3
+      /* The identities themselves are decided by STRICT_V5.modeAudit on the
+         live active set, not merely "three arrays exist" -- so a mode whose
+         theorem fails stops drawing, the way the Wheeler channel does. */
+      holds: () => MODE_COMPARE.audit !== null && MODE_COMPARE.audit.ok &&
+                   (MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3)
     },
     sutra: {
       draws: 'per-sutra injected displacement',
@@ -4346,13 +4388,15 @@ function activeSutrasV5() {
    That also makes it cacheable: it only changes when the active set or one of
    its point arguments changes. */
 const MODE_COMPARE = { key: '', modes: [], traces: [], energies: [],
-                       pairwise: [], allDistinct: false, composedAgrees: false, active: 0 };
+                       pairwise: [], allDistinct: false, composedAgrees: false, active: 0,
+                       audit: null };
 function refreshModeComparison() {
   const act = activeSutrasV5();
   const key = act.map(s => s.id + ':' + s.args.map(q => q.n + '/' + q.d).join('~')).join(',');
   if (key === MODE_COMPARE.key) return MODE_COMPARE;
   MODE_COMPARE.key = key;
   MODE_COMPARE.active = act.length;
+  MODE_COMPARE.audit = STRICT_V5.modeAudit(STRICT_V5.initState(), act);
   if (!act.length) {
     MODE_COMPARE.traces = []; MODE_COMPARE.pairwise = [];
     MODE_COMPARE.allDistinct = false; MODE_COMPARE.composedAgrees = true;
