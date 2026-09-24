@@ -13,7 +13,16 @@ if (!existsSync(JSONF)) { console.error('lean_provenance.json missing — run th
 const env = JSON.parse(readFileSync(JSONF, 'utf8'));
 const html = readFileSync(HTML, 'utf8');
 
-const names = new Set(env.kernelChecked.concat(env.compilerTrusted).map(n => n.split('.').pop()));
+/* The page cites the final name component. That is only sound while the
+   component is unique: if two namespaces both end in `foo`, deleting the one
+   the page means leaves the citation satisfied by the other. Ambiguity in a
+   cited name is therefore a failure, not a note. */
+const bySuffix = new Map();
+for (const full of env.kernelChecked.concat(env.compilerTrusted)) {
+  const s = full.split('.').pop();
+  if (!bySuffix.has(s)) bySuffix.set(s, []);
+  bySuffix.get(s).push(full);
+}
 
 const strings = src => [...(src.match(/'[^']*'/g) || [])].map(s => s.slice(1, -1));
 const cites = new Map();
@@ -34,11 +43,19 @@ let m;
 while ((m = channelRe.exec(html)) !== null)
   for (const n of strings(m[2])) add(n, 'VISUAL_CERTIFICATE.' + m[1]);
 
-const missing = [...cites].filter(([n]) => !names.has(n));
-console.log(`citations: ${cites.size} distinct names, ${names.size} theorems in the built environment`);
+const missing = [...cites].filter(([n]) => !bySuffix.has(n));
+const ambiguous = [...cites].filter(([n]) => (bySuffix.get(n) || []).length > 1);
+console.log(`citations: ${cites.size} distinct names, ${bySuffix.size} theorem suffixes in the built environment`);
+
 if (missing.length) {
   console.error(`\nFAIL — ${missing.length} cited name(s) with no theorem behind them:`);
   for (const [n, where] of missing) console.error(`  ${n}  <- ${[...where].join(', ')}`);
-  process.exit(1);
 }
-console.log('OK — every cited theorem exists in the built environment');
+if (ambiguous.length) {
+  console.error(`\nFAIL — ${ambiguous.length} cited name(s) resolve to more than one theorem;`);
+  console.error(`the citation cannot say which, so deleting the intended one would go unnoticed:`);
+  for (const [n, where] of ambiguous)
+    console.error(`  ${n}  <- ${[...where].join(', ')}\n      ${bySuffix.get(n).join('\n      ')}`);
+}
+if (missing.length || ambiguous.length) process.exit(1);
+console.log('OK — every cited theorem exists, and each name resolves to exactly one');

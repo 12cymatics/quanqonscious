@@ -14,8 +14,13 @@ open Lean Elab Command
 
 namespace SutraWS
 
-private def provenanceForbidden : Array Name :=
-  #[``sorryAx, `Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]
+/-- The declared trust base, as an allowlist.  A blocklist of the axioms we know
+to be bad classifies a theorem resting on some *newly declared* project axiom as
+kernel-checked, because that axiom is not on the list.  Naming what is permitted
+instead means anything else -- `sorryAx`, `Lean.ofReduceBool`, or an `axiom` added
+tomorrow -- falls outside by construction. -/
+private def provenanceTrustBase : Array Name :=
+  #[`propext, `Classical.choice, `Quot.sound]
 
 private def provenanceAxiomsOf (env : Environment) (c : Name) : Array Name :=
   (((CollectAxioms.collect c).run env).run {}).2.axioms
@@ -36,10 +41,10 @@ run_cmd do
     for ax in axs do
       let s := ax.toString
       unless axiomSet.contains s do axiomSet := axiomSet.push s
-    if axs.any provenanceForbidden.contains then
-      compilerTrusted := compilerTrusted.push name.toString
-    else
+    if axs.all provenanceTrustBase.contains then
       kernelChecked := kernelChecked.push name.toString
+    else
+      compilerTrusted := compilerTrusted.push name.toString
   let sorted := (kernelChecked.qsort (· < ·)).toList
   let trusted := (compilerTrusted.qsort (· < ·)).toList
   let axioms := (axiomSet.qsort (· < ·)).toList
@@ -50,6 +55,6 @@ run_cmd do
     ",\n  \"kernelCheckedCount\": " ++ toString sorted.length ++
     ",\n  \"compilerTrustedCount\": " ++ toString trusted.length ++ "\n}\n"
   IO.FS.writeFile "lean_provenance.json" json
-  logInfo s!"provenance: {sorted.length} kernel-checked, {trusted.length} compiler-trusted"
+  logInfo s!"provenance: {sorted.length} on the declared trust base, {trusted.length} outside it"
 
 end SutraWS
