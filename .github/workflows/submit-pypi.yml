@@ -2,7 +2,7 @@ name: submit-pypi
 
 on:
   push:
-    branches: [main]
+    branches: [codex/create-github-repository-for-pcfe-v3.0]
     tags: ["v*"]
   pull_request:
     branches: ["**"]
@@ -159,6 +159,32 @@ jobs:
 
       - name: Build SutraWS and run the axiom audit
         run: lake build
+
+      # The `lean citations` job checks the page against the checked-in
+      # lean_provenance.json. That only means anything if the file still
+      # describes this build: rename or delete a cited theorem without
+      # regenerating, and the gate would certify a name the kernel no longer
+      # has. Regenerating here and requiring no diff is what ties the two
+      # together.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Checking only the JSON is not enough: a Lean edit that leaves the
+      # theorem names and axioms alone produces the same JSON while changing
+      # leanCorpusSha256, so the page could still go stale. Run the generator
+      # too and require both files to come back unchanged.
+      - name: Provenance still matches the built environment
+        run: |
+          set -eu
+          lake env lean ProvenanceExport.lean
+          node tools/gen_provenance.mjs
+          git diff --exit-code -- lean_provenance.json vedic_v18.51.1_exact_phi.html || {
+            echo "Provenance is stale. Regenerate it with:"
+            echo "  lake env lean ProvenanceExport.lean && node tools/gen_provenance.mjs"
+            exit 1
+          }
+          node tools/check_citations.mjs
 
   # `primarysutra.py` is the class CLAUDE.md calls the repository's main
   # VedicSutras entry point, and until now nothing tested it -- because it
