@@ -63,7 +63,7 @@ jobs:
     # lean_provenance.json is checked in for the same reason
     # faraday/reference.json is: it is the record of what `lake build SutraWS`
     # actually proved, so CI can hold the page to it without a mathlib build.
-    # Regenerate it with `lake env lean --run ProvenanceExport.lean`.
+    # Regenerate it with `lake env lean ProvenanceExport.lean`.
     - name: Every theorem the page cites exists in the built environment
       run: node tools/check_citations.mjs
 
