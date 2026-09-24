@@ -2039,7 +2039,7 @@ const LEAN_PROVED = Object.freeze({
   /* Proved in SutraWS/RenderCertificates.lean and SutraWS/DECComplex.lean,
      built by `lake build SutraWS`. tools/check_citations.mjs fails the build
      if any name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','euler_characteristic_zero','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','euler_characteristic_zero','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero'],
   /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
      `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
      an executable decision procedure -- wheelerAudit() below -- that re-decides
@@ -2054,7 +2054,7 @@ const LEAN_PROVED = Object.freeze({
   /* Execution modes. series_sub_parallel_pair pins the difference between
      composing and superposing to the cross term, which is what the mode panel
      measures on the live active set; STRICT_V5.modeComparison decides it. */
-  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine'],
+  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine','concurrent_nil','concurrent_singleton','concurrent_sub_series_singleton','concurrent_reverse'],
   /* Empty by construction: SutraWS.AxiomAudit fails the build for any theorem
      resting on Lean.ofReduceBool, so nothing here is native_decide-trusted. */
   compilerTrusted: []
@@ -2068,12 +2068,17 @@ const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
       draws: 'R, r, yOff and the gradient terms from |Psi|^2',
-      theorems: ['norm_preserving_not_reducing', 'hw_count', 'hw_all_positive'],
+      /* The pixels come from the FAITHFUL projection, so the theorems are the
+         ones that make that projection exact: the transform round-trips, its
+         characters are orthogonal, and Parseval ties the drawn magnitudes back
+         to the exact energy. The S17 stencil is a different object -- the
+         coefficient table of one operator -- and does not constrain this. */
+      theorems: ['inverse_forward', 'parseval', 'sgn_orthogonal'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
     },
     phase: {
       draws: 'phiShift twist from arg(Psi)',
-      theorems: ['norm_preserving_not_reducing'],
+      theorems: ['inverse_forward', 'mean_forward_eq_zero'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
     },
     wheeler: {
@@ -2089,9 +2094,10 @@ const VISUAL_CERTIFICATE = {
     },
     r4gate: {
       draws: 'tube pinch from the R4 gate',
-      theorems: ['rho_num_nonneg', 'rho_num_le_den', 'rho_zero_eps',
-                 'rho_den_pos_of_hw_pos', 'tau_max_num_eq',
-                 'tau_max_below_removed_ceiling', 'tau_base_is_three_quarters'],
+      /* r4F is r4ReinforcedOf -- a product of lam^4/(R^4+lam^4) factors
+         (simulation:1661) -- not Wheeler's rho. These are the theorems about
+         the quantity this channel actually pinches on. */
+      theorems: ['r4_reinforced_mem_unit_interval', 'r4_factor_nonneg', 'r4_factor_le_one'],
       holds: () => Number.isFinite(VTX_DISPLAY.r4F) && VTX_DISPLAY.r4F >= 0 && VTX_DISPLAY.r4F <= 1
     },
     modes: {
@@ -2158,16 +2164,16 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '1ef46589dbe6e687b514e9be91a1bec59adbbe332548ef6a9d3f2f6733eb7015',
+  leanCorpusSha256: '221f5d7a555738691a197aacb5456dcd97206fcf9e7a9cddb43ca31a67b1498f',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2116,
+  leanTheorems: 2123,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
-  leanAxiomsKernelChecked: 2116,
+  leanAxiomsKernelChecked: 2123,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',

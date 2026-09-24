@@ -2,7 +2,7 @@ name: submit-pypi
 
 on:
   push:
-    branches: [main]
+    branches: [codex/create-github-repository-for-pcfe-v3.0]
     tags: ["v*"]
   pull_request:
     branches: ["**"]

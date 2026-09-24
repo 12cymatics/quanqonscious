@@ -61,7 +61,45 @@ theorem hw_denominators_are_powers_of_two_times_odd :
   · exact ⟨9, 1, by decide, by norm_num⟩
   · exact ⟨7, 5, by decide, by norm_num⟩
 
-/-! ### R4 gate channel -/
+/-! ### R4 gate channel
+
+The pinch the channel draws is `VTX_DISPLAY.r4F`, which `r4ReinforcedOf`
+(`simulation:1661`) builds as a product of one factor per axis -- not the
+Wheeler radial profile `rho` below, which is a different quantity the page also
+computes.  The `holds` predicate for this channel asks that `r4F` be finite and
+in `[0,1]`, so that is what is proved here. -/
+
+/-- One axis factor of `r4ReinforcedOf`: `lam^4 / (R^4 + lam^4)`. -/
+def r4Factor (lam R : ℚ) : ℚ := lam ^ 4 / (R ^ 4 + lam ^ 4)
+
+/-- `r4ReinforcedOf` over the four axes. -/
+def r4Reinforced (lam : Fin 4 → ℚ) (R : ℚ) : ℚ := ∏ k, r4Factor (lam k) R
+
+theorem r4_factor_nonneg (lam R : ℚ) : 0 ≤ r4Factor lam R := by
+  unfold r4Factor
+  apply div_nonneg <;> positivity
+
+/-- The page throws when `R^4 + lam^4` is exactly zero, which happens only at
+`R = 0` and `lam = 0`; that is the hypothesis here. -/
+theorem r4_factor_le_one (lam R : ℚ) (h : 0 < R ^ 4 + lam ^ 4) :
+    r4Factor lam R ≤ 1 := by
+  rw [r4Factor, div_le_one h]
+  nlinarith [sq_nonneg (R ^ 2)]
+
+/-- **The R4 reinforcement lies in `[0,1]`** -- which is exactly the predicate
+the channel is gated on. -/
+theorem r4_reinforced_mem_unit_interval (lam : Fin 4 → ℚ) (R : ℚ)
+    (h : ∀ k, 0 < R ^ 4 + (lam k) ^ 4) :
+    0 ≤ r4Reinforced lam R ∧ r4Reinforced lam R ≤ 1 := by
+  constructor
+  · exact Finset.prod_nonneg (fun k _ => r4_factor_nonneg (lam k) R)
+  · exact Finset.prod_le_one (fun k _ => r4_factor_nonneg (lam k) R)
+      (fun k _ => r4_factor_le_one (lam k) R (h k))
+
+/-! #### Wheeler's radial profile
+
+Kept because the page computes it too (`rhoOf`, `simulation:1273`), but it is
+not what the R4 channel draws. -/
 
 /-- `rhoOf(r, eps) = eps^2 / (r^2 + eps^2)`, the R4 tube pinch. -/
 def rho (r eps : ℚ) : ℚ := eps ^ 2 / (r ^ 2 + eps ^ 2)

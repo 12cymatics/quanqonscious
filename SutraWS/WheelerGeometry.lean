@@ -295,5 +295,29 @@ theorem series_eq_parallel_of_affine (f₁ f₂ : V → V) (ψ : V)
   rw [h, sub_self] at hd
   exact sub_eq_zero.mp hd
 
+/-- `SYMMETRIC_CONCURRENT` (`simulation:926`): every operator forward at half
+strength, then the same list in reverse, also at half strength.  `hs` is the
+list already at half strength, which is how `applySutraCore` builds it via
+`argsFor(s, Q.HALF)`. -/
+def concurrent (hs : List (V → V)) (ψ : V) : V :=
+  series hs.reverse (series hs ψ)
+
+theorem concurrent_nil (ψ : V) : concurrent ([] : List (V → V)) ψ = ψ := rfl
+
+/-- On one operator the concurrent mode applies it twice, which is what the
+half-strength forward/reverse pair comes to. -/
+theorem concurrent_singleton (f : V → V) (ψ : V) : concurrent [f] ψ = f (f ψ) := rfl
+
+/-- **The concurrent mode is not the series mode**, and the gap on a single
+operator is exactly the second application -- so a set on which they agree is
+one where every operator is idempotent at half strength. -/
+theorem concurrent_sub_series_singleton (f : V → V) (ψ : V) :
+    concurrent [f] ψ - series [f] ψ = f (f ψ) - f ψ := rfl
+
+/-- The split is palindromic: reversing the list mirrors the composition. -/
+theorem concurrent_reverse (hs : List (V → V)) (ψ : V) :
+    concurrent hs.reverse ψ = series hs (series hs.reverse ψ) := by
+  simp only [concurrent, List.reverse_reverse]
+
 end Modes
 end SutraWS
