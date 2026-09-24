@@ -2150,8 +2150,12 @@ const VISUAL_CERTIFICATE = {
     },
     phase: {
       draws: 'phiShift twist from arg(Psi)',
+      /* inverse_forward covers the reconstruction the argument is taken of.
+         atan2 itself is outside the exact regime and is not claimed; the grid
+         and the read-back are decided by PHASE_CERT instead. */
       theorems: ['inverse_forward', 'mean_forward_eq_zero'],
-      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
+      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
+                   PHASE_CERT.ok
     },
     wheeler: {
       draws: 'dielectric compression, magnetic dilation, precession rotation',
@@ -4212,6 +4216,38 @@ function updateField() {
       ph[idx] = Math.atan2(s.im, s.re);
     }
   }
+  refreshPhaseCertificate();
+}
+/* The phase channel draws atan2 of the complex interpolant. atan2 is
+   transcendental: it has no certificate in a development whose rule is exact
+   arithmetic, and none is claimed for it. What the Lean does cover is the field
+   whose argument is being taken -- inverse_forward is the exact reconstruction
+   FAITHFUL.state.node measures. What is left unguarded by that is the plumbing:
+   whether the grid holds what the evaluator produced, and whether samplePhase
+   reads back the cell that was written. Both are exact equalities of the same
+   float computation, not tolerances, so they are checked here and the channel
+   is gated on them. */
+const PHASE_CERT = { ok: false, checked: 0 };
+function refreshPhaseCertificate() {
+  const ev = FAITHFUL_RENDER.ev, ph = FAITHFUL_RENDER.phaseGrid;
+  if (!ev) { PHASE_CERT.ok = false; PHASE_CERT.checked = 0; return PHASE_CERT; }
+  let ok = true, n = 0;
+  for (let i = 0; i < FIELD_TH; i += 13) {
+    for (let j = 0; j < FIELD_PH; j += 11) {
+      const idx = i * FIELD_PH + j;
+      const s = ev((i / FIELD_TH) * TAU, (j / FIELD_PH) * TAU);
+      if (ph[idx] !== Math.fround(Math.atan2(s.im, s.re))) ok = false;
+      /* read back from the middle of the cell: the cell's own angle can float
+         back as i - 1e-14 and floor to the neighbour, which would be a defect
+         in this check rather than in samplePhase. */
+      if (samplePhase(((i + 0.5) / FIELD_TH) * TAU,
+                      ((j + 0.5) / FIELD_PH) * TAU) !== ph[idx]) ok = false;
+      n++;
+    }
+  }
+  PHASE_CERT.ok = ok && n > 0;
+  PHASE_CERT.checked = n;
+  return PHASE_CERT;
 }
 function samplePhase(theta, phi) {
   const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
