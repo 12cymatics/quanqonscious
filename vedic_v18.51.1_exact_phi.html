@@ -1268,15 +1268,22 @@ const STRICT_V5_FACTORY = () => {
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
 
-    /* radialFactor(r,eps) = phi^3 * rho with 0 <= rho <= 1 and rho(0) = 1. */
-    let t5 = true;
-    const rhoOf=(rQ,eQ)=>{const r2=Q.mul(rQ,rQ),e2=Q.mul(eQ,eQ);return Q.div(e2,Q.add(r2,e2));};
+    /* radialFactor = phi^3 * rho, which is what _RADF caches and what the
+       geometry uses. Decided against WHEELER.radialFactorA4 itself rather than
+       a private copy of rho, so a regression in the phi^3 multiplication is
+       caught here and not only in the unscaled profile. */
+    let t5rho = true, t5scaled = true;
     for(let i=0;i<12;i++){
-      const rho=rhoOf(Q.mk(BigInt(i),4n),Q.mk(1n,10n));
-      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5=false;
+      const rQ=Q.mk(BigInt(i),4n), eQ=Q.mk(1n,10n);
+      const rho=WHEELER.rhoQ(rQ,eQ);
+      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5rho=false;
+      const rf=WHEELER.radialFactorA4(rQ,eQ);
+      if(!A4.eq(rf,A4.scaleQ(KX.PHI_CU,rho))) t5scaled=false;
+      if(A4.cmp(rf,A4.ZERO)<0||A4.cmp(rf,KX.PHI_CU)>0) t5scaled=false;
     }
-    if(!Q.eq(rhoOf(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5=false;
-    claim('wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval',t5);
+    if(!Q.eq(WHEELER.rhoQ(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5rho=false;
+    claim('wheeler_rho_mem_unit_interval',t5rho);
+    claim('wheeler_radial_factor_bounded_by_phi_cubed',t5scaled);
 
     /* Cayley: c^2 + s^2 = 1 exactly, so omega induces a true rotation. */
     let t6 = true;
@@ -1544,15 +1551,32 @@ const STRICT_V5_FACTORY = () => {
     const ser=applySutraCore(psi,list,"SERIES");
     const par=applySutraCore(psi,list,"PARALLEL");
     const con=applySutraCore(psi,list,"SYMMETRIC_CONCURRENT");
+    /* The cardinality-specific theorems only cover 0, 1 and 2 active sutras,
+       and the page starts with all 29 on. Deciding nothing on the normal path
+       would make R.every() vacuously true, so the append identities -- which
+       hold at every cardinality -- are decided first, and ok requires at least
+       one decided claim. */
+    if(list.length>=1){
+      const fs=list.slice(0,-1),g=list[list.length-1];
+      const gf=full(g),gh=half(g);
+      const halfSeries=(l,x)=>l.reduce((acc,s)=>applySutra(s.id,acc,argsFor(s,Q.HALF)),x);
+      const serFs=applySutraCore(psi,fs,"SERIES");
+      claim('series_append_one',same(ser,gf(serFs)),`peeled S${g.id}`);
+      const parFs=applySutraCore(psi,fs,"PARALLEL");
+      claim('parallel_append_one',
+            same(par,stateAdd(parFs,stateSub(gf(psi),psi))),`peeled S${g.id}`);
+      const mid=gh(gh(halfSeries(fs,psi)));
+      claim('concurrent_append_one',
+            same(con,halfSeries(fs.slice().reverse(),mid)),`peeled S${g.id}`);
+    }
     if(list.length===0){
       claim('series_nil',same(ser,psi));
       claim('parallel_nil',same(par,psi));
       claim('concurrent_nil',same(con,psi));
     } else if(list.length===1){
-      const f=full(list[0]),h=half(list[0]);
+      const h=half(list[0]);
       claim('series_eq_parallel_singleton',same(ser,par),`S${list[0].id}`);
       claim('concurrent_singleton',same(con,h(h(psi))),`S${list[0].id} at half strength, twice`);
-      void f;
     } else if(list.length===2){
       const f1=full(list[0]),f2=full(list[1]);
       /* series - parallel = disp f2 (f1 psi) - disp f2 psi, with disp f x = f x - x */
@@ -1562,7 +1586,8 @@ const STRICT_V5_FACTORY = () => {
       claim('series_sub_parallel_pair',same(lhs,stateSub(d1,d2)),
             `S${list[0].id} then S${list[1].id}`);
     }
-    const ok=R.every(x=>x.ok);
+    /* fail closed: an audit that decided nothing is not a passing audit */
+    const ok=R.length>0&&R.every(x=>x.ok);
     return Object.freeze({ok,results:Object.freeze(R),active:list.length});
   };
   const operatorDistinctness = () => {
@@ -2101,7 +2126,7 @@ const LEAN_PROVED = Object.freeze({
   /* Execution modes. series_sub_parallel_pair pins the difference between
      composing and superposing to the cross term, which is what the mode panel
      measures on the live active set; STRICT_V5.modeComparison decides it. */
-  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine','concurrent_nil','concurrent_singleton','concurrent_sub_series_singleton','concurrent_reverse'],
+  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine','concurrent_nil','concurrent_singleton','concurrent_sub_series_singleton','concurrent_reverse','series_append_one','parallel_append_one','concurrent_append_one'],
   /* Empty by construction: SutraWS.AxiomAudit fails the build for any theorem
      resting on Lean.ofReduceBool, so nothing here is native_decide-trusted. */
   compilerTrusted: []
@@ -2215,16 +2240,16 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '6443878133aa91ba77d48f6311079aa529f481e13633b0fa4e3d73e219dbd780',
+  leanCorpusSha256: '70bb2a13f23c125627b8cdf73dee3cd108ebe56cfbfc49b17d860333b64050d1',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2127,
+  leanTheorems: 2130,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
-  leanAxiomsKernelChecked: 2127,
+  leanAxiomsKernelChecked: 2130,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',

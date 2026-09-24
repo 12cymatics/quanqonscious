@@ -326,6 +326,29 @@ one where every operator is idempotent at half strength. -/
 theorem concurrent_sub_series_singleton (f : V → V) (ψ : V) :
     concurrent [f] ψ - series [f] ψ = f (f ψ) - f ψ := rfl
 
+/-! ### Identities that hold at every cardinality
+
+The statements above are about the empty, singleton and pair cases, which is
+not enough for a runtime gate: the page starts with all 29 sutras active. These
+peel the last operator off an arbitrary list, so the audit can decide something
+on any active set. -/
+
+theorem series_append_one (fs : List (V → V)) (g : V → V) (ψ : V) :
+    series (fs ++ [g]) ψ = g (series fs ψ) := by
+  simp [series, List.foldl_append]
+
+theorem parallel_append_one (fs : List (V → V)) (g : V → V) (ψ : V) :
+    parallel (fs ++ [g]) ψ = parallel fs ψ + (g ψ - ψ) := by
+  simp only [parallel, List.map_append, List.map_cons, List.map_nil,
+             List.sum_append, List.sum_cons, List.sum_nil]
+  abel
+
+theorem concurrent_append_one (hs : List (V → V)) (h : V → V) (ψ : V) :
+    concurrent (hs ++ [h]) ψ = series hs.reverse (h (h (series hs ψ))) := by
+  simp only [concurrent, series, List.reverse_append, List.reverse_cons,
+             List.reverse_nil, List.nil_append, List.foldl_append,
+             List.foldl_cons, List.foldl_nil]
+
 /-- The split is palindromic: reversing the list mirrors the composition. -/
 theorem concurrent_reverse (hs : List (V → V)) (ψ : V) :
     concurrent hs.reverse ψ = series hs (series hs.reverse ψ) := by
