@@ -114,7 +114,7 @@ theorem wheeler_rho_zero_eps (eps : Rat) (h : eps ≠ 0) : rho 0 eps = 1 := by
 geometry without dilating it. -/
 theorem wheeler_cayley_rotation_is_orthogonal (tau : Rat) :
     ((1 - tau ^ 2) / (1 + tau ^ 2)) ^ 2 + ((2 * tau) / (1 + tau ^ 2)) ^ 2 = 1 := by
-  have h : (1 : Rat) + tau ^ 2 ≠ 0 := by positivity
+  have _h : (1 : Rat) + tau ^ 2 ≠ 0 := by positivity
   field_simp
   ring
 
@@ -188,7 +188,7 @@ theorem divided_line_sums_to_phi_cubed : φ + 1 + 1 + 1 / φ = φ ^ 3 := by
   have h2 : φ ^ 2 = φ + 1 := h
   rw [phi_cubed_eq φ h]
   field_simp
-  linear_combination (-2 : K) * h2
+  linear_combination -h2
 
 end GoldenPythagorean
 
