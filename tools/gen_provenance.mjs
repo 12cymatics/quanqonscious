@@ -25,13 +25,13 @@ const corpusHash = createHash('sha256');
 for (const rel of sources) corpusHash.update(rel + '\0' + readFileSync(join(ROOT, rel)));
 const leanCorpusSha256 = corpusHash.digest('hex');
 
+/* strip block comments and docstrings first: several of them discuss `sorry` */
 let sorryCount = 0;
 for (const rel of sources) {
-  const body = readFileSync(join(ROOT, rel), 'utf8');
-  for (const line of body.split('\n')) {
-    if (/^\s*--/.test(line)) continue;
-    if (/\bsorry\b/.test(line)) sorryCount++;
-  }
+  const body = readFileSync(join(ROOT, rel), 'utf8')
+    .replace(/\/-[\s\S]*?-\//g, '')
+    .split('\n').filter(l => !/^\s*--/.test(l)).join('\n');
+  sorryCount += (body.match(/\bsorry\b/g) || []).length;
 }
 
 const oleanDir = join(ROOT, '.lake', 'build', 'lib', 'SutraWS');
