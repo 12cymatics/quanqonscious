@@ -2,7 +2,7 @@ import SutraWS.Vertex
 import Mathlib.Tactic
 
 /-!
-# The cubical cochain complex of the 4-cube
+# The cubical cochain complex of the tesseract boundary
 
 `DEC_LGT_REGGE` in `vedic_v18.51.1_exact_phi.html` builds the cochain complex of
 the tesseract — 16 vertices, 32 edges, 24 faces, 8 cubes — and checks `d ∘ d = 0`
@@ -58,7 +58,14 @@ theorem d2_d1_zero (ω : Fin 4 → Vertex → ℚ) (a b q : Fin 4) (i : Vertex) 
   rw [flipA_comm i q a, flipA_comm i q b, flipA_comm i b a]
   ring
 
-/-! ### The dimensions the page reports -/
+/-! ### The dimensions the page reports
+
+`enumerateCubes` stops at the eight 3-dimensional facets, so this is the
+*boundary* complex of the tesseract, not the solid 4-cube: the alternating sum
+below is the Euler characteristic of that boundary 3-sphere, which is 0.  The
+solid 4-cube would carry a ninth cell and sum to 1.  The page's `eulerChar`
+(`simulation:3438`) computes the same boundary figure, so this matches what it
+reports rather than what "4-cube" might suggest. -/
 
 def dimC0 : ℕ := 16
 def dimC1 : ℕ := 32
@@ -70,7 +77,7 @@ theorem cochain_dims :
     dimC0 = 16 ∧ dimC1 = 4 * 8 ∧ dimC2 = 6 * 4 ∧ dimC3 = 4 * 2 := by
   refine ⟨rfl, rfl, rfl, rfl⟩
 
-/-- `eulerChar` of the cochain complex is zero. -/
+/-- `eulerChar` of the boundary complex is zero -- it is chi(S^3). -/
 theorem dec_euler_characteristic_zero :
     (dimC0 : ℤ) - dimC1 + dimC2 - dimC3 = 0 := by
   norm_num [dimC0, dimC1, dimC2, dimC3]

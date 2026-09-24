@@ -160,6 +160,22 @@ jobs:
       - name: Build SutraWS and run the axiom audit
         run: lake build
 
+      # The `lean citations` job checks the page against the checked-in
+      # lean_provenance.json. That only means anything if the file still
+      # describes this build: rename or delete a cited theorem without
+      # regenerating, and the gate would certify a name the kernel no longer
+      # has. Regenerating here and requiring no diff is what ties the two
+      # together.
+      - name: lean_provenance.json still matches the built environment
+        run: |
+          set -eu
+          lake env lean ProvenanceExport.lean
+          git diff --exit-code -- lean_provenance.json || {
+            echo "lean_provenance.json is stale -- regenerate it with:"
+            echo "  lake env lean ProvenanceExport.lean && node tools/gen_provenance.mjs"
+            exit 1
+          }
+
   # `primarysutra.py` is the class CLAUDE.md calls the repository's main
   # VedicSutras entry point, and until now nothing tested it -- because it
   # cannot be imported without cirq, cudaq and torch, which its own

@@ -76,14 +76,41 @@ theorem wheeler_magnetic_weight_zero_iff (v : Fin 16) :
     magneticWeight v = 0 ↔ hw v = 2 := by
   fin_cases v <;> norm_num [magneticWeight, k, hw]
 
-/-- **3. The dielectric is exactly phi-scaled**: `D / field` is the same constant
-at every vertex, so the dielectric channel is a pure rescaling of the field and
-introduces no structure of its own. -/
-theorem wheeler_dielectric_is_phi_scaled
-    (s : Rat) (field : Fin 16 → Rat) (u v : Fin 16)
+/-- `computeWheeler` sets `D v = 2*phi * (s * field v)` (`simulation:967`), and
+`wheelerAudit` re-checks that exact value at all sixteen vertices, zero samples
+included (`simulation:1259`).  `2*phi` is irrational and has no `Rat`
+representative, so the scale `c` is left abstract over an arbitrary field;
+`A4 = Q(sqrt 2, sqrt 5)` is such a field and `2*phi` lives in it. -/
+def dielectricOf {K : Type*} [Field K] (c s : K) (field : Fin 16 → K) (v : Fin 16) : K :=
+  c * (s * field v)
+
+/-- **3. The dielectric is exactly phi-scaled**: every vertex carries the field
+times one and the same constant, so the dielectric channel is a pure rescaling
+and introduces no structure of its own.  Stated as the value rather than as a
+ratio, so that it covers a zero sample -- which is what `wheelerAudit` checks. -/
+theorem wheeler_dielectric_is_phi_scaled {K : Type*} [Field K]
+    (c s : K) (field : Fin 16 → K) (v : Fin 16) :
+    dielectricOf c s field v = c * s * field v := by
+  simp only [dielectricOf]; ring
+
+/-- Away from the zeros the same fact reads as a constant ratio, which is the
+form this statement used to take before it carried the scale. -/
+theorem wheeler_dielectric_ratio_constant {K : Type*} [Field K]
+    (c s : K) (field : Fin 16 → K) (u v : Fin 16)
     (hu : field u ≠ 0) (hv : field v ≠ 0) :
-    dielectricTrace s field u / field u = dielectricTrace s field v / field v := by
-  field_simp [dielectricTrace]
+    dielectricOf c s field u / field u = dielectricOf c s field v / field v := by
+  simp only [dielectricOf]
+  field_simp
+  ring
+
+/-- The magnetic statements below carry the dielectric as the rational surrogate
+`s * field v`, without the scale.  That is sound because the scale factors out
+of the whole magnetic chain, so a claim of vanishing survives multiplication by
+it -- which is the only thing those statements assert about it. -/
+theorem magnetic_scales_with_dielectric {K : Type*} [Field K]
+    (c s H w : K) (field : Fin 16 → K) (v : Fin 16) :
+    dielectricOf c s field v * w * H = c * (s * field v * w * H) := by
+  simp only [dielectricOf]; ring
 
 /-- **4. Precession is exactly linear in the magnetic field.** -/
 theorem wheeler_omega_linear_in_magnetic

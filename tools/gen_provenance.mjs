@@ -67,6 +67,8 @@ put(/leanSorryCount: \d+/, `leanSorryCount: ${sorryCount}`, 'leanSorryCount');
 put(/leanOleans: \[[^\]]*\]/, `leanOleans: [${oleans.map(o => `'${o}'`).join(',')}]`, 'leanOleans');
 put(/leanAxiomsKernelChecked: \d+/, `leanAxiomsKernelChecked: ${env.kernelCheckedCount}`, 'leanAxiomsKernelChecked');
 put(/leanAxiomsCompilerTrusted: \d+/, `leanAxiomsCompilerTrusted: ${env.compilerTrustedCount}`, 'leanAxiomsCompilerTrusted');
+put(/leanAxiomsUsed: \[[^\]]*\]/,
+    `leanAxiomsUsed: [${env.axiomsUsed.map(a => `'${a}'`).join(',')}]`, 'leanAxiomsUsed');
 
 writeFileSync(HTML, html);
 
