@@ -36,12 +36,25 @@ theorem hw_all_positive : ∀ q ∈ stencil, 0 < q := by
   simp only [stencil, List.mem_cons, List.not_mem_nil, or_false] at hq
   rcases hq with h | h | h | h | h <;> subst h <;> norm_num
 
+/-- The denominators `S17_STENCIL` stores, in order.  They are carried
+separately rather than read off with `Rat.den`, because `Rat`'s normalisation
+runs through `Nat.gcd`'s well-founded recursion and the kernel will not reduce
+it; `stencil_times_den` ties the two together without it. -/
+def stencilDen : List ℕ := [128, 256, 128, 512, 640]
+
+/-- Each entry really is the stored numerator over the stored denominator. -/
+theorem stencil_times_den :
+    List.zipWith (fun (q : ℚ) (d : ℕ) => q * (d : ℚ)) stencil stencilDen
+      = [9, 7, 3, 7, 9] := by
+  simp only [stencil, stencilDen, List.zipWith]
+  norm_num
+
 /-- Each stencil denominator is a power of two times an odd number. -/
 theorem hw_denominators_are_powers_of_two_times_odd :
-    ∀ q ∈ stencil, ∃ a m, Odd m ∧ q.den = 2 ^ a * m := by
-  intro q hq
-  simp only [stencil, List.mem_cons, List.not_mem_nil, or_false] at hq
-  rcases hq with h | h | h | h | h <;> subst h
+    ∀ d ∈ stencilDen, ∃ a m, Odd m ∧ d = 2 ^ a * m := by
+  intro d hd
+  simp only [stencilDen, List.mem_cons, List.not_mem_nil, or_false] at hd
+  rcases hd with h | h | h | h | h <;> subst h
   · exact ⟨7, 1, by decide, by norm_num⟩
   · exact ⟨8, 1, by decide, by norm_num⟩
   · exact ⟨7, 1, by decide, by norm_num⟩

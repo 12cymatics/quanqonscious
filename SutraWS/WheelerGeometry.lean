@@ -103,7 +103,7 @@ theorem wheeler_radial_factor_bounded_by_phi_cubed
   have hpos : 0 < r ^ 2 + eps ^ 2 := by nlinarith [sq_nonneg r]
   constructor
   · exact div_nonneg (sq_nonneg eps) hpos.le
-  · rw [div_le_one hpos]; nlinarith [sq_nonneg r]
+  · rw [rho, div_le_one hpos]; nlinarith [sq_nonneg r]
 
 theorem wheeler_rho_zero_eps (eps : Rat) (h : eps ≠ 0) : rho 0 eps = 1 := by
   have h2 : eps ^ 2 ≠ 0 := pow_ne_zero 2 h
@@ -152,7 +152,6 @@ variable {K : Type*} [Field K] (φ : K)
 def IsGolden (φ : K) : Prop := φ ^ 2 = φ + 1
 
 variable (h : IsGolden φ)
-include h
 
 /-- `φ ≠ 0`, so `1/φ` is available. -/
 theorem golden_ne_zero : φ ≠ 0 := by
@@ -189,7 +188,7 @@ theorem divided_line_sums_to_phi_cubed : φ + 1 + 1 + 1 / φ = φ ^ 3 := by
   have h2 : φ ^ 2 = φ + 1 := h
   rw [phi_cubed_eq φ h]
   field_simp
-  linear_combination h2
+  linear_combination (-2 : K) * h2
 
 end GoldenPythagorean
 
@@ -243,23 +242,31 @@ theorem series_eq_parallel_singleton (f : V → V) (ψ : V) :
     series [f] ψ = parallel [f] ψ := by
   simp [series, parallel]
 
+/-- The displacement an operator applies at a point — the quantity `PARALLEL`
+superposes. -/
+def disp (f : V → V) (ψ : V) : V := f ψ - ψ
+
 /-- **On two operators they differ by exactly the cross term.**  `SERIES` feeds
-`f₁ ψ` into `f₂`; `PARALLEL` evaluates both at `ψ`.  The gap is
-`f₂ (f₁ ψ) − f₂ ψ`, which vanishes only when `f₂` cannot see `f₁`'s
-displacement — so a set on which the modes coincide is a genuine degeneracy,
-which is why the panel calls it out rather than hiding it. -/
+`f₁ ψ` into `f₂`; `PARALLEL` evaluates both at `ψ`.  The gap is the change in
+`f₂`'s *displacement* between those two points.
+
+It is not `f₂ (f₁ ψ) − f₂ ψ`: that drops `f₁`'s own displacement, and the two
+agree only when `f₁ ψ = ψ`. `parallel [f₁, f₂] ψ` is `f₁ ψ + f₂ ψ − ψ`, so the
+honest gap carries the `− (f₁ ψ − ψ)` term as well, which is what `disp`
+collects. -/
 theorem series_sub_parallel_pair (f₁ f₂ : V → V) (ψ : V) :
-    series [f₁, f₂] ψ - parallel [f₁, f₂] ψ = f₂ (f₁ ψ) - f₂ ψ := by
-  simp [series, parallel]
+    series [f₁, f₂] ψ - parallel [f₁, f₂] ψ = disp f₂ (f₁ ψ) - disp f₂ ψ := by
+  simp only [series, parallel, disp, List.foldl, List.map, List.sum_cons,
+             List.sum_nil]
   abel
 
-/-- If the second operator is additive on the first's displacement, the modes
-coincide — the precise condition under which the comparison is degenerate. -/
+/-- If `f₂` displaces `f₁ ψ` exactly as it displaces `ψ`, the modes coincide —
+the precise condition under which the comparison is degenerate. -/
 theorem series_eq_parallel_of_affine (f₁ f₂ : V → V) (ψ : V)
-    (h : f₂ (f₁ ψ) = f₂ ψ) : series [f₁, f₂] ψ = parallel [f₁, f₂] ψ := by
-  have := series_sub_parallel_pair f₁ f₂ ψ
-  rw [h] at this
-  simpa [sub_eq_zero] using this
+    (h : disp f₂ (f₁ ψ) = disp f₂ ψ) : series [f₁, f₂] ψ = parallel [f₁, f₂] ψ := by
+  have hd := series_sub_parallel_pair f₁ f₂ ψ
+  rw [h, sub_self] at hd
+  exact sub_eq_zero.mp hd
 
 end Modes
 end SutraWS
