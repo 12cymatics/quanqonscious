@@ -37,15 +37,32 @@ for (const key of ['kernelChecked', 'wheelerChecked', 'goldenChecked', 'modeChec
   for (const n of strings(m[1])) add(n, 'LEAN_PROVED.' + key);
 }
 
-/* channel gating: literal arrays only; `theorems: LEAN_PROVED.x` is covered above */
-const channelRe = /(\w+): \{\s*\n\s*draws: '[^']*',\s*\n\s*theorems: \[([^\]]*)\]/g;
-let m;
-while ((m = channelRe.exec(html)) !== null)
-  for (const n of strings(m[2])) add(n, 'VISUAL_CERTIFICATE.' + m[1]);
+/* Channel gating. Scanned structurally rather than with one regex spanning
+   draws -> theorems: comments and other properties sit between them, and a
+   regex that assumed adjacency silently matched only the last channel, which
+   is the failure this whole file exists to prevent. `theorems: LEAN_PROVED.x`
+   is covered by the named lists above. */
+const certStart = html.indexOf('const VISUAL_CERTIFICATE');
+if (certStart < 0) { console.error('VISUAL_CERTIFICATE not found'); process.exit(1); }
+const certEnd = html.indexOf('\n};', certStart);
+const certBody = html.slice(certStart, certEnd < 0 ? html.length : certEnd);
+const channelsSeen = [];
+let channel = null;
+for (const line of certBody.split('\n')) {
+  const open = line.match(/^\s{4}(\w+):\s*\{\s*$/);
+  if (open) { channel = open[1]; channelsSeen.push(channel); continue; }
+  const th = line.match(/^\s*theorems:\s*\[(.*)\],?\s*$/);
+  if (th && channel) for (const n of strings(th[1])) add(n, 'VISUAL_CERTIFICATE.' + channel);
+}
+if (channelsSeen.length === 0) {
+  console.error('FAIL — parsed no channels out of VISUAL_CERTIFICATE');
+  process.exit(1);
+}
 
 const missing = [...cites].filter(([n]) => !bySuffix.has(n));
 const ambiguous = [...cites].filter(([n]) => (bySuffix.get(n) || []).length > 1);
 console.log(`citations: ${cites.size} distinct names, ${bySuffix.size} theorem suffixes in the built environment`);
+console.log(`channels parsed: ${channelsSeen.length} (${channelsSeen.join(', ')})`);
 
 if (missing.length) {
   console.error(`\nFAIL — ${missing.length} cited name(s) with no theorem behind them:`);
