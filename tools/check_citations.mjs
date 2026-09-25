@@ -47,22 +47,45 @@ if (certStart < 0) { console.error('VISUAL_CERTIFICATE not found'); process.exit
 const certEnd = html.indexOf('\n};', certStart);
 const certBody = html.slice(certStart, certEnd < 0 ? html.length : certEnd);
 const channelsSeen = [];
-let channel = null;
+let channel = null, pending = null, arraysParsed = 0;
+const takeArray = (text) => {
+  const inner = text.slice(text.indexOf('[') + 1, text.lastIndexOf(']'));
+  for (const n of strings(inner)) add(n, 'VISUAL_CERTIFICATE.' + channel);
+  arraysParsed++;
+};
 for (const line of certBody.split('\n')) {
+  /* a theorems array may span lines -- the sutra channel's does -- so keep
+     accumulating until the bracket closes rather than requiring one line */
+  if (pending !== null) {
+    pending += ' ' + line;
+    if (line.includes(']')) { takeArray(pending); pending = null; }
+    continue;
+  }
   const open = line.match(/^\s{4}(\w+):\s*\{\s*$/);
   if (open) { channel = open[1]; channelsSeen.push(channel); continue; }
-  const th = line.match(/^\s*theorems:\s*\[(.*)\],?\s*$/);
-  if (th && channel) for (const n of strings(th[1])) add(n, 'VISUAL_CERTIFICATE.' + channel);
+  if (channel && /^\s*theorems:\s*\[/.test(line)) {
+    if (line.includes(']')) takeArray(line); else pending = line;
+  }
 }
 if (channelsSeen.length === 0) {
   console.error('FAIL — parsed no channels out of VISUAL_CERTIFICATE');
+  process.exit(1);
+}
+/* every literal array in the block must have been consumed: if the source
+   grows a shape this loop does not understand, that is a failure, not a
+   silently smaller set of checks */
+const literalArrays = (certBody.match(/^\s*theorems:\s*\[/gm) || []).length;
+if (arraysParsed !== literalArrays) {
+  console.error(`FAIL — ${literalArrays} literal theorems arrays in VISUAL_CERTIFICATE `
+              + `but only ${arraysParsed} parsed; the channel scan does not understand the source`);
   process.exit(1);
 }
 
 const missing = [...cites].filter(([n]) => !bySuffix.has(n));
 const ambiguous = [...cites].filter(([n]) => (bySuffix.get(n) || []).length > 1);
 console.log(`citations: ${cites.size} distinct names, ${bySuffix.size} theorem suffixes in the built environment`);
-console.log(`channels parsed: ${channelsSeen.length} (${channelsSeen.join(', ')})`);
+console.log(`channels parsed: ${channelsSeen.length} (${channelsSeen.join(', ')}), `
+          + `${arraysParsed} literal theorem arrays`);
 
 if (missing.length) {
   console.error(`\nFAIL — ${missing.length} cited name(s) with no theorem behind them:`);
