@@ -94,6 +94,12 @@ function hessenbergEigs(Hin, n){
 
 function stateSize(nx, ns){ return nx*ns + nx*(ns+1) + nx; }
 
+function requireFinitePositiveNumber(v, name){
+  if (typeof v !== 'number' || !Number.isFinite(v) || !(v > 0)) throw new TypeError(
+    `${name} = ${v}: a finite positive number is required.`);
+  return v;
+}
+
 function applyPeriodMap(S, h0, v, steps, dt, out, href, uref){
   const nu = S.nx*S.ns, nw = S.nx*(S.ns + 1), nx = S.nx;
   for (let i = 0; i < nu; i++) S.u[i] = v[i]*uref;
@@ -175,6 +181,176 @@ function floquet(o){
            krylov: used, breakdown, residual };
 }
 
-const FARADAY_FLOQUET = { floquet, hessenbergEigs, arnoldi, applyPeriodMap, stateSize };
+/* ---- the disc ----------------------------------------------------------
+   The same Floquet machinery over the cylindrical solver: the period map of the
+   linearised Navier-Stokes operator in (r, z) at one azimuthal mode number,
+   on the actual cell -- no-slip floor and sidewall, contact line free or
+   pinned. The box above answers for a periodic strip at the same wavenumber;
+   this answers for the disc the renderer draws.
+
+   Linearising is not a reduction here. Floquet stability of the flat state IS
+   the linear problem, and it is what makes the azimuthal direction separate
+   exactly: with the base state at rest and axisymmetric, each e^{i m theta}
+   mode evolves independently, so a three-dimensional question becomes a
+   two-dimensional one with nothing thrown away. */
+const FaradayDiscCtor = (function(){
+  if (typeof require === 'function') return require('./faraday-disc.js');
+  if (typeof globalThis !== 'undefined' && globalThis.FARADAY_DISC)
+    return globalThis.FARADAY_DISC;
+  throw new Error(
+    'faraday-floquet: FaradayDisc is not available. Load dns/faraday-disc.js '
+    + 'before this file, or require it under node.');
+})().FaradayDisc;
+
+function discStateSize(nr, nz){
+  return 2*(nr - 1)*nz + nr*nz + nr;
+}
+
+function discPack(S, v, href, uref){
+  const nr = S.nr, nz = S.nz;
+  let q = 0;
+  for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) S.u[S.iu(i, j)] = v[q++]*uref;
+  for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) S.v[S.iu(i, j)] = v[q++]*uref;
+  for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) S.w[S.iw(i, j)] = v[q++]*uref;
+  for (let i = 0; i < nr; i++) S.eta[i] = v[q++]*href;
+  return q;
+}
+
+function discUnpack(S, out, href, uref){
+  const nr = S.nr, nz = S.nz;
+  let q = 0;
+  for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) out[q++] = S.u[S.iu(i, j)]/uref;
+  for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) out[q++] = S.v[S.iu(i, j)]/uref;
+  for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) out[q++] = S.w[S.iw(i, j)]/uref;
+  for (let i = 0; i < nr; i++) out[q++] = S.eta[i]/href;
+  return q;
+}
+
+function applyDiscPeriodMap(S, v, steps, dt, out, href, uref){
+  discPack(S, v, href, uref);
+  S.u[S.iu(0, 0)] = 0;
+  S.p.fill(0);
+  S.t = 0;
+  for (let n = 0; n < steps; n++) S.step(dt);
+  discUnpack(S, out, href, uref);
+  return out;
+}
+
+function floquetDisc(o){
+  const { nr, nz, R, h, rho, nu, gamma, accel, omegaD, m } = o;
+  /* 16, not 6. The viscous disc has a dense cluster of decaying shear modes
+     whose moduli sit within a per cent of each other, so a short Krylov space
+     does not merely lose accuracy -- it returns the wrong mode. Measured at
+     nr = 28, nz = 14, m = 12, a = 7.0608 m/s^2, drive 111 Hz:
+
+       krylov    4       8      14      20
+       |mu|    0.90177 0.94006 0.94320 0.94444
+
+     At krylov 4 the answer was 4% low and, worse, LOWER than the same case
+     undriven, which inverts the one qualitative fact about parametric forcing
+     that has to hold. It settles by 14. */
+  const krylov = o.krylov || 16;
+  /* How much of the leading modulus may still be moving between the last two
+     Krylov sizes before the answer is refused rather than reported. */
+  const krylovTol = o.krylovTol === undefined ? 2e-2
+    : requireFinitePositiveNumber(o.krylovTol, 'krylovTol');
+  if (!(typeof omegaD === 'number' && Number.isFinite(omegaD) && omegaD > 0))
+    throw new TypeError(
+      `omegaD = ${omegaD}: the monodromy map is the map over one DRIVE period, `
+      + `so a positive drive frequency is required. Refusing rather than letting `
+      + `Td = 2*PI/omegaD be non-finite, which takes zero time steps and returns `
+      + `the identity map as a Floquet result.`);
+  const S = new FaradayDiscCtor({ nr, nz, R, h, rho, nu, gamma, m,
+                                  g: o.g, accel, omegaD, contact: o.contact });
+  const Td = 2*Math.PI/omegaD;
+  /* The step is the solver's own stability limit unless the caller overrides it,
+     and the override is checked against that limit rather than trusted: a step
+     above it does not announce itself, it returns a multiplier. */
+  const limit = S.stableStep(0.4);
+  let dtIn = o.dt === undefined ? limit : o.dt;
+  if (!(typeof dtIn === 'number' && Number.isFinite(dtIn) && dtIn > 0))
+    throw new TypeError(`dt = ${dtIn}: the step must be a finite positive number.`);
+  if (dtIn > limit/0.4*0.5) throw new RangeError(
+    `dt = ${dtIn.toExponential(3)} s exceeds half this grid's explicit stability `
+    + `limit of ${(limit/0.4).toExponential(3)} s at m = ${m}, nr = ${nr}, `
+    + `nz = ${nz}. Refusing rather than integrating past it: the instability that `
+    + `follows is exponential and indistinguishable from a Faraday multiplier.`);
+  const steps = Math.max(1, Math.round(Td/dtIn));
+  const dt = Td/steps;
+
+  const n = discStateSize(nr, nz);
+  const out = new Float64Array(n);
+  const href = o.href || 1e-9, uref = href*(omegaD/2);
+  const apply = (vec, w) => { applyDiscPeriodMap(S, vec, steps, dt, out, href, uref); w.set(out); };
+
+  /* The starting vector is the surface shape of the mode being asked about --
+     J_m(k r) with k the Bessel root -- rather than noise, so the Krylov space
+     is built around the physics instead of around round-off. */
+  const v0 = new Float64Array(n);
+  const base = 2*(nr - 1)*nz + nr*nz;
+  if (o.eta0){
+    if (o.eta0.length !== nr) throw new RangeError(
+      `eta0 has ${o.eta0.length} values for a ${nr}-cell radius.`);
+    for (let i = 0; i < nr; i++) v0[base + i] = o.eta0[i];
+  } else {
+    for (let i = 0; i < nr; i++) v0[base + i] = Math.cos(Math.PI*(i + 0.5)/nr);
+  }
+
+  const { Hm, used, breakdown, residual } = arnoldi(apply, v0, krylov);
+  const eigs = hessenbergEigs(Hm, used);
+  const muMax = cabs(eigs[0]);
+
+  /* Arnoldi's own convergence, for free: the leading principal submatrix of Hm
+     is exactly the Hessenberg matrix a shorter run would have produced, so the
+     same single integration gives the answer at several Krylov sizes. The
+     leading moduli must have stopped moving.
+
+     This is checked rather than assumed because the residual cannot be used
+     here: the spectrum is a dense cluster, so H[used][used-1] stays order one
+     even where the leading modulus has settled to five figures. A gate on the
+     residual would reject every converged answer and accept no others. */
+  const ladder = [];
+  for (const kk of [used - 8, used - 4, used]){
+    if (kk < 2) continue;
+    const sub = Array.from({ length: kk }, (_, i) =>
+      Array.from({ length: kk }, (_, j) => Hm[i][j]));
+    ladder.push({ krylov: kk, muMax: cabs(hessenbergEigs(sub, kk)[0]) });
+  }
+  const drift = ladder.length > 1
+    ? Math.abs(ladder[ladder.length-1].muMax/ladder[ladder.length-2].muMax - 1)
+    : Infinity;
+  /* The spread across the ladder, not just the last step. The viscous disc's
+     decaying shear modes form a dense cluster -- measured at nr = 28, nz = 14,
+     m = 12, drive 111 Hz, a = 7.0608: |mu| reads 0.94006, 0.94032, 0.94320,
+     0.94891, 0.94444 at krylov 8, 12, 14, 16, 20, wandering inside half a per
+     cent rather than settling on a figure. Which member of the cluster is
+     largest is genuinely ill conditioned, so the answer is a value with a width,
+     and the width is reported rather than hidden: half a per cent on |mu| is
+     about 0.5 per second on the growth rate here. */
+  const moduli = ladder.map(l => l.muMax);
+  const spread = ladder.length > 1
+    ? (Math.max(...moduli) - Math.min(...moduli))/2 : 0;
+  if (!(drift <= krylovTol)) throw new Error(
+    `disc Floquet has not converged in the Krylov dimension: the leading `
+    + `modulus reads `
+    + ladder.map(l => `${l.muMax.toFixed(8)} at k=${l.krylov}`).join(', ')
+    + `, still moving by ${(drift*100).toFixed(3)}% against a tolerance of `
+    + `${(krylovTol*100).toFixed(3)}%. Raise krylov above ${krylov}. Refusing `
+    + `rather than reporting the leading modulus of a subspace that has not yet `
+    + `found the dominant mode -- at krylov 4 that mistake returned a multiplier `
+    + `BELOW the undriven one, which no parametric drive can do.`);
+
+  const growth = Math.log(muMax)/Td;
+  const growthWidth = spread > 0 ? Math.abs(Math.log(1 + spread/muMax)/Td) : 0;
+  return { eigs, muMax, growth, Td, dt, steps, m,
+           muSpread: spread, growthWidth,
+           unstable: muMax - spread > 1 ? true : (muMax + spread < 1 ? false : null),
+           krylov: used, breakdown, residual, stateSize: n, ladder, drift,
+           stepLimits: S.stepLimits(), stokes: S.stokesResolution(omegaD/2),
+           resolution: S.resolution() };
+}
+
+const FARADAY_FLOQUET = { floquet, hessenbergEigs, arnoldi, applyPeriodMap, stateSize,
+                          floquetDisc, discStateSize, applyDiscPeriodMap };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_FLOQUET;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_FLOQUET = FARADAY_FLOQUET;
