@@ -22,13 +22,37 @@ const PARAMS = [ {},
   { rhoF:'999/1000', mu:'1/1000', rhoS:'2650/1000', G:'50', gamma:'727/10000' } ];
 
 console.log('1. every local residual is exactly zero over Q');
-let total = 0;
+/* The count and the key set are asserted BESIDE allZero, because "no nonzero
+   residual" is vacuously true of an empty list. That is not hypothetical: this
+   section counted the terms, printed the total and asserted neither, so
+   renaming energyBalance to energyBalanceX throughout the benchmark left all 61
+   checks green while a residual silently stopped being collected. Measured on a
+   throwaway worktree, 2026-09-26. A residual that stopped being collected reads
+   exactly like a residual that passed.
+
+   17 terms from 13 keys: fluidMomentum and fluidSolidStressMatch carry three
+   components each, the other eleven are scalars. */
+const TERMS = 17;
+const KEYS = ['angularMomentum','energyBalance','fluidKineticPower','fluidMomentum',
+  'fluidSolidStressMatch','freeSurfaceCurvature','freeSurfaceKinematic',
+  'freeSurfaceTraction','incompressibility','solidKineticPower','solidMomentum',
+  'storedEnergyRate','viscousElasticClosure'];
+let total = 0, configs = 0;
 for (const P of PARAMS) for (const s of STRETCHES){
-  const z = allResidualsZero(evaluate({ stretch: s, ...P }));
-  total += z.count;
-  ok(`s=${s} ${Object.keys(P).length ? 'params '+P.G : 'defaults'} — ${z.count} residuals`,
-     z.allZero, z.nonzero.join(', '));
+  const r = evaluate({ stretch: s, ...P });
+  const z = allResidualsZero(r);
+  total += z.count; configs++;
+  const label = `s=${s} ${Object.keys(P).length ? 'params '+P.G : 'defaults'}`;
+  ok(`${label} — ${z.count} residuals`, z.allZero, z.nonzero.join(', '));
+  ok(`${label} — all ${TERMS} residuals were collected`, z.count === TERMS,
+     `collected ${z.count}, expected ${TERMS}`);
+  const got = Object.keys(r.residuals).sort();
+  ok(`${label} — the residuals are the ${KEYS.length} named terms`,
+     got.length === KEYS.length && got.every((k, i) => k === KEYS[i]),
+     `got ${got.join(',')}`);
 }
+ok(`${configs*TERMS} residual values checked across ${configs} configurations`,
+   total === configs*TERMS, `summed ${total}, expected ${configs*TERMS}`);
 console.log(`  ${total} residual values checked, none approximate\n`);
 
 console.log('2. geometry, integrated from the declared radii and heights');
