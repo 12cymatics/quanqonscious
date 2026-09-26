@@ -1,11 +1,11 @@
 // Build a single-file, self-contained copy of cymatic.html.
 //
-// cymatic.html loads faraday/kernel.js and faraday/benchmark.js through
+// cymatic.html loads faraday/kernel.js and the two dns/ solver files through
 // relative <script src>, so the page only runs from inside a checkout with
-// that directory beside it. Handing someone the .html alone gives them a
+// those directories beside it. Handing someone the .html alone gives them a
 // page that loads and then throws on the first kernel call.
 //
-// This inlines the two scripts so the result opens by double-click, with no
+// This inlines those scripts so the result opens by double-click, with no
 // server and no siblings. It is GENERATED, never committed: a second copy of
 // 66 KB of kernel would drift from the original the first time one side was
 // edited, and a drifted copy that still *runs* is the worst failure mode this
@@ -21,8 +21,18 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-export const PAIR = '<script src="faraday/kernel.js"></script>\n'
-                  + '<script src="faraday/benchmark.js"></script>';
+/* The scripts the page loads, in order, each as {tag, path}. The tag is
+   matched verbatim and the inlined block KEEPS its id: the Navier-Stokes panel
+   reads its own solver source back out of those elements to build its worker,
+   so an id dropped here would leave the built page unable to run the check. */
+export const SCRIPTS = [
+  { tag: '<script src="faraday/kernel.js"></script>',
+    path: 'faraday/kernel.js', open: '<script>' },
+  { tag: '<script id="dnsSolver" src="dns/faraday-dns.js"></script>',
+    path: 'dns/faraday-dns.js', open: '<script id="dnsSolver">' },
+  { tag: '<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>',
+    path: 'dns/faraday-floquet.js', open: '<script id="dnsFloquet">' }
+];
 
 // `overrides` maps a repo-relative path to substitute content. It exists so
 // check-standalone.mjs can exercise the </script> guard on a source that
@@ -32,15 +42,16 @@ export function buildStandalone(overrides = {}) {
   const read = p => overrides[p] ?? readFileSync(resolve(REPO, p), 'utf8');
   const html = read('cymatic.html');
 
-  const n = html.split(PAIR).length - 1;
-  if (n !== 1)
-    throw new Error(
-      `cymatic.html must contain the kernel/benchmark <script src> pair exactly `
-      + `once, found ${n}. If the tags were reordered, reformatted or a third `
-      + `was added, update PAIR here -- do not let this silently inline nothing.`);
+  for (const { tag, path } of SCRIPTS){
+    const n = html.split(tag).length - 1;
+    if (n !== 1)
+      throw new Error(
+        `cymatic.html must contain the tag for ${path} exactly once, found ${n}. `
+        + `If it was reordered, reformatted or renamed, update SCRIPTS here -- do `
+        + `not let this silently inline nothing.`);
+  }
 
-  const sources = [['faraday/kernel.js', read('faraday/kernel.js')],
-                   ['faraday/benchmark.js', read('faraday/benchmark.js')]];
+  const sources = SCRIPTS.map(({ path }) => [path, read(path)]);
 
   // A literal </script> anywhere in the source would close the inlined block
   // early, and the rest of the kernel would render as text on the page.
@@ -50,11 +61,12 @@ export function buildStandalone(overrides = {}) {
         `${name} contains a literal </script, which would terminate the `
         + `inlined block. Split it (e.g. '<\\/' + 'script') before inlining.`);
 
-  const inlined = sources
-    .map(([, src]) => `<script>\n${src}\n</script>`)
-    .join('\n');
-
-  return html.replace(PAIR, inlined);
+  let out = html;
+  for (let i = 0; i < SCRIPTS.length; i++){
+    const { tag, open } = SCRIPTS[i];
+    out = out.replace(tag, `${open}\n${sources[i][1]}\n</script>`);
+  }
+  return out;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

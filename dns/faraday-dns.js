@@ -13,7 +13,13 @@ function curvature(H, dx, out){
   return out;
 }
 
-module.exports = { G0, curvature };
+/* Dual-mode export. This solver is loaded two ways: by `require` from
+   dns/check-dns.mjs under node, and as a classic <script> by cymatic.html,
+   where `module` does not exist and a bare `module.exports` would throw on
+   load. The kernel next door uses the same shape. */
+const FARADAY_DNS = { G0, curvature };
+if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_DNS;
+if (typeof globalThis !== 'undefined') globalThis.FARADAY_DNS = FARADAY_DNS;
 
 function requireFinite(v, name){
   if (typeof v !== 'number' || !Number.isFinite(v)) throw new TypeError(
@@ -149,7 +155,8 @@ class FaradayDNS {
     return j === this.ns ? this.H[i]/2 : this.H[i];
   }
 }
-module.exports.FaradayDNS = FaradayDNS;
+FARADAY_DNS.FaradayDNS = FaradayDNS;
+if (typeof module !== 'undefined' && module.exports) module.exports.FaradayDNS = FaradayDNS;
 
 FaradayDNS.prototype.surfaceHt = function(out){
   const { nx, ns } = this;

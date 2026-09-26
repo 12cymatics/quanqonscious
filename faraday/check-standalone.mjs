@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildStandalone, PAIR } from './build-standalone.mjs';
+import { buildStandalone, SCRIPTS } from './build-standalone.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => readFileSync(resolve(REPO, p), 'utf8');
@@ -31,8 +31,7 @@ try {
   process.exit(1);
 }
 const html = read('cymatic.html');
-const kernel = read('faraday/kernel.js');
-const bench = read('faraday/benchmark.js');
+const sources = SCRIPTS.map(({ path }) => read(path));
 
 console.log('single-file build\n');
 
@@ -42,31 +41,42 @@ check('nothing is loaded from outside the file', () => {
   eq(srcs.length, 0, `external <script src> count (${srcs.join(', ')})`);
 });
 
-check('the <script src> pair is gone from the output', () => {
-  eq(built.includes(PAIR), false, 'the original tag pair still present');
+check('every <script src> tag is gone from the output', () => {
+  for (const { tag, path } of SCRIPTS)
+    eq(built.includes(tag), false, `the original tag for ${path} is still present`);
 });
 
-check('both kernels are carried in full, byte for byte', () => {
+check('the inlined blocks keep their ids', () => {
+  /* The Navier-Stokes panel reads its own solver source back out of these
+     elements to build its worker. An id dropped by the builder leaves the
+     built page unable to run the check, with nothing else to notice. */
+  for (const { open } of SCRIPTS)
+    eq(built.includes(open), true, `the inlined block opens with ${open}`);
+});
+
+check('every source is carried in full, byte for byte', () => {
   // Substring, not a length check: a truncated inline would still be "present"
   // by any looser test, and would fail at runtime rather than here.
-  eq(built.includes(kernel), true, 'kernel.js body embedded verbatim');
-  eq(built.includes(bench), true, 'benchmark.js body embedded verbatim');
+  SCRIPTS.forEach(({ path }, i) =>
+    eq(built.includes(sources[i]), true, `${path} body embedded verbatim`));
 });
 
 check('the page around the scripts is untouched', () => {
   // Everything except the swapped tags must survive: the build must not be a
   // rewrite of the page, only a substitution of how its code arrives.
   const [beforeBuilt] = built.split('<script>');
-  const [beforeHtml] = html.split(PAIR);
+  const [beforeHtml] = html.split(SCRIPTS[0].tag);
   eq(beforeBuilt, beforeHtml, 'markup preceding the scripts');
 });
 
-check('the output grew by exactly the two inlined bodies', () => {
-  // Pins that nothing else was added or dropped. The delta is the two sources
-  // plus the four tags that replace the two src tags, minus the pair removed.
-  const tags = '<script>\n\n</script>'.length * 2 + '\n'.length;
-  eq(built.length, html.length - PAIR.length + kernel.length + bench.length + tags,
-     'built length');
+check('the output grew by exactly the inlined bodies', () => {
+  // Pins that nothing else was added or dropped: each src tag is replaced by
+  // its open tag, a newline, the source, a newline and the close tag.
+  let want = html.length;
+  SCRIPTS.forEach(({ tag, open }, i) => {
+    want += open.length + 1 + sources[i].length + 1 + '</script>'.length - tag.length;
+  });
+  eq(built.length, want, 'built length');
 });
 
 check('a literal </script> in a source is refused, not silently emitted', () => {
