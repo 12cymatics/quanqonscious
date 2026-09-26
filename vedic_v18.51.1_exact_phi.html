@@ -2140,11 +2140,15 @@ const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
       draws: 'R, r, yOff and the gradient terms from |Psi|^2',
-      /* The pixels come from the FAITHFUL projection, so the theorems are the
-         ones that make that projection exact: the transform round-trips, its
-         characters are orthogonal, and Parseval ties the drawn magnitudes back
-         to the exact energy. The S17 stencil is a different object -- the
-         coefficient table of one operator -- and does not constrain this. */
+      /* Boundary of what is proved, stated exactly:
+         these three are about the vertex substrate's own real four-axis
+         transform -- the state being interpolated. They are NOT a model of
+         FAITHFUL.coeffs/evaluator, which is a complex 4x4 trigonometric
+         interpolant; the ring mapping, the Fourier signs and the Nyquist term
+         carry no kernel obligation. What stands behind those is the runtime
+         decision in `holds`: the node residual is the interpolant reproducing
+         the exact state, and the energy residual is Parseval measured on it.
+         A Lean model of the interpolation is absent and is not claimed. */
       theorems: ['inverse_forward', 'parseval', 'sgn_orthogonal'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
     },
@@ -2260,6 +2264,7 @@ const PROVENANCE = Object.freeze({
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
+  interpolationScopeNote: 'The amplitude and phase channels rest at runtime on the FAITHFUL residuals, which decide that the complex 4x4 interpolant reproduces the exact state at the nodes and matches its energy. The interpolation itself is not modelled in Lean: no theorem here constrains the ring mapping, the Fourier signs or the Nyquist term, and atan2 is transcendental and outside an exact-arithmetic development altogether. Both are decided at runtime and neither is claimed as kernel-checked.',
   wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides.'
 });
 function sourceFingerprint() {
@@ -4203,6 +4208,7 @@ function updateField() {
      taken from the exact state itself (<|Psi|^2> = sum_k |psi_k|^2 / 16), so
      it is invertible and discards nothing. It also keeps the signed range the
      existing AMP.* geometry tuning was written against. */
+  let phaseWriteOk = true;
   const meanP = FAITHFUL_RENDER.proj.totalF / 16;
   const inv = meanP > 0 ? 1 / meanP : 0;
   FAITHFUL_RENDER.meanP = meanP;
@@ -4213,9 +4219,17 @@ function updateField() {
       const idx = i * FIELD_PH + j;
       const s = ev(theta, phi);
       fieldGrid[idx] = s.p * inv - 1;
-      ph[idx] = Math.atan2(s.im, s.re);
+      const a = Math.atan2(s.im, s.re);
+      ph[idx] = a;
+      /* Read the cell straight back. Tautological only if the write landed
+         where it was meant to: an index regression writes elsewhere and leaves
+         this cell holding the previous frame's value, so every one of the
+         12800 cells is covered here at no extra evaluator cost. */
+      if (ph[idx] !== Math.fround(a)) phaseWriteOk = false;
     }
   }
+  FAITHFUL_RENDER.phaseWriteOk = phaseWriteOk;
+  FAITHFUL_RENDER.phaseHash = phaseGridHash();
   refreshPhaseCertificate();
 }
 /* The phase channel draws atan2 of the complex interpolant. atan2 is
@@ -4227,26 +4241,35 @@ function updateField() {
    reads back the cell that was written. Both are exact equalities of the same
    float computation, not tolerances, so they are checked here and the channel
    is gated on them. */
-const PHASE_CERT = { ok: false, checked: 0 };
+const PHASE_CERT = { ok: false, checked: 0, writeOk: false, unchanged: false };
+/* FNV-1a over the raw float32 bits of every cell. */
+function phaseGridHash() {
+  const u = new Uint32Array(FAITHFUL_RENDER.phaseGrid.buffer);
+  let h = 0x811c9dc5 >>> 0;
+  for (let k = 0; k < u.length; k++) h = Math.imul(h ^ u[k], 0x01000193) >>> 0;
+  return h >>> 0;
+}
 function refreshPhaseCertificate() {
-  const ev = FAITHFUL_RENDER.ev, ph = FAITHFUL_RENDER.phaseGrid;
-  if (!ev) { PHASE_CERT.ok = false; PHASE_CERT.checked = 0; return PHASE_CERT; }
-  let ok = true, n = 0;
-  for (let i = 0; i < FIELD_TH; i += 13) {
-    for (let j = 0; j < FIELD_PH; j += 11) {
+  const ph = FAITHFUL_RENDER.phaseGrid;
+  if (!FAITHFUL_RENDER.ev) { PHASE_CERT.ok = false; PHASE_CERT.checked = 0; return PHASE_CERT; }
+  /* Every cell, three ways, none of them a sample:
+       writeOk     each cell held what was written to it, checked at fill time
+       unchanged   no cell has been altered since the fill
+       read-back   samplePhase returns the cell it was asked for, all of them  */
+  const unchanged = phaseGridHash() === FAITHFUL_RENDER.phaseHash;
+  let readOk = true, n = 0;
+  for (let i = 0; i < FIELD_TH; i++) {
+    for (let j = 0; j < FIELD_PH; j++) {
       const idx = i * FIELD_PH + j;
-      const s = ev((i / FIELD_TH) * TAU, (j / FIELD_PH) * TAU);
-      if (ph[idx] !== Math.fround(Math.atan2(s.im, s.re))) ok = false;
-      /* read back from the middle of the cell: the cell's own angle can float
-         back as i - 1e-14 and floor to the neighbour, which would be a defect
-         in this check rather than in samplePhase. */
       if (samplePhase(((i + 0.5) / FIELD_TH) * TAU,
-                      ((j + 0.5) / FIELD_PH) * TAU) !== ph[idx]) ok = false;
+                      ((j + 0.5) / FIELD_PH) * TAU) !== ph[idx]) { readOk = false; }
       n++;
     }
   }
-  PHASE_CERT.ok = ok && n > 0;
+  PHASE_CERT.writeOk = !!FAITHFUL_RENDER.phaseWriteOk;
+  PHASE_CERT.unchanged = unchanged;
   PHASE_CERT.checked = n;
+  PHASE_CERT.ok = PHASE_CERT.writeOk && unchanged && readOk && n === FIELD_TH * FIELD_PH;
   return PHASE_CERT;
 }
 function samplePhase(theta, phi) {
