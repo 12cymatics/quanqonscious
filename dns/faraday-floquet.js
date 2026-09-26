@@ -1,6 +1,21 @@
 'use strict';
 
-const { FaradayDNS } = require('./faraday-dns.js');
+/* Resolved rather than required outright: under node this is a CommonJS
+   require, in the browser faraday-dns.js has already put itself on globalThis
+   as a classic script. It REFUSES if neither is available, rather than
+   proceeding with an undefined solver. */
+/* Bound under a DIFFERENT name than the class it holds. Classic scripts share
+   one global lexical environment, so `const { FaradayDNS }` here and
+   `class FaradayDNS` in faraday-dns.js would be a redeclaration and the page
+   would fail to parse. Node's module scopes hide that; the browser does not. */
+const FaradayDNSCtor = (function(){
+  if (typeof require === 'function') return require('./faraday-dns.js');
+  if (typeof globalThis !== 'undefined' && globalThis.FARADAY_DNS)
+    return globalThis.FARADAY_DNS;
+  throw new Error(
+    'faraday-floquet: FaradayDNS is not available. Load dns/faraday-dns.js '
+    + 'before this file, or require it under node.');
+})().FaradayDNS;
 
 const C = (re, im = 0) => ({ re, im });
 const cadd = (a, b) => C(a.re + b.re, a.im + b.im);
@@ -142,7 +157,7 @@ function floquet(o){
   const Td = 2*Math.PI/omegaD;
   const steps = Math.max(1, Math.round(Td/dtIn));
   const dt = Td/steps;
-  const S = new FaradayDNS({ nx, ns, L, h0, rho, nu, gamma, accel, omegaD });
+  const S = new FaradayDNSCtor({ nx, ns, L, h0, rho, nu, gamma, accel, omegaD });
   const n = stateSize(nx, ns);
   const out = new Float64Array(n);
 
@@ -160,4 +175,6 @@ function floquet(o){
            krylov: used, breakdown, residual };
 }
 
-module.exports = { floquet, hessenbergEigs, arnoldi, applyPeriodMap, stateSize };
+const FARADAY_FLOQUET = { floquet, hessenbergEigs, arnoldi, applyPeriodMap, stateSize };
+if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_FLOQUET;
+if (typeof globalThis !== 'undefined') globalThis.FARADAY_FLOQUET = FARADAY_FLOQUET;

@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Faraday Cell</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -222,35 +223,26 @@ footer b{color:var(--ink2);font-weight:500}
 
 <div class="research">
   <div class="research-hd">
-    <span class="lab">research · exact coupled benchmark — separate from the renderer above</span>
-    <span class="seg" id="benchSeg">
-      <button data-s="5/4" aria-pressed="true">5/4</button>
-      <button data-s="13/10" aria-pressed="false">13/10</button>
-      <button data-s="7/5" aria-pressed="false">7/5</button>
-      <button data-s="17/12" aria-pressed="false">17/12</button>
-      <button data-s="3/2" aria-pressed="false">3/2</button>
-    </span>
+    <span class="lab">navier-stokes · Floquet stability of the state above</span>
+    <button id="dnsRun" class="seg" style="padding:4px 10px">run</button>
   </div>
-  <div class="research-body">
-    <p><b>What this is.</b> An exact solution of the incompressible Navier–Stokes equations
-    coupled to a finite-strain elastic vessel and a pinned liquid–air surface, on the interval
-    5/4 ≤ s ≤ 3/2. Every field is closed-form and every local residual below is
-    <span class="zero">exactly zero over the rationals</span> — not small, zero.</p>
-    <p><b>What it is not.</b> OpenAI's Navier–Stokes result is a finite-time breakdown
-    construction: for each viscosity it produces a smooth compactly supported force, chosen
-    from the constructed flow's own momentum residual, under which a resting whole-space flow
-    has bounded energy and unbounded velocity as t → 1. That force is not this apparatus's
-    actuator, the theorem supplies no vessel or free-surface solution, and it does not say this
-    cup blows up. Nothing here reproduces it. This benchmark's prescribed body forces and flat
-    free surface are also not the centre-driven Faraday problem the renderer above shows, which
-    is why the two are kept apart.</p>
-    <div class="qgrid" id="benchState"></div>
-    <div class="qgrid" id="benchResiduals"></div>
-    <div class="qgrid" id="benchEnergy"></div>
-    <p id="benchNote"></p>
-  </div>
+  <p>The renderer decides onset from a damped Mathieu form: an amplitude equation for one
+  mode, with the viscous damping folded into a single rate. That is an approximation, and a
+  measurable one — against the Floquet threshold below, the analytic formula reads about 1%
+  low on this apparatus.</p>
+  <p>This runs the incompressible Navier–Stokes solver in <code>dns/</code> on the state
+  currently shown: it integrates the linearised equations over one drive period and takes the
+  eigenvalues of that period map. |μ| &gt; 1 is growth. No amplitude equation, no assumed
+  damping — the viscosity enters as the actual diffusion term.</p>
+  <p><b>It is not the same geometry.</b> The solver is a two-dimensional periodic box of
+  length 2π/k at the dominant wavenumber, depth and fluid of the state above; the renderer is
+  a circular cell whose Bessel modes select that k. Faraday onset at a given k is set by the
+  layer, not the sidewall, so this is the rigorous answer for that mode — not for the disc.</p>
+  <p>It takes tens of seconds and runs in a worker, so the page stays live.</p>
+  <div class="qgrid" id="dnsInput"></div>
+  <div class="qgrid" id="dnsOut"></div>
+  <p id="dnsNote"></p>
 </div>
-
 <footer>
   <b>Layers are kept separate.</b> Fold labels are the paper's printed classifications.
   Contrast / centre-bias / ring / texture figures are image descriptors measured from the
@@ -261,7 +253,8 @@ footer b{color:var(--ink2);font-weight:500}
 </footer>
 </div>
 <script src="faraday/kernel.js"></script>
-<script src="faraday/benchmark.js"></script>
+<script id="dnsSolver" src="dns/faraday-dns.js"></script>
+<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
 <script>
 
 const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
@@ -647,6 +640,7 @@ function drawAtlas(cellKey, f){
 let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
 let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
+let dnsShowInput = null;
 
 const $ = id => document.getElementById(id);
 
@@ -677,6 +671,7 @@ function recompute(){
   buildSurface(state);
   paintDeck(); paintInspector();
   drawAtlas(cellKey, freq);
+  if (dnsShowInput) dnsShowInput();
   dirty = false;
 }
 function paintDeck(){
@@ -1302,69 +1297,133 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   }
 });
 
-(function benchPanel(){
-  const B = globalThis.CymaticaCoupledBenchmark;
-  const cell = (k, v, zero) =>
-    `<div><span class="k">${k}</span><span class="v${zero ? ' zero' : ''}">${v}</span></div>`;
-  let stretch = '5/4';
-  function paint(){
-    const r = B.evaluate({ stretch });
-    const z = B.allResidualsZero(r);
-    const st = r.state, sg = r.stress;
-    $('benchState').innerHTML =
-      cell('stretch s', `<b>${st.s}</b>`) +
-      cell('ṡ = f(s)', `${st.sDot}`) +
-      cell('a = ṡ/s', `${st.a}`) +
-      cell('det F', `<b>${st.detF}</b>`) +
-      cell('σ_r', `${sg.sigmaR}`) +
-      cell('σ_z', `${sg.sigmaZ}`) +
-      cell('d = σ_r − σ_z', `${sg.d}`) +
-      cell('pressure p', `${st.p}`) +
-      cell('p_air = −σ_z', `${st.pAir}`) +
-      cell('stored energy W', `${st.W}`);
-    const R = r.residuals;
-    const line = (k, v) => cell(k, Array.isArray(v)
-      ? v.map(String).join(', ') : String(v),
-      Array.isArray(v) ? v.every(q => q.isZero) : v.isZero);
-    $('benchResiduals').innerHTML =
-      line('incompressibility ∇·u', R.incompressibility) +
-      line('fluid momentum', R.fluidMomentum) +
-      line('solid momentum', R.solidMomentum) +
-      line('σ_f − σ_s', R.fluidSolidStressMatch) +
-      line('angular momentum', R.angularMomentum) +
-      line('free surface kinematic', R.freeSurfaceKinematic) +
-      line('free surface traction', R.freeSurfaceTraction) +
-      line('closure 6μa − d', R.viscousElasticClosure) +
-      line('energy balance', R.energyBalance) +
-      line('kinetic power, fluid', R.fluidKineticPower) +
-      line('kinetic power, solid', R.solidKineticPower);
-    const E = r.energy, g = r.geometry;
-    $('benchEnergy').innerHTML =
-      cell('K_fluid / π', `${E.Kf}`) +
-      cell('K_solid / π', `${E.Ks}`) +
-      cell('stored / π', `${E.Usolid}`) +
-      cell('surface / π', `${E.Usurface}`) +
-      cell('dissipation / π', `${E.dissipation}`) +
-      cell('external stress power / π', `${E.externalStressPower}`) +
-      cell('support power / π', `${E.supportPower}`) +
-      cell('solid volume / π', `<b>${g.solid.volume}</b> (integrated)`) +
-      cell('solid radial moment', `<b>${g.solid.radial}</b> (integrated)`) +
-      cell('T* bounds', `${r.clock.tStarLower} … ${r.clock.tStarUpper}`);
-    $('benchNote').innerHTML =
-      `<b>${z.count} residuals, all exactly zero.</b> Geometry moments and volumes are `
-      + `integrated from the declared radii and heights, not written in — though no local `
-      + `residual can constrain them: d/dt K = P_body is Reynolds transport and holds for `
-      + `whatever domain is supplied, so a wrong moment would move both sides together. `
-      + `The residuals check the fields and the closure; the geometry sets the energy `
-      + `magnitudes only.`;
+(function dnsPanel(){
+  /* The renderer's onset comes from a damped Mathieu form. The solver in dns/
+     answers the same question without that reduction: it integrates the
+     linearised incompressible Navier-Stokes equations over one drive period
+     and takes the eigenvalues of the period map. dns/check-dns.mjs already
+     measures the gap -- bisected Floquet threshold 2.55291 against the
+     analytic 2.52774, so the formula reads 0.99% low -- and nothing on this
+     page showed it. This does.
+
+     It runs in a worker because a Floquet solve is tens of seconds and the
+     main thread is drawing. */
+  const cell = (k, v, hi) =>
+    `<div><span class="k">${k}</span><span class="v${hi ? ' zero' : ''}">${v}</span></div>`;
+  const note = t => { $('dnsNote').innerHTML = t; };
+  const fmt = (v, n = 4) => Number.isFinite(v) ? v.toFixed(n) : String(v);
+
+  function config(){
+    /* Refuses rather than substituting defaults. Before the first recompute()
+       there is no k, no depth and no drive to hand the solver, and a box built
+       from numbers nobody chose would still return a Floquet multiplier. */
+    if (!state) throw new Error(
+      'dns panel: the renderer has not resolved a state yet, so there is no '
+      + 'wavenumber, layer depth or drive to build the box from.');
+    const k = state.wavenumber, w = state.water;
+    return { nx: 32, ns: 32,
+             L: 2*Math.PI/k, h0: depth/1000,
+             rho: w.rho, nu: w.nu, gamma: w.sigma,
+             omegaD: 2*Math.PI*freq, accel: state.accelAssumed,
+             dt: 2e-5, m: 6 };
   }
-  document.querySelectorAll('#benchSeg button').forEach(b =>
-    b.addEventListener('click', () => {
-      document.querySelectorAll('#benchSeg button').forEach(x =>
-        x.setAttribute('aria-pressed', String(x === b)));
-      stretch = b.dataset.s; paint();
-    }));
-  paint();
+
+  function showInput(c){
+    $('dnsInput').innerHTML =
+      cell('box length L = 2π/k', `${(c.L*1000).toFixed(4)} <span class="u">mm</span>`) +
+      cell('depth h', `${(c.h0*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('drive ω_d', `${(c.omegaD/(2*Math.PI)).toFixed(2)} <span class="u">Hz</span>`) +
+      cell('acceleration a', `${fmt(c.accel)} <span class="u">m/s²</span>`) +
+      cell('ν', `${c.nu.toExponential(4)} <span class="u">m²/s</span>`) +
+      cell('γ', `${c.gamma.toFixed(5)} <span class="u">N/m</span>`) +
+      cell('grid', `${c.nx} × ${c.ns}`) +
+      cell('Krylov m', `${c.m}`);
+  }
+
+  /* The worker needs the solver's SOURCE, not the loaded objects. In the
+     single-file build the script tags carry it inline; served as separate
+     files they carry a src to fetch. Either way it is the same two files, and
+     if neither yields source this refuses rather than running a worker with
+     nothing in it. */
+  async function sourceOf(id){
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`dns panel: no <script id="${id}">`);
+    if (el.textContent && el.textContent.trim().length) return el.textContent;
+    if (el.src){
+      const r = await fetch(el.src);
+      if (!r.ok) throw new Error(`dns panel: fetching ${el.src} gave ${r.status}`);
+      return await r.text();
+    }
+    throw new Error(`dns panel: <script id="${id}"> has neither inline source nor src`);
+  }
+
+  let worker = null;
+  async function ensureWorker(){
+    if (worker) return worker;
+    const body = [await sourceOf('dnsSolver'), await sourceOf('dnsFloquet'),
+      `self.onmessage = (e) => {
+         try { const r = FARADAY_FLOQUET.floquet(e.data);
+               self.postMessage({ ok: true, muMax: r.muMax, growth: r.growth }); }
+         catch (err) { self.postMessage({ ok: false, error: String(err && err.message || err) }); }
+       };`].join('\n;\n');
+    worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
+    return worker;
+  }
+
+  let running = false;
+  $('dnsRun').addEventListener('click', async () => {
+    if (running) return;
+    running = true;
+    const btn = $('dnsRun');
+    const c = config();
+    showInput(c);
+    $('dnsOut').innerHTML = '';
+    const t0 = performance.now();
+    const tick = setInterval(() => {
+      btn.textContent = `running ${((performance.now()-t0)/1000).toFixed(0)}s`;
+    }, 500);
+    try {
+      const w = await ensureWorker();
+      const r = await new Promise((res, rej) => {
+        w.onmessage = e => e.data.ok ? res(e.data) : rej(new Error(e.data.error));
+        w.onerror = e => rej(new Error(e.message || 'worker failed'));
+        w.postMessage(c);
+      });
+      const secs = (performance.now()-t0)/1000;
+      const unstable = r.muMax > 1;
+      const mathieu = state.onset ? state.onset.growth : NaN;
+      $('dnsOut').innerHTML =
+        cell('|μ| largest Floquet multiplier', `<b>${r.muMax.toFixed(8)}</b>`, unstable) +
+        cell('verdict', unstable ? '<b>unstable — the mode grows</b>' : 'stable — it decays') +
+        cell('Floquet growth', `${fmt(r.growth)} <span class="u">s⁻¹</span>`) +
+        cell('renderer (Mathieu) growth', `${fmt(mathieu)} <span class="u">s⁻¹</span>`) +
+        cell('difference', Number.isFinite(mathieu) && mathieu !== 0
+              ? `${((r.growth/mathieu - 1)*100).toFixed(2)} %` : '—') +
+        cell('solve time', `${secs.toFixed(1)} <span class="u">s</span>`);
+      note(`Growth here is ln|μ| over one drive period, from the eigenvalues of the `
+         + `period map of the linearised Navier-Stokes operator. The renderer's figure `
+         + `beside it comes from the damped Mathieu form. They answer the same question `
+         + `about the same layer; where they differ, this one made fewer assumptions.`);
+    } catch (err) {
+      $('dnsOut').innerHTML = '';
+      note(`<b>The Navier-Stokes check did not run:</b> ${err.message}. Nothing is `
+         + `reported in its place.`);
+    } finally {
+      clearInterval(tick);
+      btn.textContent = 'run';
+      running = false;
+    }
+  });
+
+  /* Driven by recompute(), not called here. The panel is constructed before
+     the renderer's first recompute(), so state is still null at this point:
+     calling config() here threw, the exception left the top-level script, and
+     sprinkle()/recompute()/requestAnimationFrame(loop) at the end of the file
+     never ran -- a blank page with the panel's own listener attached. Wiring it
+     to recompute() also keeps these cells in step with the controls instead of
+     showing whatever the drive was when the page loaded. */
+  dnsShowInput = () => showInput(config());
+  note('Not run yet. The renderer above is unaffected by this panel.');
 })();
 
 let lastBuild = -1;

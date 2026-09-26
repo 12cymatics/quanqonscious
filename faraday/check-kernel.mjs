@@ -25,12 +25,15 @@ const HTML = readFileSync(join(ROOT, 'cymatic.html'), 'utf8');
 const REF  = JSON.parse(readFileSync(join(here, 'reference.json'), 'utf8'));
 
 /* ---- the physics, required straight from its own files ------------------
-   cymatic.html loads faraday/kernel.js and faraday/benchmark.js as classic
-   scripts; node requires the same two files here. There is still exactly one
-   copy of the physics and of the coupled construction, and the boundary is now
-   the FILE rather than a pair of marker comments inside the page. The previous
-   arrangement sliced both regions out of the HTML between comments, which meant
-   deleting a comment silently removed every assertion that depended on it. */
+   cymatic.html loads faraday/kernel.js as a classic script; node requires the
+   same file here. There is still exactly one copy of the physics, and the
+   boundary is the FILE rather than a pair of marker comments inside the page.
+   The previous arrangement sliced both regions out of the HTML between
+   comments, which meant deleting a comment silently removed every assertion
+   that depended on it.
+
+   faraday/benchmark.js is still required below, but the page no longer loads
+   it -- see the check that enforces that, further down. */
 const K = require(join(here, 'kernel.js'));
 const B = require(join(here, 'benchmark.js'));
 
@@ -43,13 +46,30 @@ for (const n of EXPORTS)
 for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MAX'])
   if (B[n] === undefined) throw new Error(`benchmark export ${n} is undefined`);
 
-/* The page must actually load both files, or the browser gets a kernel the
-   tests never see. Asserted here because it is the one thing requiring the
-   modules directly can no longer notice. */
-for (const f of ['faraday/kernel.js', 'faraday/benchmark.js'])
+/* The page must actually load every physics file it runs on, or the browser
+   gets a kernel the tests never see. Asserted here because it is the one thing
+   requiring the modules directly can no longer notice. The two dns/ files are
+   named because the page's stability panel loads them; their physics is gated
+   by dns/check-dns.mjs, and this is the line that stops the page and that
+   suite pointing at different files. */
+for (const f of ['faraday/kernel.js', 'dns/faraday-dns.js', 'dns/faraday-floquet.js'])
   if (!HTML.includes(`src="${f}"`)) throw new Error(
-    `cymatic.html does not load ${f}. The page and this suite would be running `
+    `cymatic.html does not load ${f}. The page and its suite would be running `
     + `different code.`);
+
+/* And it must NOT load faraday/benchmark.js. That is not housekeeping. The
+   panel it fed was removed because the request was for the exact coupled
+   benchmark and the rendered Faraday field to be ONE process, and they cannot
+   be: the benchmark is exact over Q, while the Faraday path runs through
+   Bessel zeros and tanh of a rational, both irrational, so no rational
+   arithmetic reaches the renderer's numbers. Section 12 below still gates the
+   construction -- as the standalone module it now is. If this fires, someone
+   has put the panel back, and section 12's preamble and build-standalone's
+   SCRIPTS list need revisiting rather than this line deleting. */
+if (HTML.includes('src="faraday/benchmark.js"')) throw new Error(
+  `cymatic.html loads faraday/benchmark.js again. The exact coupled benchmark `
+  + `cannot share a process with the Faraday renderer; see the comment above `
+  + `this check.`);
 
 /* ---- harness ----------------------------------------------------------- */
 let pass = 0; const failures = [];

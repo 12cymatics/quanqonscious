@@ -18,6 +18,25 @@
 # CI compares against fixed numbers rather than recomputing them with the code
 # under test.
 #
+# fsi/check-coupled-affine.mjs was in the same position these two were: 61
+# checks on a construction whose every residual is claimed to be exactly zero
+# over the rationals, and nothing ran them. It is added here rather than left
+# out because cymatic.html no longer loads the coupled benchmark at all -- the
+# panel that did was removed, since an exact-over-Q construction and a renderer
+# whose numbers come from Bessel zeros and tanh of a rational cannot be one
+# process -- so CI is now the only thing that executes it.
+#
+# dns/check-page.mjs is the only suite here that needs a browser, and it gets
+# one without an install: the ubuntu-latest image ships Google Chrome, and node
+# 22 has a global WebSocket, so it drives it over the DevTools protocol with no
+# dependency. It exists because every suite above runs the physics while nothing
+# ran the PAGE. Wiring the Floquet panel in, a call to config() before the
+# renderer's first recompute() threw on a null state, the exception left the
+# top-level script, and sprinkle()/recompute()/requestAnimationFrame never ran
+# -- a blank page, with every node suite green. The same run found that the page
+# declared no character set, so every micron and s^-1 on it decoded as
+# windows-1252. Neither is visible from node.
+#
 # dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
 # rather than a twenty-second one, and because it gates something different: not
 # a library of special functions but a solver, checked against analytic forces,
@@ -51,6 +70,8 @@ jobs:
       run: node faraday/check-kernel.mjs
     - name: Single-file build is self-contained
       run: node faraday/check-standalone.mjs
+    - name: Exact coupled benchmark (residuals zero over Q)
+      run: node fsi/check-coupled-affine.mjs
 
   lean-citations:
     name: lean citations
@@ -77,3 +98,16 @@ jobs:
         node-version: "22"
     - name: Free-surface Navier-Stokes solver
       run: node dns/check-dns.mjs
+
+  page:
+    name: cymatic.html in a browser
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Page loads, draws, and its Floquet panel agrees with the solver
+      run: node dns/check-page.mjs
+      env:
+        CHROME: /usr/bin/google-chrome
