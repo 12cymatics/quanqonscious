@@ -21,15 +21,22 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/* The scripts the page loads, in order, each as {tag, path}. The tag is
-   matched verbatim and the inlined block KEEPS its id: the Navier-Stokes panel
-   reads its own solver source back out of those elements to build its worker,
-   so an id dropped here would leave the built page unable to run the check. */
+/* The scripts the page loads, IN ORDER, each as {tag, path}. The tag is matched
+   verbatim and the inlined block KEEPS its id: the Navier-Stokes panel reads its
+   own solver source back out of those elements to build its worker, so an id
+   dropped here would leave the built page unable to run the check.
+
+   The order is load order and it is load bearing. faraday-floquet.js resolves
+   both solvers at its top level -- the periodic box from faraday-dns.js and the
+   disc from faraday-disc.js -- and refuses if either is missing, so it comes
+   last. */
 export const SCRIPTS = [
   { tag: '<script src="faraday/kernel.js"></script>',
     path: 'faraday/kernel.js', open: '<script>' },
   { tag: '<script id="dnsSolver" src="dns/faraday-dns.js"></script>',
     path: 'dns/faraday-dns.js', open: '<script id="dnsSolver">' },
+  { tag: '<script id="dnsDisc" src="dns/faraday-disc.js"></script>',
+    path: 'dns/faraday-disc.js', open: '<script id="dnsDisc">' },
   { tag: '<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>',
     path: 'dns/faraday-floquet.js', open: '<script id="dnsFloquet">' }
 ];
