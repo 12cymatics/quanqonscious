@@ -266,8 +266,8 @@ const VERSION = Object.freeze({
   slug:       'v18_51_0',
   name:       'strict_cquad_wheeler_geometry_kernel',
   title:      'Strict CQuad Wheeler Geometry Kernel',
-  sourceFile: 'vedic_v18_51_0_strict_core.html',
-  leanMirror: 'VedicFractal.lean@v18.51.0'
+  sourceFile: 'vedic_v18.51.1_exact_phi.html',
+  leanMirror: 'SutraWS.lean@v18.51.0'
 });
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
@@ -1268,15 +1268,22 @@ const STRICT_V5_FACTORY = () => {
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
 
-    /* radialFactor(r,eps) = phi^3 * rho with 0 <= rho <= 1 and rho(0) = 1. */
-    let t5 = true;
-    const rhoOf=(rQ,eQ)=>{const r2=Q.mul(rQ,rQ),e2=Q.mul(eQ,eQ);return Q.div(e2,Q.add(r2,e2));};
+    /* radialFactor = phi^3 * rho, which is what _RADF caches and what the
+       geometry uses. Decided against WHEELER.radialFactorA4 itself rather than
+       a private copy of rho, so a regression in the phi^3 multiplication is
+       caught here and not only in the unscaled profile. */
+    let t5rho = true, t5scaled = true;
     for(let i=0;i<12;i++){
-      const rho=rhoOf(Q.mk(BigInt(i),4n),Q.mk(1n,10n));
-      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5=false;
+      const rQ=Q.mk(BigInt(i),4n), eQ=Q.mk(1n,10n);
+      const rho=WHEELER.rhoQ(rQ,eQ);
+      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5rho=false;
+      const rf=WHEELER.radialFactorA4(rQ,eQ);
+      if(!A4.eq(rf,A4.scaleQ(KX.PHI_CU,rho))) t5scaled=false;
+      if(A4.cmp(rf,A4.ZERO)<0||A4.cmp(rf,KX.PHI_CU)>0) t5scaled=false;
     }
-    if(!Q.eq(rhoOf(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5=false;
-    claim('wheeler_radial_factor_bounded_by_phi_cubed',t5);
+    if(!Q.eq(WHEELER.rhoQ(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5rho=false;
+    claim('wheeler_rho_mem_unit_interval',t5rho);
+    claim('wheeler_radial_factor_bounded_by_phi_cubed',t5scaled);
 
     /* Cayley: c^2 + s^2 = 1 exactly, so omega induces a true rotation. */
     let t6 = true;
@@ -1527,6 +1534,62 @@ const STRICT_V5_FACTORY = () => {
     }
     return Object.freeze({modes:MODES3,states,energies,pairwise,allDistinct,composedAgrees});
   };
+  /* Decision procedure for the Modes theorems of SutraWS/WheelerGeometry.lean,
+     in the same shape wheelerAudit returns. Which statements are decidable
+     depends on how many sutras are active -- the theorems are stated for the
+     empty, singleton and pair cases -- so it reports one record per statement
+     it can decide on the live set, and the mode channel is gated on it. Before
+     this the channel's predicate only asked that three trace arrays existed,
+     which no theorem constrains. */
+  const modeAudit = (psi,active) => {
+    const list=active.slice().sort((a,b)=>a.id-b.id);
+    const R=[];
+    const claim=(name,ok,detail)=>{R.push({name,ok:!!ok,detail:detail||''});return !!ok;};
+    const same=(a,b)=>a.every((z,i)=>C4.eq(z,b[i]));
+    const full=s=>x=>applySutra(s.id,x,argsFor(s));
+    const half=s=>x=>applySutra(s.id,x,argsFor(s,Q.HALF));
+    const ser=applySutraCore(psi,list,"SERIES");
+    const par=applySutraCore(psi,list,"PARALLEL");
+    const con=applySutraCore(psi,list,"SYMMETRIC_CONCURRENT");
+    /* The cardinality-specific theorems only cover 0, 1 and 2 active sutras,
+       and the page starts with all 29 on. Deciding nothing on the normal path
+       would make R.every() vacuously true, so the append identities -- which
+       hold at every cardinality -- are decided first, and ok requires at least
+       one decided claim. */
+    if(list.length>=1){
+      const fs=list.slice(0,-1),g=list[list.length-1];
+      const gf=full(g),gh=half(g);
+      const halfSeries=(l,x)=>l.reduce((acc,s)=>applySutra(s.id,acc,argsFor(s,Q.HALF)),x);
+      const serFs=applySutraCore(psi,fs,"SERIES");
+      claim('series_append_one',same(ser,gf(serFs)),`peeled S${g.id}`);
+      const parFs=applySutraCore(psi,fs,"PARALLEL");
+      claim('parallel_append_one',
+            same(par,stateAdd(parFs,stateSub(gf(psi),psi))),`peeled S${g.id}`);
+      const mid=gh(gh(halfSeries(fs,psi)));
+      claim('concurrent_append_one',
+            same(con,halfSeries(fs.slice().reverse(),mid)),`peeled S${g.id}`);
+    }
+    if(list.length===0){
+      claim('series_nil',same(ser,psi));
+      claim('parallel_nil',same(par,psi));
+      claim('concurrent_nil',same(con,psi));
+    } else if(list.length===1){
+      const h=half(list[0]);
+      claim('series_eq_parallel_singleton',same(ser,par),`S${list[0].id}`);
+      claim('concurrent_singleton',same(con,h(h(psi))),`S${list[0].id} at half strength, twice`);
+    } else if(list.length===2){
+      const f1=full(list[0]),f2=full(list[1]);
+      /* series - parallel = disp f2 (f1 psi) - disp f2 psi, with disp f x = f x - x */
+      const lhs=stateSub(ser,par);
+      const d1=stateSub(f2(f1(psi)),f1(psi));
+      const d2=stateSub(f2(psi),psi);
+      claim('series_sub_parallel_pair',same(lhs,stateSub(d1,d2)),
+            `S${list[0].id} then S${list[1].id}`);
+    }
+    /* fail closed: an audit that decided nothing is not a passing audit */
+    const ok=R.length>0&&R.every(x=>x.ok);
+    return Object.freeze({ok,results:Object.freeze(R),active:list.length});
+  };
   const operatorDistinctness = () => {
     /* Two operators are the same operator only if they agree as functions of
        BOTH state and strength. Agreeing at a single strength is a coincidence
@@ -1701,7 +1764,7 @@ const STRICT_V5_FACTORY = () => {
       energyMethod: last.energyMethod
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
+  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,R4_R,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,step,stepStages,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,applySutraCoreComposed,scaleActiveByR4,r4TauMaxNumerator,hwCoefficients});
 };
 const STRICT_V5 = STRICT_V5_FACTORY();
 /* Release manifest: one object a buyer or reviewer can diff against a shipped
@@ -2027,8 +2090,17 @@ const qFromFloat = x => {
   return Q.mk(BigInt(v), d);
 };
 const LEAN_PROVED = Object.freeze({
-  cellCounts: [16, 64, 96, 64, 16],
-  eulerCharacteristic: 0,
+  /* (vertex, k-mask) incidences, 16*C(4,k) -- NOT the f-vector. A genuine
+     k-cell has 2^k vertices, so this counts each one 2^k times. The
+     tesseract's actual f-vector is [16,32,24,8,1]; see
+     SutraWS.Render.vertexMaskIncidences and .cellCounts. */
+  vertexMaskIncidences: [16, 64, 96, 64, 16],
+  cellCounts: [16, 32, 24, 8, 1],
+  /* the alternating sum of vertexMaskIncidences, 16*(1-1)^4. Not the Euler
+     characteristic of the solid 4-cube, which is 1; the boundary complex
+     DEC_LGT_REGGE builds is the one whose characteristic is 0. */
+  incidenceAlternatingSum: 0,
+  eulerCharacteristic: 1,
   tauMaxNum: 109,
   tauDen: 128,
   tauBaseNum: 96,
@@ -2036,14 +2108,16 @@ const LEAN_PROVED = Object.freeze({
   removedCeilingDen: 16,
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
-  kernelChecked: ['masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','cellCounts_eq','rho_num_nonneg','rho_num_le_den','rho_zero_eps','rho_den_pos_of_hw_pos','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','norm_preserving_not_reducing','projective_not_invertible'],
-  /* Wheeler geometry. Lean source is in the repository at WheelerGeometry.lean,
-     in the SutraWS package alongside Exhaustive.lean. Every statement is a
-     decidable identity over Rat, so each also carries an executable decision
-     procedure -- wheelerAudit() below -- that re-decides it in this page over
-     the same exact arithmetic the renderer uses. These are NOT among the
-     VedicKernel oleans; they are listed separately and reported separately. */
-  wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
+  /* Proved in SutraWS/RenderCertificates.lean and SutraWS/DECComplex.lean,
+     built by `lake build SutraWS`. tools/check_citations.mjs fails the build
+     if any name here has no theorem behind it. */
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero'],
+  /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
+     `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
+     an executable decision procedure -- wheelerAudit() below -- that re-decides
+     it in this page over the same exact arithmetic the renderer uses, so the
+     compiled proof and the drawn pixels are held to the same claim. */
+  wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
   /* GOLDENPYTHAGOREAN identities. Lean source is in the same file as the
      Wheeler block; the runtime decision is KX's own identity array, which
      throws at load if any of them fails -- so the page cannot start with a
@@ -2052,8 +2126,10 @@ const LEAN_PROVED = Object.freeze({
   /* Execution modes. series_sub_parallel_pair pins the difference between
      composing and superposing to the cross term, which is what the mode panel
      measures on the live active set; STRICT_V5.modeComparison decides it. */
-  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine'],
-  compilerTrusted: ['d1_d2_zero','d2_d3_zero','d3_d4_zero','euler_characteristic_zero','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect']
+  modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine','concurrent_nil','concurrent_singleton','concurrent_sub_series_singleton','concurrent_reverse','series_append_one','parallel_append_one','concurrent_append_one'],
+  /* Empty by construction: SutraWS.AxiomAudit fails the build for any theorem
+     resting on Lean.ofReduceBool, so nothing here is native_decide-trusted. */
+  compilerTrusted: []
 });
 /* Every visual channel names the theorems it rests on and the predicate that
    decides, right now, whether those theorems still hold of the running state.
@@ -2064,13 +2140,26 @@ const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
       draws: 'R, r, yOff and the gradient terms from |Psi|^2',
-      theorems: ['norm_preserving_not_reducing', 'hw_count', 'hw_all_positive'],
+      /* Boundary of what is proved, stated exactly:
+         these three are about the vertex substrate's own real four-axis
+         transform -- the state being interpolated. They are NOT a model of
+         FAITHFUL.coeffs/evaluator, which is a complex 4x4 trigonometric
+         interpolant; the ring mapping, the Fourier signs and the Nyquist term
+         carry no kernel obligation. What stands behind those is the runtime
+         decision in `holds`: the node residual is the interpolant reproducing
+         the exact state, and the energy residual is Parseval measured on it.
+         A Lean model of the interpolation is absent and is not claimed. */
+      theorems: ['inverse_forward', 'parseval', 'sgn_orthogonal'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
     },
     phase: {
       draws: 'phiShift twist from arg(Psi)',
-      theorems: ['norm_preserving_not_reducing'],
-      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
+      /* inverse_forward covers the reconstruction the argument is taken of.
+         atan2 itself is outside the exact regime and is not claimed; the grid
+         and the read-back are decided by PHASE_CERT instead. */
+      theorems: ['inverse_forward', 'mean_forward_eq_zero'],
+      holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
+                   PHASE_CERT.ok
     },
     wheeler: {
       draws: 'dielectric compression, magnetic dilation, precession rotation',
@@ -2085,15 +2174,20 @@ const VISUAL_CERTIFICATE = {
     },
     r4gate: {
       draws: 'tube pinch from the R4 gate',
-      theorems: ['rho_num_nonneg', 'rho_num_le_den', 'rho_zero_eps',
-                 'rho_den_pos_of_hw_pos', 'tau_max_num_eq',
-                 'tau_max_below_removed_ceiling', 'tau_base_is_three_quarters'],
+      /* r4F is r4ReinforcedOf -- a product of lam^4/(R^4+lam^4) factors
+         (simulation:1661) -- not Wheeler's rho. These are the theorems about
+         the quantity this channel actually pinches on. */
+      theorems: ['r4_reinforced_mem_unit_interval', 'r4_factor_nonneg', 'r4_factor_le_one'],
       holds: () => Number.isFinite(VTX_DISPLAY.r4F) && VTX_DISPLAY.r4F >= 0 && VTX_DISPLAY.r4F <= 1
     },
     modes: {
       draws: 'series / parallel / concurrency comparison panel',
       theorems: LEAN_PROVED.modeChecked,
-      holds: () => MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3
+      /* The identities themselves are decided by STRICT_V5.modeAudit on the
+         live active set, not merely "three arrays exist" -- so a mode whose
+         theorem fails stops drawing, the way the Wheeler channel does. */
+      holds: () => MODE_COMPARE.audit !== null && MODE_COMPARE.audit.ok &&
+                   (MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3)
     },
     sutra: {
       draws: 'per-sutra injected displacement',
@@ -2154,18 +2248,24 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '76e30d6ad3297615',
-  leanToolchain: 'leanprover/lean4:v4.15.0',
-  leanTheorems: 26,
+  leanCorpusSha256: '70bb2a13f23c125627b8cdf73dee3cd108ebe56cfbfc49b17d860333b64050d1',
+  leanToolchain: 'leanprover/lean4:v4.10.0',
+  /* Generated by tools/gen_provenance.mjs from the environment lake build
+     produced. leanTheorems counts every theorem in the SutraWS namespace,
+     the same population SutraWS.AxiomAudit gates, so it includes the
+     equation and spec lemmas `deriving` generates. */
+  leanTheorems: 2130,
   leanSorryCount: 0,
-  leanOleans: ['VedicKernel/Q4Topology.olean','VedicKernel/OperatorClass.olean','VedicKernel/R4Gate.olean','Main.olean'],
-  leanAxiomsKernelChecked: 18,
-  leanAxiomsCompilerTrusted: 8,
-  wheelerLeanSource: 'WheelerGeometry.lean',
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
+  leanAxiomsKernelChecked: 2130,
+  leanAxiomsCompilerTrusted: 0,
+  leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
+  wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  wheelerScopeNote: 'The seven Wheeler statements are carried as Lean source in this repository and are re-decided at runtime by wheelerAudit() over the page arithmetic. No olean is claimed for them; the runtime decision is what gates the render.'
+  interpolationScopeNote: 'The amplitude and phase channels rest at runtime on the FAITHFUL residuals, which decide that the complex 4x4 interpolant reproduces the exact state at the nodes and matches its energy. The interpolation itself is not modelled in Lean: no theorem here constrains the ring mapping, the Fourier signs or the Nyquist term, and atan2 is transcendental and outside an exact-arithmetic development altogether. Both are decided at runtime and neither is claimed as kernel-checked.',
+  wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides.'
 });
 function sourceFingerprint() {
   const scripts = document.scripts;
@@ -3967,11 +4067,11 @@ const DEC_LGT_REGGE = {
           'DEC/LGT non-flatness from explicit S22/S3/S28/S5 sutra edge formula',
           'Sutra Regge hinge action over Q4 square faces',
           'negative controls proving the curvature path can fail',
-          'Lean VedicFractal contract: 12-role Sutra29.role dispatch',
-          'Lean R4KernelContract: exact_formula and reciprocal_formula in ℚ',
-          'Lean RecursiveScaleGeometryBridge: 8 layer flags + energy contract'
+          'Lean SutraWS.Contracts: 7-family dispatch total over all 29 sutras',
+          'Lean SutraWS.RenderCertificates: r4_reinforced_mem_unit_interval -- the R4 pinch in [0,1]'
         ],
         notClaimed: [
+          'Lean-verified RecursiveScaleGeometryBridge layer/energy contract',
           'presentation modules are strict kernel formulas',
           'cryptographic security',
           'physical wormhole formation',
@@ -4108,6 +4208,7 @@ function updateField() {
      taken from the exact state itself (<|Psi|^2> = sum_k |psi_k|^2 / 16), so
      it is invertible and discards nothing. It also keeps the signed range the
      existing AMP.* geometry tuning was written against. */
+  let phaseWriteOk = true;
   const meanP = FAITHFUL_RENDER.proj.totalF / 16;
   const inv = meanP > 0 ? 1 / meanP : 0;
   FAITHFUL_RENDER.meanP = meanP;
@@ -4118,9 +4219,58 @@ function updateField() {
       const idx = i * FIELD_PH + j;
       const s = ev(theta, phi);
       fieldGrid[idx] = s.p * inv - 1;
-      ph[idx] = Math.atan2(s.im, s.re);
+      const a = Math.atan2(s.im, s.re);
+      ph[idx] = a;
+      /* Read the cell straight back. Tautological only if the write landed
+         where it was meant to: an index regression writes elsewhere and leaves
+         this cell holding the previous frame's value, so every one of the
+         12800 cells is covered here at no extra evaluator cost. */
+      if (ph[idx] !== Math.fround(a)) phaseWriteOk = false;
     }
   }
+  FAITHFUL_RENDER.phaseWriteOk = phaseWriteOk;
+  FAITHFUL_RENDER.phaseHash = phaseGridHash();
+  refreshPhaseCertificate();
+}
+/* The phase channel draws atan2 of the complex interpolant. atan2 is
+   transcendental: it has no certificate in a development whose rule is exact
+   arithmetic, and none is claimed for it. What the Lean does cover is the field
+   whose argument is being taken -- inverse_forward is the exact reconstruction
+   FAITHFUL.state.node measures. What is left unguarded by that is the plumbing:
+   whether the grid holds what the evaluator produced, and whether samplePhase
+   reads back the cell that was written. Both are exact equalities of the same
+   float computation, not tolerances, so they are checked here and the channel
+   is gated on them. */
+const PHASE_CERT = { ok: false, checked: 0, writeOk: false, unchanged: false };
+/* FNV-1a over the raw float32 bits of every cell. */
+function phaseGridHash() {
+  const u = new Uint32Array(FAITHFUL_RENDER.phaseGrid.buffer);
+  let h = 0x811c9dc5 >>> 0;
+  for (let k = 0; k < u.length; k++) h = Math.imul(h ^ u[k], 0x01000193) >>> 0;
+  return h >>> 0;
+}
+function refreshPhaseCertificate() {
+  const ph = FAITHFUL_RENDER.phaseGrid;
+  if (!FAITHFUL_RENDER.ev) { PHASE_CERT.ok = false; PHASE_CERT.checked = 0; return PHASE_CERT; }
+  /* Every cell, three ways, none of them a sample:
+       writeOk     each cell held what was written to it, checked at fill time
+       unchanged   no cell has been altered since the fill
+       read-back   samplePhase returns the cell it was asked for, all of them  */
+  const unchanged = phaseGridHash() === FAITHFUL_RENDER.phaseHash;
+  let readOk = true, n = 0;
+  for (let i = 0; i < FIELD_TH; i++) {
+    for (let j = 0; j < FIELD_PH; j++) {
+      const idx = i * FIELD_PH + j;
+      if (samplePhase(((i + 0.5) / FIELD_TH) * TAU,
+                      ((j + 0.5) / FIELD_PH) * TAU) !== ph[idx]) { readOk = false; }
+      n++;
+    }
+  }
+  PHASE_CERT.writeOk = !!FAITHFUL_RENDER.phaseWriteOk;
+  PHASE_CERT.unchanged = unchanged;
+  PHASE_CERT.checked = n;
+  PHASE_CERT.ok = PHASE_CERT.writeOk && unchanged && readOk && n === FIELD_TH * FIELD_PH;
+  return PHASE_CERT;
 }
 function samplePhase(theta, phi) {
   const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
@@ -4322,13 +4472,15 @@ function activeSutrasV5() {
    That also makes it cacheable: it only changes when the active set or one of
    its point arguments changes. */
 const MODE_COMPARE = { key: '', modes: [], traces: [], energies: [],
-                       pairwise: [], allDistinct: false, composedAgrees: false, active: 0 };
+                       pairwise: [], allDistinct: false, composedAgrees: false, active: 0,
+                       audit: null };
 function refreshModeComparison() {
   const act = activeSutrasV5();
   const key = act.map(s => s.id + ':' + s.args.map(q => q.n + '/' + q.d).join('~')).join(',');
   if (key === MODE_COMPARE.key) return MODE_COMPARE;
   MODE_COMPARE.key = key;
   MODE_COMPARE.active = act.length;
+  MODE_COMPARE.audit = STRICT_V5.modeAudit(STRICT_V5.initState(), act);
   if (!act.length) {
     MODE_COMPARE.traces = []; MODE_COMPARE.pairwise = [];
     MODE_COMPARE.allDistinct = false; MODE_COMPARE.composedAgrees = true;

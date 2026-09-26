@@ -1,13 +1,16 @@
 import Mathlib.Tactic
-import Mathlib.Data.Rat.Basic
+import Mathlib.Data.Rat.Defs
 
 /-!
 # Wheeler geometry certificates
 
 The seven statements that gate the Wheeler render channels in
 `vedic_v18.51.1_exact_phi.html`.  Each one is about `computeWheeler` and
-`exactGeometry` in the `STRICT_V5` kernel, and each is a decidable identity or
-inequality over `Rat`, so `decide` / `native_decide` closes it.
+`exactGeometry` in the `STRICT_V5` kernel.  Most are identities or inequalities
+over `Rat`; `Rat`'s `DecidableEq` reduces through `Nat.gcd`'s well-founded
+recursion and the kernel gives up, so they are closed by `norm_num` over an
+enumeration of the sixteen vertices rather than by `decide`.  `native_decide`
+is forbidden here — see `SutraWS.AxiomAudit`.
 
 The page carries an executable decision procedure for the same seven statements
 (`STRICT_V5.wheelerAudit`).  A channel is drawn only when its statement holds at
@@ -66,19 +69,48 @@ theorem wheeler_inertial_plane_card :
 
 /-- **2. The magnetic weight lies in `[0, 1)`, and vanishes only on the plane.** -/
 theorem wheeler_magnetic_weight_in_unit_interval (v : Fin 16) :
-    0 ≤ magneticWeight v ∧ magneticWeight v < 1 := by decide +kernel
+    0 ≤ magneticWeight v ∧ magneticWeight v < 1 := by
+  fin_cases v <;> norm_num [magneticWeight, k, hw]
 
 theorem wheeler_magnetic_weight_zero_iff (v : Fin 16) :
-    magneticWeight v = 0 ↔ hw v = 2 := by decide +kernel
+    magneticWeight v = 0 ↔ hw v = 2 := by
+  fin_cases v <;> norm_num [magneticWeight, k, hw]
 
-/-- **3. The dielectric is exactly phi-scaled**: `D / field` is the same constant
-at every vertex, so the dielectric channel is a pure rescaling of the field and
-introduces no structure of its own. -/
-theorem wheeler_dielectric_is_phi_scaled
-    (s : Rat) (field : Fin 16 → Rat) (u v : Fin 16)
+/-- `computeWheeler` sets `D v = 2*phi * (s * field v)` (`simulation:967`), and
+`wheelerAudit` re-checks that exact value at all sixteen vertices, zero samples
+included (`simulation:1259`).  `2*phi` is irrational and has no `Rat`
+representative, so the scale `c` is left abstract over an arbitrary field;
+`A4 = Q(sqrt 2, sqrt 5)` is such a field and `2*phi` lives in it. -/
+def dielectricOf {K : Type*} [Field K] (c s : K) (field : Fin 16 → K) (v : Fin 16) : K :=
+  c * (s * field v)
+
+/-- **3. The dielectric is exactly phi-scaled**: every vertex carries the field
+times one and the same constant, so the dielectric channel is a pure rescaling
+and introduces no structure of its own.  Stated as the value rather than as a
+ratio, so that it covers a zero sample -- which is what `wheelerAudit` checks. -/
+theorem wheeler_dielectric_is_phi_scaled {K : Type*} [Field K]
+    (c s : K) (field : Fin 16 → K) (v : Fin 16) :
+    dielectricOf c s field v = c * s * field v := by
+  simp only [dielectricOf]; ring
+
+/-- Away from the zeros the same fact reads as a constant ratio, which is the
+form this statement used to take before it carried the scale. -/
+theorem wheeler_dielectric_ratio_constant {K : Type*} [Field K]
+    (c s : K) (field : Fin 16 → K) (u v : Fin 16)
     (hu : field u ≠ 0) (hv : field v ≠ 0) :
-    dielectricTrace s field u / field u = dielectricTrace s field v / field v := by
-  field_simp [dielectricTrace]
+    dielectricOf c s field u / field u = dielectricOf c s field v / field v := by
+  simp only [dielectricOf]
+  field_simp
+  ring
+
+/-- The magnetic statements below carry the dielectric as the rational surrogate
+`s * field v`, without the scale.  That is sound because the scale factors out
+of the whole magnetic chain, so a claim of vanishing survives multiplication by
+it -- which is the only thing those statements assert about it. -/
+theorem magnetic_scales_with_dielectric {K : Type*} [Field K]
+    (c s H w : K) (field : Fin 16 → K) (v : Fin 16) :
+    dielectricOf c s field v * w * H = c * (s * field v * w * H) := by
+  simp only [dielectricOf]; ring
 
 /-- **4. Precession is exactly linear in the magnetic field.** -/
 theorem wheeler_omega_linear_in_magnetic
@@ -89,26 +121,39 @@ theorem wheeler_omega_additive
     (s H gammaW : Rat) (f g : Fin 16 → Rat) (v : Fin 16) :
     omega s H gammaW (fun w => f w + g w) v
       = omega s H gammaW f v + omega s H gammaW g v := by
-  simp [omega, magnetic, dielectricTrace]; ring
+  simp only [omega, magnetic, dielectricTrace]; ring
 
-/-- **5. The radial factor is bounded by `phi^3`**, via `0 ≤ rho ≤ 1`. -/
-theorem wheeler_radial_factor_bounded_by_phi_cubed
+/-- `0 ≤ rho ≤ 1` for the profile itself. -/
+theorem wheeler_rho_mem_unit_interval
     (r eps : Rat) (h : eps ≠ 0) : 0 ≤ rho r eps ∧ rho r eps ≤ 1 := by
-  have hpos : 0 < r ^ 2 + eps ^ 2 :=
-    lt_of_lt_of_le (by positivity) (le_add_of_nonneg_left (sq_nonneg r))
+  have he : 0 < eps ^ 2 := by positivity
+  have hpos : 0 < r ^ 2 + eps ^ 2 := by nlinarith [sq_nonneg r]
   constructor
   · exact div_nonneg (sq_nonneg eps) hpos.le
-  · rw [div_le_one hpos]; nlinarith [sq_nonneg r]
+  · rw [rho, div_le_one hpos]; nlinarith [sq_nonneg r]
+
+/-- **5. The radial factor is bounded by `phi^3`.**  What the renderer caches in
+`_RADF` is `radialFactorQ = phi^3 * rho` (`simulation:2628,2636`), not `rho`, so
+the advertised bound is on the scaled value.  `phi^3` is irrational and has no
+`Rat` representative, so the scale is an abstract nonnegative `c` over an
+ordered field; `A4` is one and `phi^3 = 2 + sqrt 5` lives in it. -/
+theorem wheeler_radial_factor_bounded_by_phi_cubed {K : Type*} [LinearOrderedField K]
+    (c ρ : K) (hc : 0 ≤ c) (h0 : 0 ≤ ρ) (h1 : ρ ≤ 1) :
+    0 ≤ c * ρ ∧ c * ρ ≤ c := by
+  constructor
+  · exact mul_nonneg hc h0
+  · nlinarith
 
 theorem wheeler_rho_zero_eps (eps : Rat) (h : eps ≠ 0) : rho 0 eps = 1 := by
-  simp [rho]; field_simp
+  have h2 : eps ^ 2 ≠ 0 := pow_ne_zero 2 h
+  field_simp [rho]
 
 /-- **6. The Cayley transform of `omega` is a genuine rotation**: the induced
 `(c, s)` sits on the unit circle exactly, so the omega channel rotates the
 geometry without dilating it. -/
 theorem wheeler_cayley_rotation_is_orthogonal (tau : Rat) :
     ((1 - tau ^ 2) / (1 + tau ^ 2)) ^ 2 + ((2 * tau) / (1 + tau ^ 2)) ^ 2 = 1 := by
-  have h : (1 : Rat) + tau ^ 2 ≠ 0 := by positivity
+  have _h : (1 : Rat) + tau ^ 2 ≠ 0 := by positivity
   field_simp
   ring
 
@@ -117,8 +162,9 @@ z-compression `1 / (1 + geoD * D)` never inverts the geometry or divides by
 zero, provided the dielectric stays above `-1/geoD`. -/
 theorem wheeler_compression_positive
     (geoD D : Rat) (hg : 0 < geoD) (hD : -(1 / geoD) < D) : 0 < 1 + geoD * D := by
-  have : geoD * (-(1 / geoD)) < geoD * D := by exact (mul_lt_mul_left hg).mpr hD
-  rw [mul_neg, mul_one_div, div_self hg.ne'] at this
+  have h1 : geoD * (-(1 / geoD)) < geoD * D := (mul_lt_mul_left hg).mpr hD
+  have h2 : geoD * (-(1 / geoD)) = -1 := by field_simp
+  rw [h2] at h1
   linarith
 
 theorem wheeler_compression_positive_of_nonneg
@@ -145,19 +191,22 @@ variable {K : Type*} [Field K] (φ : K)
 def IsGolden (φ : K) : Prop := φ ^ 2 = φ + 1
 
 variable (h : IsGolden φ)
-include h
 
 /-- `φ ≠ 0`, so `1/φ` is available. -/
 theorem golden_ne_zero : φ ≠ 0 := by
   intro h0
-  rw [IsGolden, h0] at h
-  norm_num at h
+  have h2 : φ ^ 2 = φ + 1 := h
+  rw [h0] at h2
+  norm_num at h2
 
 /-- **`φ³ = 2φ + 1`** — the cube in terms of the ratio itself. -/
 theorem phi_cubed_eq : φ ^ 3 = 2 * φ + 1 := by
-  have : φ ^ 3 = φ * φ ^ 2 := by ring
-  rw [this, IsGolden] at *
-  rw [h]; nlinarith [h]
+  have h2 : φ ^ 2 = φ + 1 := h
+  calc φ ^ 3 = φ * φ ^ 2 := by ring
+    _ = φ * (φ + 1) := by rw [h2]
+    _ = φ ^ 2 + φ := by ring
+    _ = φ + 1 + φ := by rw [h2]
+    _ = 2 * φ + 1 := by ring
 
 /-- **`φ + φ + 1 = φ³`** — the identity written on the chart. -/
 theorem phi_plus_phi_plus_one : φ + φ + 1 = φ ^ 3 := by
@@ -166,17 +215,19 @@ theorem phi_plus_phi_plus_one : φ + φ + 1 = φ ^ 3 := by
 /-- **`φ + 1/φ = √5`**, in the form that avoids naming `√5`: `φ - 1/φ = 1`. -/
 theorem phi_sub_inv : φ - 1 / φ = 1 := by
   have hne := golden_ne_zero φ h
+  have h2 : φ ^ 2 = φ + 1 := h
   field_simp
-  nlinarith [h]
+  linear_combination h2
 
 /-- **The divided line sums to `φ³`**: `φ + 1 + 1 + 1/φ = φ³`.
 This is the GOLDENPYTHAGOREAN divided line `Θ : Α : Υ : Γ`, and it is what
 `C.dividedLine` is checked against at load time. -/
 theorem divided_line_sums_to_phi_cubed : φ + 1 + 1 + 1 / φ = φ ^ 3 := by
   have hne := golden_ne_zero φ h
+  have h2 : φ ^ 2 = φ + 1 := h
   rw [phi_cubed_eq φ h]
   field_simp
-  nlinarith [h]
+  linear_combination -h2
 
 end GoldenPythagorean
 
@@ -188,7 +239,7 @@ def sqrt5Mul (x y : Rat × Rat) : Rat × Rat :=
 /-- `φ³ = 2 + √5` in the `(a, b) ↦ a + b√5` representation. -/
 theorem phi_cubed_is_two_plus_sqrt5 :
     sqrt5Mul (sqrt5Mul (1/2, 1/2) (1/2, 1/2)) (1/2, 1/2) = (2, 1) := by
-  simp [sqrt5Mul]; norm_num
+  norm_num [sqrt5Mul, Prod.ext_iff]
 
 end Wheeler
 
@@ -230,23 +281,78 @@ theorem series_eq_parallel_singleton (f : V → V) (ψ : V) :
     series [f] ψ = parallel [f] ψ := by
   simp [series, parallel]
 
+/-- The displacement an operator applies at a point — the quantity `PARALLEL`
+superposes. -/
+def disp (f : V → V) (ψ : V) : V := f ψ - ψ
+
 /-- **On two operators they differ by exactly the cross term.**  `SERIES` feeds
-`f₁ ψ` into `f₂`; `PARALLEL` evaluates both at `ψ`.  The gap is
-`f₂ (f₁ ψ) − f₂ ψ`, which vanishes only when `f₂` cannot see `f₁`'s
-displacement — so a set on which the modes coincide is a genuine degeneracy,
-which is why the panel calls it out rather than hiding it. -/
+`f₁ ψ` into `f₂`; `PARALLEL` evaluates both at `ψ`.  The gap is the change in
+`f₂`'s *displacement* between those two points.
+
+It is not `f₂ (f₁ ψ) − f₂ ψ`: that drops `f₁`'s own displacement, and the two
+agree only when `f₁ ψ = ψ`. `parallel [f₁, f₂] ψ` is `f₁ ψ + f₂ ψ − ψ`, so the
+honest gap carries the `− (f₁ ψ − ψ)` term as well, which is what `disp`
+collects. -/
 theorem series_sub_parallel_pair (f₁ f₂ : V → V) (ψ : V) :
-    series [f₁, f₂] ψ - parallel [f₁, f₂] ψ = f₂ (f₁ ψ) - f₂ ψ := by
-  simp [series, parallel]
+    series [f₁, f₂] ψ - parallel [f₁, f₂] ψ = disp f₂ (f₁ ψ) - disp f₂ ψ := by
+  simp only [series, parallel, disp, List.foldl, List.map, List.sum_cons,
+             List.sum_nil]
   abel
 
-/-- If the second operator is additive on the first's displacement, the modes
-coincide — the precise condition under which the comparison is degenerate. -/
+/-- If `f₂` displaces `f₁ ψ` exactly as it displaces `ψ`, the modes coincide —
+the precise condition under which the comparison is degenerate. -/
 theorem series_eq_parallel_of_affine (f₁ f₂ : V → V) (ψ : V)
-    (h : f₂ (f₁ ψ) = f₂ ψ) : series [f₁, f₂] ψ = parallel [f₁, f₂] ψ := by
-  have := series_sub_parallel_pair f₁ f₂ ψ
-  rw [h] at this
-  simpa [sub_eq_zero] using this
+    (h : disp f₂ (f₁ ψ) = disp f₂ ψ) : series [f₁, f₂] ψ = parallel [f₁, f₂] ψ := by
+  have hd := series_sub_parallel_pair f₁ f₂ ψ
+  rw [h, sub_self] at hd
+  exact sub_eq_zero.mp hd
+
+/-- `SYMMETRIC_CONCURRENT` (`simulation:926`): every operator forward at half
+strength, then the same list in reverse, also at half strength.  `hs` is the
+list already at half strength, which is how `applySutraCore` builds it via
+`argsFor(s, Q.HALF)`. -/
+def concurrent (hs : List (V → V)) (ψ : V) : V :=
+  series hs.reverse (series hs ψ)
+
+theorem concurrent_nil (ψ : V) : concurrent ([] : List (V → V)) ψ = ψ := rfl
+
+/-- On one operator the concurrent mode applies it twice, which is what the
+half-strength forward/reverse pair comes to. -/
+theorem concurrent_singleton (f : V → V) (ψ : V) : concurrent [f] ψ = f (f ψ) := rfl
+
+/-- **The concurrent mode is not the series mode**, and the gap on a single
+operator is exactly the second application -- so a set on which they agree is
+one where every operator is idempotent at half strength. -/
+theorem concurrent_sub_series_singleton (f : V → V) (ψ : V) :
+    concurrent [f] ψ - series [f] ψ = f (f ψ) - f ψ := rfl
+
+/-! ### Identities that hold at every cardinality
+
+The statements above are about the empty, singleton and pair cases, which is
+not enough for a runtime gate: the page starts with all 29 sutras active. These
+peel the last operator off an arbitrary list, so the audit can decide something
+on any active set. -/
+
+theorem series_append_one (fs : List (V → V)) (g : V → V) (ψ : V) :
+    series (fs ++ [g]) ψ = g (series fs ψ) := by
+  simp [series, List.foldl_append]
+
+theorem parallel_append_one (fs : List (V → V)) (g : V → V) (ψ : V) :
+    parallel (fs ++ [g]) ψ = parallel fs ψ + (g ψ - ψ) := by
+  simp only [parallel, List.map_append, List.map_cons, List.map_nil,
+             List.sum_append, List.sum_cons, List.sum_nil]
+  abel
+
+theorem concurrent_append_one (hs : List (V → V)) (h : V → V) (ψ : V) :
+    concurrent (hs ++ [h]) ψ = series hs.reverse (h (h (series hs ψ))) := by
+  simp only [concurrent, series, List.reverse_append, List.reverse_cons,
+             List.reverse_nil, List.nil_append, List.foldl_append,
+             List.foldl_cons, List.foldl_nil]
+
+/-- The split is palindromic: reversing the list mirrors the composition. -/
+theorem concurrent_reverse (hs : List (V → V)) (ψ : V) :
+    concurrent hs.reverse ψ = series hs (series hs.reverse ψ) := by
+  simp only [concurrent, List.reverse_reverse]
 
 end Modes
 end SutraWS

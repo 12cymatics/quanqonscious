@@ -7,6 +7,9 @@ import SutraWS.Exhaustive
 import SutraWS.Vertex
 import SutraWS.VertexProofs
 import SutraWS.Contracts
+import SutraWS.WheelerGeometry
+import SutraWS.RenderCertificates
+import SutraWS.DECComplex
 import Lean
 
 /-!
@@ -39,8 +42,12 @@ open Lean Elab Command
 
 namespace SutraWS
 
-private def forbiddenAxioms : Array Name :=
-  #[``sorryAx, `Lean.ofReduceBool, `Lean.ofReduceNat, `Lean.trustCompiler]
+/-- The permitted trust base, as an allowlist rather than a blocklist of the
+axioms we happen to know about. A blocklist passes a theorem that rests on some
+newly declared project `axiom`, because that name is not on it; naming what is
+allowed puts everything else outside by construction. -/
+private def permittedAxioms : Array Name :=
+  #[`propext, `Classical.choice, `Quot.sound]
 
 private def axiomsOf (env : Environment) (c : Name) : Array Name :=
   (((CollectAxioms.collect c).run env).run {}).2.axioms
@@ -55,13 +62,14 @@ run_cmd do
     unless !name.isInternalDetail do continue
     audited := audited + 1
     for ax in axiomsOf env name do
-      if forbiddenAxioms.contains ax then
+      unless permittedAxioms.contains ax do
         offenders := offenders.push (name, ax)
   if !offenders.isEmpty then
     let lines := (offenders.map fun (n, ax) => s!"  {n} uses {ax}").toList
-    throwError "SutraWS axiom audit FAILED ({offenders.size} offending theorem(s) \
-      of {audited} audited):\n{"\n".intercalate lines}"
+    throwError "SutraWS axiom audit FAILED ({offenders.size} theorem(s) of \
+      {audited} resting on an axiom outside the declared trust base \
+      {permittedAxioms.toList}):\n{"\n".intercalate lines}"
   else
-    logInfo s!"SutraWS axiom audit: {audited} theorems, none using {forbiddenAxioms.toList}"
+    logInfo s!"SutraWS axiom audit: {audited} theorems, all on {permittedAxioms.toList}"
 
 end SutraWS

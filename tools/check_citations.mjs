@@ -1,0 +1,101 @@
+#!/usr/bin/env node
+/* Every theorem name the page cites must exist in the environment `lake build`
+   produced. Run after ProvenanceExport.lean has written lean_provenance.json.
+   Exits non-zero naming any citation with no theorem behind it. */
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const ROOT = process.cwd();
+const HTML = join(ROOT, 'vedic_v18.51.1_exact_phi.html');
+const JSONF = join(ROOT, 'lean_provenance.json');
+if (!existsSync(JSONF)) { console.error('lean_provenance.json missing — run the Lean export first'); process.exit(1); }
+
+const env = JSON.parse(readFileSync(JSONF, 'utf8'));
+const html = readFileSync(HTML, 'utf8');
+
+/* The page cites the final name component. That is only sound while the
+   component is unique: if two namespaces both end in `foo`, deleting the one
+   the page means leaves the citation satisfied by the other. Ambiguity in a
+   cited name is therefore a failure, not a note. */
+const bySuffix = new Map();
+for (const full of env.kernelChecked.concat(env.compilerTrusted)) {
+  const s = full.split('.').pop();
+  if (!bySuffix.has(s)) bySuffix.set(s, []);
+  bySuffix.get(s).push(full);
+}
+
+const strings = src => [...(src.match(/'[^']*'/g) || [])].map(s => s.slice(1, -1));
+const cites = new Map();
+const add = (name, where) => {
+  if (!cites.has(name)) cites.set(name, new Set());
+  cites.get(name).add(where);
+};
+
+for (const key of ['kernelChecked', 'wheelerChecked', 'goldenChecked', 'modeChecked', 'compilerTrusted']) {
+  const m = html.match(new RegExp(key + ': \\[([^\\]]*)\\]'));
+  if (!m) { console.error('LEAN_PROVED.' + key + ' not found'); process.exit(1); }
+  for (const n of strings(m[1])) add(n, 'LEAN_PROVED.' + key);
+}
+
+/* Channel gating. Scanned structurally rather than with one regex spanning
+   draws -> theorems: comments and other properties sit between them, and a
+   regex that assumed adjacency silently matched only the last channel, which
+   is the failure this whole file exists to prevent. `theorems: LEAN_PROVED.x`
+   is covered by the named lists above. */
+const certStart = html.indexOf('const VISUAL_CERTIFICATE');
+if (certStart < 0) { console.error('VISUAL_CERTIFICATE not found'); process.exit(1); }
+const certEnd = html.indexOf('\n};', certStart);
+const certBody = html.slice(certStart, certEnd < 0 ? html.length : certEnd);
+const channelsSeen = [];
+let channel = null, pending = null, arraysParsed = 0;
+const takeArray = (text) => {
+  const inner = text.slice(text.indexOf('[') + 1, text.lastIndexOf(']'));
+  for (const n of strings(inner)) add(n, 'VISUAL_CERTIFICATE.' + channel);
+  arraysParsed++;
+};
+for (const line of certBody.split('\n')) {
+  /* a theorems array may span lines -- the sutra channel's does -- so keep
+     accumulating until the bracket closes rather than requiring one line */
+  if (pending !== null) {
+    pending += ' ' + line;
+    if (line.includes(']')) { takeArray(pending); pending = null; }
+    continue;
+  }
+  const open = line.match(/^\s{4}(\w+):\s*\{\s*$/);
+  if (open) { channel = open[1]; channelsSeen.push(channel); continue; }
+  if (channel && /^\s*theorems:\s*\[/.test(line)) {
+    if (line.includes(']')) takeArray(line); else pending = line;
+  }
+}
+if (channelsSeen.length === 0) {
+  console.error('FAIL — parsed no channels out of VISUAL_CERTIFICATE');
+  process.exit(1);
+}
+/* every literal array in the block must have been consumed: if the source
+   grows a shape this loop does not understand, that is a failure, not a
+   silently smaller set of checks */
+const literalArrays = (certBody.match(/^\s*theorems:\s*\[/gm) || []).length;
+if (arraysParsed !== literalArrays) {
+  console.error(`FAIL — ${literalArrays} literal theorems arrays in VISUAL_CERTIFICATE `
+              + `but only ${arraysParsed} parsed; the channel scan does not understand the source`);
+  process.exit(1);
+}
+
+const missing = [...cites].filter(([n]) => !bySuffix.has(n));
+const ambiguous = [...cites].filter(([n]) => (bySuffix.get(n) || []).length > 1);
+console.log(`citations: ${cites.size} distinct names, ${bySuffix.size} theorem suffixes in the built environment`);
+console.log(`channels parsed: ${channelsSeen.length} (${channelsSeen.join(', ')}), `
+          + `${arraysParsed} literal theorem arrays`);
+
+if (missing.length) {
+  console.error(`\nFAIL — ${missing.length} cited name(s) with no theorem behind them:`);
+  for (const [n, where] of missing) console.error(`  ${n}  <- ${[...where].join(', ')}`);
+}
+if (ambiguous.length) {
+  console.error(`\nFAIL — ${ambiguous.length} cited name(s) resolve to more than one theorem;`);
+  console.error(`the citation cannot say which, so deleting the intended one would go unnoticed:`);
+  for (const [n, where] of ambiguous)
+    console.error(`  ${n}  <- ${[...where].join(', ')}\n      ${bySuffix.get(n).join('\n      ')}`);
+}
+if (missing.length || ambiguous.length) process.exit(1);
+console.log('OK — every cited theorem exists, and each name resolves to exactly one');
