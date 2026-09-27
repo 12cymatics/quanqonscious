@@ -32,7 +32,8 @@ const ROOT = join(here, '..');
 const K = require(join(ROOT, 'faraday', 'kernel.js'));
 const D = require(join(here, 'faraday-disc.js'));
 const F = require(join(here, 'faraday-floquet.js'));
-const { FaradayDisc, gradeToEnd, gradeBothEnds } = D;
+const { FaradayDisc, gradeToEnd, gradeBothEnds, suggestGrid } = D;
+const W = require(join(here, 'faraday-disc-wasm.js'));
 
 let pass = 0; const failures = [];
 function ok(cond, label, detail){
@@ -314,6 +315,32 @@ section('6. the grading puts cells in the layers that set the damping');
      `${su.cellsInFloorLayer.toFixed(3)} cells in the floor layer`);
 }
 
+/* The grid the Floquet sections run on, sized to the mode rather than chosen.
+   The sections below used a fixed 24 x 12, which the resolution gate now refuses
+   and was right to: at that grid this mode gets 0.69 cells into the floor Stokes
+   layer, so its damping came out of the truncation error. */
+const A8 = analytic(12, 1);
+const K8 = A8.k;
+const SIZED8 = suggestGrid({ m: 12, k: K8, ...CELL, contact: 'free',
+                             omegaResponse: Math.PI*111, omegaDrive: 2*Math.PI*111,
+                             profile: r => K.besselJ(12, K8*r) });
+if (SIZED8.unreachable) throw new Error(
+  'check-disc: no grid on the ladder carries m = 12, n = 1 at 111 Hz, which is '
+  + 'the operating point every Floquet section below is written against.');
+const GRID8 = { nr: SIZED8.nr, nz: SIZED8.nz,
+                rStretch: SIZED8.rStretch, zStretch: SIZED8.zStretch };
+const ETA8 = (() => {
+  const S = new FaradayDisc({ m: 12, ...GRID8, ...CELL, contact: 'free' });
+  const e = new Float64Array(GRID8.nr);
+  for (let i = 0; i < GRID8.nr; i++) e[i] = K.besselJ(12, K8*S.rc[i]);
+  return e;
+})();
+console.log(`\n  sized for the Floquet sections: ${GRID8.nr} x ${GRID8.nz}, `
+  + `r stretch ${GRID8.rStretch}, z stretch ${GRID8.zStretch}; surface operator `
+  + `error ${SIZED8.err.toExponential(2)}, ${SIZED8.layers.toFixed(2)} cells in the `
+  + `tightest Stokes layer, ${SIZED8.stateSize} unknowns, ${SIZED8.stepsPerPeriod} `
+  + `steps per drive period`);
+
 /* ── 7. refusals ───────────────────────────────────────────────────────── */
 section('7. what it refuses rather than answering');
 throws('m = 1 is refused, naming the cancellation that makes it different',
@@ -335,22 +362,34 @@ throws('a zero drive frequency is refused by the Floquet driver',
 throws('a step above the explicit stability limit is refused',
        () => F.floquetDisc({ nr: 24, nz: 12, ...CELL, m: 12, accel: 7,
                              omegaD: 2*Math.PI*111, dt: 1e-3 }), 'stability limit');
+/* A short Krylov space is now ESCALATED rather than refused -- the Arnoldi space
+   is extended, so asking for more costs only the extra vectors -- so the refusal
+   is reached by capping the escalation as well. With the cap at 4 the ladder has
+   a single rung and there is no evidence the leading modulus has settled, which
+   is the refusal. It runs on a grid that passes the resolution gate, because
+   otherwise that gate fires first and this would be testing the wrong refusal. */
 throws('a Krylov space too short to find the dominant mode is refused, not '
        + 'reported',
-       () => F.floquetDisc({ nr: 16, nz: 8, ...CELL, m: 12, accel: 7,
-                             omegaD: 2*Math.PI*111, krylov: 4 }),
+       () => F.floquetDisc({ ...GRID8, ...CELL, m: 12, accel: 7, eta0: ETA8,
+                             omegaD: 2*Math.PI*111, contact: 'free',
+                             engine: 'wasm', krylov: 4, krylovCap: 4 }),
        'not converged in the Krylov dimension');
+throws('a grid that cannot carry the mode is refused before a step is taken, '
+       + 'naming the cells it is short of',
+       () => F.floquetDisc({ nr: 16, nz: 8, ...CELL, m: 12, accel: 7, k: K8,
+                             omegaD: 2*Math.PI*111, contact: 'free' }),
+       'cannot carry the mode');
+throws('and the refusal names the Stokes layer, not just the surface operator',
+       () => F.floquetDisc({ nr: 16, nz: 8, ...CELL, m: 12, accel: 7, k: K8,
+                             omegaD: 2*Math.PI*111, contact: 'free' }),
+       'cells at the floor');
 
 /* ── 8. Floquet ────────────────────────────────────────────────────────── */
 section('8. Floquet multipliers on the disc');
 {
-  const m = 12, a = analytic(m, 1);
-  const nr = 24, nz = 12;
-  const S0 = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free' });
-  const eta0 = new Float64Array(nr);
-  for (let i = 0; i < nr; i++) eta0[i] = K.besselJ(m, a.k*S0.rc[i]);
-  const common = { nr, nz, ...CELL, m, contact: 'free', eta0,
-                   omegaD: 2*Math.PI*111 };
+  const m = 12;
+  const common = { ...GRID8, ...CELL, m, contact: 'free', eta0: ETA8, k: K8,
+                   omegaD: 2*Math.PI*111, engine: 'wasm' };
 
   const quiet = F.floquetDisc({ ...common, accel: 0 });
   ok(quiet.muMax < 1, 'an undriven layer has every multiplier inside the unit circle',
@@ -401,6 +440,26 @@ section('8. Floquet multipliers on the disc');
   ok(!driven.breakdown || driven.krylov > 1,
      'the Krylov space either filled or broke down on an invariant subspace',
      `krylov ${driven.krylov}, residual ${driven.residual}`);
+  ok(driven.engine === 'wasm',
+     'and it ran in the C++ engine, which is what was asked for',
+     `engine ${driven.engine}`);
+
+  /* The JavaScript reference, on the same problem. Everything above ran in C++
+     because it is four times faster and the suite has to finish; this is the line
+     that makes that legitimate. It is not a tolerance: the two implementations
+     compute the same arithmetic in the same order and must agree to the last bit,
+     so the assertion is equality, and any difference at all fails it. */
+  const ref = F.floquetDisc({ ...common, accel: 7.060788, engine: 'js' });
+  ok(ref.muMax === driven.muMax,
+     'the JavaScript solver returns the identical multiplier on the identical '
+     + 'problem, to the last bit, so running the physics in C++ above asserts '
+     + 'nothing the JavaScript does not',
+     `js ${ref.muMax} against wasm ${driven.muMax}`);
+  ok(ref.krylov === driven.krylov && ref.steps === driven.steps,
+     'and reaches it through the same Krylov dimension over the same steps',
+     `js krylov ${ref.krylov}/${ref.steps} steps, wasm ${driven.krylov}/${driven.steps}`);
+  ok(ref.engine === 'js', 'with the engine it reports being the one asked for',
+     `engine ${ref.engine}`);
 }
 
 /* ── 9. the contact line changes the answer ────────────────────────────── */
@@ -450,12 +509,9 @@ section('10. the disc answers differently from the periodic box');
   const boxed = F.floquet({ nx: 32, ns: 32, L: 2*Math.PI/a.k, h0: CELL.h,
                             rho: CELL.rho, nu: CELL.nu, gamma: CELL.gamma,
                             accel: 7.060788, omegaD: 2*Math.PI*111, m: 4 });
-  const nr = 24, nz = 12;
-  const S0 = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free' });
-  const eta0 = new Float64Array(nr);
-  for (let i = 0; i < nr; i++) eta0[i] = K.besselJ(m, a.k*S0.rc[i]);
-  const disc = F.floquetDisc({ nr, nz, ...CELL, m, contact: 'free',
-                               eta0, accel: 7.060788, omegaD: 2*Math.PI*111 });
+  const disc = F.floquetDisc({ ...GRID8, ...CELL, m, contact: 'free', k: K8,
+                               eta0: ETA8, accel: 7.060788,
+                               omegaD: 2*Math.PI*111, engine: 'wasm' });
   console.log(`       periodic box: growth ${boxed.growth.toFixed(4)} s^-1 `
     + `(|mu| ${boxed.muMax.toFixed(6)})`);
   console.log(`       disc:         growth ${disc.growth.toFixed(4)} s^-1 `
@@ -472,9 +528,263 @@ section('10. the disc answers differently from the periodic box');
      damped Mathieu form. This is the number the deck prints, and the disc
      disagrees with it in SIGN -- which is the finding, and the reason the panel
      on the page had to stop being a second opinion printed beside it. */
-  const damp = K.dampingFrom ? null : null;
   console.log(`       the deck's Mathieu growth for this state is +3.24 s^-1, so `
     + `the disc reverses the verdict rather than trimming it`);
+}
+
+/* ── 11. the C++ period map is the JavaScript one ───────────────────────── */
+section('11. the C++ engine against the JavaScript solver, bit for bit');
+/* Not "close". dns/faraday_disc.cpp is a transcription of dns/faraday-disc.js:
+   the same discretisation in the same order, double precision, no fused
+   multiply-add, no fast-math, and no transcendental at all -- the drive's cosine
+   is evaluated in JavaScript into a table and passed in. The only floating point
+   operations either side performs are +, -, *, / and sqrt, all of which IEEE-754
+   specifies exactly, so the two must agree to the last bit and the assertion is
+   equality. A tolerance here would hide exactly the kind of divergence that
+   matters: one term reassociated, one loop bound off by a cell.
+
+   This runs on a coarse grid on purpose. Parity is a property of the
+   transcription, not of the resolution: whether the two implementations agree
+   does not depend on whether the grid carries the mode, and a coarse grid
+   exercises every term in seconds instead of minutes. */
+{
+  const m = 12, a = analytic(m, 1);
+  for (const contact of ['free', 'pinned']){
+    const nr = 20, nz = 10;
+    const mk = () => {
+      const S = new FaradayDisc({ m, nr, nz, ...CELL, contact,
+                                  accel: 7.060788, omegaD: 2*Math.PI*111 });
+      return S;
+    };
+    const S = mk();
+    const n = 2*(nr - 1)*nz + nr*nz + nr;
+    const dt = S.stableStep(0.4);
+    const href = 1e-9, uref = href*Math.PI*111;
+
+    /* A state with every block non-zero, so a dropped term anywhere shows. */
+    const v = new Float64Array(n);
+    for (let i = 0; i < n; i++) v[i] = Math.sin(0.7*i + 0.3) + 0.25*Math.cos(1.9*i);
+    for (let i = 0; i < nr; i++)
+      v[2*(nr-1)*nz + nr*nz + i] = K.besselJ(m, a.k*S.rc[i]);
+
+    const E = W.createDiscEngine({}).load(S, 1, dt, 7.060788, 2*Math.PI*111, S.g);
+    const gNow = S.g + 7.060788*Math.cos(0);
+
+    /* One step first: a divergence here is still attributable to a single term. */
+    const js1 = new Float64Array(n), wa1 = new Float64Array(n);
+    F.applyDiscPeriodMap(mk(), v, 1, dt, js1, href, uref);
+    E.stepOnce(v, wa1, dt, gNow, href, uref);
+    let same = 0;
+    for (let i = 0; i < n; i++) if (js1[i] === wa1[i]) same++;
+    ok(same === n, `${contact} rim, one step: all ${n} values identical`,
+       `${same} of ${n} identical`);
+
+    /* Then a full drive period, where a difference of one bit in one cell has
+       had every step to grow into the answer. */
+    const steps = Math.max(1, Math.round((2*Math.PI/(2*Math.PI*111))/dt));
+    const E2 = W.createDiscEngine({}).load(S, steps, dt, 7.060788, 2*Math.PI*111, S.g);
+    const jsP = new Float64Array(n), waP = new Float64Array(n);
+    F.applyDiscPeriodMap(mk(), v, steps, dt, jsP, href, uref);
+    E2.applyPeriodMap(v, waP, dt, href, uref);
+    same = 0;
+    let worst = 0;
+    for (let i = 0; i < n; i++){
+      if (jsP[i] === waP[i]) same++;
+      const d = Math.abs(jsP[i] - waP[i]);
+      const sc = Math.max(Math.abs(jsP[i]), Math.abs(waP[i]));
+      if (sc > 0) worst = Math.max(worst, d/sc);
+    }
+    ok(same === n, `${contact} rim, one drive period of ${steps} steps: all `
+       + `${n} values identical`,
+       `${same} of ${n} identical, worst relative difference ${worst.toExponential(3)}`);
+    /* The map is not the identity, or the equality above would be vacuous. */
+    let moved = 0;
+    for (let i = 0; i < n; i++) if (waP[i] !== v[i]) moved++;
+    ok(moved > 0.9*n, `${contact} rim: and the period map moved the state, so the `
+       + `agreement is not two copies of the input`, `${moved} of ${n} moved`);
+  }
+
+  /* The loader refuses rather than substituting. Bytes that are not a module
+     cannot compile, and what comes back must be a refusal that names the engine
+     -- not a silent run of the JavaScript under the C++ name. */
+  throws('bytes that are not a WebAssembly module are refused',
+         () => W.createDiscEngine({ bytes: new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]) }),
+         'would not compile');
+  /* And a request the arena cannot hold is refused, not silently truncated.
+     This asked for a 512 x 96 grid first, on the assumption that the largest grid
+     the sizing ladder allows would overflow. Measured: it does not -- 512 x 96
+     with 100000 drive samples fits in the 3000000-double arena with room to
+     spare, and the load was accepted, which is why the test read "did not throw".
+     What the arena is actually sized against is the TOTAL, and the drive table is
+     the term that scales with the step count rather than with the grid: 512 x 96
+     is refused at 2000000 samples, and a 20 x 10 grid is refused at 4000000. The
+     small grid is used so the refusal is reached without building a large one. */
+  throws('a drive table larger than the module arena is refused',
+         () => { const S = new FaradayDisc({ m: 12, nr: 20, nz: 10, ...CELL });
+                 W.createDiscEngine({}).load(S, 4000000, 1e-6, 0, 1, S.g); },
+         'arena');
+}
+
+/* ── 12. sizing the grid, and extending the Krylov space ────────────────── */
+section('12. the grid is sized to the mode, and the space is extended not rebuilt');
+{
+  /* The operating point the renderer defaults to is reachable; a mode with 37
+     radial wavelengths across a 24 mm cell is not, and that is reported as
+     unreachable rather than answered on a grid that cannot carry it. */
+  const a = analytic(12, 3);
+  const good = suggestGrid({ m: 12, k: a.k, ...CELL, contact: 'free',
+                             omegaResponse: a.omega, omegaDrive: 2*a.omega,
+                             profile: r => K.besselJ(12, a.k*r) });
+  ok(!good.unreachable, 'a mode with a few radial wavelengths gets a grid',
+     JSON.stringify(good.unreachable ? { tried: good.tried.length } : {
+       nr: good.nr, nz: good.nz }));
+  ok(good.err <= 1e-2, 'whose surface operator error meets the one per cent gate',
+     `${good.err.toExponential(3)}`);
+  ok(good.layers >= 2, 'and which holds two cells in every Stokes layer',
+     `${good.layers.toFixed(3)} in the tightest`);
+  /* The cheapest that holds, not the first found. */
+  const cheaper = good.tried.filter(t => t.err <= 1e-2 && t.layersOk
+                                         && t.work < good.work);
+  ok(cheaper.length === 0,
+     'and it is the cheapest of every grid tried that meets both gates',
+     `${cheaper.length} cheaper passing grids, e.g. `
+     + (cheaper[0] ? `${cheaper[0].nr}x${cheaper[0].nz}` : 'none'));
+
+  const hard = analytic(17, 46);
+  const no = suggestGrid({ m: 17, k: hard.k, ...CELL, contact: 'free',
+                           omegaResponse: hard.omega, omegaDrive: 2*hard.omega,
+                           profile: r => K.besselJ(17, hard.k*r) });
+  ok(no.unreachable === true,
+     `a mode with kR = ${hard.k*CELL.R < 1 ? '' : (hard.k*CELL.R).toFixed(0)} is `
+     + `reported unreachable rather than answered`,
+     no.unreachable ? `${no.tried.length} grids tried` : `${no.nr}x${no.nz} offered`);
+  const best = no.tried.reduce((x, y) => y.err < x.err ? y : x);
+  ok(best.err > 1e-2,
+     'and the closest grid on the ladder really does miss the gate',
+     `${best.err.toExponential(3)} at ${best.nr}x${best.nz}`);
+  console.log(`       m = 17, n = 46: closest of ${no.tried.length} grids is `
+    + `${best.nr}x${best.nz} at ${best.err.toExponential(2)}, against the 1e-2 gate`);
+
+  /* A profile with no structure the operator can see is refused by the fit rather
+     than given a wavenumber -- and which profiles those are is not what was first
+     written here. This asked for a constant elevation at m = 12 to be refused,
+     which it is not, and measurement says why: the azimuthal part of the operator
+     is -m^2 eta/r^2, which does not vanish on a constant. At m = 12 a constant
+     elevation gives D_m eta = -4.464e-1 at the axis cell and fits lambda =
+     -8.491e+6 with a residual of 4.95 -- a legitimate answer, saying loudly that
+     the profile is not a mode. The operator is blind to a constant only at m = 0,
+     where D_0 of a constant is exactly zero, and that is the case refused. */
+  throws('a constant elevation at m = 0 has no mode to fit, and says so',
+         () => { const S = new FaradayDisc({ m: 0, nr: 24, nz: 12, ...CELL });
+                 S.eta.fill(1e-9); return S.surfaceModeFit(); },
+         'no radial structure');
+  {
+    const S = new FaradayDisc({ m: 12, nr: 24, nz: 12, ...CELL });
+    S.eta.fill(1e-9);
+    const fit = S.surfaceModeFit();
+    ok(fit.err > 1,
+       'while at m = 12 a constant elevation does fit -- the azimuthal term acts '
+       + 'on it -- and the residual says it is not a mode',
+       `residual ${fit.err.toExponential(3)}`);
+  }
+  throws('an identically zero surface has nothing to fit at any m',
+         () => { const S = new FaradayDisc({ m: 12, nr: 24, nz: 12, ...CELL });
+                 return S.surfaceModeFit(); },
+         'identically zero');
+}
+{
+  /* Extending an Arnoldi space must give exactly what building it from scratch
+     would. If it does not, escalating the Krylov dimension is not free -- it is
+     wrong -- and the escalation the Floquet driver now does on its own would be
+     reporting the eigenvalues of a basis that is not orthonormal. */
+  const n = 40;
+  const A = (v, out) => {
+    for (let i = 0; i < n; i++){
+      let x = (1 + 0.05*i)*v[i];
+      if (i > 0) x += 0.7*v[i-1];
+      if (i + 1 < n) x += 0.3*v[i+1];
+      out[i] = x + 0.02*v[n-1-i];
+    }
+  };
+  const v0 = new Float64Array(n);
+  for (let i = 0; i < n; i++) v0[i] = Math.cos(0.37*i) + 0.11;
+
+  let calls = 0;
+  const counted = (v, out) => { calls++; A(v, out); };
+  const six = F.arnoldi(counted, v0, 6);
+  const atSix = calls;
+  const extended = F.arnoldi(counted, v0, 12, six);
+  const toExtend = calls - atSix;
+  calls = 0;
+  const fresh = F.arnoldi(counted, v0, 12);
+
+  ok(atSix === 6 && calls === 12 && toExtend === 6,
+     'extending a 6-dimensional space to 12 costs six more operator '
+     + 'applications, not twelve',
+     `6 then ${toExtend} to extend, against ${calls} to rebuild`);
+  let worst = 0;
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++)
+    worst = Math.max(worst, Math.abs(extended.Hm[i][j] - fresh.Hm[i][j]));
+  ok(worst === 0,
+     'and the extended Hessenberg matrix is identical to the rebuilt one, bit '
+     + 'for bit',
+     `worst difference ${worst}`);
+  ok(six.V.length === 7,
+     'the previous result is left able to be extended, carrying its next basis '
+     + 'vector', `${six.V.length} vectors for a 6-dimensional space`);
+  ok(six.used === 6,
+     'and unchanged by the extension that read it',
+     `used ${six.used}, V ${six.V.length}`);
+
+  /* Three hops must land where one does. */
+  const hop = F.arnoldi(A, v0, 12, F.arnoldi(A, v0, 8, F.arnoldi(A, v0, 4)));
+  let worstHop = 0;
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++)
+    worstHop = Math.max(worstHop, Math.abs(hop.Hm[i][j] - fresh.Hm[i][j]));
+  ok(worstHop === 0, 'and 4 to 8 to 12 lands on the same matrix as 12 outright',
+     `worst difference ${worstHop}`);
+
+  /* A space that closed cannot be extended, and says so rather than reading a
+     basis vector that was never built. */
+  const B = (v, out) => {
+    out.fill(0);
+    out[0] = 2*v[0] + v[1];
+    out[1] = v[0] + 3*v[1] + v[2];
+    out[2] = v[1] + 4*v[2];
+  };
+  const bv = new Float64Array(n); bv[0] = 1; bv[1] = 0.5; bv[2] = -0.25;
+  const closed = F.arnoldi(B, bv, 8);
+  ok(closed.breakdown && closed.used === 3,
+     'an operator with a three-dimensional invariant subspace breaks down at '
+     + 'three', `used ${closed.used}, breakdown ${closed.breakdown}`);
+  throws('and extending that closed space is refused',
+         () => F.arnoldi(B, bv, 12, closed), 'space that closed');
+  throws('as is asking for a dimension that is not an extension',
+         () => F.arnoldi(A, v0, 12, fresh), 'not an extension');
+}
+{
+  /* The grading reaches the solver. It did not once: floquetDisc built its grid
+     without forwarding rStretch and zStretch, so every run used the solver's
+     default 2.2/2.2 and a grid sized to put 2.85 cells in the floor layer was
+     integrated with 1.22 there. Nothing announced it. The refusal message names
+     the cells it measured, and it is reached before any integration, so this
+     costs nothing and fails if the forwarding is dropped again. */
+  const cellsFromRefusal = zStretch => {
+    try {
+      F.floquetDisc({ nr: 16, nz: 8, ...CELL, m: 12, accel: 7, k: K8,
+                      omegaD: 2*Math.PI*111, contact: 'free', zStretch });
+    } catch (e){
+      const mt = /([0-9.]+) cells at the floor/.exec(e.message);
+      if (!mt) throw new Error(`the refusal did not report floor cells: ${e.message}`);
+      return parseFloat(mt[1]);
+    }
+    throw new Error('a 16x8 grid was not refused at m = 12');
+  };
+  const mild = cellsFromRefusal(1.0), severe = cellsFromRefusal(3.8);
+  ok(severe > 1.5*mild,
+     'a harder vertical grading puts substantially more cells in the floor '
+     + 'Stokes layer, so the grading the caller asks for is the grading solved',
+     `${mild.toFixed(3)} cells at stretch 1.0 against ${severe.toFixed(3)} at 3.8`);
 }
 
 console.log('\n' + '-'.repeat(66));

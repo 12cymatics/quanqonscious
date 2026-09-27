@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildStandalone, SCRIPTS } from './build-standalone.mjs';
+import { buildStandalone, SCRIPTS, WASM_TAG, WASM_PATH } from './build-standalone.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => readFileSync(resolve(REPO, p), 'utf8');
@@ -69,14 +69,48 @@ check('the page around the scripts is untouched', () => {
   eq(beforeBuilt, beforeHtml, 'markup preceding the scripts');
 });
 
+const wasmBytes = readFileSync(resolve(REPO, WASM_PATH));
+const wasmB64 = Buffer.from(wasmBytes).toString('base64');
+
 check('the output grew by exactly the inlined bodies', () => {
   // Pins that nothing else was added or dropped: each src tag is replaced by
-  // its open tag, a newline, the source, a newline and the close tag.
+  // its open tag, a newline, the source, a newline and the close tag, and the
+  // empty wasm tag by the same tag carrying the base64 assignment.
   let want = html.length;
   SCRIPTS.forEach(({ tag, open }, i) => {
     want += open.length + 1 + sources[i].length + 1 + '</script>'.length - tag.length;
   });
+  const wasmBlock = `<script id="dnsWasmBase64">\nglobalThis.FARADAY_DISC_WASM_BASE64 = "${wasmB64}";\n</script>`;
+  want += wasmBlock.length - WASM_TAG.length;
   eq(built.length, want, 'built length');
+});
+
+check('the compiled period map is carried, and decodes to the committed bytes', () => {
+  // Not "a base64 string is present": the string is decoded and compared with
+  // dns/faraday_disc.wasm byte for byte. A truncated or stale inline would still
+  // look like base64, and would fail in the page instead of here.
+  eq(built.includes(`globalThis.FARADAY_DISC_WASM_BASE64 = "${wasmB64}";`), true,
+     'the assignment is present with the exact encoding');
+  const m = built.match(/globalThis\.FARADAY_DISC_WASM_BASE64 = "([A-Za-z0-9+/=]+)";/);
+  eq(m !== null, true, 'the assignment parses');
+  const back = Buffer.from(m[1], 'base64');
+  eq(back.length, wasmBytes.length, 'decoded byte length');
+  eq(Buffer.compare(back, wasmBytes), 0, 'decoded bytes equal the module on disk');
+  // And the decoded bytes are a module WebAssembly will take, which a corrupted
+  // encoding would not be even at the right length.
+  eq(WebAssembly.validate(back), true, 'the decoded module validates');
+});
+
+check('a page without the wasm tag is refused', () => {
+  // The one failure that produces a page which LOADS and then refuses at the
+  // panel, which is the hardest kind to notice.
+  let threw = null;
+  try { buildStandalone({ 'cymatic.html': html.replace(WASM_TAG, '') }); }
+  catch (e) { threw = e; }
+  if (threw === null)
+    throw new Error('the build accepted a page with no place to put the compiled '
+                    + 'period map, and emitted one without it');
+  eq(/dnsWasmBase64/.test(threw.message), true, 'the refusal names the tag');
 });
 
 check('a literal </script> in a source is refused, not silently emitted', () => {

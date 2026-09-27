@@ -546,6 +546,96 @@ class FaradayDisc {
     return s*Math.min(L.capillary, L.viscous);
   }
 
+  /* Can this grid represent the mode at all?
+
+     The elevation currently loaded is taken to be the mode, and D_m applied to
+     it must return -k^2 times it -- that is Bessel's equation, so the relative
+     L2 error of that identity measures the grid against the mode directly
+     rather than through a proxy like cells per wavelength.
+
+     This exists because a grid can be far too coarse for a mode while the
+     solver still runs and still returns a multiplier. Measured on this
+     apparatus: at the working point the renderer defaults to -- 111 Hz, m = 12,
+     n = 1, kR = 13.9, the point check-disc validates against the analytic
+     dispersion relation -- a 28x14 grid gives 2.19e-3, three digits. At 4392 Hz,
+     m = 17, n = 46, kR = 168, the SAME grid gives 7.56e-1: the operator
+     misrepresents the mode by 76 per cent. That mode has 26.7 radial
+     wavelengths across the cell and the grid gives it 3.6 cells each, barely
+     above Nyquist. Refining helps slowly -- 2.55e-1 at 128x28, 7.31e-2 at
+     256x40, 3.40e-2 at 384x48 -- so nothing affordable reaches the working
+     point's accuracy.
+
+     Grading trades this against the Stokes layers, and the trade is real: at
+     nr = 128 the same high-order mode reads 1.13e-1 on a uniform radius and
+     2.55e-1 at rStretch 2.2, because clustering cells at the rim starves the
+     interior the mode oscillates across. */
+  surfaceOperatorError(k){
+    requireFinitePositive(k, 'k');
+    let num = 0, den = 0;
+    for (let i = 0; i < this.nr; i++){
+      const w = this.rc[i]*this.drc[i];
+      const got = this.surfaceLaplacian(i), want = -k*k*this.eta[i];
+      num += (got - want)*(got - want)*w;
+      den += want*want*w;
+    }
+    if (!(den > 0)) throw new Error(
+      'surfaceOperatorError: the loaded elevation is identically zero on this '
+      + 'grid, so there is no mode to measure the operator against.');
+    return Math.sqrt(num/den);
+  }
+
+  /* The same measurement without being told k, for a caller that has a surface
+     profile but no wavenumber for it. The best-fitting eigenvalue of the
+     discrete operator on the loaded elevation is the weighted Rayleigh
+     quotient, lambda = <D eta, eta>_w / <eta, eta>_w, and the residual against
+     that lambda is how far the profile is from being an eigenvector of the
+     operator the solver will actually apply to it. A well represented mode
+     leaves a small residual; a mode the grid cannot carry leaves a large one,
+     whatever k is called.
+
+     This is the weaker of the two tests -- it asks only that the grid have SOME
+     eigenvector near the profile, where surfaceOperatorError(k) also asks that
+     the eigenvalue be the right one -- so a caller that knows k should pass it. */
+  surfaceModeFit(){
+    let num = 0, den = 0;
+    const d = new Float64Array(this.nr);
+    for (let i = 0; i < this.nr; i++){
+      const w = this.rc[i]*this.drc[i];
+      d[i] = this.surfaceLaplacian(i);
+      num += d[i]*this.eta[i]*w;
+      den += this.eta[i]*this.eta[i]*w;
+    }
+    if (!(den > 0)) throw new Error(
+      'surfaceModeFit: the loaded elevation is identically zero on this grid, so '
+      + 'there is no mode to fit.');
+    const lambda = num/den;
+    if (!(lambda < 0)) throw new Error(
+      `surfaceModeFit: the best-fitting eigenvalue of the surface operator is `
+      + `${lambda.toExponential(3)}, which is not negative. The azimuthal `
+      + `Laplacian is negative definite on any elevation that is not identically `
+      + `zero, so a non-negative fit means the profile has no radial structure `
+      + `this grid can see at all.`);
+    let rn = 0, rd = 0;
+    for (let i = 0; i < this.nr; i++){
+      const w = this.rc[i]*this.drc[i], want = lambda*this.eta[i];
+      rn += (d[i] - want)*(d[i] - want)*w;
+      rd += want*want*w;
+    }
+    return { k: Math.sqrt(-lambda), lambda, err: Math.sqrt(rn/rd) };
+  }
+
+  /* Cells across one radial wavelength of the mode, where the mode lives rather
+     than at the finest cell: a rim-graded grid has tiny cells at the wall and
+     large ones in the middle, and it is the largest that limits the wave. */
+  cellsPerRadialWavelength(k){
+    requireFinitePositive(k, 'k');
+    const lambda = 2*Math.PI/k;
+    let worst = Infinity;
+    for (let i = 0; i < this.nr; i++)
+      if (Math.abs(this.eta[i]) > 0.1) worst = Math.min(worst, lambda/this.drc[i]);
+    return Number.isFinite(worst) ? worst : lambda/Math.max(...this.drc);
+  }
+
   /* The Stokes depth of a mode at the drive's response frequency, against the
      cells that have to resolve it. Reported rather than assumed, because the
      damping is what sets the Faraday threshold and an unresolved layer measures
@@ -560,6 +650,104 @@ class FaradayDisc {
   }
 }
 
-const FARADAY_DISC = { DISC_G0, FaradayDisc, gradeToEnd, gradeBothEnds };
+/* The smallest grid that can carry a given mode, found by measuring rather than
+   by a formula: it walks nr and nz upward and reports the first pair at which
+   BOTH gates pass -- the surface operator reproduces -k^2 on the mode to
+   `errTol`, and every Stokes layer at the response frequency holds at least
+   `layerCells` cells. The measurement is cheap because it needs no time
+   stepping, only the grid and one application of D_m.
+
+   `profile(r)` supplies the mode's radial shape. It is the caller's, because
+   the Bessel functions live in the kernel and this solver does not depend on
+   it.
+
+   Returns null when the cap is reached, which is a real answer: some modes
+   cannot be carried by any grid this side of the cap, and saying so is the
+   point. */
+/* The grids worth trying, and the vertical gradings worth trying on them. The
+   ladder is finer than doubling because the cost between one rung and the next
+   is large: at the renderer's default working point one drive period costs 1.2 s
+   at 24x12, 12.4 s at 48x24, 44.6 s at 64x32 and 297 s at 96x48, so overshooting
+   by one doubling is a factor of seven in wall time for nothing.
+
+   The vertical stretch is searched rather than fixed because it is the cheap way
+   to buy the Stokes layers. A shallow-layer mode varies vertically like
+   cosh(k z), which is smooth over the depth, so clustering z cells at the floor
+   and the free surface costs the interior almost nothing -- unlike the radial
+   grading, which starves the wave the mode is made of. */
+const SUGGEST_NR = [24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512];
+const SUGGEST_NZ = [12, 16, 20, 24, 32, 40, 48, 64, 80, 96];
+const SUGGEST_ZSTRETCH = [2.2, 3.0, 3.8];
+
+function suggestGrid(o){
+  const { m, k, R, h, rho, nu, gamma, omegaResponse, profile } = o;
+  requireFinitePositive(k, 'k');
+  requireFinitePositive(omegaResponse, 'omegaResponse');
+  const omegaDrive = requireFinitePositive(o.omegaDrive, 'omegaDrive');
+  if (typeof profile !== 'function') throw new TypeError(
+    'suggestGrid: profile must be a function of radius giving the surface '
+    + 'elevation of the mode, because the grid is being sized to carry THAT '
+    + 'mode and the answer depends on where its oscillations are.');
+  const errTol = o.errTol === undefined ? 1e-2 : requireFinitePositive(o.errTol, 'errTol');
+  const layerCells = o.layerCells === undefined ? 2
+    : requireFinitePositive(o.layerCells, 'layerCells');
+  const nrCap = o.nrCap === undefined ? 512 : o.nrCap;
+  const nzCap = o.nzCap === undefined ? 96 : o.nzCap;
+  const nrMin = o.nrMin === undefined ? 24 : o.nrMin;
+  const nzMin = o.nzMin === undefined ? 12 : o.nzMin;
+  const tried = [];
+  let best = null;
+  for (const nr of SUGGEST_NR){
+    if (nr < nrMin || nr > nrCap) continue;
+    for (const nz of SUGGEST_NZ){
+      if (nz < nzMin || nz > nzCap) continue;
+      for (const zStretch of SUGGEST_ZSTRETCH){
+        /* Milder radial grading as the mode's radial order rises: the rim cells
+           buy the Stokes layer, the interior cells carry the wave, and a
+           high-order mode needs the interior more. Measured at nr = 128 on a
+           46th radial mode: 1.13e-1 on a uniform radius against 2.55e-1 at
+           rStretch 2.2, so the grading actively hurts there. */
+        const perLambdaUniform = (2*Math.PI/k)/(R/nr);
+        const rStretch = perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8;
+        const S = new FaradayDisc({ m, nr, nz, R, h, rho, nu, gamma,
+                                    contact: o.contact, rStretch, zStretch });
+        for (let i = 0; i < nr; i++) S.eta[i] = profile(S.rc[i]);
+        let err;
+        try { err = S.surfaceOperatorError(k); } catch { continue; }
+        const st = S.stokesResolution(omegaResponse);
+        const layers = Math.min(st.cellsInFloorLayer, st.cellsInSurfaceLayer,
+                                st.cellsInRimLayer);
+        const stateSize = 2*(nr - 1)*nz + nr*nz + nr;
+        const stepsPerPeriod = Math.max(1, Math.round((2*Math.PI/omegaDrive)
+                                                     /S.stableStep(0.4)));
+        /* A dimensionless cost, not a time. One step costs one conjugate
+           gradient solve, whose iteration count was measured to grow as
+           N^0.59 across 864 to 13824 unknowns -- 155, 224, 354, 499, 794
+           iterations -- and each iteration touches N values, so a step costs
+           about N^1.6 and a period that times the step count. Measured wall
+           times per step on one machine, 3.25 ms at N = 1536 to 89.35 ms at
+           N = 13824, put the exponent at 1.51. It is left dimensionless
+           because the constant is the caller's machine, not this code's: time
+           a few steps there and scale. */
+        const work = Math.pow(stateSize, 1.5)*stepsPerPeriod;
+        const rec = { nr, nz, rStretch, zStretch, err, stokes: st, layers,
+                      layersOk: layers >= layerCells,
+                      cellsPerWavelength: S.cellsPerRadialWavelength(k),
+                      stateSize, stepsPerPeriod, work };
+        tried.push(rec);
+        /* The cheapest grid that holds, not the first one found: the search
+           order over nr, nz and grading has nothing to do with cost, and the
+           two are not even monotone together -- a taller grid with a milder
+           stretch can take longer steps than a shorter one with a severe one. */
+        if (rec.err <= errTol && rec.layersOk && (!best || rec.work < best.work))
+          best = rec;
+      }
+    }
+  }
+  if (best) return Object.assign({}, best, { tried });
+  return { unreachable: true, errTol, layerCells, nrCap, nzCap, tried };
+}
+
+const FARADAY_DISC = { DISC_G0, FaradayDisc, gradeToEnd, gradeBothEnds, suggestGrid };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_DISC;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_DISC = FARADAY_DISC;
