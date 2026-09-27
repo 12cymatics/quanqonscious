@@ -625,6 +625,88 @@ section('11. the C++ engine against the JavaScript solver, bit for bit');
          'arena');
 }
 
+/* ── 11b. the preconditioner is the operator's own diagonal ─────────────── */
+section('11b. the pressure solve is preconditioned by the operator\'s diagonal');
+/* Two claims, and both are checkable exactly.
+
+   The first is that the two-application red/black probe recovers the TRUE
+   diagonal. That rests on the composite stencil reaching only cells of the
+   opposite parity, which is an argument about the discretisation -- so it is
+   checked against the definition instead: N applications of the operator to N
+   unit vectors, reading the i-th entry of the i-th result. If the stencil ever
+   grows a corner term the two will disagree and this fails.
+
+   The second is that preconditioning is a speed-up and not a looser solve. The
+   comparison is against a plain conjugate gradient written here, on the same
+   operator, driven to the same tolerance, so what is being compared is iteration
+   counts at equal accuracy and nothing else. */
+for (const [m, nr, nz, zs] of [[12, 20, 10, 2.2], [0, 24, 12, 2.2],
+                               [2, 16, 8, 0], [12, 40, 12, 3.0]]){
+  const S = new FaradayDisc({ m, nr, nz, ...CELL, rStretch: 2.2, zStretch: zs });
+  const n = nr*nz;
+  const probe = new Float64Array(n), q = new Float64Array(n), byUnit = new Float64Array(n);
+  for (let i = 0; i < n; i++){
+    probe.fill(0); probe[i] = 1;
+    S.applyL(probe, q);
+    byUnit[i] = q[i];
+  }
+  let same = 0, negative = 0;
+  for (let i = 0; i < n; i++){
+    if (byUnit[i] === S._pdiag[i]) same++;
+    if (S._pdiag[i] < 0) negative++;
+  }
+  ok(same === n,
+     `m = ${m}, ${nr}x${nz}: the two-application diagonal equals the ${n}-`
+     + `application one in every entry`,
+     `${same} of ${n} identical`);
+  ok(negative === n,
+     `m = ${m}, ${nr}x${nz}: and every entry is negative, as a negative definite `
+     + `operator requires`, `${negative} of ${n} negative`);
+
+  /* Iterations at equal accuracy, against a plain CG written here. */
+  const eta0 = new Float64Array(nr);
+  const a = analytic(m, 1);
+  for (let i = 0; i < nr; i++) S.eta[i] = 1e-9*K.besselJ(m, a.k*S.rc[i]);
+  const dt = S.stableStep(0.4);
+  S.step(dt);
+  const rhs = Float64Array.from(S._div);
+  const plainCG = () => {
+    const x = new Float64Array(n), r = new Float64Array(n), d = new Float64Array(n),
+          Q = new Float64Array(n);
+    S.applyL(x, Q);
+    let rr = 0;
+    for (let i = 0; i < n; i++){ r[i] = rhs[i] - Q[i]; d[i] = r[i]; rr += r[i]*r[i]; }
+    const rr0 = rr;
+    let it = 0;
+    for (; it < 40*(nr + nz); it++){
+      S.applyL(d, Q);
+      let dq = 0;
+      for (let i = 0; i < n; i++) dq += d[i]*Q[i];
+      if (dq === 0) break;
+      const alpha = rr/dq;
+      let rr2 = 0;
+      for (let i = 0; i < n; i++){ x[i] += alpha*d[i]; r[i] -= alpha*Q[i]; rr2 += r[i]*r[i]; }
+      if (Math.sqrt(rr2/rr0) < 1e-11){ rr = rr2; it++; break; }
+      const beta = rr2/rr; rr = rr2;
+      for (let i = 0; i < n; i++) d[i] = r[i] + beta*d[i];
+    }
+    return { it, res: Math.sqrt(rr/rr0) };
+  };
+  const plain = plainCG();
+  S.p.fill(0);
+  S.solveP(rhs, 1e-11, 40*(nr + nz));
+  ok(S.cgResidual < 1e-11 && plain.res < 1e-11,
+     `m = ${m}, ${nr}x${nz}: both solves reach the same 1e-11 residual, so the `
+     + `comparison is iterations at equal accuracy`,
+     `preconditioned ${S.cgResidual.toExponential(2)}, plain ${plain.res.toExponential(2)}`);
+  ok(S.cgIters < plain.it,
+     `m = ${m}, ${nr}x${nz}: and the preconditioned solve gets there in fewer `
+     + `iterations`,
+     `${S.cgIters} against ${plain.it}, a factor of ${(plain.it/S.cgIters).toFixed(2)}`);
+  console.log(`       m = ${m}, ${nr}x${nz}: ${S.cgIters} preconditioned against `
+    + `${plain.it} plain iterations to 1e-11`);
+}
+
 /* ── 12. sizing the grid, and extending the Krylov space ────────────────── */
 section('12. the grid is sized to the mode, and the space is extended not rebuilt');
 {

@@ -12,10 +12,11 @@
    and passed in. The two therefore agree BIT FOR BIT, which
    dns/check-disc.mjs asserts rather than assumes.
 
-   WHAT IT IS FOR. The JavaScript is too slow to resolve the problem it is asked
-   about. At the renderer's default working point the smallest grid that both
-   represents the mode and resolves every Stokes layer is 48 x 24, which is 2759
-   steps per drive period and nine minutes for one Krylov-16 solve in JavaScript.
+   WHAT IT IS FOR. Time. At the renderer's default working point the cheapest grid
+   that both represents the mode and resolves every Stokes layer is 40 x 12, which
+   is 2580 steps per drive period; one Krylov-16 solve there takes 79.1 s in
+   JavaScript and 33.5 s here, a factor of 2.36. A higher radial mode is dearer
+   again. That is the whole purpose: the numbers are identical, the wait is not.
 
    THERE IS NO SILENT FALLBACK. The caller names the engine and the result says
    which one ran. If the module cannot be loaded this refuses and says so, rather
@@ -28,7 +29,8 @@
 const DISC_WASM_EXPORTS = [
   'setup', 'setScalars', 'ptrRf', 'ptrZf', 'ptrRc', 'ptrZc', 'ptrDrc', 'ptrDzc',
   'ptrDrf', 'ptrDzf', 'ptrDrive', 'ptrVecIn', 'ptrVecOut', 'ptrEta',
-  'getCgIters', 'getCgResidual', 'getLastError', 'applyPeriodMap', 'stepFromVec'
+  'getCgIters', 'getCgResidual', 'getLastError', 'applyPeriodMap', 'stepFromVec',
+  'prepare'
 ];
 
 function decodeBase64(b64){
@@ -121,6 +123,17 @@ function createDiscEngine(o){
       for (let n = 0; n < steps; n++)
         drive[n] = gBase + accel*Math.cos(omegaD*(n*dt));
       put(X.ptrDrive(), drive);
+      /* The pressure operator's diagonal, for the Jacobi preconditioner. It
+         depends on the grid and on m, so it is formed after both are in place and
+         before any step -- the same point in the sequence as the JavaScript
+         solver's constructor, and from the same two applications of the same
+         operator, so the two preconditioners are identical and the parity holds. */
+      const prep = X.prepare();
+      if (prep !== 0) throw new Error(
+        `faraday-disc-wasm: the pressure operator's diagonal is not negative `
+        + `definite on this ${S.nr} x ${S.nz} grid at m = ${S.m} (code ${prep}). `
+        + `It is negative definite by construction, so this means a cell is `
+        + `decoupled from the pressure field.`);
       this.steps = steps;
       this.pinned = S.contact === 'pinned' ? 1 : 0;
       return this;

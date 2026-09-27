@@ -171,10 +171,53 @@ class FaradayDisc {
     this._r = new Float64Array(nr*nz);
     this._d = new Float64Array(nr*nz);
     this._q = new Float64Array(nr*nz);
+    this._z = new Float64Array(nr*nz);
     this._dudz = new Float64Array(nr + 1);
     this._dvdz = new Float64Array(nr + 1);
 
     this.cgIters = 0; this.cgResidual = 0;
+    this._pdiag = this._pressureDiagonal();
+  }
+
+  /* The diagonal of divergence(gradient(.)), in exactly two applications of it.
+
+     The composite operator's stencil at cell (i, j) reaches (i-1, j), (i, j),
+     (i+1, j), (i, j-1) and (i, j+1) and nothing else -- the azimuthal term is
+     diagonal, and the face averages that carry v only reach the same radial
+     neighbours. Every one of those neighbours has the opposite parity of i + j,
+     so setting all cells of one parity to one and reading the result at those
+     same cells returns their diagonal entries with no neighbour contributing
+     anything. Two parities, two applications, exact.
+
+     It is READ from applyL rather than rederived from the stencil, so the
+     preconditioner cannot drift away from the operator it preconditions if the
+     discretisation is ever changed. Checked against the N-application version at
+     four grids and three mode numbers: identical in every entry.
+
+     Computed in the constructor rather than on first use, because applyL writes
+     the gradient buffers that a step in flight is using. */
+  _pressureDiagonal(){
+    const n = this.nr*this.nz;
+    const d = new Float64Array(n), probe = new Float64Array(n), q = new Float64Array(n);
+    for (let parity = 0; parity < 2; parity++){
+      probe.fill(0);
+      for (let i = 0; i < this.nr; i++)
+        for (let j = 0; j < this.nz; j++)
+          if (((i + j) & 1) === parity) probe[this.ip(i, j)] = 1;
+      this.applyL(probe, q);
+      for (let i = 0; i < this.nr; i++)
+        for (let j = 0; j < this.nz; j++)
+          if (((i + j) & 1) === parity) d[this.ip(i, j)] = q[this.ip(i, j)];
+    }
+    for (let i = 0; i < n; i++)
+      if (!(d[i] < 0)) throw new Error(
+        `the pressure operator has a diagonal entry of ${d[i]} at cell ${i} of `
+        + `${n} on a ${this.nr}x${this.nz} grid at m = ${this.m}. It is negative `
+        + `definite by construction -- the gradient is the exact transpose of the `
+        + `divergence over a positive weight -- so a zero or positive diagonal `
+        + `means a cell is decoupled from the pressure field and no `
+        + `preconditioner can be formed from it.`);
+    return d;
   }
 
   iu(i, j){ return i*this.nz + j; }
@@ -375,25 +418,46 @@ class FaradayDisc {
     return out;
   }
 
+  /* Conjugate gradient with a Jacobi preconditioner -- the same system, the same
+     operator and the same convergence tolerance, reached in half the iterations.
+     This is not an approximation and it is not a looser solve: the residual is
+     still driven below 1e-11 relative, and what changes is only the sequence of
+     search directions taken to get there.
+
+     It is worth the two lines because the cell spacings span orders of magnitude
+     on a graded grid, so the operator's diagonal does too -- measured 3.20e+2
+     across an 80 x 12 grid -- and that is precisely the conditioning a diagonal
+     scale removes. Measured iteration counts to the same tolerance: 260 against
+     135 at 40 x 12, 477 against 228 at 80 x 12, 489 against 257 at 64 x 32; a
+     factor of 1.90 to 2.09 on the dominant cost of every step.
+
+     The preconditioner's diagonal is negative, as the operator is, so rz and dq
+     are both negative and their signs cancel in alpha exactly as they would for
+     the positive definite -A with -M. */
   solveP(rhs, tol, maxIt){
-    const n = rhs.length, p = this.p, r = this._r, d = this._d, q = this._q;
+    const n = rhs.length, p = this.p, r = this._r, d = this._d, q = this._q,
+          z = this._z, M = this._pdiag;
     this.applyL(p, q);
     let rr = 0;
-    for (let i = 0; i < n; i++){ r[i] = rhs[i] - q[i]; d[i] = r[i]; rr += r[i]*r[i]; }
+    for (let i = 0; i < n; i++){ r[i] = rhs[i] - q[i]; rr += r[i]*r[i]; }
     const rr0 = rr;
     if (rr0 === 0){ this.cgIters = 0; this.cgResidual = 0; return 0; }
+    let rz = 0;
+    for (let i = 0; i < n; i++){ z[i] = r[i]/M[i]; d[i] = z[i]; rz += r[i]*z[i]; }
     let it = 0;
     for (; it < maxIt; it++){
       this.applyL(d, q);
       let dq = 0;
       for (let i = 0; i < n; i++) dq += d[i]*q[i];
       if (dq === 0) break;
-      const alpha = rr/dq;
+      const alpha = rz/dq;
       let rr2 = 0;
       for (let i = 0; i < n; i++){ p[i] += alpha*d[i]; r[i] -= alpha*q[i]; rr2 += r[i]*r[i]; }
       if (Math.sqrt(rr2/rr0) < tol){ rr = rr2; it++; break; }
-      const beta = rr2/rr; rr = rr2;
-      for (let i = 0; i < n; i++) d[i] = r[i] + beta*d[i];
+      let rz2 = 0;
+      for (let i = 0; i < n; i++){ z[i] = r[i]/M[i]; rz2 += r[i]*z[i]; }
+      const beta = rz2/rz; rz = rz2; rr = rr2;
+      for (let i = 0; i < n; i++) d[i] = z[i] + beta*d[i];
     }
     this.cgIters = it; this.cgResidual = Math.sqrt(rr/rr0);
     if (!(this.cgResidual < tol)) throw new Error(
@@ -666,9 +730,9 @@ class FaradayDisc {
    point. */
 /* The grids worth trying, and the vertical gradings worth trying on them. The
    ladder is finer than doubling because the cost between one rung and the next
-   is large: at the renderer's default working point one drive period costs 1.2 s
-   at 24x12, 12.4 s at 48x24, 44.6 s at 64x32 and 297 s at 96x48, so overshooting
-   by one doubling is a factor of seven in wall time for nothing.
+   is large: at the renderer's default working point one drive period costs 0.4 s
+   at 24x12, 7.2 s at 48x24, 29.1 s at 64x32 and 170.4 s at 96x48, so overshooting
+   by one doubling is a factor of six in wall time for nothing.
 
    The vertical stretch is searched rather than fixed because it is the cheap way
    to buy the Stokes layers. A shallow-layer mode varies vertically like
@@ -722,13 +786,14 @@ function suggestGrid(o){
                                                      /S.stableStep(0.4)));
         /* A dimensionless cost, not a time. One step costs one conjugate
            gradient solve, whose iteration count was measured to grow as
-           N^0.59 across 864 to 13824 unknowns -- 155, 224, 354, 499, 794
-           iterations -- and each iteration touches N values, so a step costs
-           about N^1.6 and a period that times the step count. Measured wall
-           times per step on one machine, 3.25 ms at N = 1536 to 89.35 ms at
-           N = 13824, put the exponent at 1.51. It is left dimensionless
-           because the constant is the caller's machine, not this code's: time
-           a few steps there and scale. */
+           N^0.538 across 864 to 13824 unknowns -- 97, 131, 213, 285, 431
+           iterations with the Jacobi preconditioner in place -- and each
+           iteration touches N values, so a step costs about N^1.5 and a period
+           that times the step count. Measured wall times per step on one
+           machine, 1.90 ms at N = 1536 to 51.25 ms at N = 13824, put the
+           exponent at 1.500 exactly. It is left dimensionless because the
+           constant is the caller's machine, not this code's: time a few steps
+           there and scale. */
         const work = Math.pow(stateSize, 1.5)*stepsPerPeriod;
         const rec = { nr, nz, rStretch, zStretch, err, stokes: st, layers,
                       layersOk: layers >= layerCells,
