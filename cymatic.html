@@ -1318,14 +1318,16 @@ document.getElementById('expBtn').addEventListener('click', async () => {
      came from truncation error rather than from the viscosity. The verdict
      survived the correction; the width doubled, which is the honest size of it.
 
-     It runs in a worker because a converged solve is a minute, not a moment:
+     It runs in a worker because a converged solve is half a minute, not a moment:
      1456 unknowns, 2580 steps per drive period, sixteen period maps. The period
-     map itself is the C++ transcription compiled to WebAssembly -- measured 51.5 s
-     against 132.1 s for the identical solve in JavaScript, a factor of 2.56,
+     map itself is the C++ transcription compiled to WebAssembly -- measured 33.5 s
+     against 79.1 s for the identical solve in JavaScript, a factor of 2.36,
      returning the same |mu| to the last bit. A higher radial mode costs more
-     again: m = 12, n = 3 at 277 Hz sizes to 80 x 12 and takes 217 s in C++
-     against 564 s in JavaScript, extending its Krylov space to 24 before the
-     leading modulus settles. */
+     again: m = 12, n = 3 at 277 Hz sizes to 80 x 12 and takes 132 s in C++
+     against 313 s in JavaScript, extending its Krylov space to 24 before the
+     leading modulus settles. Both sides of that were 1.6 times slower before the
+     pressure solve was preconditioned: the same system to the same 1e-11
+     residual, in half the conjugate gradient iterations. */
   const cell = (k, v, hi) =>
     `<div><span class="k">${k}</span><span class="v${hi ? ' zero' : ''}">${v}</span></div>`;
   const note = t => { $('dnsNote').innerHTML = t; };
@@ -1372,13 +1374,13 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   }
 
   /* How long a solve will take HERE, measured rather than guessed. One step is
-     one conjugate gradient solve; its iteration count grows about as N^0.6 and
-     each iteration touches N values, so a step costs about N^1.5 -- measured
-     from 3.25 ms at 1536 unknowns to 89.35 ms at 13824 on one machine, an
-     exponent of 1.51. The constant is the machine's, so it is timed on this one:
-     twenty steps of a small grid, about a tenth of a second, and the projection
-     scales from there. The C++ engine is measured the same way, not assumed to
-     be a fixed factor faster. */
+     one preconditioned conjugate gradient solve; its iteration count grows about
+     as N^0.54 and each iteration touches N values, so a step costs about N^1.5 --
+     measured from 1.90 ms at 1536 unknowns to 51.25 ms at 13824 on one machine,
+     an exponent of 1.500. The constant is the machine's, so it is timed on this
+     one: twenty steps of a small grid, about a twentieth of a second, and the
+     projection scales from there. The C++ engine is measured the same way, not
+     assumed to be a fixed factor faster. */
   function projectSeconds(c, g, krylov, bytes){
     const P = { nr: 24, nz: 12, R: c.R, h: c.h, rho: c.rho, nu: c.nu,
                 gamma: c.gamma, m: c.m, rStretch: 2.2, zStretch: 2.2 };
