@@ -199,16 +199,15 @@ class Page {
 }
 
 /* ---- the panel's solver settings, pinned -------------------------------
-   The node reference below must solve the SAME box the page does, without
+   The node reference below must solve the SAME problem the page does, without
    asking the page what that is -- otherwise it would agree with a wrong
-   mapping. These four are the panel's discretisation choices, pinned here and
-   asserted against the page source, so changing them in the page fails this
-   gate loudly instead of silently comparing two different problems. The
-   physical numbers (k, depth, drive, acceleration, water) come from the
-   renderer's own resolved state and are mapped here independently. */
-const GRID = { nr: 28, nz: 14, rStretch: 2.2, zStretch: 2.2 };
-const GRID_SRC = 'nr: 28, nz: 14';
-const GRID_SRC2 = 'rStretch: 2.2, zStretch: 2.2';
+   mapping. The grid is no longer a constant to pin: the panel sizes it to the
+   mode, so what is pinned is the SIZING CALL, and the node side runs the same
+   search on the same arguments and must land on the same grid. The physical
+   numbers (k, depth, drive, acceleration, water) come from the renderer's own
+   resolved state and are mapped here independently. */
+const GRID_SRC = 'FARADAY_DISC.suggestGrid({';
+const GRID_SRC2 = 'omegaResponse: c.omegaD/2, omegaDrive: c.omegaD';
 const PAGE_SRC = readFileSync(join(REPO, 'cymatic.html'), 'utf8');
 
 /* the drive period must divide into a whole number of steps at this dt for the
@@ -222,13 +221,25 @@ const KERNEL = require(join(REPO, 'faraday', 'kernel.js'));
    state rather than read back off the page. If the page's own mapping were wrong
    the two would disagree, which is the point. */
 function configFrom(s){
-  return { nr: GRID.nr, nz: GRID.nz,
-           rStretch: GRID.rStretch, zStretch: GRID.zStretch,
-           R: s.cellDiameterMm/2000, h: s.depthMm/1000,
-           rho: s.rho, nu: s.nu, gamma: s.sigma,
-           m: s.modeM, k: s.modeK,
-           omegaD: 2*Math.PI*s.freq, accel: s.accelAssumed,
-           contact: s.rim === 'pinned' ? 'pinned' : 'free' };
+  const c = { R: s.cellDiameterMm/2000, h: s.depthMm/1000,
+              rho: s.rho, nu: s.nu, gamma: s.sigma,
+              m: s.modeM, k: s.modeK,
+              omegaD: 2*Math.PI*s.freq, accel: s.accelAssumed,
+              contact: s.rim === 'pinned' ? 'pinned' : 'free' };
+  /* The same search the panel runs, on the same arguments. If the page sized its
+     grid differently the two would solve different problems, and the |mu|
+     comparison below would fail rather than quietly comparing them. */
+  const g = DISC.suggestGrid({
+    m: c.m, k: c.k, R: c.R, h: c.h, rho: c.rho, nu: c.nu, gamma: c.gamma,
+    contact: c.contact, omegaResponse: c.omegaD/2, omegaDrive: c.omegaD,
+    profile: r => KERNEL.besselJ(c.m, c.k*r) });
+  if (g.unreachable) throw new Error(
+    'check-page: no grid on the ladder carries the renderer default mode, so the '
+    + 'panel will refuse and there is nothing to compare. That is a change in the '
+    + 'default state or in the gates, not a browser problem.');
+  c.nr = g.nr; c.nz = g.nz; c.rStretch = g.rStretch; c.zStretch = g.zStretch;
+  c.grid = g;
+  return c;
 }
 
 function seedFor(c){
@@ -338,15 +349,30 @@ async function checkPage(url, name, expectInline){
      cells['azimuthal mode m']);
   ok(cells['contact line'] === c.contact,
      'the contact line shown is the one the control selects', cells['contact line']);
-  ok(cells['grid'].startsWith(`${c.nr} × ${c.nz}`),
-     'the grid shown is the grid solved', cells['grid']);
+  ok(/sized to the mode when you press run/.test(cells['grid']),
+     'before a run the panel says the grid is sized to the mode, rather than '
+     + 'naming one it has not measured', cells['grid']);
 
   /* 5. inline versus fetched solver source */
   const tags = await page.json(`[...document.querySelectorAll('script')].map(t => ({
     id: t.id, src: t.getAttribute('src') || '', inline: t.textContent.trim().length }))`);
-  const dns = tags.filter(t => ['dnsSolver', 'dnsDisc', 'dnsFloquet'].includes(t.id));
-  ok(dns.length === 3, 'all three solver scripts are present and carry their ids',
+  const dns = tags.filter(t =>
+    ['dnsSolver', 'dnsDisc', 'dnsDiscWasm', 'dnsFloquet'].includes(t.id));
+  ok(dns.length === 4, 'all four solver scripts are present and carry their ids',
      dns.map(t => t.id).join(','));
+  /* The compiled period map. Inline base64 in the single-file build; fetched
+     beside the page in the checkout, where the tag is empty. */
+  const b64 = tags.filter(t => t.id === 'dnsWasmBase64');
+  ok(b64.length === 1, 'the page has the tag the compiled period map lands in',
+     `${b64.length} tags with id dnsWasmBase64`);
+  if (expectInline)
+    ok(b64[0].inline > 20000,
+       'the single-file build carries the compiled period map inline',
+       `${b64[0].inline} characters`);
+  else
+    ok(b64[0].inline === 0,
+       'the checkout leaves it empty and fetches dns/faraday_disc.wasm',
+       `${b64[0].inline} characters`);
   for (const t of dns){
     if (expectInline)
       ok(t.inline > 1000 && t.src === '',
@@ -383,7 +409,12 @@ async function checkPage(url, name, expectInline){
     /* computed here, from the state probed out of the page and the mapping
        written in configFrom -- not by asking the page what to solve. */
     const t0 = Date.now();
-    nodeRef = FLOQUET.floquetDisc({ ...c, eta0: seedFor(c) });
+    /* engine 'wasm' here too: the two engines are bit-for-bit identical and
+       dns/check-disc.mjs is what asserts that. This gate's question is whether
+       the PAGE solves what node solves, so both sides run the same engine and
+       the comparison is not paying for the slower one twice. */
+    nodeRef = FLOQUET.floquetDisc({ ...c, eta0: seedFor(c), krylov: 16,
+                                    engine: 'wasm', grid: undefined });
     console.log(`       node reference: |mu| = ${nodeRef.muMax.toFixed(10)} +/- `
       + `${nodeRef.muSpread.toExponential(2)}, growth ${nodeRef.growth.toFixed(6)} `
       + `s^-1, krylov ${nodeRef.krylov}, ${((Date.now()-t0)/1000).toFixed(1)} s`);
@@ -399,6 +430,35 @@ async function checkPage(url, name, expectInline){
   ok(Math.abs(growth - Math.log(mu)/(2*Math.PI/c.omegaD)) < 5e-4*Math.abs(growth),
      'the growth shown is ln|μ| over one drive period, recomputed from the |μ| shown',
      `${growth} vs ${Math.log(mu)/(2*Math.PI/c.omegaD)}`);
+  /* The grid the panel actually solved on, now that it has one, against the grid
+     the same search picks here. A page that sized differently would have solved a
+     different problem, and the |mu| comparison above would have caught it -- this
+     says WHICH way it went wrong when it does. */
+  const shownGrid = await page.json(`(() => {
+    for (const d of document.querySelectorAll('#dnsInput > div'))
+      if (/^grid/.test(d.querySelector('.k').textContent))
+        return d.querySelector('.v').textContent;
+    return null; })()`);
+  ok(shownGrid !== null && shownGrid.startsWith(`${c.nr} × ${c.nz}`),
+     `after the run the grid shown is the grid the sizing picks (${c.nr} × ${c.nz})`,
+     String(shownGrid));
+  ok(/graded r /.test(String(shownGrid)) && String(shownGrid).includes(`z ${c.zStretch}`),
+     'and it names the grading it was sized with', String(shownGrid));
+  ok(/C\+\+/.test(res.cells['period map ran in'] || ''),
+     'the panel says the period map ran in C++, because that is what it asked for',
+     String(res.cells['period map ran in']));
+  ok(/drift /.test(res.cells['Krylov dimension used'] || ''),
+     'and reports how far the leading modulus was still moving',
+     String(res.cells['Krylov dimension used']));
+  const opErr = await page.json(`(() => {
+    for (const d of document.querySelectorAll('#dnsInput > div'))
+      if (/surface operator error/.test(d.querySelector('.k').textContent))
+        return parseFloat(d.querySelector('.v').textContent);
+    return null; })()`);
+  ok(Number.isFinite(opErr) && opErr <= 1.0,
+     'the surface operator error it reports is within the one per cent it gates on',
+     `${opErr} %`);
+
   const mathieu = parseFloat(res.cells['deck (Mathieu) growth']);
   rel(mathieu, s.onsetGrowth, 4, 'the Mathieu figure beside it is the deck’s own onset growth');
   const diff = parseFloat(res.cells['the two disagree by']);

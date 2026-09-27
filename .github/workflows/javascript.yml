@@ -38,6 +38,16 @@
 # the axis instead of the rim, and uniform grids that measured the damping
 # inconsistently because the Stokes layers were never resolved.
 #
+# dns/check-wasm-build.mjs runs in the disc job, before the suite it supports.
+# dns/faraday_disc.wasm is checked in, because a browser cannot compile C++ and
+# the page has to carry the module; a checked-in binary is a thing that can drift
+# from its source, so this rebuilds dns/faraday_disc.cpp with the runner's own
+# clang and requires the fresh module, the committed module and the JavaScript
+# solver to produce identical values over a full drive period. It is a failure,
+# never a skip, if the rebuild cannot happen: a checkout that cannot rebuild its
+# binary has no way to know the binary matches its source, and the binary is what
+# the page runs.
+#
 # dns/check-page.mjs is the only suite here that needs a browser, and it gets
 # one without an install: the ubuntu-latest image ships Google Chrome, and node
 # 22 has a global WebSocket, so it drives it over the DevTools protocol with no
@@ -119,6 +129,13 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
+    # clang is on the runner image; wasm-ld comes from lld, which is not always.
+    # The module needs no Emscripten and no sysroot -- it has no libc surface at
+    # all -- so this is the whole toolchain.
+    - name: WebAssembly toolchain
+      run: sudo apt-get update && sudo apt-get install -y clang lld
+    - name: The committed module is the committed source
+      run: node dns/check-wasm-build.mjs
     - name: Linearised free-surface Navier-Stokes in the cell
       run: node dns/check-disc.mjs
 

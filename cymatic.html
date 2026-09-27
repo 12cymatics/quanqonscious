@@ -250,6 +250,8 @@ footer b{color:var(--ink2);font-weight:500}
 <script src="faraday/kernel.js"></script>
 <script id="dnsSolver" src="dns/faraday-dns.js"></script>
 <script id="dnsDisc" src="dns/faraday-disc.js"></script>
+<script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>
+<script id="dnsWasmBase64"></script>
 <script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
 <script>
 
@@ -1301,25 +1303,106 @@ document.getElementById('expBtn').addEventListener('click', async () => {
      at the surface, over one drive period.
 
      The two disagree in SIGN at the default state, which is why this is here and
-     not a footnote. Measured at 111 Hz, 3 mm, 24.25 mm cell, a = 7.0608 m/s^2,
-     m = 12: the deck's Mathieu growth is +3.24 per second and calls the mode
-     unstable at 2.26 times threshold; the disc's Floquet growth is -6.38 +/- 0.52
-     per second and calls it stable. The difference is damping the deck's gamma
-     leaves out -- gamma is 2.57 per second there, while the disc dissipates about
-     2.5 times that, most of it in the sidewall layer that a rim-concentrated
-     m = 12 mode sits in.
+     not a footnote. Measured on the grid the sizing picks there -- 40 x 12,
+     surface operator error 1.2e-3 on the mode, 6.0 cells in the floor and surface
+     Stokes layers and 2.2 at the rim -- the deck's Mathieu growth is +3.24 per
+     second and calls the mode unstable at 2.26 times threshold, while the disc's
+     Floquet growth is -5.259 +/- 1.089 per second and calls it stable. The
+     difference is damping the deck's gamma leaves out: gamma is 2.57 per second
+     there, and the disc dissipates several times that, most of it in the sidewall
+     layer that a rim-concentrated mode sits in.
 
-     It runs in a worker because a converged solve is tens of seconds and the main
-     thread is drawing. */
+     Those figures replace -6.38 +/- 0.52 from a fixed 28 x 14 grid, which this
+     panel used to solve on and which the solver now refuses: that grid gets 1.50
+     cells into the floor Stokes layer and 0.95 at the rim, so most of its damping
+     came from truncation error rather than from the viscosity. The verdict
+     survived the correction; the width doubled, which is the honest size of it.
+
+     It runs in a worker because a converged solve is a minute, not a moment:
+     1456 unknowns, 2580 steps per drive period, sixteen period maps. The period
+     map itself is the C++ transcription compiled to WebAssembly -- measured 51.5 s
+     against 132.1 s for the identical solve in JavaScript, a factor of 2.56,
+     returning the same |mu| to the last bit. A higher radial mode costs more
+     again: m = 12, n = 3 at 277 Hz sizes to 80 x 12 and takes 217 s in C++
+     against 564 s in JavaScript, extending its Krylov space to 24 before the
+     leading modulus settles. */
   const cell = (k, v, hi) =>
     `<div><span class="k">${k}</span><span class="v${hi ? ' zero' : ''}">${v}</span></div>`;
   const note = t => { $('dnsNote').innerHTML = t; };
   const fmt = (v, n = 4) => Number.isFinite(v) ? v.toFixed(n) : String(v);
 
-  /* The grid. 28 x 14 graded cells put more than one cell inside every Stokes
-     layer at this apparatus and solve in about half a minute; the panel reports
-     what it actually achieved rather than claiming it. */
-  const GRID = { nr: 28, nz: 14, rStretch: 2.2, zStretch: 2.2 };
+  /* The grid is SIZED, not chosen. It was a fixed 28 x 14 here, with a comment
+     saying that put more than one cell inside every Stokes layer -- which was
+     true, and not enough: at the default state that grid gets 1.50 cells into
+     the floor layer, 0.95 at the rim, and misrepresents the surface operator on
+     the mode by 2.6 per cent. Two of the three layers therefore had their
+     damping set by truncation error rather than by the viscosity, and the answer
+     came back anyway. A fixed grid cannot be right for every mode the controls
+     can reach: the same 28 x 14 gives 86 per cent error on the 46th radial mode.
+
+     suggestGrid walks the grid up until the discrete surface operator is within
+     1 per cent of -k^2 on this mode AND every Stokes layer has at least two
+     cells, and returns the cheapest that holds. At the default state that is
+     80 x 12 with the z cells clustered harder (zStretch 3.0) -- wide and shallow,
+     because the vertical structure is smooth while the radial structure is the
+     wave. Where no grid within the caps holds, this refuses with the numbers. */
+  function sizeGrid(c){
+    const g = FARADAY_DISC.suggestGrid({
+      m: c.m, k: c.k, R: c.R, h: c.h, rho: c.rho, nu: c.nu, gamma: c.gamma,
+      contact: c.contact, omegaResponse: c.omegaD/2, omegaDrive: c.omegaD,
+      profile: r => besselJ(c.m, c.k*r) });
+    if (g.unreachable){
+      const best = g.tried.reduce((a, b) => b.err < a.err ? b : a);
+      const layered = g.tried.filter(t => t.layersOk);
+      throw new Error(
+        `no affordable grid can carry this mode. m = ${c.m}, kR = `
+        + `${(c.k*c.R).toFixed(1)}, which is ${(c.k*c.R/Math.PI/2).toFixed(1)} `
+        + `radial wavelengths across the cell. Of ${g.tried.length} grids up to `
+        + `${g.nrCap} x ${g.nzCap}, the closest gets the surface operator to `
+        + `${(best.err*100).toFixed(1)}% against the ${(g.errTol*100).toFixed(0)}% `
+        + `required, at ${best.nr} x ${best.nz} with `
+        + `${best.cellsPerWavelength.toFixed(1)} cells per radial wavelength; `
+        + `${layered.length} of them resolve the Stokes layers. Refusing rather `
+        + `than returning a multiplier from a grid that misrepresents the `
+        + `restoring force by that much. This is a statement about this mode, not `
+        + `about the solver: a mode with that many wavelengths in a 24 mm cell `
+        + `needs a grid this page cannot afford.`);
+    }
+    return g;
+  }
+
+  /* How long a solve will take HERE, measured rather than guessed. One step is
+     one conjugate gradient solve; its iteration count grows about as N^0.6 and
+     each iteration touches N values, so a step costs about N^1.5 -- measured
+     from 3.25 ms at 1536 unknowns to 89.35 ms at 13824 on one machine, an
+     exponent of 1.51. The constant is the machine's, so it is timed on this one:
+     twenty steps of a small grid, about a tenth of a second, and the projection
+     scales from there. The C++ engine is measured the same way, not assumed to
+     be a fixed factor faster. */
+  function projectSeconds(c, g, krylov, bytes){
+    const P = { nr: 24, nz: 12, R: c.R, h: c.h, rho: c.rho, nu: c.nu,
+                gamma: c.gamma, m: c.m, rStretch: 2.2, zStretch: 2.2 };
+    const S = new FARADAY_DISC.FaradayDisc(P);
+    const nCal = 2*(P.nr - 1)*P.nz + P.nr*P.nz + P.nr;
+    const dt = S.stableStep(0.4);
+    const calSteps = 20;
+    let ms;
+    if (bytes){
+      const E = FARADAY_DISC_WASM.createDiscEngine({ bytes })
+        .load(S, calSteps, dt, 0, c.omegaD, S.g);
+      const v = new Float64Array(nCal), o = new Float64Array(nCal);
+      v[2*(P.nr-1)*P.nz + P.nr*P.nz] = 1;
+      const t0 = performance.now();
+      E.applyPeriodMap(v, o, dt, 1e-9, 1e-9*(c.omegaD/2));
+      ms = (performance.now() - t0)/calSteps;
+    } else {
+      S.eta[0] = 1e-9;
+      const t0 = performance.now();
+      for (let i = 0; i < calSteps; i++){ S.t = i*dt; S.step(dt); }
+      ms = (performance.now() - t0)/calSteps;
+    }
+    return ms*Math.pow(g.stateSize/nCal, 1.5)*g.stepsPerPeriod*krylov/1000;
+  }
 
   function config(){
     if (!state) throw new Error(
@@ -1334,13 +1417,23 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       + 'rather than mis-handling. Its radial and azimuthal momentum stay finite '
       + 'at the axis only through a cancellation that no other m needs, and the '
       + 'regularity condition the solver imposes is wrong for exactly that one.');
-    return { nr: GRID.nr, nz: GRID.nz,
-             rStretch: GRID.rStretch, zStretch: GRID.zStretch,
-             R: state.cellDiameterMm/2000, h: depth/1000,
+    return { R: state.cellDiameterMm/2000, h: depth/1000,
              rho: w.rho, nu: w.nu, gamma: w.sigma,
              m: mode.m, k: mode.k,
              omegaD: 2*Math.PI*freq, accel: state.accelAssumed,
              contact: rim === 'pinned' ? 'pinned' : 'free' };
+  }
+
+  /* Sizing costs 150 to 280 ms -- it builds and measures every grid on the
+     ladder -- and recompute() runs on every control change, so it happens when
+     the button is pressed, not while a slider moves. The result is kept against
+     the problem it was sized for, so pressing run twice does not search twice. */
+  let sized = null;
+  function gridFor(c){
+    const key = [c.R, c.h, c.rho, c.nu, c.gamma, c.m, c.k, c.omegaD, c.contact]
+      .join('|');
+    if (!sized || sized.key !== key) sized = { key, grid: sizeGrid(c) };
+    return sized.grid;
   }
 
   /* The Arnoldi seed: the surface shape of the mode being asked about, J_m(k r)
@@ -1364,7 +1457,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     return eta0;
   }
 
-  function showInput(c){
+  function showInput(c, g){
     const mode = state.nearestTheoryModes[0];
     $('dnsInput').innerHTML =
       cell('cell radius R', `${(c.R*1000).toFixed(3)} <span class="u">mm</span>`) +
@@ -1375,7 +1468,20 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       cell('ν', `${c.nu.toExponential(4)} <span class="u">m²/s</span>`) +
       cell('γ surface tension', `${c.gamma.toFixed(5)} <span class="u">N/m</span>`) +
       cell('contact line', c.contact) +
-      cell('grid', `${c.nr} × ${c.nz} <span class="u">graded</span>`);
+      (g ? cell('grid (sized to this mode)',
+                `${g.nr} × ${g.nz} <span class="u">graded r ${g.rStretch}, `
+                + `z ${g.zStretch}</span>`) +
+           cell('surface operator error on this mode',
+                `${(g.err*100).toFixed(2)} <span class="u">%</span> · `
+                + `${g.cellsPerWavelength.toFixed(1)} cells per radial wavelength`) +
+           cell('cells inside the Stokes layer δ',
+                `floor ${g.stokes.cellsInFloorLayer.toFixed(2)} · `
+                + `surface ${g.stokes.cellsInSurfaceLayer.toFixed(2)} · `
+                + `rim ${g.stokes.cellsInRimLayer.toFixed(2)}`) +
+           cell('unknowns · steps per drive period',
+                `${g.stateSize} · ${g.stepsPerPeriod}`)
+         : cell('grid', `<span class="u">sized to the mode when you press run`
+                + `</span>`));
   }
 
   /* The worker needs the solvers' SOURCE, not the loaded objects. In the
@@ -1384,6 +1490,31 @@ document.getElementById('expBtn').addEventListener('click', async () => {
      none yields source this refuses rather than running a worker with nothing in
      it. faraday-dns.js comes along because faraday-floquet.js requires it for the
      periodic-box solver that shares its Arnoldi. */
+  /* The C++ period map's bytes. Two places they can come from, and no third:
+     the single-file build inlines them as base64, and a checkout served over
+     http can fetch them. A checkout opened from file:// can do neither, and that
+     is said rather than worked around -- the alternative would be to run the
+     JavaScript reference under the C++ engine's name and report a time for work
+     the C++ did not do. */
+  let wasmBytesCache = null;
+  async function wasmBytes(){
+    if (wasmBytesCache) return wasmBytesCache;
+    if (globalThis.FARADAY_DISC_WASM_BASE64)
+      return (wasmBytesCache = FARADAY_DISC_WASM.discWasmBytes());
+    let r;
+    try { r = await fetch('dns/faraday_disc.wasm'); }
+    catch (e){ throw new Error(
+      `the C++ period map could not be loaded (${e.message}). This page is `
+      + `running from a checkout, where the bytes are fetched from `
+      + `dns/faraday_disc.wasm beside it; that works when the directory is `
+      + `served over http and not when the file is opened directly. Either serve `
+      + `the checkout, or use the single-file build, which carries the bytes `
+      + `inline. Not falling back to the JavaScript solver under the C++ name.`); }
+    if (!r.ok) throw new Error(
+      `dns/faraday_disc.wasm gave ${r.status}. Build it with dns/build-wasm.sh.`);
+    return (wasmBytesCache = new Uint8Array(await r.arrayBuffer()));
+  }
+
   async function sourceOf(id){
     const el = document.getElementById(id);
     if (!el) throw new Error(`dns panel: no <script id="${id}">`);
@@ -1400,14 +1531,16 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   async function ensureWorker(){
     if (worker) return worker;
     const body = [await sourceOf('dnsSolver'), await sourceOf('dnsDisc'),
-      await sourceOf('dnsFloquet'),
+      await sourceOf('dnsDiscWasm'), await sourceOf('dnsFloquet'),
       `self.onmessage = (e) => {
          try {
            const r = FARADAY_FLOQUET.floquetDisc(e.data);
            self.postMessage({ ok: true, muMax: r.muMax, growth: r.growth,
              muSpread: r.muSpread, growthWidth: r.growthWidth,
              unstable: r.unstable, krylov: r.krylov, steps: r.steps,
-             stokes: r.stokes, stateSize: r.stateSize });
+             stokes: r.stokes, stateSize: r.stateSize, engine: r.engine,
+             escalation: r.escalation, drift: r.drift, ladder: r.ladder,
+             surfaceOperatorError: r.surfaceOperatorError });
          } catch (err) {
            self.postMessage({ ok: false, error: String(err && err.message || err) });
          }
@@ -1429,13 +1562,25 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     }, 500);
     try {
       c = config();
-      showInput(c);
+      showInput(c, null);
       $('dnsOut').innerHTML = '';
+      const g = gridFor(c);
+      c.nr = g.nr; c.nz = g.nz; c.rStretch = g.rStretch; c.zStretch = g.zStretch;
+      showInput(c, g);
+      const bytes = await wasmBytes();
+      const krylov = 16;
+      const projected = projectSeconds(c, g, krylov, bytes);
+      note(`Projected ${projected < 90 ? projected.toFixed(0) + ' s'
+             : (projected/60).toFixed(1) + ' min'} for ${krylov} period maps on `
+         + `${g.stateSize} unknowns at ${g.stepsPerPeriod} steps each, `
+         + `from twenty steps timed on this machine just now. Running in a worker; `
+         + `the renderer above is unaffected.`);
       const w = await ensureWorker();
       const r = await new Promise((res, rej) => {
         w.onmessage = e => e.data.ok ? res(e.data) : rej(new Error(e.data.error));
         w.onerror = e => rej(new Error(e.message || 'worker failed'));
-        w.postMessage(Object.assign({}, c, { eta0: seedProfile(c) }));
+        w.postMessage(Object.assign({}, c, { eta0: seedProfile(c), krylov,
+          engine: 'wasm', wasmBytes: bytes }));
       });
       const secs = (performance.now()-t0)/1000;
       const mathieu = state.onset ? state.onset.growth : NaN;
@@ -1461,11 +1606,22 @@ document.getElementById('expBtn').addEventListener('click', async () => {
              `floor ${r.stokes.cellsInFloorLayer.toFixed(1)} · `
              + `surface ${r.stokes.cellsInSurfaceLayer.toFixed(1)} · `
              + `rim ${r.stokes.cellsInRimLayer.toFixed(1)}`) +
-        cell('Krylov dimension used', `${r.krylov} on ${r.stateSize} unknowns`) +
+        cell('Krylov dimension used',
+             `${r.krylov} on ${r.stateSize} unknowns`
+             + (r.escalation.length > 1
+                ? ` · extended ${r.escalation.map(e => e.krylov).join(' → ')}` : '')
+             + ` · drift ${(r.drift*100).toFixed(3)}%`) +
+        cell('period map ran in',
+             `<b>${r.engine === 'wasm' ? 'C++ (WebAssembly)' : 'JavaScript'}</b>`) +
         cell('solve time',
-             `${secs.toFixed(1)} <span class="u">s</span> · ${r.steps} steps`);
+             `${secs.toFixed(1)} <span class="u">s</span> · ${r.steps} steps × `
+             + `${r.krylov} period maps · projected `
+             + `${projected < 90 ? projected.toFixed(0) + ' s'
+                 : (projected/60).toFixed(1) + ' min'}`);
       note(`Growth is ln|μ| over one drive period, from the eigenvalues of the period `
-         + `map of the linearised Navier-Stokes operator in this disc. The width on it `
+         + `map of the linearised Navier-Stokes operator in this disc, integrated by `
+         + `the C++ transcription of the solver — bit for bit the same numbers as the `
+         + `JavaScript, which is asserted rather than assumed. The width on the growth `
          + `is real: the viscous cell has a dense cluster of decaying modes, so which `
          + `one is largest is ill conditioned, and the figure is quoted with the spread `
          + `across Krylov dimensions rather than to a precision it does not have. Where `
@@ -1489,7 +1645,9 @@ document.getElementById('expBtn').addEventListener('click', async () => {
      never ran -- a blank page with the panel's own listener attached. Wiring it
      to recompute() also keeps these cells in step with the controls instead of
      showing whatever the drive was when the page loaded. */
-  dnsShowInput = () => { try { showInput(config()); }
+  dnsShowInput = () => { try { const c = config();
+      showInput(c, sized && sized.key === [c.R, c.h, c.rho, c.nu, c.gamma, c.m,
+        c.k, c.omegaD, c.contact].join('|') ? sized.grid : null); }
     catch (e){ $('dnsInput').innerHTML = ''; note(`<b>Not runnable on this state:</b> `
       + `${e.message}`); } };
   note('Not run yet. The renderer above is unaffected by this panel.');

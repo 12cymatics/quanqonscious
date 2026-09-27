@@ -37,9 +37,22 @@ export const SCRIPTS = [
     path: 'dns/faraday-dns.js', open: '<script id="dnsSolver">' },
   { tag: '<script id="dnsDisc" src="dns/faraday-disc.js"></script>',
     path: 'dns/faraday-disc.js', open: '<script id="dnsDisc">' },
+  { tag: '<script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>',
+    path: 'dns/faraday-disc-wasm.js', open: '<script id="dnsDiscWasm">' },
   { tag: '<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>',
     path: 'dns/faraday-floquet.js', open: '<script id="dnsFloquet">' }
 ];
+
+/* The compiled period map travels as base64 in its own tag. A single file opened
+   by double-click cannot fetch a sibling -- file:// gives the fetch no origin to
+   satisfy -- so the alternative to carrying the bytes is a page whose C++ engine
+   refuses, and the panel would then have nothing to run: it asks for the C++
+   engine and does not substitute the JavaScript under that name.
+
+   The tag is empty in the checkout, where the bytes are fetched from
+   dns/faraday_disc.wasm over http instead. */
+export const WASM_TAG = '<script id="dnsWasmBase64"></script>';
+export const WASM_PATH = 'dns/faraday_disc.wasm';
 
 // `overrides` maps a repo-relative path to substitute content. It exists so
 // check-standalone.mjs can exercise the </script> guard on a source that
@@ -68,11 +81,23 @@ export function buildStandalone(overrides = {}) {
         `${name} contains a literal </script, which would terminate the `
         + `inlined block. Split it (e.g. '<\\/' + 'script') before inlining.`);
 
+  if (html.split(WASM_TAG).length - 1 !== 1)
+    throw new Error(
+      `cymatic.html must contain ${WASM_TAG} exactly once: it is where the `
+      + `compiled period map is inlined. Without it the built page has no C++ `
+      + `engine and the Navier-Stokes panel refuses, because it does not run the `
+      + `JavaScript solver under the C++ engine's name.`);
+
   let out = html;
   for (let i = 0; i < SCRIPTS.length; i++){
     const { tag, open } = SCRIPTS[i];
     out = out.replace(tag, `${open}\n${sources[i][1]}\n</script>`);
   }
+
+  const wasm = overrides[WASM_PATH] ?? readFileSync(resolve(REPO, WASM_PATH));
+  const b64 = Buffer.from(wasm).toString('base64');
+  out = out.replace(WASM_TAG,
+    `<script id="dnsWasmBase64">\nglobalThis.FARADAY_DISC_WASM_BASE64 = "${b64}";\n</script>`);
   return out;
 }
 

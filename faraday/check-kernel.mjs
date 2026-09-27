@@ -53,7 +53,7 @@ for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MA
    dns/check-dns.mjs and dns/check-disc.mjs, and this is the line that stops the
    page and those suites pointing at different files. */
 for (const f of ['faraday/kernel.js', 'dns/faraday-dns.js', 'dns/faraday-disc.js',
-                 'dns/faraday-floquet.js'])
+                 'dns/faraday-disc-wasm.js', 'dns/faraday-floquet.js'])
   if (!HTML.includes(`src="${f}"`)) throw new Error(
     `cymatic.html does not load ${f}. The page and its suite would be running `
     + `different code.`);
