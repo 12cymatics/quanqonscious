@@ -223,22 +223,17 @@ footer b{color:var(--ink2);font-weight:500}
 
 <div class="research">
   <div class="research-hd">
-    <span class="lab">navier-stokes · Floquet stability of the state above</span>
+    <span class="lab">navier-stokes · Floquet stability in this cell</span>
     <button id="dnsRun" class="seg" style="padding:4px 10px">run</button>
   </div>
-  <p>The renderer decides onset from a damped Mathieu form: an amplitude equation for one
-  mode, with the viscous damping folded into a single rate. That is an approximation, and a
-  measurable one — against the Floquet threshold below, the analytic formula reads about 1%
-  low on this apparatus.</p>
-  <p>This runs the incompressible Navier–Stokes solver in <code>dns/</code> on the state
-  currently shown: it integrates the linearised equations over one drive period and takes the
-  eigenvalues of that period map. |μ| &gt; 1 is growth. No amplitude equation, no assumed
-  damping — the viscosity enters as the actual diffusion term.</p>
-  <p><b>It is not the same geometry.</b> The solver is a two-dimensional periodic box of
-  length 2π/k at the dominant wavenumber, depth and fluid of the state above; the renderer is
-  a circular cell whose Bessel modes select that k. Faraday onset at a given k is set by the
-  layer, not the sidewall, so this is the rigorous answer for that mode — not for the disc.</p>
-  <p>It takes tens of seconds and runs in a worker, so the page stays live.</p>
+  <p>The deck above decides onset from a damped Mathieu form — one amplitude equation, with
+  all the viscous damping folded into a single rate γ. This solves the incompressible
+  Navier–Stokes equations instead, linearised about the flat layer <b>in this disc</b>: the
+  same radius, depth, water and drive, with no slip on the floor and the sidewall, the full
+  normal-stress balance at the free surface, and the contact line as the control above sets
+  it. It integrates one drive period and takes the eigenvalues of that period map; |μ| &gt; 1
+  is growth. Nothing is assumed about the damping — the viscosity enters as the diffusion
+  term and the boundary layers are resolved by a graded grid.</p>
   <div class="qgrid" id="dnsInput"></div>
   <div class="qgrid" id="dnsOut"></div>
   <p id="dnsNote"></p>
@@ -254,6 +249,7 @@ footer b{color:var(--ink2);font-weight:500}
 </div>
 <script src="faraday/kernel.js"></script>
 <script id="dnsSolver" src="dns/faraday-dns.js"></script>
+<script id="dnsDisc" src="dns/faraday-disc.js"></script>
 <script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
 <script>
 
@@ -1298,53 +1294,96 @@ document.getElementById('expBtn').addEventListener('click', async () => {
 });
 
 (function dnsPanel(){
-  /* The renderer's onset comes from a damped Mathieu form. The solver in dns/
-     answers the same question without that reduction: it integrates the
-     linearised incompressible Navier-Stokes equations over one drive period
-     and takes the eigenvalues of the period map. dns/check-dns.mjs already
-     measures the gap -- bisected Floquet threshold 2.55291 against the
-     analytic 2.52774, so the formula reads 0.99% low -- and nothing on this
-     page showed it. This does.
+  /* The deck's onset comes from a damped Mathieu form. The solver in dns/ answers
+     the same question without that reduction AND in this geometry: the linearised
+     incompressible Navier-Stokes equations in the disc, one azimuthal mode at a
+     time, no slip on the floor and the sidewall, the full normal-stress balance
+     at the surface, over one drive period.
 
-     It runs in a worker because a Floquet solve is tens of seconds and the
-     main thread is drawing. */
+     The two disagree in SIGN at the default state, which is why this is here and
+     not a footnote. Measured at 111 Hz, 3 mm, 24.25 mm cell, a = 7.0608 m/s^2,
+     m = 12: the deck's Mathieu growth is +3.24 per second and calls the mode
+     unstable at 2.26 times threshold; the disc's Floquet growth is -6.38 +/- 0.52
+     per second and calls it stable. The difference is damping the deck's gamma
+     leaves out -- gamma is 2.57 per second there, while the disc dissipates about
+     2.5 times that, most of it in the sidewall layer that a rim-concentrated
+     m = 12 mode sits in.
+
+     It runs in a worker because a converged solve is tens of seconds and the main
+     thread is drawing. */
   const cell = (k, v, hi) =>
     `<div><span class="k">${k}</span><span class="v${hi ? ' zero' : ''}">${v}</span></div>`;
   const note = t => { $('dnsNote').innerHTML = t; };
   const fmt = (v, n = 4) => Number.isFinite(v) ? v.toFixed(n) : String(v);
 
+  /* The grid. 28 x 14 graded cells put more than one cell inside every Stokes
+     layer at this apparatus and solve in about half a minute; the panel reports
+     what it actually achieved rather than claiming it. */
+  const GRID = { nr: 28, nz: 14, rStretch: 2.2, zStretch: 2.2 };
+
   function config(){
-    /* Refuses rather than substituting defaults. Before the first recompute()
-       there is no k, no depth and no drive to hand the solver, and a box built
-       from numbers nobody chose would still return a Floquet multiplier. */
     if (!state) throw new Error(
       'dns panel: the renderer has not resolved a state yet, so there is no '
-      + 'wavenumber, layer depth or drive to build the box from.');
-    const k = state.wavenumber, w = state.water;
-    return { nx: 32, ns: 32,
-             L: 2*Math.PI/k, h0: depth/1000,
+      + 'cell, layer or drive to build the problem from.');
+    const w = state.water, mode = state.nearestTheoryModes[0];
+    if (!mode) throw new Error(
+      'dns panel: the renderer named no theory mode near f/2 for this state, so '
+      + 'there is no azimuthal mode number to solve at.');
+    if (mode.m === 1) throw new Error(
+      'dns panel: the dominant mode here is m = 1, which the disc solver refuses '
+      + 'rather than mis-handling. Its radial and azimuthal momentum stay finite '
+      + 'at the axis only through a cancellation that no other m needs, and the '
+      + 'regularity condition the solver imposes is wrong for exactly that one.');
+    return { nr: GRID.nr, nz: GRID.nz,
+             rStretch: GRID.rStretch, zStretch: GRID.zStretch,
+             R: state.cellDiameterMm/2000, h: depth/1000,
              rho: w.rho, nu: w.nu, gamma: w.sigma,
+             m: mode.m, k: mode.k,
              omegaD: 2*Math.PI*freq, accel: state.accelAssumed,
-             dt: 2e-5, m: 6 };
+             contact: rim === 'pinned' ? 'pinned' : 'free' };
+  }
+
+  /* The Arnoldi seed: the surface shape of the mode being asked about, J_m(k r)
+     on the solver's own graded radii. Built here rather than in the worker
+     because besselJ lives in the kernel, which the page has loaded and the
+     worker has not -- and pulling 66 KB of kernel into the worker to evaluate one
+     Bessel function, or serialising the function itself, are both worse than
+     handing over the 28 numbers it produces. The radii are reconstructed from
+     the same map the solver uses, with the stretch passed explicitly so the two
+     cannot drift apart silently. */
+  function seedProfile(c){
+    const rf = FARADAY_DISC.gradeToEnd(c.nr, c.R, c.rStretch);
+    const eta0 = new Float64Array(c.nr);
+    for (let i = 0; i < c.nr; i++)
+      eta0[i] = besselJ(c.m, c.k*0.5*(rf[i] + rf[i+1]));
+    let norm = 0;
+    for (let i = 0; i < c.nr; i++) norm = Math.max(norm, Math.abs(eta0[i]));
+    if (!(norm > 0)) throw new Error(
+      `dns panel: the seed profile J_${c.m}(k r) is identically zero on this grid, `
+      + `so the Krylov space would start from nothing.`);
+    return eta0;
   }
 
   function showInput(c){
+    const mode = state.nearestTheoryModes[0];
     $('dnsInput').innerHTML =
-      cell('box length L = 2π/k', `${(c.L*1000).toFixed(4)} <span class="u">mm</span>`) +
-      cell('depth h', `${(c.h0*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('cell radius R', `${(c.R*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('depth h', `${(c.h*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('azimuthal mode m', `<b>${c.m}</b> · ${2*c.m}-fold · n = ${mode.n}`) +
       cell('drive ω_d', `${(c.omegaD/(2*Math.PI)).toFixed(2)} <span class="u">Hz</span>`) +
       cell('acceleration a', `${fmt(c.accel)} <span class="u">m/s²</span>`) +
       cell('ν', `${c.nu.toExponential(4)} <span class="u">m²/s</span>`) +
-      cell('γ', `${c.gamma.toFixed(5)} <span class="u">N/m</span>`) +
-      cell('grid', `${c.nx} × ${c.ns}`) +
-      cell('Krylov m', `${c.m}`);
+      cell('γ surface tension', `${c.gamma.toFixed(5)} <span class="u">N/m</span>`) +
+      cell('contact line', c.contact) +
+      cell('grid', `${c.nr} × ${c.nz} <span class="u">graded</span>`);
   }
 
-  /* The worker needs the solver's SOURCE, not the loaded objects. In the
-     single-file build the script tags carry it inline; served as separate
-     files they carry a src to fetch. Either way it is the same two files, and
-     if neither yields source this refuses rather than running a worker with
-     nothing in it. */
+  /* The worker needs the solvers' SOURCE, not the loaded objects. In the
+     single-file build the script tags carry it inline; served as separate files
+     they carry a src to fetch. Either way it is the same three files, and if
+     none yields source this refuses rather than running a worker with nothing in
+     it. faraday-dns.js comes along because faraday-floquet.js requires it for the
+     periodic-box solver that shares its Arnoldi. */
   async function sourceOf(id){
     const el = document.getElementById(id);
     if (!el) throw new Error(`dns panel: no <script id="${id}">`);
@@ -1360,13 +1399,21 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   let worker = null;
   async function ensureWorker(){
     if (worker) return worker;
-    const body = [await sourceOf('dnsSolver'), await sourceOf('dnsFloquet'),
+    const body = [await sourceOf('dnsSolver'), await sourceOf('dnsDisc'),
+      await sourceOf('dnsFloquet'),
       `self.onmessage = (e) => {
-         try { const r = FARADAY_FLOQUET.floquet(e.data);
-               self.postMessage({ ok: true, muMax: r.muMax, growth: r.growth }); }
-         catch (err) { self.postMessage({ ok: false, error: String(err && err.message || err) }); }
+         try {
+           const r = FARADAY_FLOQUET.floquetDisc(e.data);
+           self.postMessage({ ok: true, muMax: r.muMax, growth: r.growth,
+             muSpread: r.muSpread, growthWidth: r.growthWidth,
+             unstable: r.unstable, krylov: r.krylov, steps: r.steps,
+             stokes: r.stokes, stateSize: r.stateSize });
+         } catch (err) {
+           self.postMessage({ ok: false, error: String(err && err.message || err) });
+         }
        };`].join('\n;\n');
-    worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
+    worker = new Worker(URL.createObjectURL(
+      new Blob([body], { type: 'text/javascript' })));
     return worker;
   }
 
@@ -1375,38 +1422,58 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     if (running) return;
     running = true;
     const btn = $('dnsRun');
-    const c = config();
-    showInput(c);
-    $('dnsOut').innerHTML = '';
+    let c = null;
     const t0 = performance.now();
     const tick = setInterval(() => {
       btn.textContent = `running ${((performance.now()-t0)/1000).toFixed(0)}s`;
     }, 500);
     try {
+      c = config();
+      showInput(c);
+      $('dnsOut').innerHTML = '';
       const w = await ensureWorker();
       const r = await new Promise((res, rej) => {
         w.onmessage = e => e.data.ok ? res(e.data) : rej(new Error(e.data.error));
         w.onerror = e => rej(new Error(e.message || 'worker failed'));
-        w.postMessage(c);
+        w.postMessage(Object.assign({}, c, { eta0: seedProfile(c) }));
       });
       const secs = (performance.now()-t0)/1000;
-      const unstable = r.muMax > 1;
       const mathieu = state.onset ? state.onset.growth : NaN;
+      const verdict = r.unstable === true ? '<b>unstable — the mode grows</b>'
+        : r.unstable === false ? 'stable — it decays'
+        : '<b>too close to call at this grid</b>';
       $('dnsOut').innerHTML =
-        cell('|μ| largest Floquet multiplier', `<b>${r.muMax.toFixed(8)}</b>`, unstable) +
-        cell('verdict', unstable ? '<b>unstable — the mode grows</b>' : 'stable — it decays') +
-        cell('Floquet growth', `${fmt(r.growth)} <span class="u">s⁻¹</span>`) +
-        cell('renderer (Mathieu) growth', `${fmt(mathieu)} <span class="u">s⁻¹</span>`) +
-        cell('difference', Number.isFinite(mathieu) && mathieu !== 0
-              ? `${((r.growth/mathieu - 1)*100).toFixed(2)} %` : '—') +
-        cell('solve time', `${secs.toFixed(1)} <span class="u">s</span>`);
-      note(`Growth here is ln|μ| over one drive period, from the eigenvalues of the `
-         + `period map of the linearised Navier-Stokes operator. The renderer's figure `
-         + `beside it comes from the damped Mathieu form. They answer the same question `
-         + `about the same layer; where they differ, this one made fewer assumptions.`);
+        cell('|μ| largest Floquet multiplier',
+             `<b>${r.muMax.toFixed(8)}</b> ± ${r.muSpread.toExponential(1)}`,
+             r.unstable === true) +
+        cell('verdict', verdict) +
+        cell('Floquet growth (disc)',
+             `<b>${fmt(r.growth)}</b> ± ${fmt(r.growthWidth, 2)} <span class="u">s⁻¹</span>`) +
+        cell('deck (Mathieu) growth', `${fmt(mathieu)} <span class="u">s⁻¹</span>`) +
+        cell('the two disagree by',
+             Number.isFinite(mathieu)
+               ? `${fmt(r.growth - mathieu, 2)} <span class="u">s⁻¹</span>`
+                 + (Math.sign(r.growth) !== Math.sign(mathieu) ? ' — <b>in sign</b>' : '')
+               : '—') +
+        cell('Stokes depth δ',
+             `${(r.stokes.delta*1e6).toFixed(1)} <span class="u">µm</span>`) +
+        cell('cells inside δ',
+             `floor ${r.stokes.cellsInFloorLayer.toFixed(1)} · `
+             + `surface ${r.stokes.cellsInSurfaceLayer.toFixed(1)} · `
+             + `rim ${r.stokes.cellsInRimLayer.toFixed(1)}`) +
+        cell('Krylov dimension used', `${r.krylov} on ${r.stateSize} unknowns`) +
+        cell('solve time',
+             `${secs.toFixed(1)} <span class="u">s</span> · ${r.steps} steps`);
+      note(`Growth is ln|μ| over one drive period, from the eigenvalues of the period `
+         + `map of the linearised Navier-Stokes operator in this disc. The width on it `
+         + `is real: the viscous cell has a dense cluster of decaying modes, so which `
+         + `one is largest is ill conditioned, and the figure is quoted with the spread `
+         + `across Krylov dimensions rather than to a precision it does not have. Where `
+         + `this and the deck's Mathieu figure differ, the difference is damping the `
+         + `single-rate γ leaves out — chiefly the sidewall layer.`);
     } catch (err) {
       $('dnsOut').innerHTML = '';
-      note(`<b>The Navier-Stokes check did not run:</b> ${err.message}. Nothing is `
+      note(`<b>The Navier-Stokes check did not run:</b> ${err.message} Nothing is `
          + `reported in its place.`);
     } finally {
       clearInterval(tick);
@@ -1415,14 +1482,16 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     }
   });
 
-  /* Driven by recompute(), not called here. The panel is constructed before
-     the renderer's first recompute(), so state is still null at this point:
-     calling config() here threw, the exception left the top-level script, and
+  /* Driven by recompute(), not called here. The panel is constructed before the
+     renderer's first recompute(), so state is still null at this point: calling
+     config() here threw, the exception left the top-level script, and
      sprinkle()/recompute()/requestAnimationFrame(loop) at the end of the file
      never ran -- a blank page with the panel's own listener attached. Wiring it
      to recompute() also keeps these cells in step with the controls instead of
      showing whatever the drive was when the page loaded. */
-  dnsShowInput = () => showInput(config());
+  dnsShowInput = () => { try { showInput(config()); }
+    catch (e){ $('dnsInput').innerHTML = ''; note(`<b>Not runnable on this state:</b> `
+      + `${e.message}`); } };
   note('Not run yet. The renderer above is unaffected by this panel.');
 })();
 

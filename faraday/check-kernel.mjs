@@ -49,10 +49,11 @@ for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MA
 /* The page must actually load every physics file it runs on, or the browser
    gets a kernel the tests never see. Asserted here because it is the one thing
    requiring the modules directly can no longer notice. The two dns/ files are
-   named because the page's stability panel loads them; their physics is gated
-   by dns/check-dns.mjs, and this is the line that stops the page and that
-   suite pointing at different files. */
-for (const f of ['faraday/kernel.js', 'dns/faraday-dns.js', 'dns/faraday-floquet.js'])
+   named because the page's stability panel loads them; their physics is gated by
+   dns/check-dns.mjs and dns/check-disc.mjs, and this is the line that stops the
+   page and those suites pointing at different files. */
+for (const f of ['faraday/kernel.js', 'dns/faraday-dns.js', 'dns/faraday-disc.js',
+                 'dns/faraday-floquet.js'])
   if (!HTML.includes(`src="${f}"`)) throw new Error(
     `cymatic.html does not load ${f}. The page and its suite would be running `
     + `different code.`);

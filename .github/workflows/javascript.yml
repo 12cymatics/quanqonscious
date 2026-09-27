@@ -26,6 +26,18 @@
 # whose numbers come from Bessel zeros and tanh of a rational cannot be one
 # process -- so CI is now the only thing that executes it.
 #
+# dns/check-disc.mjs is its own job for the same reason dns/check-dns.mjs is: it
+# is a five-and-a-half minute run, and it gates a solver rather than a library.
+# It is the disc: the linearised incompressible Navier-Stokes equations in the
+# actual cylindrical cell, one azimuthal mode at a time, with no slip on the floor
+# and the sidewall. Its expected values come from the analytic disc dispersion
+# relation, Bessel's own equation, and identities the equations must satisfy --
+# never from the solver. Four defects it was written against, each found by
+# measurement: a surface pressure applied as an O(1/dz) predictor force, a step
+# limit that ignored the azimuthal direction, a radial grading that clustered at
+# the axis instead of the rim, and uniform grids that measured the damping
+# inconsistently because the Stokes layers were never resolved.
+#
 # dns/check-page.mjs is the only suite here that needs a browser, and it gets
 # one without an install: the ubuntu-latest image ships Google Chrome, and node
 # 22 has a global WebSocket, so it drives it over the DevTools protocol with no
@@ -98,6 +110,17 @@ jobs:
         node-version: "22"
     - name: Free-surface Navier-Stokes solver
       run: node dns/check-dns.mjs
+
+  disc:
+    name: faraday disc (cylindrical Navier-Stokes)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Linearised free-surface Navier-Stokes in the cell
+      run: node dns/check-disc.mjs
 
   page:
     name: cymatic.html in a browser

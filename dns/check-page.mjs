@@ -206,23 +206,37 @@ class Page {
    gate loudly instead of silently comparing two different problems. The
    physical numbers (k, depth, drive, acceleration, water) come from the
    renderer's own resolved state and are mapped here independently. */
-const GRID = { nx: 32, ns: 32, dt: 2e-5, m: 6 };
-/* the same four as the page spells them, because 2e-5 stringifies to 0.00002
-   and a template literal would look for text the file does not contain */
-const GRID_SRC = 'nx: 32, ns: 32';
-const GRID_SRC2 = 'dt: 2e-5, m: 6';
+const GRID = { nr: 28, nz: 14, rStretch: 2.2, zStretch: 2.2 };
+const GRID_SRC = 'nr: 28, nz: 14';
+const GRID_SRC2 = 'rStretch: 2.2, zStretch: 2.2';
 const PAGE_SRC = readFileSync(join(REPO, 'cymatic.html'), 'utf8');
 
 /* the drive period must divide into a whole number of steps at this dt for the
    node and browser runs to be the same map; floquet() rounds, so both round
    identically and this is only asserted to have a sane value. */
 const FLOQUET = require(join(REPO, 'dns', 'faraday-floquet.js'));
+const DISC = require(join(REPO, 'dns', 'faraday-disc.js'));
+const KERNEL = require(join(REPO, 'faraday', 'kernel.js'));
 
+/* The box the panel would solve, mapped here from the renderer's own resolved
+   state rather than read back off the page. If the page's own mapping were wrong
+   the two would disagree, which is the point. */
 function configFrom(s){
-  return { nx: GRID.nx, ns: GRID.ns, dt: GRID.dt, m: GRID.m,
-           L: 2*Math.PI/s.wavenumber, h0: s.depthMm/1000,
+  return { nr: GRID.nr, nz: GRID.nz,
+           rStretch: GRID.rStretch, zStretch: GRID.zStretch,
+           R: s.cellDiameterMm/2000, h: s.depthMm/1000,
            rho: s.rho, nu: s.nu, gamma: s.sigma,
-           omegaD: 2*Math.PI*s.freq, accel: s.accelAssumed };
+           m: s.modeM, k: s.modeK,
+           omegaD: 2*Math.PI*s.freq, accel: s.accelAssumed,
+           contact: s.rim === 'pinned' ? 'pinned' : 'free' };
+}
+
+function seedFor(c){
+  const rf = DISC.gradeToEnd(c.nr, c.R, c.rStretch);
+  const eta0 = new Float64Array(c.nr);
+  for (let i = 0; i < c.nr; i++)
+    eta0[i] = KERNEL.besselJ(c.m, c.k*0.5*(rf[i] + rf[i+1]));
+  return eta0;
 }
 
 /* ---- run --------------------------------------------------------------- */
@@ -257,13 +271,18 @@ async function checkPage(url, name, expectInline){
     wavenumber: state.wavenumber, onsetGrowth: state.onset.growth,
     accelAssumed: state.accelAssumed, responseHz: state.responseHz,
     rho: state.water.rho, nu: state.water.nu, sigma: state.water.sigma,
-    freq: freq, depthMm: depth,
+    freq: freq, depthMm: depth, cellDiameterMm: state.cellDiameterMm,
+    rim: rim,
+    modeM: state.nearestTheoryModes[0].m, modeK: state.nearestTheoryModes[0].k,
+    modeN: state.nearestTheoryModes[0].n,
     grains: (() => { let n = 0; for (let i = 0; i < NP; i++) if (PX[i] !== 0) n++; return n; })(),
     grainTotal: NP,
     frames: typeof lastBuild === 'number' ? lastBuild : null }`);
   for (const [k, v] of Object.entries(s))
-    if (k !== 'grains' && k !== 'grainTotal' && k !== 'frames')
+    if (k !== 'grains' && k !== 'grainTotal' && k !== 'frames' && k !== 'rim')
       ok(Number.isFinite(v) && v !== 0, `state.${k} is a finite nonzero number`, `${k} = ${v}`);
+  ok(s.rim === 'free' || s.rim === 'pinned', 'the contact line control has a value',
+     String(s.rim));
   /* PX is a Float32Array of zeros until sprinkle() places the grains, and
      sprinkle() is the first of the three statements that follow the panel at
      the end of the file. If the panel throws, PX is still all zeros. */
@@ -301,23 +320,32 @@ async function checkPage(url, name, expectInline){
     for (const d of document.querySelectorAll('#dnsInput > div'))
       o[d.querySelector('.k').textContent] = d.querySelector('.v').textContent;
     return o; })()`);
-  ok(Object.keys(cells).length === 8, 'the panel shows its eight inputs',
-     `${Object.keys(cells).length} cells`);
-  rel(parseFloat(cells['box length L = 2π/k']), c.L*1000, 4,
-      'the box length shown is 2π/k in mm');
-  rel(parseFloat(cells['depth h']), c.h0*1000, 3, 'the depth shown is the layer depth in mm');
+  ok(Object.keys(cells).length === 9, 'the panel shows its nine inputs',
+     `${Object.keys(cells).length} cells: ${Object.keys(cells).join(' | ')}`);
+  rel(parseFloat(cells['cell radius R']), c.R*1000, 4,
+      'the radius shown is half the cell diameter, in mm');
+  rel(parseFloat(cells['depth h']), c.h*1000, 3, 'the depth shown is the layer depth in mm');
   rel(parseFloat(cells['drive ω_d']), c.omegaD/(2*Math.PI), 3, 'the drive shown is ω_d/2π');
   rel(parseFloat(cells['acceleration a']), c.accel, 3, 'the acceleration shown is the assumed drive');
   rel(parseFloat(cells['ν']), c.nu, 3, 'the viscosity shown is the water model’s ν');
-  rel(parseFloat(cells['γ']), c.gamma, 4, 'the surface tension shown is the water model’s σ');
-  ok(cells['grid'] === `${c.nx} × ${c.ns}`, 'the grid shown is the grid solved', cells['grid']);
-  ok(cells['Krylov m'] === String(c.m), 'the Krylov dimension shown is the one solved', cells['Krylov m']);
+  rel(parseFloat(cells['γ surface tension']), c.gamma, 4,
+      'the surface tension shown is the water model’s σ');
+  ok(parseInt(cells['azimuthal mode m'], 10) === c.m,
+     'the azimuthal mode shown is the renderer’s own dominant mode',
+     `${cells['azimuthal mode m']} against m = ${c.m}`);
+  ok(cells['azimuthal mode m'].includes(`${2*c.m}-fold`),
+     'and it is labelled with the fold count that mode produces',
+     cells['azimuthal mode m']);
+  ok(cells['contact line'] === c.contact,
+     'the contact line shown is the one the control selects', cells['contact line']);
+  ok(cells['grid'].startsWith(`${c.nr} × ${c.nz}`),
+     'the grid shown is the grid solved', cells['grid']);
 
   /* 5. inline versus fetched solver source */
   const tags = await page.json(`[...document.querySelectorAll('script')].map(t => ({
     id: t.id, src: t.getAttribute('src') || '', inline: t.textContent.trim().length }))`);
-  const dns = tags.filter(t => t.id === 'dnsSolver' || t.id === 'dnsFloquet');
-  ok(dns.length === 2, 'both solver scripts are present and carry their ids',
+  const dns = tags.filter(t => ['dnsSolver', 'dnsDisc', 'dnsFloquet'].includes(t.id));
+  ok(dns.length === 3, 'all three solver scripts are present and carry their ids',
      dns.map(t => t.id).join(','));
   for (const t of dns){
     if (expectInline)
@@ -348,32 +376,47 @@ async function checkPage(url, name, expectInline){
   ok(!/did not run/.test(res.note), 'the worker ran rather than refusing', res.note.slice(0, 200));
   ok(res.btn === 'run', 'the button returns to rest afterwards', res.btn);
   const mu = parseFloat(res.cells['|μ| largest Floquet multiplier']);
-  const growth = parseFloat(res.cells['Floquet growth']);
+  const growth = parseFloat(res.cells['Floquet growth (disc)']);
   ok(Number.isFinite(mu) && mu > 0, 'the panel reports a positive multiplier', String(mu));
 
   if (!nodeRef){
     /* computed here, from the state probed out of the page and the mapping
        written in configFrom -- not by asking the page what to solve. */
     const t0 = Date.now();
-    nodeRef = FLOQUET.floquet(c);
-    console.log(`       node reference: |mu| = ${nodeRef.muMax.toFixed(10)}, `
-      + `growth ${nodeRef.growth.toFixed(6)} s^-1, ${((Date.now()-t0)/1000).toFixed(1)} s`);
+    nodeRef = FLOQUET.floquetDisc({ ...c, eta0: seedFor(c) });
+    console.log(`       node reference: |mu| = ${nodeRef.muMax.toFixed(10)} +/- `
+      + `${nodeRef.muSpread.toExponential(2)}, growth ${nodeRef.growth.toFixed(6)} `
+      + `s^-1, krylov ${nodeRef.krylov}, ${((Date.now()-t0)/1000).toFixed(1)} s`);
   }
   /* Eight decimals is what the panel prints, so that is what can be compared;
      the underlying agreement is tighter. Any real disagreement -- a different
-     box, a different drive, a dropped factor -- moves the first digits. */
+     cell, a different mode number, a dropped factor -- moves the first digits.
+     This is NOT the cluster width: both sides run the same code on the same
+     inputs, so they must agree to rounding, whatever the width of the physical
+     answer. */
   rel(mu, nodeRef.muMax, 7, `the panel's |μ| is the solver's |μ| (${mu})`);
   rel(growth, nodeRef.growth, 4, `the panel's growth rate is ln|μ| over the drive period`);
   ok(Math.abs(growth - Math.log(mu)/(2*Math.PI/c.omegaD)) < 5e-4*Math.abs(growth),
      'the growth shown is ln|μ| over one drive period, recomputed from the |μ| shown',
      `${growth} vs ${Math.log(mu)/(2*Math.PI/c.omegaD)}`);
-  const mathieu = parseFloat(res.cells['renderer (Mathieu) growth']);
-  rel(mathieu, s.onsetGrowth, 4, 'the Mathieu figure beside it is the renderer’s own onset growth');
-  const diff = parseFloat(res.cells['difference']);
-  rel(diff, (nodeRef.growth/s.onsetGrowth - 1)*100, 2,
-      `the difference shown is the two growth rates compared (${diff} %)`);
-  console.log(`       panel: |mu| ${mu}, growth ${growth} s^-1 against Mathieu `
-    + `${mathieu} s^-1, ${diff}% apart, in ${secs.toFixed(1)} s`);
+  const mathieu = parseFloat(res.cells['deck (Mathieu) growth']);
+  rel(mathieu, s.onsetGrowth, 4, 'the Mathieu figure beside it is the deck’s own onset growth');
+  const diff = parseFloat(res.cells['the two disagree by']);
+  rel(diff, nodeRef.growth - s.onsetGrowth, 2,
+      `the disagreement shown is the difference of the two growth rates (${diff} s^-1)`);
+  ok(res.cells['the two disagree by'].includes('in sign')
+       === (Math.sign(nodeRef.growth) !== Math.sign(s.onsetGrowth)),
+     'and it says so when the two disagree in sign, which at the default state they do',
+     res.cells['the two disagree by']);
+  ok(res.cells['verdict'].includes('stable'),
+     'the verdict names a side', res.cells['verdict']);
+  const layers = res.cells['cells inside δ'];
+  ok(/floor [\d.]+ · surface [\d.]+ · rim [\d.]+/.test(layers),
+     'the panel reports how much of each Stokes layer the grid actually resolved, '
+     + 'rather than claiming the damping without it', layers);
+  console.log(`       panel: |mu| ${mu}, growth ${growth} s^-1 against the deck's `
+    + `Mathieu ${mathieu} s^-1, ${diff} s^-1 apart, in ${secs.toFixed(1)} s`);
+  console.log(`       ${layers}`);
   if (servedMu === null) servedMu = mu;
   else ok(mu === servedMu,
     'the single-file build and the checkout report the same multiplier to the digit',
