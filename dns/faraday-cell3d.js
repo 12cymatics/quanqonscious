@@ -179,6 +179,15 @@ class FaradayCell3D {
        identically. */
     this.rx = new Float64Array(nr + 2);
     this.Hx = new Float64Array((nr + 2)*nth);
+    /* The centred slopes, extended the same way. Hat's own slopes are the slope of
+       the bracket it interpolates in, which is centred at a FACE midpoint and
+       one-sided at a node -- right for the r-face and theta-face cross terms,
+       which are evaluated at faces, and first order for the sigma-face cross
+       terms, which are evaluated at nodes. Interpolating the precomputed centred
+       slopes instead keeps those second order. Getting this wrong cost the whole
+       operator an order and a half: every family read 0.5 instead of 2. */
+    this.Hxr = new Float64Array((nr + 2)*nth);
+    this.Hxt = new Float64Array((nr + 2)*nth);
     this.rx[0] = -this.rc[0];
     for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
     this.rx[nr+1] = this.R;
@@ -217,9 +226,14 @@ class FaradayCell3D {
       v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
+      /* w's nodes run 0..nz, but its momentum equation is solved on 1..nz-1: the
+         floor value is zero by no slip and the surface value is set by the
+         free-surface conditions rather than by a momentum balance -- it has no
+         half cell above it to take a flux through. Both remain readable
+         neighbours. */
       w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
-           sn: this.sf, sb: sbW, sLo: 1, sHi: nz }
+           sn: this.sf, sb: sbW, sLo: 1, sHi: nz - 1 }
     };
     this.refreshMetric();
   }
@@ -280,12 +294,29 @@ class FaradayCell3D {
         this.Hdth[e] = (this.Hth[i*nth + this.kw(k+1)] - this.Hth[i*nth + this.kw(k)])
                        /this.dth;
       }
-    /* the extended columns */
+    /* the extended columns. H is even under the axis reflection, so its radial
+       derivative is odd and its azimuthal derivative even:
+           H(-r, th)   =  H(r, th+pi)
+           H_r(-r, th) = -H_r(r, th+pi)
+           H_th(-r,th) =  H_th(r, th+pi)
+       At the rim a free contact line has dH/dr = 0 by definition, and a pinned one
+       has the surface undeformed along the wall, so dH/dtheta = 0 there instead. */
     const half = nth >> 1;
+    const free = this.contact === 'free';
     for (let k = 0; k < nth; k++){
-      this.Hx[0*nth + k] = H[this.ie(0, k + half)];
-      for (let i = 0; i < nr; i++) this.Hx[(i+1)*nth + k] = H[this.ie(i, k)];
-      this.Hx[(nr+1)*nth + k] = this.contact === 'pinned' ? h : H[this.ie(nr-1, k)];
+      const ka = this.kw(k + half);
+      this.Hx[0*nth + k]  =  H[this.ie(0, ka)];
+      this.Hxr[0*nth + k] = -this.Hdr[this.ie(0, ka)];
+      this.Hxt[0*nth + k] =  this.Hdth[this.ie(0, ka)];
+      for (let i = 0; i < nr; i++){
+        this.Hx[(i+1)*nth + k]  = H[this.ie(i, k)];
+        this.Hxr[(i+1)*nth + k] = this.Hdr[this.ie(i, k)];
+        this.Hxt[(i+1)*nth + k] = this.Hdth[this.ie(i, k)];
+      }
+      this.Hx[(nr+1)*nth + k]  = free ? H[this.ie(nr-1, k)] : h;
+      this.Hxr[(nr+1)*nth + k] = free ? 0
+        : (h - H[this.ie(nr-1, k)])/this.drf[nr];
+      this.Hxt[(nr+1)*nth + k] = free ? this.Hdth[this.ie(nr-1, k)] : 0;
     }
     return this;
   }
@@ -501,6 +532,24 @@ class FaradayCell3D {
     return { H, Hr, Hth };
   }
 
+  /* The centred slopes of H at an arbitrary position, bilinear on the extended
+     slope grids. Distinct from Hat's slopes, which are the bracket's own and so
+     are centred only at a face midpoint: these are what the sigma-face cross
+     terms need, because those are evaluated at nodes. */
+  Hslope(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5, kb = Math.floor(tt), ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const lerp = A => (1 - fr)*((1 - ft)*A[a*nth + k0] + ft*A[a*nth + k1])
+                    + fr*((1 - ft)*A[(a+1)*nth + k0] + ft*A[(a+1)*nth + k1]);
+    return { Hr: lerp(this.Hxr), Hth: lerp(this.Hxt) };
+  }
+
   /* ---- the axis ---------------------------------------------------------- */
 
   /* A value across the axis, by reflection. The point at radius -r and angle
@@ -692,6 +741,174 @@ class FaradayCell3D {
           }
 
           out[this.ip(i, k, j)] = flux/(rc[i]*drc[i]*dth*Hc*dsc[j]);
+        }
+      }
+    }
+    return out;
+  }
+
+  /* The metric Laplacian at any of the four node families.
+   *
+   * The same flux algebra as scalarLaplacian, read off a family descriptor rather
+   * than hard-wired to the cell centres: the families differ only in where their
+   * nodes sit in r and sigma, their theta offset, and their boundaries. Written
+   * once and instantiated four times, because four copies with the indices
+   * changed is where a spacing or a sign goes wrong without any test noticing.
+   *
+   * `bc(kind, r, th, sigma)` gives the field's value ON a boundary face, with kind
+   * one of 'rim', 'floor', 'surface'. Omitted, every boundary face carries zero
+   * flux. The axis needs no entry: at r = 0 the face area is exactly zero, so no
+   * value there can matter, and inward stencils use the antipodal reflection with
+   * the family's own sign.
+   *
+   * The sigma-faces are the non-orthogonal ones and carry the two tangential
+   * cross terms; the r-faces and theta-faces carry one each. Dropping any of them
+   * is invisible on a flat surface, which is why every gate deforms it. */
+  famLaplacian(f, out, fam, bc){
+    const nth = this.nth, dth = this.dth;
+    const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
+    const nI = rn.length, nJ = sn.length;
+    const idx = fam.idx, sgn = fam.axisSign, thOff = fam.thOff;
+    const thOf = k => (k + thOff)*dth;
+    const at = (a, k, b) => f[idx(a, k, b)];
+    /* inward across the axis: node -1 is node 0 of the antipodal column, at -rn[0],
+       carrying the family's reflection sign */
+    const half = nth >> 1;
+    const rAt = a => a < 0 ? -rn[-1 - a] : rn[a];
+    const vAt = (a, k, b) => a < 0 ? sgn*at(-1 - a, k + half, b) : at(a, k, b);
+
+    const dfds = (a, k, b) => {
+      if (nJ < 2) return 0;
+      if (b === 0) return (at(a, k, 1) - at(a, k, 0))/(sn[1] - sn[0]);
+      if (b === nJ - 1) return (at(a, k, nJ-1) - at(a, k, nJ-2))/(sn[nJ-1] - sn[nJ-2]);
+      return (at(a, k, b+1) - at(a, k, b-1))/(sn[b+1] - sn[b-1]);
+    };
+    const dfdr = (a, k, b) => {
+      if (nI < 2) return 0;
+      if (a === nI - 1) return (at(nI-1, k, b) - at(nI-2, k, b))/(rn[nI-1] - rn[nI-2]);
+      return (at(a+1, k, b) - vAt(a-1, k, b))/(rn[a+1] - rAt(a-1));
+    };
+    const dfdth = (a, k, b) => (at(a, k+1, b) - at(a, k-1, b))/(2*dth);
+
+    /* The derivative AT a boundary face, second order, from the boundary value and
+       the two nearest nodes. A plain one-sided difference over the half cell is
+       second order at the MIDPOINT between the face and the node, and only first
+       order at the face itself -- and a flux error of that order at one face gives
+       an error in the cell's Laplacian that does not converge at all. Measured
+       before this was fixed: every interior sigma row read 4.5e-3 and the surface
+       row read 2.4e-1 at both resolutions, flat.
+       dns/faraday-disc.js already does this, in wzSurface, and this is the same
+       quadratic: the derivative at x0 of the parabola through (x0, fo), at
+       distance d1 (fc) and d2 (ff) on one side. */
+    const faceDeriv = (fo, fc, ff, d1, d2) =>
+      fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
+
+    for (let a = fam.rLo; a <= fam.rHi; a++){
+      const dra = rb[a+1] - rb[a];
+      for (let k = 0; k < nth; k++){
+        const th = thOf(k);
+        const mid = this.Hat(rn[a], th);
+        const midS = this.Hslope(rn[a], th);
+        for (let b = fam.sLo; b <= fam.sHi; b++){
+          const dsb = sb[b+1] - sb[b];
+          const fc = at(a, k, b);
+          let flux = 0;
+
+          /* ---- the two r faces ---- */
+          for (const side of [-1, +1]){
+            const rface = side < 0 ? rb[a] : rb[a+1];
+            if (rface === 0) continue;                 // the axis: zero area
+            const g = this.Hat(rface, th);
+            const area = rface*dth*g.H*dsb;
+            let dr, dsg;
+            const an = side < 0 ? a - 1 : a + 1;
+            if (an > nI - 1){
+              /* the rim wall, outside the node list: a prescribed value at r = R.
+                 Keyed on the NODE list rather than on the unknown range, because a
+                 node that exists but is not solved for -- u at the wall, w at the
+                 surface -- is an ordinary neighbour to read, not a boundary to
+                 close on. Keying it on the unknown range divided by a zero
+                 half-cell and returned NaN for the whole w family. */
+              if (!bc) continue;
+              const fo = bc('rim', this.R, th, sn[b]);
+              dr = a >= 1
+                ? faceDeriv(fo, fc, at(a-1, k, b), this.R - rn[a], this.R - rn[a-1])
+                : (fo - fc)/(this.R - rn[a]);
+              /* and the sigma gradient at the wall face, extrapolated for the same
+                 reason the tangential ones are at the sigma faces */
+              dsg = a >= 1 ? 1.5*dfds(a, k, b) - 0.5*dfds(a-1, k, b)
+                           : dfds(a, k, b);
+            } else {
+              const fo = vAt(an, k, b);
+              const ro = rAt(an);
+              dr = side < 0 ? (fc - fo)/(rn[a] - ro) : (fo - fc)/(ro - rn[a]);
+              dsg = an < 0 ? dfds(a, k, b)
+                           : 0.5*(dfds(a, k, b) + dfds(an, k, b));
+            }
+            flux += side*area*(dr - (sn[b]*g.Hr/g.H)*dsg);
+          }
+
+          /* ---- the two theta faces: periodic, so always both ---- */
+          for (const side of [-1, +1]){
+            const thf = th + side*0.5*dth;
+            const g = this.Hat(rn[a], thf);
+            const area = dra*g.H*dsb;
+            const fo = at(a, k + side, b);
+            const dt_ = side < 0 ? (fc - fo)/dth : (fo - fc)/dth;
+            const dsg = 0.5*(dfds(a, k, b) + dfds(a, k + side, b));
+            flux += side*area*(dt_ - (sn[b]*g.Hth/g.H)*dsg)/rn[a];
+          }
+
+          /* ---- the two sigma faces: the non-orthogonal ones ---- */
+          for (const side of [-1, +1]){
+            const sface = side < 0 ? sb[b] : sb[b+1];
+            const proj = rn[a]*dra*dth;
+            let dsg, drAt, dtAt;
+            const bn = side < 0 ? b - 1 : b + 1;
+            if (bn < 0 || bn > nJ - 1){
+              if (!bc) continue;
+              const kind = side < 0 ? 'floor' : 'surface';
+              const fo = bc(kind, rn[a], th, sface);
+              if (side < 0){
+                /* the floor: the two nodes above it. The bracket is the derivative
+                   in the +sigma sense, so it is negated -- the helper is written
+                   for nodes on one side and this side is the other. */
+                const d1 = sn[b] - sface;
+                const d2 = (b + 1 <= nJ - 1) ? sn[b+1] - sface : 2*d1;
+                dsg = (b + 1 <= nJ - 1)
+                  ? -faceDeriv(fo, fc, at(a, k, b+1), d1, d2)
+                  : (fc - fo)/d1;
+              } else {
+                const d1 = sface - sn[b];
+                dsg = (b - 1 >= 0)
+                  ? faceDeriv(fo, fc, at(a, k, b-1), d1, sface - sn[b-1])
+                  : (fo - fc)/d1;
+              }
+              /* The tangential gradients AT the boundary face, by linear
+                 extrapolation of the node-centred ones. Using the node's own
+                 values is first order at the face, and with the metric cross
+                 terms active that non-converges exactly as the normal derivative
+                 did: measured order -0.37 at eta/h = 0.3 before this. */
+              const bi = side < 0 ? b + 1 : b - 1;
+              const haveIn = bi >= 0 && bi <= nJ - 1;
+              drAt = haveIn ? 1.5*dfdr(a, k, b) - 0.5*dfdr(a, k, bi)
+                            : dfdr(a, k, b);
+              dtAt = haveIn ? 1.5*dfdth(a, k, b) - 0.5*dfdth(a, k, bi)
+                            : dfdth(a, k, b);
+            } else {
+              dsg = side < 0 ? (fc - at(a, k, bn))/(sn[b] - sn[bn])
+                             : (at(a, k, bn) - fc)/(sn[bn] - sn[b]);
+              drAt = 0.5*(dfdr(a, k, b) + dfdr(a, k, bn));
+              dtAt = 0.5*(dfdth(a, k, b) + dfdth(a, k, bn));
+            }
+            const gradR = drAt - (sface*midS.Hr/mid.H)*dsg;
+            const gradT = dtAt - (sface*midS.Hth/mid.H)*dsg;
+            flux += side*proj*( dsg/mid.H
+                              - sface*midS.Hr*gradR
+                              - (sface*midS.Hth/(rn[a]*rn[a]))*gradT );
+          }
+
+          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid.H*dsb);
         }
       }
     }

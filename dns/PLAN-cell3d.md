@@ -2,10 +2,46 @@
 
 **Session counter: 1**
 **Stages complete: 4 of 14**
-**Next action: S4b — instantiate the metric Laplacian at the u, v and w families
-and add the cylindrical vector coupling. The geometry it needs is in place
-(`this.FAM`), the metric interpolation it calls is verified (`Hat`), and the one
-non-mechanical piece, u_r at the axis, is done.**
+**Next action: S4b, and the shape of the remaining work is now known precisely.
+`famLaplacian` is written and instantiates at all four families; three faults were
+found and fixed, and one remains, diagnosed below. Fix it by evaluating tangential
+derivatives at a COMMON PHYSICAL HEIGHT — interpolating in sigma to z = sigma_face
+* H_face within each neighbouring column — instead of differencing at constant
+sigma and subtracting a metric correction.**
+
+### The sigma-coordinate cancellation, and why it defeats the obvious discretisation
+
+Worth reading before touching `famLaplacian`, because it cost four measure-fix
+cycles to find and it will look like a small accuracy problem until it is
+understood.
+
+Under z = sigma H, each physical derivative is a difference of two terms:
+d/dr|_z = d_r - (sigma H_r/H) d_sigma. For a field that depends on z alone those
+two terms are individually O(1) and cancel EXACTLY. Discretely they cancel only to
+O(dtheta^2); the Laplacian then divides a difference of face fluxes by dtheta,
+leaving O(dtheta); and the (1/r^2) factor near the axis amplifies that by 1/dr^2.
+Refining the grid therefore makes it WORSE. Measured with f = sin(kz), a surface
+varying only in theta, eta/h = 0.3:
+
+    family p:  1.77e-1 -> 1.72e-1   order  0.04
+    family v:  8.63e-1 -> 3.42e+0   order -1.99
+
+This is the same defect known in terrain-following ocean and atmosphere models as
+the pressure-gradient error over steep topography. No amount of care in the
+metric slopes fixes it, because the problem is the subtraction itself. Evaluating
+the tangential difference between two columns at a common physical height removes
+the subtraction: for f = f(z) both interpolated values are equal, so the
+difference is exactly zero.
+
+### Faults found and fixed in `famLaplacian` so far
+
+| Fault | How it showed | Fix |
+|-------|---------------|-----|
+| Hat's slopes used for the sigma-face cross terms | every family order 0.5 instead of 2 | interpolate the precomputed centred slopes (`Hslope`) instead; Hat's own are centred only at face midpoints |
+| Boundary branch keyed on the unknown range, not the node list | NaN for the whole w family, from a zero-width half cell above its surface node | key it on the node list: a node that exists but is not solved for is an ordinary neighbour |
+| One-sided boundary derivative | surface row stuck at 2.4e-1 on both grids | three-point quadratic at the face, as `wzSurface` already does in the two-dimensional solver |
+
+A fourth, still open, is the cancellation above.
 
 Update the counter, the stage table and the next action in the same commit that
 changes a stage's status. A stage is `done` only when a gate in
@@ -44,10 +80,14 @@ ratio. That is what DNS costs, not a compromise chosen here.
 Second, from the hardware: **no GPU on an Intel Mac can do double precision.**
 The Metal Shading Language Specification has no `double` type, which is also why
 WGSL has no `f64`. So the GPU cannot own the arithmetic without dropping to single
-precision. The plan therefore puts all eight CPU cores on the physics in full
-`f64`, the GPU on rendering where `f32` is correct because the output is pixels,
-and the GPU optionally on an `f32` preconditioner inside the `f64` solve, which
-changes the iteration count and not the answer.
+precision.
+
+**Settled, confirmed by the owner on 2026-09-28, not to be reopened:** all eight
+CPU cores carry the physics in full `f64`; the GPU carries the rendering, where
+`f32` is correct because the output is pixels; and the GPU may additionally carry
+an `f32` preconditioner inside the `f64` solve, which changes the iteration count
+and not the answer. The physics is never moved to `f32`. S11 and S12 are written
+against this and need no further decision.
 
 ## Stages
 
