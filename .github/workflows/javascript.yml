@@ -59,6 +59,12 @@
 # declared no character set, so every micron and s^-1 on it decoded as
 # windows-1252. Neither is visible from node.
 #
+# dns/check-cell3d.mjs shares the DNS job rather than taking one of its own: seven
+# seconds does not earn a runner. It goes FIRST in that job so its signal arrives
+# before the two-and-a-half minute suite behind it. It was not run by any job at all
+# until now, which is the same gap that once let a red suite sit on the default
+# branch -- a suite that exists and is not run is not a gate.
+#
 # dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
 # rather than a twenty-second one, and because it gates something different: not
 # a library of special functions but a solver, checked against analytic forces,
@@ -118,6 +124,8 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
+    - name: Nonlinear three-dimensional cell solver
+      run: node dns/check-cell3d.mjs
     - name: Free-surface Navier-Stokes solver
       run: node dns/check-dns.mjs
 

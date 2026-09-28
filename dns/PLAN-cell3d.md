@@ -1,14 +1,27 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
 **Session counter: 3**
-**Stages complete: 6 of 14**
-**Next action: S6 -- the free surface. Full mean curvature, normal stress, tangential
-stress, and the kinematic update. One thing S5 left for it: the advection now solves w
-at sigma = 1, on the half cell between sc[nz-1] and the surface, because leaving that
-node out of the energy sum put a face with non-zero flux on the sum's edge.
-`famLaplacian` still stops at nz-1 for the w family, so the viscous term at the surface
-node is not yet computed -- it is the normal-stress condition that supplies that face's
-flux, which is S6's job. That gap is recorded here rather than papered over.**
+**Stages complete: 6 of 14, and S6 is under way**
+**Next action: S6e -- wire the surface flux into the operator. `surfaceLapFluxes` now
+gives, for each velocity component, exactly the flux famLaplacian's sigma = 1 face wants;
+what remains is (a) a `surfaceFlux` hook in famLaplacian's sigma = 1 boundary branch, which
+takes a FLUX where `bc` takes a value, (b) interpolating each component to its own family's
+face -- radially for u, azimuthally for v, and unchanged for w, whose face is already at the
+pressure cell's own position, (c) extending the w family's range from 1..nz-1 to 1..nz, which
+closes the surface node S5 made a solved advection unknown, and (d) the surface pressure
+`p_s = p_ext - gamma kappa + n.T` as the inhomogeneous Dirichlet value inside the projection,
+never as a predictor force. Then S6 is closed and S7 begins.
+(Superseded: S6c/S6d as first written. The curvature is done and gated (7a to 7d)
+and so is the outward normal (8a); 140 checks, 0 failed. The count was written as 138
+here for one commit, which was the total before 8a was added -- measured, not
+transcribed, and corrected. What remains: the full normal stress
+`rho g eta - gamma kappa + 2 rho nu n.E.n` with the WHOLE rate-of-strain contraction and
+not the flat-normal `2 rho nu dw/dz` the two-dimensional solver is entitled to; the two
+tangential conditions `t_j.(2 rho nu E).n = 0` supplying du/dz and dv/dz at sigma = 1;
+and `famLaplacian`'s w family extended from nz-1 to nz, which is what closes the surface
+node S5 made a solved advection unknown. `dns/faraday-disc.js`'s `lapW` (line 322) is the
+pattern for that last one: it solves w at the surface and closes the top face on
+`wzSurface`, the three-point quadratic of w's own column.**
 
 ### Read this before touching any operator: compare at a common physical height
 
@@ -131,7 +144,11 @@ against this and need no further decision.
 | S4a | Staggered node geometry, u_r at the axis, metric interpolation | **done** | descriptors shape-checked; axis row exactly antisymmetric and non-zero for m = 1, exactly zero for m = 3; `Hat` second order at face midpoints (1.96, 1.95) and exact in r on a quadratic surface |
 | S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | **done** | vector Laplacian second order at every deformation: (grad^2 u)_r and (grad^2 u)_theta both 2.00 at eta/h = 0, 0.2, 0.4; grad^2 w 2.00 flat and 1.97 at 0.4; scalar probe convergent at all four families |
 | S5 | Conservative centred advection, grid-relative in sigma | **done** | every momentum cell's net flux is exactly half the sum of its neighbours' divergences (worst 1e-16 of the largest net, three families, two grids, deformed and moving); the transport telescopes exactly on an arbitrary field (1e-16 of the terms summed); the curvature pair cancels to 7e-18; a uniform rise over a rising surface is left exactly alone; on a projected field the residual follows the solve tolerance over 6.2 decades to 1.8e-17; second order against calculus outside the axis cells, 1.90 to 2.08 in all three components at eta/h = 0, 0.2 and 0.4; seven injected defects all red |
-| S6 | Free surface: full mean curvature, normal stress, tangential stress, kinematic update | todo | curvature against the analytic mean curvature of a known surface, under refinement |
+| S6 | Free surface: full mean curvature | **done** | the curvature of a sphere is -2/Rs wherever you stand on it, second order at 1.90, 1.88, 1.94 with \|grad eta\| up to 1.61; the curvature of a tilted plane is zero at second order outside r/R = 0.4, and the whole residual is alpha dtheta^2/r -- the same constant 8.01e-2, 8.13e-2, 8.16e-2 on three grids; kappa is the EXACT variational derivative of the discrete area, residual falling as eps^2 with ratio 4.00 on both contact branches; both contact conditions second order inside r/R = 0.9 (1.85/1.96 free, 1.97/1.99 pinned) and bounded by 9% without converging in the two rows at the rim; five injected defects all red |
+| S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
+| S6c | Free surface: the strain tensor at the surface, and the viscous normal stress | **done** | all six components second order against calculus on a deformed surface, 1.97 to 4.35 at eta/h = 0 and 0.3, rim row included; 2 rho nu n.E.n second order (1.98) against the analytic contraction with the analytic normal at eta/h = 0.3 and 0.6; on a FLAT surface it equals `wzSurface` in the independently written two-dimensional solver to 1.1e-13 relative, and on a deformed one the flat form is wrong by 95.5% of the stress; five injected defects all red |
+| S6d | Free surface: the flux the Laplacian's surface face wants, from the traction | **done** | the tangential traction exactly zero at both tangents, at \|grad eta\| up to 0.30 -- exactly, not nearly; on a FLAT surface the radial and azimuthal fluxes are EXACTLY minus dw/dr and -(1/r)dw/dtheta, which is `surfaceSlopes` in the independently written two-dimensional solver; second order against the identity formed analytically, 1.98 to 1.99, at eta/h = 0.3 and 0.6; a flat surface's slopes and normal exactly zero and exactly vertical; five injected defects all red, two of them caught only by the exactness gates |
+| S6e | Free surface: wire it into famLaplacian, extend w to sigma = 1, and the surface pressure | todo | grad^2 w convergent including the surface row; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -217,6 +234,251 @@ flux is caught by exactly that check.
   Both sides reach an answer of size U^2 a^2/rf by subtracting two quantities of size
   U^2/rf, so a bound relative to the answer asks for a^2/8 more precision than double
   carries. Measured against the terms each subtracts, the agreement is 1e-15.
+
+## What S6 found about the curvature
+
+### Define it as the derivative of the area, not as a discretised formula
+
+The curvature is `kappa_j = -(1/(rc drc dtheta)) dA/d eta_j` for the discrete area
+
+    A = sum_cells rc drc dtheta sqrt(1 + |grad eta|^2)
+
+and three things follow that a discretised formula would only approximate. It IS the
+finite-volume divergence form: worked out, the radial face coefficient comes to the
+width-weighted mean of `1/sqrt(1 + |grad eta|^2)` across the face, which is what
+consistency asks for. It is second order, because the area is. And the work the capillary
+term does is exactly `-gamma dA/dt`, so the exchange between kinetic and surface energy is
+an identity in floating point rather than a tolerance -- which is what will let S7 assert
+that the whole step conserves energy with viscosity and the drive off. Gate 7c holds the
+identity directly: the central difference of A along a random direction matches
+`-sum (rc drc dtheta) kappa delta` with a residual that falls as eps^2, ratio 4.00.
+
+### The axis needs no condition, and that is not a convenience
+
+`eta_r` at r = 0 is non-zero for every azimuthal mode but m = 0, so any single value
+assigned there would be wrong for some mode. Weighting each cell's two radial slopes by
+their FACE AREAS makes the axis face -- whose area rf[0] is exactly zero -- drop out of
+its own accord, in the area and in the derivative alike.
+
+### The face-area weighting is load-bearing, and the rim cannot be fixed inside it
+
+The weighting is not free to choose. It is exactly what makes `rc drc/(rf[i] + rf[i+1])`
+collapse to `drc/2`, and hence what makes the derivative a divergence at all. Three ways
+of making the pinned rim slope second order were tried and every one made the curvature
+far worse. Measured at the rim row, relative, on grids of 16, 32 and 64 radial cells:
+
+| rim closure | rim row error |
+|---|---|
+| three-point quadratic through the wall | 35, 80 -- diverging, order -1.2 |
+| weights 1/3 and 2/3, centring the estimate on rc | 38, 84, 176 |
+| slope extrapolated to R as (4 sWall - sIn)/3 | 39, 84, 176 |
+| **the plain local two-point difference** | **0.013, 0.016, 0.017** |
+
+So the plain difference is not a shortcut; it is the only one of the four that leaves a
+small error instead of a large one. What is left is a couple of per cent in the outermost
+two rows, not converging, and it is asserted as a BOUND rather than as a rate because it
+is not a rate. The free branch proves the cause is not the slope: a free contact line's
+rim slope is exactly right -- zero is the condition itself -- and its rim row is first
+order anyway, because what is one-sided there is the face's own coefficient, which has
+only the cell inside it to come from. The trade was taken this way round because locality
+buys the exact energy identity, and one annulus of width h carrying a first-order force
+contributes at the scheme's own order to anything integrated.
+
+### Rule 2 has an exception, and it is specific to functionals
+
+"A boundary face needs a three-point derivative" holds for a flux computed directly. It
+does NOT hold for a slope inside a functional whose derivative is then taken: the
+three-point slope makes the last cell's area depend on the column two cells in, so the
+functional stops being a sum of local cell areas and its derivative lands a term on cell
+nr-2 where that term is not a divergence. That is the first row of the table above.
+
+## What S6b must not do: eliminate the surface z-derivatives
+
+Worked out before writing any of it, because the obvious move is singular and the
+singularity is at a slope this cell reaches.
+
+The two tangential conditions are `t_j . E . n = 0` for the two surface tangents
+`t1 = (1, 0, s)` and `t2 = (0, 1, t)`, with `s = eta_r` and `t = eta_theta/r`. Written out
+they are two equations for the two strain components that carry the vertical derivatives:
+
+    (1 - s^2) E_rz  -    s t    E_theta_z  =  s E_rr + t E_r_theta     - s E_zz
+      - s t   E_rz  + (1 - t^2) E_theta_z  =  s E_r_theta + t E_tt     - t E_zz
+
+and their determinant is `1 - s^2 - t^2`. **It vanishes at |grad eta| = 1 and changes sign
+beyond it.** So solving them for `du_r/dz` and `du_theta/dz` -- which is what
+`surfaceSlopes` does next door, in its linearised form, and what the obvious
+generalisation would do -- is singular at a forty-five degree slope. The same denominator
+appears if one tries to eliminate the normal stress instead: `E . n = lambda n` gives
+
+    lambda (1 - s^2 - t^2) = E_zz - s^2 E_rr - 2 s t E_r_theta - t^2 E_tt
+
+so `n . E . n` cannot be obtained that way either.
+
+That is not a defect in the physics. At `s = 1, t = 0` the tangential condition in the
+r-z plane reduces to `E_zz = E_rr` -- it constrains the horizontal strains and says
+nothing about `du_r/dz`, because a forty-five degree rotation turns the shear in that
+plane into the difference of the two normal strains. The traction is then left to the
+momentum equations, which is where it belongs. The elimination is simply the wrong move.
+
+**What to do instead is impose the conditions on the FLUX**, which is where a
+finite-volume method wants them anyway:
+
+1. Form the six strain components at the sigma = 1 face from the interior field:
+   horizontal derivatives at the surface's own height (rule 1), vertical derivatives
+   one-sided from each family's own column with the three-point quadratic (rule 2, as
+   `wzSurface` does in `dns/faraday-disc.js`).
+2. Form the traction `T = 2 rho nu E . n`.
+3. Replace `T` by `(n . T) n`. That imposes zero tangential traction exactly, at any
+   slope, with no division by `1 - |grad eta|^2` anywhere.
+4. The sigma = 1 face's viscous momentum flux is `T_i` times the face area, and `n . T` is
+   the viscous part of the surface pressure, `p_s = p_ext - gamma kappa + n . T`.
+
+This is exact at any slope and it reduces to the two-dimensional solver's linearised pair
+as the slope goes to zero: `n` goes to `z`, `T` goes to `2 rho nu (E_rz, E_theta_z, E_zz)`,
+and projecting out the tangential part sets `E_rz = E_theta_z = 0`, which is exactly
+`du_r/dz = -du_z/dr` and `du_theta/dz = -(1/r) du_z/dtheta` -- `surfaceSlopes` itself.
+**That limit is a gate**, and it is a gate against an independently written code rather
+than against this one's own opinion.
+
+## The gate runs in CI now
+
+`dns/check-cell3d.mjs` was not run by any job until 2026-09-28. It is now the first step
+of the `dns` job in `.github/workflows/javascript.yml`, ahead of `dns/check-dns.mjs`, so
+its signal arrives in about seven seconds rather than behind a two-and-a-half minute
+suite. It shares that job rather than taking a runner of its own, which seven seconds does
+not earn. Confirmed to be a gate and not a decoration: with a defect injected it exits 1,
+clean it exits 0.
+
+A suite that exists and is not run is not a gate, and this repository has already paid for
+that once -- a red `tests/test_documented_paths.py` sat unobserved on the default branch
+because the workflow carrying it was keyed on a branch that does not exist.
+
+## What S6c measured
+
+The rate-of-strain tensor at the free surface, and the viscous normal stress from it.
+
+Every horizontal derivative is taken between columns at ONE physical height -- this cell's
+own surface height, so a neighbour is read above or below its own surface as the slope
+dictates. That is rule 1 and the gate sees it: evaluating each column at its own sigma = 1
+instead leaves E_rr at order -0.007 on a deformed surface while the flat case still passes,
+which is the signature of that rule being broken.
+
+Every vertical derivative is the quadratic through a column's three topmost sigma nodes,
+differentiated at the target height. For w that interpolates, since w has a node at
+sigma = 1; for u and v it extrapolates half a cell, which is what a field whose vertical
+nodes are cell centres costs at a boundary.
+
+`colDerivAtZ` sits beside `colValueAtZ` and shares its stencil conventions deliberately:
+the two are read at the same points, and a difference in stencil between them is a
+difference nothing would catch.
+
+**The flat limit is a check against another code.** On a flat surface the normal is exactly
+z-hat, so `2 rho nu n.E.n` must collapse to `2 rho nu dw/dz` -- which is `wzSurface` in
+`dns/faraday-disc.js`. It agrees to 1.1e-13 relative, the round-off of the cancellation in
+a three-point derivative rather than bit equality, since the two work in sigma and in z
+respectively. On a deformed surface at |grad eta| up to 0.30 the flat form is wrong by
+**95.5% of the stress**, which is the whole reason for carrying the full contraction.
+
+**One gate exists solely for the contraction.** The six components being right does not make
+n.E.n right: a dropped or mis-signed cross term leaves every component correct and the
+stress wrong, and the flat limit cannot see it either, because on a flat surface every cross
+term is multiplied by a normal component that is zero. Dropping the radial-vertical cross
+term is red only on that gate, at order -0.01.
+
+## S6d: the surface flux is not the traction, and the fix is an identity
+
+Found while writing S6d, before writing any of it, and it changes the design.
+
+`famLaplacian`'s sigma-face flux is exactly `proj * (grad f . N)` with
+`N = (-sigma H_r, -sigma H_theta/r, 1)` the sheet's unnormalised normal and
+`proj = rn dra dtheta` its projected area -- which is right, because
+`dA = |N| dA_proj` and `n = N/|N|`, so `grad f . n dA` is `(grad f . N) dA_proj` with the
+normalisation cancelling exactly.
+
+The free-surface condition, though, gives a TRACTION: `tau . n = 2 rho nu E . n`. And for
+an incompressible flow with constant viscosity
+
+    2 nu div E = nu grad^2 u        (as volume operators, since div u = 0)
+
+but their FACE FLUXES are not the same: `2 nu E . n` and `nu grad u_i . n` differ by
+`nu u_{j,i} n_j`, a term that integrates to zero over a closed surface and does not vanish
+face by face. **So substituting the traction for the Laplacian's flux on the surface face,
+while every other face carries `grad u_i . N`, is a consistent discretisation of neither
+operator.** Two ways out:
+
+1. Rebuild the viscous term as `2 nu div E`, so that every face carries a traction. Correct,
+   and a large change: the full strain tensor at every interior face, and S4b's gates redone.
+2. Keep `nu grad^2 u` and convert the traction into the flux that operator wants. This is an
+   identity, not an approximation, and it needs no elimination:
+
+       E_ij = 1/2 (u_{i,j} + u_{j,i})   =>   grad u_i . n = 2 (E . n)_i - u_{j,i} n_j
+
+   After the tangential projection `E . n = lambda n` with `lambda = n . E . n`, so with the
+   unnormalised normal (`E . N = lambda N`)
+
+       grad u_i . N  =  2 lambda N_i  -  u_{j,i} N_j
+
+   and every term of `u_{j,i} N_j` is a derivative the surface strain machinery already
+   forms:
+
+       i = r      du_r/dr,  du_th/dr,  du_z/dr
+       i = theta  (1/r)du_r/dtheta - u_th/r,  (1/r)du_th/dtheta + u_r/r,  (1/r)du_z/dtheta
+       i = z      du_r/dz,  du_th/dz,  du_z/dz
+
+   No division by `1 - |grad eta|^2` anywhere, so the forty-five degree degeneracy never
+   appears; the projection is what disposes of the tangential stress, and this identity only
+   changes bases.
+
+**Take route 2.** It keeps an operator that is already gated second order at every family
+and every deformation, and the conversion is exact.
+
+One thing route 2 needs that is not yet built: `surfaceStrain` is written for the PRESSURE
+cell's position, and the flux is wanted at each momentum family's own sigma = 1 face --
+`(rf, theta_c)` for u, `(rc, theta_k)` for v, `(rc, theta_c)` for w. So it has to take a
+family rather than assume one. That is the first task of S6d, and it is a generalisation of
+working code rather than new numerics.
+
+`famLaplacian` also needs its sigma = 1 boundary branch to accept a FLUX instead of a
+boundary value, since a traction is a flux; and with that in place the w family's range goes
+from `1..nz-1` to `1..nz`, which closes the surface node S5 made a solved advection unknown.
+
+## What S6d built, and one round-off fix that turned out to matter
+
+`surfaceLapFluxes` gives, for each velocity component, the flux famLaplacian's sigma = 1
+face wants -- not the traction, for the reason recorded above, but the traction converted by
+the identity
+
+    grad u_i . N  =  2 lambda N_i  -  u_{j,i} N_j ,      lambda = n . E . n
+
+after the tangential stress has been disposed of by PROJECTION. Nothing divides by
+1 - |grad eta|^2, so the forty-five degree degeneracy never appears.
+
+The nine covariant derivatives are formed once, in `surfaceGradient`, and both the strain
+tensor and the flux are built from them: two functions each forming their own nine
+derivatives would be two chances to disagree about one.
+
+**The tangential traction is exactly zero, not nearly.** After projection the traction is
+2 lambda N, the tangents are (1, 0, eta_r) and (0, 1, eta_theta/r), and N is
+(-eta_r, -eta_theta/r, 1) with a vertical part of exactly one -- so t.N is a difference of
+equals and vanishes to the last bit, at any slope.
+
+**The flat limit is exactly the two-dimensional solver's condition.** With eta flat the
+radial flux collapses to -du_z/dr and the azimuthal one to -(1/r)du_z/dtheta, so the flux the
+Laplacian wants gives du_r/dz = -du_z/dr and du_theta/dz = -(1/r)du_z/dtheta: `surfaceSlopes`
+in `dns/faraday-disc.js`, exactly and not asymptotically.
+
+### The round-off fix
+
+That last property held only to 2.4e-15 at first, and chasing why found something worth
+fixing. `refreshMetric` interpolated the face depth as `(b*lo + a*hi)/(a + b)`, which for
+two EQUAL depths rounds twice and lands within an ulp rather than on the common value. The
+centred slope then differences two such values over drc, amplifying that ulp by h/drc: a flat
+surface carried slopes of about 1e-13 instead of zero. Written as an increment from one end,
+`lo + (a/(a+b))*(hi - lo)`, two equal depths interpolate to exactly that depth, and a flat
+surface's slopes and normal are now exactly zero and exactly vertical. Both facts are gated.
+
+That fix is the one the injection test says is load-bearing: putting the weighted sum back
+leaves every order test passing and is caught ONLY by the two exactness gates.
 
 ## Rules this build keeps
 

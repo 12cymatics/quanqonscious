@@ -1180,6 +1180,729 @@ section('6i. what the axis costs, in closed form');
      + `${orderFirst.toFixed(3)}`);
 }
 
+/* ── 7. the free surface: mean curvature ─────────────────────────────────── */
+
+section('7a. the curvature of a sphere is its own radius, wherever you stand on it');
+/* The reference needs no derivative of mine: every patch of a sphere of radius Rs has
+ * div(grad eta / sqrt(1 + |grad eta|^2)) = -2/Rs, EXACTLY and everywhere, so a single
+ * closed number checks the operator at every cell at once. Taking the sphere's centre
+ * OFF the axis makes eta depend on theta as well as r, which is what exercises the
+ * azimuthal half of the divergence; an on-axis cap would leave it untested.
+ *
+ * The cell is deep here (h = 2R) so that a cap steep enough to be genuinely nonlinear
+ * -- |grad eta| reaching 1.7, where sqrt(1 + |grad eta|^2) is 2.0 and the linearised
+ * Laplacian would be wrong by a factor of two -- still leaves a positive depth
+ * everywhere. Nothing is bypassed to get there: the state is one the solver accepts.
+ *
+ * THE TWO OUTERMOST ROWS ARE EXCLUDED, and measured instead: this surface satisfies
+ * neither contact condition -- its radial slope at the rim is not zero and neither is
+ * eta there -- so the rim face is closed by a condition the surface does not meet. That
+ * is an O(1) error in one face slope, which the curvature divides by a cell width, so it
+ * grows like 1/h at the last row and leaks one cell inward: measured, row nr-1 read
+ * -69 then -150 relative and row nr-2 read 2.9 then 7.6, while every interior row
+ * converged at second order. It is a property of the probe, not of the operator, and the
+ * contact conditions get their own gate in 7d with surfaces that do satisfy them. */
+{
+  const R = 12.125e-3;
+  const DEEP = { ...CELL, R, h: 2*R };
+  const cap = (Rs, xc) => (S) => {
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const th = (k + 0.5)*S.dth, r = S.rc[i];
+        const dx = r*Math.cos(th) - xc, dy = r*Math.sin(th);
+        const d2 = dx*dx + dy*dy;
+        S.eta[S.ie(i,k)] = Math.sqrt(Rs*Rs - d2) - 1.1*R;
+      }
+    S.refreshMetric();
+    return -2/Rs;
+  };
+  const errorOn = (nr, nth, set) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    const want = set(S);
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let num = 0, den = 0, axis = 0, slope = 0;
+    for (let i = 0; i < nr - 2; i++)
+      for (let k = 0; k < nth; k++){
+        const e = S.ie(i,k), d = kap[e] - want;
+        slope = Math.max(slope, Math.sqrt(S.surfaceMetric(i,k) - 1));
+        if (i === 0){ axis = Math.max(axis, Math.abs(d/want)); continue; }
+        num += d*d; den += want*want;
+      }
+    return { rms: Math.sqrt(num/den), axis, slope, want };
+  };
+  for (const [Rs, xc, tag] of [[1.5*R, 0.3*R, 'steep, off axis'],
+                               [6*R, 0.35*R, 'shallow, off axis'],
+                               [1.5*R, 0, 'steep, on axis']]){
+    const a = errorOn(16, 24, cap(Rs, xc)), b = errorOn(32, 48, cap(Rs, xc));
+    const order = Math.log(a.rms/b.rms)/Math.log(2);
+    console.log(`       ${tag}: |grad eta| up to ${a.slope.toFixed(2)}, `
+      + `${a.rms.toExponential(2)} -> ${b.rms.toExponential(2)}, order ${order.toFixed(2)}`
+      + `; axis cell ${a.axis.toExponential(2)} -> ${b.axis.toExponential(2)}`);
+    ok(order > 1.8,
+       `${tag}: the curvature converges on -2/Rs at second order`,
+       `${a.rms.toExponential(3)} -> ${b.rms.toExponential(3)} relative, order `
+       + `${order.toFixed(3)}, against a curvature of ${a.want.toExponential(3)} /m`);
+    ok(b.axis < a.axis,
+       `${tag}: and the axis cell, whose inner face has no area, improves too`,
+       `${a.axis.toExponential(3)} then ${b.axis.toExponential(3)} relative`);
+  }
+}
+
+section('7b. the curvature of a plane is zero, and what is left of it is dtheta^2 / r');
+/* A plane has no curvature at any tilt, so the whole of what is measured here is
+ * truncation, with no reference value to hide inside. It is also the sharpest possible
+ * test of the axis, because zero is reached by CANCELLATION: for eta = alpha r cos(theta)
+ * the radial term is +alpha cos(theta)/r and the azimuthal term is -alpha cos(theta)/r,
+ * each growing without bound as r goes to zero, and the answer is their difference. A
+ * centred azimuthal difference reproduces the second one only to O(dtheta^2), so what
+ * survives is
+ *
+ *     residual  ~  alpha dtheta^2 / r
+ *
+ * second order at a fixed radius and first order at the innermost cell, where r is
+ * itself a spacing. That is not a defect this operator can remove -- it is what a
+ * second-order centred difference on a circle costs, the same 1/r amplification of a
+ * cancellation that gate 6i pins for the advection -- so it is measured rather than
+ * bounded: the residual times r/(alpha dtheta^2) must be the SAME NUMBER on three
+ * grids, which is the scaling law itself and not a tolerance. */
+{
+  const R = 12.125e-3, DEEP = { ...CELL, R, h: 2*R };
+  const probe = (nr, nth, alpha) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        S.eta[S.ie(i,k)] = alpha*S.rc[i]*Math.cos((k + 0.5)*S.dth);
+    S.refreshMetric();
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let outer = 0, law = 0;
+    for (let i = 0; i < nr - 2; i++)        // the two rim rows: see 7a
+      for (let k = 0; k < nth; k++){
+        const g = Math.abs(kap[S.ie(i,k)]);
+        law = Math.max(law, g*S.rc[i]/(alpha*S.dth*S.dth));
+        if (S.rc[i] >= 0.4*R) outer = Math.max(outer, g*R/alpha);
+      }
+    return { outer, law };
+  };
+  for (const alpha of [0.2, 0.8]){
+    const a = probe(16, 24, alpha), b = probe(32, 48, alpha), c = probe(64, 96, alpha);
+    const o1 = Math.log(a.outer/b.outer)/Math.LN2, o2 = Math.log(b.outer/c.outer)/Math.LN2;
+    console.log(`       tilt ${alpha}: outside r/R = 0.4, ${a.outer.toExponential(2)} -> `
+      + `${b.outer.toExponential(2)} -> ${c.outer.toExponential(2)} (times alpha/R), `
+      + `orders ${o1.toFixed(2)}, ${o2.toFixed(2)}; residual*r/(alpha dtheta^2) = `
+      + `${a.law.toExponential(3)}, ${b.law.toExponential(3)}, ${c.law.toExponential(3)}`);
+    ok(o1 > 1.7 && o2 > 1.7,
+       `tilt ${alpha}: away from the axis the curvature of a plane converges to zero at `
+       + `second order`,
+       `${a.outer.toExponential(3)} -> ${b.outer.toExponential(3)} -> `
+       + `${c.outer.toExponential(3)} in units of alpha/R, orders ${o1.toFixed(3)}, `
+       + `${o2.toFixed(3)}`);
+    const spread = Math.max(a.law, b.law, c.law)/Math.min(a.law, b.law, c.law);
+    ok(spread < 1.12,
+       `tilt ${alpha}: and the whole residual is alpha dtheta^2 / r, the same constant on `
+       + `all three grids, so nothing else is left in it`,
+       `${a.law.toExponential(3)}, ${b.law.toExponential(3)}, ${c.law.toExponential(3)}: `
+       + `spread ${((spread - 1)*100).toFixed(1)}%`);
+  }
+}
+
+section('7c. the curvature is the derivative of the area, not a discretised formula');
+/* The design, asserted rather than described. If kappa is the variational derivative of
+ * the discrete area then
+ *
+ *     dA/d(eps) along delta  =  -sum_cells (rc drc dtheta) kappa delta
+ *
+ * and the left side can be measured without the operator at all, from two evaluations
+ * of the area. A central difference has its own O(eps^2) truncation, so the residual is
+ * not asserted against a bound -- it is required to FALL AS eps^2, which a wrong
+ * derivative could not do because it would sit at its own O(1) offset. Both contact
+ * conditions, because the rim face's slope depends on eta under one and not the other. */
+for (const contact of ['free', 'pinned']){
+  const R = 12.125e-3;
+  const S = new FaradayCell3D({ nr: 12, nth: 16, nz: 6, ...CELL, R, h: 2*R, contact });
+  const r = rnd(2024);
+  const base = new Float64Array(S.NE), delta = new Float64Array(S.NE);
+  for (let i = 0; i < S.nr; i++)
+    for (let k = 0; k < S.nth; k++){
+      const x = S.rc[i]/S.R, th = (k + 0.5)*S.dth;
+      base[S.ie(i,k)] = 0.30*R*(x*x*Math.cos(2*th) + 0.6*x*Math.sin(th + 0.3)
+                                + 0.25*x*x*x*Math.cos(3*th));
+      delta[S.ie(i,k)] = R*r();
+    }
+  S.eta.set(base); S.refreshMetric();
+  const kap = new Float64Array(S.NE);
+  S.curvature(kap);
+  let predicted = 0;
+  for (let i = 0; i < S.nr; i++)
+    for (let k = 0; k < S.nth; k++)
+      predicted -= S.rc[i]*S.drc[i]*S.dth*kap[S.ie(i,k)]*delta[S.ie(i,k)];
+  const measured = eps => {
+    for (let c = 0; c < S.NE; c++) S.eta[c] = base[c] + eps*delta[c];
+    const up = S.surfaceArea();
+    for (let c = 0; c < S.NE; c++) S.eta[c] = base[c] - eps*delta[c];
+    const dn = S.surfaceArea();
+    S.eta.set(base);
+    return (up - dn)/(2*eps);
+  };
+  const e1 = 2e-4, r1 = Math.abs(measured(e1) - predicted)/Math.abs(predicted);
+  const r2 = Math.abs(measured(e1/2) - predicted)/Math.abs(predicted);
+  const drop = r1/r2;
+  console.log(`       ${contact}: residual ${r1.toExponential(2)} at eps, `
+    + `${r2.toExponential(2)} at eps/2, falling by ${drop.toFixed(2)}`);
+  ok(drop > 3.3 && drop < 4.7,
+     `${contact}: the residual falls as eps squared, so kappa is the exact derivative `
+     + `of the area and what is left is the difference's own truncation`,
+     `${r1.toExponential(3)} then ${r2.toExponential(3)}, ratio ${drop.toFixed(3)}`);
+  ok(r2 < 1e-5,
+     `${contact}: and what is left at the finer step is small in absolute terms too`,
+     `predicted ${predicted.toExponential(6)} m^2, measured `
+     + `${measured(e1/2).toExponential(6)} m^2`);
+}
+
+section('7d. the two contact conditions, and what the rim costs');
+/* 7a and 7b excluded the rim because their probes satisfied neither condition. These
+ * probes satisfy one each, so the rim is what this gate is about. Both are axisymmetric,
+ * where the mean curvature has the closed form
+ *
+ *     kappa = eta'' / (1 + eta'^2)^{3/2}  +  eta' / (r sqrt(1 + eta'^2))
+ *
+ * and both carry slopes of order one, so the nonlinear denominators are doing work.
+ *
+ *     free    eta = A(1 - x^2)^2,  x = r/R:  eta'(R) = 0, as a free contact line needs
+ *     pinned  eta = A(1 - x^2):              eta(R) = 0, as a pinned one needs
+ *
+ * AWAY FROM THE RIM BOTH ARE SECOND ORDER. AT THE RIM NEITHER IS, AND THAT IS ASSERTED AS
+ * A BOUND RATHER THAN AS A RATE, because it is not a rate: building the curvature as the
+ * derivative of a LOCAL area functional ties the slope and the weights together -- the
+ * face-area weighting is exactly what makes the derivative a divergence -- and the rim
+ * face has only the cell inside it to take its coefficient from. The free case shows the
+ * cause is not the slope: its rim slope is exactly right, zero being the condition
+ * itself, and its rim row is first order anyway. Three ways of making the pinned rim
+ * second order were tried and all three made it far worse; the solver's own comment
+ * records the four sets of numbers.
+ *
+ * So what is claimed is what is true: second order outside the outermost two rows, and
+ * inside them an error of a couple of per cent that does not converge. It is confined to
+ * two annuli, it is the same order of accuracy as the contact-line model itself, and the
+ * energy identity of 7c is exact regardless of it -- which is why the trade was taken
+ * this way round rather than giving up the identity. */
+for (const [contact, A, tag] of [['free', 0.5, '(1-x^2)^2'], ['pinned', 0.4, '(1-x^2)']]){
+  const R = 12.125e-3, DEEP = { ...CELL, R, h: 2*R, contact };
+  const shape = contact === 'free'
+    ? { eta: x => A*R*(1-x*x)*(1-x*x),
+        d1:  x => -4*A*x*(1-x*x),
+        d2:  x => -4*A*(1-3*x*x)/R,
+        dOr: x => -4*A*(1-x*x)/R }
+    : { eta: x => A*R*(1-x*x),
+        d1:  x => -2*A*x,
+        d2:  () => -2*A/R,
+        dOr: () => -2*A/R };
+  const want = x => {
+    const p = shape.d1(x), q = 1 + p*p;
+    return shape.d2(x)/Math.pow(q, 1.5) + shape.dOr(x)/Math.sqrt(q);
+  };
+  const errorOn = (nr, nth) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) S.eta[S.ie(i,k)] = shape.eta(S.rc[i]/R);
+    S.refreshMetric();
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let num = 0, den = 0, edge = 0, slope = 0;
+    for (let i = 0; i < nr; i++){
+      const x = S.rc[i]/R, w = want(x);
+      slope = Math.max(slope, Math.abs(shape.d1(x)));
+      for (let k = 0; k < nth; k++){
+        const d = kap[S.ie(i,k)] - w;
+        /* the cut is a PHYSICAL radius, so both grids measure the same region; an index
+           cut would move inward as the grid refines and the order would mean nothing */
+        if (x > 0.9){ edge = Math.max(edge, Math.abs(d/w)); continue; }
+        num += d*d; den += w*w;
+      }
+    }
+    return { rms: Math.sqrt(num/den), edge, slope };
+  };
+  const a = errorOn(16, 24), b = errorOn(32, 48), c = errorOn(64, 96);
+  const o1 = Math.log(a.rms/b.rms)/Math.LN2, o2 = Math.log(b.rms/c.rms)/Math.LN2;
+  console.log(`       ${contact} (eta = A${tag}, |eta'| up to ${a.slope.toFixed(2)}): inside `
+    + `r/R = 0.9, ${a.rms.toExponential(2)} -> ${b.rms.toExponential(2)} -> `
+    + `${c.rms.toExponential(2)}, orders ${o1.toFixed(2)}, ${o2.toFixed(2)}; outside it, `
+    + `worst ${a.edge.toExponential(2)}, ${b.edge.toExponential(2)}, `
+    + `${c.edge.toExponential(2)}`);
+  ok(o1 > 1.8 && o2 > 1.8,
+     `${contact}: with the contact condition satisfied, the curvature is second order `
+     + `inside r/R = 0.9`,
+     `${a.rms.toExponential(3)} -> ${b.rms.toExponential(3)} -> ${c.rms.toExponential(3)} `
+     + `relative, orders ${o1.toFixed(3)}, ${o2.toFixed(3)}`);
+  ok(Math.max(a.edge, b.edge, c.edge) < 0.09,
+     `${contact}: and in the rows near the rim it stays within nine per cent without `
+     + `converging, which is what a local area functional costs at its one one-sided face`,
+     `worst ${a.edge.toExponential(3)}, ${b.edge.toExponential(3)}, `
+     + `${c.edge.toExponential(3)} relative`);
+}
+
+/* ── 8. the free surface: its normal ─────────────────────────────────────── */
+
+section('8a. the outward normal, against the surface it belongs to');
+/* The normal is where every surface stress starts, so it is checked on its own before
+   anything is contracted with it. Against the analytic normal of a surface whose slopes
+   are known in closed form, under refinement, and over a region cut by PHYSICAL radius
+   rather than by index: H_theta/r is the azimuthal slope, so an index cut would creep
+   towards the axis as the grid refines and the 1/r would keep the error from converging
+   no matter how good the operator was. Measured that way first, it read order -0.03. The
+   rim is out too, where the contact condition rather than the surface decides the slope.
+   Plus the invariant that costs nothing and would catch a normalisation slip: it is a
+   unit vector. */
+{
+  const R = 12.125e-3, A = 0.30;
+  const eta = (x, t) => A*R*(x*x*Math.cos(2*t) + 0.5*x*Math.sin(t + 0.4));
+  const etaR = (x, t) => A*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4));
+  const etaTOverR = (x, t) => A*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4));
+  const errorOn = (nr, nth) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...CELL, R, h: 2*R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        S.eta[S.ie(i,k)] = eta(S.rc[i]/R, (k + 0.5)*S.dth);
+    S.refreshMetric();
+    let worst = 0, unit = 0, slope = 0;
+    for (let i = 1; i < nr - 1; i++){
+      if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+      for (let k = 0; k < nth; k++)
+        for (const [r, th] of [[S.rc[i], (k + 0.5)*S.dth], [S.rf[i], (k + 0.5)*S.dth],
+                               [S.rc[i], k*S.dth]]){
+          const x = r/R;
+          const sr = etaR(x, th), st = etaTOverR(x, th);
+          const len = Math.sqrt(1 + sr*sr + st*st);
+          const n = S.surfaceNormal(r, th);
+          worst = Math.max(worst, Math.abs(n.nr + sr/len), Math.abs(n.nth + st/len),
+                                  Math.abs(n.nz - 1/len));
+          unit = Math.max(unit, Math.abs(n.nr*n.nr + n.nth*n.nth + n.nz*n.nz - 1));
+          slope = Math.max(slope, Math.sqrt(sr*sr + st*st));
+        }
+    }
+    return { worst, unit, slope };
+  };
+  const a = errorOn(16, 24), b = errorOn(32, 48);
+  const order = Math.log(a.worst/b.worst)/Math.LN2;
+  console.log(`       between r/R = 0.25 and 0.9, |grad eta| up to ${a.slope.toFixed(3)}: `
+    + `${a.worst.toExponential(2)} -> `
+    + `${b.worst.toExponential(2)}, order ${order.toFixed(2)}`);
+  ok(order > 1.8, 'the outward normal is second order against the analytic one',
+     `${a.worst.toExponential(3)} -> ${b.worst.toExponential(3)}, order ${order.toFixed(3)}`);
+  ok(a.unit < 1e-15 && b.unit < 1e-15,
+     'and it is a unit vector, which a normalisation slip could not be',
+     `worst |n|^2 - 1 = ${Math.max(a.unit, b.unit).toExponential(3)}`);
+
+  /* A FLAT SURFACE HAS EXACTLY ZERO SLOPES. Not nearly zero: the free surface's flat limit
+     has to reduce to exactly the condition the two-dimensional solver imposes, and that only
+     works if the normal there is exactly (0, 0, 1). It is not automatic -- interpolating the
+     face depth as a weighted sum rounds twice and lands within an ulp of the common value,
+     and the centred slope then differences two such values over drc, amplifying that ulp by
+     h/drc to about 1e-13. Writing the interpolation as an increment from one end makes two
+     equal depths interpolate to exactly that depth, and this is the check that holds it
+     there. */
+  {
+    const S = new FaradayCell3D({ nr: 14, nth: 20, nz: 8, ...CELL, R, h: 2*R });
+    S.refreshMetric();
+    let worst = 0;
+    for (let c = 0; c < S.NE; c++)
+      worst = Math.max(worst, Math.abs(S.Hdr[c]), Math.abs(S.Hdth[c]));
+    for (let n = 0; n < 200; n++){
+      const r = R*(0.02 + 0.96*((n*37) % 101)/101), th = 2*Math.PI*((n*53) % 97)/97;
+      const g = S.surfaceNormal(r, th);
+      worst = Math.max(worst, Math.abs(g.sr), Math.abs(g.st), Math.abs(g.nz - 1));
+    }
+    ok(worst === 0,
+       'and on a flat surface every slope, and the normal itself, is exactly zero and '
+       + 'exactly vertical -- not within an ulp',
+       `worst departure ${worst.toExponential(3)}`);
+  }
+}
+
+section('8b. the rate-of-strain tensor at the surface, against calculus');
+/* Six components, each against its closed form, on a DEFORMED surface. The field is
+ * chosen so that all nine first derivatives are elementary and so that every component
+ * vanishes at the rim -- both potentials carry r(R - r) -- which makes the wall values the
+ * solver uses there (zero, by no slip) the true ones, so the rim row is IN.
+ *
+ * The inner quarter of the radius is out: E_thetatheta and E_rtheta carry 1/r, and an index
+ * cut would creep towards the axis as the grid refines. Gate 6i pins what that 1/r costs. */
+{
+  const R = 12.125e-3, KZ = 400;
+  const A = 27, B = 19, D = 3.8e3;
+  const P = r => r*(R - r),      Pp = r => R - 2*r;
+  const Q = r => r*r*(R - r),    Qp = r => 2*R*r - 3*r*r;
+  const Sf = z => Math.sin(KZ*z + 0.3),  Sp = z => KZ*Math.cos(KZ*z + 0.3);
+  const Cf = z => Math.cos(KZ*z),        Cp = z => -KZ*Math.sin(KZ*z);
+  const Tf = z => Math.sin(KZ*z),        Tp = z => KZ*Math.cos(KZ*z);
+  const ur = (r,t,z) => A*P(r)*Math.cos(2*t)*Sf(z);
+  const ut = (r,t,z) => B*P(r)*Math.sin(t)*Cf(z);
+  const uz = (r,t,z) => D*Q(r)*Math.cos(t)*Tf(z);
+  /* the six components, from those three by hand */
+  const want = (r,t,z) => {
+    const dur_dr = A*Pp(r)*Math.cos(2*t)*Sf(z);
+    const dur_dth = -2*A*P(r)*Math.sin(2*t)*Sf(z);
+    const dur_dz = A*P(r)*Math.cos(2*t)*Sp(z);
+    const dut_dr = B*Pp(r)*Math.sin(t)*Cf(z);
+    const dut_dth = B*P(r)*Math.cos(t)*Cf(z);
+    const dut_dz = B*P(r)*Math.sin(t)*Cp(z);
+    const duz_dr = D*Qp(r)*Math.cos(t)*Tf(z);
+    const duz_dth = -D*Q(r)*Math.sin(t)*Tf(z);
+    const duz_dz = D*Q(r)*Math.cos(t)*Tp(z);
+    return [dur_dr,
+            dut_dth/r + ur(r,t,z)/r,
+            duz_dz,
+            0.5*(dur_dth/r + dut_dr - ut(r,t,z)/r),
+            0.5*(dur_dz + duz_dr),
+            0.5*(dut_dz + duz_dth/r)];
+  };
+  const build = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i];
+      for (let b = 0; b < nz; b++) S.u[S.iu(i,k,b)] = ur(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i];
+      for (let b = 0; b < nz; b++) S.v[S.iv(i,k,b)] = ut(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= nz; b++) S.w[S.iw(i,k,b)] = uz(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+  const NAME = ['E_rr', 'E_tt', 'E_zz', 'E_rt', 'E_rz', 'E_tz'];
+  const errorOn = (nr, nth, nz, amp) => {
+    const S = build(nr, nth, nz, amp);
+    const got = new Float64Array(6);
+    const num = [0,0,0,0,0,0], den = [0,0,0,0,0,0];
+    for (let i = 0; i < nr; i++){
+      if (S.rc[i] < 0.25*R) continue;
+      for (let k = 0; k < nth; k++){
+        S.surfaceStrain(i, k, got);
+        const w = want(S.rc[i], (k + 0.5)*S.dth, S.H[S.ie(i,k)]);
+        for (let c = 0; c < 6; c++){ const d = got[c] - w[c]; num[c] += d*d; den[c] += w[c]*w[c]; }
+      }
+    }
+    return num.map((n, c) => Math.sqrt(n/den[c]));
+  };
+  for (const amp of [0, 0.3]){
+    const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp);
+    const o = a.map((x, c) => Math.log(x/b[c])/Math.LN2);
+    console.log(`       eta/h = ${amp}: ` + NAME.map((n, c) =>
+      `${n} ${o[c].toFixed(2)}`).join(', '));
+    for (let c = 0; c < 6; c++)
+      ok(o[c] > 1.7, `eta/h = ${amp}: ${NAME[c]} at the surface is second order`,
+         `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
+  }
+
+  /* And the contraction itself, n.E.n, against its analytic value with the analytic normal.
+     The six components above do not cover it: a dropped or mis-signed cross term in the
+     contraction leaves every component right and the stress wrong, and 8c's flat limit
+     cannot see it either, because on a flat surface every cross term is multiplied by a
+     normal component that is zero. */
+  {
+    const slopes = (amp, x, t) => {
+      const f = amp*CELL.h/R;
+      return { sr: f*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4)),
+               st: f*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4)) };
+    };
+    const stressError = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      let num = 0, den = 0;
+      for (let i = 0; i < nr; i++){
+        /* the rim is out here, and only here: the CONTRACTION needs the surface normal, and
+           at the rim the solver's normal carries the free contact condition -- eta_r = 0 --
+           which this probe surface does not satisfy. The six components in the loop above do
+           not use the normal, which is why the rim is in for them. Measured with the rim in:
+           order 0.51, on code whose every ingredient is second order. */
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = (k + 0.5)*S.dth, r = S.rc[i], z = S.H[S.ie(i,k)];
+          const g = slopes(amp, r/R, th);
+          const len = Math.sqrt(1 + g.sr*g.sr + g.st*g.st);
+          const a1 = -g.sr/len, b1 = -g.st/len, c1 = 1/len;
+          const E = want(r, th, z);
+          const nEn = E[0]*a1*a1 + E[1]*b1*b1 + E[2]*c1*c1
+                    + 2*(E[3]*a1*b1 + E[4]*a1*c1 + E[5]*b1*c1);
+          const w = 2*S.rho*S.nu*nEn, d = S.surfaceNormalStress(i, k) - w;
+          num += d*d; den += w*w;
+        }
+      }
+      return Math.sqrt(num/den);
+    };
+    for (const amp of [0.3, 0.6]){
+      const a = stressError(16, 24, 16, amp), b = stressError(32, 48, 32, amp);
+      const o = Math.log(a/b)/Math.LN2;
+      console.log(`       eta/h = ${amp}: 2 rho nu n.E.n order ${o.toFixed(2)} `
+        + `(${a.toExponential(2)} -> ${b.toExponential(2)})`);
+      ok(o > 1.7,
+         `eta/h = ${amp}: the viscous normal stress is second order against the analytic `
+         + `contraction with the analytic normal`,
+         `${a.toExponential(3)} -> ${b.toExponential(3)}, order ${o.toFixed(3)}`);
+    }
+  }
+}
+
+section('8c. the viscous normal stress, and its flat limit against the solver next door');
+/* On a FLAT surface the outward normal is z-hat exactly, so n.E.n collapses to E_zz and the
+ * viscous normal stress must be exactly 2 rho nu dw/dz -- which is `wzSurface` in
+ * dns/faraday-disc.js, an independently written solver, quadratic through the three
+ * vertical faces below the surface.
+ *
+ * Asserted at round-off of the CANCELLATION, not bit for bit. The two are the same
+ * quadratic but not the same sequence of operations -- one works in sigma and divides by H,
+ * the other in z -- and a three-point derivative differences nearly equal values over a
+ * small spacing, so agreement is limited by that cancellation. Measured: 3.2e-17 against a
+ * stress of 2.9e-4, which is 1.1e-13 relative. Asked for 1e-13 first, and that was the
+ * third time in this build that two algebraically identical expressions were expected to
+ * agree more closely than their operation order allows.
+ *
+ * On a deformed surface it must instead be the full contraction, and the gap between the
+ * two forms is measured rather than asserted small: it is most of the stress, which is the
+ * whole reason for not using the flat form. */
+{
+  const R = 12.125e-3, KZ = 400, D = 3.8e3;
+  const uzf = (r, t, z) => D*r*r*(R - r)*Math.cos(t)*Math.sin(KZ*z);
+  const build = amp => {
+    const S = new FaradayCell3D({ nr: 16, nth: 24, nz: 16, ...CELL, R });
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= S.nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+  /* wzSurface, transcribed from dns/faraday-disc.js:256 -- the quadratic through the three
+     topmost w nodes of a column, differentiated at the surface */
+  const wzSurface = (S, i, k) => {
+    const nz = S.nz, z = b => S.sf[b]*S.H[S.ie(i,k)];
+    const w0 = S.w[S.iw(i,k,nz)], w1 = S.w[S.iw(i,k,nz-1)], w2 = S.w[S.iw(i,k,nz-2)];
+    const a = z(nz) - z(nz-1), b = z(nz) - z(nz-2);
+    return w0*(a + b)/(a*b) - w1*b/(a*(b - a)) + w2*a/(b*(b - a));
+  };
+  {
+    const S = build(0);
+    let worst = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const mine = S.surfaceNormalStress(i, k);
+        const theirs = 2*S.rho*S.nu*wzSurface(S, i, k);
+        worst = Math.max(worst, Math.abs(mine - theirs));
+        scale = Math.max(scale, Math.abs(theirs));
+      }
+    ok(worst < 1e-12*scale,
+       'on a flat surface the viscous normal stress is exactly the two-dimensional '
+       + 'solver\'s 2 rho nu dw/dz, to round-off',
+       `worst ${worst.toExponential(3)} against ${scale.toExponential(3)}, relative `
+       + `${(worst/scale).toExponential(2)}`);
+    ok(scale > 0, 'and that stress is not zero, so the agreement is not two blank arrays',
+       `largest ${scale.toExponential(3)} Pa`);
+  }
+  {
+    const S = build(0.5);
+    let worst = 0, scale = 0, slope = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const mine = S.surfaceNormalStress(i, k);
+        const flat = 2*S.rho*S.nu*wzSurface(S, i, k);
+        const n = S.surfaceNormal(S.rc[i], (k + 0.5)*S.dth);
+        slope = Math.max(slope, Math.sqrt(n.sr*n.sr + n.st*n.st));
+        worst = Math.max(worst, Math.abs(mine - flat));
+        scale = Math.max(scale, Math.abs(mine));
+      }
+    console.log(`       |grad eta| up to ${slope.toFixed(2)}: the flat form differs from the `
+      + `full contraction by ${(100*worst/scale).toFixed(1)}% of the largest stress`);
+    ok(worst > 0.15*scale,
+       'on a deformed surface the full contraction differs from the flat form by most of '
+       + 'the stress, which is why the flat form is not used',
+       `worst gap ${worst.toExponential(3)} against a largest stress of `
+       + `${scale.toExponential(3)}, ${(100*worst/scale).toFixed(1)}%`);
+  }
+}
+
+section('8d. the surface flux: no tangential traction, and the flat limit next door');
+/* Three properties of `surfaceLapFluxes`, in increasing strength.
+ *
+ * THE TANGENTIAL TRACTION IS EXACTLY ZERO. After the projection the traction is 2 lambda N,
+ * and the two surface tangents are t1 = (1, 0, eta_r) and t2 = (0, 1, eta_theta/r). Since N
+ * is (-eta_r, -eta_theta/r, 1) with a vertical part of exactly one, t.N is a difference of
+ * equals and vanishes to the last bit, at any slope. Asserted as exactly zero, not as small:
+ * that is what the projection buys and there is nothing for it to differ by.
+ *
+ * THE FLAT LIMIT IS THE TWO-DIMENSIONAL SOLVER'S CONDITION. With eta flat, N is exactly
+ * (0, 0, 1), so the radial flux collapses to -du_z/dr and the azimuthal one to
+ * -(1/r)du_z/dtheta. Since the flux the Laplacian wants is du_r/dz and du_theta/dz, that is
+ *
+ *     du_r/dz = -du_z/dr        du_theta/dz = -(1/r) du_z/dtheta
+ *
+ * which is `surfaceSlopes` in dns/faraday-disc.js, an independently written solver, exactly
+ * and not asymptotically. The 2 lambda N term must vanish there for that to hold, which it
+ * does only because the flat normal's horizontal parts are exactly zero.
+ *
+ * AND IT IS SECOND ORDER against the same identity formed from the analytic field and the
+ * analytic normal, on a deformed surface. */
+{
+  const R = 12.125e-3, KZ = 400;
+  const A = 27, B = 19, D = 3.8e3;
+  const P = r => r*(R - r),      Pp = r => R - 2*r;
+  const Q = r => r*r*(R - r),    Qp = r => 2*R*r - 3*r*r;
+  const Sf = z => Math.sin(KZ*z + 0.3),  Sp = z => KZ*Math.cos(KZ*z + 0.3);
+  const Cf = z => Math.cos(KZ*z),        Cp = z => -KZ*Math.sin(KZ*z);
+  const Tf = z => Math.sin(KZ*z),        Tp = z => KZ*Math.cos(KZ*z);
+  const urf = (r,t,z) => A*P(r)*Math.cos(2*t)*Sf(z);
+  const utf = (r,t,z) => B*P(r)*Math.sin(t)*Cf(z);
+  const uzf = (r,t,z) => D*Q(r)*Math.cos(t)*Tf(z);
+  /* the nine covariant derivatives, by hand, in the solver's order */
+  const grad = (r,t,z) => [
+    A*Pp(r)*Math.cos(2*t)*Sf(z),
+    (-2*A*P(r)*Math.sin(2*t)*Sf(z))/r - utf(r,t,z)/r,
+    A*P(r)*Math.cos(2*t)*Sp(z),
+    B*Pp(r)*Math.sin(t)*Cf(z),
+    (B*P(r)*Math.cos(t)*Cf(z))/r + urf(r,t,z)/r,
+    B*P(r)*Math.sin(t)*Cp(z),
+    D*Qp(r)*Math.cos(t)*Tf(z),
+    (-D*Q(r)*Math.sin(t)*Tf(z))/r,
+    D*Q(r)*Math.cos(t)*Tp(z)];
+  const slopes = (amp, x, t) => {
+    const f = amp*CELL.h/R;
+    return { sr: f*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4)),
+             st: f*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4)) };
+  };
+  const wantFlux = (amp, r, t, z) => {
+    const g = grad(r, t, z), s = slopes(amp, r/R, t);
+    const Nr = -s.sr, Nt = -s.st, Nz = 1, len2 = 1 + s.sr*s.sr + s.st*s.st;
+    const E = [g[0], g[4], g[8], 0.5*(g[1]+g[3]), 0.5*(g[2]+g[6]), 0.5*(g[5]+g[7])];
+    const NEN = E[0]*Nr*Nr + E[1]*Nt*Nt + E[2]*Nz*Nz
+              + 2*(E[3]*Nr*Nt + E[4]*Nr*Nz + E[5]*Nt*Nz);
+    const lam = NEN/len2;
+    const N = [Nr, Nt, Nz];
+    return N.map((Ni, c) => 2*lam*Ni - (g[c]*Nr + g[3+c]*Nt + g[6+c]*Nz));
+  };
+  const build = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i];
+      for (let b = 0; b < nz; b++) S.u[S.iu(i,k,b)] = urf(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i];
+      for (let b = 0; b < nz; b++) S.v[S.iv(i,k,b)] = utf(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+
+  /* the tangential traction, at a genuinely sloped surface */
+  {
+    const S = build(16, 24, 16, 0.5);
+    const F = new Float64Array(3), g = new Float64Array(9);
+    let t1 = 0, t2 = 0, mag = 0, slope = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        S.surfaceGradient(i, k, g);
+        const n = S.surfaceNormal(S.rc[i], (k + 0.5)*S.dth);
+        const E = [g[0], g[4], g[8], 0.5*(g[1]+g[3]), 0.5*(g[2]+g[6]), 0.5*(g[5]+g[7])];
+        const Nr = -n.sr, Nt = -n.st;
+        const NEN = E[0]*Nr*Nr + E[1]*Nt*Nt + E[2]
+                  + 2*(E[3]*Nr*Nt + E[4]*Nr + E[5]*Nt);
+        const lam = NEN/(n.len*n.len);
+        /* the projected traction, up to 2 rho nu: T = lambda N */
+        const T = [lam*Nr, lam*Nt, lam];
+        t1 = Math.max(t1, Math.abs(T[0] + n.sr*T[2]));        // t1 = (1, 0, eta_r)
+        t2 = Math.max(t2, Math.abs(T[1] + n.st*T[2]));        // t2 = (0, 1, eta_th/r)
+        mag = Math.max(mag, Math.abs(lam)*n.len);
+        slope = Math.max(slope, Math.sqrt(n.sr*n.sr + n.st*n.st));
+      }
+    ok(t1 === 0 && t2 === 0,
+       `the tangential traction is exactly zero at both tangents, at |grad eta| up to `
+       + `${slope.toFixed(2)}`,
+       `t1.T = ${t1.toExponential(3)}, t2.T = ${t2.toExponential(3)}`);
+    ok(mag > 0, 'while the traction itself is not zero, so that is a projection and not '
+       + 'an empty field', `largest |T| = ${mag.toExponential(3)}`);
+  }
+
+  /* the flat limit, against the condition the two-dimensional solver imposes */
+  {
+    const S = build(16, 24, 16, 0);
+    const F = new Float64Array(3), g = new Float64Array(9);
+    let wr = 0, wt = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        S.surfaceLapFluxes(i, k, F);
+        S.surfaceGradient(i, k, g);
+        /* surfaceSlopes next door: du_r/dz = -du_z/dr, du_theta/dz = -(1/r) du_z/dtheta */
+        wr = Math.max(wr, Math.abs(F[0] + g[6]));
+        wt = Math.max(wt, Math.abs(F[1] + g[7]));
+        scale = Math.max(scale, Math.abs(g[6]), Math.abs(g[7]));
+      }
+    ok(wr === 0 && wt === 0,
+       'on a flat surface the radial and azimuthal fluxes are exactly minus the radial and '
+       + 'azimuthal derivatives of w, which is surfaceSlopes in dns/faraday-disc.js',
+       `worst ${Math.max(wr, wt).toExponential(3)} against derivatives of `
+       + `${scale.toExponential(3)}`);
+    ok(scale > 0, 'and those derivatives are not zero',
+       `largest ${scale.toExponential(3)}`);
+  }
+
+  /* and second order against the same identity formed analytically */
+  {
+    const errorOn = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      const F = new Float64Array(3);
+      const num = [0,0,0], den = [0,0,0];
+      for (let i = 0; i < nr; i++){
+        /* physical radius cut at both ends: the flux carries 1/r through the covariant
+           derivatives, and at the rim the solver's normal takes the contact condition this
+           probe does not satisfy */
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          S.surfaceLapFluxes(i, k, F);
+          const w = wantFlux(amp, S.rc[i], (k + 0.5)*S.dth, S.H[S.ie(i,k)]);
+          for (let c = 0; c < 3; c++){ const d = F[c] - w[c]; num[c] += d*d; den[c] += w[c]*w[c]; }
+        }
+      }
+      return num.map((n, c) => Math.sqrt(n/den[c]));
+    };
+    const NAME = ['radial', 'azimuthal', 'vertical'];
+    for (const amp of [0.3, 0.6]){
+      const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp);
+      const o = a.map((x, c) => Math.log(x/b[c])/Math.LN2);
+      console.log(`       eta/h = ${amp}: surface flux order ` + NAME.map((n, c) =>
+        `${n} ${o[c].toFixed(2)}`).join(', '));
+      for (let c = 0; c < 3; c++)
+        ok(o[c] > 1.7,
+           `eta/h = ${amp}: the ${NAME[c]} surface flux is second order against the identity`,
+           `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
+    }
+  }
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

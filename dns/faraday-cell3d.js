@@ -200,6 +200,10 @@ class FaradayCell3D {
     this.rx[nr+1] = this.R;
 
     this.cgIters = 0; this.cgResidual = 0;
+    this._es = new Float64Array(6);        // one cell's four eta slopes, then two weights
+    this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
+    this._sg = new Float64Array(9);        // and its nine covariant derivatives
+    this._sf3 = new Float64Array(3);       // the three surface Laplacian fluxes
 
     /* Node geometry, one descriptor per staggered family. Every family shares the
        same periodic uniform theta and the same flux algebra; they differ only in
@@ -283,7 +287,16 @@ class FaradayCell3D {
       this.Hr[0*nth + k] = H[this.ie(0, k)];
       for (let i = 1; i < nr; i++){
         const a = this.drc[i-1], b = this.drc[i];
-        this.Hr[i*nth + k] = (b*H[this.ie(i-1, k)] + a*H[this.ie(i, k)])/(a + b);
+        const lo = H[this.ie(i-1, k)], hi = H[this.ie(i, k)];
+        /* written as an increment from one end rather than as a weighted sum, so that two
+           equal depths interpolate to EXACTLY that depth. The weighted form
+           (b*lo + a*hi)/(a + b) does not: for lo = hi it rounds twice and lands within an
+           ulp, and the centred slope below then differences two such values over drc, which
+           amplifies that ulp by h/drc. A flat surface would carry slopes of 1e-13 instead of
+           zero, and the free surface's flat limit -- where the radial flux must reduce to
+           exactly minus dw/dr, the condition dns/faraday-disc.js imposes -- would hold only
+           to 2.4e-15 rather than exactly. Measured, before the change. */
+        this.Hr[i*nth + k] = lo + (a/(a + b))*(hi - lo);
       }
       this.Hr[nr*nth + k] = this.contact === 'pinned' ? h : H[this.ie(nr-1, k)];
     }
@@ -621,6 +634,181 @@ class FaradayCell3D {
     const L1 = ((ss - s0)*(ss - s2))/((s1 - s0)*(s1 - s2));
     const L2 = ((ss - s0)*(ss - s1))/((s2 - s0)*(s2 - s1));
     return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2);
+  }
+
+  /* The same stencil as colValueAtZ, differentiated instead of evaluated: df/dz in one
+   * column at one physical height. Since z = sigma H at fixed (r, theta), d/dz is
+   * (1/H) d/dsigma, so this is the quadratic's sigma-derivative over that column's own H.
+   *
+   * It sits beside colValueAtZ and shares its conventions -- the stencil centred on `lev`
+   * rather than chosen by bracketing the target, the antipodal reflection for a negative
+   * radial index, the family's own sign -- because the two are read at the same points and
+   * a difference in stencil between them would be a difference nothing would catch. */
+  colDerivAtZ(f, fam, a, k, z, lev){
+    const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
+    let aa = a, kk = k, sign = 1;
+    if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
+    const th = (kk + fam.thOff)*this.dth;
+    const H = this.Hat(fam.rn[aa], th).H;
+    const ss = z/H;
+    const at = b => f[fam.idx(aa, kk, b)];
+    if (nJ === 1) return 0;
+    if (nJ === 2) return sign*(at(1) - at(0))/((sn[1] - sn[0])*H);
+    let j = lev === undefined ? 1 : lev;
+    if (j < 1) j = 1;
+    if (j > nJ - 2) j = nJ - 2;
+    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
+    /* d/ds of the three Lagrange basis polynomials, at s = ss */
+    const L0 = ((ss - s1) + (ss - s2))/((s0 - s1)*(s0 - s2));
+    const L1 = ((ss - s0) + (ss - s2))/((s1 - s0)*(s1 - s2));
+    const L2 = ((ss - s0) + (ss - s1))/((s2 - s0)*(s2 - s1));
+    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2)/H;
+  }
+
+  /* The nine covariant derivatives of the velocity at the free surface above one pressure
+   * cell, filled into a caller-supplied nine-element array in the order
+   *
+   *     [u_r,r  u_r,th  u_r,z   u_th,r  u_th,th  u_th,z   u_z,r  u_z,th  u_z,z]
+   *
+   * where u_{i,j} is the j-th covariant derivative of the i-th component, so the two that
+   * carry the rotating basis are
+   *
+   *     u_r,theta    = (1/r) du_r/dtheta - u_theta/r
+   *     u_theta,theta = (1/r) du_theta/dtheta + u_r/r
+   *
+   * The strain tensor and the surface flux are both built from these, so they are formed
+   * once: two functions each forming their own nine derivatives would be two chances for
+   * them to disagree about one.
+   *
+   * Every horizontal derivative is taken BETWEEN COLUMNS AT ONE PHYSICAL HEIGHT -- the
+   * height of this cell's own surface -- which is rule 1 and is not optional: under
+   * z = sigma H the neighbouring columns' sigma = 1 sits at a different height, and
+   * differencing there carries an O(dH) error that vanishes on a flat surface and does not
+   * converge on a deformed one. Measured with the neighbour read at its own sigma = 1
+   * instead: E_rr at order -0.007 while the flat case still passed.
+   *
+   * Every vertical derivative is the quadratic through that column's three topmost sigma
+   * nodes, differentiated at the target height. For w that interpolates, because w has a
+   * node at sigma = 1; for u and v it extrapolates half a cell, which is what a field whose
+   * vertical nodes are cell centres costs at a boundary.
+   *
+   * At the rim the wall supplies the outward neighbour, zero for all three components by no
+   * slip. At the axis the inward neighbour is the antipodal column, carried with the
+   * family's own reflection sign by colValueAtZ. */
+  surfaceGradient(i, k, out){
+    const nr = this.nr, dth = this.dth, rc = this.rc, R = this.R;
+    const FU = this.FAM.u, FV = this.FAM.v, FW = this.FAM.w;
+    const r = rc[i], z = this.H[this.ie(i, k)];
+    const lu = FU.sn.length - 2, lw = FW.sn.length - 2;
+    const uV = (a, kk) => this.colValueAtZ(this.u, FU, a, kk, z, lu);
+    const uD = (a, kk) => this.colDerivAtZ(this.u, FU, a, kk, z, lu);
+    const vV = (a, kk) => a > nr - 1 ? 0 : this.colValueAtZ(this.v, FV, a, kk, z, lu);
+    const vD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.v, FV, a, kk, z, lu);
+    const wV = (a, kk) => a > nr - 1 ? 0 : this.colValueAtZ(this.w, FW, a, kk, z, lw);
+    const wD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.w, FW, a, kk, z, lw);
+    const rcOf = a => a < 0 ? -rc[-1 - a] : (a > nr - 1 ? R : rc[a]);
+    const span = rcOf(i + 1) - rcOf(i - 1);
+
+    const uIn = uV(i, k), uOut = uV(i + 1, k);
+    const ur = 0.5*(uIn + uOut);
+    const vLo = vV(i, k), vHi = vV(i, k + 1);
+    const ut = 0.5*(vLo + vHi);
+
+    out[0] = (uOut - uIn)/this.drc[i];
+    out[1] = 0.25*(uV(i, k+1) - uV(i, k-1) + uV(i+1, k+1) - uV(i+1, k-1))/(dth*r) - ut/r;
+    out[2] = 0.5*(uD(i, k) + uD(i + 1, k));
+    out[3] = 0.5*(vV(i+1, k) - vV(i-1, k) + vV(i+1, k+1) - vV(i-1, k+1))/span;
+    out[4] = (vHi - vLo)/(dth*r) + ur/r;
+    out[5] = 0.5*(vD(i, k) + vD(i, k+1));
+    out[6] = (wV(i+1, k) - wV(i-1, k))/span;
+    out[7] = 0.5*(wV(i, k+1) - wV(i, k-1))/(dth*r);
+    out[8] = wD(i, k);
+    return out;
+  }
+
+  /* The rate-of-strain tensor at the free surface above one pressure cell, as
+   *
+   *     [E_rr, E_thetatheta, E_zz, E_rtheta, E_rz, E_thetaz]
+   *
+   * which is the symmetric part of the nine derivatives above, and nothing more. */
+  surfaceStrain(i, k, out){
+    const g = this.surfaceGradient(i, k, this._sg);
+    out[0] = g[0];
+    out[1] = g[4];
+    out[2] = g[8];
+    out[3] = 0.5*(g[1] + g[3]);
+    out[4] = 0.5*(g[2] + g[6]);
+    out[5] = 0.5*(g[5] + g[7]);
+    return out;
+  }
+
+  /* The flux the vector Laplacian's sigma = 1 face must carry, for each velocity
+   * component, once the free-surface stress conditions are imposed: grad u_i . N at the
+   * surface, with N the unnormalised outward normal.
+   *
+   * WHY IT IS NOT JUST THE TRACTION. famLaplacian's sigma-face flux is proj*(grad f . N),
+   * and the free surface gives a traction, 2 rho nu E . n. For an incompressible flow with
+   * constant viscosity 2 nu div E and nu grad^2 u are the same VOLUME operator, but their
+   * face fluxes differ by nu u_{j,i} n_j -- a term that integrates to zero over a closed
+   * surface and does not vanish face by face. Putting a traction on this one face while
+   * every other face carries grad u_i . N would be a consistent discretisation of neither.
+   *
+   * The conversion is an identity, not an approximation. From E_ij = (u_{i,j} + u_{j,i})/2,
+   *
+   *     grad u_i . n  =  2 (E . n)_i  -  u_{j,i} n_j
+   *
+   * and the tangential stress condition is imposed by PROJECTION -- E . n is replaced by
+   * (n . E . n) n, which is exact at any slope -- so with the unnormalised normal, where
+   * E . N = lambda N and lambda = n . E . n,
+   *
+   *     grad u_i . N  =  2 lambda N_i  -  u_{j,i} N_j
+   *
+   * Nothing divides by 1 - |grad eta|^2 anywhere, so the forty-five degree degeneracy that
+   * defeats solving the tangential conditions for du/dz never appears. The derivation of
+   * that degeneracy is in dns/PLAN-cell3d.md.
+   *
+   * Filled into a caller-supplied three-element array as [radial, azimuthal, vertical],
+   * at the surface above one PRESSURE cell. Each momentum family's own sigma = 1 face takes
+   * its own component from here, interpolated to where that face sits. */
+  surfaceLapFluxes(i, k, out){
+    const g = this.surfaceGradient(i, k, this._sg);
+    const n = this.surfaceNormal(this.rc[i], (k + 0.5)*this.dth);
+    /* the unnormalised normal, whose radial and azimuthal parts are minus the surface
+       slopes and whose vertical part is exactly one -- which is what makes the tangential
+       traction vanish to the last bit rather than to an order */
+    const Nr = -n.sr, Nt = -n.st, Nz = 1;
+    const E0 = g[0], E1 = g[4], E2 = g[8];
+    const E3 = 0.5*(g[1] + g[3]), E4 = 0.5*(g[2] + g[6]), E5 = 0.5*(g[5] + g[7]);
+    /* lambda = n.E.n, formed with N and divided by |N|^2 */
+    const NEN = E0*Nr*Nr + E1*Nt*Nt + E2*Nz*Nz
+              + 2*(E3*Nr*Nt + E4*Nr*Nz + E5*Nt*Nz);
+    const lam = NEN/(n.len*n.len);
+    for (let c = 0; c < 3; c++)
+      out[c] = 2*lam*(c === 0 ? Nr : c === 1 ? Nt : Nz)
+             - (g[c]*Nr + g[3 + c]*Nt + g[6 + c]*Nz);
+    return out;
+  }
+
+  /* The viscous normal stress at the free surface above one pressure cell, 2 rho nu n.E.n.
+   *
+   * This is the term the normal-stress condition contributes to the surface pressure, and
+   * it is contracted with the FULL normal rather than with z-hat. The flat-normal form
+   * 2 rho nu dw/dz is what the two-dimensional solver next door is entitled to, because it
+   * linearises about a flat surface; this one is not.
+   *
+   * It is NOT obtained by eliminating anything. Writing E.n = lambda n and solving for
+   * lambda divides by 1 - |grad eta|^2, which vanishes at a forty-five degree slope and
+   * changes sign beyond it -- the derivation is in dns/PLAN-cell3d.md. The strain comes
+   * from the interior field and the contraction is then just a contraction, well defined
+   * at any slope. */
+  surfaceNormalStress(i, k){
+    const e = this.ie(i, k);
+    const n = this.surfaceNormal(this.rc[i], (k + 0.5)*this.dth);
+    const E = this.surfaceStrain(i, k, this._st);
+    const a = n.nr, b = n.nth, c = n.nz;
+    const nEn = E[0]*a*a + E[1]*b*b + E[2]*c*c
+              + 2*(E[3]*a*b + E[4]*a*c + E[5]*b*c);
+    return 2*this.rho*this.nu*nEn;
   }
 
   /* ---- the viscous operator -------------------------------------------- */
@@ -1146,6 +1334,197 @@ class FaradayCell3D {
     this.advectTransport(outU, outV, outW);
     this.advectCurvature(outU, outV);
     return [outU, outV, outW];
+  }
+
+  /* ---- the free surface -------------------------------------------------- */
+
+  /* The four face slopes of eta around one cell, written ONCE because the curvature is
+   * the exact adjoint of exactly these and the two must not be able to drift apart.
+   * Filled into a caller-supplied four-element array: [inner r, outer r, lower theta,
+   * upper theta].
+   *
+   * The axis needs no condition. Its face area rf[0] is exactly zero, so the area
+   * functional weights that slope by nothing and the curvature's coefficient for it is
+   * exactly zero -- which is the only correct treatment, because eta_r at r = 0 is
+   * non-zero for every azimuthal mode but m = 0 and any single value assigned there
+   * would be wrong for some mode.
+   *
+   * The rim needs one, and which one is the contact condition: a free contact line
+   * leaves the surface with zero radial slope at the wall, a pinned one holds eta at
+   * zero there, so the pinned case takes a two-point difference against the wall value.
+   *
+   * THAT IS DELIBERATELY NOT THE THREE-POINT QUADRATIC the rest of this solver uses at a
+   * boundary face, and the reason is specific to a functional whose derivative is then
+   * taken. A three-point rim slope makes the last cell's AREA depend on the column two
+   * cells in, so the functional stops being a sum of local cell areas, and its
+   * derivative inherits that: the extra term lands on cell nr-2, where it is not part of
+   * that cell's divergence. Measured: with the three-point slope the last two rows read
+   * 35 and 8.1 relative and got WORSE under refinement, orders -1.20 and -0.71, while
+   * the two-point slope leaves every row but the rim second order and the rim row first.
+   *
+   * THREE WAYS OF MAKING THE RIM SLOPE SECOND ORDER WERE TRIED AND ALL THREE MADE THE
+   * CURVATURE WORSE, because within this construction the weights and the slope are not
+   * free to choose: it is the FACE-AREA weighting that makes rc*drc/(rf[i] + rf[i+1])
+   * collapse to drc/2 and hence makes the derivative a divergence at all. Measured at the
+   * rim row, relative, on grids of 16, 32 and 64 radial cells:
+   *
+   *     three-point quadratic through the wall         35, 80   (diverging, -1.2)
+   *     weights 1/3 and 2/3, centring the estimate     38, 84, 176
+   *     slope extrapolated to R as (4 sWall - sIn)/3   39, 84, 176
+   *     the plain local two-point difference          0.013, 0.016, 0.017
+   *
+   * so the plain difference is not a shortcut, it is the only one of the four that leaves
+   * a small error rather than a large one.
+   *
+   * First order at the rim row is not a consequence of the two-point slope; it is a
+   * consequence of the functional being local, and it cannot be removed without giving
+   * that up. A free contact line's rim slope is EXACTLY right -- it is zero, which is the
+   * condition itself -- and its rim row is first order all the same, because what is
+   * one-sided there is the face's own coefficient 1/sqrt(1 + |grad eta|^2), which has
+   * only the cell inside it to come from. The trade is deliberate: locality buys the
+   * exact identity kappa = -(1/vol) dA/d eta, and that identity is what makes the
+   * exchange between kinetic and surface energy exact rather than approximate. One
+   * annulus of width h carrying a first-order force contributes at the scheme's own
+   * order to anything integrated. */
+  etaSlopes(i, k, out){
+    const nr = this.nr, eta = this.eta, drf = this.drf, rf = this.rf;
+    const e = this.ie(i, k);
+    const pinnedRim = i === nr - 1 && this.contact !== 'free';
+    out[0] = i === 0 ? 0 : (eta[e] - eta[this.ie(i-1, k)])/drf[i];
+    if (i < nr - 1) out[1] = (eta[this.ie(i+1, k)] - eta[e])/drf[i+1];
+    else if (!pinnedRim) out[1] = 0;
+    else out[1] = (0 - eta[e])/drf[nr];
+    out[2] = (eta[e] - eta[this.ie(i, k-1)])/this.dth;
+    out[3] = (eta[this.ie(i, k+1)] - eta[e])/this.dth;
+    /* The weights with which the two radial slopes make the CELL-CENTRE value the area
+     * element needs. Ordinarily they are the faces' own areas, and that is second order
+     * because the two faces bracket the centre symmetrically: weighting positions by
+     * rf gives rc + O(drc^2/rc). It is also what makes the curvature's radial face
+     * coefficient come out as the width-weighted mean of 1/sqrt(1 + |grad eta|^2), which
+     * is what consistency asks for.
+     *
+     * The pinned rim is the exception, and the reason is where its slope LIVES. A
+     * two-point difference against the wall value is the exact slope at the midpoint of
+     * rc[nr-1] and R, not at R; the inner face's slope is at rf[nr-1]. Since
+     * rc[nr-1] - rf[nr-1] and R - rc[nr-1] are both half the last cell's width, that
+     * midpoint sits at rc + drc/4 and the inner face at rc - drc/2, so the weights that
+     * centre the estimate on rc are exactly one third and two thirds, on any grid.
+     * Weighting them by face area instead puts the estimate a quarter of a cell off
+     * centre, which is first order, and it showed: rows nr-1 and nr-2 sat at 1.3% and
+     * 0.7% and did not converge at all while every interior row ran at second order. */
+    const w = rf[i] + rf[i+1]; out[4] = rf[i]/w; out[5] = rf[i+1]/w;
+    return out;
+  }
+
+  /* 1 + |grad eta|^2 at a cell centre. The radial pair is weighted by the FACE AREAS,
+     which is what makes the axis face drop out of its own accord; the azimuthal faces
+     have equal area, so they are weighted equally. */
+  surfaceMetric(i, k){
+    const s = this.etaSlopes(i, k, this._es);
+    const rc = this.rc[i];
+    return 1 + s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
+             + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
+  }
+
+  /* The outward unit normal of the free surface at an arbitrary position, from the
+   * surface's own slopes. With z = H(r, theta) and h constant, eta_r is H_r and
+   * eta_theta is H_theta, so
+   *
+   *     N = (-H_r, -H_theta/r, 1),   |N| = sqrt(1 + H_r^2 + (H_theta/r)^2)
+   *
+   * and n = N/|N|. Returned unnormalised as well as normalised, because the tangent
+   * vectors (1, 0, H_r) and (0, 1, H_theta/r) are orthogonal to N without normalising and
+   * the traction algebra is cleaner in those terms.
+   *
+   * THIS IS NOT THE SAME QUANTITY AS `surfaceMetric`, AND THEY MUST NOT BE UNIFIED. That
+   * one is a CELL-AVERAGED squared slope, built from face differences weighted by face
+   * area, and it is that particular average which makes the curvature the exact
+   * derivative of the area. This one is a POINTWISE slope at an arbitrary position, which
+   * is what a normal at a face is. They agree to second order and they are different
+   * objects; replacing either with the other would break the thing it was built for. */
+  surfaceNormal(r, th){
+    const g = this.Hslope(r, th);
+    const sr = g.Hr, st = g.Hth/r;
+    const len = Math.sqrt(1 + sr*sr + st*st);
+    return { sr, st, len, nr: -sr/len, nth: -st/len, nz: 1/len };
+  }
+
+  /* The area of the free surface, discretely:
+   *
+   *     A = sum_cells rc drc dtheta sqrt(1 + |grad eta|^2)
+   *
+   * This exists because the curvature is defined as its derivative. */
+  surfaceArea(){
+    let A = 0;
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++)
+        A += this.rc[i]*this.drc[i]*this.dth*Math.sqrt(this.surfaceMetric(i, k));
+    return A;
+  }
+
+  /* The mean curvature of the free surface, div(grad eta / sqrt(1 + |grad eta|^2)).
+   *
+   * NOT the linearised Laplacian of eta. At the drives this cell runs |grad eta| is of
+   * order one, where sqrt(1 + |grad eta|^2) is two, and the difference is the difference
+   * between a capillary pressure that saturates the pattern and one that does not.
+   *
+   * IT IS DEFINED AS THE VARIATIONAL DERIVATIVE OF THE DISCRETE AREA, and that is the
+   * design rather than a way of writing it down:
+   *
+   *     kappa_j = -(1/(rc drc dtheta)) dA/d eta_j
+   *
+   * Three things follow that a discretised formula would only approximate. The
+   * expression IS the finite-volume divergence form, because differentiating a sum over
+   * face slopes gathers exactly a difference of face fluxes -- worked out, the radial
+   * face coefficient comes to the width-weighted mean of 1/sqrt(1 + |grad eta|^2) across
+   * the face, which is what consistency asks for, and the area weighting of the slopes
+   * is what makes it come out that way. It is second order, because the area is. And the
+   * work the capillary term does is exactly -gamma dA/dt, so the exchange between
+   * kinetic energy and surface energy is an identity in floating point rather than a
+   * tolerance -- which is what will let S7 assert that the whole step conserves energy
+   * with viscosity and the drive off.
+   *
+   * Written as a scatter, in the same accumulate-then-divide shape `gradient` uses,
+   * because that is what makes it the exact adjoint of the slopes rather than
+   * approximately so. */
+  curvature(out){
+    const nr = this.nr, nth = this.nth, dth = this.dth;
+    const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf;
+    const free = this.contact === 'free';
+    const s = this._es;
+    out.fill(0);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this.etaSlopes(i, k, s);
+        const rr = rc[i]*rc[i];
+        const X = 1 + s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
+                    + 0.5*(s[2]*s[2] + s[3]*s[3])/rr;
+        const W = rc[i]*drc[i]*dth/(2*Math.sqrt(X));
+        /* the radial pair. The axis face carries rf[0] = 0, so its weight is exactly zero
+           and the neighbour that does not exist is never touched. */
+        const cIn = W*2*s[4]*s[0], cOut = W*2*s[5]*s[1];
+        if (i > 0){
+          out[e] += cIn/drf[i];
+          out[this.ie(i-1, k)] -= cIn/drf[i];
+        }
+        if (i < nr - 1){
+          out[e] -= cOut/drf[i+1];
+          out[this.ie(i+1, k)] += cOut/drf[i+1];
+        } else if (!free){
+          out[e] -= cOut/drf[nr];
+        }
+        /* the azimuthal pair, periodic, so both neighbours always exist */
+        const cLo = W*s[2]/rr, cHi = W*s[3]/rr;
+        out[e] += (cLo - cHi)/dth;
+        out[this.ie(i, k-1)] -= cLo/dth;
+        out[this.ie(i, k+1)] += cHi/dth;
+      }
+    for (let i = 0; i < nr; i++){
+      const vol = rc[i]*drc[i]*dth;
+      for (let k = 0; k < nth; k++) out[this.ie(i, k)] /= -vol;
+    }
+    return out;
   }
 
   /* Omega from the physical velocity, and back. The definition is
