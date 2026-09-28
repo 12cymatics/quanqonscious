@@ -420,6 +420,146 @@ class FaradayCell3D {
     return worst;
   }
 
+  /* ---- the viscous operator -------------------------------------------- */
+
+  /* The Laplacian of a cell-centred scalar, in flux form, with the full metric
+     of the surface-following map.
+
+     Only the sigma-faces are non-orthogonal. An r = const surface still has
+     normal r-hat and a theta = const surface still has normal theta-hat, but a
+     sigma = const surface is the curved sheet z = sigma H(r, theta), whose normal
+     is proportional to (-sigma H_r, -sigma H_theta/r, 1) -- so its flux carries
+     the two tangential gradients as well as the normal one. Those two cross terms
+     are exactly what a flat test surface cannot detect, which is why the gate
+     deforms the surface and checks this against an analytic Laplacian under
+     refinement rather than against a tolerance on one grid.
+
+     Flux form, not a pointwise chain rule: the same face flux is used by both
+     cells that share the face, which makes the assembled operator symmetric, and
+     a symmetric operator built from face-normal differences is dissipative --
+     which a viscous term must be, or it feeds the flow instead of damping it.
+
+     `bc` supplies the value outside a boundary face, as bc(side, i, k, j); when it
+     is omitted every boundary face carries zero flux, which is the natural
+     condition and is what the interior stencil is tested against. */
+  scalarLaplacian(f, out, bc){
+    const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
+    const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf;
+    const sf = this.sf, sc = this.sc, dsc = this.dsc, dsf = this.dsf;
+    const H = this.H, Hr = this.Hr, Hth = this.Hth;
+    const at = (i, k, j) => f[this.ip(i, k, j)];
+    /* d f / d sigma at a cell centre, centred where both neighbours exist and
+       one-sided at the floor and the surface. */
+    const dfds = (i, k, j) => {
+      if (nz === 1) return 0;
+      if (j === 0) return (at(i, k, 1) - at(i, k, 0))/(sc[1] - sc[0]);
+      if (j === nz - 1) return (at(i, k, nz-1) - at(i, k, nz-2))/(sc[nz-1] - sc[nz-2]);
+      return (at(i, k, j+1) - at(i, k, j-1))/(sc[j+1] - sc[j-1]);
+    };
+    /* d f / d r at a cell centre, centred where both neighbours exist. At the
+       axis the reflection is across r = 0, where a scalar is even, so the
+       one-sided difference is the consistent choice; at the rim likewise. */
+    const dfdr = (i, k, j) => {
+      if (nr === 1) return 0;
+      if (i === 0) return (at(1, k, j) - at(0, k, j))/(rc[1] - rc[0]);
+      if (i === nr - 1) return (at(nr-1, k, j) - at(nr-2, k, j))/(rc[nr-1] - rc[nr-2]);
+      return (at(i+1, k, j) - at(i-1, k, j))/(rc[i+1] - rc[i-1]);
+    };
+    /* theta is periodic, so this is always centred. */
+    const dfdth = (i, k, j) => (at(i, k+1, j) - at(i, k-1, j))/(2*dth);
+
+    for (let i = 0; i < nr; i++){
+      for (let k = 0; k < nth; k++){
+        const kk = this.kw(k);
+        const e = this.ie(i, k);
+        const Hc = H[e];
+        for (let j = 0; j < nz; j++){
+          const fc = at(i, k, j);
+          let flux = 0;
+
+          /* ---- r faces ---- */
+          for (const side of [-1, +1]){
+            const iface = side < 0 ? i : i + 1;
+            const area0 = rf[iface]*dth*this.Hr[iface*nth + kk]*dsc[j];
+            if (iface === 0) continue;          // axis: rf = 0, so the area is zero
+            let dr, dsigma, Hface, Hrface;
+            if (iface === nr){
+              /* rim: the wall. With no bc supplied the flux is zero. */
+              if (!bc) continue;
+              const fo = bc('rim', i, k, j);
+              dr = (fo - fc)/drf[nr];
+              dsigma = dfds(i, k, j);
+              Hface = this.Hr[nr*nth + kk];
+              Hrface = (fo === fo ? (Hface - Hc)/drf[nr] : 0);
+            } else if (iface === i){
+              const fo = at(i-1, k, j);
+              dr = (fc - fo)/drf[i];
+              dsigma = 0.5*(dfds(i-1, k, j) + dfds(i, k, j));
+              Hface = this.Hr[i*nth + kk];
+              Hrface = (Hc - H[this.ie(i-1, k)])/drf[i];
+            } else {
+              const fo = at(i+1, k, j);
+              dr = (fo - fc)/drf[i+1];
+              dsigma = 0.5*(dfds(i, k, j) + dfds(i+1, k, j));
+              Hface = this.Hr[(i+1)*nth + kk];
+              Hrface = (H[this.ie(i+1, k)] - Hc)/drf[i+1];
+            }
+            const gradR = dr - (sc[j]*Hrface/Hface)*dsigma;
+            flux += side*area0*gradR;
+          }
+
+          /* ---- theta faces: periodic, always two of them ---- */
+          for (const side of [-1, +1]){
+            const kface = side < 0 ? k : k + 1;
+            const kf = this.kw(kface);
+            const Hface = this.Hth[i*nth + kf];
+            const area = drc[i]*Hface*dsc[j];
+            const fo = side < 0 ? at(i, k-1, j) : at(i, k+1, j);
+            const dth_ = side < 0 ? (fc - fo)/dth : (fo - fc)/dth;
+            const dsigma = 0.5*(dfds(i, k, j)
+                              + dfds(i, side < 0 ? k-1 : k+1, j));
+            const Hthface = side < 0 ? (Hc - H[this.ie(i, k-1)])/dth
+                                     : (H[this.ie(i, k+1)] - Hc)/dth;
+            const gradT = (dth_ - (sc[j]*Hthface/Hface)*dsigma)/rc[i];
+            flux += side*area*gradT;
+          }
+
+          /* ---- sigma faces: the non-orthogonal ones ---- */
+          for (const side of [-1, +1]){
+            const jface = side < 0 ? j : j + 1;
+            const proj = rc[i]*drc[i]*dth;
+            let dsigma, drAt, dthAt;
+            if (jface === 0 || jface === nz){
+              if (!bc) continue;                // natural: no flux through floor or surface
+              const fo = bc(jface === 0 ? 'floor' : 'surface', i, k, j);
+              dsigma = jface === 0 ? (fc - fo)/dsf[0] : (fo - fc)/dsf[nz];
+              drAt = dfdr(i, k, j);
+              dthAt = dfdth(i, k, j);
+            } else {
+              const jo = side < 0 ? j - 1 : j + 1;
+              dsigma = side < 0 ? (fc - at(i, k, j-1))/dsf[j]
+                                : (at(i, k, j+1) - fc)/dsf[j+1];
+              drAt = 0.5*(dfdr(i, k, j) + dfdr(i, k, jo));
+              dthAt = 0.5*(dfdth(i, k, j) + dfdth(i, k, jo));
+            }
+            const sg = sf[jface];
+            const Hrc = this.Hdr[e], Hthc = this.Hdth[e];
+            /* the physical gradients tangential to the sheet */
+            const gradR = drAt - (sg*Hrc/Hc)*dsigma;
+            const gradT = dthAt - (sg*Hthc/Hc)*dsigma;
+            const normal = dsigma/Hc
+                         - sg*Hrc*gradR
+                         - (sg*Hthc/(rc[i]*rc[i]))*gradT;
+            flux += side*proj*normal;
+          }
+
+          out[this.ip(i, k, j)] = flux/(rc[i]*drc[i]*dth*Hc*dsc[j]);
+        }
+      }
+    }
+    return out;
+  }
+
   /* Physical vertical velocity, from Omega and the metric: the definition of
      Omega, rearranged. Needed by the viscous term and by anything reporting the
      field, and never stored, so it cannot go stale against Omega. */

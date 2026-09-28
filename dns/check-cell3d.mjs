@@ -203,8 +203,67 @@ section('3. Omega and physical w are consistent with the map');
      `worst difference ${floorW.toExponential(3)}`);
 }
 
-/* ── 4. refusals ────────────────────────────────────────────────────────── */
-section('4. what it refuses rather than answering');
+/* ── 4. the viscous operator against an analytic Laplacian ──────────────── */
+section('4. the metric Laplacian, against calculus, under refinement');
+/* f = r^2 cos(2 theta) sin(kz) is harmonic in the horizontal -- (d_rr + d_r/r
+   + d_thetatheta/r^2)(r^2 cos 2theta) is identically zero -- so grad^2 f is
+   exactly -k^2 f. That is Bessel-free calculus and owes nothing to this solver.
+   Sampled at the physical position of each node, which on a deformed surface is
+   z = sigma*(h + eta), it exercises every metric term.
+ *
+ * Asserted as CONVERGENCE rather than against a tolerance, because the order is
+ * the statement about the discretisation; a fixed bound on one grid is a
+ * statement about that grid's skew. The interior is tested, away from the faces
+ * where a boundary condition rather than the operator decides the flux.
+ *
+ * WHY THE DEFORMED CASES CARRY THE TEST. Only the sigma-faces are non-orthogonal,
+ * so on a flat surface every cross term is identically zero and the operator
+ * passes with them deleted. Measured on a disposable copy with the two cross
+ * terms removed: at eta/h = 0 the error is unchanged to the digit (4.301e-3 then
+ * 1.041e-3, order 2.05), while at eta/h = 0.3 it STOPS CONVERGING -- 3.711e-2
+ * then 3.728e-2, order -0.01 -- and at 0.6, order -0.04. That is what makes the
+ * deformed rows a gate rather than a repetition, and it is also what establishes
+ * that the reduced order at eta/h = 0.6 below is grid skew and not a missing
+ * term: a missing term plateaus, and this one converges. */
+{
+  const KZ = 700;                       // 1/m; k*h = 2.1, a full half wave in the depth
+  const fOf = (r, th, z) => r*r*Math.cos(2*th)*Math.sin(KZ*z);
+  const lapOf = (r, th, z) => -KZ*KZ*fOf(r, th, z);
+  const errorOn = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
+      S.eta[S.ie(i,k)] = amp*S.h*(
+          Math.cos(2*(k + 0.5)*S.dth)*Math.pow(S.rc[i]/S.R, 2)
+        + 0.3*Math.sin(3*(k + 0.5)*S.dth));
+    S.refreshMetric();
+    const f = new Float64Array(S.NP), got = new Float64Array(S.NP);
+    const thc = k => (k + 0.5)*S.dth;
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
+      f[S.ip(i,k,j)] = fOf(S.rc[i], thc(k), S.sc[j]*S.H[S.ie(i,k)]);
+    S.scalarLaplacian(f, got);
+    let num = 0, den = 0;
+    for (let i = 1; i < nr-1; i++) for (let k = 0; k < nth; k++) for (let j = 1; j < nz-1; j++){
+      const want = lapOf(S.rc[i], thc(k), S.sc[j]*S.H[S.ie(i,k)]);
+      const d = got[S.ip(i,k,j)] - want;
+      num += d*d; den += want*want;
+    }
+    return Math.sqrt(num/den);
+  };
+  for (const [amp, floor] of [[0, 1.9], [0.3, 1.8], [0.6, 1.3]]){
+    const coarse = errorOn(16, 24, 16, amp), fine = errorOn(32, 48, 32, amp);
+    const order = Math.log(coarse/fine)/Math.log(2);
+    console.log(`       eta/h = ${amp}: ${coarse.toExponential(3)} at 16x24x16, `
+      + `${fine.toExponential(3)} at 32x48x32, order ${order.toFixed(2)}`);
+    ok(fine < coarse, `eta/h = ${amp}: refining reduces the error in grad^2 f`,
+       `${coarse.toExponential(3)} then ${fine.toExponential(3)}`);
+    ok(order > floor,
+       `eta/h = ${amp}: and it falls at order ${floor} or better (got ${order.toFixed(2)})`,
+       `observed order ${order.toFixed(3)}`);
+  }
+}
+
+/* ── 5. refusals ────────────────────────────────────────────────────────── */
+section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',
        () => new FaradayCell3D({ nr: 8, nth: 11, nz: 6, ...CELL }), 'nth');
 throws('fewer than eight azimuthal cells is refused',
