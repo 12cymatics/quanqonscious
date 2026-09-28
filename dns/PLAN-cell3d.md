@@ -329,6 +329,19 @@ and projecting out the tangential part sets `E_rz = E_theta_z = 0`, which is exa
 **That limit is a gate**, and it is a gate against an independently written code rather
 than against this one's own opinion.
 
+## The gate runs in CI now
+
+`dns/check-cell3d.mjs` was not run by any job until 2026-09-28. It is now the first step
+of the `dns` job in `.github/workflows/javascript.yml`, ahead of `dns/check-dns.mjs`, so
+its signal arrives in about seven seconds rather than behind a two-and-a-half minute
+suite. It shares that job rather than taking a runner of its own, which seven seconds does
+not earn. Confirmed to be a gate and not a decoration: with a defect injected it exits 1,
+clean it exits 0.
+
+A suite that exists and is not run is not a gate, and this repository has already paid for
+that once -- a red `tests/test_documented_paths.py` sat unobserved on the default branch
+because the workflow carrying it was keyed on a branch that does not exist.
+
 ## Rules this build keeps
 
 Inherited from `CLAUDE.md` and from what has already gone wrong here:
