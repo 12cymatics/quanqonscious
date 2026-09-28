@@ -1442,6 +1442,59 @@ for (const [contact, A, tag] of [['free', 0.5, '(1-x^2)^2'], ['pinned', 0.4, '(1
      + `${c.edge.toExponential(3)} relative`);
 }
 
+/* ── 8. the free surface: its normal ─────────────────────────────────────── */
+
+section('8a. the outward normal, against the surface it belongs to');
+/* The normal is where every surface stress starts, so it is checked on its own before
+   anything is contracted with it. Against the analytic normal of a surface whose slopes
+   are known in closed form, under refinement, and over a region cut by PHYSICAL radius
+   rather than by index: H_theta/r is the azimuthal slope, so an index cut would creep
+   towards the axis as the grid refines and the 1/r would keep the error from converging
+   no matter how good the operator was. Measured that way first, it read order -0.03. The
+   rim is out too, where the contact condition rather than the surface decides the slope.
+   Plus the invariant that costs nothing and would catch a normalisation slip: it is a
+   unit vector. */
+{
+  const R = 12.125e-3, A = 0.30;
+  const eta = (x, t) => A*R*(x*x*Math.cos(2*t) + 0.5*x*Math.sin(t + 0.4));
+  const etaR = (x, t) => A*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4));
+  const etaTOverR = (x, t) => A*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4));
+  const errorOn = (nr, nth) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...CELL, R, h: 2*R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        S.eta[S.ie(i,k)] = eta(S.rc[i]/R, (k + 0.5)*S.dth);
+    S.refreshMetric();
+    let worst = 0, unit = 0, slope = 0;
+    for (let i = 1; i < nr - 1; i++){
+      if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+      for (let k = 0; k < nth; k++)
+        for (const [r, th] of [[S.rc[i], (k + 0.5)*S.dth], [S.rf[i], (k + 0.5)*S.dth],
+                               [S.rc[i], k*S.dth]]){
+          const x = r/R;
+          const sr = etaR(x, th), st = etaTOverR(x, th);
+          const len = Math.sqrt(1 + sr*sr + st*st);
+          const n = S.surfaceNormal(r, th);
+          worst = Math.max(worst, Math.abs(n.nr + sr/len), Math.abs(n.nth + st/len),
+                                  Math.abs(n.nz - 1/len));
+          unit = Math.max(unit, Math.abs(n.nr*n.nr + n.nth*n.nth + n.nz*n.nz - 1));
+          slope = Math.max(slope, Math.sqrt(sr*sr + st*st));
+        }
+    }
+    return { worst, unit, slope };
+  };
+  const a = errorOn(16, 24), b = errorOn(32, 48);
+  const order = Math.log(a.worst/b.worst)/Math.LN2;
+  console.log(`       between r/R = 0.25 and 0.9, |grad eta| up to ${a.slope.toFixed(3)}: `
+    + `${a.worst.toExponential(2)} -> `
+    + `${b.worst.toExponential(2)}, order ${order.toFixed(2)}`);
+  ok(order > 1.8, 'the outward normal is second order against the analytic one',
+     `${a.worst.toExponential(3)} -> ${b.worst.toExponential(3)}, order ${order.toFixed(3)}`);
+  ok(a.unit < 1e-15 && b.unit < 1e-15,
+     'and it is a unit vector, which a normalisation slip could not be',
+     `worst |n|^2 - 1 = ${Math.max(a.unit, b.unit).toExponential(3)}`);
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

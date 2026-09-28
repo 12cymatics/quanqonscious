@@ -134,7 +134,8 @@ against this and need no further decision.
 | S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | **done** | vector Laplacian second order at every deformation: (grad^2 u)_r and (grad^2 u)_theta both 2.00 at eta/h = 0, 0.2, 0.4; grad^2 w 2.00 flat and 1.97 at 0.4; scalar probe convergent at all four families |
 | S5 | Conservative centred advection, grid-relative in sigma | **done** | every momentum cell's net flux is exactly half the sum of its neighbours' divergences (worst 1e-16 of the largest net, three families, two grids, deformed and moving); the transport telescopes exactly on an arbitrary field (1e-16 of the terms summed); the curvature pair cancels to 7e-18; a uniform rise over a rising surface is left exactly alone; on a projected field the residual follows the solve tolerance over 6.2 decades to 1.8e-17; second order against calculus outside the axis cells, 1.90 to 2.08 in all three components at eta/h = 0, 0.2 and 0.4; seven injected defects all red |
 | S6 | Free surface: full mean curvature | **done** | the curvature of a sphere is -2/Rs wherever you stand on it, second order at 1.90, 1.88, 1.94 with \|grad eta\| up to 1.61; the curvature of a tilted plane is zero at second order outside r/R = 0.4, and the whole residual is alpha dtheta^2/r -- the same constant 8.01e-2, 8.13e-2, 8.16e-2 on three grids; kappa is the EXACT variational derivative of the discrete area, residual falling as eps^2 with ratio 4.00 on both contact branches; both contact conditions second order inside r/R = 0.9 (1.85/1.96 free, 1.97/1.99 pinned) and bounded by 9% without converging in the two rows at the rim; five injected defects all red |
-| S6b | Free surface: normal and tangential stress, and w at sigma = 1 | todo | n.E.n against a closed-form strain field on a sloped surface; tangential-stress residual to zero at second order; grad^2 w convergent including the surface row |
+| S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
+| S6c | Free surface: the traction at sigma = 1, and w solved there | todo | the tangential traction exactly zero after projection; n.E.n against a closed-form strain field on a sloped surface; the small-slope limit reproduces `surfaceSlopes` next door; grad^2 w convergent including the surface row |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -277,6 +278,54 @@ does NOT hold for a slope inside a functional whose derivative is then taken: th
 three-point slope makes the last cell's area depend on the column two cells in, so the
 functional stops being a sum of local cell areas and its derivative lands a term on cell
 nr-2 where that term is not a divergence. That is the first row of the table above.
+
+## What S6b must not do: eliminate the surface z-derivatives
+
+Worked out before writing any of it, because the obvious move is singular and the
+singularity is at a slope this cell reaches.
+
+The two tangential conditions are `t_j . E . n = 0` for the two surface tangents
+`t1 = (1, 0, s)` and `t2 = (0, 1, t)`, with `s = eta_r` and `t = eta_theta/r`. Written out
+they are two equations for the two strain components that carry the vertical derivatives:
+
+    (1 - s^2) E_rz  -    s t    E_theta_z  =  s E_rr + t E_r_theta     - s E_zz
+      - s t   E_rz  + (1 - t^2) E_theta_z  =  s E_r_theta + t E_tt     - t E_zz
+
+and their determinant is `1 - s^2 - t^2`. **It vanishes at |grad eta| = 1 and changes sign
+beyond it.** So solving them for `du_r/dz` and `du_theta/dz` -- which is what
+`surfaceSlopes` does next door, in its linearised form, and what the obvious
+generalisation would do -- is singular at a forty-five degree slope. The same denominator
+appears if one tries to eliminate the normal stress instead: `E . n = lambda n` gives
+
+    lambda (1 - s^2 - t^2) = E_zz - s^2 E_rr - 2 s t E_r_theta - t^2 E_tt
+
+so `n . E . n` cannot be obtained that way either.
+
+That is not a defect in the physics. At `s = 1, t = 0` the tangential condition in the
+r-z plane reduces to `E_zz = E_rr` -- it constrains the horizontal strains and says
+nothing about `du_r/dz`, because a forty-five degree rotation turns the shear in that
+plane into the difference of the two normal strains. The traction is then left to the
+momentum equations, which is where it belongs. The elimination is simply the wrong move.
+
+**What to do instead is impose the conditions on the FLUX**, which is where a
+finite-volume method wants them anyway:
+
+1. Form the six strain components at the sigma = 1 face from the interior field:
+   horizontal derivatives at the surface's own height (rule 1), vertical derivatives
+   one-sided from each family's own column with the three-point quadratic (rule 2, as
+   `wzSurface` does in `dns/faraday-disc.js`).
+2. Form the traction `T = 2 rho nu E . n`.
+3. Replace `T` by `(n . T) n`. That imposes zero tangential traction exactly, at any
+   slope, with no division by `1 - |grad eta|^2` anywhere.
+4. The sigma = 1 face's viscous momentum flux is `T_i` times the face area, and `n . T` is
+   the viscous part of the surface pressure, `p_s = p_ext - gamma kappa + n . T`.
+
+This is exact at any slope and it reduces to the two-dimensional solver's linearised pair
+as the slope goes to zero: `n` goes to `z`, `T` goes to `2 rho nu (E_rz, E_theta_z, E_zz)`,
+and projecting out the tangential part sets `E_rz = E_theta_z = 0`, which is exactly
+`du_r/dz = -du_z/dr` and `du_theta/dz = -(1/r) du_z/dtheta` -- `surfaceSlopes` itself.
+**That limit is a gate**, and it is a gate against an independently written code rather
+than against this one's own opinion.
 
 ## Rules this build keeps
 

@@ -1239,6 +1239,29 @@ class FaradayCell3D {
              + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
   }
 
+  /* The outward unit normal of the free surface at an arbitrary position, from the
+   * surface's own slopes. With z = H(r, theta) and h constant, eta_r is H_r and
+   * eta_theta is H_theta, so
+   *
+   *     N = (-H_r, -H_theta/r, 1),   |N| = sqrt(1 + H_r^2 + (H_theta/r)^2)
+   *
+   * and n = N/|N|. Returned unnormalised as well as normalised, because the tangent
+   * vectors (1, 0, H_r) and (0, 1, H_theta/r) are orthogonal to N without normalising and
+   * the traction algebra is cleaner in those terms.
+   *
+   * THIS IS NOT THE SAME QUANTITY AS `surfaceMetric`, AND THEY MUST NOT BE UNIFIED. That
+   * one is a CELL-AVERAGED squared slope, built from face differences weighted by face
+   * area, and it is that particular average which makes the curvature the exact
+   * derivative of the area. This one is a POINTWISE slope at an arbitrary position, which
+   * is what a normal at a face is. They agree to second order and they are different
+   * objects; replacing either with the other would break the thing it was built for. */
+  surfaceNormal(r, th){
+    const g = this.Hslope(r, th);
+    const sr = g.Hr, st = g.Hth/r;
+    const len = Math.sqrt(1 + sr*sr + st*st);
+    return { sr, st, len, nr: -sr/len, nth: -st/len, nz: 1/len };
+  }
+
   /* The area of the free surface, discretely:
    *
    *     A = sum_cells rc drc dtheta sqrt(1 + |grad eta|^2)
