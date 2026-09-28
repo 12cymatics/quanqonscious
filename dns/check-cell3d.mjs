@@ -1493,6 +1493,31 @@ section('8a. the outward normal, against the surface it belongs to');
   ok(a.unit < 1e-15 && b.unit < 1e-15,
      'and it is a unit vector, which a normalisation slip could not be',
      `worst |n|^2 - 1 = ${Math.max(a.unit, b.unit).toExponential(3)}`);
+
+  /* A FLAT SURFACE HAS EXACTLY ZERO SLOPES. Not nearly zero: the free surface's flat limit
+     has to reduce to exactly the condition the two-dimensional solver imposes, and that only
+     works if the normal there is exactly (0, 0, 1). It is not automatic -- interpolating the
+     face depth as a weighted sum rounds twice and lands within an ulp of the common value,
+     and the centred slope then differences two such values over drc, amplifying that ulp by
+     h/drc to about 1e-13. Writing the interpolation as an increment from one end makes two
+     equal depths interpolate to exactly that depth, and this is the check that holds it
+     there. */
+  {
+    const S = new FaradayCell3D({ nr: 14, nth: 20, nz: 8, ...CELL, R, h: 2*R });
+    S.refreshMetric();
+    let worst = 0;
+    for (let c = 0; c < S.NE; c++)
+      worst = Math.max(worst, Math.abs(S.Hdr[c]), Math.abs(S.Hdth[c]));
+    for (let n = 0; n < 200; n++){
+      const r = R*(0.02 + 0.96*((n*37) % 101)/101), th = 2*Math.PI*((n*53) % 97)/97;
+      const g = S.surfaceNormal(r, th);
+      worst = Math.max(worst, Math.abs(g.sr), Math.abs(g.st), Math.abs(g.nz - 1));
+    }
+    ok(worst === 0,
+       'and on a flat surface every slope, and the normal itself, is exactly zero and '
+       + 'exactly vertical -- not within an ulp',
+       `worst departure ${worst.toExponential(3)}`);
+  }
 }
 
 section('8b. the rate-of-strain tensor at the surface, against calculus');
@@ -1708,6 +1733,173 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
        + 'the stress, which is why the flat form is not used',
        `worst gap ${worst.toExponential(3)} against a largest stress of `
        + `${scale.toExponential(3)}, ${(100*worst/scale).toFixed(1)}%`);
+  }
+}
+
+section('8d. the surface flux: no tangential traction, and the flat limit next door');
+/* Three properties of `surfaceLapFluxes`, in increasing strength.
+ *
+ * THE TANGENTIAL TRACTION IS EXACTLY ZERO. After the projection the traction is 2 lambda N,
+ * and the two surface tangents are t1 = (1, 0, eta_r) and t2 = (0, 1, eta_theta/r). Since N
+ * is (-eta_r, -eta_theta/r, 1) with a vertical part of exactly one, t.N is a difference of
+ * equals and vanishes to the last bit, at any slope. Asserted as exactly zero, not as small:
+ * that is what the projection buys and there is nothing for it to differ by.
+ *
+ * THE FLAT LIMIT IS THE TWO-DIMENSIONAL SOLVER'S CONDITION. With eta flat, N is exactly
+ * (0, 0, 1), so the radial flux collapses to -du_z/dr and the azimuthal one to
+ * -(1/r)du_z/dtheta. Since the flux the Laplacian wants is du_r/dz and du_theta/dz, that is
+ *
+ *     du_r/dz = -du_z/dr        du_theta/dz = -(1/r) du_z/dtheta
+ *
+ * which is `surfaceSlopes` in dns/faraday-disc.js, an independently written solver, exactly
+ * and not asymptotically. The 2 lambda N term must vanish there for that to hold, which it
+ * does only because the flat normal's horizontal parts are exactly zero.
+ *
+ * AND IT IS SECOND ORDER against the same identity formed from the analytic field and the
+ * analytic normal, on a deformed surface. */
+{
+  const R = 12.125e-3, KZ = 400;
+  const A = 27, B = 19, D = 3.8e3;
+  const P = r => r*(R - r),      Pp = r => R - 2*r;
+  const Q = r => r*r*(R - r),    Qp = r => 2*R*r - 3*r*r;
+  const Sf = z => Math.sin(KZ*z + 0.3),  Sp = z => KZ*Math.cos(KZ*z + 0.3);
+  const Cf = z => Math.cos(KZ*z),        Cp = z => -KZ*Math.sin(KZ*z);
+  const Tf = z => Math.sin(KZ*z),        Tp = z => KZ*Math.cos(KZ*z);
+  const urf = (r,t,z) => A*P(r)*Math.cos(2*t)*Sf(z);
+  const utf = (r,t,z) => B*P(r)*Math.sin(t)*Cf(z);
+  const uzf = (r,t,z) => D*Q(r)*Math.cos(t)*Tf(z);
+  /* the nine covariant derivatives, by hand, in the solver's order */
+  const grad = (r,t,z) => [
+    A*Pp(r)*Math.cos(2*t)*Sf(z),
+    (-2*A*P(r)*Math.sin(2*t)*Sf(z))/r - utf(r,t,z)/r,
+    A*P(r)*Math.cos(2*t)*Sp(z),
+    B*Pp(r)*Math.sin(t)*Cf(z),
+    (B*P(r)*Math.cos(t)*Cf(z))/r + urf(r,t,z)/r,
+    B*P(r)*Math.sin(t)*Cp(z),
+    D*Qp(r)*Math.cos(t)*Tf(z),
+    (-D*Q(r)*Math.sin(t)*Tf(z))/r,
+    D*Q(r)*Math.cos(t)*Tp(z)];
+  const slopes = (amp, x, t) => {
+    const f = amp*CELL.h/R;
+    return { sr: f*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4)),
+             st: f*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4)) };
+  };
+  const wantFlux = (amp, r, t, z) => {
+    const g = grad(r, t, z), s = slopes(amp, r/R, t);
+    const Nr = -s.sr, Nt = -s.st, Nz = 1, len2 = 1 + s.sr*s.sr + s.st*s.st;
+    const E = [g[0], g[4], g[8], 0.5*(g[1]+g[3]), 0.5*(g[2]+g[6]), 0.5*(g[5]+g[7])];
+    const NEN = E[0]*Nr*Nr + E[1]*Nt*Nt + E[2]*Nz*Nz
+              + 2*(E[3]*Nr*Nt + E[4]*Nr*Nz + E[5]*Nt*Nz);
+    const lam = NEN/len2;
+    const N = [Nr, Nt, Nz];
+    return N.map((Ni, c) => 2*lam*Ni - (g[c]*Nr + g[3+c]*Nt + g[6+c]*Nz));
+  };
+  const build = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i];
+      for (let b = 0; b < nz; b++) S.u[S.iu(i,k,b)] = urf(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i];
+      for (let b = 0; b < nz; b++) S.v[S.iv(i,k,b)] = utf(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+
+  /* the tangential traction, at a genuinely sloped surface */
+  {
+    const S = build(16, 24, 16, 0.5);
+    const F = new Float64Array(3), g = new Float64Array(9);
+    let t1 = 0, t2 = 0, mag = 0, slope = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        S.surfaceGradient(i, k, g);
+        const n = S.surfaceNormal(S.rc[i], (k + 0.5)*S.dth);
+        const E = [g[0], g[4], g[8], 0.5*(g[1]+g[3]), 0.5*(g[2]+g[6]), 0.5*(g[5]+g[7])];
+        const Nr = -n.sr, Nt = -n.st;
+        const NEN = E[0]*Nr*Nr + E[1]*Nt*Nt + E[2]
+                  + 2*(E[3]*Nr*Nt + E[4]*Nr + E[5]*Nt);
+        const lam = NEN/(n.len*n.len);
+        /* the projected traction, up to 2 rho nu: T = lambda N */
+        const T = [lam*Nr, lam*Nt, lam];
+        t1 = Math.max(t1, Math.abs(T[0] + n.sr*T[2]));        // t1 = (1, 0, eta_r)
+        t2 = Math.max(t2, Math.abs(T[1] + n.st*T[2]));        // t2 = (0, 1, eta_th/r)
+        mag = Math.max(mag, Math.abs(lam)*n.len);
+        slope = Math.max(slope, Math.sqrt(n.sr*n.sr + n.st*n.st));
+      }
+    ok(t1 === 0 && t2 === 0,
+       `the tangential traction is exactly zero at both tangents, at |grad eta| up to `
+       + `${slope.toFixed(2)}`,
+       `t1.T = ${t1.toExponential(3)}, t2.T = ${t2.toExponential(3)}`);
+    ok(mag > 0, 'while the traction itself is not zero, so that is a projection and not '
+       + 'an empty field', `largest |T| = ${mag.toExponential(3)}`);
+  }
+
+  /* the flat limit, against the condition the two-dimensional solver imposes */
+  {
+    const S = build(16, 24, 16, 0);
+    const F = new Float64Array(3), g = new Float64Array(9);
+    let wr = 0, wt = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        S.surfaceLapFluxes(i, k, F);
+        S.surfaceGradient(i, k, g);
+        /* surfaceSlopes next door: du_r/dz = -du_z/dr, du_theta/dz = -(1/r) du_z/dtheta */
+        wr = Math.max(wr, Math.abs(F[0] + g[6]));
+        wt = Math.max(wt, Math.abs(F[1] + g[7]));
+        scale = Math.max(scale, Math.abs(g[6]), Math.abs(g[7]));
+      }
+    ok(wr === 0 && wt === 0,
+       'on a flat surface the radial and azimuthal fluxes are exactly minus the radial and '
+       + 'azimuthal derivatives of w, which is surfaceSlopes in dns/faraday-disc.js',
+       `worst ${Math.max(wr, wt).toExponential(3)} against derivatives of `
+       + `${scale.toExponential(3)}`);
+    ok(scale > 0, 'and those derivatives are not zero',
+       `largest ${scale.toExponential(3)}`);
+  }
+
+  /* and second order against the same identity formed analytically */
+  {
+    const errorOn = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      const F = new Float64Array(3);
+      const num = [0,0,0], den = [0,0,0];
+      for (let i = 0; i < nr; i++){
+        /* physical radius cut at both ends: the flux carries 1/r through the covariant
+           derivatives, and at the rim the solver's normal takes the contact condition this
+           probe does not satisfy */
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          S.surfaceLapFluxes(i, k, F);
+          const w = wantFlux(amp, S.rc[i], (k + 0.5)*S.dth, S.H[S.ie(i,k)]);
+          for (let c = 0; c < 3; c++){ const d = F[c] - w[c]; num[c] += d*d; den[c] += w[c]*w[c]; }
+        }
+      }
+      return num.map((n, c) => Math.sqrt(n/den[c]));
+    };
+    const NAME = ['radial', 'azimuthal', 'vertical'];
+    for (const amp of [0.3, 0.6]){
+      const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp);
+      const o = a.map((x, c) => Math.log(x/b[c])/Math.LN2);
+      console.log(`       eta/h = ${amp}: surface flux order ` + NAME.map((n, c) =>
+        `${n} ${o[c].toFixed(2)}`).join(', '));
+      for (let c = 0; c < 3; c++)
+        ok(o[c] > 1.7,
+           `eta/h = ${amp}: the ${NAME[c]} surface flux is second order against the identity`,
+           `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
+    }
   }
 }
 

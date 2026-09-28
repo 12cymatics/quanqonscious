@@ -202,6 +202,8 @@ class FaradayCell3D {
     this.cgIters = 0; this.cgResidual = 0;
     this._es = new Float64Array(6);        // one cell's four eta slopes, then two weights
     this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
+    this._sg = new Float64Array(9);        // and its nine covariant derivatives
+    this._sf3 = new Float64Array(3);       // the three surface Laplacian fluxes
 
     /* Node geometry, one descriptor per staggered family. Every family shares the
        same periodic uniform theta and the same flux algebra; they differ only in
@@ -285,7 +287,16 @@ class FaradayCell3D {
       this.Hr[0*nth + k] = H[this.ie(0, k)];
       for (let i = 1; i < nr; i++){
         const a = this.drc[i-1], b = this.drc[i];
-        this.Hr[i*nth + k] = (b*H[this.ie(i-1, k)] + a*H[this.ie(i, k)])/(a + b);
+        const lo = H[this.ie(i-1, k)], hi = H[this.ie(i, k)];
+        /* written as an increment from one end rather than as a weighted sum, so that two
+           equal depths interpolate to EXACTLY that depth. The weighted form
+           (b*lo + a*hi)/(a + b) does not: for lo = hi it rounds twice and lands within an
+           ulp, and the centred slope below then differences two such values over drc, which
+           amplifies that ulp by h/drc. A flat surface would carry slopes of 1e-13 instead of
+           zero, and the free surface's flat limit -- where the radial flux must reduce to
+           exactly minus dw/dr, the condition dns/faraday-disc.js imposes -- would hold only
+           to 2.4e-15 rather than exactly. Measured, before the change. */
+        this.Hr[i*nth + k] = lo + (a/(a + b))*(hi - lo);
       }
       this.Hr[nr*nth + k] = this.contact === 'pinned' ? h : H[this.ie(nr-1, k)];
     }
@@ -654,34 +665,37 @@ class FaradayCell3D {
     return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2)/H;
   }
 
-  /* The rate-of-strain tensor at the free surface above one pressure cell, filled into a
-   * caller-supplied six-element array as
+  /* The nine covariant derivatives of the velocity at the free surface above one pressure
+   * cell, filled into a caller-supplied nine-element array in the order
    *
-   *     [E_rr, E_thetatheta, E_zz, E_rtheta, E_rz, E_thetaz]
+   *     [u_r,r  u_r,th  u_r,z   u_th,r  u_th,th  u_th,z   u_z,r  u_z,th  u_z,z]
    *
-   * in cylindrical coordinates:
+   * where u_{i,j} is the j-th covariant derivative of the i-th component, so the two that
+   * carry the rotating basis are
    *
-   *     E_rr = du_r/dr                E_rtheta = 1/2[(1/r)du_r/dtheta + du_th/dr - u_th/r]
-   *     E_tt = (1/r)du_th/dtheta + u_r/r   E_rz = 1/2[du_r/dz + du_z/dr]
-   *     E_zz = du_z/dz                E_thz = 1/2[du_th/dz + (1/r)du_z/dtheta]
+   *     u_r,theta    = (1/r) du_r/dtheta - u_theta/r
+   *     u_theta,theta = (1/r) du_theta/dtheta + u_r/r
+   *
+   * The strain tensor and the surface flux are both built from these, so they are formed
+   * once: two functions each forming their own nine derivatives would be two chances for
+   * them to disagree about one.
    *
    * Every horizontal derivative is taken BETWEEN COLUMNS AT ONE PHYSICAL HEIGHT -- the
    * height of this cell's own surface -- which is rule 1 and is not optional: under
    * z = sigma H the neighbouring columns' sigma = 1 sits at a different height, and
-   * differencing there would carry an O(dH) error that vanishes on a flat surface and does
-   * not converge on a deformed one. The neighbour is therefore evaluated at THIS cell's
-   * surface height, above or below its own surface as the slope dictates.
+   * differencing there carries an O(dH) error that vanishes on a flat surface and does not
+   * converge on a deformed one. Measured with the neighbour read at its own sigma = 1
+   * instead: E_rr at order -0.007 while the flat case still passed.
    *
    * Every vertical derivative is the quadratic through that column's three topmost sigma
-   * nodes, differentiated at the target height. For w that is an interpolation, because w
-   * has a node at sigma = 1. For u and v it is an extrapolation of half a cell, which is
-   * what a field whose vertical nodes are cell centres costs at a boundary; the value is
-   * third order and the derivative second, so nothing is given away.
+   * nodes, differentiated at the target height. For w that interpolates, because w has a
+   * node at sigma = 1; for u and v it extrapolates half a cell, which is what a field whose
+   * vertical nodes are cell centres costs at a boundary.
    *
-   * At the rim the wall supplies the outward neighbour, which is zero for all three
-   * components by no slip. At the axis the inward neighbour is the antipodal column,
-   * carried with the family's own reflection sign by colValueAtZ. */
-  surfaceStrain(i, k, out){
+   * At the rim the wall supplies the outward neighbour, zero for all three components by no
+   * slip. At the axis the inward neighbour is the antipodal column, carried with the
+   * family's own reflection sign by colValueAtZ. */
+  surfaceGradient(i, k, out){
     const nr = this.nr, dth = this.dth, rc = this.rc, R = this.R;
     const FU = this.FAM.u, FV = this.FAM.v, FW = this.FAM.w;
     const r = rc[i], z = this.H[this.ie(i, k)];
@@ -692,36 +706,86 @@ class FaradayCell3D {
     const vD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.v, FV, a, kk, z, lu);
     const wV = (a, kk) => a > nr - 1 ? 0 : this.colValueAtZ(this.w, FW, a, kk, z, lw);
     const wD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.w, FW, a, kk, z, lw);
-    /* the radial coordinate of a cell-centred column, with the antipodal continuation
-       inward of the axis and the wall outward of the last centre */
     const rcOf = a => a < 0 ? -rc[-1 - a] : (a > nr - 1 ? R : rc[a]);
+    const span = rcOf(i + 1) - rcOf(i - 1);
 
-    /* u_r lives on r faces at this cell's own theta; rc is their midpoint exactly */
     const uIn = uV(i, k), uOut = uV(i + 1, k);
     const ur = 0.5*(uIn + uOut);
-    const dur_dr = (uOut - uIn)/this.drc[i];
-    const dur_dth = 0.25*(uV(i, k+1) - uV(i, k-1) + uV(i+1, k+1) - uV(i+1, k-1))/dth;
-    const dur_dz = 0.5*(uD(i, k) + uD(i + 1, k));
-
-    /* u_theta lives on theta faces at cell-centred radii */
-    const vLo = vV(i, k), vHi = vV(i, k+1);
+    const vLo = vV(i, k), vHi = vV(i, k + 1);
     const ut = 0.5*(vLo + vHi);
-    const dut_dth = (vHi - vLo)/dth;
-    const dvSpan = rcOf(i + 1) - rcOf(i - 1);
-    const dut_dr = 0.5*(vV(i+1, k) - vV(i-1, k) + vV(i+1, k+1) - vV(i-1, k+1))/dvSpan;
-    const dut_dz = 0.5*(vD(i, k) + vD(i, k+1));
 
-    /* u_z lives at cell-centred radii and this cell's own theta, with a node at sigma = 1 */
-    const duz_dz = wD(i, k);
-    const duz_dr = (wV(i+1, k) - wV(i-1, k))/dvSpan;
-    const duz_dth = 0.5*(wV(i, k+1) - wV(i, k-1))/dth;
+    out[0] = (uOut - uIn)/this.drc[i];
+    out[1] = 0.25*(uV(i, k+1) - uV(i, k-1) + uV(i+1, k+1) - uV(i+1, k-1))/(dth*r) - ut/r;
+    out[2] = 0.5*(uD(i, k) + uD(i + 1, k));
+    out[3] = 0.5*(vV(i+1, k) - vV(i-1, k) + vV(i+1, k+1) - vV(i-1, k+1))/span;
+    out[4] = (vHi - vLo)/(dth*r) + ur/r;
+    out[5] = 0.5*(vD(i, k) + vD(i, k+1));
+    out[6] = (wV(i+1, k) - wV(i-1, k))/span;
+    out[7] = 0.5*(wV(i, k+1) - wV(i, k-1))/(dth*r);
+    out[8] = wD(i, k);
+    return out;
+  }
 
-    out[0] = dur_dr;
-    out[1] = dut_dth/r + ur/r;
-    out[2] = duz_dz;
-    out[3] = 0.5*(dur_dth/r + dut_dr - ut/r);
-    out[4] = 0.5*(dur_dz + duz_dr);
-    out[5] = 0.5*(dut_dz + duz_dth/r);
+  /* The rate-of-strain tensor at the free surface above one pressure cell, as
+   *
+   *     [E_rr, E_thetatheta, E_zz, E_rtheta, E_rz, E_thetaz]
+   *
+   * which is the symmetric part of the nine derivatives above, and nothing more. */
+  surfaceStrain(i, k, out){
+    const g = this.surfaceGradient(i, k, this._sg);
+    out[0] = g[0];
+    out[1] = g[4];
+    out[2] = g[8];
+    out[3] = 0.5*(g[1] + g[3]);
+    out[4] = 0.5*(g[2] + g[6]);
+    out[5] = 0.5*(g[5] + g[7]);
+    return out;
+  }
+
+  /* The flux the vector Laplacian's sigma = 1 face must carry, for each velocity
+   * component, once the free-surface stress conditions are imposed: grad u_i . N at the
+   * surface, with N the unnormalised outward normal.
+   *
+   * WHY IT IS NOT JUST THE TRACTION. famLaplacian's sigma-face flux is proj*(grad f . N),
+   * and the free surface gives a traction, 2 rho nu E . n. For an incompressible flow with
+   * constant viscosity 2 nu div E and nu grad^2 u are the same VOLUME operator, but their
+   * face fluxes differ by nu u_{j,i} n_j -- a term that integrates to zero over a closed
+   * surface and does not vanish face by face. Putting a traction on this one face while
+   * every other face carries grad u_i . N would be a consistent discretisation of neither.
+   *
+   * The conversion is an identity, not an approximation. From E_ij = (u_{i,j} + u_{j,i})/2,
+   *
+   *     grad u_i . n  =  2 (E . n)_i  -  u_{j,i} n_j
+   *
+   * and the tangential stress condition is imposed by PROJECTION -- E . n is replaced by
+   * (n . E . n) n, which is exact at any slope -- so with the unnormalised normal, where
+   * E . N = lambda N and lambda = n . E . n,
+   *
+   *     grad u_i . N  =  2 lambda N_i  -  u_{j,i} N_j
+   *
+   * Nothing divides by 1 - |grad eta|^2 anywhere, so the forty-five degree degeneracy that
+   * defeats solving the tangential conditions for du/dz never appears. The derivation of
+   * that degeneracy is in dns/PLAN-cell3d.md.
+   *
+   * Filled into a caller-supplied three-element array as [radial, azimuthal, vertical],
+   * at the surface above one PRESSURE cell. Each momentum family's own sigma = 1 face takes
+   * its own component from here, interpolated to where that face sits. */
+  surfaceLapFluxes(i, k, out){
+    const g = this.surfaceGradient(i, k, this._sg);
+    const n = this.surfaceNormal(this.rc[i], (k + 0.5)*this.dth);
+    /* the unnormalised normal, whose radial and azimuthal parts are minus the surface
+       slopes and whose vertical part is exactly one -- which is what makes the tangential
+       traction vanish to the last bit rather than to an order */
+    const Nr = -n.sr, Nt = -n.st, Nz = 1;
+    const E0 = g[0], E1 = g[4], E2 = g[8];
+    const E3 = 0.5*(g[1] + g[3]), E4 = 0.5*(g[2] + g[6]), E5 = 0.5*(g[5] + g[7]);
+    /* lambda = n.E.n, formed with N and divided by |N|^2 */
+    const NEN = E0*Nr*Nr + E1*Nt*Nt + E2*Nz*Nz
+              + 2*(E3*Nr*Nt + E4*Nr*Nz + E5*Nt*Nz);
+    const lam = NEN/(n.len*n.len);
+    for (let c = 0; c < 3; c++)
+      out[c] = 2*lam*(c === 0 ? Nr : c === 1 ? Nt : Nz)
+             - (g[c]*Nr + g[3 + c]*Nt + g[6 + c]*Nz);
     return out;
   }
 
