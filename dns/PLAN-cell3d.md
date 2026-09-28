@@ -2,8 +2,10 @@
 
 **Session counter: 3**
 **Stages complete: 6 of 14, and S6 is under way**
-**Next action: the rest of S6 -- the surface stresses. The curvature is done and gated
-(gates 7a to 7d, 138 checks). What remains: the full normal stress
+**Next action: S6c -- the surface stresses. The curvature is done and gated (7a to 7d)
+and so is the outward normal (8a); 140 checks, 0 failed. The count was written as 138
+here for one commit, which was the total before 8a was added -- measured, not
+transcribed, and corrected. What remains: the full normal stress
 `rho g eta - gamma kappa + 2 rho nu n.E.n` with the WHOLE rate-of-strain contraction and
 not the flat-normal `2 rho nu dw/dz` the two-dimensional solver is entitled to; the two
 tangential conditions `t_j.(2 rho nu E).n = 0` supplying du/dz and dv/dz at sigma = 1;
