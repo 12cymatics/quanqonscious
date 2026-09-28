@@ -204,6 +204,9 @@ class FaradayCell3D {
     this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
     this._sg = new Float64Array(9);        // and its nine covariant derivatives
     this._sf3 = new Float64Array(3);       // the three surface Laplacian fluxes
+    this._fsr = new Float64Array(NE);      // and those three, over the whole surface
+    this._fst = new Float64Array(NE);
+    this._fsz = new Float64Array(NE);
 
     /* Node geometry, one descriptor per staggered family. Every family shares the
        same periodic uniform theta and the same flux algebra; they differ only in
@@ -237,11 +240,18 @@ class FaradayCell3D {
       v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      /* w's nodes run 0..nz, but its momentum equation is solved on 1..nz-1: the
-         floor value is zero by no slip and the surface value is set by the
-         free-surface conditions rather than by a momentum balance -- it has no
-         half cell above it to take a flux through. Both remain readable
-         neighbours. */
+      /* w's nodes run 0..nz; its VISCOUS term is solved on 1..nz-1, whose control
+         volumes never touch sigma = 1, so the surface node's viscous side is still
+         open. S5 made that node a solved ADVECTION unknown, and closing its viscous
+         side was tried here and reverted, with numbers: extending this range to nz
+         leaves the surface row at order 0.06 and 32% error on a deformed surface, and
+         1.16 at the node when flat. Two things are wrong and only one is understood --
+         the node sits ON its control volume's boundary rather than at its centroid, so
+         a flux balance is second order half a cell away from where the value is read
+         (measured: 1.16 at the node against 1.40 at the centroid, flat). The deformed
+         case is not explained by that and is not yet diagnosed. Recorded in
+         dns/PLAN-cell3d.md; the surface flux itself is right and gated in 8d, and u and
+         v do take it. */
       w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sf, sb: sbW, sLo: 1, sHi: nz - 1 }
@@ -848,9 +858,11 @@ class FaradayCell3D {
    * offset, and their boundaries, so this is written once and instantiated four
    * times. `bc(kind, r, th, sigma)` gives the field's value on a boundary face,
    * kind being 'rim', 'floor' or 'surface'; omitted, boundary faces carry zero
-   * flux. The axis needs no entry: at r = 0 the face area is exactly zero, and
+   * flux. `sFlux(a, k)`, if given, overrides the sigma = 1 face with grad f . N
+   * directly -- which is how the free surface is closed, because its condition is a
+   * traction and a traction is a flux, not a value. The axis needs no entry: at r = 0 the face area is exactly zero, and
    * inward stencils use the antipodal column with the family's reflection sign. */
-  famLaplacian(f, out, fam, bc){
+  famLaplacian(f, out, fam, bc, sFlux){
     const nth = this.nth, dth = this.dth;
     const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
     const nI = rn.length, nJ = sn.length;
@@ -951,6 +963,16 @@ class FaradayCell3D {
             const proj = rn[a]*dra*dth;
             const bn = side < 0 ? b - 1 : b + 1;
             let dsg;
+            if (bn > nJ - 1 && sFlux){
+              /* THE FREE SURFACE, closed by a FLUX rather than by a value. The bracket below
+                 computes grad f . N, where N is the sheet's unnormalised outward normal, and
+                 proj is its projected area -- so a caller that knows what grad f . N must be
+                 at the surface, because the stress conditions fix it, supplies exactly that
+                 and the rest of the branch is skipped. `bc` cannot express this: a traction is
+                 a flux, and there is no boundary VALUE that carries it. */
+              flux += side*proj*sFlux(a, k);
+              continue;
+            }
             if (bn < 0 || bn > nJ - 1){
               if (!bc) continue;
               const fo = bc(side < 0 ? 'floor' : 'surface', rn[a], th, sface);
@@ -1003,9 +1025,31 @@ class FaradayCell3D {
      `bcU`, `bcV`, `bcW` close the three scalar operators at the walls. */
   viscous(outU, outV, outW, bcU, bcV, bcW){
     const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
-    this.famLaplacian(this.u, outU, this.FAM.u, bcU);
-    this.famLaplacian(this.v, outV, this.FAM.v, bcV);
-    this.famLaplacian(this.w, outW, this.FAM.w, bcW);
+    /* The free surface's own flux, per component, formed once at every pressure cell and
+       then read at each family's sigma = 1 face. The three components live in different
+       places, so each is interpolated to where its own face sits: radially for u, whose
+       faces are at r faces; azimuthally for v, whose faces are at theta faces; and not at
+       all for w, whose face is already at the pressure cell's own position.
+
+       The arithmetic mean is second order at a u face on a smoothly graded radius and exact
+       at a v face, where theta is uniform. NOTHING GATES THAT INTERPOLATION YET: replacing
+       u's mean of two cells with one cell's value leaves the whole suite passing, because it
+       is a second-order error and the only gate that could see it -- a convergence test of
+       the composed operator at the surface row -- needs a probe field satisfying zero
+       tangential stress there. Recorded in dns/PLAN-cell3d.md as S6f's, not forgotten. */
+    const Fr = this._fsr, Ft = this._fst, Fz = this._fsz, t3 = this._sf3;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        this.surfaceLapFluxes(i, k, t3);
+        const e = this.ie(i, k);
+        Fr[e] = t3[0]; Ft[e] = t3[1]; Fz[e] = t3[2];
+      }
+    this.famLaplacian(this.u, outU, this.FAM.u, bcU,
+      (a, k) => 0.5*(Fr[this.ie(a - 1, k)] + Fr[this.ie(a, k)]));
+    this.famLaplacian(this.v, outV, this.FAM.v, bcV,
+      (a, k) => 0.5*(Ft[this.ie(a, k - 1)] + Ft[this.ie(a, k)]));
+    this.famLaplacian(this.w, outW, this.FAM.w, bcW,
+      (a, k) => Fz[this.ie(a, k)]);
 
     /* d v / d theta at a u node, and d u / d theta at a v node.
      *

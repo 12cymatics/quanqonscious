@@ -1736,6 +1736,44 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
   }
 }
 
+section('8e. the hook that puts a flux on the surface face, exactly');
+/* `surfaceLapFluxes` is gated in 8d and famLaplacian is gated in 4e and 4f, but the HOOK
+   between them is neither's business, and it is live: `viscous` uses it for u and v. So it is
+   checked on its own terms, and exactly rather than under refinement. The sigma = 1 face's
+   contribution is side*proj*sFlux and the operator divides by rn*dra*dtheta*H*dsigma, so
+   changing the supplied flux by C must change the surface row by exactly C/(H dsigma) and
+   must change nothing else at all. */
+{
+  const S = deform(new FaradayCell3D({ nr: 12, nth: 16, nz: 10, ...CELL }), 0.4);
+  const r = rnd(8123);
+  for (let c = 0; c < S.NU; c++) S.u[c] = 1e-3*r();
+  const fam = S.FAM.u, C = 0.37;
+  const a0 = new Float64Array(S.NU), a1 = new Float64Array(S.NU);
+  S.famLaplacian(S.u, a0, fam, () => 0, () => 0);
+  S.famLaplacian(S.u, a1, fam, () => 0, () => C);
+  let worstTop = 0, worstRest = 0, scale = 0;
+  for (let i = fam.rLo; i <= fam.rHi; i++)
+    for (let k = 0; k < S.nth; k++){
+      const H = S.Hat(S.rf[i], (k + 0.5)*S.dth).H;
+      for (let b = 0; b < S.nz; b++){
+        const c = S.iu(i, k, b), d = a1[c] - a0[c];
+        if (b === S.nz - 1){
+          const want = C/(H*S.dsc[b]);
+          worstTop = Math.max(worstTop, Math.abs(d - want));
+          scale = Math.max(scale, Math.abs(want));
+        } else worstRest = Math.max(worstRest, Math.abs(d));
+      }
+    }
+  ok(worstTop < 1e-12*scale,
+     'changing the supplied surface flux changes the surface row by exactly the flux over '
+     + 'the volume it crosses',
+     `worst ${worstTop.toExponential(3)} against ${scale.toExponential(3)}, relative `
+     + `${(worstTop/scale).toExponential(2)}`);
+  ok(worstRest === 0,
+     'and changes no other row at all, so the hook reaches the surface face and nothing else',
+     `worst change elsewhere ${worstRest.toExponential(3)}`);
+}
+
 section('8d. the surface flux: no tangential traction, and the flat limit next door');
 /* Three properties of `surfaceLapFluxes`, in increasing strength.
  *

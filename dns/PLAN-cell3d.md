@@ -2,7 +2,9 @@
 
 **Session counter: 3**
 **Stages complete: 6 of 14, and S6 is under way**
-**Next action: S6e -- wire the surface flux into the operator. `surfaceLapFluxes` now
+**Next action: S6f -- the w surface row, and two gaps S6e left open (both below, with
+numbers). Then the surface pressure, and S6 closes.
+(Superseded: S6e -- wire the surface flux into the operator. `surfaceLapFluxes` now
 gives, for each velocity component, exactly the flux famLaplacian's sigma = 1 face wants;
 what remains is (a) a `surfaceFlux` hook in famLaplacian's sigma = 1 boundary branch, which
 takes a FLUX where `bc` takes a value, (b) interpolating each component to its own family's
@@ -148,7 +150,8 @@ against this and need no further decision.
 | S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
 | S6c | Free surface: the strain tensor at the surface, and the viscous normal stress | **done** | all six components second order against calculus on a deformed surface, 1.97 to 4.35 at eta/h = 0 and 0.3, rim row included; 2 rho nu n.E.n second order (1.98) against the analytic contraction with the analytic normal at eta/h = 0.3 and 0.6; on a FLAT surface it equals `wzSurface` in the independently written two-dimensional solver to 1.1e-13 relative, and on a deformed one the flat form is wrong by 95.5% of the stress; five injected defects all red |
 | S6d | Free surface: the flux the Laplacian's surface face wants, from the traction | **done** | the tangential traction exactly zero at both tangents, at \|grad eta\| up to 0.30 -- exactly, not nearly; on a FLAT surface the radial and azimuthal fluxes are EXACTLY minus dw/dr and -(1/r)dw/dtheta, which is `surfaceSlopes` in the independently written two-dimensional solver; second order against the identity formed analytically, 1.98 to 1.99, at eta/h = 0.3 and 0.6; a flat surface's slopes and normal exactly zero and exactly vertical; five injected defects all red, two of them caught only by the exactness gates |
-| S6e | Free surface: wire it into famLaplacian, extend w to sigma = 1, and the surface pressure | todo | grad^2 w convergent including the surface row; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
+| S6e | Free surface: the flux hook in famLaplacian, and u and v closed by it | **done, in part** | the hook changes the surface row by exactly the flux over the volume it crosses and changes no other row at all; `viscous` supplies it for u and v. NOT done: w's surface row, and two untested things -- see below |
+| S6f | Free surface: w's surface row, the two gate gaps, and the surface pressure | todo | grad^2 w convergent at the surface row on a DEFORMED surface; the interpolation of each flux component to its own family's face; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -479,6 +482,47 @@ surface's slopes and normal are now exactly zero and exactly vertical. Both fact
 
 That fix is the one the injection test says is load-bearing: putting the weighted sum back
 leaves every order test passing and is caught ONLY by the two exactness gates.
+
+## What S6e closed, and the two things it did not
+
+**Closed.** famLaplacian's sigma = 1 boundary branch now accepts a FLUX where `bc` takes a
+value, because the free surface's condition is a traction and a traction is a flux -- there
+is no boundary value that carries one. `viscous` supplies it for u and v, interpolating each
+component to where its own face sits: radially for u, azimuthally for v. The hook is gated
+exactly, not under refinement: changing the supplied flux by C changes the surface row by
+exactly C/(H dsigma) and changes no other row at all.
+
+**Not closed, and measured rather than assumed.**
+
+*w's surface row.* Extending the w family's viscous range from 1..nz-1 to 1..nz was tried and
+reverted. With the surface flux supplied ANALYTICALLY, so that the flux itself cannot be the
+suspect:
+
+| | interior rows | surface row, at the node | at the CV centroid |
+|---|---|---|---|
+| flat | 1.99 | 1.16 | 1.40 |
+| eta/h = 0.4 | 1.65 | **0.06**, 32% error | 0.06 |
+
+Two things are wrong and only one is understood. The node at sigma = 1 sits ON its control
+volume's boundary rather than at its centroid, so a flux balance over that half cell is
+second order half a cell away from where the value is read -- which is the flat row's 1.16
+against 1.40, and which raises a design question S6f has to answer: is w[nz] a node value or
+a half-cell average? The two-dimensional solver next door takes the other route entirely, a
+pointwise one-sided second derivative at the node (`lapW`, line 322), which is second order
+at the node but not conservative. The deformed case's 0.06 is NOT explained by the centroid
+offset and is not yet diagnosed.
+
+Until that is settled the range stays at nz-1, where w's control volumes never touch
+sigma = 1, exactly as before S6e. The surface flux itself is right and gated in 8d; u and v
+do take it.
+
+*An untested interpolation.* The three flux components are interpolated to their own
+families' faces, and nothing checks that interpolation. Proven by injection: replacing u's
+mean of the two adjacent cells with one cell's value leaves all 170 checks passing. It is a
+second-order error, so only a convergence gate on the composed operator at the surface row
+would see it -- and gate 4f excludes the top row. Closing it needs a probe field that
+satisfies zero tangential stress at the surface, which is the same construction w's row
+needs, so both belong to S6f.
 
 ## Rules this build keeps
 
