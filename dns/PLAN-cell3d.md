@@ -145,7 +145,7 @@ against this and need no further decision.
 | S6 | Free surface: full mean curvature | **done** | the curvature of a sphere is -2/Rs wherever you stand on it, second order at 1.90, 1.88, 1.94 with \|grad eta\| up to 1.61; the curvature of a tilted plane is zero at second order outside r/R = 0.4, and the whole residual is alpha dtheta^2/r -- the same constant 8.01e-2, 8.13e-2, 8.16e-2 on three grids; kappa is the EXACT variational derivative of the discrete area, residual falling as eps^2 with ratio 4.00 on both contact branches; both contact conditions second order inside r/R = 0.9 (1.85/1.96 free, 1.97/1.99 pinned) and bounded by 9% without converging in the two rows at the rim; five injected defects all red |
 | S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
 | S6c | Free surface: the strain tensor at the surface, and the viscous normal stress | **done** | all six components second order against calculus on a deformed surface, 1.97 to 4.35 at eta/h = 0 and 0.3, rim row included; 2 rho nu n.E.n second order (1.98) against the analytic contraction with the analytic normal at eta/h = 0.3 and 0.6; on a FLAT surface it equals `wzSurface` in the independently written two-dimensional solver to 1.1e-13 relative, and on a deformed one the flat form is wrong by 95.5% of the stress; five injected defects all red |
-| S6d | Free surface: the traction on the momentum faces, and w solved at sigma = 1 | todo | the tangential traction exactly zero after projection; grad^2 w convergent including the surface row; the small-slope limit reproduces `surfaceSlopes` next door |
+| S6d | Free surface: the surface flux on the momentum faces, and w solved at sigma = 1 | todo | see "the surface flux is not the traction" below -- route 2, the basis identity. Gates: the tangential traction exactly zero after projection; grad^2 w convergent including the surface row; the small-slope limit reproduces `surfaceSlopes` next door |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -381,6 +381,63 @@ n.E.n right: a dropped or mis-signed cross term leaves every component correct a
 stress wrong, and the flat limit cannot see it either, because on a flat surface every cross
 term is multiplied by a normal component that is zero. Dropping the radial-vertical cross
 term is red only on that gate, at order -0.01.
+
+## S6d: the surface flux is not the traction, and the fix is an identity
+
+Found while writing S6d, before writing any of it, and it changes the design.
+
+`famLaplacian`'s sigma-face flux is exactly `proj * (grad f . N)` with
+`N = (-sigma H_r, -sigma H_theta/r, 1)` the sheet's unnormalised normal and
+`proj = rn dra dtheta` its projected area -- which is right, because
+`dA = |N| dA_proj` and `n = N/|N|`, so `grad f . n dA` is `(grad f . N) dA_proj` with the
+normalisation cancelling exactly.
+
+The free-surface condition, though, gives a TRACTION: `tau . n = 2 rho nu E . n`. And for
+an incompressible flow with constant viscosity
+
+    2 nu div E = nu grad^2 u        (as volume operators, since div u = 0)
+
+but their FACE FLUXES are not the same: `2 nu E . n` and `nu grad u_i . n` differ by
+`nu u_{j,i} n_j`, a term that integrates to zero over a closed surface and does not vanish
+face by face. **So substituting the traction for the Laplacian's flux on the surface face,
+while every other face carries `grad u_i . N`, is a consistent discretisation of neither
+operator.** Two ways out:
+
+1. Rebuild the viscous term as `2 nu div E`, so that every face carries a traction. Correct,
+   and a large change: the full strain tensor at every interior face, and S4b's gates redone.
+2. Keep `nu grad^2 u` and convert the traction into the flux that operator wants. This is an
+   identity, not an approximation, and it needs no elimination:
+
+       E_ij = 1/2 (u_{i,j} + u_{j,i})   =>   grad u_i . n = 2 (E . n)_i - u_{j,i} n_j
+
+   After the tangential projection `E . n = lambda n` with `lambda = n . E . n`, so with the
+   unnormalised normal (`E . N = lambda N`)
+
+       grad u_i . N  =  2 lambda N_i  -  u_{j,i} N_j
+
+   and every term of `u_{j,i} N_j` is a derivative the surface strain machinery already
+   forms:
+
+       i = r      du_r/dr,  du_th/dr,  du_z/dr
+       i = theta  (1/r)du_r/dtheta - u_th/r,  (1/r)du_th/dtheta + u_r/r,  (1/r)du_z/dtheta
+       i = z      du_r/dz,  du_th/dz,  du_z/dz
+
+   No division by `1 - |grad eta|^2` anywhere, so the forty-five degree degeneracy never
+   appears; the projection is what disposes of the tangential stress, and this identity only
+   changes bases.
+
+**Take route 2.** It keeps an operator that is already gated second order at every family
+and every deformation, and the conversion is exact.
+
+One thing route 2 needs that is not yet built: `surfaceStrain` is written for the PRESSURE
+cell's position, and the flux is wanted at each momentum family's own sigma = 1 face --
+`(rf, theta_c)` for u, `(rc, theta_k)` for v, `(rc, theta_c)` for w. So it has to take a
+family rather than assume one. That is the first task of S6d, and it is a generalisation of
+working code rather than new numerics.
+
+`famLaplacian` also needs its sigma = 1 boundary branch to accept a FLUX instead of a
+boundary value, since a traction is a flux; and with that in place the w family's range goes
+from `1..nz-1` to `1..nz`, which closes the surface node S5 made a solved advection unknown.
 
 ## Rules this build keeps
 
