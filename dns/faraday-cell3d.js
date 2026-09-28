@@ -559,34 +559,6 @@ class FaradayCell3D {
 
   /* ---- the axis ---------------------------------------------------------- */
 
-  /* A value across the axis, by reflection. The point at radius -r and angle
-     theta IS the point at radius r and angle theta + pi, so a stencil reaching
-     inside r = 0 reads the antipodal column -- with a sign that depends on what
-     is being reflected:
-
-        p, w      even:  f(-r, theta) =  f(r, theta + pi)
-        u_r, u_th odd:   f(-r, theta) = -f(r, theta + pi)
-
-     because r-hat and theta-hat both reverse under the reflection while z-hat
-     does not. This is exact for every azimuthal mode, including m = 1 -- the one
-     a single-mode solver cannot handle, since at the axis only the m = 1 harmonic
-     of u_r and u_theta survives at all, and dns/faraday-disc.js refuses m = 1 for
-     precisely that reason. Here every mode is present at once and none is
-     refused.
-
-     nth is required even so that k + nth/2 is an exact index rather than an
-     interpolation between two columns. That is the reason for the requirement.
-
-     `sign` is +1 for a scalar and -1 for a horizontal vector component. */
-  across(f, sign, idx, i, k, j){
-    if (i >= 0) return f[idx(i, k, j)];
-    return sign*f[idx(-1 - i, k + (this.nth >> 1), j)];
-  }
-
-  /* The radial coordinate of a node index continued across the axis, so a
-     difference taken through r = 0 has the right denominator. */
-  rcAcross(i){ return i >= 0 ? this.rc[i] : -this.rc[-1 - i]; }
-
   /* The radial velocity at the axis. u_r is not stored there as an independent
      value: a single-valued vector field requires u_r(0, theta) = -u_r(0, theta+pi),
      so the axis row is the antisymmetric part of an extrapolation from the two
@@ -652,147 +624,6 @@ class FaradayCell3D {
   }
 
   /* ---- the viscous operator -------------------------------------------- */
-
-  /* The Laplacian of a cell-centred scalar, in flux form, with the full metric
-     of the surface-following map.
-
-     Only the sigma-faces are non-orthogonal. An r = const surface still has
-     normal r-hat and a theta = const surface still has normal theta-hat, but a
-     sigma = const surface is the curved sheet z = sigma H(r, theta), whose normal
-     is proportional to (-sigma H_r, -sigma H_theta/r, 1) -- so its flux carries
-     the two tangential gradients as well as the normal one. Those two cross terms
-     are exactly what a flat test surface cannot detect, which is why the gate
-     deforms the surface and checks this against an analytic Laplacian under
-     refinement rather than against a tolerance on one grid.
-
-     Flux form, not a pointwise chain rule: the same face flux is used by both
-     cells that share the face, which makes the assembled operator symmetric, and
-     a symmetric operator built from face-normal differences is dissipative --
-     which a viscous term must be, or it feeds the flow instead of damping it.
-
-     `bc` supplies the value outside a boundary face, as bc(side, i, k, j); when it
-     is omitted every boundary face carries zero flux, which is the natural
-     condition and is what the interior stencil is tested against. */
-  scalarLaplacian(f, out, bc){
-    const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
-    const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf;
-    const sf = this.sf, sc = this.sc, dsc = this.dsc, dsf = this.dsf;
-    const H = this.H, Hr = this.Hr, Hth = this.Hth;
-    const at = (i, k, j) => f[this.ip(i, k, j)];
-    /* d f / d sigma at a cell centre, centred where both neighbours exist and
-       one-sided at the floor and the surface. */
-    const dfds = (i, k, j) => {
-      if (nz === 1) return 0;
-      if (j === 0) return (at(i, k, 1) - at(i, k, 0))/(sc[1] - sc[0]);
-      if (j === nz - 1) return (at(i, k, nz-1) - at(i, k, nz-2))/(sc[nz-1] - sc[nz-2]);
-      return (at(i, k, j+1) - at(i, k, j-1))/(sc[j+1] - sc[j-1]);
-    };
-    /* d f / d r at a cell centre. Centred everywhere including the axis cell,
-       where the inward neighbour is the antipodal column reflected through r = 0:
-       a scalar is even under that reflection, so the value carries a plus sign
-       and the denominator spans rc[1] - (-rc[0]). A one-sided difference there
-       would be first order in the one place the metric cross terms are largest. */
-    const idx = (a, b, c) => this.ip(a, b, c);
-    const dfdr = (i, k, j) => {
-      if (nr === 1) return 0;
-      if (i === nr - 1) return (at(nr-1, k, j) - at(nr-2, k, j))/(rc[nr-1] - rc[nr-2]);
-      const inward = this.across(f, +1, idx, i - 1, k, j);
-      return (at(i+1, k, j) - inward)/(rc[i+1] - this.rcAcross(i - 1));
-    };
-    /* theta is periodic, so this is always centred. */
-    const dfdth = (i, k, j) => (at(i, k+1, j) - at(i, k-1, j))/(2*dth);
-
-    for (let i = 0; i < nr; i++){
-      for (let k = 0; k < nth; k++){
-        const kk = this.kw(k);
-        const e = this.ie(i, k);
-        const Hc = H[e];
-        for (let j = 0; j < nz; j++){
-          const fc = at(i, k, j);
-          let flux = 0;
-
-          /* ---- r faces ---- */
-          for (const side of [-1, +1]){
-            const iface = side < 0 ? i : i + 1;
-            const area0 = rf[iface]*dth*this.Hr[iface*nth + kk]*dsc[j];
-            if (iface === 0) continue;          // axis: rf = 0, so the area is zero
-            let dr, dsigma, Hface, Hrface;
-            if (iface === nr){
-              /* rim: the wall. With no bc supplied the flux is zero. */
-              if (!bc) continue;
-              const fo = bc('rim', i, k, j);
-              dr = (fo - fc)/drf[nr];
-              dsigma = dfds(i, k, j);
-              Hface = this.Hr[nr*nth + kk];
-              Hrface = (fo === fo ? (Hface - Hc)/drf[nr] : 0);
-            } else if (iface === i){
-              const fo = at(i-1, k, j);
-              dr = (fc - fo)/drf[i];
-              dsigma = 0.5*(dfds(i-1, k, j) + dfds(i, k, j));
-              Hface = this.Hr[i*nth + kk];
-              Hrface = (Hc - H[this.ie(i-1, k)])/drf[i];
-            } else {
-              const fo = at(i+1, k, j);
-              dr = (fo - fc)/drf[i+1];
-              dsigma = 0.5*(dfds(i, k, j) + dfds(i+1, k, j));
-              Hface = this.Hr[(i+1)*nth + kk];
-              Hrface = (H[this.ie(i+1, k)] - Hc)/drf[i+1];
-            }
-            const gradR = dr - (sc[j]*Hrface/Hface)*dsigma;
-            flux += side*area0*gradR;
-          }
-
-          /* ---- theta faces: periodic, always two of them ---- */
-          for (const side of [-1, +1]){
-            const kface = side < 0 ? k : k + 1;
-            const kf = this.kw(kface);
-            const Hface = this.Hth[i*nth + kf];
-            const area = drc[i]*Hface*dsc[j];
-            const fo = side < 0 ? at(i, k-1, j) : at(i, k+1, j);
-            const dth_ = side < 0 ? (fc - fo)/dth : (fo - fc)/dth;
-            const dsigma = 0.5*(dfds(i, k, j)
-                              + dfds(i, side < 0 ? k-1 : k+1, j));
-            const Hthface = side < 0 ? (Hc - H[this.ie(i, k-1)])/dth
-                                     : (H[this.ie(i, k+1)] - Hc)/dth;
-            const gradT = (dth_ - (sc[j]*Hthface/Hface)*dsigma)/rc[i];
-            flux += side*area*gradT;
-          }
-
-          /* ---- sigma faces: the non-orthogonal ones ---- */
-          for (const side of [-1, +1]){
-            const jface = side < 0 ? j : j + 1;
-            const proj = rc[i]*drc[i]*dth;
-            let dsigma, drAt, dthAt;
-            if (jface === 0 || jface === nz){
-              if (!bc) continue;                // natural: no flux through floor or surface
-              const fo = bc(jface === 0 ? 'floor' : 'surface', i, k, j);
-              dsigma = jface === 0 ? (fc - fo)/dsf[0] : (fo - fc)/dsf[nz];
-              drAt = dfdr(i, k, j);
-              dthAt = dfdth(i, k, j);
-            } else {
-              const jo = side < 0 ? j - 1 : j + 1;
-              dsigma = side < 0 ? (fc - at(i, k, j-1))/dsf[j]
-                                : (at(i, k, j+1) - fc)/dsf[j+1];
-              drAt = 0.5*(dfdr(i, k, j) + dfdr(i, k, jo));
-              dthAt = 0.5*(dfdth(i, k, j) + dfdth(i, k, jo));
-            }
-            const sg = sf[jface];
-            const Hrc = this.Hdr[e], Hthc = this.Hdth[e];
-            /* the physical gradients tangential to the sheet */
-            const gradR = drAt - (sg*Hrc/Hc)*dsigma;
-            const gradT = dthAt - (sg*Hthc/Hc)*dsigma;
-            const normal = dsigma/Hc
-                         - sg*Hrc*gradR
-                         - (sg*Hthc/(rc[i]*rc[i]))*gradT;
-            flux += side*proj*normal;
-          }
-
-          out[this.ip(i, k, j)] = flux/(rc[i]*drc[i]*dth*Hc*dsc[j]);
-        }
-      }
-    }
-    return out;
-  }
 
   /* The metric Laplacian at any of the four node families.
    *
@@ -1033,6 +864,290 @@ class FaradayCell3D {
     return [outU, outV, outW];
   }
 
+  /* ---- advection -------------------------------------------------------- */
+
+  /* The volumetric face fluxes of a PRESSURE cell, in the transformed coordinates.
+   * The radial and azimuthal ones are exactly the terms divergence() forms. The
+   * vertical one comes in three pieces because the sigma sheets themselves move
+   * when eta does:
+   *
+   *     fluxSabs    r Omega, the absolute transport, what continuity balances
+   *     fluxSmesh   r sigma dH/dt, the sheet's own motion
+   *     fluxS       their difference, the GRID-RELATIVE transport, which is what
+   *                 carries momentum across a moving sheet
+   *
+   * NOTHING IS CLAMPED TO ZERO AT A BOUNDARY, and that is the point. Each of the
+   * four boundary fluxes is already exactly zero for a physical reason:
+   *
+   *     r = 0     rf[0] is exactly zero, so the axis face has no area
+   *     r = R     no penetration, so u at the rim is zero
+   *     sigma = 0 no slip, so Omega on the floor is zero, and sigma kills the mesh
+   *               term there in any case
+   *     sigma = 1 the surface is material, so Omega there IS dH/dt and the two
+   *               pieces are a floating-point difference of equals
+   *
+   * Writing the expressions out rather than clamping means a violated boundary
+   * condition shows up as a divergence or an energy imbalance, instead of being
+   * masked by a branch that answers zero whatever the state says. */
+  fluxR(i, k, b){
+    return this.dth*this.dsc[b]*this.rf[i]*this.Hr[i*this.nth + this.kw(k)]
+         * this.u[this.iu(i, k, b)];
+  }
+  fluxTh(i, k, b){
+    return this.drc[i]*this.dsc[b]*this.Hth[i*this.nth + this.kw(k)]
+         * this.v[this.iv(i, k, b)];
+  }
+  fluxSabs(i, k, b){
+    return this.rc[i]*this.drc[i]*this.dth*this.om[this.iw(i, k, b)];
+  }
+  fluxSmesh(i, k, b){
+    return this.rc[i]*this.drc[i]*this.dth*this.sf[b]*this.Ht[this.ie(i, k)];
+  }
+  fluxS(i, k, b){ return this.fluxSabs(i, k, b) - this.fluxSmesh(i, k, b); }
+
+  /* The transport part of the advective term, in conservative flux form, centred.
+   *
+   * NO UPWINDING. Upwinding adds numerical dissipation, which is indistinguishable
+   * from viscosity in the answer and would fake the damping that sets the Faraday
+   * threshold. Centred flux-form advection is exactly energy neutral instead, which
+   * is an identity the gate checks rather than a tolerance it tolerates.
+   *
+   * THE FORM IS THE MOVING-MESH ONE, and it is not the same as minus the flux
+   * divergence. On a mesh that moves, what the finite-volume balance conserves is
+   * the momentum CONTENT of a cell, V u, not u:
+   *
+   *     d(V u)/dt + sum_faces F_rel phi = 0   ==>   V du/dt = -f - u dV/dt
+   *
+   * so the rate of change of the cell's own volume appears, and it must be taken as
+   * the net of the SAME mesh fluxes that were subtracted to make F_rel -- the
+   * discrete geometric conservation law. Drop the term and a field that is uniform
+   * over a surface rising uniformly accelerates out of nothing: measured without it,
+   * the energy residual on a divergence-free field sat at 2.5e-3 of the terms it
+   * sums and would not move when the projection tolerance was tightened by five
+   * decades, because it was not the projection's error at all.
+   *
+   * THE ADVECTED QUANTITY IS A PLAIN ARITHMETIC MEAN, not a common-height
+   * reconstruction, and that is deliberate. The common-height rule exists because a
+   * physical DERIVATIVE under z = sigma H is a difference of two O(1) terms that
+   * must cancel; an average has no cancellation to protect, and the flux form in
+   * these coordinates never forms such a difference. What the mean must do instead
+   * is telescope: with the face value equal to the mean of its two neighbouring
+   * nodes, each interior face contributes Q (u_R^2 - u_L^2)/2 and the sum regroups
+   * onto the cells. Reconstructing at a common height breaks that and the scheme
+   * stops conserving energy.
+   *
+   * THE TRANSPORT FLUXES ARE THE PRESSURE CELLS' OWN, AVERAGED ONTO THE MOMENTUM
+   * CONTROL VOLUMES, and the averaging is what makes the net flux collapse:
+   *
+   *     net absolute flux out of a momentum cell
+   *         = 1/2 (divergence of one neighbour + divergence of the other)
+   *
+   * exactly, for any field whatever. Building the momentum fluxes independently
+   * would leave a residual behaving like a spurious source. The one-sided cases are
+   * the same statement: the u cell at i = 1 and the w half cell at sigma = 1 each
+   * straddle a single pressure cell and collapse to half that one cell's divergence.
+   *
+   * w IS SOLVED AT SIGMA = 1, on the half cell between sc[nz-1] and the surface.
+   * Its horizontal faces carry half of the last pressure cell's fluxes -- half
+   * because sc[nz-1] is exactly the midpoint of that cell -- and its top face
+   * carries the grid-relative flux there, which the kinematic condition makes zero.
+   * Leaving that node out would put a face with non-zero flux on the edge of the
+   * energy sum, and the identity would hold only up to the work done through it. */
+  advectTransport(outU, outV, outW){
+    const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
+    const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf;
+    const dsc = this.dsc, dsf = this.dsf;
+    const u = this.u, v = this.v, w = this.w, half = nth >> 1;
+
+    const Qr = (i, k, b) => this.fluxR(i, k, b);
+    const Qt = (i, k, b) => this.fluxTh(i, k, b);
+    const Qs = (i, k, b) => this.fluxS(i, k, b);
+    const Qm = (i, k, b) => this.fluxSmesh(i, k, b);
+
+    outU.fill(0); outV.fill(0); outW.fill(0);
+
+    /* ---- radial momentum, on the u control volumes ------------------------
+       rc[i-1] .. rc[i] in r, one pressure cell in theta and in sigma. Its r faces
+       sit at the two pressure centres either side, so each carries the mean of the
+       fluxes through the two cell faces bracketing it; its theta and sigma faces
+       each span half of each of the two cells it straddles, so each carries the
+       mean of those two cells' fluxes there. Only the sigma faces move. */
+    for (let i = 1; i < nr; i++){
+      for (let k = 0; k < nth; k++){
+        const Hf = this.Hr[i*nth + this.kw(k)];
+        for (let b = 0; b < nz; b++){
+          const c = this.iu(i, k, b);
+          const V = rf[i]*drf[i]*dth*Hf*dsc[b];
+          const QrIn  = 0.5*(Qr(i-1, k, b) + Qr(i, k, b));
+          const QrOut = 0.5*(Qr(i, k, b)   + Qr(i+1, k, b));
+          const QtLo  = 0.5*(Qt(i-1, k, b) + Qt(i, k, b));
+          const QtHi  = 0.5*(Qt(i-1, k+1, b) + Qt(i, k+1, b));
+          const QsLo  = 0.5*(Qs(i-1, k, b) + Qs(i, k, b));
+          const QsHi  = 0.5*(Qs(i-1, k, b+1) + Qs(i, k, b+1));
+          const QmLo  = 0.5*(Qm(i-1, k, b) + Qm(i, k, b));
+          const QmHi  = 0.5*(Qm(i-1, k, b+1) + Qm(i, k, b+1));
+          /* below the first sigma node the wall value is zero by no slip; above the
+             last there is no u node, so the nearest value stands. Both faces carry
+             exactly zero flux, so neither choice enters the answer -- they exist
+             because a face value has to be a number. */
+          const uDn = b === 0      ? 0 : u[this.iu(i, k, b-1)];
+          const uUp = b === nz - 1 ? u[c] : u[this.iu(i, k, b+1)];
+          const f = QrOut*0.5*(u[c] + u[this.iu(i+1, k, b)])
+                  - QrIn *0.5*(u[this.iu(i-1, k, b)] + u[c])
+                  + QtHi *0.5*(u[c] + u[this.iu(i, k+1, b)])
+                  - QtLo *0.5*(u[this.iu(i, k-1, b)] + u[c])
+                  + QsHi *0.5*(u[c] + uUp)
+                  - QsLo *0.5*(uDn + u[c]);
+          outU[c] = -(f + u[c]*(QmHi - QmLo))/V;
+        }
+      }
+    }
+
+    /* ---- azimuthal momentum, on the v control volumes --------------------- */
+    for (let i = 0; i < nr; i++){
+      for (let k = 0; k < nth; k++){
+        const Hf = this.Hth[i*nth + this.kw(k)];
+        for (let b = 0; b < nz; b++){
+          const c = this.iv(i, k, b);
+          const V = rc[i]*drc[i]*dth*Hf*dsc[b];
+          const QrIn  = 0.5*(Qr(i, k-1, b)   + Qr(i, k, b));
+          const QrOut = 0.5*(Qr(i+1, k-1, b) + Qr(i+1, k, b));
+          const QtLo  = 0.5*(Qt(i, k-1, b) + Qt(i, k, b));
+          const QtHi  = 0.5*(Qt(i, k, b)   + Qt(i, k+1, b));
+          const QsLo  = 0.5*(Qs(i, k-1, b) + Qs(i, k, b));
+          const QsHi  = 0.5*(Qs(i, k-1, b+1) + Qs(i, k, b+1));
+          const QmLo  = 0.5*(Qm(i, k-1, b) + Qm(i, k, b));
+          const QmHi  = 0.5*(Qm(i, k-1, b+1) + Qm(i, k, b+1));
+          /* inward of the first column the continuation is the antipodal one with
+             u_theta's own sign; outward of the last the sidewall holds v at zero.
+             Both faces carry exactly zero flux. */
+          const vIn  = i === 0      ? -v[this.iv(0, k + half, b)] : v[this.iv(i-1, k, b)];
+          const vOut = i === nr - 1 ? 0 : v[this.iv(i+1, k, b)];
+          const vDn  = b === 0      ? 0 : v[this.iv(i, k, b-1)];
+          const vUp  = b === nz - 1 ? v[c] : v[this.iv(i, k, b+1)];
+          const f = QrOut*0.5*(v[c] + vOut)
+                  - QrIn *0.5*(vIn + v[c])
+                  + QtHi *0.5*(v[c] + v[this.iv(i, k+1, b)])
+                  - QtLo *0.5*(v[this.iv(i, k-1, b)] + v[c])
+                  + QsHi *0.5*(v[c] + vUp)
+                  - QsLo *0.5*(vDn + v[c]);
+          outV[c] = -(f + v[c]*(QmHi - QmLo))/V;
+        }
+      }
+    }
+
+    /* ---- vertical momentum, on the w control volumes ---------------------
+       sc[b-1] .. sc[b] in sigma for b below nz, and sc[nz-1] .. 1 for the surface
+       half cell. There is no pressure cell at b = nz, so that half cell's
+       horizontal faces carry half of cell nz-1's fluxes and nothing else; its top
+       face carries the full flux at sigma = 1. */
+    for (let i = 0; i < nr; i++){
+      for (let k = 0; k < nth; k++){
+        const Hc = this.H[this.ie(i, k)];
+        for (let b = 1; b <= nz; b++){
+          const c = this.iw(i, k, b);
+          const V = rc[i]*drc[i]*dth*Hc*dsf[b];
+          const top = b === nz;
+          const QrIn  = 0.5*(Qr(i, k, b-1)   + (top ? 0 : Qr(i, k, b)));
+          const QrOut = 0.5*(Qr(i+1, k, b-1) + (top ? 0 : Qr(i+1, k, b)));
+          const QtLo  = 0.5*(Qt(i, k, b-1)   + (top ? 0 : Qt(i, k, b)));
+          const QtHi  = 0.5*(Qt(i, k+1, b-1) + (top ? 0 : Qt(i, k+1, b)));
+          const QsLo  = 0.5*(Qs(i, k, b-1) + Qs(i, k, b));
+          const QsHi  = top ? Qs(i, k, nz) : 0.5*(Qs(i, k, b) + Qs(i, k, b+1));
+          const QmLo  = 0.5*(Qm(i, k, b-1) + Qm(i, k, b));
+          const QmHi  = top ? Qm(i, k, nz) : 0.5*(Qm(i, k, b) + Qm(i, k, b+1));
+          /* inward of the first column the continuation is the antipodal one, and w
+             is a scalar under that reflection; outward of the last the sidewall
+             holds w at zero. Above the surface node there is nothing, so the node
+             itself stands -- against a flux the kinematic condition makes zero. */
+          const wIn  = i === 0      ? w[this.iw(0, k + half, b)] : w[this.iw(i-1, k, b)];
+          const wOut = i === nr - 1 ? 0 : w[this.iw(i+1, k, b)];
+          const wUp  = top ? w[c] : w[this.iw(i, k, b+1)];
+          const f = QrOut*0.5*(w[c] + wOut)
+                  - QrIn *0.5*(wIn + w[c])
+                  + QtHi *0.5*(w[c] + w[this.iw(i, k+1, b)])
+                  - QtLo *0.5*(w[this.iw(i, k-1, b)] + w[c])
+                  + QsHi *0.5*(w[c] + wUp)
+                  - QsLo *0.5*(w[this.iw(i, k, b-1)] + w[c]);
+          outW[c] = -(f + w[c]*(QmHi - QmLo))/V;
+        }
+      }
+    }
+    return [outU, outV, outW];
+  }
+
+  /* The two terms the rotating basis contributes to the cylindrical momentum
+   * equations, +u_theta^2/r in the radial one and -u_r u_theta/r in the azimuthal.
+   *
+   * THEY CANCEL EXACTLY IN THE ENERGY, and getting that cancellation is the whole
+   * design of this method. In the continuum the cancellation is POINTWISE:
+   * u_r (u_theta^2/r) - u_theta (u_r u_theta / r) = 0 at every point, so the basis
+   * contributes no energy. On a staggered grid u_r and u_theta live in different
+   * places, and interpolating each to the other's node -- the obvious thing --
+   * leaves (mean v)^2 on one side against v^2 on the other, which do not cancel:
+   * the pair then acts as an energy source of the scheme's own truncation order.
+   *
+   * What does cancel is to form the product at ONE place, the pressure cell centre,
+   * where both components have a single value, and to distribute it to the two
+   * momentum equations as exact adjoints of those cell-centre averages. With
+   *
+   *     uc = (u(i) + u(i+1))/2,  vc = (v(k) + v(k+1))/2,  Vc the cell volume
+   *
+   * the radial term at node i takes half of each neighbouring cell's Vc vc^2/rc and
+   * the azimuthal term at node k takes half of each neighbouring cell's
+   * Vc (uc/rc) vc. Summing V u C over the radial nodes then gives
+   * +sum_cells Vc uc vc^2/rc and over the azimuthal nodes -sum_cells Vc uc vc^2/rc,
+   * the same number twice with opposite signs, and the two cancel in floating point
+   * to the last bit rather than to an order.
+   *
+   * Two terms survive at the ends of the radial direction, where a cell has only
+   * one momentum node inside the sum: 1/2 Vc(0) Gv(0) u(0) at the axis and
+   * 1/2 Vc(nr-1) Gv(nr-1) u(nr) at the rim. The rim one is identically zero, because
+   * no penetration holds u(nr) at zero. The axis one is not zero, and it is not
+   * hidden either: u_r at r = 0 is not an unknown but the antisymmetric extrapolation
+   * of the two columns outside it, so its control volume has exactly zero measure and
+   * the faces it shares with node 1 have no partner inside the energy sum. What that
+   * costs is derived in closed form and asserted term for term in the gate, on a
+   * uniform Cartesian field, which advects itself to exactly nothing: the residual is
+   * second order in dtheta at a fixed radius and first order at the first cell, where
+   * the radius is itself a spacing, and no interpolation removes it. */
+  advectCurvature(outU, outV){
+    const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
+    const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf, dsc = this.dsc;
+    const u = this.u, v = this.v, H = this.H;
+
+    const Vcell = (i, k, b) => rc[i]*drc[i]*dth*H[this.ie(i, k)]*dsc[b];
+    const ucell = (i, k, b) => 0.5*(u[this.iu(i, k, b)] + u[this.iu(i+1, k, b)]);
+    const vcell = (i, k, b) => 0.5*(v[this.iv(i, k, b)] + v[this.iv(i, k+1, b)]);
+    /* u_theta^2/r and (u_r/r) u_theta at a cell centre */
+    const Gv = (i, k, b) => { const t = vcell(i, k, b); return t*t/rc[i]; };
+    const Pu = (i, k, b) => ucell(i, k, b)*vcell(i, k, b)/rc[i];
+
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = this.Hr[i*nth + this.kw(k)];
+        for (let b = 0; b < nz; b++)
+          outU[this.iu(i, k, b)] +=
+            0.5*(Vcell(i-1, k, b)*Gv(i-1, k, b) + Vcell(i, k, b)*Gv(i, k, b))
+            / (rf[i]*drf[i]*dth*Hf*dsc[b]);
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = this.Hth[i*nth + this.kw(k)];
+        for (let b = 0; b < nz; b++)
+          outV[this.iv(i, k, b)] -=
+            0.5*(Vcell(i, k-1, b)*Pu(i, k-1, b) + Vcell(i, k, b)*Pu(i, k, b))
+            / (rc[i]*drc[i]*dth*Hf*dsc[b]);
+      }
+    return [outU, outV];
+  }
+
+  advect(outU, outV, outW){
+    this.advectTransport(outU, outV, outW);
+    this.advectCurvature(outU, outV);
+    return [outU, outV, outW];
+  }
+
   /* Omega from the physical velocity, and back. The definition is
          Omega = w - sigma (u dH/dr + (v/r) dH/dtheta)
      so the two directions differ only in the sign of the slope term. Both are
@@ -1074,23 +1189,6 @@ class FaradayCell3D {
     return s*(uu*this.Hdr[e] + (vv/this.rc[i])*this.Hdth[e]);
   }
 
-  /* Physical vertical velocity, from Omega and the metric: the definition of
-     Omega, rearranged. Needed by the viscous term and by anything reporting the
-     field, and never stored, so it cannot go stale against Omega. */
-  wAt(i, k, j){
-    const e = this.ie(i, k);
-    const s = this.sf[j];
-    /* u and v at this sigma face of this cell: the radial average of the cell's
-       two r faces, and the azimuthal average of its two theta faces, each taken
-       at the sigma cells either side of the face. */
-    const jm = j === 0 ? 0 : j - 1, jp = j === this.nz ? this.nz - 1 : j;
-    const uu = 0.25*(this.u[this.iu(i, k, jm)] + this.u[this.iu(i+1, k, jm)]
-                   + this.u[this.iu(i, k, jp)] + this.u[this.iu(i+1, k, jp)]);
-    const vv = 0.25*(this.v[this.iv(i, k, jm)] + this.v[this.iv(i, k+1, jm)]
-                   + this.v[this.iv(i, k, jp)] + this.v[this.iv(i, k+1, jp)]);
-    return this.om[this.iw(i, k, j)]
-         + s*(uu*this.Hdr[e] + (vv/this.rc[i])*this.Hdth[e]);
-  }
 }
 
 const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D };
