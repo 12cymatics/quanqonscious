@@ -1,14 +1,16 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
 **Session counter: 3**
-**Stages complete: 6 of 14**
-**Next action: S6 -- the free surface. Full mean curvature, normal stress, tangential
-stress, and the kinematic update. One thing S5 left for it: the advection now solves w
-at sigma = 1, on the half cell between sc[nz-1] and the surface, because leaving that
-node out of the energy sum put a face with non-zero flux on the sum's edge.
-`famLaplacian` still stops at nz-1 for the w family, so the viscous term at the surface
-node is not yet computed -- it is the normal-stress condition that supplies that face's
-flux, which is S6's job. That gap is recorded here rather than papered over.**
+**Stages complete: 6 of 14, and S6 is under way**
+**Next action: the rest of S6 -- the surface stresses. The curvature is done and gated
+(gates 7a to 7d, 138 checks). What remains: the full normal stress
+`rho g eta - gamma kappa + 2 rho nu n.E.n` with the WHOLE rate-of-strain contraction and
+not the flat-normal `2 rho nu dw/dz` the two-dimensional solver is entitled to; the two
+tangential conditions `t_j.(2 rho nu E).n = 0` supplying du/dz and dv/dz at sigma = 1;
+and `famLaplacian`'s w family extended from nz-1 to nz, which is what closes the surface
+node S5 made a solved advection unknown. `dns/faraday-disc.js`'s `lapW` (line 322) is the
+pattern for that last one: it solves w at the surface and closes the top face on
+`wzSurface`, the three-point quadratic of w's own column.**
 
 ### Read this before touching any operator: compare at a common physical height
 
@@ -131,7 +133,8 @@ against this and need no further decision.
 | S4a | Staggered node geometry, u_r at the axis, metric interpolation | **done** | descriptors shape-checked; axis row exactly antisymmetric and non-zero for m = 1, exactly zero for m = 3; `Hat` second order at face midpoints (1.96, 1.95) and exact in r on a quadratic surface |
 | S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | **done** | vector Laplacian second order at every deformation: (grad^2 u)_r and (grad^2 u)_theta both 2.00 at eta/h = 0, 0.2, 0.4; grad^2 w 2.00 flat and 1.97 at 0.4; scalar probe convergent at all four families |
 | S5 | Conservative centred advection, grid-relative in sigma | **done** | every momentum cell's net flux is exactly half the sum of its neighbours' divergences (worst 1e-16 of the largest net, three families, two grids, deformed and moving); the transport telescopes exactly on an arbitrary field (1e-16 of the terms summed); the curvature pair cancels to 7e-18; a uniform rise over a rising surface is left exactly alone; on a projected field the residual follows the solve tolerance over 6.2 decades to 1.8e-17; second order against calculus outside the axis cells, 1.90 to 2.08 in all three components at eta/h = 0, 0.2 and 0.4; seven injected defects all red |
-| S6 | Free surface: full mean curvature, normal stress, tangential stress, kinematic update | todo | curvature against the analytic mean curvature of a known surface, under refinement |
+| S6 | Free surface: full mean curvature | **done** | the curvature of a sphere is -2/Rs wherever you stand on it, second order at 1.90, 1.88, 1.94 with \|grad eta\| up to 1.61; the curvature of a tilted plane is zero at second order outside r/R = 0.4, and the whole residual is alpha dtheta^2/r -- the same constant 8.01e-2, 8.13e-2, 8.16e-2 on three grids; kappa is the EXACT variational derivative of the discrete area, residual falling as eps^2 with ratio 4.00 on both contact branches; both contact conditions second order inside r/R = 0.9 (1.85/1.96 free, 1.97/1.99 pinned) and bounded by 9% without converging in the two rows at the rim; five injected defects all red |
+| S6b | Free surface: normal and tangential stress, and w at sigma = 1 | todo | n.E.n against a closed-form strain field on a sloped surface; tangential-stress residual to zero at second order; grad^2 w convergent including the surface row |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -217,6 +220,63 @@ flux is caught by exactly that check.
   Both sides reach an answer of size U^2 a^2/rf by subtracting two quantities of size
   U^2/rf, so a bound relative to the answer asks for a^2/8 more precision than double
   carries. Measured against the terms each subtracts, the agreement is 1e-15.
+
+## What S6 found about the curvature
+
+### Define it as the derivative of the area, not as a discretised formula
+
+The curvature is `kappa_j = -(1/(rc drc dtheta)) dA/d eta_j` for the discrete area
+
+    A = sum_cells rc drc dtheta sqrt(1 + |grad eta|^2)
+
+and three things follow that a discretised formula would only approximate. It IS the
+finite-volume divergence form: worked out, the radial face coefficient comes to the
+width-weighted mean of `1/sqrt(1 + |grad eta|^2)` across the face, which is what
+consistency asks for. It is second order, because the area is. And the work the capillary
+term does is exactly `-gamma dA/dt`, so the exchange between kinetic and surface energy is
+an identity in floating point rather than a tolerance -- which is what will let S7 assert
+that the whole step conserves energy with viscosity and the drive off. Gate 7c holds the
+identity directly: the central difference of A along a random direction matches
+`-sum (rc drc dtheta) kappa delta` with a residual that falls as eps^2, ratio 4.00.
+
+### The axis needs no condition, and that is not a convenience
+
+`eta_r` at r = 0 is non-zero for every azimuthal mode but m = 0, so any single value
+assigned there would be wrong for some mode. Weighting each cell's two radial slopes by
+their FACE AREAS makes the axis face -- whose area rf[0] is exactly zero -- drop out of
+its own accord, in the area and in the derivative alike.
+
+### The face-area weighting is load-bearing, and the rim cannot be fixed inside it
+
+The weighting is not free to choose. It is exactly what makes `rc drc/(rf[i] + rf[i+1])`
+collapse to `drc/2`, and hence what makes the derivative a divergence at all. Three ways
+of making the pinned rim slope second order were tried and every one made the curvature
+far worse. Measured at the rim row, relative, on grids of 16, 32 and 64 radial cells:
+
+| rim closure | rim row error |
+|---|---|
+| three-point quadratic through the wall | 35, 80 -- diverging, order -1.2 |
+| weights 1/3 and 2/3, centring the estimate on rc | 38, 84, 176 |
+| slope extrapolated to R as (4 sWall - sIn)/3 | 39, 84, 176 |
+| **the plain local two-point difference** | **0.013, 0.016, 0.017** |
+
+So the plain difference is not a shortcut; it is the only one of the four that leaves a
+small error instead of a large one. What is left is a couple of per cent in the outermost
+two rows, not converging, and it is asserted as a BOUND rather than as a rate because it
+is not a rate. The free branch proves the cause is not the slope: a free contact line's
+rim slope is exactly right -- zero is the condition itself -- and its rim row is first
+order anyway, because what is one-sided there is the face's own coefficient, which has
+only the cell inside it to come from. The trade was taken this way round because locality
+buys the exact energy identity, and one annulus of width h carrying a first-order force
+contributes at the scheme's own order to anything integrated.
+
+### Rule 2 has an exception, and it is specific to functionals
+
+"A boundary face needs a three-point derivative" holds for a flux computed directly. It
+does NOT hold for a slope inside a functional whose derivative is then taken: the
+three-point slope makes the last cell's area depend on the column two cells in, so the
+functional stops being a sum of local cell areas and its derivative lands a term on cell
+nr-2 where that term is not a divergence. That is the first row of the table above.
 
 ## Rules this build keeps
 

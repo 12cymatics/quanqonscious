@@ -1180,6 +1180,268 @@ section('6i. what the axis costs, in closed form');
      + `${orderFirst.toFixed(3)}`);
 }
 
+/* ── 7. the free surface: mean curvature ─────────────────────────────────── */
+
+section('7a. the curvature of a sphere is its own radius, wherever you stand on it');
+/* The reference needs no derivative of mine: every patch of a sphere of radius Rs has
+ * div(grad eta / sqrt(1 + |grad eta|^2)) = -2/Rs, EXACTLY and everywhere, so a single
+ * closed number checks the operator at every cell at once. Taking the sphere's centre
+ * OFF the axis makes eta depend on theta as well as r, which is what exercises the
+ * azimuthal half of the divergence; an on-axis cap would leave it untested.
+ *
+ * The cell is deep here (h = 2R) so that a cap steep enough to be genuinely nonlinear
+ * -- |grad eta| reaching 1.7, where sqrt(1 + |grad eta|^2) is 2.0 and the linearised
+ * Laplacian would be wrong by a factor of two -- still leaves a positive depth
+ * everywhere. Nothing is bypassed to get there: the state is one the solver accepts.
+ *
+ * THE TWO OUTERMOST ROWS ARE EXCLUDED, and measured instead: this surface satisfies
+ * neither contact condition -- its radial slope at the rim is not zero and neither is
+ * eta there -- so the rim face is closed by a condition the surface does not meet. That
+ * is an O(1) error in one face slope, which the curvature divides by a cell width, so it
+ * grows like 1/h at the last row and leaks one cell inward: measured, row nr-1 read
+ * -69 then -150 relative and row nr-2 read 2.9 then 7.6, while every interior row
+ * converged at second order. It is a property of the probe, not of the operator, and the
+ * contact conditions get their own gate in 7d with surfaces that do satisfy them. */
+{
+  const R = 12.125e-3;
+  const DEEP = { ...CELL, R, h: 2*R };
+  const cap = (Rs, xc) => (S) => {
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const th = (k + 0.5)*S.dth, r = S.rc[i];
+        const dx = r*Math.cos(th) - xc, dy = r*Math.sin(th);
+        const d2 = dx*dx + dy*dy;
+        S.eta[S.ie(i,k)] = Math.sqrt(Rs*Rs - d2) - 1.1*R;
+      }
+    S.refreshMetric();
+    return -2/Rs;
+  };
+  const errorOn = (nr, nth, set) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    const want = set(S);
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let num = 0, den = 0, axis = 0, slope = 0;
+    for (let i = 0; i < nr - 2; i++)
+      for (let k = 0; k < nth; k++){
+        const e = S.ie(i,k), d = kap[e] - want;
+        slope = Math.max(slope, Math.sqrt(S.surfaceMetric(i,k) - 1));
+        if (i === 0){ axis = Math.max(axis, Math.abs(d/want)); continue; }
+        num += d*d; den += want*want;
+      }
+    return { rms: Math.sqrt(num/den), axis, slope, want };
+  };
+  for (const [Rs, xc, tag] of [[1.5*R, 0.3*R, 'steep, off axis'],
+                               [6*R, 0.35*R, 'shallow, off axis'],
+                               [1.5*R, 0, 'steep, on axis']]){
+    const a = errorOn(16, 24, cap(Rs, xc)), b = errorOn(32, 48, cap(Rs, xc));
+    const order = Math.log(a.rms/b.rms)/Math.log(2);
+    console.log(`       ${tag}: |grad eta| up to ${a.slope.toFixed(2)}, `
+      + `${a.rms.toExponential(2)} -> ${b.rms.toExponential(2)}, order ${order.toFixed(2)}`
+      + `; axis cell ${a.axis.toExponential(2)} -> ${b.axis.toExponential(2)}`);
+    ok(order > 1.8,
+       `${tag}: the curvature converges on -2/Rs at second order`,
+       `${a.rms.toExponential(3)} -> ${b.rms.toExponential(3)} relative, order `
+       + `${order.toFixed(3)}, against a curvature of ${a.want.toExponential(3)} /m`);
+    ok(b.axis < a.axis,
+       `${tag}: and the axis cell, whose inner face has no area, improves too`,
+       `${a.axis.toExponential(3)} then ${b.axis.toExponential(3)} relative`);
+  }
+}
+
+section('7b. the curvature of a plane is zero, and what is left of it is dtheta^2 / r');
+/* A plane has no curvature at any tilt, so the whole of what is measured here is
+ * truncation, with no reference value to hide inside. It is also the sharpest possible
+ * test of the axis, because zero is reached by CANCELLATION: for eta = alpha r cos(theta)
+ * the radial term is +alpha cos(theta)/r and the azimuthal term is -alpha cos(theta)/r,
+ * each growing without bound as r goes to zero, and the answer is their difference. A
+ * centred azimuthal difference reproduces the second one only to O(dtheta^2), so what
+ * survives is
+ *
+ *     residual  ~  alpha dtheta^2 / r
+ *
+ * second order at a fixed radius and first order at the innermost cell, where r is
+ * itself a spacing. That is not a defect this operator can remove -- it is what a
+ * second-order centred difference on a circle costs, the same 1/r amplification of a
+ * cancellation that gate 6i pins for the advection -- so it is measured rather than
+ * bounded: the residual times r/(alpha dtheta^2) must be the SAME NUMBER on three
+ * grids, which is the scaling law itself and not a tolerance. */
+{
+  const R = 12.125e-3, DEEP = { ...CELL, R, h: 2*R };
+  const probe = (nr, nth, alpha) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        S.eta[S.ie(i,k)] = alpha*S.rc[i]*Math.cos((k + 0.5)*S.dth);
+    S.refreshMetric();
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let outer = 0, law = 0;
+    for (let i = 0; i < nr - 2; i++)        // the two rim rows: see 7a
+      for (let k = 0; k < nth; k++){
+        const g = Math.abs(kap[S.ie(i,k)]);
+        law = Math.max(law, g*S.rc[i]/(alpha*S.dth*S.dth));
+        if (S.rc[i] >= 0.4*R) outer = Math.max(outer, g*R/alpha);
+      }
+    return { outer, law };
+  };
+  for (const alpha of [0.2, 0.8]){
+    const a = probe(16, 24, alpha), b = probe(32, 48, alpha), c = probe(64, 96, alpha);
+    const o1 = Math.log(a.outer/b.outer)/Math.LN2, o2 = Math.log(b.outer/c.outer)/Math.LN2;
+    console.log(`       tilt ${alpha}: outside r/R = 0.4, ${a.outer.toExponential(2)} -> `
+      + `${b.outer.toExponential(2)} -> ${c.outer.toExponential(2)} (times alpha/R), `
+      + `orders ${o1.toFixed(2)}, ${o2.toFixed(2)}; residual*r/(alpha dtheta^2) = `
+      + `${a.law.toExponential(3)}, ${b.law.toExponential(3)}, ${c.law.toExponential(3)}`);
+    ok(o1 > 1.7 && o2 > 1.7,
+       `tilt ${alpha}: away from the axis the curvature of a plane converges to zero at `
+       + `second order`,
+       `${a.outer.toExponential(3)} -> ${b.outer.toExponential(3)} -> `
+       + `${c.outer.toExponential(3)} in units of alpha/R, orders ${o1.toFixed(3)}, `
+       + `${o2.toFixed(3)}`);
+    const spread = Math.max(a.law, b.law, c.law)/Math.min(a.law, b.law, c.law);
+    ok(spread < 1.12,
+       `tilt ${alpha}: and the whole residual is alpha dtheta^2 / r, the same constant on `
+       + `all three grids, so nothing else is left in it`,
+       `${a.law.toExponential(3)}, ${b.law.toExponential(3)}, ${c.law.toExponential(3)}: `
+       + `spread ${((spread - 1)*100).toFixed(1)}%`);
+  }
+}
+
+section('7c. the curvature is the derivative of the area, not a discretised formula');
+/* The design, asserted rather than described. If kappa is the variational derivative of
+ * the discrete area then
+ *
+ *     dA/d(eps) along delta  =  -sum_cells (rc drc dtheta) kappa delta
+ *
+ * and the left side can be measured without the operator at all, from two evaluations
+ * of the area. A central difference has its own O(eps^2) truncation, so the residual is
+ * not asserted against a bound -- it is required to FALL AS eps^2, which a wrong
+ * derivative could not do because it would sit at its own O(1) offset. Both contact
+ * conditions, because the rim face's slope depends on eta under one and not the other. */
+for (const contact of ['free', 'pinned']){
+  const R = 12.125e-3;
+  const S = new FaradayCell3D({ nr: 12, nth: 16, nz: 6, ...CELL, R, h: 2*R, contact });
+  const r = rnd(2024);
+  const base = new Float64Array(S.NE), delta = new Float64Array(S.NE);
+  for (let i = 0; i < S.nr; i++)
+    for (let k = 0; k < S.nth; k++){
+      const x = S.rc[i]/S.R, th = (k + 0.5)*S.dth;
+      base[S.ie(i,k)] = 0.30*R*(x*x*Math.cos(2*th) + 0.6*x*Math.sin(th + 0.3)
+                                + 0.25*x*x*x*Math.cos(3*th));
+      delta[S.ie(i,k)] = R*r();
+    }
+  S.eta.set(base); S.refreshMetric();
+  const kap = new Float64Array(S.NE);
+  S.curvature(kap);
+  let predicted = 0;
+  for (let i = 0; i < S.nr; i++)
+    for (let k = 0; k < S.nth; k++)
+      predicted -= S.rc[i]*S.drc[i]*S.dth*kap[S.ie(i,k)]*delta[S.ie(i,k)];
+  const measured = eps => {
+    for (let c = 0; c < S.NE; c++) S.eta[c] = base[c] + eps*delta[c];
+    const up = S.surfaceArea();
+    for (let c = 0; c < S.NE; c++) S.eta[c] = base[c] - eps*delta[c];
+    const dn = S.surfaceArea();
+    S.eta.set(base);
+    return (up - dn)/(2*eps);
+  };
+  const e1 = 2e-4, r1 = Math.abs(measured(e1) - predicted)/Math.abs(predicted);
+  const r2 = Math.abs(measured(e1/2) - predicted)/Math.abs(predicted);
+  const drop = r1/r2;
+  console.log(`       ${contact}: residual ${r1.toExponential(2)} at eps, `
+    + `${r2.toExponential(2)} at eps/2, falling by ${drop.toFixed(2)}`);
+  ok(drop > 3.3 && drop < 4.7,
+     `${contact}: the residual falls as eps squared, so kappa is the exact derivative `
+     + `of the area and what is left is the difference's own truncation`,
+     `${r1.toExponential(3)} then ${r2.toExponential(3)}, ratio ${drop.toFixed(3)}`);
+  ok(r2 < 1e-5,
+     `${contact}: and what is left at the finer step is small in absolute terms too`,
+     `predicted ${predicted.toExponential(6)} m^2, measured `
+     + `${measured(e1/2).toExponential(6)} m^2`);
+}
+
+section('7d. the two contact conditions, and what the rim costs');
+/* 7a and 7b excluded the rim because their probes satisfied neither condition. These
+ * probes satisfy one each, so the rim is what this gate is about. Both are axisymmetric,
+ * where the mean curvature has the closed form
+ *
+ *     kappa = eta'' / (1 + eta'^2)^{3/2}  +  eta' / (r sqrt(1 + eta'^2))
+ *
+ * and both carry slopes of order one, so the nonlinear denominators are doing work.
+ *
+ *     free    eta = A(1 - x^2)^2,  x = r/R:  eta'(R) = 0, as a free contact line needs
+ *     pinned  eta = A(1 - x^2):              eta(R) = 0, as a pinned one needs
+ *
+ * AWAY FROM THE RIM BOTH ARE SECOND ORDER. AT THE RIM NEITHER IS, AND THAT IS ASSERTED AS
+ * A BOUND RATHER THAN AS A RATE, because it is not a rate: building the curvature as the
+ * derivative of a LOCAL area functional ties the slope and the weights together -- the
+ * face-area weighting is exactly what makes the derivative a divergence -- and the rim
+ * face has only the cell inside it to take its coefficient from. The free case shows the
+ * cause is not the slope: its rim slope is exactly right, zero being the condition
+ * itself, and its rim row is first order anyway. Three ways of making the pinned rim
+ * second order were tried and all three made it far worse; the solver's own comment
+ * records the four sets of numbers.
+ *
+ * So what is claimed is what is true: second order outside the outermost two rows, and
+ * inside them an error of a couple of per cent that does not converge. It is confined to
+ * two annuli, it is the same order of accuracy as the contact-line model itself, and the
+ * energy identity of 7c is exact regardless of it -- which is why the trade was taken
+ * this way round rather than giving up the identity. */
+for (const [contact, A, tag] of [['free', 0.5, '(1-x^2)^2'], ['pinned', 0.4, '(1-x^2)']]){
+  const R = 12.125e-3, DEEP = { ...CELL, R, h: 2*R, contact };
+  const shape = contact === 'free'
+    ? { eta: x => A*R*(1-x*x)*(1-x*x),
+        d1:  x => -4*A*x*(1-x*x),
+        d2:  x => -4*A*(1-3*x*x)/R,
+        dOr: x => -4*A*(1-x*x)/R }
+    : { eta: x => A*R*(1-x*x),
+        d1:  x => -2*A*x,
+        d2:  () => -2*A/R,
+        dOr: () => -2*A/R };
+  const want = x => {
+    const p = shape.d1(x), q = 1 + p*p;
+    return shape.d2(x)/Math.pow(q, 1.5) + shape.dOr(x)/Math.sqrt(q);
+  };
+  const errorOn = (nr, nth) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 6, ...DEEP });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) S.eta[S.ie(i,k)] = shape.eta(S.rc[i]/R);
+    S.refreshMetric();
+    const kap = new Float64Array(S.NE);
+    S.curvature(kap);
+    let num = 0, den = 0, edge = 0, slope = 0;
+    for (let i = 0; i < nr; i++){
+      const x = S.rc[i]/R, w = want(x);
+      slope = Math.max(slope, Math.abs(shape.d1(x)));
+      for (let k = 0; k < nth; k++){
+        const d = kap[S.ie(i,k)] - w;
+        /* the cut is a PHYSICAL radius, so both grids measure the same region; an index
+           cut would move inward as the grid refines and the order would mean nothing */
+        if (x > 0.9){ edge = Math.max(edge, Math.abs(d/w)); continue; }
+        num += d*d; den += w*w;
+      }
+    }
+    return { rms: Math.sqrt(num/den), edge, slope };
+  };
+  const a = errorOn(16, 24), b = errorOn(32, 48), c = errorOn(64, 96);
+  const o1 = Math.log(a.rms/b.rms)/Math.LN2, o2 = Math.log(b.rms/c.rms)/Math.LN2;
+  console.log(`       ${contact} (eta = A${tag}, |eta'| up to ${a.slope.toFixed(2)}): inside `
+    + `r/R = 0.9, ${a.rms.toExponential(2)} -> ${b.rms.toExponential(2)} -> `
+    + `${c.rms.toExponential(2)}, orders ${o1.toFixed(2)}, ${o2.toFixed(2)}; outside it, `
+    + `worst ${a.edge.toExponential(2)}, ${b.edge.toExponential(2)}, `
+    + `${c.edge.toExponential(2)}`);
+  ok(o1 > 1.8 && o2 > 1.8,
+     `${contact}: with the contact condition satisfied, the curvature is second order `
+     + `inside r/R = 0.9`,
+     `${a.rms.toExponential(3)} -> ${b.rms.toExponential(3)} -> ${c.rms.toExponential(3)} `
+     + `relative, orders ${o1.toFixed(3)}, ${o2.toFixed(3)}`);
+  ok(Math.max(a.edge, b.edge, c.edge) < 0.09,
+     `${contact}: and in the rows near the rim it stays within nine per cent without `
+     + `converging, which is what a local area functional costs at its one one-sided face`,
+     `worst ${a.edge.toExponential(3)}, ${b.edge.toExponential(3)}, `
+     + `${c.edge.toExponential(3)} relative`);
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',
