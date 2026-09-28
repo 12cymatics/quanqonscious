@@ -2,7 +2,14 @@
 
 **Session counter: 3**
 **Stages complete: 6 of 14, and S6 is under way**
-**Next action: S6c -- the surface stresses. The curvature is done and gated (7a to 7d)
+**Next action: S6d -- the traction on the momentum faces, and w solved at sigma = 1.
+The strain tensor and the viscous NORMAL stress are done and gated (8b, 8c). What
+remains of S6: form the traction T = 2 rho nu E.n at each momentum family's sigma = 1
+face, replace it by (n.T)n so the tangential part is exactly zero at any slope, use it
+as that face's viscous flux, and extend `famLaplacian`'s w family from nz-1 to nz --
+`dns/faraday-disc.js`'s `lapW` (line 322) is the pattern. Then the surface pressure
+`p_s = p_ext - gamma kappa + n.T` and the kinematic update, and S6 is closed.
+(Superseded: S6c -- the surface stresses. The curvature is done and gated (7a to 7d)
 and so is the outward normal (8a); 140 checks, 0 failed. The count was written as 138
 here for one commit, which was the total before 8a was added -- measured, not
 transcribed, and corrected. What remains: the full normal stress
@@ -137,7 +144,8 @@ against this and need no further decision.
 | S5 | Conservative centred advection, grid-relative in sigma | **done** | every momentum cell's net flux is exactly half the sum of its neighbours' divergences (worst 1e-16 of the largest net, three families, two grids, deformed and moving); the transport telescopes exactly on an arbitrary field (1e-16 of the terms summed); the curvature pair cancels to 7e-18; a uniform rise over a rising surface is left exactly alone; on a projected field the residual follows the solve tolerance over 6.2 decades to 1.8e-17; second order against calculus outside the axis cells, 1.90 to 2.08 in all three components at eta/h = 0, 0.2 and 0.4; seven injected defects all red |
 | S6 | Free surface: full mean curvature | **done** | the curvature of a sphere is -2/Rs wherever you stand on it, second order at 1.90, 1.88, 1.94 with \|grad eta\| up to 1.61; the curvature of a tilted plane is zero at second order outside r/R = 0.4, and the whole residual is alpha dtheta^2/r -- the same constant 8.01e-2, 8.13e-2, 8.16e-2 on three grids; kappa is the EXACT variational derivative of the discrete area, residual falling as eps^2 with ratio 4.00 on both contact branches; both contact conditions second order inside r/R = 0.9 (1.85/1.96 free, 1.97/1.99 pinned) and bounded by 9% without converging in the two rows at the rim; five injected defects all red |
 | S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
-| S6c | Free surface: the traction at sigma = 1, and w solved there | todo | the tangential traction exactly zero after projection; n.E.n against a closed-form strain field on a sloped surface; the small-slope limit reproduces `surfaceSlopes` next door; grad^2 w convergent including the surface row |
+| S6c | Free surface: the strain tensor at the surface, and the viscous normal stress | **done** | all six components second order against calculus on a deformed surface, 1.97 to 4.35 at eta/h = 0 and 0.3, rim row included; 2 rho nu n.E.n second order (1.98) against the analytic contraction with the analytic normal at eta/h = 0.3 and 0.6; on a FLAT surface it equals `wzSurface` in the independently written two-dimensional solver to 1.1e-13 relative, and on a deformed one the flat form is wrong by 95.5% of the stress; five injected defects all red |
+| S6d | Free surface: the traction on the momentum faces, and w solved at sigma = 1 | todo | the tangential traction exactly zero after projection; grad^2 w convergent including the surface row; the small-slope limit reproduces `surfaceSlopes` next door |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -341,6 +349,38 @@ clean it exits 0.
 A suite that exists and is not run is not a gate, and this repository has already paid for
 that once -- a red `tests/test_documented_paths.py` sat unobserved on the default branch
 because the workflow carrying it was keyed on a branch that does not exist.
+
+## What S6c measured
+
+The rate-of-strain tensor at the free surface, and the viscous normal stress from it.
+
+Every horizontal derivative is taken between columns at ONE physical height -- this cell's
+own surface height, so a neighbour is read above or below its own surface as the slope
+dictates. That is rule 1 and the gate sees it: evaluating each column at its own sigma = 1
+instead leaves E_rr at order -0.007 on a deformed surface while the flat case still passes,
+which is the signature of that rule being broken.
+
+Every vertical derivative is the quadratic through a column's three topmost sigma nodes,
+differentiated at the target height. For w that interpolates, since w has a node at
+sigma = 1; for u and v it extrapolates half a cell, which is what a field whose vertical
+nodes are cell centres costs at a boundary.
+
+`colDerivAtZ` sits beside `colValueAtZ` and shares its stencil conventions deliberately:
+the two are read at the same points, and a difference in stencil between them is a
+difference nothing would catch.
+
+**The flat limit is a check against another code.** On a flat surface the normal is exactly
+z-hat, so `2 rho nu n.E.n` must collapse to `2 rho nu dw/dz` -- which is `wzSurface` in
+`dns/faraday-disc.js`. It agrees to 1.1e-13 relative, the round-off of the cancellation in
+a three-point derivative rather than bit equality, since the two work in sigma and in z
+respectively. On a deformed surface at |grad eta| up to 0.30 the flat form is wrong by
+**95.5% of the stress**, which is the whole reason for carrying the full contraction.
+
+**One gate exists solely for the contraction.** The six components being right does not make
+n.E.n right: a dropped or mis-signed cross term leaves every component correct and the
+stress wrong, and the flat limit cannot see it either, because on a flat surface every cross
+term is multiplied by a normal component that is zero. Dropping the radial-vertical cross
+term is red only on that gate, at order -0.01.
 
 ## Rules this build keeps
 

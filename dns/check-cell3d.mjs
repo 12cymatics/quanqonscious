@@ -1495,6 +1495,222 @@ section('8a. the outward normal, against the surface it belongs to');
      `worst |n|^2 - 1 = ${Math.max(a.unit, b.unit).toExponential(3)}`);
 }
 
+section('8b. the rate-of-strain tensor at the surface, against calculus');
+/* Six components, each against its closed form, on a DEFORMED surface. The field is
+ * chosen so that all nine first derivatives are elementary and so that every component
+ * vanishes at the rim -- both potentials carry r(R - r) -- which makes the wall values the
+ * solver uses there (zero, by no slip) the true ones, so the rim row is IN.
+ *
+ * The inner quarter of the radius is out: E_thetatheta and E_rtheta carry 1/r, and an index
+ * cut would creep towards the axis as the grid refines. Gate 6i pins what that 1/r costs. */
+{
+  const R = 12.125e-3, KZ = 400;
+  const A = 27, B = 19, D = 3.8e3;
+  const P = r => r*(R - r),      Pp = r => R - 2*r;
+  const Q = r => r*r*(R - r),    Qp = r => 2*R*r - 3*r*r;
+  const Sf = z => Math.sin(KZ*z + 0.3),  Sp = z => KZ*Math.cos(KZ*z + 0.3);
+  const Cf = z => Math.cos(KZ*z),        Cp = z => -KZ*Math.sin(KZ*z);
+  const Tf = z => Math.sin(KZ*z),        Tp = z => KZ*Math.cos(KZ*z);
+  const ur = (r,t,z) => A*P(r)*Math.cos(2*t)*Sf(z);
+  const ut = (r,t,z) => B*P(r)*Math.sin(t)*Cf(z);
+  const uz = (r,t,z) => D*Q(r)*Math.cos(t)*Tf(z);
+  /* the six components, from those three by hand */
+  const want = (r,t,z) => {
+    const dur_dr = A*Pp(r)*Math.cos(2*t)*Sf(z);
+    const dur_dth = -2*A*P(r)*Math.sin(2*t)*Sf(z);
+    const dur_dz = A*P(r)*Math.cos(2*t)*Sp(z);
+    const dut_dr = B*Pp(r)*Math.sin(t)*Cf(z);
+    const dut_dth = B*P(r)*Math.cos(t)*Cf(z);
+    const dut_dz = B*P(r)*Math.sin(t)*Cp(z);
+    const duz_dr = D*Qp(r)*Math.cos(t)*Tf(z);
+    const duz_dth = -D*Q(r)*Math.sin(t)*Tf(z);
+    const duz_dz = D*Q(r)*Math.cos(t)*Tp(z);
+    return [dur_dr,
+            dut_dth/r + ur(r,t,z)/r,
+            duz_dz,
+            0.5*(dur_dth/r + dut_dr - ut(r,t,z)/r),
+            0.5*(dur_dz + duz_dr),
+            0.5*(dut_dz + duz_dth/r)];
+  };
+  const build = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i];
+      for (let b = 0; b < nz; b++) S.u[S.iu(i,k,b)] = ur(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i];
+      for (let b = 0; b < nz; b++) S.v[S.iv(i,k,b)] = ut(r, th, S.sc[b]*H(r, th));
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= nz; b++) S.w[S.iw(i,k,b)] = uz(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+  const NAME = ['E_rr', 'E_tt', 'E_zz', 'E_rt', 'E_rz', 'E_tz'];
+  const errorOn = (nr, nth, nz, amp) => {
+    const S = build(nr, nth, nz, amp);
+    const got = new Float64Array(6);
+    const num = [0,0,0,0,0,0], den = [0,0,0,0,0,0];
+    for (let i = 0; i < nr; i++){
+      if (S.rc[i] < 0.25*R) continue;
+      for (let k = 0; k < nth; k++){
+        S.surfaceStrain(i, k, got);
+        const w = want(S.rc[i], (k + 0.5)*S.dth, S.H[S.ie(i,k)]);
+        for (let c = 0; c < 6; c++){ const d = got[c] - w[c]; num[c] += d*d; den[c] += w[c]*w[c]; }
+      }
+    }
+    return num.map((n, c) => Math.sqrt(n/den[c]));
+  };
+  for (const amp of [0, 0.3]){
+    const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp);
+    const o = a.map((x, c) => Math.log(x/b[c])/Math.LN2);
+    console.log(`       eta/h = ${amp}: ` + NAME.map((n, c) =>
+      `${n} ${o[c].toFixed(2)}`).join(', '));
+    for (let c = 0; c < 6; c++)
+      ok(o[c] > 1.7, `eta/h = ${amp}: ${NAME[c]} at the surface is second order`,
+         `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
+  }
+
+  /* And the contraction itself, n.E.n, against its analytic value with the analytic normal.
+     The six components above do not cover it: a dropped or mis-signed cross term in the
+     contraction leaves every component right and the stress wrong, and 8c's flat limit
+     cannot see it either, because on a flat surface every cross term is multiplied by a
+     normal component that is zero. */
+  {
+    const slopes = (amp, x, t) => {
+      const f = amp*CELL.h/R;
+      return { sr: f*(2*x*Math.cos(2*t) + 0.5*Math.sin(t + 0.4)),
+               st: f*(-2*x*Math.sin(2*t) + 0.5*Math.cos(t + 0.4)) };
+    };
+    const stressError = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      let num = 0, den = 0;
+      for (let i = 0; i < nr; i++){
+        /* the rim is out here, and only here: the CONTRACTION needs the surface normal, and
+           at the rim the solver's normal carries the free contact condition -- eta_r = 0 --
+           which this probe surface does not satisfy. The six components in the loop above do
+           not use the normal, which is why the rim is in for them. Measured with the rim in:
+           order 0.51, on code whose every ingredient is second order. */
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = (k + 0.5)*S.dth, r = S.rc[i], z = S.H[S.ie(i,k)];
+          const g = slopes(amp, r/R, th);
+          const len = Math.sqrt(1 + g.sr*g.sr + g.st*g.st);
+          const a1 = -g.sr/len, b1 = -g.st/len, c1 = 1/len;
+          const E = want(r, th, z);
+          const nEn = E[0]*a1*a1 + E[1]*b1*b1 + E[2]*c1*c1
+                    + 2*(E[3]*a1*b1 + E[4]*a1*c1 + E[5]*b1*c1);
+          const w = 2*S.rho*S.nu*nEn, d = S.surfaceNormalStress(i, k) - w;
+          num += d*d; den += w*w;
+        }
+      }
+      return Math.sqrt(num/den);
+    };
+    for (const amp of [0.3, 0.6]){
+      const a = stressError(16, 24, 16, amp), b = stressError(32, 48, 32, amp);
+      const o = Math.log(a/b)/Math.LN2;
+      console.log(`       eta/h = ${amp}: 2 rho nu n.E.n order ${o.toFixed(2)} `
+        + `(${a.toExponential(2)} -> ${b.toExponential(2)})`);
+      ok(o > 1.7,
+         `eta/h = ${amp}: the viscous normal stress is second order against the analytic `
+         + `contraction with the analytic normal`,
+         `${a.toExponential(3)} -> ${b.toExponential(3)}, order ${o.toFixed(3)}`);
+    }
+  }
+}
+
+section('8c. the viscous normal stress, and its flat limit against the solver next door');
+/* On a FLAT surface the outward normal is z-hat exactly, so n.E.n collapses to E_zz and the
+ * viscous normal stress must be exactly 2 rho nu dw/dz -- which is `wzSurface` in
+ * dns/faraday-disc.js, an independently written solver, quadratic through the three
+ * vertical faces below the surface.
+ *
+ * Asserted at round-off of the CANCELLATION, not bit for bit. The two are the same
+ * quadratic but not the same sequence of operations -- one works in sigma and divides by H,
+ * the other in z -- and a three-point derivative differences nearly equal values over a
+ * small spacing, so agreement is limited by that cancellation. Measured: 3.2e-17 against a
+ * stress of 2.9e-4, which is 1.1e-13 relative. Asked for 1e-13 first, and that was the
+ * third time in this build that two algebraically identical expressions were expected to
+ * agree more closely than their operation order allows.
+ *
+ * On a deformed surface it must instead be the full contraction, and the gap between the
+ * two forms is measured rather than asserted small: it is most of the stress, which is the
+ * whole reason for not using the flat form. */
+{
+  const R = 12.125e-3, KZ = 400, D = 3.8e3;
+  const uzf = (r, t, z) => D*r*r*(R - r)*Math.cos(t)*Math.sin(KZ*z);
+  const build = amp => {
+    const S = new FaradayCell3D({ nr: 16, nth: 24, nz: 16, ...CELL, R });
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
+        S.eta[S.ie(i,k)] = amp*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
+      }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      for (let b = 0; b <= S.nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+    }
+    return S;
+  };
+  /* wzSurface, transcribed from dns/faraday-disc.js:256 -- the quadratic through the three
+     topmost w nodes of a column, differentiated at the surface */
+  const wzSurface = (S, i, k) => {
+    const nz = S.nz, z = b => S.sf[b]*S.H[S.ie(i,k)];
+    const w0 = S.w[S.iw(i,k,nz)], w1 = S.w[S.iw(i,k,nz-1)], w2 = S.w[S.iw(i,k,nz-2)];
+    const a = z(nz) - z(nz-1), b = z(nz) - z(nz-2);
+    return w0*(a + b)/(a*b) - w1*b/(a*(b - a)) + w2*a/(b*(b - a));
+  };
+  {
+    const S = build(0);
+    let worst = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const mine = S.surfaceNormalStress(i, k);
+        const theirs = 2*S.rho*S.nu*wzSurface(S, i, k);
+        worst = Math.max(worst, Math.abs(mine - theirs));
+        scale = Math.max(scale, Math.abs(theirs));
+      }
+    ok(worst < 1e-12*scale,
+       'on a flat surface the viscous normal stress is exactly the two-dimensional '
+       + 'solver\'s 2 rho nu dw/dz, to round-off',
+       `worst ${worst.toExponential(3)} against ${scale.toExponential(3)}, relative `
+       + `${(worst/scale).toExponential(2)}`);
+    ok(scale > 0, 'and that stress is not zero, so the agreement is not two blank arrays',
+       `largest ${scale.toExponential(3)} Pa`);
+  }
+  {
+    const S = build(0.5);
+    let worst = 0, scale = 0, slope = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const mine = S.surfaceNormalStress(i, k);
+        const flat = 2*S.rho*S.nu*wzSurface(S, i, k);
+        const n = S.surfaceNormal(S.rc[i], (k + 0.5)*S.dth);
+        slope = Math.max(slope, Math.sqrt(n.sr*n.sr + n.st*n.st));
+        worst = Math.max(worst, Math.abs(mine - flat));
+        scale = Math.max(scale, Math.abs(mine));
+      }
+    console.log(`       |grad eta| up to ${slope.toFixed(2)}: the flat form differs from the `
+      + `full contraction by ${(100*worst/scale).toFixed(1)}% of the largest stress`);
+    ok(worst > 0.15*scale,
+       'on a deformed surface the full contraction differs from the flat form by most of '
+       + 'the stress, which is why the flat form is not used',
+       `worst gap ${worst.toExponential(3)} against a largest stress of `
+       + `${scale.toExponential(3)}, ${(100*worst/scale).toFixed(1)}%`);
+  }
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

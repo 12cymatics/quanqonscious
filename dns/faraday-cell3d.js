@@ -201,6 +201,7 @@ class FaradayCell3D {
 
     this.cgIters = 0; this.cgResidual = 0;
     this._es = new Float64Array(6);        // one cell's four eta slopes, then two weights
+    this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
 
     /* Node geometry, one descriptor per staggered family. Every family shares the
        same periodic uniform theta and the same flux algebra; they differ only in
@@ -622,6 +623,128 @@ class FaradayCell3D {
     const L1 = ((ss - s0)*(ss - s2))/((s1 - s0)*(s1 - s2));
     const L2 = ((ss - s0)*(ss - s1))/((s2 - s0)*(s2 - s1));
     return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2);
+  }
+
+  /* The same stencil as colValueAtZ, differentiated instead of evaluated: df/dz in one
+   * column at one physical height. Since z = sigma H at fixed (r, theta), d/dz is
+   * (1/H) d/dsigma, so this is the quadratic's sigma-derivative over that column's own H.
+   *
+   * It sits beside colValueAtZ and shares its conventions -- the stencil centred on `lev`
+   * rather than chosen by bracketing the target, the antipodal reflection for a negative
+   * radial index, the family's own sign -- because the two are read at the same points and
+   * a difference in stencil between them would be a difference nothing would catch. */
+  colDerivAtZ(f, fam, a, k, z, lev){
+    const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
+    let aa = a, kk = k, sign = 1;
+    if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
+    const th = (kk + fam.thOff)*this.dth;
+    const H = this.Hat(fam.rn[aa], th).H;
+    const ss = z/H;
+    const at = b => f[fam.idx(aa, kk, b)];
+    if (nJ === 1) return 0;
+    if (nJ === 2) return sign*(at(1) - at(0))/((sn[1] - sn[0])*H);
+    let j = lev === undefined ? 1 : lev;
+    if (j < 1) j = 1;
+    if (j > nJ - 2) j = nJ - 2;
+    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
+    /* d/ds of the three Lagrange basis polynomials, at s = ss */
+    const L0 = ((ss - s1) + (ss - s2))/((s0 - s1)*(s0 - s2));
+    const L1 = ((ss - s0) + (ss - s2))/((s1 - s0)*(s1 - s2));
+    const L2 = ((ss - s0) + (ss - s1))/((s2 - s0)*(s2 - s1));
+    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2)/H;
+  }
+
+  /* The rate-of-strain tensor at the free surface above one pressure cell, filled into a
+   * caller-supplied six-element array as
+   *
+   *     [E_rr, E_thetatheta, E_zz, E_rtheta, E_rz, E_thetaz]
+   *
+   * in cylindrical coordinates:
+   *
+   *     E_rr = du_r/dr                E_rtheta = 1/2[(1/r)du_r/dtheta + du_th/dr - u_th/r]
+   *     E_tt = (1/r)du_th/dtheta + u_r/r   E_rz = 1/2[du_r/dz + du_z/dr]
+   *     E_zz = du_z/dz                E_thz = 1/2[du_th/dz + (1/r)du_z/dtheta]
+   *
+   * Every horizontal derivative is taken BETWEEN COLUMNS AT ONE PHYSICAL HEIGHT -- the
+   * height of this cell's own surface -- which is rule 1 and is not optional: under
+   * z = sigma H the neighbouring columns' sigma = 1 sits at a different height, and
+   * differencing there would carry an O(dH) error that vanishes on a flat surface and does
+   * not converge on a deformed one. The neighbour is therefore evaluated at THIS cell's
+   * surface height, above or below its own surface as the slope dictates.
+   *
+   * Every vertical derivative is the quadratic through that column's three topmost sigma
+   * nodes, differentiated at the target height. For w that is an interpolation, because w
+   * has a node at sigma = 1. For u and v it is an extrapolation of half a cell, which is
+   * what a field whose vertical nodes are cell centres costs at a boundary; the value is
+   * third order and the derivative second, so nothing is given away.
+   *
+   * At the rim the wall supplies the outward neighbour, which is zero for all three
+   * components by no slip. At the axis the inward neighbour is the antipodal column,
+   * carried with the family's own reflection sign by colValueAtZ. */
+  surfaceStrain(i, k, out){
+    const nr = this.nr, dth = this.dth, rc = this.rc, R = this.R;
+    const FU = this.FAM.u, FV = this.FAM.v, FW = this.FAM.w;
+    const r = rc[i], z = this.H[this.ie(i, k)];
+    const lu = FU.sn.length - 2, lw = FW.sn.length - 2;
+    const uV = (a, kk) => this.colValueAtZ(this.u, FU, a, kk, z, lu);
+    const uD = (a, kk) => this.colDerivAtZ(this.u, FU, a, kk, z, lu);
+    const vV = (a, kk) => a > nr - 1 ? 0 : this.colValueAtZ(this.v, FV, a, kk, z, lu);
+    const vD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.v, FV, a, kk, z, lu);
+    const wV = (a, kk) => a > nr - 1 ? 0 : this.colValueAtZ(this.w, FW, a, kk, z, lw);
+    const wD = (a, kk) => a > nr - 1 ? 0 : this.colDerivAtZ(this.w, FW, a, kk, z, lw);
+    /* the radial coordinate of a cell-centred column, with the antipodal continuation
+       inward of the axis and the wall outward of the last centre */
+    const rcOf = a => a < 0 ? -rc[-1 - a] : (a > nr - 1 ? R : rc[a]);
+
+    /* u_r lives on r faces at this cell's own theta; rc is their midpoint exactly */
+    const uIn = uV(i, k), uOut = uV(i + 1, k);
+    const ur = 0.5*(uIn + uOut);
+    const dur_dr = (uOut - uIn)/this.drc[i];
+    const dur_dth = 0.25*(uV(i, k+1) - uV(i, k-1) + uV(i+1, k+1) - uV(i+1, k-1))/dth;
+    const dur_dz = 0.5*(uD(i, k) + uD(i + 1, k));
+
+    /* u_theta lives on theta faces at cell-centred radii */
+    const vLo = vV(i, k), vHi = vV(i, k+1);
+    const ut = 0.5*(vLo + vHi);
+    const dut_dth = (vHi - vLo)/dth;
+    const dvSpan = rcOf(i + 1) - rcOf(i - 1);
+    const dut_dr = 0.5*(vV(i+1, k) - vV(i-1, k) + vV(i+1, k+1) - vV(i-1, k+1))/dvSpan;
+    const dut_dz = 0.5*(vD(i, k) + vD(i, k+1));
+
+    /* u_z lives at cell-centred radii and this cell's own theta, with a node at sigma = 1 */
+    const duz_dz = wD(i, k);
+    const duz_dr = (wV(i+1, k) - wV(i-1, k))/dvSpan;
+    const duz_dth = 0.5*(wV(i, k+1) - wV(i, k-1))/dth;
+
+    out[0] = dur_dr;
+    out[1] = dut_dth/r + ur/r;
+    out[2] = duz_dz;
+    out[3] = 0.5*(dur_dth/r + dut_dr - ut/r);
+    out[4] = 0.5*(dur_dz + duz_dr);
+    out[5] = 0.5*(dut_dz + duz_dth/r);
+    return out;
+  }
+
+  /* The viscous normal stress at the free surface above one pressure cell, 2 rho nu n.E.n.
+   *
+   * This is the term the normal-stress condition contributes to the surface pressure, and
+   * it is contracted with the FULL normal rather than with z-hat. The flat-normal form
+   * 2 rho nu dw/dz is what the two-dimensional solver next door is entitled to, because it
+   * linearises about a flat surface; this one is not.
+   *
+   * It is NOT obtained by eliminating anything. Writing E.n = lambda n and solving for
+   * lambda divides by 1 - |grad eta|^2, which vanishes at a forty-five degree slope and
+   * changes sign beyond it -- the derivation is in dns/PLAN-cell3d.md. The strain comes
+   * from the interior field and the contraction is then just a contraction, well defined
+   * at any slope. */
+  surfaceNormalStress(i, k){
+    const e = this.ie(i, k);
+    const n = this.surfaceNormal(this.rc[i], (k + 0.5)*this.dth);
+    const E = this.surfaceStrain(i, k, this._st);
+    const a = n.nr, b = n.nth, c = n.nz;
+    const nEn = E[0]*a*a + E[1]*b*b + E[2]*c*c
+              + 2*(E[3]*a*b + E[4]*a*c + E[5]*b*c);
+    return 2*this.rho*this.nu*nEn;
   }
 
   /* ---- the viscous operator -------------------------------------------- */
