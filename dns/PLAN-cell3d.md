@@ -2,8 +2,10 @@
 
 **Session counter: 3**
 **Stages complete: 6 of 14, and S6 is under way**
-**Next action: S6f -- the w surface row, and two gaps S6e left open (both below, with
-numbers). Then the surface pressure, and S6 closes.
+**Next action: FIX THE SURFACE-ROW DEFECT IN famLaplacian, diagnosed completely below and
+present in the COMMITTED operator, not only in the extension that exposed it. Nothing else
+in S6 should be built on top of it. Then the untested interpolation, then the surface
+pressure, and S6 closes.
 (Superseded: S6e -- wire the surface flux into the operator. `surfaceLapFluxes` now
 gives, for each velocity component, exactly the flux famLaplacian's sigma = 1 face wants;
 what remains is (a) a `surfaceFlux` hook in famLaplacian's sigma = 1 boundary branch, which
@@ -523,6 +525,95 @@ second-order error, so only a convergence gate on the composed operator at the s
 would see it -- and gate 4f excludes the top row. Closing it needs a probe field that
 satisfies zero tangential stress at the surface, which is the same construction w's row
 needs, so both belong to S6f.
+
+## The surface-row defect in famLaplacian, diagnosed
+
+**This is a defect in the committed operator.** It was found by extending the w family's
+viscous range to sigma = 1, but it is not caused by that: the same faces are used with the
+range at nz-1, and the u, v and p families' topmost sigma face is the surface itself.
+
+### What fails
+
+The w family's surface row, with the surface flux supplied ANALYTICALLY so that the flux
+cannot be the suspect, and with a probe depending on z alone so that every tangential
+derivative is exactly zero:
+
+| | interior rows | row nz-1 | surface row |
+|---|---|---|---|
+| flat | 1.94 | 2.34 | 1.20 |
+| eta/h = 0.4 | 1.92 | 1.31 | **0.09, 23% error** |
+
+### Which term, established by injection
+
+Forcing the sigma-face cross terms to their analytic value (zero, for a probe depending on
+z alone) takes the deformed surface row from 0.09 and 23% to **1.23 and 0.57%** -- the flat
+case's own numbers. So the cross terms on the sigma faces are the whole of it, and the
+remaining 1.2 is a separate, understood thing (below).
+
+### Why they fail, with the condition
+
+A sigma sheet's flux needs the tangential derivative AT THAT SHEET'S HEIGHT, and
+`famLaplacian` gets it by reconstructing each neighbouring column at that height -- rule 1,
+which is right in the interior and is what cured S4b's order -1.99. Near the surface it
+breaks down, because one column's sheet at height `s*H_a` lies ABOVE a neighbouring column's
+top node whenever
+
+    |H_r| drc / H  >  dsf[nz]
+
+that is, whenever the surface's variation between adjacent columns exceeds the top sigma
+cell's thickness. Measured, and note that it GROWS under refinement, because `dsf[nz]` shrinks
+like 1/nz^2 on a grid graded at both ends while `|H_r| drc` shrinks only like 1/nr:
+
+| grid | eta/h = 0.1 | eta/h = 0.4 |
+|---|---|---|
+| 16x24x16 | 3.37 | 16.49 |
+| 32x48x32 | 3.90 | 19.09 |
+| 64x96x64 | 4.29 | 21.13 |
+
+So the reconstruction extrapolates further the finer the grid gets, which is exactly why the
+row does not converge. The ratio exceeds one even at eta/h = 0.1, so this is not an
+extreme-deformation artefact. For u, v and p the topmost sigma face IS the surface, where the
+condition is met for any non-zero slope at all.
+
+### One thing tried and rejected, with numbers
+
+Writing the sigma-face flux in sigma coordinates instead, which needs no cross-column height
+matching:
+
+    grad f . N = (1/H) f_sigma (1 + s^2 H_r^2 + s^2 H_th^2/r^2)
+                 - s H_r f_r|sigma - (s H_th/r^2) f_theta|sigma
+
+exact term for term analytically, and exactly f_z for f = f(z). Implemented, it read order
+0.20 with 102% error at the surface row and NaN in the vector-Laplacian gate, so either the
+form or that implementation of it is wrong; it was reverted rather than left in. The r and
+theta faces must keep common height in any case -- their flux difference is divided by dr or
+dtheta and amplified by 1/r^2, which is the -1.99 of S4b.
+
+### The other, separate thing: the node on its own boundary
+
+The surface node sits ON its control volume's boundary rather than at its centroid, so a flux
+balance over that half cell is second order half a cell from where the value is read: 1.20 at
+the node against 1.40 at the centroid, flat. That is the residual 1.2 above, and it is a
+design question rather than a bug -- is w[nz] a node value or a half-cell average? The
+two-dimensional solver next door takes the other route entirely, a pointwise one-sided second
+derivative at the node (`lapW`, line 322), second order there but not conservative; S5's
+advection uses the half cell at b = nz for exact energy conservation, so a pointwise viscous
+term there would be a mixed formulation and needs justifying rather than assuming.
+
+### Candidate fixes, for the next pass
+
+1. Bound the reconstruction: clamp the target to each column's own resolved range. Bounded
+   error, but clamping makes the tangential derivative wrong by O(H_r f_z), an O(1) error in
+   the derivative, so this alone is not enough.
+2. Treat the condition above as a RESOLUTION requirement and refuse when it is violated --
+   the top sigma cell must be thicker than the surface's inter-column variation. That is the
+   same shape as the resolution gates `dns/faraday-disc.js` already carries
+   (`stokesResolution`, `cellsPerRadialWavelength`, `surfaceOperatorError`), and refusing
+   rather than returning a wrong answer is what this repository does elsewhere. It also says
+   something real: the sigma grading near the surface cannot be finer than the surface's own
+   slope resolves.
+3. Both: clamp for robustness AND refuse when the condition is violated, so the operator is
+   second order exactly where it is entitled to be.
 
 ## Rules this build keeps
 
