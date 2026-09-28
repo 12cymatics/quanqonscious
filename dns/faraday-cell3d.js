@@ -420,6 +420,36 @@ class FaradayCell3D {
     return worst;
   }
 
+  /* ---- the axis ---------------------------------------------------------- */
+
+  /* A value across the axis, by reflection. The point at radius -r and angle
+     theta IS the point at radius r and angle theta + pi, so a stencil reaching
+     inside r = 0 reads the antipodal column -- with a sign that depends on what
+     is being reflected:
+
+        p, w      even:  f(-r, theta) =  f(r, theta + pi)
+        u_r, u_th odd:   f(-r, theta) = -f(r, theta + pi)
+
+     because r-hat and theta-hat both reverse under the reflection while z-hat
+     does not. This is exact for every azimuthal mode, including m = 1 -- the one
+     a single-mode solver cannot handle, since at the axis only the m = 1 harmonic
+     of u_r and u_theta survives at all, and dns/faraday-disc.js refuses m = 1 for
+     precisely that reason. Here every mode is present at once and none is
+     refused.
+
+     nth is required even so that k + nth/2 is an exact index rather than an
+     interpolation between two columns. That is the reason for the requirement.
+
+     `sign` is +1 for a scalar and -1 for a horizontal vector component. */
+  across(f, sign, idx, i, k, j){
+    if (i >= 0) return f[idx(i, k, j)];
+    return sign*f[idx(-1 - i, k + (this.nth >> 1), j)];
+  }
+
+  /* The radial coordinate of a node index continued across the axis, so a
+     difference taken through r = 0 has the right denominator. */
+  rcAcross(i){ return i >= 0 ? this.rc[i] : -this.rc[-1 - i]; }
+
   /* ---- the viscous operator -------------------------------------------- */
 
   /* The Laplacian of a cell-centred scalar, in flux form, with the full metric
@@ -456,14 +486,17 @@ class FaradayCell3D {
       if (j === nz - 1) return (at(i, k, nz-1) - at(i, k, nz-2))/(sc[nz-1] - sc[nz-2]);
       return (at(i, k, j+1) - at(i, k, j-1))/(sc[j+1] - sc[j-1]);
     };
-    /* d f / d r at a cell centre, centred where both neighbours exist. At the
-       axis the reflection is across r = 0, where a scalar is even, so the
-       one-sided difference is the consistent choice; at the rim likewise. */
+    /* d f / d r at a cell centre. Centred everywhere including the axis cell,
+       where the inward neighbour is the antipodal column reflected through r = 0:
+       a scalar is even under that reflection, so the value carries a plus sign
+       and the denominator spans rc[1] - (-rc[0]). A one-sided difference there
+       would be first order in the one place the metric cross terms are largest. */
+    const idx = (a, b, c) => this.ip(a, b, c);
     const dfdr = (i, k, j) => {
       if (nr === 1) return 0;
-      if (i === 0) return (at(1, k, j) - at(0, k, j))/(rc[1] - rc[0]);
       if (i === nr - 1) return (at(nr-1, k, j) - at(nr-2, k, j))/(rc[nr-1] - rc[nr-2]);
-      return (at(i+1, k, j) - at(i-1, k, j))/(rc[i+1] - rc[i-1]);
+      const inward = this.across(f, +1, idx, i - 1, k, j);
+      return (at(i+1, k, j) - inward)/(rc[i+1] - this.rcAcross(i - 1));
     };
     /* theta is periodic, so this is always centred. */
     const dfdth = (i, k, j) => (at(i, k+1, j) - at(i, k-1, j))/(2*dth);

@@ -229,7 +229,7 @@ section('4. the metric Laplacian, against calculus, under refinement');
   const KZ = 700;                       // 1/m; k*h = 2.1, a full half wave in the depth
   const fOf = (r, th, z) => r*r*Math.cos(2*th)*Math.sin(KZ*z);
   const lapOf = (r, th, z) => -KZ*KZ*fOf(r, th, z);
-  const errorOn = (nr, nth, nz, amp) => {
+  const errorOn = (nr, nth, nz, amp, fromI = 0) => {
     const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
       S.eta[S.ie(i,k)] = amp*S.h*(
@@ -242,13 +242,20 @@ section('4. the metric Laplacian, against calculus, under refinement');
       f[S.ip(i,k,j)] = fOf(S.rc[i], thc(k), S.sc[j]*S.H[S.ie(i,k)]);
     S.scalarLaplacian(f, got);
     let num = 0, den = 0;
-    for (let i = 1; i < nr-1; i++) for (let k = 0; k < nth; k++) for (let j = 1; j < nz-1; j++){
+    for (let i = fromI; i < nr-1; i++) for (let k = 0; k < nth; k++) for (let j = 1; j < nz-1; j++){
       const want = lapOf(S.rc[i], thc(k), S.sc[j]*S.H[S.ie(i,k)]);
       const d = got[S.ip(i,k,j)] - want;
       num += d*d; den += want*want;
     }
     return Math.sqrt(num/den);
   };
+  /* The axis cell is INCLUDED (fromI = 0). Its inward neighbour is the antipodal
+     column reflected through r = 0, and the point of including it is that the
+     reflection is what makes the axis converge at the interior's order rather
+     than at first order. Measured both ways: excluding the axis cell, 2.05 flat
+     and 2.00 at eta/h = 0.3; including it, 2.06 and 2.01. If the reflection were
+     replaced by a one-sided difference the axis rows would drop to first order
+     and drag these figures down. */
   for (const [amp, floor] of [[0, 1.9], [0.3, 1.8], [0.6, 1.3]]){
     const coarse = errorOn(16, 24, 16, amp), fine = errorOn(32, 48, 32, amp);
     const order = Math.log(coarse/fine)/Math.log(2);
@@ -260,6 +267,38 @@ section('4. the metric Laplacian, against calculus, under refinement');
        `eta/h = ${amp}: and it falls at order ${floor} or better (got ${order.toFixed(2)})`,
        `observed order ${order.toFixed(3)}`);
   }
+}
+
+/* ── 4b. the axis reflection ─────────────────────────────────────────────── */
+section('4b. the axis is a reflection, not a special case');
+{
+  const S = deform(new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }), 0.3);
+  const f = new Float64Array(S.NP);
+  const r = rnd(4242);
+  for (let c = 0; c < S.NP; c++) f[c] = r();
+  const idx = (a, b, c) => S.ip(a, b, c);
+  const half = S.nth >> 1;
+  /* Inside the axis, radial index -1 is cell 0 of the antipodal column. A scalar
+     carries a plus sign there and a horizontal vector component a minus. */
+  let evenOk = true, oddOk = true;
+  for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++){
+    if (S.across(f, +1, idx, -1, k, j) !== f[S.ip(0, k + half, j)]) evenOk = false;
+    if (S.across(f, -1, idx, -1, k, j) !== -f[S.ip(0, k + half, j)]) oddOk = false;
+  }
+  ok(evenOk, 'a scalar reflected through the axis is the antipodal value');
+  ok(oddOk, 'and a horizontal vector component is minus it, because r-hat and '
+     + 'theta-hat both reverse');
+  ok(S.rcAcross(-1) === -S.rc[0],
+     'the radial coordinate continues through zero, so a difference across the '
+     + 'axis has the right denominator',
+     `${S.rcAcross(-1)} against ${-S.rc[0]}`);
+  /* Reflecting twice is the identity, which is the consistency the sign table
+     has to satisfy. */
+  let twice = true;
+  for (let k = 0; k < S.nth; k++)
+    if (S.kw(k + half + half) !== S.kw(k)) twice = false;
+  ok(twice, 'and reflecting twice returns to the same column, which needs an even '
+     + 'azimuthal count -- the reason the constructor requires one');
 }
 
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
