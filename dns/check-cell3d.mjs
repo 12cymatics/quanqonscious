@@ -419,6 +419,158 @@ section('4d. H interpolated at face midpoints, against the analytic surface');
      `${a.eHr.toExponential(2)} and ${b.eHr.toExponential(2)}`);
 }
 
+/* ── 4e. the metric Laplacian at the staggered nodes ─────────────────────── */
+section('4e. the Laplacian at every node family, against calculus');
+/* ADMISSIBLE SURFACES ONLY, and that is a physical constraint rather than a
+   convenience. A single-valued smooth surface must have its m-th azimuthal
+   component vanish as r^m at the axis; a surface like cos(2 theta) with no radial
+   factor is multivalued there, and sigma H_theta / r^2 diverges. Probing with one
+   reported order -1.99 on a correct operator, which cost a measure-fix cycle to
+   understand. The solver will never meet such a surface, because eta is produced by
+   the equations rather than imposed.
+
+   Tangential derivatives are taken at a common physical height, which is what makes
+   the operator converge at all: see the note on famLaplacian. */
+{
+  const KZ = 700;
+  const fOf = (r, th, z) =>
+    (1 + (r/CELL.R)*(r/CELL.R)*Math.cos(2*th))*Math.sin(KZ*z);
+  const lapOf = (r, th, z) => -KZ*KZ*fOf(r, th, z);
+  /* mixed, and every component admissible: m = 1 as r, m = 2 as r^2, m = 3 as r^3 */
+  const surf = (x, th) => 0.6*x*Math.cos(th) + 0.5*x*x*Math.cos(2*th)
+                        - 0.3*x*x*x*Math.sin(3*th);
+  const errorOn = (famName, nr, nth, nz, amp, skipIn) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
+      S.eta[S.ie(i,k)] = amp*S.h*surf(S.rc[i]/S.R, (k + 0.5)*S.dth);
+    S.refreshMetric();
+    const fam = S.FAM[famName];
+    const N = famName === 'u' ? S.NU : famName === 'v' ? S.NV
+            : famName === 'w' ? S.NW : S.NP;
+    const f = new Float64Array(N), got = new Float64Array(N);
+    const thOf = k => (k + fam.thOff)*S.dth;
+    const zOf = (a, k, b) => fam.sn[b]*S.Hat(fam.rn[a], thOf(k)).H;
+    for (let a = 0; a < fam.rn.length; a++) for (let k = 0; k < nth; k++)
+      for (let b = 0; b < fam.sn.length; b++)
+        f[fam.idx(a,k,b)] = fOf(fam.rn[a], thOf(k), zOf(a,k,b));
+    S.famLaplacian(f, got, fam, (kd, r, th, sg) => fOf(r, th, sg*S.Hat(r, th).H));
+    let num = 0, den = 0;
+    for (let a = Math.max(fam.rLo, skipIn); a <= fam.rHi; a++)
+      for (let k = 0; k < nth; k++)
+        for (let b = fam.sLo; b <= fam.sHi; b++){
+          const want = lapOf(fam.rn[a], thOf(k), zOf(a,k,b));
+          const d = got[fam.idx(a,k,b)] - want;
+          num += d*d; den += want*want;
+        }
+    return Math.sqrt(num/den);
+  };
+  /* The two innermost radial rows are excluded for the families whose reflection is
+     odd. The probe is a SCALAR, even under the axis reflection, while u and v carry
+     the odd sign a horizontal vector component requires -- so at the axis the probe
+     itself has the wrong parity and the reflected neighbour is wrong. That is a
+     property of the probe, not the operator: v's order recovers from 0.28 to 1.45,
+     matching p and u, once those rows are dropped. The axis treatment is gated on
+     its own terms in 4c, where u_r's antisymmetry is exact. */
+  for (const [fam, skip] of [['p', 0], ['u', 2], ['v', 2], ['w', 0]]){
+    for (const amp of [0, 0.4]){
+      const coarse = errorOn(fam, 16, 24, 16, amp, skip);
+      const fine = errorOn(fam, 32, 48, 32, amp, skip);
+      const order = Math.log(coarse/fine)/Math.log(2);
+      console.log(`       ${fam} eta/h = ${amp}: ${coarse.toExponential(2)} -> `
+        + `${fine.toExponential(2)}, order ${order.toFixed(2)}`);
+      ok(fine < coarse,
+         `${fam}, eta/h = ${amp}: refining reduces the error in grad^2 f`,
+         `${coarse.toExponential(3)} then ${fine.toExponential(3)}`);
+      ok(order > 1.2,
+         `${fam}, eta/h = ${amp}: and it converges (order ${order.toFixed(2)})`,
+         `observed order ${order.toFixed(3)}`);
+    }
+  }
+}
+
+/* ── 4f. the vector Laplacian and its cylindrical coupling ───────────────── */
+section('4f. the vector Laplacian, where the coupling cannot hide');
+/* u_r = U cos(theta) g(z), u_theta = -U sin(theta) g(z) is a field uniform in
+   Cartesian terms times g(z), so grad^2 u = U xhat g''(z) exactly. The scalar
+   Laplacian of each component carries a spurious -u/r^2, and it is precisely the
+   two coupling terms that cancel it. Get either coupling term wrong and this field
+   cannot pass; a field without an m = 1 part would not notice. */
+{
+  const KZ = 700, U = 1;
+  const g = z => Math.sin(KZ*z), gpp = z => -KZ*KZ*Math.sin(KZ*z);
+  const errorOn = (nr, nth, nz, amp) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const x = S.rc[i]/S.R, th = (k + 0.5)*S.dth;
+      S.eta[S.ie(i,k)] = amp*S.h*(0.6*x*Math.cos(th) + 0.5*x*x*Math.cos(2*th));
+    }
+    S.refreshMetric();
+    const H = (r, th) => S.Hat(r, th).H;
+    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
+      S.u[S.iu(i,k,j)] = U*Math.cos((k+0.5)*S.dth)*g(S.sc[j]*H(S.rf[i], (k+0.5)*S.dth));
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
+      S.v[S.iv(i,k,j)] = -U*Math.sin(k*S.dth)*g(S.sc[j]*H(S.rc[i], k*S.dth));
+    const LU = new Float64Array(S.NU), LV = new Float64Array(S.NV),
+          LW = new Float64Array(S.NW);
+    S.viscous(LU, LV, LW,
+      (kd, r, th, sg) => U*Math.cos(th)*g(sg*H(r, th)),
+      (kd, r, th, sg) => -U*Math.sin(th)*g(sg*H(r, th)),
+      () => 0);
+    let nu = 0, du = 0, nv = 0, dv = 0;
+    for (let i = 2; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j < nz-1; j++){
+      const th = (k+0.5)*S.dth, z = S.sc[j]*H(S.rf[i], th);
+      const w = U*Math.cos(th)*gpp(z), e = LU[S.iu(i,k,j)] - w;
+      nu += e*e; du += w*w;
+    }
+    for (let i = 2; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j < nz-1; j++){
+      const th = k*S.dth, z = S.sc[j]*H(S.rc[i], th);
+      const w = -U*Math.sin(th)*gpp(z), e = LV[S.iv(i,k,j)] - w;
+      nv += e*e; dv += w*w;
+    }
+    return { u: Math.sqrt(nu/du), v: Math.sqrt(nv/dv) };
+  };
+  for (const amp of [0, 0.2, 0.4]){
+    const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp);
+    const oU = Math.log(a.u/b.u)/Math.log(2), oV = Math.log(a.v/b.v)/Math.log(2);
+    console.log(`       eta/h = ${amp}: (grad^2 u)_r order ${oU.toFixed(2)}, `
+      + `(grad^2 u)_theta order ${oV.toFixed(2)}`);
+    ok(oU > 1.8, `eta/h = ${amp}: the radial component is second order`,
+       `${a.u.toExponential(3)} -> ${b.u.toExponential(3)}, order ${oU.toFixed(3)}`);
+    ok(oV > 1.8, `eta/h = ${amp}: and so is the azimuthal one`,
+       `${a.v.toExponential(3)} -> ${b.v.toExponential(3)}, order ${oV.toFixed(3)}`);
+  }
+}
+
+/* ── 4g. Omega and the physical vertical velocity ────────────────────────── */
+section('4g. the state is the physical velocity; Omega is derived');
+{
+  const S = deform(new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }), 0.3);
+  const r = rnd(9001);
+  for (let c = 0; c < S.NU; c++) S.u[c] = 1e-3*r();
+  for (let c = 0; c < S.NV; c++) S.v[c] = 1e-3*r();
+  for (let c = 0; c < S.NW; c++) S.w[c] = 1e-3*r();
+  for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++) S.w[S.iw(i,k,0)] = 0;
+  const keep = Float64Array.from(S.w);
+  S.omegaFromW();
+  let floorZero = true, slope = 0;
+  for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++)
+    if (S.om[S.iw(i,k,0)] !== 0) floorZero = false;
+  for (let c = 0; c < S.NW; c++) slope = Math.max(slope, Math.abs(S.om[c] - keep[c]));
+  S.wFromOmega();
+  let worst = 0;
+  for (let c = 0; c < S.NW; c++) worst = Math.max(worst, Math.abs(S.w[c] - keep[c]));
+  ok(worst < 1e-18, 'w to Omega and back is the identity',
+     `worst difference ${worst.toExponential(3)}`);
+  ok(floorZero,
+     'Omega is exactly zero on the floor, because sigma kills the slope term there '
+     + 'and no slip kills w',
+     `${floorZero}`);
+  ok(slope > 0,
+     'and the slope term is non-zero on a deformed surface, so the round trip is '
+     + 'not two copies of the same array',
+     `largest |Omega - w| = ${slope.toExponential(3)}`);
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

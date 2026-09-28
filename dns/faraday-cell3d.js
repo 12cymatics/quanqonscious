@@ -145,9 +145,16 @@ class FaradayCell3D {
     this.NU = NU; this.NV = NV; this.NW = NW; this.NP = NP; this.NE = NE;
 
     this.t = 0;
+    /* THE STATE IS THE PHYSICAL VELOCITY. (u, v, w) and eta are what the solver
+       carries; Omega is formed from them at the start of each projection and read
+       back afterwards. Carrying Omega as state instead would make the stored field
+       depend on the metric, so the moment eta advanced the stored numbers would
+       mean something different -- and the viscous and advective terms need
+       physical w in any case. */
     this.u   = new Float64Array(NU);     // radial, at r faces
     this.v   = new Float64Array(NV);     // azimuthal, at theta faces
-    this.om  = new Float64Array(NW);     // Omega, at sigma faces
+    this.w   = new Float64Array(NW);     // physical vertical, at sigma faces
+    this.om  = new Float64Array(NW);     // Omega, derived for the projection
     this.p   = new Float64Array(NP);
     this.eta = new Float64Array(NE);
 
@@ -604,6 +611,46 @@ class FaradayCell3D {
     return this;
   }
 
+  /* A field's value in one column, at an arbitrary physical height.
+   *
+   * This is the primitive the whole operator is built on. Anything that compares
+   * values from two different columns must do it at a COMMON PHYSICAL HEIGHT:
+   * under z = sigma H two columns' sigma levels are at different heights whenever
+   * the surface is deformed, so comparing them at equal sigma carries an O(dH)
+   * error that vanishes when flat and does not converge when not. That error is
+   * what made the coupling terms read order 2.00 flat and -0.52 at eta/h = 0.4.
+   *
+   * Quadratic in sigma, on the stencil centred at level `lev` -- centred on the
+   * LEVEL and not chosen by bracketing the target, so that two columns compared at
+   * one height use the same node positions and their reconstruction errors cancel
+   * instead of jumping as a target crosses a node.
+   *
+   * Radial index a < 0 is the antipodal column reflected through the axis, carrying
+   * the family's own sign: plus for a scalar or the vertical component, minus for a
+   * horizontal one. */
+  colValueAtZ(f, fam, a, k, z, lev){
+    const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
+    let aa = a, kk = k, sign = 1;
+    if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
+    const th = (kk + fam.thOff)*this.dth;
+    const H = this.Hat(fam.rn[aa], th).H;
+    const ss = z/H;
+    const at = b => f[fam.idx(aa, kk, b)];
+    if (nJ === 1) return sign*at(0);
+    if (nJ === 2){
+      const t = (ss - sn[0])/(sn[1] - sn[0]);
+      return sign*((1 - t)*at(0) + t*at(1));
+    }
+    let j = lev === undefined ? 1 : lev;
+    if (j < 1) j = 1;
+    if (j > nJ - 2) j = nJ - 2;
+    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
+    const L0 = ((ss - s1)*(ss - s2))/((s0 - s1)*(s0 - s2));
+    const L1 = ((ss - s0)*(ss - s2))/((s1 - s0)*(s1 - s2));
+    const L2 = ((ss - s0)*(ss - s1))/((s2 - s0)*(s2 - s1));
+    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2);
+  }
+
   /* ---- the viscous operator -------------------------------------------- */
 
   /* The Laplacian of a cell-centred scalar, in flux form, with the full metric
@@ -749,57 +796,101 @@ class FaradayCell3D {
 
   /* The metric Laplacian at any of the four node families.
    *
-   * The same flux algebra as scalarLaplacian, read off a family descriptor rather
-   * than hard-wired to the cell centres: the families differ only in where their
-   * nodes sit in r and sigma, their theta offset, and their boundaries. Written
-   * once and instantiated four times, because four copies with the indices
-   * changed is where a spacing or a sign goes wrong without any test noticing.
+   * TANGENTIAL DERIVATIVES ARE TAKEN AT A COMMON PHYSICAL HEIGHT. This is the
+   * whole design and it is not an optimisation; the obvious discretisation does
+   * not converge. Under z = sigma H every physical derivative is a difference of
+   * two terms,
    *
-   * `bc(kind, r, th, sigma)` gives the field's value ON a boundary face, with kind
-   * one of 'rim', 'floor', 'surface'. Omitted, every boundary face carries zero
-   * flux. The axis needs no entry: at r = 0 the face area is exactly zero, so no
-   * value there can matter, and inward stencils use the antipodal reflection with
-   * the family's own sign.
+   *     df/dr|_z = d_r f - (sigma H_r / H) d_sigma f
    *
-   * The sigma-faces are the non-orthogonal ones and carry the two tangential
-   * cross terms; the r-faces and theta-faces carry one each. Dropping any of them
-   * is invisible on a flat surface, which is why every gate deforms it. */
+   * and for a field that depends on z alone those two terms are individually O(1)
+   * and cancel EXACTLY. Discretely they cancel only to O(dtheta^2); the Laplacian
+   * then divides a difference of face fluxes by dtheta, leaving O(dtheta); and the
+   * 1/r^2 factor near the axis amplifies that by 1/dr^2, so refining the grid
+   * makes it worse. Measured with f = sin(kz) over a surface varying only in
+   * theta, eta/h = 0.3: family p read 1.77e-1 then 1.72e-1, order 0.04, and family
+   * v read 8.63e-1 then 3.42e+0, order -1.99. This is the pressure-gradient error
+   * known from terrain-following ocean and atmosphere models.
+   *
+   * The cure is to remove the subtraction rather than to compute it more
+   * carefully. Each column is reconstructed as a function of physical height and
+   * the two reconstructions are differenced at the SAME height:
+   *
+   *     df/dr|_z  ~  [ f_{a+1}(z) - f_a(z) ] / (r_{a+1} - r_a)
+   *
+   * with f_a(z) obtained by interpolating column a in sigma at sigma = z/H_a. For
+   * f = f(z) both reconstructions return f(z) and the difference is exactly zero,
+   * whatever the surface does. Quadratic in sigma, so the reconstruction error is
+   * smooth across node boundaries: with linear interpolation the error is
+   * piecewise and the two columns' errors fail to cancel when their targets
+   * straddle a node.
+   *
+   * The families differ only in where their nodes sit in r and sigma, their theta
+   * offset, and their boundaries, so this is written once and instantiated four
+   * times. `bc(kind, r, th, sigma)` gives the field's value on a boundary face,
+   * kind being 'rim', 'floor' or 'surface'; omitted, boundary faces carry zero
+   * flux. The axis needs no entry: at r = 0 the face area is exactly zero, and
+   * inward stencils use the antipodal column with the family's reflection sign. */
   famLaplacian(f, out, fam, bc){
     const nth = this.nth, dth = this.dth;
     const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
     const nI = rn.length, nJ = sn.length;
     const idx = fam.idx, sgn = fam.axisSign, thOff = fam.thOff;
+    const half = nth >> 1;
     const thOf = k => (k + thOff)*dth;
     const at = (a, k, b) => f[idx(a, k, b)];
-    /* inward across the axis: node -1 is node 0 of the antipodal column, at -rn[0],
-       carrying the family's reflection sign */
-    const half = nth >> 1;
-    const rAt = a => a < 0 ? -rn[-1 - a] : rn[a];
-    const vAt = (a, k, b) => a < 0 ? sgn*at(-1 - a, k + half, b) : at(a, k, b);
 
+    /* A column, resolved through the axis, for its radial coordinate only; the
+       value comes from colValueAtZ, which applies the same reflection. */
+    const colR = a => a >= 0 ? rn[a] : -rn[-1 - a];
+
+    const atZ = (a, k, z, lev) => this.colValueAtZ(f, fam, a, k, z, lev);
+
+    /* df/dr|_z and df/dtheta|_z, each a difference of reconstructions at ONE
+       height. Beyond the node list the wall value comes from bc, which already
+       delivers a value at a requested sigma and therefore at a requested height. */
+    /* At the rim the face IS the wall, so a two-point difference between the wall
+       and the nearest column is centred at their midpoint and only first order AT
+       the face -- and a flux error of that order does not converge. It cost the w
+       family its last radial row, 2.9e-3 growing to 3.7e-3 while every interior row
+       ran at second order; the same three-point quadratic the sigma boundaries use
+       fixes it. u never showed it, because its node list reaches the wall and the
+       wall is an ordinary neighbour there rather than a boundary. */
+    const dPhysR = (aL, aR, k, z, lev) => {
+      const th = thOf(k);
+      const HR = this.Hat(this.R, th).H;
+      const outL = aL > nI - 1, outR = aR > nI - 1;
+      if (outR){
+        if (!bc) return 0;
+        const fo = bc('rim', this.R, th, z/HR);
+        const fc = atZ(aL, k, z, lev);
+        const d1 = this.R - colR(aL);
+        if (aL - 1 < 0) return (fo - fc)/d1;
+        const ff = atZ(aL - 1, k, z, lev);
+        const d2 = this.R - colR(aL - 1);
+        return fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
+      }
+      const vL = outL ? (bc ? bc('rim', this.R, th, z/HR) : 0) : atZ(aL, k, z, lev);
+      const vR = atZ(aR, k, z, lev);
+      const rL = outL ? this.R : colR(aL), rR = colR(aR);
+      return (vR - vL)/(rR - rL);
+    };
+    const dPhysTh = (a, kL, kR, z, lev) =>
+      (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
+
+    /* d f / d sigma at a node, centred where both neighbours exist. This one needs
+       no common-height treatment: it is already a derivative along the coordinate,
+       with nothing to cancel against. */
     const dfds = (a, k, b) => {
       if (nJ < 2) return 0;
       if (b === 0) return (at(a, k, 1) - at(a, k, 0))/(sn[1] - sn[0]);
       if (b === nJ - 1) return (at(a, k, nJ-1) - at(a, k, nJ-2))/(sn[nJ-1] - sn[nJ-2]);
       return (at(a, k, b+1) - at(a, k, b-1))/(sn[b+1] - sn[b-1]);
     };
-    const dfdr = (a, k, b) => {
-      if (nI < 2) return 0;
-      if (a === nI - 1) return (at(nI-1, k, b) - at(nI-2, k, b))/(rn[nI-1] - rn[nI-2]);
-      return (at(a+1, k, b) - vAt(a-1, k, b))/(rn[a+1] - rAt(a-1));
-    };
-    const dfdth = (a, k, b) => (at(a, k+1, b) - at(a, k-1, b))/(2*dth);
-
-    /* The derivative AT a boundary face, second order, from the boundary value and
-       the two nearest nodes. A plain one-sided difference over the half cell is
-       second order at the MIDPOINT between the face and the node, and only first
-       order at the face itself -- and a flux error of that order at one face gives
-       an error in the cell's Laplacian that does not converge at all. Measured
-       before this was fixed: every interior sigma row read 4.5e-3 and the surface
-       row read 2.4e-1 at both resolutions, flat.
-       dns/faraday-disc.js already does this, in wzSurface, and this is the same
-       quadratic: the derivative at x0 of the parabola through (x0, fo), at
-       distance d1 (fc) and d2 (ff) on one side. */
+    /* and at a boundary face, second order, from the three-point quadratic --
+       a plain one-sided difference is second order at the midpoint between face
+       and node and only first order AT the face, and a flux error of that order
+       does not converge at all. dns/faraday-disc.js does the same in wzSurface. */
     const faceDeriv = (fo, fc, ff, d1, d2) =>
       fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
 
@@ -814,69 +905,40 @@ class FaradayCell3D {
           const fc = at(a, k, b);
           let flux = 0;
 
-          /* ---- the two r faces ---- */
+          /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
           for (const side of [-1, +1]){
             const rface = side < 0 ? rb[a] : rb[a+1];
-            if (rface === 0) continue;                 // the axis: zero area
+            if (rface === 0) continue;                  // the axis: zero area
             const g = this.Hat(rface, th);
-            const area = rface*dth*g.H*dsb;
-            let dr, dsg;
-            const an = side < 0 ? a - 1 : a + 1;
-            if (an > nI - 1){
-              /* the rim wall, outside the node list: a prescribed value at r = R.
-                 Keyed on the NODE list rather than on the unknown range, because a
-                 node that exists but is not solved for -- u at the wall, w at the
-                 surface -- is an ordinary neighbour to read, not a boundary to
-                 close on. Keying it on the unknown range divided by a zero
-                 half-cell and returned NaN for the whole w family. */
-              if (!bc) continue;
-              const fo = bc('rim', this.R, th, sn[b]);
-              dr = a >= 1
-                ? faceDeriv(fo, fc, at(a-1, k, b), this.R - rn[a], this.R - rn[a-1])
-                : (fo - fc)/(this.R - rn[a]);
-              /* and the sigma gradient at the wall face, extrapolated for the same
-                 reason the tangential ones are at the sigma faces */
-              dsg = a >= 1 ? 1.5*dfds(a, k, b) - 0.5*dfds(a-1, k, b)
-                           : dfds(a, k, b);
-            } else {
-              const fo = vAt(an, k, b);
-              const ro = rAt(an);
-              dr = side < 0 ? (fc - fo)/(rn[a] - ro) : (fo - fc)/(ro - rn[a]);
-              dsg = an < 0 ? dfds(a, k, b)
-                           : 0.5*(dfds(a, k, b) + dfds(an, k, b));
-            }
-            flux += side*area*(dr - (sn[b]*g.Hr/g.H)*dsg);
+            if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
+            const z = sn[b]*g.H;
+            const d = side < 0 ? dPhysR(a - 1, a, k, z, b) : dPhysR(a, a + 1, k, z, b);
+            flux += side*rface*dth*g.H*dsb*d;
           }
 
-          /* ---- the two theta faces: periodic, so always both ---- */
+          /* ---- the two theta faces: normal theta-hat ---- */
           for (const side of [-1, +1]){
             const thf = th + side*0.5*dth;
             const g = this.Hat(rn[a], thf);
-            const area = dra*g.H*dsb;
-            const fo = at(a, k + side, b);
-            const dt_ = side < 0 ? (fc - fo)/dth : (fo - fc)/dth;
-            const dsg = 0.5*(dfds(a, k, b) + dfds(a, k + side, b));
-            flux += side*area*(dt_ - (sn[b]*g.Hth/g.H)*dsg)/rn[a];
+            const z = sn[b]*g.H;
+            const d = side < 0 ? dPhysTh(a, k - 1, k, z, b) : dPhysTh(a, k, k + 1, z, b);
+            flux += side*dra*g.H*dsb*d/rn[a];
           }
 
-          /* ---- the two sigma faces: the non-orthogonal ones ---- */
+          /* ---- the two sigma faces: the curved sheets z = sigma H, whose normal
+                  is proportional to (-sigma H_r, -sigma H_theta / r, 1) ---- */
           for (const side of [-1, +1]){
             const sface = side < 0 ? sb[b] : sb[b+1];
             const proj = rn[a]*dra*dth;
-            let dsg, drAt, dtAt;
             const bn = side < 0 ? b - 1 : b + 1;
+            let dsg;
             if (bn < 0 || bn > nJ - 1){
               if (!bc) continue;
-              const kind = side < 0 ? 'floor' : 'surface';
-              const fo = bc(kind, rn[a], th, sface);
+              const fo = bc(side < 0 ? 'floor' : 'surface', rn[a], th, sface);
               if (side < 0){
-                /* the floor: the two nodes above it. The bracket is the derivative
-                   in the +sigma sense, so it is negated -- the helper is written
-                   for nodes on one side and this side is the other. */
                 const d1 = sn[b] - sface;
-                const d2 = (b + 1 <= nJ - 1) ? sn[b+1] - sface : 2*d1;
                 dsg = (b + 1 <= nJ - 1)
-                  ? -faceDeriv(fo, fc, at(a, k, b+1), d1, d2)
+                  ? -faceDeriv(fo, fc, at(a, k, b+1), d1, sn[b+1] - sface)
                   : (fc - fo)/d1;
               } else {
                 const d1 = sface - sn[b];
@@ -884,28 +946,17 @@ class FaradayCell3D {
                   ? faceDeriv(fo, fc, at(a, k, b-1), d1, sface - sn[b-1])
                   : (fo - fc)/d1;
               }
-              /* The tangential gradients AT the boundary face, by linear
-                 extrapolation of the node-centred ones. Using the node's own
-                 values is first order at the face, and with the metric cross
-                 terms active that non-converges exactly as the normal derivative
-                 did: measured order -0.37 at eta/h = 0.3 before this. */
-              const bi = side < 0 ? b + 1 : b - 1;
-              const haveIn = bi >= 0 && bi <= nJ - 1;
-              drAt = haveIn ? 1.5*dfdr(a, k, b) - 0.5*dfdr(a, k, bi)
-                            : dfdr(a, k, b);
-              dtAt = haveIn ? 1.5*dfdth(a, k, b) - 0.5*dfdth(a, k, bi)
-                            : dfdth(a, k, b);
             } else {
               dsg = side < 0 ? (fc - at(a, k, bn))/(sn[b] - sn[bn])
                              : (at(a, k, bn) - fc)/(sn[bn] - sn[b]);
-              drAt = 0.5*(dfdr(a, k, b) + dfdr(a, k, bn));
-              dtAt = 0.5*(dfdth(a, k, b) + dfdth(a, k, bn));
             }
-            const gradR = drAt - (sface*midS.Hr/mid.H)*dsg;
-            const gradT = dtAt - (sface*midS.Hth/mid.H)*dsg;
+            /* the two tangential gradients at this sheet, at its own height */
+            const z = sface*mid.H;
+            const gR = dPhysR(a - 1, a + 1, k, z, b);
+            const gT = dPhysTh(a, k - 1, k + 1, z, b);
             flux += side*proj*( dsg/mid.H
-                              - sface*midS.Hr*gradR
-                              - (sface*midS.Hth/(rn[a]*rn[a]))*gradT );
+                              - sface*midS.Hr*gR
+                              - (sface*midS.Hth/(rn[a]*rn[a]))*gT );
           }
 
           out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid.H*dsb);
@@ -913,6 +964,114 @@ class FaradayCell3D {
       }
     }
     return out;
+  }
+
+  /* The viscous term for the velocity, as the vector Laplacian in cylindrical
+     coordinates:
+
+         (grad^2 u)_r     = grad^2 u_r - u_r/r^2 - (2/r^2) d u_th / d theta
+         (grad^2 u)_theta = grad^2 u_th - u_th/r^2 + (2/r^2) d u_r  / d theta
+         (grad^2 u)_z     = grad^2 w
+
+     The scalar part is famLaplacian at each component's own nodes; the rest is the
+     curvature of the coordinate system, algebraic and pointwise. The two coupling
+     terms are not optional and not small: for a field that is uniform in Cartesian
+     terms -- u_r = U cos(theta) g(z), u_th = -U sin(theta) g(z) -- the scalar
+     Laplacian of each component carries a spurious -u/r^2, and it is exactly the
+     coupling that cancels it to leave U g''(z). The gate uses that field, because
+     it is the one where getting the coupling wrong cannot hide.
+
+     `bcU`, `bcV`, `bcW` close the three scalar operators at the walls. */
+  viscous(outU, outV, outW, bcU, bcV, bcW){
+    const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
+    this.famLaplacian(this.u, outU, this.FAM.u, bcU);
+    this.famLaplacian(this.v, outV, this.FAM.v, bcV);
+    this.famLaplacian(this.w, outW, this.FAM.w, bcW);
+
+    /* d v / d theta at a u node, and d u / d theta at a v node.
+     *
+     * Both are taken at the target node's own PHYSICAL HEIGHT. u sits at
+     * (rf, theta centre) and v at (rc, theta face), so on a deformed surface their
+     * sigma levels are at different heights, and averaging across at equal sigma
+     * carries an O(dH) error: it vanishes when flat and does not converge when
+     * not. Measured with the equal-sigma average: order 2.00 at eta/h = 0 for both
+     * components and -0.52 at eta/h = 0.4. Reconstructing each column at the
+     * target's height removes it. */
+    const FU = this.FAM.u, FV = this.FAM.v;
+    for (let i = FU.rLo; i <= FU.rHi; i++){
+      const r = this.rf[i], inv = 1/(r*r);
+      for (let k = 0; k < nth; k++){
+        const Hu = this.Hat(r, (k + 0.5)*this.dth).H;
+        for (let j = 0; j < nz; j++){
+          const c = this.iu(i, k, j);
+          const z = this.sc[j]*Hu;
+          /* v on this u cell's two theta faces, each the mean of the two radial
+             columns either side, reconstructed at z */
+          const vA = 0.5*(this.colValueAtZ(this.v, FV, i - 1, k, z, j)
+                        + (i <= nr - 1 ? this.colValueAtZ(this.v, FV, i, k, z, j) : 0));
+          const vB = 0.5*(this.colValueAtZ(this.v, FV, i - 1, k + 1, z, j)
+                        + (i <= nr - 1 ? this.colValueAtZ(this.v, FV, i, k + 1, z, j) : 0));
+          outU[c] += -inv*this.u[c] - 2*inv*(vB - vA)/this.dth;
+        }
+      }
+    }
+    for (let i = FV.rLo; i <= FV.rHi; i++){
+      const r = this.rc[i], inv = 1/(r*r);
+      for (let k = 0; k < nth; k++){
+        const Hv = this.Hat(r, k*this.dth).H;
+        for (let j = 0; j < nz; j++){
+          const c = this.iv(i, k, j);
+          const z = this.sc[j]*Hv;
+          const uA = 0.5*(this.colValueAtZ(this.u, FU, i, k - 1, z, j)
+                        + this.colValueAtZ(this.u, FU, i + 1, k - 1, z, j));
+          const uB = 0.5*(this.colValueAtZ(this.u, FU, i, k, z, j)
+                        + this.colValueAtZ(this.u, FU, i + 1, k, z, j));
+          outV[c] += -inv*this.v[c] + 2*inv*(uB - uA)/this.dth;
+        }
+      }
+    }
+    return [outU, outV, outW];
+  }
+
+  /* Omega from the physical velocity, and back. The definition is
+         Omega = w - sigma (u dH/dr + (v/r) dH/dtheta)
+     so the two directions differ only in the sign of the slope term. Both are
+     written out rather than one calling the other, because each is a full pass and
+     the caller always knows which way it is going.
+
+     Floor and surface both come out right without a special case: at sigma = 0 the
+     slope term vanishes and Omega is w, which is zero by no slip; at sigma = 1 the
+     slope term is exactly the horizontal advection of the surface, so Omega there
+     is the kinematic condition, dEta/dt. */
+  omegaFromW(){
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++)
+        for (let j = 0; j <= this.nz; j++){
+          const c = this.iw(i, k, j);
+          this.om[c] = this.w[c] - this.slopeTerm(i, k, j);
+        }
+    return this;
+  }
+  wFromOmega(){
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++)
+        for (let j = 0; j <= this.nz; j++){
+          const c = this.iw(i, k, j);
+          this.w[c] = this.om[c] + this.slopeTerm(i, k, j);
+        }
+    return this;
+  }
+  /* sigma (u dH/dr + (v/r) dH/dtheta) at a sigma face, with u and v averaged from
+     the four faces of the cell that meet there. */
+  slopeTerm(i, k, j){
+    const e = this.ie(i, k), s = this.sf[j];
+    if (s === 0) return 0;
+    const jm = j === 0 ? 0 : j - 1, jp = j === this.nz ? this.nz - 1 : j;
+    const uu = 0.25*(this.u[this.iu(i, k, jm)] + this.u[this.iu(i+1, k, jm)]
+                   + this.u[this.iu(i, k, jp)] + this.u[this.iu(i+1, k, jp)]);
+    const vv = 0.25*(this.v[this.iv(i, k, jm)] + this.v[this.iv(i, k+1, jm)]
+                   + this.v[this.iv(i, k, jp)] + this.v[this.iv(i, k+1, jp)]);
+    return s*(uu*this.Hdr[e] + (vv/this.rc[i])*this.Hdth[e]);
   }
 
   /* Physical vertical velocity, from Omega and the metric: the definition of

@@ -1,13 +1,34 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
-**Session counter: 1**
-**Stages complete: 4 of 14**
-**Next action: S4b, and the shape of the remaining work is now known precisely.
-`famLaplacian` is written and instantiates at all four families; three faults were
-found and fixed, and one remains, diagnosed below. Fix it by evaluating tangential
-derivatives at a COMMON PHYSICAL HEIGHT — interpolating in sigma to z = sigma_face
-* H_face within each neighbouring column — instead of differencing at constant
-sigma and subtracting a metric correction.**
+**Session counter: 2**
+**Stages complete: 5 of 14**
+**Next action: S5 — conservative centred advection, grid-relative in sigma. The
+primitive it needs already exists: `colValueAtZ` reconstructs any field in any
+column at any physical height, which is how every cross-column comparison in this
+solver must be done (see below). No upwinding: it would add numerical dissipation,
+which is indistinguishable from viscosity in the answer and would fake the damping
+that sets the threshold.**
+
+### Read this before touching any operator: compare at a common physical height
+
+Four separate faults in S4b were the same fault. Under z = sigma H two columns'
+sigma levels sit at DIFFERENT physical heights whenever the surface is deformed, so
+any quantity formed by comparing columns at equal sigma carries an O(dH) error that
+vanishes when flat and does not converge when not. It bit:
+
+  - the tangential derivatives in the Laplacian (order -1.99 at worst),
+  - the interpolation of v to u's nodes in the coupling (2.00 flat, -0.52 deformed),
+
+and would bite the advection identically. `colValueAtZ` is the primitive: quadratic
+in sigma on a stencil centred on the LEVEL being differenced, not on the target, so
+two columns compared at one height use the same node positions and their
+reconstruction errors cancel rather than jumping as a target crosses a node.
+
+A second rule, from the same stage: a boundary face needs a THREE-POINT derivative.
+A two-point difference between a wall value and the nearest node is centred at their
+midpoint and only first order at the face, and a flux error of that order does not
+converge at all. This was fixed once, lost in a rewrite, and found again by the w
+family's last radial row diverging while every interior row ran at second order.
 
 ### The sigma-coordinate cancellation, and why it defeats the obvious discretisation
 
@@ -97,7 +118,7 @@ against this and need no further decision.
 | S2 | Metric Laplacian with the sigma-face cross terms | **done** | order 2.05 flat, 2.00 at eta/h = 0.3, 1.52 at 0.6; cross terms proven load-bearing by injection (order -0.01 without them) |
 | S3 | Axis as a reflection, so m = 1 needs no special case | **done** | axis cell converges at the interior's order, 2.01 against 2.00 |
 | S4a | Staggered node geometry, u_r at the axis, metric interpolation | **done** | descriptors shape-checked; axis row exactly antisymmetric and non-zero for m = 1, exactly zero for m = 3; `Hat` second order at face midpoints (1.96, 1.95) and exact in r on a quadratic surface |
-| S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | todo | manufactured solution at each staggered family; the coupling against the analytic vector Laplacian |
+| S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | **done** | vector Laplacian second order at every deformation: (grad^2 u)_r and (grad^2 u)_theta both 2.00 at eta/h = 0, 0.2, 0.4; grad^2 w 2.00 flat and 1.97 at 0.4; scalar probe convergent at all four families |
 | S5 | Conservative centred advection, grid-relative in sigma | todo | discrete kinetic energy conserved to round-off with viscosity and drive off; no upwinding, which would fake viscosity |
 | S6 | Free surface: full mean curvature, normal stress, tangential stress, kinematic update | todo | curvature against the analytic mean curvature of a known surface, under refinement |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
