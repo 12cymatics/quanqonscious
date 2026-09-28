@@ -301,6 +301,124 @@ section('4b. the axis is a reflection, not a special case');
      + 'azimuthal count -- the reason the constructor requires one');
 }
 
+/* ── 4c. node geometry and the axis value of the radial velocity ─────────── */
+section('4c. the staggered node families, and u_r at the axis');
+{
+  const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 6, ...CELL });
+  /* Every family's control-volume boundary list must be exactly one longer than
+     its node list, or some node has no cell and its flux balance is incomplete.
+     Cheap, and it catches an off-by-one in the descriptor that would otherwise
+     surface as a wrong answer at one boundary. */
+  let shaped = true;
+  const names = ['p', 'u', 'v', 'w'];
+  for (const n of names){
+    const f = S.FAM[n];
+    if (f.rb.length !== f.rn.length + 1) shaped = false;
+    if (f.sb.length !== f.sn.length + 1) shaped = false;
+    if (!(f.rLo >= 0 && f.rHi < f.rn.length)) shaped = false;
+    if (!(f.sLo >= 0 && f.sHi < f.sn.length)) shaped = false;
+  }
+  ok(shaped, 'each family has one more control-volume boundary than it has nodes, '
+     + 'and its unknown range lies inside its node list',
+     names.map(n => `${n}: rn ${S.FAM[n].rn.length}/rb ${S.FAM[n].rb.length}`).join(', '));
+  ok(S.FAM.u.axisSign === -1 && S.FAM.v.axisSign === -1
+     && S.FAM.p.axisSign === +1 && S.FAM.w.axisSign === +1,
+     'and the reflection signs are odd for the two horizontal components and even '
+     + 'for pressure and the vertical one');
+  ok(S.FAM.v.thOff === 0 && S.FAM.p.thOff === 0.5 && S.FAM.u.thOff === 0.5
+     && S.FAM.w.thOff === 0.5,
+     'the azimuthal velocity sits on the theta faces and everything else on the '
+     + 'theta centres');
+
+  /* u_r at the axis. A single-valued vector field needs u_r(0, theta) =
+     -u_r(0, theta + pi); the axis row is built as the antisymmetric part of an
+     extrapolation, so it satisfies that by construction. It must also NOT be
+     identically zero, which is what a single-mode solver is forced to assume and
+     why dns/faraday-disc.js refuses m = 1: an m = 1 field is non-zero at the axis,
+     and here it survives. */
+  const half = S.nth >> 1;
+  for (let i = 1; i < S.nr; i++) for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
+    S.u[S.iu(i,k,j)] = Math.cos(k*S.dth)*S.rf[i]
+                     + 0.3*Math.cos(3*k*S.dth)*S.rf[i]*S.rf[i];
+  S.axisU();
+  let anti = 0, mag = 0;
+  for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++){
+    anti = Math.max(anti, Math.abs(S.u[S.iu(0,k,j)] + S.u[S.iu(0,k+half,j)]));
+    mag = Math.max(mag, Math.abs(S.u[S.iu(0,k,j)]));
+  }
+  ok(anti === 0,
+     'u_r at the axis is exactly antisymmetric under theta -> theta + pi',
+     `worst |u(0,k) + u(0,k+pi)| = ${anti.toExponential(2)}`);
+  ok(mag > 0,
+     'and is not identically zero, so the m = 1 component that lives at the axis '
+     + 'is carried rather than assumed away',
+     `max |u(0,k)| = ${mag.toExponential(3)}`);
+  /* A purely m = 3 field has no axis component, so the same machinery must return
+     zero there -- the complement of the check above. */
+  S.u.fill(0);
+  for (let i = 1; i < S.nr; i++) for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
+    S.u[S.iu(i,k,j)] = Math.cos(3*k*S.dth)*S.rf[i];
+  S.axisU();
+  let m3 = 0;
+  for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
+    m3 = Math.max(m3, Math.abs(S.u[S.iu(0,k,j)]));
+  ok(m3 < 1e-18,
+     'while a purely m = 3 field leaves the axis exactly zero, which is the '
+     + 'complement of the check above',
+     `max |u(0,k)| = ${m3.toExponential(2)}`);
+}
+
+/* ── 4d. the metric interpolation ────────────────────────────────────────── */
+section('4d. H interpolated at face midpoints, against the analytic surface');
+/* The operator needs H and its two horizontal slopes at face midpoints, where a
+   bracket-based difference is centred. Checked against a surface whose H is known
+   in closed form.
+ *
+ * Normalised by the field's own scale, not pointwise: dH/dtheta is proportional to
+ * sin(2 theta), which at theta = pi/2 evaluates to 1.2e-16, and a pointwise
+ * relative error divided by that reported 156 on correct code. The first version
+ * of this check did exactly that. */
+{
+  const Hf = (r, th) => CELL.h*(1 + 0.3*Math.cos(2*th)*Math.pow(r/CELL.R, 2));
+  const Hrf = (r, th) => CELL.h*0.3*Math.cos(2*th)*2*r/(CELL.R*CELL.R);
+  const Htf = (r, th) => -CELL.h*0.3*2*Math.sin(2*th)*Math.pow(r/CELL.R, 2);
+  const sH = CELL.h, sHr = CELL.h*0.6/CELL.R, sHt = CELL.h*0.6;
+  const probe = (nr, nth) => {
+    const S = new FaradayCell3D({ nr, nth, nz: 8, ...CELL, rStretch: 0, zStretch: 0 });
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
+      S.eta[S.ie(i,k)] = Hf(S.rc[i], (k + 0.5)*S.dth) - CELL.h;
+    S.refreshMetric();
+    let eH = 0, eHr = 0, eHt = 0;
+    for (let i = 1; i < nr; i++) for (let k = 0; k < nth; k++){
+      const r = 0.5*(S.rc[i-1] + S.rc[i]), th = (k + 0.5)*S.dth, g = S.Hat(r, th);
+      eH = Math.max(eH, Math.abs(g.H - Hf(r, th))/sH);
+      eHr = Math.max(eHr, Math.abs(g.Hr - Hrf(r, th))/sHr);
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const r = S.rc[i], th = k*S.dth, g = S.Hat(r, th);
+      eHt = Math.max(eHt, Math.abs(g.Hth - Htf(r, th))/sHt);
+    }
+    return { eH, eHr, eHt };
+  };
+  const a = probe(16, 24), b = probe(32, 48);
+  const ord = (x, y) => Math.log(x/y)/Math.log(2);
+  console.log(`       H ${a.eH.toExponential(2)} -> ${b.eH.toExponential(2)} `
+    + `(order ${ord(a.eH, b.eH).toFixed(2)}), dH/dtheta ${a.eHt.toExponential(2)} -> `
+    + `${b.eHt.toExponential(2)} (order ${ord(a.eHt, b.eHt).toFixed(2)}), `
+    + `dH/dr ${a.eHr.toExponential(2)}`);
+  ok(ord(a.eH, b.eH) > 1.8, 'H is second order at face midpoints',
+     `order ${ord(a.eH, b.eH).toFixed(3)}`);
+  ok(ord(a.eHt, b.eHt) > 1.8, 'and so is dH/dtheta',
+     `order ${ord(a.eHt, b.eHt).toFixed(3)}`);
+  /* This surface is quadratic in r, and a centred difference differentiates a
+     quadratic exactly, so dH/dr is at round-off rather than second order. Asserted
+     as such: an order here would be an order on round-off noise. */
+  ok(a.eHr < 1e-12 && b.eHr < 1e-12,
+     'while dH/dr is exact on this surface, because it is quadratic in r and a '
+     + 'centred difference differentiates a quadratic exactly',
+     `${a.eHr.toExponential(2)} and ${b.eHr.toExponential(2)}`);
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

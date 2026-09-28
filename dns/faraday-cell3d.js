@@ -169,7 +169,58 @@ class FaradayCell3D {
     this._gw = new Float64Array(NW);
     this._pdiag = new Float64Array(NP);
 
+    /* H on a radially extended grid, so a face midpoint anywhere between the axis
+       and the rim can be interpolated without a special case. Column 0 is cell 0
+       continued across the axis to -rc[0] -- H is a scalar, so the antipodal value
+       carries a plus sign -- and the last column is the rim, where a free contact
+       line leaves the surface at the last cell's height and a pinned one holds it
+       at h. Interpolating a pure function of position is also what keeps the
+       viscous operator symmetric: both cells sharing a face compute that face's H
+       identically. */
+    this.rx = new Float64Array(nr + 2);
+    this.Hx = new Float64Array((nr + 2)*nth);
+    this.rx[0] = -this.rc[0];
+    for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
+    this.rx[nr+1] = this.R;
+
     this.cgIters = 0; this.cgResidual = 0;
+
+    /* Node geometry, one descriptor per staggered family. Every family shares the
+       same periodic uniform theta and the same flux algebra; they differ only in
+       where their nodes sit in r and sigma, by how much their theta nodes are
+       offset from the cell centres, and in what happens at each boundary. So the
+       viscous operator is written once and instantiated four times, rather than
+       copied four times with the indices changed -- which is where a sign or a
+       spacing would go wrong unnoticed.
+
+         rn  node coordinate
+         rb  control-volume boundaries, rb[a] below node a, so one longer than rn
+         lo, hi   the range of node indices that are unknowns; outside it the value
+                  is prescribed by the wall
+         axisSign  +1 for a scalar, -1 for a horizontal vector component */
+    const rbU = new Float64Array(nr + 2);
+    rbU[0] = 0;
+    for (let i = 0; i < nr; i++) rbU[i+1] = this.rc[i];
+    rbU[nr+1] = this.R;
+    const sbW = new Float64Array(nz + 2);
+    sbW[0] = 0;
+    for (let j = 0; j < nz; j++) sbW[j+1] = this.sc[j];
+    sbW[nz+1] = 1;
+
+    this.FAM = {
+      p: { idx: (i, k, j) => this.ip(i, k, j), axisSign: +1, thOff: 0.5,
+           rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
+           sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
+      u: { idx: (i, k, j) => this.iu(i, k, j), axisSign: -1, thOff: 0.5,
+           rn: this.rf, rb: rbU, rLo: 1, rHi: nr - 1,
+           sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
+      v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
+           rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
+           sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
+      w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
+           rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
+           sn: this.sf, sb: sbW, sLo: 1, sHi: nz }
+    };
     this.refreshMetric();
   }
 
@@ -229,6 +280,13 @@ class FaradayCell3D {
         this.Hdth[e] = (this.Hth[i*nth + this.kw(k+1)] - this.Hth[i*nth + this.kw(k)])
                        /this.dth;
       }
+    /* the extended columns */
+    const half = nth >> 1;
+    for (let k = 0; k < nth; k++){
+      this.Hx[0*nth + k] = H[this.ie(0, k + half)];
+      for (let i = 0; i < nr; i++) this.Hx[(i+1)*nth + k] = H[this.ie(i, k)];
+      this.Hx[(nr+1)*nth + k] = this.contact === 'pinned' ? h : H[this.ie(nr-1, k)];
+    }
     return this;
   }
 
@@ -420,6 +478,29 @@ class FaradayCell3D {
     return worst;
   }
 
+  /* H and its two horizontal slopes at an arbitrary position, bilinear on the
+     extended grid. theta is periodic and uniform with cell centres at
+     (k + 1/2) dtheta; r is bracketed in the extended node list, so the axis and
+     the rim need no special case at the call site. */
+  Hat(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Hx = this.Hx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const h00 = Hx[a*nth + k0], h01 = Hx[a*nth + k1];
+    const h10 = Hx[(a+1)*nth + k0], h11 = Hx[(a+1)*nth + k1];
+    const H = (1 - fr)*((1 - ft)*h00 + ft*h01) + fr*((1 - ft)*h10 + ft*h11);
+    const Hr = (((1 - ft)*h10 + ft*h11) - ((1 - ft)*h00 + ft*h01))/(r1 - r0);
+    const Hth = ((1 - fr)*(h01 - h00) + fr*(h11 - h10))/dth;
+    return { H, Hr, Hth };
+  }
+
   /* ---- the axis ---------------------------------------------------------- */
 
   /* A value across the axis, by reflection. The point at radius -r and angle
@@ -449,6 +530,30 @@ class FaradayCell3D {
   /* The radial coordinate of a node index continued across the axis, so a
      difference taken through r = 0 has the right denominator. */
   rcAcross(i){ return i >= 0 ? this.rc[i] : -this.rc[-1 - i]; }
+
+  /* The radial velocity at the axis. u_r is not stored there as an independent
+     value: a single-valued vector field requires u_r(0, theta) = -u_r(0, theta+pi),
+     so the axis row is the antisymmetric part of an extrapolation from the two
+     nodes outside it. Second order, and it satisfies the constraint by
+     construction rather than by an assertion afterwards.
+
+     Setting it to zero instead -- which is what a single-mode solver does, and why
+     dns/faraday-disc.js refuses m = 1 -- would be exact for m = 0 and for every
+     m >= 2, and wrong for exactly the one mode that is non-zero at the axis. */
+  axisU(){
+    const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
+    const r1 = this.rf[1], r2 = this.rf[2];
+    const ex = new Float64Array(nth);
+    for (let j = 0; j < nz; j++){
+      for (let k = 0; k < nth; k++){
+        const a = this.u[this.iu(1, k, j)], b = this.u[this.iu(2, k, j)];
+        ex[k] = a + (0 - r1)*(b - a)/(r2 - r1);     // linear extrapolation to r = 0
+      }
+      for (let k = 0; k < nth; k++)
+        this.u[this.iu(0, k, j)] = 0.5*(ex[k] - ex[this.kw(k + half)]);
+    }
+    return this;
+  }
 
   /* ---- the viscous operator -------------------------------------------- */
 

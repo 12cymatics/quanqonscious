@@ -1,8 +1,11 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
 **Session counter: 1**
-**Stages complete: 3 of 13**
-**Next action: S4 — the metric Laplacian at the staggered nodes.**
+**Stages complete: 4 of 14**
+**Next action: S4b — instantiate the metric Laplacian at the u, v and w families
+and add the cylindrical vector coupling. The geometry it needs is in place
+(`this.FAM`), the metric interpolation it calls is verified (`Hat`), and the one
+non-mechanical piece, u_r at the axis, is done.**
 
 Update the counter, the stage table and the next action in the same commit that
 changes a stage's status. A stage is `done` only when a gate in
@@ -53,7 +56,8 @@ changes the iteration count and not the answer.
 | S1 | Exact projection under the surface-following metric | **done** | symmetric to 2.7e-16 at eta/h = 0.7; divergence falls 3.7e+10 at tol 1e-11 and five decades further at 1e-14 |
 | S2 | Metric Laplacian with the sigma-face cross terms | **done** | order 2.05 flat, 2.00 at eta/h = 0.3, 1.52 at 0.6; cross terms proven load-bearing by injection (order -0.01 without them) |
 | S3 | Axis as a reflection, so m = 1 needs no special case | **done** | axis cell converges at the interior's order, 2.01 against 2.00 |
-| S4 | Metric Laplacian at the u, v and w nodes, plus the cylindrical vector coupling | todo | manufactured solution at each staggered node family; coupling checked against the analytic vector Laplacian |
+| S4a | Staggered node geometry, u_r at the axis, metric interpolation | **done** | descriptors shape-checked; axis row exactly antisymmetric and non-zero for m = 1, exactly zero for m = 3; `Hat` second order at face midpoints (1.96, 1.95) and exact in r on a quadratic surface |
+| S4b | The Laplacian instantiated at u, v, w, plus the cylindrical vector coupling | todo | manufactured solution at each staggered family; the coupling against the analytic vector Laplacian |
 | S5 | Conservative centred advection, grid-relative in sigma | todo | discrete kinetic energy conserved to round-off with viscosity and drive off; no upwinding, which would fake viscosity |
 | S6 | Free surface: full mean curvature, normal stress, tangential stress, kinematic update | todo | curvature against the analytic mean curvature of a known surface, under refinement |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
