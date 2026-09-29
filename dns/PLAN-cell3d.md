@@ -1,103 +1,29 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
-**Session counter: 3**
-**Stages complete: 6 of 14, and S6 is under way**
-**Next action: FIX THE SURFACE-ROW DEFECT IN famLaplacian, diagnosed completely below and
-present in the COMMITTED operator, not only in the extension that exposed it. Nothing else
-in S6 should be built on top of it. Then the untested interpolation, then the surface
-pressure, and S6 closes.
-(Superseded: S6e -- wire the surface flux into the operator. `surfaceLapFluxes` now
-gives, for each velocity component, exactly the flux famLaplacian's sigma = 1 face wants;
-what remains is (a) a `surfaceFlux` hook in famLaplacian's sigma = 1 boundary branch, which
-takes a FLUX where `bc` takes a value, (b) interpolating each component to its own family's
-face -- radially for u, azimuthally for v, and unchanged for w, whose face is already at the
-pressure cell's own position, (c) extending the w family's range from 1..nz-1 to 1..nz, which
-closes the surface node S5 made a solved advection unknown, and (d) the surface pressure
-`p_s = p_ext - gamma kappa + n.T` as the inhomogeneous Dirichlet value inside the projection,
-never as a predictor force. Then S6 is closed and S7 begins.
-(Superseded: S6c/S6d as first written. The curvature is done and gated (7a to 7d)
-and so is the outward normal (8a); 140 checks, 0 failed. The count was written as 138
-here for one commit, which was the total before 8a was added -- measured, not
-transcribed, and corrected. What remains: the full normal stress
-`rho g eta - gamma kappa + 2 rho nu n.E.n` with the WHOLE rate-of-strain contraction and
-not the flat-normal `2 rho nu dw/dz` the two-dimensional solver is entitled to; the two
-tangential conditions `t_j.(2 rho nu E).n = 0` supplying du/dz and dv/dz at sigma = 1;
-and `famLaplacian`'s w family extended from nz-1 to nz, which is what closes the surface
-node S5 made a solved advection unknown. `dns/faraday-disc.js`'s `lapW` (line 322) is the
-pattern for that last one: it solves w at the surface and closes the top face on
-`wzSurface`, the three-point quadratic of w's own column.**
+**Session counter: 4**
+**Stages complete: 6 of 14, and S6 is nearly closed**
+**Next action: the two gate gaps and the surface pressure, which is all that is left of S6.
+(a) The interpolation of each surface-flux component onto its own family's sigma = 1 face is
+still untested -- replacing u's mean of the two adjacent pressure cells with one cell's value
+leaves the whole suite passing. Closing it needs a probe field satisfying zero tangential
+stress at the surface. (b) The surface pressure `p_s = p_ext - gamma kappa + n.T` as the
+inhomogeneous DIRICHLET value inside the projection, never as a predictor force -- that
+mistake made the two-dimensional solver non-finite at 0.57 periods. Then S7: `step()`, the
+stability limit from the capillary, viscous and advective limits including the azimuthal
+direction, and the energy diagnostic.**
 
-### Read this before touching any operator: compare at a common physical height
-
-Four separate faults in S4b were the same fault. Under z = sigma H two columns'
-sigma levels sit at DIFFERENT physical heights whenever the surface is deformed, so
-any quantity formed by comparing columns at equal sigma carries an O(dH) error that
-vanishes when flat and does not converge when not. It bit:
-
-  - the tangential derivatives in the Laplacian (order -1.99 at worst),
-  - the interpolation of v to u's nodes in the coupling (2.00 flat, -0.52 deformed),
-
-and would bite the advection identically. `colValueAtZ` is the primitive: quadratic
-in sigma on a stencil centred on the LEVEL being differenced, not on the target, so
-two columns compared at one height use the same node positions and their
-reconstruction errors cancel rather than jumping as a target crosses a node.
-
-A THIRD rule, from S5, and it is the limit of the first: the ADVECTION must NOT use
-`colValueAtZ`. The common-height rule exists because a physical DERIVATIVE under
-z = sigma H is a difference of two O(1) terms that must cancel. An AVERAGE has no
-cancellation to protect, and the flux form in these coordinates never forms such a
-difference -- it is the same flux algebra `divergence` uses, which is exact. What the
-average must do instead is telescope, and that requires the face value to be the plain
-arithmetic mean of its two neighbouring nodes; reconstructing at a common height breaks
-the telescoping and the scheme stops conserving energy. The planning note that said to
-use `colValueAtZ` here was wrong and is corrected in place.
-
-A second rule, from the same stage: a boundary face needs a THREE-POINT derivative.
-A two-point difference between a wall value and the nearest node is centred at their
-midpoint and only first order at the face, and a flux error of that order does not
-converge at all. This was fixed once, lost in a rewrite, and found again by the w
-family's last radial row diverging while every interior row ran at second order.
-
-### The sigma-coordinate cancellation, and why it defeats the obvious discretisation
-
-Worth reading before touching `famLaplacian`, because it cost four measure-fix
-cycles to find and it will look like a small accuracy problem until it is
-understood.
-
-Under z = sigma H, each physical derivative is a difference of two terms:
-d/dr|_z = d_r - (sigma H_r/H) d_sigma. For a field that depends on z alone those
-two terms are individually O(1) and cancel EXACTLY. Discretely they cancel only to
-O(dtheta^2); the Laplacian then divides a difference of face fluxes by dtheta,
-leaving O(dtheta); and the (1/r^2) factor near the axis amplifies that by 1/dr^2.
-Refining the grid therefore makes it WORSE. Measured with f = sin(kz), a surface
-varying only in theta, eta/h = 0.3:
-
-    family p:  1.77e-1 -> 1.72e-1   order  0.04
-    family v:  8.63e-1 -> 3.42e+0   order -1.99
-
-This is the same defect known in terrain-following ocean and atmosphere models as
-the pressure-gradient error over steep topography. No amount of care in the
-metric slopes fixes it, because the problem is the subtraction itself. Evaluating
-the tangential difference between two columns at a common physical height removes
-the subtraction: for f = f(z) both interpolated values are equal, so the
-difference is exactly zero.
-
-### Faults found and fixed in `famLaplacian` so far
-
-| Fault | How it showed | Fix |
-|-------|---------------|-----|
-| Hat's slopes used for the sigma-face cross terms | every family order 0.5 instead of 2 | interpolate the precomputed centred slopes (`Hslope`) instead; Hat's own are centred only at face midpoints |
-| Boundary branch keyed on the unknown range, not the node list | NaN for the whole w family, from a zero-width half cell above its surface node | key it on the node list: a node that exists but is not solved for is an ordinary neighbour |
-| One-sided boundary derivative | surface row stuck at 2.4e-1 on both grids | three-point quadratic at the face, as `wzSurface` already does in the two-dimensional solver |
-
-A fourth, still open, is the cancellation above.
-
-Update the counter, the stage table and the next action in the same commit that
-changes a stage's status. A stage is `done` only when a gate in
-`dns/check-cell3d.mjs` asserts it against something other than this solver's own
-opinion, and the measured figure is recorded in the row.
-
----
+**What session 4 did, in one line each.** The surface-row defect session 3 diagnosed was
+mostly the GATE's: its test surface was inadmissible at the axis and contradicted the free
+contact line at the rim. Underneath it were three real first-order closures, all the same
+mechanism -- a boundary row has nothing for its interior face's error to cancel against --
+cured by making every face derivative cubic. One quadrature sat at the node instead of the
+control volume's sigma centroid. `FAM.w.sHi` is now `nz`, so w is solved at the surface, and
+gate 4g says what that unknown means and pins its centroid offset in closed form. The
+azimuthal cross term needed the reconstruction stencil to bracket its target rather than be
+anchored on the level, and what remains there is a property of the grid, not the operator.
+The regeneration test then found a gate gap -- one of the five injected defects left the whole
+suite green -- and closing it needed an AXISYMMETRIC probe beside the azimuthal one. 195
+checks, 0 failed, 44 seconds. Every number is in "The surface-row defect, resolved" below.
 
 ## Why this exists
 
@@ -152,8 +78,9 @@ against this and need no further decision.
 | S6b | Free surface: the outward normal | **done** | second order against the analytic normal of a surface with \|grad eta\| up to 0.68, order 1.98, over r/R in [0.25, 0.9]; and a unit vector to 1e-16 |
 | S6c | Free surface: the strain tensor at the surface, and the viscous normal stress | **done** | all six components second order against calculus on a deformed surface, 1.97 to 4.35 at eta/h = 0 and 0.3, rim row included; 2 rho nu n.E.n second order (1.98) against the analytic contraction with the analytic normal at eta/h = 0.3 and 0.6; on a FLAT surface it equals `wzSurface` in the independently written two-dimensional solver to 1.1e-13 relative, and on a deformed one the flat form is wrong by 95.5% of the stress; five injected defects all red |
 | S6d | Free surface: the flux the Laplacian's surface face wants, from the traction | **done** | the tangential traction exactly zero at both tangents, at \|grad eta\| up to 0.30 -- exactly, not nearly; on a FLAT surface the radial and azimuthal fluxes are EXACTLY minus dw/dr and -(1/r)dw/dtheta, which is `surfaceSlopes` in the independently written two-dimensional solver; second order against the identity formed analytically, 1.98 to 1.99, at eta/h = 0.3 and 0.6; a flat surface's slopes and normal exactly zero and exactly vertical; five injected defects all red, two of them caught only by the exactness gates |
-| S6e | Free surface: the flux hook in famLaplacian, and u and v closed by it | **done, in part** | the hook changes the surface row by exactly the flux over the volume it crosses and changes no other row at all; `viscous` supplies it for u and v. NOT done: w's surface row, and two untested things -- see below |
-| S6f | Free surface: w's surface row, the two gate gaps, and the surface pressure | todo | grad^2 w convergent at the surface row on a DEFORMED surface; the interpolation of each flux component to its own family's face; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
+| S6e | Free surface: the flux hook in famLaplacian, and u, v, w closed by it | **done** | the hook changes the surface row by exactly the flux over the volume it crosses and changes no other row at all; `viscous` supplies it for all three; `FAM.w.sHi` is `nz`, so w is solved at sigma = 1 over the half cell its advection already uses |
+| S6f | Free surface: the Laplacian second order at EVERY row, and what w's surface unknown means | **done** | every face derivative cubic, so no boundary row relies on a cancellation: 4e reads 1.99 to 2.00 at all eight (family, amplitude) pairs against a floor raised from 1.2 to 1.9; the sigma = 0 row's first-order term identified in closed form and measured to three digits against it before the fix; 4g asserts grad^2 w at the surface row second order against the exact average over its half cell, AND pins its gap to the point value at sigma = 1 as the centroid offset in closed form, over eight cases -- azimuthal and axisymmetric probes, flat and deformed, at the renderer's grid aspect and at one where the azimuthal surface-slope resolution matches the radial; five injected defects red, the fifth only after the axisymmetric probe was added, which is why it is there |
+| S6g | Free surface: the flux interpolation gate, and the surface pressure | todo | a probe satisfying zero tangential stress, so the interpolation of each flux component onto its own family's face is gated; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -526,94 +453,196 @@ would see it -- and gate 4f excludes the top row. Closing it needs a probe field
 satisfies zero tangential stress at the surface, which is the same construction w's row
 needs, so both belong to S6f.
 
-## The surface-row defect in famLaplacian, diagnosed
+## The surface-row defect, resolved -- and most of it was in the gate
 
-**This is a defect in the committed operator.** It was found by extending the w family's
-viscous range to sigma = 1, but it is not caused by that: the same faces are used with the
-range at nz-1, and the u, v and p families' topmost sigma face is the surface itself.
+The section this replaces diagnosed a defect in `famLaplacian` from measurements taken over
+an INADMISSIBLE TEST SURFACE, and the larger part of what it measured was that surface
+rather than the operator. Kept here because the diagnosis was wrong in a way worth not
+repeating: rule 3 was written about probe FIELDS, and a surface is a field.
 
-### What fails
+### The gate's own surface was not one the solver can be in
 
-The w family's surface row, with the surface flux supplied ANALYTICALLY so that the flux
-cannot be the suspect, and with a probe depending on z alone so that every tangential
-derivative is exactly zero:
+`deform` carried its m = 3 mode as rho^2 and its m = 5 as rho^1. A mode m must vanish like
+r^m at the axis or the field is not a smooth function of position -- r is not -- so
+`dH/dtheta / r^2`, which every sigma face's azimuthal cross term carries, diverged like 1/r.
+That term alone was the whole of the "defect": family w's rows near the surface read
+1.4e-2, 8.0e-3, 2.4e-3 over 16/32/64, order 0.84 then 1.75, and with each mode carried as
+rho^m the same rows read second order, deformed exactly as flat.
 
-| | interior rows | row nz-1 | surface row |
+`deform` also had a nonzero radial slope at the rim. A free contact line means a 90 degree
+contact angle, deta/dr = 0 at r = R exactly, and `refreshMetric` closes the rim with that
+(`Hxr = 0` there), so a surface with a rim slope contradicts its own metric by O(1). Family
+w's rim column read 4.39e-2, 2.59e-2, 1.44e-2, order 0.76 then 0.85, against 1.85 then 1.88
+with the slope removed. 4e's own surface had the same rim slope, and family u showed it
+because its node list reaches the wall, so the wall is an ordinary member of its stencils:
+1.79e-3, 7.41e-4, 4.49e-4, order 1.27 then 0.72, where p, v and w read 1.99.
+
+`deform` is now admissible at the axis and has zero radial slope at the rim, and is
+normalised by the sup of its shape over the unit disc (0.803963385774, from a 20000 x 7200
+scan) so that `ampFraction` is max|eta|/h exactly.
+
+### Three real first-order closures, found underneath that
+
+A row's Laplacian is a difference of two face fluxes over the row's thickness. In the
+interior the two fluxes carry the same truncation error and it cancels; at a boundary row
+one face IS the boundary -- one-sided stencil, or a flux prescribed by the stress condition
+-- and there is nothing for the interior face's error to cancel against, so it is divided by
+the row's thickness undiminished. On a graded grid that costs an order, three times over:
+
+| where | with two points | measured | with four |
 |---|---|---|---|
-| flat | 1.94 | 2.34 | 1.20 |
-| eta/h = 0.4 | 1.92 | 1.31 | **0.09, 23% error** |
+| sigma = 0 row, relative error | (ds_neighbour - ds_row)/4 times f_ss | 1.748e-1, 7.679e-2, 3.598e-2, 1.741e-2 over nz = 16..128, against the closed form's 1.730e-1, 7.623e-2, 3.575e-2, 1.731e-2 | 6.98e-5, 6.38e-6, 9.32e-7, 1.76e-7 |
+| rim column, family p, flat | the same offset in r | 2.27e-3, order 1.71 then 1.43 | 1.58e-3, order 2.19 then 2.05 |
+| surface row, with the flux supplied analytically | the height reconstruction's O(ds^2) in a cross-column difference | 1.68e-2, 1.58e-2, 1.05e-2, order 0.08 then 0.59 | 6.68e-4, order 1.80 then 2.00 |
 
-### Which term, established by injection
+So `polyDerivAt` -- one generic Lagrange derivative -- and the sigma-face derivative, the
+radial face derivative and `colValueAtZ`/`colDerivAtZ` all cubic. The three-point rim
+closure and the dead `dfds` are gone with them. 4e's floor is raised from order 1.2, which
+is what an operator that loses an order at a boundary can manage, to 1.9.
 
-Forcing the sigma-face cross terms to their analytic value (zero, for a probe depending on
-z alone) takes the deformed surface row from 0.09 and 23% to **1.23 and 0.57%** -- the flat
-case's own numbers. So the cross terms on the sigma faces are the whole of it, and the
-remaining 1.2 is a separate, understood thing (below).
+### One quadrature, in the wrong place
 
-### Why they fail, with the condition
+The r and theta faces' one-point rule sat at the node. For the families whose nodes are cell
+centres that IS the control volume's sigma centroid, bit for bit; for w, whose nodes are the
+sigma faces, it is not, and at the surface the node is a quarter cell above the centroid.
+Against the exact average over the half cell the surface row read 1.22e-4, 6.53e-5, 3.43e-5,
+order 0.91 then 0.93; with the quadrature at the centroid, second order.
 
-A sigma sheet's flux needs the tangential derivative AT THAT SHEET'S HEIGHT, and
-`famLaplacian` gets it by reconstructing each neighbouring column at that height -- rule 1,
-which is right in the interior and is what cured S4b's order -1.99. Near the surface it
-breaks down, because one column's sheet at height `s*H_a` lies ABOVE a neighbouring column's
-top node whenever
+### w is now solved at sigma = 1, and what its unknown means
 
-    |H_r| drc / H  >  dsf[nz]
+`FAM.w.sHi` is `nz`. The control volume is the half cell [sc[nz-1], 1] that S5's advection
+already uses, because a shared volume is what makes the discrete energy identity exact.
 
-that is, whenever the surface's variation between adjacent columns exceeds the top sigma
-cell's thickness. Measured, and note that it GROWS under refinement, because `dsf[nz]` shrinks
-like 1/nz^2 on a grid graded at both ends while `|H_r| drc` shrinks only like 1/nr:
+AT THAT NODE THE UNKNOWN IS THE HALF CELL'S AVERAGE, not the point value at sigma = 1, and
+the two differ by O(1/nz). A staggered face-centred unknown on the domain boundary BOUNDS
+its control volume instead of straddling it, so the flux balance is a statement about the
+average, whose centroid is ds_top/4 below the node. No choice of volume closes that gap: a
+node cannot be the centroid of a cell it bounds. The alternative is `lapW` in
+`dns/faraday-disc.js`, a pointwise one-sided second derivative -- second order at the node
+and not conservative -- and an advective term in flux form beside a pointwise viscous one
+would leave the energy identity neither exactly dissipative nor exactly conservative.
 
-| grid | eta/h = 0.1 | eta/h = 0.4 |
+Gate 4g therefore asserts three things, and the third is the one that turns "first order at
+the node" from an excuse into a prediction:
+
+1. second order against the exact average over the half cell (seven-point Gauss-Legendre,
+   exact for degree 13);
+2. that the gap to the point value at sigma = 1 is the centroid offset in closed form,
+   `got = grad^2 f(1) - hw H d(grad^2 f)/dz + O(hw^2)`, to the same order;
+3. that the point value alone is first order and larger.
+
+### The azimuthal cross term, and the resolution it needs
+
+The last term to fall, and the one that cost the most. A sigma face's cross terms want the
+tangential derivatives AT THAT SHEET'S HEIGHT, and a neighbouring theta column's own sigma
+level at that height is off by `|H_theta| dtheta / H` -- measured at 18 to 20 times the top
+row's thickness, a ratio refinement does not reduce, since dtheta and ds_top both fall like
+1/n. Four things were measured:
+
+| form | surface row, eta/h = 0.4, 16/32/64 (max norm) | order |
 |---|---|---|
-| 16x24x16 | 3.37 | 16.49 |
-| 32x48x32 | 3.90 | 19.09 |
-| 64x96x64 | 4.29 | 21.13 |
+| common height, stencil anchored on the level | 3.99e-3, 1.91e-3, 5.45e-4 | 1.06, 1.81 |
+| common height, stencil bracketing the target | 4.75e-3, 8.02e-4, 3.54e-4 | 2.57, 1.18 |
+| sigma coordinates, metric slope consistent with the field's | 1.57e-1, 5.23e-2, 8.94e-3 | 1.58, 2.55 |
+| bracketed, with the azimuthal grid resolving the surface slope as well as the radial one | 3.66e-4, 9.41e-5, 2.38e-5 | 1.96, 1.98 |
 
-So the reconstruction extrapolates further the finer the grid gets, which is exactly why the
-row does not converge. The ratio exceeds one even at eta/h = 0.1, so this is not an
-extreme-deformation artefact. For u, v and p the topmost sigma face IS the surface, where the
-condition is met for any non-zero slope at all.
+Anchored on the level, the cubic extrapolates ten stencil widths past its own nodes.
+Bracketing removes that; what is left is that the stencil changes between adjacent theta
+columns and a theta derivative divides the jump by dtheta.
 
-### One thing tried and rejected, with numbers
+**The sigma-coordinate form is worse, and the reason is what rule 1 is really about.**
+Substituting `f_r|_z = f_r|_sigma - sigma H_r f_z` needs the H-slope in it to be the same
+discrete operator as the field's, or the residual is `sigma^2 H_r (H_r - D_r H)`, an O(dr^2)
+flux error the surface row divides by its own thickness -- measured 1.75e-1 at order 0.14.
+With `D_r H` that residual is identically zero for f = z, whatever the stencil, and
+`grad^2 z` reads 1.8e-9 instead of 1.3e-10; but the azimuthal term is then thirty times
+worse, because in sigma coordinates the field carries the surface's own azimuthal variation
+multiplied by the vertical wavenumber. Here k_z H_theta is 3.15 radians per radian of theta,
+so 0.82 radians per azimuthal cell -- barely resolved -- and the four-point difference's
+O(dtheta^4 f^(5)) error evaluates to 0.05 against a term of size 2: predicted 0.16, measured
+1.566e-1. Radially the substitution is harmless (indistinguishable from the common-height
+form) because the radial slope is gentler. At a common height the field varies in theta only
+through its own shape, which is smooth. That is the whole of rule 1's content, and it is why
+the common-height form stays.
 
-Writing the sigma-face flux in sigma coordinates instead, which needs no cross-column height
-matching:
+Narrowing the azimuthal stencil does not help: three points and two points both read
+3.86e-2 at order 0.68 then 0.83, ten times worse, their O(dtheta^2) truncation being what
+the row divides by its own thickness.
 
-    grad f . N = (1/H) f_sigma (1 + s^2 H_r^2 + s^2 H_th^2/r^2)
-                 - s H_r f_r|sigma - (s H_th/r^2) f_theta|sigma
+**What is left is a property of the grid, not of the operator.** With the azimuthal and
+radial surface-slope resolutions matched the surface row is second order (1.99, 1.98 in RMS);
+at the renderer's aspect, nth = 1.5 nr, the azimuthal ratio is 3.3 times the radial one and
+the row reads 2.41 then 1.74, average 2.07. Both are gated. Whether to REFUSE above some
+ratio is S7's to decide, once `step()` exists and the cost of a coarse azimuthal grid can be
+measured in the answer rather than in one operator: refusing at nth = 1.5 nr would refuse
+the grid the renderer needs, so it is not a free choice.
 
-exact term for term analytically, and exactly f_z for f = f(z). Implemented, it read order
-0.20 with 102% error at the surface row and NaN in the vector-Laplacian gate, so either the
-form or that implementation of it is wrong; it was reverted rather than left in. The r and
-theta faces must keep common height in any case -- their flux difference is divided by dr or
-dtheta and amplified by 1/r^2, which is the -1.99 of S4b.
+### A gate gap the regeneration test found, and what closed it
 
-### The other, separate thing: the node on its own boundary
+Of the five defects injected for this pass, four were red at once and one -- moving the r and
+theta faces' one-point quadrature from the control volume's sigma centroid back to the node --
+left all 183 checks PASSING. That change is a real second-order restoration, measured before
+it was made, and nothing in the suite saw it undone.
 
-The surface node sits ON its control volume's boundary rather than at its centroid, so a flux
-balance over that half cell is second order half a cell from where the value is read: 1.20 at
-the node against 1.40 at the centroid, flat. That is the residual 1.2 above, and it is a
-design question rather than a bug -- is w[nz] a node value or a half-cell average? The
-two-dimensional solver next door takes the other route entirely, a pointwise one-sided second
-derivative at the node (`lapW`, line 322), second order there but not conservative; S5's
-advection uses the half cell at b = nz for exact energy conservation, so a pointwise viscous
-term there would be a mixed formulation and needs justifying rather than assuming.
+The reason is instructive. 4g's probe carried cos 2theta, and with an azimuthal component in
+the field the sigma faces' cross terms are twenty times larger than the quadrature term and
+bury it: the surface row read 4.34e-4 at order 2.00 with the quadrature at the node against
+4.25e-4 at 1.98 with it at the centroid -- indistinguishable. With an AXISYMMETRIC probe the
+cross terms vanish analytically and the quadrature is all that is left: 1.22e-4 at order 0.91
+then 0.93 against 4.74e-5 at 2.74 then 2.38. So 4g now runs both probes, and the gate that
+catches this defect is the axisymmetric one.
 
-### Candidate fixes, for the next pass
+That axisymmetric probe then said the same thing about the azimuthal cross term a third time.
+On a deformed surface its cross terms ought to be identically zero, and what survives is the
+reconstruction's own error: at the renderer's aspect the row reads 1.37 then 1.14, and with
+the azimuthal surface-slope resolution matched to the radial, 3.44 then 2.41. Established by
+injection on a disposable copy: zeroing the azimuthal cross term takes the same case to
+7.22e-5 at order 2.81 then 2.36, while zeroing the radial one changes nothing.
 
-1. Bound the reconstruction: clamp the target to each column's own resolved range. Bounded
-   error, but clamping makes the tangential derivative wrong by O(H_r f_z), an O(1) error in
-   the derivative, so this alone is not enough.
-2. Treat the condition above as a RESOLUTION requirement and refuse when it is violated --
-   the top sigma cell must be thicker than the surface's inter-column variation. That is the
-   same shape as the resolution gates `dns/faraday-disc.js` already carries
-   (`stokesResolution`, `cellsPerRadialWavelength`, `surfaceOperatorError`), and refusing
-   rather than returning a wrong answer is what this repository does elsewhere. It also says
-   something real: the sigma grading near the surface cannot be finer than the surface's own
-   slope resolves.
-3. Both: clamp for robustness AND refuse when the condition is violated, so the operator is
-   second order exactly where it is entitled to be.
+### What is left there, stated as an open item rather than a tolerance
+
+The surface row's order is limited by the surface slope the grid resolves,
+`max(|H_r| dr / H, |H_theta| dtheta / H)`, and by ONE mechanism in both directions: the
+bracketed reconstruction follows its target, so its stencil CHANGES between adjacent columns
+whenever the target moves by more than a cell, and a derivative divides that jump by dr or
+dtheta. Measured, at eta/h = 0.4, against the exact average over the half cell:
+
+| probe | grid aspect | slope ratios theta / r | order |
+|---|---|---|---|
+| cos 2theta | nth = 1.5 nr | 0.169 / 0.051 | 2.41, 1.74 |
+| axisymmetric with radial structure | nth = 1.5 nr | 0.169 / 0.051 | 1.42, 1.17 |
+| cos 2theta | nth = 6 nr | 0.098 / 0.093 | 2.35, 1.99 |
+| axisymmetric with radial structure | nth = 6 nr | 0.098 / 0.093 | 2.02, 1.59 |
+
+so the azimuthal jumps limit the first two and the radial jumps the last, which is why
+matching the ratios does not by itself buy second order once the probe has radial structure.
+Every case is gated at the floor it is measured to clear, with those numbers beside it, and
+the strong claims are untouched: 4e reads 1.99 to 2.00 at all eight (family, amplitude) pairs
+against a floor of 1.9, `grad^2 z` is zero to 1.3e-10, and 4g pins the surface row's centroid
+offset in closed form.
+
+**The fix, for a pass of its own.** Remove the jump rather than bound it: a reconstruction
+that is C1 in its target position -- a cubic Hermite on the bracketing interval, or two
+adjacent cubics blended with weights smooth in the target -- has an error that is a continuous
+function of the target, so a difference quotient of it cannot divide a discontinuity. That is
+a change to `colValueAtZ` alone, and it is gateable by exactly the table above. It is not
+attempted here because S6's remaining work (the flux-interpolation gate and the surface
+pressure) and S7 are ahead of it, and because the row is already second order in every case
+where the slope ratios are small enough that the stencil does not change -- which is what the
+flat cases show, at 1.98 to 2.74.
+
+### The gate that changed, with the measurement
+
+8c pinned EXACT agreement with the two-dimensional solver's `wzSurface`, a three-point
+quadratic, and `colDerivAtZ` is now a cubic, so that had to change. It is not a weakening:
+by the identity 8e gates, a surface-flux error is divided by the top row's thickness, which
+falls like 1/nz here, so a second-order surface quantity leaves the surface row first order.
+The two-dimensional solver keeps its quadratic -- it is the independent reference for S8 and
+changing it would spend that independence. The check is now made twice and the first is
+still exact: on a w profile quadratic in z, which both stencils differentiate exactly, they
+agree to 7.7e-13, 2.1e-12, 6.3e-12 relative (a three-point derivative's cancellation gets
+relatively worse as the spacing shrinks); on the sinusoid the gap between them falls at
+order 2.69 then 2.32, the order the quadratic can promise.
 
 ## Rules this build keeps
 

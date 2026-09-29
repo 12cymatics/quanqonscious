@@ -93,6 +93,11 @@ function requireFinite(v, name){
    Four points make each face flux third order, the division by the row thickness
    leaves second order, and no cancellation is relied on: the same rows then read
    6.98e-5, 6.38e-6, 9.32e-7, 1.76e-7. */
+/* The four columns that straddle a theta node symmetrically with the node itself left out,
+   as offsets in k -- on a uniform grid the classical fourth-order central difference. Module
+   level, because it is a constant and the innermost loop must not allocate. */
+const TH_NODE = new Int8Array([-2, -1, 1, 2]);
+
 function polyDerivAt(xs, ys, n, x){
   let d = 0;
   for (let j = 0; j < n; j++){
@@ -247,6 +252,8 @@ class FaradayCell3D {
     this._sy = new Float64Array(4);        // and its values
     this._rx4 = new Float64Array(4);       // one radial stencil's abscissae
     this._ry4 = new Float64Array(4);       // and its values
+    this._tx4 = new Float64Array(4);       // one azimuthal stencil's abscissae
+    this._ty4 = new Float64Array(4);       // and its values
     this._fsr = new Float64Array(NE);      // and those three, over the whole surface
     this._fst = new Float64Array(NE);
     this._fsz = new Float64Array(NE);
@@ -283,21 +290,27 @@ class FaradayCell3D {
       v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      /* w's nodes run 0..nz; its VISCOUS term is solved on 1..nz-1, whose control
-         volumes never touch sigma = 1, so the surface node's viscous side is still
-         open. S5 made that node a solved ADVECTION unknown, and closing its viscous
-         side was tried here and reverted, with numbers: extending this range to nz
-         leaves the surface row at order 0.06 and 32% error on a deformed surface, and
-         1.16 at the node when flat. Two things are wrong and only one is understood --
-         the node sits ON its control volume's boundary rather than at its centroid, so
-         a flux balance is second order half a cell away from where the value is read
-         (measured: 1.16 at the node against 1.40 at the centroid, flat). The deformed
-         case is not explained by that and is not yet diagnosed. Recorded in
-         dns/PLAN-cell3d.md; the surface flux itself is right and gated in 8d, and u and
-         v do take it. */
+      /* w's nodes run 0..nz and its viscous term is solved on 1..nz, the surface node
+         included -- S5 made that node a solved ADVECTION unknown and this closes its
+         viscous side, over the same half control volume [sc[nz-1], 1] the advection uses,
+         because it is that shared volume which makes the discrete energy identity exact.
+
+         AT THAT NODE THE UNKNOWN IS THE HALF CELL'S AVERAGE, not the point value at
+         sigma = 1, and the two differ by O(1/nz). A staggered face-centred unknown on the
+         domain boundary BOUNDS its control volume instead of straddling it, so the flux
+         balance is a statement about the average and that average's centroid sits
+         ds_top/4 below the node. Measured, with the surface flux supplied analytically:
+         against the exact average over the half cell 6.78e-5, 1.80e-5, 4.58e-6 over
+         16/32/64, order 1.92 then 1.97; against the point value at sigma = 1, 4.63e-3 at
+         order 1.21 then 1.11. No choice of volume closes that gap -- a node cannot be the
+         centroid of a cell it bounds -- and the alternative is the one
+         dns/faraday-disc.js takes in lapW, a pointwise one-sided second derivative, which
+         is second order at the node and not conservative. Conservation is kept here
+         instead: an advective term in flux form beside a pointwise viscous one would
+         leave the energy identity neither exactly dissipative nor exactly conservative. */
       w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
-           sn: this.sf, sb: sbW, sLo: 1, sHi: nz - 1 }
+           sn: this.sf, sb: sbW, sLo: 1, sHi: nz }
     };
     this.refreshMetric();
   }
@@ -677,7 +690,7 @@ class FaradayCell3D {
    * Radial index a < 0 is the antipodal column reflected through the axis, carrying
    * the family's own sign: plus for a scalar or the vertical component, minus for a
    * horizontal one. */
-  colValueAtZ(f, fam, a, k, z, lev){
+  colValueAtZ(f, fam, a, k, z, lev, bracket){
     const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
@@ -687,7 +700,16 @@ class FaradayCell3D {
     const at = b => f[fam.idx(aa, kk, b)];
     if (nJ === 1) return sign*at(0);
     const n = nJ < 4 ? nJ : 4;
-    let j0 = (lev === undefined ? 1 : lev) - 1;
+    /* `bracket` puts the stencil around the target instead of around `lev`, by a binary
+       search for the interval holding it -- for the callers whose target is far from the
+       level, where anchoring would extrapolate. famLaplacian's sigma-face cross terms say
+       why, with the numbers; every other caller leaves it off. */
+    let j0;
+    if (bracket){
+      let lo = 0, hi = nJ - 1;
+      while (hi - lo > 1){ const m = (lo + hi) >> 1; if (sn[m] <= ss) lo = m; else hi = m; }
+      j0 = lo - 1;
+    } else j0 = (lev === undefined ? 1 : lev) - 1;
     if (j0 + n > nJ) j0 = nJ - n;
     if (j0 < 0) j0 = 0;
     let v = 0;
@@ -966,13 +988,20 @@ class FaradayCell3D {
       }
       return polyDerivAt(rx, ry, 4, x);
     };
-    /* theta is uniform and periodic, so the two-point difference over the interval it
-       spans is centred exactly where it is wanted -- at the face midpoint for a theta
-       face, at the node for the sigma faces' cross term -- and its truncation error has
-       the same coefficient at every k, so it cancels between opposite faces exactly. No
-       stencil here changes character anywhere, which is why this one needs no widening. */
-    const dPhysTh = (a, kL, kR, z, lev) =>
+    /* df/dtheta|_z AT A THETA FACE, two points, and two points deliberately.
+       theta is uniform and periodic, so the difference over the interval it spans is
+       centred exactly at the face and its truncation coefficient is the same at every k --
+       which cancels between opposite faces. More than that, THIS STENCIL IS LOAD-BEARING
+       for the cylindrical coupling: for a field uniform in Cartesian terms the azimuthal
+       part of the scalar Laplacian is a spurious -u/r^2 and it is the coupling term
+       (2/r^2) du_theta/dtheta that cancels it, and that cancellation is between two
+       DISCRETE expressions, so it holds only while the two use matching stencils. Raising
+       this one to four points on its own took the vector Laplacian from order 2.10 to 0.67
+       on a flat surface -- the mismatch is O(dtheta^2)/r^2, which at the first cell is
+       O(1). */
+    const dPhysThFace = (a, kL, kR, z, lev) =>
       (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
+    const tx = this._tx4, ty = this._ty4;
 
     /* d f / d sigma AT a sigma face, third order there, from the cubic through the
        four values that straddle it -- polyDerivAt says why four and not two, with
@@ -998,15 +1027,77 @@ class FaradayCell3D {
                                : (j > nJ - 1 ? bc('surface', rn[a], th, sHiB)
                                              : at(a, k, j));
     const sx = this._sx, sy = this._sy;
-    const dfdsFace = (a, k, b, side, sface, th) => {
+    /* The four values straddling one sigma face of row b, loaded into sx and sy, and the
+       index the first of them sits at -- returned because the cross terms below interpolate
+       the SAME four levels in the neighbouring columns, so that every column's interpolation
+       error carries the same coefficient and the r and theta differences see a smooth one. */
+    const sStencil = (b, side) => {
       let j0 = side < 0 ? b - 2 : b - 1;
       if (j0 < jLo) j0 = jLo;
       if (j0 + 3 > jHi) j0 = jHi - 3;
+      return j0;
+    };
+    const loadS = (a, k, j0, th) => {
       for (let m = 0; m < 4; m++){
         sx[m] = sAbs(j0 + m);
         sy[m] = sVal(a, k, j0 + m, th);
       }
-      return polyDerivAt(sx, sy, 4, sface);
+    };
+    /* THE TANGENTIAL GRADIENTS A SIGMA FACE WANTS, and the one place in this operator where
+       rule 1's common height must NOT be used -- with a construction that keeps what rule 1
+       is for and drops the height matching that makes it fail here.
+       .
+       Rule 1 exists because f_r|_z = f_r|_sigma - sigma H_r f_z is a difference of two O(1)
+       terms that must cancel exactly for f = f(z), and reading both columns at one height
+       makes it cancel by construction. On the r and theta faces that works, because the
+       height wanted differs from a neighbour's own level by only H_r dr/H or H_theta dtheta/H
+       of a sheet. On a SIGMA face near the surface it does not: the sheet is at this column's
+       sigma H, and a neighbour's level at that height is off by H_theta dtheta / H, measured
+       at 18 to 20 times the top row's thickness over 16/32/64 -- a ratio refinement does not
+       reduce, since dtheta and ds_top both fall like 1/n. Anchored on the level the cubic was
+       extrapolating ten stencil widths past its own nodes and the azimuthal cross term read
+       3.05e-3, 1.94e-3, 5.91e-4, order 0.65 then 1.71. Choosing the stencil to bracket the
+       target instead removed the extrapolation but made the error jump as the stencil changed
+       between adjacent theta columns, which a theta derivative divides by dtheta: 3.73e-3,
+       9.06e-4, 3.94e-4, 1.25e-4 over four grids, order 2.04, 1.20, 1.66. With the
+       reconstruction replaced by its analytic value the same term read 1.95e-3, 3.15e-4,
+       4.53e-5, 5.84e-6, order 2.63, 2.80, 2.96 -- so neither stencil is the difficulty, the
+       reconstruction is.
+       .
+       Writing the subtraction in sigma instead, with the same discrete operator on H as on
+       the field -- so that f = z cancels to the last bit whatever the stencil -- was tried
+       and is WORSE, by a factor of thirty, and the reason is worth keeping because it is what
+       rule 1 is really about. In sigma coordinates the field carries the surface's own
+       azimuthal variation multiplied by the vertical wavenumber: f(r, theta, sigma H(theta))
+       oscillates in theta at an effective wavenumber k_z H_theta, which here is 3.15 radians
+       per radian of theta, so 0.82 radians per azimuthal cell -- barely resolved. The
+       four-point difference's O(dtheta^4 f^(5)) error then evaluates to 0.05 against a term of
+       size 2, and the surface row divides it by its own thickness: predicted 0.16, measured
+       1.566e-1. Radially the same substitution is harmless (measured indistinguishable from
+       the form below), because the radial slope is gentler; azimuthally it is not. At a
+       COMMON HEIGHT the field varies in theta only through its own shape, which is smooth,
+       and that is the whole of rule 1's content.
+       .
+       So: common height, bracketed. */
+    const atZB = (a, k, z) => this.colValueAtZ(f, fam, a, k, z, undefined, true);
+    const dSigR = (a, k, z) => {
+      let j = a - 1;
+      if (j + 3 > aHi) j = aHi - 3;
+      if (j < aLo) j = aLo;
+      const th2 = thOf(k), HR = this.Hat(this.R, th2).H;
+      for (let m = 0; m < 4; m++){
+        const a2 = j + m;
+        rx[m] = a2 > nI - 1 ? this.R : colR(a2);
+        ry[m] = a2 > nI - 1 ? bc('rim', this.R, th2, z/HR) : atZB(a2, k, z);
+      }
+      return polyDerivAt(rx, ry, 4, rn[a]);
+    };
+    const dSigTh = (a, k, z) => {
+      for (let m = 0; m < 4; m++){
+        tx[m] = (k + TH_NODE[m])*dth;
+        ty[m] = atZB(a, k + TH_NODE[m], z);
+      }
+      return polyDerivAt(tx, ty, 4, k*dth);
     };
 
     for (let a = fam.rLo; a <= fam.rHi; a++){
@@ -1017,6 +1108,16 @@ class FaradayCell3D {
         const midS = this.Hslope(rn[a], th);
         for (let b = fam.sLo; b <= fam.sHi; b++){
           const dsb = sb[b+1] - sb[b];
+          /* The sigma CENTROID of this row's control volume, which is where the r and theta
+             faces' one-point quadrature belongs -- not the node. For the families whose
+             nodes are cell centres the two are the same number bit for bit; for w, whose
+             nodes are the sigma faces, they differ by O(ds^2) in the interior and by
+             ds_top/4 at the surface, where the control volume is the half cell the node
+             bounds rather than straddles. Evaluating there instead cost the surface row an
+             order: against the exact average over that half cell it read 1.22e-4, 6.53e-5,
+             3.43e-5, order 0.91 then 0.93, and reads second order once the quadrature sits
+             at the centroid. */
+          const sMid = 0.5*(sb[b] + sb[b+1]);
           let flux = 0;
 
           /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
@@ -1025,7 +1126,7 @@ class FaradayCell3D {
             if (rface === 0) continue;                  // the axis: zero area
             const g = this.Hat(rface, th);
             if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
-            const z = sn[b]*g.H;
+            const z = sMid*g.H;
             const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
             flux += side*rface*dth*g.H*dsb*d;
           }
@@ -1034,8 +1135,9 @@ class FaradayCell3D {
           for (const side of [-1, +1]){
             const thf = th + side*0.5*dth;
             const g = this.Hat(rn[a], thf);
-            const z = sn[b]*g.H;
-            const d = side < 0 ? dPhysTh(a, k - 1, k, z, b) : dPhysTh(a, k, k + 1, z, b);
+            const z = sMid*g.H;
+            const d = side < 0 ? dPhysThFace(a, k - 1, k, z, b)
+                               : dPhysThFace(a, k, k + 1, z, b);
             flux += side*dra*g.H*dsb*d/rn[a];
           }
 
@@ -1056,14 +1158,12 @@ class FaradayCell3D {
               continue;
             }
             if ((bn < 0 || bn > nJ - 1) && !bc) continue;
-            const dsg = dfdsFace(a, k, b, side, sface, th);
-            /* the two tangential gradients at this sheet, at its own height */
+            loadS(a, k, sStencil(b, side), th);
+            const dsg = polyDerivAt(sx, sy, 4, sface);
             const z = sface*mid.H;
-            const gR = dPhysR(k, z, b, rn[a], a - 1);
-            const gT = dPhysTh(a, k - 1, k + 1, z, b);
             flux += side*proj*( dsg/mid.H
-                              - sface*midS.Hr*gR
-                              - (sface*midS.Hth/(rn[a]*rn[a]))*gT );
+                              - sface*midS.Hr*dSigR(a, k, z)
+                              - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
           }
 
           out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid.H*dsb);
