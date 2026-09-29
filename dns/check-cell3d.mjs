@@ -42,14 +42,44 @@ function rnd(seed){
   return () => { s = (s*1103515245 + 12345) & 0x7fffffff; return s/0x7fffffff - 0.5; };
 }
 
-/* A lumpy surface, so the metric is genuinely three-dimensional rather than a
-   flat special case that would hide every term carrying dH/dr or dH/dtheta. */
+/* A lumpy surface, so the metric is genuinely three-dimensional rather than a flat
+   special case that would hide every term carrying dH/dr or dH/dtheta -- and a surface
+   THE SOLVER CAN ACTUALLY BE IN, which the one this replaces was not.
+
+   Two conditions, and both were broken, each at the place the operator then failed to
+   converge.
+
+   ADMISSIBLE AT THE AXIS. A field with azimuthal mode m must vanish like r^m there, or it
+   is not a smooth function of position at all: r itself is not. The surface this replaces
+   carried m = 3 as rho^2 and m = 5 as rho^1, so dH/dtheta / r^2 -- which every sigma face's
+   azimuthal cross term carries -- diverged like 1/r. That term was measured to be the whole
+   of the surface rows' failure to converge: family w's rows read 1.4e-2, 8.0e-3, 2.4e-3,
+   order 0.84 then 1.75, and with the m-th mode carried as rho^m instead the same rows read
+   second order flat and deformed alike. Rule 3 in dns/PLAN-cell3d.md said this about probe
+   FIELDS; it is just as true of the surface, and saying it only about fields is what let an
+   inadmissible one sit in this file and be read as a defect in the operator. The
+   even-in-r^2 factors below keep each mode of the form r^m times a function of r^2, which
+   is what an analytic field looks like.
+
+   CONSISTENT WITH THE CONTACT LINE. A free contact line means a 90 degree contact angle,
+   which is deta/dr = 0 at r = R exactly -- and refreshMetric closes the rim with precisely
+   that, Hxr = 0 there. A surface with a rim slope contradicts its own metric by O(1), and
+   the rim column then does not converge either: family w read 4.39e-2, 2.59e-2, 1.44e-2,
+   order 0.76 then 0.85, against 1.85 then 1.88 with the slope removed. Each mode below
+   therefore carries a factor that makes its radial derivative vanish at rho = 1.
+
+   Normalised by the sup of the shape over the unit disc, 0.803963385774, computed by a
+   20000 x 7200 scan -- so `ampFraction` is max|eta|/h exactly rather than nominally. */
+const DEFORM_SUP = 0.803963385774;
 function deform(S, ampFraction){
   for (let i = 0; i < S.nr; i++)
-    for (let k = 0; k < S.nth; k++)
-      S.eta[S.ie(i, k)] = ampFraction*S.h*(
-          Math.cos(3*k*S.dth)*Math.pow(S.rc[i]/S.R, 2)
-        + 0.4*Math.sin(5*k*S.dth + 1)*(S.rc[i]/S.R));
+    for (let k = 0; k < S.nth; k++){
+      const x = S.rc[i]/S.R, x2 = x*x, th = k*S.dth;
+      S.eta[S.ie(i, k)] = (ampFraction*S.h/DEFORM_SUP)*(
+          0.6*x2*(1 - 0.5*x2)                                    // m = 0
+        + Math.cos(3*th)*x2*x*(1 - 0.6*x2)                       // m = 3, as rho^3
+        + 0.4*Math.sin(5*th + 1)*x2*x2*x*(1 - (5/7)*x2));        // m = 5, as rho^5
+    }
   S.refreshMetric();
   return S;
 }
@@ -354,9 +384,16 @@ section('4e. the Laplacian at every node family, against calculus');
   const fOf = (r, th, z) =>
     (1 + (r/CELL.R)*(r/CELL.R)*Math.cos(2*th))*Math.sin(KZ*z);
   const lapOf = (r, th, z) => -KZ*KZ*fOf(r, th, z);
-  /* mixed, and every component admissible: m = 1 as r, m = 2 as r^2, m = 3 as r^3 */
-  const surf = (x, th) => 0.6*x*Math.cos(th) + 0.5*x*x*Math.cos(2*th)
-                        - 0.3*x*x*x*Math.sin(3*th);
+  /* Mixed, every component admissible at the axis -- m = 1 as r, m = 2 as r^2, m = 3 as
+     r^3 -- AND with zero radial slope at the rim, which a free contact line means and which
+     refreshMetric closes the rim with. Without that last factor the rim contradicted the
+     metric by O(1) in the slope, and family u was the one that showed it, because its node
+     list reaches the wall and the wall is therefore an ordinary member of its stencils:
+     u read 1.79e-3, 7.41e-4, 4.49e-4 at eta/h = 0.4, order 1.27 then 0.72, while p, v and w
+     stayed at 1.99. With the factor every family reads 1.99 to 2.03 on all three grids. */
+  const surf = (x, th) => 0.6*x*(1 - x*x/3)*Math.cos(th)
+                        + 0.5*x*x*(1 - 0.5*x*x)*Math.cos(2*th)
+                        - 0.3*x*x*x*(1 - 0.6*x*x)*Math.sin(3*th);
   const errorOn = (famName, nr, nth, nz, amp, skipIn) => {
     const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
@@ -389,6 +426,12 @@ section('4e. the Laplacian at every node family, against calculus');
      property of the probe, not the operator: v's order recovers from 0.28 to 1.45,
      matching p and u, once those rows are dropped. The axis treatment is gated on
      its own terms in 4c, where u_r's antisymmetry is exact. */
+  /* SECOND order asked for, not merely convergence. The floor used to be 1.2, which is what
+     an operator that loses an order at a boundary row can manage, and it passed while three
+     separate first-order closures sat in the sigma and radial directions. With the face
+     derivatives cubic -- see polyDerivAt -- the measured orders are 1.99, 1.99, 1.99, 2.00,
+     1.99, 2.00, 2.04, 2.03 over the eight (family, amplitude) pairs, so 1.9 is a floor the
+     operator clears and a first-order closure could not. */
   for (const [fam, skip] of [['p', 0], ['u', 2], ['v', 2], ['w', 0]]){
     for (const amp of [0, 0.4]){
       const coarse = errorOn(fam, 16, 24, 16, amp, skip);
@@ -399,8 +442,8 @@ section('4e. the Laplacian at every node family, against calculus');
       ok(fine < coarse,
          `${fam}, eta/h = ${amp}: refining reduces the error in grad^2 f`,
          `${coarse.toExponential(3)} then ${fine.toExponential(3)}`);
-      ok(order > 1.2,
-         `${fam}, eta/h = ${amp}: and it converges (order ${order.toFixed(2)})`,
+      ok(order > 1.9,
+         `${fam}, eta/h = ${amp}: and it is second order (${order.toFixed(2)})`,
          `observed order ${order.toFixed(3)}`);
     }
   }
@@ -1655,17 +1698,32 @@ section('8b. the rate-of-strain tensor at the surface, against calculus');
 
 section('8c. the viscous normal stress, and its flat limit against the solver next door');
 /* On a FLAT surface the outward normal is z-hat exactly, so n.E.n collapses to E_zz and the
- * viscous normal stress must be exactly 2 rho nu dw/dz -- which is `wzSurface` in
+ * viscous normal stress must be 2 rho nu dw/dz -- which is `wzSurface` in
  * dns/faraday-disc.js, an independently written solver, quadratic through the three
  * vertical faces below the surface.
  *
- * Asserted at round-off of the CANCELLATION, not bit for bit. The two are the same
- * quadratic but not the same sequence of operations -- one works in sigma and divides by H,
- * the other in z -- and a three-point derivative differences nearly equal values over a
- * small spacing, so agreement is limited by that cancellation. Measured: 3.2e-17 against a
- * stress of 2.9e-4, which is 1.1e-13 relative. Asked for 1e-13 first, and that was the
- * third time in this build that two algebraically identical expressions were expected to
- * agree more closely than their operation order allows.
+ * THE TWO NO LONGER USE THE SAME STENCIL, and that is deliberate. `colDerivAtZ` is a cubic
+ * through four nodes, because the surface flux's error is divided by the top row's thickness
+ * in that row's flux balance -- the identity 8e gates below -- and on a grid graded towards
+ * the surface that thickness falls like 1/nz, so a second-order surface quantity leaves the
+ * surface row first order. The two-dimensional solver keeps its quadratic: it is the
+ * independent reference for S8 and changing it would spend that independence.
+ *
+ * So the cross-code check is made twice, and the first of the two is still exact. On a w
+ * profile QUADRATIC in z both stencils differentiate exactly, so they must agree to
+ * round-off whatever their order: the check is then of the formula -- n.E.n collapsing to
+ * E_zz, and the factor 2 rho nu -- rather than of the stencil. Asserted at round-off of the
+ * CANCELLATION, not bit for bit: the two are not the same sequence of operations, one
+ * working in sigma and dividing by H and the other in z, and a three-point derivative
+ * differences nearly equal values over a small spacing, so agreement is limited by that
+ * cancellation and gets RELATIVELY worse as the grid refines and the spacing shrinks.
+ * Measured 5.09e-17, 1.37e-16, 4.25e-16 against a stress of 6.6e-5 over nz = 16, 32, 64:
+ * 7.7e-13, 2.1e-12, 6.3e-12 relative.
+ *
+ * On the sinusoid the two stencils differ by their own truncation, and that gap must
+ * CONVERGE, which is the second check: measured 1.578e-8, 2.463e-9, 4.935e-10, order 2.68
+ * then 2.32. A gap between two approximations of one true value falls at the worse of their
+ * orders, so the floor asserted is second order -- what the quadratic can promise.
  *
  * On a deformed surface it must instead be the full contraction, and the gap between the
  * two forms is measured rather than asserted small: it is most of the stress, which is the
@@ -1673,8 +1731,12 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
 {
   const R = 12.125e-3, KZ = 400, D = 3.8e3;
   const uzf = (r, t, z) => D*r*r*(R - r)*Math.cos(t)*Math.sin(KZ*z);
-  const build = amp => {
-    const S = new FaradayCell3D({ nr: 16, nth: 24, nz: 16, ...CELL, R });
+  /* the same shape in r and theta, but quadratic in z, which both stencils differentiate
+     exactly -- so their agreement on it is the formula's and not the stencil's */
+  const uzq = (r, t, z, h) =>
+    D*r*r*(R - r)*Math.cos(t)*(0.3 + 1.7*(z/h) - 0.9*(z/h)*(z/h));
+  const build = (amp, nr = 16, nth = 24, nz = 16, prof = uzf) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++){
         const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
@@ -1684,7 +1746,8 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
     const H = (r, th) => S.Hat(r, th).H;
     for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
       const th = (k + 0.5)*S.dth, r = S.rc[i];
-      for (let b = 0; b <= S.nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+      for (let b = 0; b <= S.nz; b++)
+        S.w[S.iw(i,k,b)] = prof(r, th, S.sf[b]*H(r, th), S.h);
     }
     return S;
   };
@@ -1696,8 +1759,8 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
     const a = z(nz) - z(nz-1), b = z(nz) - z(nz-2);
     return w0*(a + b)/(a*b) - w1*b/(a*(b - a)) + w2*a/(b*(b - a));
   };
-  {
-    const S = build(0);
+  const gap = (nz, prof) => {
+    const S = build(0, 16, 24, nz, prof);
     let worst = 0, scale = 0;
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++){
@@ -1706,13 +1769,33 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
         worst = Math.max(worst, Math.abs(mine - theirs));
         scale = Math.max(scale, Math.abs(theirs));
       }
-    ok(worst < 1e-12*scale,
+    return { worst, scale };
+  };
+  {
+    /* the quadratic profile: both stencils are exact on it, so this is the formula */
+    const q = [gap(16, uzq), gap(32, uzq), gap(64, uzq)];
+    const rel = q.map(x => x.worst/x.scale);
+    ok(rel.every(x => x < 1e-11),
        'on a flat surface the viscous normal stress is exactly the two-dimensional '
-       + 'solver\'s 2 rho nu dw/dz, to round-off',
-       `worst ${worst.toExponential(3)} against ${scale.toExponential(3)}, relative `
-       + `${(worst/scale).toExponential(2)}`);
-    ok(scale > 0, 'and that stress is not zero, so the agreement is not two blank arrays',
-       `largest ${scale.toExponential(3)} Pa`);
+       + 'solver\'s 2 rho nu dw/dz, to round-off, on a profile both stencils differentiate '
+       + 'exactly',
+       `relative ${rel.map(x => x.toExponential(2)).join(', ')} over nz = 16, 32, 64, `
+       + `against a stress of ${q[0].scale.toExponential(3)} Pa`);
+    ok(q.every(x => x.scale > 0),
+       'and that stress is not zero, so the agreement is not two blank arrays',
+       `largest ${q[0].scale.toExponential(3)} Pa`);
+    /* the sinusoid: the stencils differ by their truncation, and that must converge */
+    const t = [gap(16, uzf), gap(32, uzf), gap(64, uzf)];
+    const o1 = Math.log(t[0].worst/t[1].worst)/Math.LN2;
+    const o2 = Math.log(t[1].worst/t[2].worst)/Math.LN2;
+    console.log(`       cubic against the two-dimensional solver's quadratic: `
+      + `${t.map(x => x.worst.toExponential(3)).join(' -> ')}, order `
+      + `${o1.toFixed(2)} then ${o2.toFixed(2)}`);
+    ok(o1 > 1.9 && o2 > 1.9,
+       'and on a profile they differentiate differently the gap between them converges at '
+       + 'the order the quadratic can promise, so the two codes agree in the limit',
+       `order ${o1.toFixed(2)} then ${o2.toFixed(2)}, from `
+       + `${t[0].worst.toExponential(3)} down to ${t[2].worst.toExponential(3)}`);
   }
   {
     const S = build(0.5);

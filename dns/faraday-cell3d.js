@@ -71,6 +71,45 @@ function requireFinite(v, name){
   return v;
 }
 
+/* The derivative at x of the polynomial through the first n of (xs, ys).
+   Written as the sum over j of ys[j] times the derivative of the j-th Lagrange
+   basis polynomial, and that derivative as the sum over i != j of the product
+   over m != i, j of (x - xs[m]) -- which has no removable singularity, so x may
+   be a node as well as a point between nodes.
+
+   WHY A CUBIC IS NEEDED, not merely convenient. A finite-volume row's Laplacian
+   is a difference of two face fluxes divided by the row's own thickness. In the
+   interior the two fluxes carry the same truncation error to leading order and it
+   cancels, so second-order fluxes leave a second-order operator. At a boundary row
+   one of the two faces is the boundary, where the stencil is one-sided or the flux
+   is prescribed outright, so there is nothing for the interior face's error to
+   cancel against and it is divided by the row's thickness undiminished -- which
+   costs an order. With the two-point difference the surviving term is the offset
+   between the face and the midpoint of the two nodes differenced there,
+   (ds_neighbour - ds_row)/4 times f_ss, and on a graded grid that is first order:
+   measured on the sigma = 0 row, relative error 1.748e-1, 7.679e-2, 3.598e-2,
+   1.741e-2 over nz = 16, 32, 64, 128, against the closed form above of 1.730e-1,
+   7.623e-2, 3.575e-2, 1.731e-2 -- three digits, so the mechanism is not in doubt.
+   Four points make each face flux third order, the division by the row thickness
+   leaves second order, and no cancellation is relied on: the same rows then read
+   6.98e-5, 6.38e-6, 9.32e-7, 1.76e-7. */
+function polyDerivAt(xs, ys, n, x){
+  let d = 0;
+  for (let j = 0; j < n; j++){
+    let den = 1;
+    for (let m = 0; m < n; m++) if (m !== j) den *= xs[j] - xs[m];
+    let num = 0;
+    for (let i = 0; i < n; i++){
+      if (i === j) continue;
+      let prod = 1;
+      for (let m = 0; m < n; m++) if (m !== j && m !== i) prod *= x - xs[m];
+      num += prod;
+    }
+    d += ys[j]*num/den;
+  }
+  return d;
+}
+
 /* The same graded maps the two-dimensional solver uses, so the grid code has one
    implementation and the two cannot drift. */
 const GRADE = (function(){
@@ -204,6 +243,10 @@ class FaradayCell3D {
     this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
     this._sg = new Float64Array(9);        // and its nine covariant derivatives
     this._sf3 = new Float64Array(3);       // the three surface Laplacian fluxes
+    this._sx = new Float64Array(4);        // one sigma-face stencil's abscissae
+    this._sy = new Float64Array(4);        // and its values
+    this._rx4 = new Float64Array(4);       // one radial stencil's abscissae
+    this._ry4 = new Float64Array(4);       // and its values
     this._fsr = new Float64Array(NE);      // and those three, over the whole surface
     this._fst = new Float64Array(NE);
     this._fsz = new Float64Array(NE);
@@ -615,10 +658,21 @@ class FaradayCell3D {
    * error that vanishes when flat and does not converge when not. That error is
    * what made the coupling terms read order 2.00 flat and -0.52 at eta/h = 0.4.
    *
-   * Quadratic in sigma, on the stencil centred at level `lev` -- centred on the
-   * LEVEL and not chosen by bracketing the target, so that two columns compared at
-   * one height use the same node positions and their reconstruction errors cancel
-   * instead of jumping as a target crosses a node.
+   * CUBIC in sigma, on the four nodes lev-1 .. lev+2 -- anchored on the LEVEL and not
+   * chosen by bracketing the target, so that two columns compared at one height use the
+   * same node positions and their reconstruction errors cancel instead of jumping as a
+   * target crosses a node.
+   *
+   * Cubic and not quadratic for the reason polyDerivAt gives, one step removed. A
+   * quadratic leaves the reconstruction wrong by O(ds^2 dr) at a height one column's own
+   * surface fixes, so the difference of two columns over dr carries O(ds^2); between the
+   * two sigma faces of an interior row that cancels, but at the SURFACE row -- where the
+   * other face's flux comes from the stress condition and is not a discretisation of
+   * anything -- there is nothing to cancel against, and dividing by the top row's
+   * thickness turns it into O(ds). Measured with a quadratic and the surface flux supplied
+   * analytically, family p's surface row read 1.68e-2, 1.58e-2, 1.05e-2 over 16, 32, 64:
+   * order 0.08 then 0.59. The cubic makes it O(ds^3) instead, which the same division
+   * leaves second order.
    *
    * Radial index a < 0 is the antipodal column reflected through the axis, carrying
    * the family's own sign: plus for a scalar or the vertical component, minus for a
@@ -632,18 +686,18 @@ class FaradayCell3D {
     const ss = z/H;
     const at = b => f[fam.idx(aa, kk, b)];
     if (nJ === 1) return sign*at(0);
-    if (nJ === 2){
-      const t = (ss - sn[0])/(sn[1] - sn[0]);
-      return sign*((1 - t)*at(0) + t*at(1));
+    const n = nJ < 4 ? nJ : 4;
+    let j0 = (lev === undefined ? 1 : lev) - 1;
+    if (j0 + n > nJ) j0 = nJ - n;
+    if (j0 < 0) j0 = 0;
+    let v = 0;
+    for (let i = 0; i < n; i++){
+      let L = 1;
+      for (let m = 0; m < n; m++)
+        if (m !== i) L *= (ss - sn[j0 + m])/(sn[j0 + i] - sn[j0 + m]);
+      v += at(j0 + i)*L;
     }
-    let j = lev === undefined ? 1 : lev;
-    if (j < 1) j = 1;
-    if (j > nJ - 2) j = nJ - 2;
-    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
-    const L0 = ((ss - s1)*(ss - s2))/((s0 - s1)*(s0 - s2));
-    const L1 = ((ss - s0)*(ss - s2))/((s1 - s0)*(s1 - s2));
-    const L2 = ((ss - s0)*(ss - s1))/((s2 - s0)*(s2 - s1));
-    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2);
+    return sign*v;
   }
 
   /* The same stencil as colValueAtZ, differentiated instead of evaluated: df/dz in one
@@ -661,18 +715,14 @@ class FaradayCell3D {
     const th = (kk + fam.thOff)*this.dth;
     const H = this.Hat(fam.rn[aa], th).H;
     const ss = z/H;
-    const at = b => f[fam.idx(aa, kk, b)];
     if (nJ === 1) return 0;
-    if (nJ === 2) return sign*(at(1) - at(0))/((sn[1] - sn[0])*H);
-    let j = lev === undefined ? 1 : lev;
-    if (j < 1) j = 1;
-    if (j > nJ - 2) j = nJ - 2;
-    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
-    /* d/ds of the three Lagrange basis polynomials, at s = ss */
-    const L0 = ((ss - s1) + (ss - s2))/((s0 - s1)*(s0 - s2));
-    const L1 = ((ss - s0) + (ss - s2))/((s1 - s0)*(s1 - s2));
-    const L2 = ((ss - s0) + (ss - s1))/((s2 - s0)*(s2 - s1));
-    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2)/H;
+    const n = nJ < 4 ? nJ : 4;
+    let j0 = (lev === undefined ? 1 : lev) - 1;
+    if (j0 + n > nJ) j0 = nJ - n;
+    if (j0 < 0) j0 = 0;
+    const sx = this._sx, sy = this._sy;
+    for (let m = 0; m < n; m++){ sx[m] = sn[j0 + m]; sy[m] = f[fam.idx(aa, kk, j0 + m)]; }
+    return sign*polyDerivAt(sx, sy, n, ss)/H;
   }
 
   /* The nine covariant derivatives of the velocity at the free surface above one pressure
@@ -877,53 +927,87 @@ class FaradayCell3D {
 
     const atZ = (a, k, z, lev) => this.colValueAtZ(f, fam, a, k, z, lev);
 
-    /* df/dr|_z and df/dtheta|_z, each a difference of reconstructions at ONE
-       height. Beyond the node list the wall value comes from bc, which already
-       delivers a value at a requested sigma and therefore at a requested height. */
-    /* At the rim the face IS the wall, so a two-point difference between the wall
-       and the nearest column is centred at their midpoint and only first order AT
-       the face -- and a flux error of that order does not converge. It cost the w
-       family its last radial row, 2.9e-3 growing to 3.7e-3 while every interior row
-       ran at second order; the same three-point quadratic the sigma boundaries use
-       fixes it. u never showed it, because its node list reaches the wall and the
-       wall is an ordinary neighbour there rather than a boundary. */
-    const dPhysR = (aL, aR, k, z, lev) => {
+    /* df/dr|_z at a chosen radius, third order there, from the cubic through the four
+       columns that straddle it -- each column reconstructed at the SAME physical height,
+       which is rule 1 above and the reason for colValueAtZ. Four and not two for the
+       reason polyDerivAt gives: the radial grid is graded too, so the two-point difference
+       is centred at the midpoint of its columns rather than at the face, and at the rim
+       column -- where the outward face is the wall and its stencil is one-sided -- there is
+       nothing for that error to cancel against. Measured on family p over a flat surface,
+       the rim column read 2.27e-3 at order 1.71 then 1.43 while every interior column ran
+       at 2.04 or better; the corner where the rim meets a sigma boundary was first order
+       for the same reason in both directions at once.
+
+       A column past the rim is the wall, whose value bc delivers at the requested height;
+       one inside the axis is the antipodal column, which colValueAtZ carries with the
+       family's own reflection sign. The wall is therefore an ordinary fourth point rather
+       than a special case, and the three-point rim closure this replaces is gone with it.
+       `a0` is the first column of the stencil; it is clamped so the four exist. */
+    const aHi = (bc && rn[nI-1] < this.R) ? nI : nI - 1;
+    /* How far inward the stencil may reach. A family whose first node is ON the axis --
+       u, whose nodes are the r faces -- has no antipodal continuation to offer: column
+       -1 would be that same node reflected, at the same radius zero, and two stencil
+       points at one abscissa is a division by zero rather than a wide stencil. Such a
+       family stops at its own axis node, which carries the reflection already (axisU).
+       The others, whose nodes are cell centres, continue across as far as the stencil
+       needs. */
+    const aLo = rn[0] > 0 ? -nI : 0;
+    const rx = this._rx4, ry = this._ry4;
+    const dPhysR = (k, z, lev, x, a0) => {
+      let j0 = a0;
+      if (j0 + 3 > aHi) j0 = aHi - 3;
+      if (j0 < aLo) j0 = aLo;
       const th = thOf(k);
       const HR = this.Hat(this.R, th).H;
-      const outL = aL > nI - 1, outR = aR > nI - 1;
-      if (outR){
-        if (!bc) return 0;
-        const fo = bc('rim', this.R, th, z/HR);
-        const fc = atZ(aL, k, z, lev);
-        const d1 = this.R - colR(aL);
-        if (aL - 1 < 0) return (fo - fc)/d1;
-        const ff = atZ(aL - 1, k, z, lev);
-        const d2 = this.R - colR(aL - 1);
-        return fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
+      for (let m = 0; m < 4; m++){
+        const a = j0 + m;
+        rx[m] = a > nI - 1 ? this.R : colR(a);
+        ry[m] = a > nI - 1 ? bc('rim', this.R, th, z/HR) : atZ(a, k, z, lev);
       }
-      const vL = outL ? (bc ? bc('rim', this.R, th, z/HR) : 0) : atZ(aL, k, z, lev);
-      const vR = atZ(aR, k, z, lev);
-      const rL = outL ? this.R : colR(aL), rR = colR(aR);
-      return (vR - vL)/(rR - rL);
+      return polyDerivAt(rx, ry, 4, x);
     };
+    /* theta is uniform and periodic, so the two-point difference over the interval it
+       spans is centred exactly where it is wanted -- at the face midpoint for a theta
+       face, at the node for the sigma faces' cross term -- and its truncation error has
+       the same coefficient at every k, so it cancels between opposite faces exactly. No
+       stencil here changes character anywhere, which is why this one needs no widening. */
     const dPhysTh = (a, kL, kR, z, lev) =>
       (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
 
-    /* d f / d sigma at a node, centred where both neighbours exist. This one needs
-       no common-height treatment: it is already a derivative along the coordinate,
-       with nothing to cancel against. */
-    const dfds = (a, k, b) => {
-      if (nJ < 2) return 0;
-      if (b === 0) return (at(a, k, 1) - at(a, k, 0))/(sn[1] - sn[0]);
-      if (b === nJ - 1) return (at(a, k, nJ-1) - at(a, k, nJ-2))/(sn[nJ-1] - sn[nJ-2]);
-      return (at(a, k, b+1) - at(a, k, b-1))/(sn[b+1] - sn[b-1]);
+    /* d f / d sigma AT a sigma face, third order there, from the cubic through the
+       four values that straddle it -- polyDerivAt says why four and not two, with
+       the measurement, and the short of it is that a boundary row has nothing for
+       its interior face's error to cancel against.
+
+       A boundary value counts as one of the four, at the boundary's own sigma. It
+       exists only where the family's outermost node is off the boundary AND a `bc`
+       is given to supply it: w's first and last nodes ARE sigma = 0 and sigma = 1,
+       so w reads only its own nodes, and no family reads a surface value while
+       `sFlux` closes that face -- a traction is not a value, and there is no surface
+       Dirichlet datum to read. Where a boundary value is unavailable the four run
+       one-sided into the interior, which is third order there too. */
+    const sLoB = sb[0], sHiB = sb[nJ];
+    const jLo = (bc && sn[0] > sLoB) ? -1 : 0;
+    const jHi = (bc && !sFlux && sn[nJ-1] < sHiB) ? nJ : nJ - 1;
+    if (jHi - jLo < 3) throw new Error(
+      `famLaplacian: this family offers ${jHi - jLo + 1} values in sigma and the `
+      + `face derivative needs four. nz >= 4 guarantees them, so this is a `
+      + `descriptor error rather than a grid that is too coarse.`);
+    const sAbs = j => j < 0 ? sLoB : (j > nJ - 1 ? sHiB : sn[j]);
+    const sVal = (a, k, j, th) => j < 0 ? bc('floor', rn[a], th, sLoB)
+                               : (j > nJ - 1 ? bc('surface', rn[a], th, sHiB)
+                                             : at(a, k, j));
+    const sx = this._sx, sy = this._sy;
+    const dfdsFace = (a, k, b, side, sface, th) => {
+      let j0 = side < 0 ? b - 2 : b - 1;
+      if (j0 < jLo) j0 = jLo;
+      if (j0 + 3 > jHi) j0 = jHi - 3;
+      for (let m = 0; m < 4; m++){
+        sx[m] = sAbs(j0 + m);
+        sy[m] = sVal(a, k, j0 + m, th);
+      }
+      return polyDerivAt(sx, sy, 4, sface);
     };
-    /* and at a boundary face, second order, from the three-point quadratic --
-       a plain one-sided difference is second order at the midpoint between face
-       and node and only first order AT the face, and a flux error of that order
-       does not converge at all. dns/faraday-disc.js does the same in wzSurface. */
-    const faceDeriv = (fo, fc, ff, d1, d2) =>
-      fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
 
     for (let a = fam.rLo; a <= fam.rHi; a++){
       const dra = rb[a+1] - rb[a];
@@ -933,7 +1017,6 @@ class FaradayCell3D {
         const midS = this.Hslope(rn[a], th);
         for (let b = fam.sLo; b <= fam.sHi; b++){
           const dsb = sb[b+1] - sb[b];
-          const fc = at(a, k, b);
           let flux = 0;
 
           /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
@@ -943,7 +1026,7 @@ class FaradayCell3D {
             const g = this.Hat(rface, th);
             if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
             const z = sn[b]*g.H;
-            const d = side < 0 ? dPhysR(a - 1, a, k, z, b) : dPhysR(a, a + 1, k, z, b);
+            const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
             flux += side*rface*dth*g.H*dsb*d;
           }
 
@@ -962,7 +1045,6 @@ class FaradayCell3D {
             const sface = side < 0 ? sb[b] : sb[b+1];
             const proj = rn[a]*dra*dth;
             const bn = side < 0 ? b - 1 : b + 1;
-            let dsg;
             if (bn > nJ - 1 && sFlux){
               /* THE FREE SURFACE, closed by a FLUX rather than by a value. The bracket below
                  computes grad f . N, where N is the sheet's unnormalised outward normal, and
@@ -973,27 +1055,11 @@ class FaradayCell3D {
               flux += side*proj*sFlux(a, k);
               continue;
             }
-            if (bn < 0 || bn > nJ - 1){
-              if (!bc) continue;
-              const fo = bc(side < 0 ? 'floor' : 'surface', rn[a], th, sface);
-              if (side < 0){
-                const d1 = sn[b] - sface;
-                dsg = (b + 1 <= nJ - 1)
-                  ? -faceDeriv(fo, fc, at(a, k, b+1), d1, sn[b+1] - sface)
-                  : (fc - fo)/d1;
-              } else {
-                const d1 = sface - sn[b];
-                dsg = (b - 1 >= 0)
-                  ? faceDeriv(fo, fc, at(a, k, b-1), d1, sface - sn[b-1])
-                  : (fo - fc)/d1;
-              }
-            } else {
-              dsg = side < 0 ? (fc - at(a, k, bn))/(sn[b] - sn[bn])
-                             : (at(a, k, bn) - fc)/(sn[bn] - sn[b]);
-            }
+            if ((bn < 0 || bn > nJ - 1) && !bc) continue;
+            const dsg = dfdsFace(a, k, b, side, sface, th);
             /* the two tangential gradients at this sheet, at its own height */
             const z = sface*mid.H;
-            const gR = dPhysR(a - 1, a + 1, k, z, b);
+            const gR = dPhysR(k, z, b, rn[a], a - 1);
             const gT = dPhysTh(a, k - 1, k + 1, z, b);
             flux += side*proj*( dsg/mid.H
                               - sface*midS.Hr*gR
