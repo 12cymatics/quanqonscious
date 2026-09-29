@@ -1173,6 +1173,48 @@ class FaradayCell3D {
     return out;
   }
 
+  /* The free surface's own flux, per velocity component, at every pressure cell. Formed once
+     per viscous evaluation because all three components of `surfaceLapFluxes` come from one
+     rate-of-strain tensor, and forming it three times would be three chances for them to
+     disagree about one surface. */
+  refreshSurfaceFluxes(){
+    const t3 = this._sf3;
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        this.surfaceLapFluxes(i, k, t3);
+        const e = this.ie(i, k);
+        this._fsr[e] = t3[0]; this._fst[e] = t3[1]; this._fsz[e] = t3[2];
+      }
+    return this;
+  }
+
+  /* and that flux where one family's own sigma = 1 face sits, which is not where the
+     pressure cells are. u's faces are at r faces, v's at theta faces, and w's already at the
+     pressure cell's own position.
+     .
+     THE RADIAL ONE IS A WEIGHTED INTERPOLATION RATHER THAN A MEAN, and that is a smaller
+     matter than it looks -- said here because the opposite was expected and measured wrong.
+     An r face is the midpoint of its two cell centres only when the two cells are equally
+     wide, and this radius is graded towards the rim, so the arithmetic mean sits at
+     (rc[a-1] + rc[a])/2 instead of at rf[a]. The offset is O(dr^2) on a smoothly graded grid,
+     not O(dr), so BOTH forms are second order at the face: measured against the analytic flux
+     there, 5.12e-2, 1.17e-2, 2.80e-3 over 16/32/64 at order 2.12 then 2.07 for the weights
+     below, and 6.10e-2, 1.43e-2, 3.46e-3 at order 2.09 then 2.05 for the mean. The weights
+     are kept because they are the right interpolation and cost two arithmetic operations, and
+     because a surface-flux error is divided by the top row's thickness in the surface row --
+     the identity 8e gates -- so a nineteen per cent smaller constant is worth having there.
+     They are refreshMetric's own weights for H at an r face, written the same way, as an
+     increment from one end so that two equal fluxes interpolate to exactly that flux.
+     Azimuthally the mean is right rather than merely close: theta is uniform, so a theta face
+     IS the midpoint of its two cells, exactly. */
+  surfaceFluxFace(which, a, k){
+    if (which === 'v') return 0.5*(this._fst[this.ie(a, k - 1)] + this._fst[this.ie(a, k)]);
+    if (which === 'w') return this._fsz[this.ie(a, k)];
+    const lo = this._fsr[this.ie(a - 1, k)], hi = this._fsr[this.ie(a, k)];
+    const wa = this.drc[a-1], wb = this.drc[a];
+    return lo + (wa/(wa + wb))*(hi - lo);
+  }
+
   /* The viscous term for the velocity, as the vector Laplacian in cylindrical
      coordinates:
 
@@ -1191,31 +1233,13 @@ class FaradayCell3D {
      `bcU`, `bcV`, `bcW` close the three scalar operators at the walls. */
   viscous(outU, outV, outW, bcU, bcV, bcW){
     const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
-    /* The free surface's own flux, per component, formed once at every pressure cell and
-       then read at each family's sigma = 1 face. The three components live in different
-       places, so each is interpolated to where its own face sits: radially for u, whose
-       faces are at r faces; azimuthally for v, whose faces are at theta faces; and not at
-       all for w, whose face is already at the pressure cell's own position.
-
-       The arithmetic mean is second order at a u face on a smoothly graded radius and exact
-       at a v face, where theta is uniform. NOTHING GATES THAT INTERPOLATION YET: replacing
-       u's mean of two cells with one cell's value leaves the whole suite passing, because it
-       is a second-order error and the only gate that could see it -- a convergence test of
-       the composed operator at the surface row -- needs a probe field satisfying zero
-       tangential stress there. Recorded in dns/PLAN-cell3d.md as S6f's, not forgotten. */
-    const Fr = this._fsr, Ft = this._fst, Fz = this._fsz, t3 = this._sf3;
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++){
-        this.surfaceLapFluxes(i, k, t3);
-        const e = this.ie(i, k);
-        Fr[e] = t3[0]; Ft[e] = t3[1]; Fz[e] = t3[2];
-      }
+    this.refreshSurfaceFluxes();
     this.famLaplacian(this.u, outU, this.FAM.u, bcU,
-      (a, k) => 0.5*(Fr[this.ie(a - 1, k)] + Fr[this.ie(a, k)]));
+      (a, k) => this.surfaceFluxFace('u', a, k));
     this.famLaplacian(this.v, outV, this.FAM.v, bcV,
-      (a, k) => 0.5*(Ft[this.ie(a, k - 1)] + Ft[this.ie(a, k)]));
+      (a, k) => this.surfaceFluxFace('v', a, k));
     this.famLaplacian(this.w, outW, this.FAM.w, bcW,
-      (a, k) => Fz[this.ie(a, k)]);
+      (a, k) => this.surfaceFluxFace('w', a, k));
 
     /* d v / d theta at a u node, and d u / d theta at a v node.
      *

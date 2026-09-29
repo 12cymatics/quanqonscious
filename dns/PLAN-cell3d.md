@@ -2,15 +2,11 @@
 
 **Session counter: 4**
 **Stages complete: 6 of 14, and S6 is nearly closed**
-**Next action: the two gate gaps and the surface pressure, which is all that is left of S6.
-(a) The interpolation of each surface-flux component onto its own family's sigma = 1 face is
-still untested -- replacing u's mean of the two adjacent pressure cells with one cell's value
-leaves the whole suite passing. Closing it needs a probe field satisfying zero tangential
-stress at the surface. (b) The surface pressure `p_s = p_ext - gamma kappa + n.T` as the
-inhomogeneous DIRICHLET value inside the projection, never as a predictor force -- that
-mistake made the two-dimensional solver non-finite at 0.57 periods. Then S7: `step()`, the
-stability limit from the capillary, viscous and advective limits including the azimuthal
-direction, and the energy diagnostic.**
+**Next action: the surface pressure, which is all that is left of S6.
+`p_s = p_ext - gamma kappa + n.T` as the inhomogeneous DIRICHLET value inside the projection,
+never as a predictor force -- that mistake made the two-dimensional solver non-finite at 0.57
+periods. Then S7: `step()`, the stability limit from the capillary, viscous and advective
+limits including the azimuthal direction, and the energy diagnostic.**
 
 **What session 4 did, in one line each.** The surface-row defect session 3 diagnosed was
 mostly the GATE's: its test surface was inadmissible at the axis and contradicted the free
@@ -80,7 +76,8 @@ against this and need no further decision.
 | S6d | Free surface: the flux the Laplacian's surface face wants, from the traction | **done** | the tangential traction exactly zero at both tangents, at \|grad eta\| up to 0.30 -- exactly, not nearly; on a FLAT surface the radial and azimuthal fluxes are EXACTLY minus dw/dr and -(1/r)dw/dtheta, which is `surfaceSlopes` in the independently written two-dimensional solver; second order against the identity formed analytically, 1.98 to 1.99, at eta/h = 0.3 and 0.6; a flat surface's slopes and normal exactly zero and exactly vertical; five injected defects all red, two of them caught only by the exactness gates |
 | S6e | Free surface: the flux hook in famLaplacian, and u, v, w closed by it | **done** | the hook changes the surface row by exactly the flux over the volume it crosses and changes no other row at all; `viscous` supplies it for all three; `FAM.w.sHi` is `nz`, so w is solved at sigma = 1 over the half cell its advection already uses |
 | S6f | Free surface: the Laplacian second order at EVERY row, and what w's surface unknown means | **done** | every face derivative cubic, so no boundary row relies on a cancellation: 4e reads 1.99 to 2.00 at all eight (family, amplitude) pairs against a floor raised from 1.2 to 1.9; the sigma = 0 row's first-order term identified in closed form and measured to three digits against it before the fix; 4g asserts grad^2 w at the surface row second order against the exact average over its half cell, AND pins its gap to the point value at sigma = 1 as the centroid offset in closed form, over eight cases -- azimuthal and axisymmetric probes, flat and deformed, at the renderer's grid aspect and at one where the azimuthal surface-slope resolution matches the radial; five injected defects red, the fifth only after the axisymmetric probe was added, which is why it is there |
-| S6g | Free surface: the flux interpolation gate, and the surface pressure | todo | a probe satisfying zero tangential stress, so the interpolation of each flux component onto its own family's face is gated; the surface pressure as an inhomogeneous Dirichlet value inside the projection |
+| S6g | Free surface: the flux interpolation, gated | **done** | the interpolation of each surface-flux component onto its OWN family's sigma = 1 face -- radially for u, azimuthally for v -- is second order against `wantFlux` evaluated at that face, 2.12 then 2.07 for u and 1.96 then 1.98 for v over 16/32/64 at eta/h = 0.3 and 0.6; one cell's value in place of either reads 0.92 and 0.99. The plan said this needed a probe satisfying zero tangential stress; it does not, because the analytic flux can be asked for the face's own position |
+| S6h | Free surface: the surface pressure | todo | `p_s = p_ext - gamma kappa + n.T` as the inhomogeneous Dirichlet value inside the projection, never as a predictor force |
 | S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
@@ -630,6 +627,27 @@ attempted here because S6's remaining work (the flux-interpolation gate and the 
 pressure) and S7 are ahead of it, and because the row is already second order in every case
 where the slope ratios are small enough that the stencil does not change -- which is what the
 flat cases show, at 1.98 to 2.74.
+
+### The untested interpolation, and an expectation it overturned
+
+`surfaceLapFluxes` gives the flux at a pressure cell; u's sigma = 1 face is at an r face and
+v's at a theta face, so each is interpolated, and nothing checked that -- replacing u's with
+one cell's value left the whole suite passing. The plan said closing it needed a probe field
+satisfying zero tangential stress at the surface. **It does not.** 8d's `wantFlux` is the
+analytic flux at any (r, theta), so it can be asked for the face's own position and the
+interpolation gated directly against calculus, which is both simpler and stronger than gating
+it through a composed operator. `refreshSurfaceFluxes` and `surfaceFluxFace` exist so the gate
+can reach it.
+
+The defect expected was not the one found. The arithmetic mean was expected to be FIRST order
+at a u face, since an r face is the midpoint of its two cell centres only when the cells are
+equally wide and this radius is graded. Measured, it is second order: 6.10e-2, 1.43e-2,
+3.46e-3 over 16/32/64, order 2.09 then 2.05, because on a smoothly graded grid the offset is
+O(dr^2) and not O(dr). The weighted interpolation -- refreshMetric's own weights for H at an r
+face -- reads 5.12e-2, 1.17e-2, 2.80e-3 at 2.12 then 2.07, a nineteen per cent smaller error,
+and is kept for that constant, because a surface-flux error is divided by the top row's
+thickness in the surface row. A coarser slip than a mean IS first order and the gate catches
+it: one cell's value reads 0.92 then 0.96 radially and 0.99 then 1.00 azimuthally.
 
 ### The gate that changed, with the measurement
 

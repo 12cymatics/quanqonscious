@@ -2213,6 +2213,67 @@ section('8d. the surface flux: no tangential traction, and the flat limit next d
            `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
     }
   }
+
+  /* AND WHERE EACH COMPONENT'S OWN FACE SITS, which is not where the pressure cells are.
+   * `surfaceLapFluxes` gives the flux at a pressure cell; u's sigma = 1 face is at an r face
+   * and v's at a theta face, so each is interpolated, and until now nothing checked that
+   * interpolation -- replacing u's with one cell's value left the whole suite passing. The
+   * plan said closing this needed a probe satisfying zero tangential stress at the surface.
+   * It does not: `wantFlux` above is the analytic flux at ANY (r, theta), so it can be asked
+   * for the face's own position, and the interpolation is then gated directly against
+   * calculus. That is both simpler and stronger than gating it through a composed operator.
+   *
+   * What it found was NOT the defect expected. The arithmetic mean it replaces is also second
+   * order at the face -- 2.09 then 2.05, against 2.12 then 2.07 for the weighted form, and a
+   * nineteen per cent larger error -- because on a smoothly graded grid the offset between an
+   * r face and the midpoint of its two cell centres is O(dr^2) and not O(dr). The weighted
+   * form is kept for the constant, and the gate is kept because a coarser slip than a mean --
+   * one cell's value in place of either -- IS first order, and nothing saw that before. */
+  {
+    const errorOn = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      S.refreshSurfaceFluxes();
+      const num = [0, 0], den = [0, 0];
+      for (let i = 1; i < nr; i++){
+        if (S.rf[i] < 0.25*R || S.rf[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = (k + 0.5)*S.dth, r = S.rf[i];
+          const w = wantFlux(amp, r, th, S.Hat(r, th).H)[0];
+          const d = S.surfaceFluxFace('u', i, k) - w;
+          num[0] += d*d; den[0] += w*w;
+        }
+      }
+      for (let i = 0; i < nr; i++){
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = k*S.dth, r = S.rc[i];
+          const w = wantFlux(amp, r, th, S.Hat(r, th).H)[1];
+          const d = S.surfaceFluxFace('v', i, k) - w;
+          num[1] += d*d; den[1] += w*w;
+        }
+      }
+      return num.map((n, c) => Math.sqrt(n/den[c]));
+    };
+    for (const amp of [0.3, 0.6]){
+      const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp),
+            c = errorOn(64, 96, 64, amp);
+      const o1 = a.map((x, j) => Math.log(x/b[j])/Math.LN2);
+      const o2 = b.map((x, j) => Math.log(x/c[j])/Math.LN2);
+      console.log(`       eta/h = ${amp}: at u's own face ${a[0].toExponential(2)} -> `
+        + `${b[0].toExponential(2)} -> ${c[0].toExponential(2)}, order ${o1[0].toFixed(2)} `
+        + `then ${o2[0].toFixed(2)}; at v's own face ${o1[1].toFixed(2)} then `
+        + `${o2[1].toFixed(2)}`);
+      ok(o1[0] > 1.8 && o2[0] > 1.8,
+         `eta/h = ${amp}: the radial surface flux is second order AT THE r FACE u's surface `
+         + `condition is applied on, not only at the pressure cells it is formed at`,
+         `${a[0].toExponential(3)} -> ${b[0].toExponential(3)} -> ${c[0].toExponential(3)}, `
+         + `order ${o1[0].toFixed(3)} then ${o2[0].toFixed(3)}`);
+      ok(o1[1] > 1.8 && o2[1] > 1.8,
+         `eta/h = ${amp}: and the azimuthal one at the theta face v's is applied on`,
+         `${a[1].toExponential(3)} -> ${b[1].toExponential(3)} -> ${c[1].toExponential(3)}, `
+         + `order ${o1[1].toFixed(3)} then ${o2[1].toFixed(3)}`);
+    }
+  }
 }
 
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
