@@ -2546,7 +2546,11 @@ section('9c. the energy, and what the solver does to it');
  * six per cent of a period: sin^2(2*pi*0.0643) = 15.5%. It tested the drift and not the
  * exchange, and no threshold on 14.70% could have told a real oscillator from a scheme that
  * merely leaked a little energy into motion. A quarter period on 10x16x8 takes 377 steps and
- * 17 s and reaches 99.19%.
+ * 17 s and reaches 99.20%. (99.19% when this was written; the capillary energy is computed
+ * from the surface's excess area directly since then, rather than as the difference of two
+ * areas that agree to thirteen digits -- see section 11, which is where the change and the
+ * defect behind it are measured. Drift -0.0343% became -0.0333% and the worst single-step
+ * rise 8.08e-3% became 1.52e-3% for the same reason.)
  *
  * THE KINETIC BRACKET IS TWO-SIDED because the lower half alone passes for the wrong reason.
  * Injecting forward Euler on the surface oscillator -- eta advanced on the PRE-corrector Omega
@@ -2895,6 +2899,241 @@ section('10. the hoisted operators are the same operators, bit for bit');
        + 'them, anchored and bracketed, at the axis reflection and away from it',
        `${bad} of ${n} differ; scale ${scale.toExponential(3)}`);
   }
+}
+
+section('11. the excess area, which is not the difference of two areas');
+/* `energy().capillary` is gamma times the area the surface has in excess of flat. It was
+ * `gamma*(surfaceArea() - PI*R*R)`, and that subtraction has no significant digits at small
+ * amplitude: at eta = 1e-9 m the two operands are 4.618632074629e-4 and their difference is
+ * 1.2e-18, twenty times a double's own resolution at that magnitude. Measured, the excess
+ * came out 1.1926e-18 where its own amplitude scaling demands 1.1596e-18 -- 2.8% wrong -- and
+ * the total energy then drifted +25.256% over a quarter period on a grid where the identical
+ * run at eta = 1e-7 drifts -0.0356%.
+ *
+ * NOTHING WAS WRONG WITH THE SOLVER, and that is why this section exists. The drift measured
+ * -0.0344, -0.0349, -0.0356 per cent at eta = 1e-5, 1e-6 and 1e-7: flat over three decades,
+ * which is what a linear regime must give. Gate 9c happened to be written at 1e-7, inside the
+ * range where the diagnostic still had digits, so it never saw any of this -- and a diagnostic
+ * that silently loses its significance below an amplitude nothing states is worse than a wrong
+ * one, because every energy claim made with it is conditional on a bound no one wrote down.
+ *
+ * `surfaceExcessArea` sums rc drc dtheta (sqrt(1+q) - 1) cell by cell as q/(1 + sqrt(1+q)),
+ * the same number in exact arithmetic and one that keeps its digits for every q. The two
+ * assertions here are that it agrees with the difference form where the difference form still
+ * works, and that it goes on working where that one does not. */
+{
+  const areaOf = S => S.surfaceArea() - Math.PI*S.R*S.R;
+
+  /* --- at a deformation where the difference form is well conditioned, they agree --- */
+  {
+    const S = new FaradayCell3D({ nr: 12, nth: 20, nz: 8, ...CELL });
+    deform(S, 0.45);
+    const ex = S.surfaceExcessArea(), df = areaOf(S);
+    const rel = Math.abs(ex - df)/Math.abs(df);
+    console.log(`       at eta/h = 0.45: excess ${ex.toExponential(12)}, difference `
+      + `${df.toExponential(12)}, relative gap ${rel.toExponential(2)}`);
+    ok(rel < 1e-11,
+       'at a large deformation the excess area equals surfaceArea() minus pi R^2, so the two '
+       + 'are the same quantity and not two different discretisations',
+       `relative gap ${rel.toExponential(3)}`);
+    /* And adding the flat area back returns surfaceArea itself, to the round-off of a sum of
+       nr*nth terms and no better. The bound here was 1e-15 and that expectation was wrong: it
+       failed at 1.07e-15, which is about ten units in the last place of 4.65e-4 accumulated
+       over 240 cells, and ten ulps over 240 terms is what a correct sum does. 1e-14 is
+       roughly a hundred ulps, which is loose enough to be true and tight enough that the
+       injections in this section still break it -- weighting one cell by the face radius
+       instead of the cell centre reads 6.8e-2, thirteen orders away. */
+    const back = ex + Math.PI*S.R*S.R;
+    const rel2 = Math.abs(back - S.surfaceArea())/S.surfaceArea();
+    const ulp = Math.abs(S.surfaceArea())*Number.EPSILON;
+    ok(rel2 < 1e-14,
+       'and adding pi R^2 back returns surfaceArea to the round-off of a 240-term sum, so the '
+       + 'curvature identity that differentiates surfaceArea is untouched',
+       `${back.toExponential(15)} against ${S.surfaceArea().toExponential(15)}: relative `
+       + `${rel2.toExponential(2)}, about `
+       + `${(rel2*S.surfaceArea()/ulp).toFixed(1)} units in the last place`);
+  }
+
+  /* --- and it keeps its digits where the difference form has none --- *
+   * The excess area of a fixed shape scales exactly as the square of its amplitude in the
+   * small-slope limit, so halving the amplitude must quarter it. That ratio is the reference,
+   * computed from calculus and not from either implementation. Ten decades of amplitude, down
+   * to where the difference of two areas is pure round-off. */
+  {
+    const S = new FaradayCell3D({ nr: 12, nth: 20, nz: 8, ...CELL });
+    const amps = [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11];
+    const ex = [], df = [];
+    for (const a of amps){
+      deform(S, a);
+      ex.push(S.surfaceExcessArea());
+      df.push(areaOf(S));
+    }
+    let worstEx = 0, worstDf = 0;
+    for (let i = 1; i < amps.length; i++){
+      const want = Math.pow(amps[i]/amps[i-1], 2);
+      worstEx = Math.max(worstEx, Math.abs(ex[i]/ex[i-1]/want - 1));
+      worstDf = Math.max(worstDf, Math.abs(df[i]/df[i-1]/want - 1));
+    }
+    console.log(`       amplitude^2 scaling over ${amps[0].toExponential(0)} .. `
+      + `${amps[amps.length-1].toExponential(0)} of h: worst relative error, excess form `
+      + `${worstEx.toExponential(2)}, difference form ${worstDf.toExponential(2)}`);
+    ok(worstEx < 1e-6,
+       'the excess area scales as the square of the amplitude over eight decades, which is '
+       + 'the small-slope law and is what the capillary energy has to obey',
+       `worst departure ${worstEx.toExponential(3)}`);
+    ok(worstDf > 1e-3,
+       'while the difference of two areas does not, which is why it was replaced -- this is '
+       + 'the defect, measured, not an argument that one existed',
+       `worst departure ${worstDf.toExponential(3)}, against the excess form's `
+       + `${worstEx.toExponential(3)}`);
+  }
+
+  /* --- and the energy's drift no longer depends on the amplitude --- *
+   * The check that matters, because it is the one the defect was found through: released from
+   * rest in a single linear mode, the fractional energy drift over a fixed physical time is a
+   * property of the SCHEME and cannot depend on the amplitude it is applied to. */
+  {
+    const K = require(join(here, '..', 'faraday', 'kernel.js'));
+    const m = 3, kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+    const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+    const tEnd = 0.05*(2*Math.PI/omega);
+    const drifts = [];
+    for (const AMP of [1e-5, 1e-7, 1e-9]){
+      const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+        S.eta[S.ie(i,kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+      S.refreshMetric();
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      const e0 = S.energy().total;
+      for (let n = 0; n < steps; n++) S.step(dt);
+      drifts.push((S.energy().total - e0)/e0);
+    }
+    const spread = Math.max(...drifts) - Math.min(...drifts);
+    console.log(`       drift at eta = 1e-5, 1e-7, 1e-9 m: `
+      + drifts.map(d => (100*d).toFixed(5) + '%').join(', ')
+      + `; spread ${(100*spread).toExponential(2)} points`);
+    ok(Math.abs(spread) < 1e-5,
+       'the energy drift over a fixed time is the same at 1e-5, 1e-7 and 1e-9 m of elevation, '
+       + 'so it is a property of the scheme and not of the amplitude -- which is exactly what '
+       + 'the difference-of-areas form could not say',
+       `spread ${(100*spread).toExponential(3)} percentage points across four decades`);
+  }
+}
+
+section('12. the damping rate, against an independently written solver');
+/* THE CHECK THE WHOLE FILE EXISTS TO PASS. Every other section compares the solver with
+ * calculus, with an identity it must satisfy, or with itself. This one compares it with
+ * `dns/faraday-disc.js`: a different solver, written separately, linear rather than
+ * nonlinear, one azimuthal mode at a time rather than all of them, and -- the part that
+ * makes the comparison worth anything -- in a DIFFERENT VERTICAL COORDINATE. That one solves
+ * in z on a fixed grid with the surface conditions at the top; this one solves in
+ * sigma = z/H on a grid that follows the surface. Nothing is shared but the physics.
+ *
+ * The quantity is the viscous decay rate of a single free mode, gamma = -ln(E/E0)/(2t). It is
+ * chosen because there is NO closed form for it: the frequency has one and gate 9 already
+ * checks against it, but the damping is set by the Stokes layers at the floor, the sidewall
+ * and the surface, and the only reference for it is another solver. The disc gate measures
+ * the exponent of its own nu-dependence at 0.755 -- between the bulk term's 1 and a pure
+ * boundary layer's 1/2 -- so most of this number comes from those layers, which is to say
+ * from precisely the part of the discretisation the two codes do differently.
+ *
+ * Measured over the m = 3, n = 1 free-contact mode at eta = 1e-9 m, a quarter of its 88.860 ms
+ * period, matching nr and nz:
+ *
+ *      grid        disc        cell3d      gap
+ *      12x8        1.26121     1.33232     +5.64%
+ *      14x10       1.29079     1.32578     +2.71%
+ *      16x10       1.30927     1.32165     +0.95%
+ *      20x12       1.33430     1.33377     -0.04%
+ *      24x14       1.35070     1.34333     -0.55%
+ *
+ * The last two are outside this gate's time budget -- 24x40x14 alone is 862 s -- and are
+ * recorded in dns/PLAN-cell3d.md. The first three are here, and what they assert is the gap
+ * and its convergence. Each code is still moving in its own grid over that range (the disc
+ * from 1.261 to 1.351, this solver from 1.332 to 1.343), so agreement to four parts in ten
+ * thousand at 20x12 is the two of them converging to the same limit from opposite sides and
+ * not either one being right.
+ *
+ * m = 2 was measured too: +6.13% at 16x10 and +3.35% at 20x12, also converging.
+ *
+ * WHAT THIS GATE CAN AND CANNOT RESOLVE, measured by injection rather than asserted. Making
+ * the floor and sidewall free-slip instead of no-slip -- removing the Stokes layers that the
+ * disc gate's own nu-exponent of 0.755 says carry most of the damping -- takes the rate from
+ * 1.326 to 0.526, a 59 per cent gap, and fails at every pair. Halving the viscosity in the
+ * RADIAL predictor alone moves it by about three per cent, and that was GREEN on the first
+ * version of this section, which stopped at 14x24x10 with a four per cent window: 1.32578
+ * became 1.28233 and the window swallowed it. It also made the coarse pair's agreement
+ * BETTER, so a two-point convergence test passed as well. Both holes are why the third pair
+ * is here -- at 16x24x10 the clean gap is +0.95% and the defect reads -2.47%, so a two per
+ * cent window separates them -- and why the convergence assertion now runs over all three.
+ * The honest statement of this gate's power is: it resolves a defect of a few per cent in the
+ * damping and not one of a few tenths.
+ *
+ * ONE DEFECT WAS FOUND BY THIS COMPARISON AND IT WAS IN THE ENERGY DIAGNOSTIC, not the
+ * solver: see section 11. The first run of this section reported the 3-D solver's rate as
+ * -2.034 s^-1 -- a growth -- because `energy().capillary` was the difference of two areas
+ * agreeing to thirteen digits and eta = 1e-9 m is below where that difference has any. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const { FaradayDisc } = require(join(here, 'faraday-disc.js'));
+  const m = 3;
+  const jp = K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0], k = jp/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const tEnd = 0.25*(2*Math.PI/omega);
+  const AMP = 1e-9;
+
+  const discRate = (nr, nz) => {
+    const S = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free', accel: 0, omegaD: 1 });
+    for (let i = 0; i < nr; i++) S.eta[i] = AMP*K.besselJ(m, k*S.rc[i]);
+    const dt = S.stableStep(0.4), steps = Math.round(tEnd/dt);
+    const E0 = S.energy().total;
+    for (let s = 0; s < steps; s++) S.step(dt);
+    return -Math.log(S.energy().total/E0)/(2*steps*dt);
+  };
+  const cellRate = (nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: 'free' });
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i, kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    S.refreshMetric();
+    const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+    const E0 = S.energy().total;
+    for (let s = 0; s < steps; s++) S.step(dt);
+    return -Math.log(S.energy().total/E0)/(2*steps*dt);
+  };
+
+  const gaps = [], rates = [];
+  for (const [nr, nth, nz] of [[12, 20, 8], [14, 24, 10], [16, 24, 10]]){
+    const d = discRate(nr, nz), c = cellRate(nr, nth, nz);
+    gaps.push(c/d - 1); rates.push([d, c]);
+    console.log(`       ${nr}x${nz} disc ${d.toFixed(5)} s^-1 vs ${nr}x${nth}x${nz} cell3d `
+      + `${c.toFixed(5)} s^-1: ${(100*(c/d - 1)).toFixed(2)}%`);
+  }
+  ok(rates.every(([d, c]) => d > 0 && c > 0),
+     'both solvers report a decay and not a growth, which is the sign the energy diagnostic '
+     + 'got wrong before section 11 fixed it',
+     rates.map(([d, c]) => `${d.toFixed(4)}/${c.toFixed(4)}`).join(', '));
+  ok(Math.abs(gaps[0]) < 0.08,
+     'at 12x20x8 the nonlinear surface-following solver agrees with the linear fixed-grid one '
+     + 'on the viscous damping rate to within eight per cent',
+     `${(100*gaps[0]).toFixed(3)}%`);
+  ok(Math.abs(gaps[1]) < 0.04,
+     'and at 14x24x10 to within four per cent -- two codes sharing nothing but the physics, '
+     + 'on a quantity that has no closed form',
+     `${(100*gaps[1]).toFixed(3)}%`);
+  ok(Math.abs(gaps[2]) < 0.02,
+     'and at 16x24x10 to within two per cent, which is the window that resolves a three per '
+     + 'cent error in one component\'s viscous term',
+     `${(100*gaps[2]).toFixed(3)}%`);
+  ok(Math.abs(gaps[2]) < Math.abs(gaps[1]) && Math.abs(gaps[1]) < Math.abs(gaps[0]),
+     'and refining both grids narrows the gap at every step, so they are converging to one '
+     + 'another rather than happening to be close on one grid',
+     gaps.map(g => (100*g).toFixed(2) + '%').join(' -> '));
+  const bulk = 2*CELL.nu*k*k;
+  ok(rates[2][1] > 3*bulk,
+     'and the damping is several times the bulk term 2 nu k^2, so the floor, sidewall and '
+     + 'surface Stokes layers are present in it -- which is what makes the agreement above a '
+     + 'statement about the boundary treatment and not about the interior',
+     `${rates[1][1].toFixed(4)} against 2 nu k^2 = ${bulk.toFixed(4)} s^-1`);
 }
 
 /* ── 5. refusals ────────────────────────────────────────────────────────── */

@@ -91,7 +91,8 @@ against this and need no further decision.
 | S6g | Free surface: the flux interpolation, gated | **done** | the interpolation of each surface-flux component onto its OWN family's sigma = 1 face -- radially for u, azimuthally for v -- is second order against `wantFlux` evaluated at that face, 2.12 then 2.07 for u and 1.96 then 1.98 for v over 16/32/64 at eta/h = 0.3 and 0.6; one cell's value in place of either reads 0.92 and 0.99. The plan said this needed a probe satisfying zero tangential stress; it does not, because the analytic flux can be asked for the face's own position |
 | S6h | Free surface: the surface pressure | **done** | `rho g eta - gamma kappa + 2 rho nu n.E.n`, entering the projection's right-hand side top row and the corrector's sigma = 1 face and nowhere else -- never the predictor, where it is O(1/dsigma) and the projection cancels almost all of it |
 | S7 | `step()`, its stability limit, and the energy diagnostic | **done** | the assembled solver reproduces the linear gravity-capillary frequency for m = 3, error 13.11% -> 6.62% -> 3.92% -> 2.08% over four grids, which no single operator in the file could produce alone; building it found two O(1) defects in the committed projection (the Omega control volume missing its H; the horizontal components covariant rather than physical, 86.99 against 137.00); `stableStep` from the DISPERSION relation, with no growth at 1x (0.997392 and 0.997441 per step on two grids) and divergence at 10x (by step 14 and step 15), so the limit is falsifiable on both sides; over a quarter period at nu = 1e-12 the energy drifts -0.0343%, never rises, and 99.19% of it becomes kinetic |
-| S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
+| S8a | Validation: the viscous damping rate against `faraday-disc.js` | **done** | a quantity with no closed form, from two solvers sharing nothing but the physics and not even a vertical coordinate: 1.26121/1.33232, 1.29079/1.32578, 1.30927/1.32165, 1.33430/1.33377, 1.35070/1.34333 over five grid pairs -- gap +5.64%, +2.71%, +0.95%, -0.04%, -0.55%, each code still moving in its own grid, so they converge to one limit from opposite sides; m = 2 likewise +6.13% then +3.35%. Found one real defect, in the ENERGY DIAGNOSTIC: the capillary part was the difference of two areas agreeing to thirteen digits, which at eta = 1e-9 m reported a 9.4% energy GAIN where the scheme drifts -0.035%. Free-slip walls read -59% and are red; half the radial viscosity reads -2.47% and is red only since the third pair was added, which is why it was |
+| S8b | Validation: driven Floquet growth rate, harmonics, mode coupling | todo | per-mode growth against `faraday-disc.js` under drive; harmonics at finite amplitude scaling as the square of the amplitude; two modes producing their sum and difference |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
@@ -780,9 +781,14 @@ whose variational derivative IS the curvature the surface pressure carries (7c).
 
 Measured, released from rest with eta = 1e-7 J_3(kr) cos(3 theta) on 10x16x8 and nu = 1e-12, over
 a quarter of the 88.860 ms period in 377 steps: the total goes 1.8784e-15 -> 1.8777e-15 J, a drift
-of -0.0343%, and it falls at every step rather than rising anywhere -- worst single-step rise
-5.22e-3% of the initial total. The kinetic part reaches 99.19% of that initial total, which is the
+of -0.0333%, and it falls at every step rather than rising anywhere -- worst single-step rise
+1.52e-3% of the initial total. The kinetic part reaches 99.20% of that initial total, which is the
 whole point of running a quarter period rather than a fixed number of steps.
+
+(Those three figures read -0.0343%, 5.22e-3% and 99.19% when S7 landed, and the difference is the
+capillary energy, which is now the surface's excess area computed directly instead of the
+difference of two areas agreeing to thirteen digits. The defect that change fixes, and why nothing
+about the solver was wrong, is under "S8a" below.)
 
 **That last figure is why this gate was restructured, and the first version of it is worth
 recording.** It ran two hundred steps on 14x24x10 and asserted that the kinetic energy took "a
@@ -900,6 +906,95 @@ round alike, so that would forfeit the bit-for-bit argument and put every measur
 this file back in question for perhaps another 20%. It is not taken. The answer to the step
 cost is S10 and S11, where the same discretisation compiled and spread over eight cores buys
 far more than reassociating a product.
+
+## S8a: the two solvers agree on a number that has no closed form
+
+This is the check the file exists to pass, and it is the first one that is not against calculus,
+against an identity, or against itself. `dns/faraday-disc.js` is a different solver: written
+separately, linear rather than nonlinear, one azimuthal mode at a time rather than all of them,
+and -- the part that makes the comparison mean anything -- **in a different vertical
+coordinate**. It solves in z on a fixed grid with the surface conditions applied at the top;
+this one solves in sigma = z/H on a grid that follows the surface. They share the physics and
+the cell, and nothing else.
+
+The quantity is the viscous decay rate of one free mode, `gamma = -ln(E/E0)/(2t)`, chosen
+because there is **no closed form for it**. The frequency has one and gate 9 already checks
+against it. The damping is set by the Stokes layers at the floor, the sidewall and the surface,
+and the only reference for it is another solver -- the disc gate measures the exponent of its
+own nu-dependence at 0.755, between the bulk term's 1 and a pure boundary layer's 1/2, so most
+of this number comes from exactly the part the two codes do differently.
+
+m = 3, n = 1, free contact, eta = 1e-9 m, a quarter of the 88.860 ms period, matching nr and nz:
+
+| grid | disc | cell3d | gap |
+|---|---|---|---|
+| 12x8 / 12x20x8 | 1.26121 | 1.33232 | +5.64% |
+| 14x10 / 14x24x10 | 1.29079 | 1.32578 | +2.71% |
+| 16x10 / 16x24x10 | 1.30927 | 1.32165 | +0.95% |
+| 20x12 / 20x32x12 | 1.33430 | 1.33377 | **-0.04%** |
+| 24x14 / 24x40x14 | 1.35070 | 1.34333 | -0.55% |
+
+Each code is still moving in its own grid over that range -- the disc from 1.261 to 1.351, this
+solver from 1.332 to 1.343 -- so the four parts in ten thousand at 20x12 is the two of them
+converging to the same limit from opposite sides, not either one being right. m = 2 was measured
+too: +6.13% at 16x10, +3.35% at 20x12, converging the same way. The first three pairs are gated
+in section 12; the last two cost 288 s and 862 s and are recorded here instead.
+
+### The comparison found a defect, and it was in the energy diagnostic
+
+The first run reported the 3-D solver's rate as **-2.034 s^-1: a growth**, against the disc's
++1.309. At the real viscosity the energy rose 9.4% over a quarter period.
+
+It was not the solver, and the sequence that established that is worth recording, because the
+first suspicion -- the viscous surface traction, which is the newest and most intricate thing in
+the file -- was wrong. The rate at nu = 1e-12, 1e-10, 1e-8, 1e-7 and 1e-6 read -2.750, -2.749,
+-2.711, -2.541, -2.034: the growth is **already there at nu = 1e-12**, and raising nu makes it
+monotonically less negative by 0.72 s^-1, which is viscosity damping correctly on top of it. So
+the viscous term was doing its job and something else was adding energy.
+
+What was adding energy was the *measurement*. `energy().capillary` was
+`gamma*(surfaceArea() - PI*R*R)`, and at eta = 1e-9 m those two operands are both
+4.618632074629e-4 and their difference is 1.2e-18 -- twenty times a double's own resolution at
+that magnitude. The excess area came out 1.1926e-18 where its own amplitude scaling demands
+1.1596e-18, 2.8 per cent wrong, and some runs reported `kinetic/total` of 1.29 and 1.82, which
+is a negative potential energy. Sweeping the amplitude settled it: the drift over a quarter
+period reads -0.0344, -0.0349, -0.0356, +0.1166 and +25.256 per cent at eta = 1e-5, 1e-6, 1e-7,
+1e-8 and 1e-9 m. Flat over three decades and then nonsense -- a diagnostic breaking down, not a
+scheme.
+
+`surfaceExcessArea` sums `rc drc dtheta (sqrt(1+q) - 1)` cell by cell as `q/(1 + sqrt(1+q))`,
+the same number in exact arithmetic and one that keeps every digit for small q. `Sum rc drc
+dtheta` is exactly `pi R^2` -- `rc drc` telescopes to `R^2/2`, `dtheta` sums to `2 pi` -- so
+nothing is approximated by taking the excess term by term. The drift now reads -0.0344,
+-0.0349, -0.0349, -0.0349, -0.0349 across the same five decades, and the damping rate came out
++1.32165 against the disc's +1.30927.
+
+**Gate 9c never saw any of this because it happens to be written at eta = 1e-7 m**, the last
+amplitude where the subtraction still had digits. A diagnostic that silently loses its
+significance below a bound nobody has written down is worse than a wrong one, because every
+energy claim made with it is conditional on that bound. Section 11 now gates the excess area
+against the amplitude-squared law over eight decades -- the excess form departs by 2.85e-10, the
+difference form by 9.90e+1 -- and gates that the drift over a fixed time is the same at 1e-5,
+1e-7 and 1e-9 m, which is what makes it a property of the scheme.
+
+One expectation of mine was overturned in passing: I bounded `surfaceExcessArea() + pi R^2`
+against `surfaceArea()` at a relative 1e-15 and it failed at 1.07e-15. That is about ten units
+in the last place accumulated over a 240-cell sum, which is what a correct sum does; the bound
+is 1e-14 now, still thirteen orders tighter than the injections it has to catch.
+
+### What this gate can and cannot resolve, measured
+
+- Free-slip instead of no-slip at the floor and sidewall -- removing the layers that carry most
+  of the damping -- takes the rate from 1.326 to 0.526: a **-59%** gap, red at every pair.
+- Halving the viscosity in the **radial predictor alone** moves it by about three per cent, and
+  that was **GREEN** on the first version of section 12, which stopped at 14x24x10 inside a four
+  per cent window: 1.32578 became 1.28233. It also made the *coarse* pair agree better, so a
+  two-point convergence test passed as well. The third pair is there because of that: at
+  16x24x10 the clean gap is +0.95% and the defect reads -2.47%, so a two per cent window
+  separates them, and the convergence assertion now runs over all three. Red on both.
+
+So: this gate resolves a defect of a few per cent in the damping and not one of a few tenths.
+That is its measured power and it is stated in the section rather than implied by a threshold.
 
 ## Rules this build keeps
 

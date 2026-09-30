@@ -60,17 +60,21 @@
 # windows-1252. Neither is visible from node.
 #
 # dns/check-cell3d.mjs shares the DNS job rather than taking one of its own. That
-# line read "seven seconds does not earn a runner" and the seven seconds was long
-# gone: the gate assembles the whole solver and integrates it. Timed twice on this
-# container, because the second measurement is the answer to the first -- 3m00s
-# before the step's repeated index arithmetic was hoisted out of the conjugate-
-# gradient matvec and the reconstruction primitives, 1m18s after, for the same 221
-# checks and the same bits. It still shares the job, now for room rather than for
-# smallness: 1m18s beside a two-and-a-half minute suite is one four-minute runner
-# instead of two. It goes FIRST so its signal arrives before the suite behind it.
-# It was not run by any job at all until S6f, which is the same gap that once let a
-# red suite sit on the default branch -- a suite that exists and is not run is not
-# a gate.
+# line once read "seven seconds does not earn a runner", and this comment has now
+# been wrong about the figure twice, so it records what the time is made of instead
+# of a number to go stale again. Timed on this container: 3m00s for 214 checks;
+# 1m18s for the same checks once the step's repeated index arithmetic was hoisted
+# out of the conjugate-gradient matvec and the reconstruction primitives, bit for
+# bit unchanged; 5m12s for 232, the added four minutes being section 12, which
+# integrates BOTH this solver and dns/faraday-disc.js for a quarter of a mode's
+# period on three grids to compare their damping rates. That section is the most
+# expensive thing in the file and the only check in the project that compares two
+# independently written solvers, so it is also the last thing that should be cut
+# for time. It still shares the job: five minutes beside a two-and-a-half minute
+# suite is one eight-minute runner instead of two. It goes FIRST so its signal
+# arrives before the suite behind it. It was not run by any job at all until S6f,
+# which is the same gap that once let a red suite sit on the default branch -- a
+# suite that exists and is not run is not a gate.
 #
 # dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
 # rather than a twenty-second one, and because it gates something different: not

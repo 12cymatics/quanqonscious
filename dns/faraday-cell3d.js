@@ -1809,10 +1809,32 @@ class FaradayCell3D {
      which is what makes the axis face drop out of its own accord; the azimuthal faces
      have equal area, so they are weighted equally. */
   surfaceMetric(i, k){
+    /* Written out rather than as 1 + surfaceSlopeSquared(i, k), because ((1 + A) + B) + C and
+       1 + ((A + B) + C) are not the same double and this quantity feeds the curvature, the
+       surface pressure and every measured order in this file. On the fingerprint case the two
+       happened to agree bit for bit, which is luck at one amplitude and not a property: with
+       A, B, C all far below one, the first form truncates each addend against a leading 1
+       three times and the second only once. The three lines are duplicated so that nothing
+       downstream depends on that coincidence holding at another amplitude. */
     const s = this.etaSlopes(i, k, this._es);
     const rc = this.rc[i];
     return 1 + s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
              + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
+  }
+  /* |grad eta|^2 alone, which is what `surfaceMetric` adds one to. Separate because the
+     excess area needs it WITHOUT the one: sqrt(1 + q) - 1 loses every significant digit for
+     small q, and so does surfaceArea() - pi R^2, where the two operands are 4.6e-4 and their
+     difference at eta = 1e-9 m is 1.2e-18. Measured: the excess area came out 1.1926e-18
+     against the 1.1596e-18 its own amplitude scaling demands, 2.8 per cent wrong, and the
+     total energy then drifted 25.3 per cent over a quarter period where the same run at
+     eta = 1e-7 drifts 0.0356. That was the DIAGNOSTIC failing, not the solver: the drift is
+     -0.0344, -0.0349 and -0.0356 per cent at 1e-5, 1e-6 and 1e-7, flat across three decades
+     as a linear regime must be. Gate 9c happened to sit at 1e-7 and so never saw it. */
+  surfaceSlopeSquared(i, k){
+    const s = this.etaSlopes(i, k, this._es);
+    const rc = this.rc[i];
+    return s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
+         + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
   }
 
   /* The outward unit normal of the free surface at an arbitrary position, from the
@@ -1849,6 +1871,31 @@ class FaradayCell3D {
       for (let k = 0; k < this.nth; k++)
         A += this.rc[i]*this.drc[i]*this.dth*Math.sqrt(this.surfaceMetric(i, k));
     return A;
+  }
+
+  /* The area the surface has IN EXCESS of flat, which is the quantity the capillary energy
+     wants and is not the same computation as taking the difference of two areas.
+
+     Sum_cells rc drc dtheta is exactly pi R^2 -- rc drc telescopes to R^2/2 and dtheta sums
+     to 2 pi -- so the excess is Sum rc drc dtheta (sqrt(1 + q) - 1) term by term, with q the
+     same cell-averaged squared slope `surfaceMetric` adds one to. Written as
+     q/(1 + sqrt(1 + q)), which is the same number in exact arithmetic and keeps every digit
+     for small q, where the subtraction has none: at eta = 1e-9 m the difference of areas is
+     1.2e-18 out of operands of 4.6e-4, twenty times the double's own resolution.
+
+     This is deliberately NOT how `surfaceArea` is written and `surfaceArea` is deliberately
+     not written in terms of this. The curvature is the exact variational derivative of the
+     area as `surfaceArea` computes it (gate 7c), and that identity is in floating point, not
+     to a tolerance. Adding pi R^2 back to this function returns `surfaceArea` to round-off
+     and the gate says by how much. */
+  surfaceExcessArea(){
+    let dA = 0;
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        const q = this.surfaceSlopeSquared(i, k);
+        dA += this.rc[i]*this.drc[i]*this.dth*(q/(1 + Math.sqrt(1 + q)));
+      }
+    return dA;
   }
 
   /* The mean curvature of the free surface, div(grad eta / sqrt(1 + |grad eta|^2)).
@@ -2225,7 +2272,7 @@ class FaradayCell3D {
         const e = this.eta[this.ie(i, k)];
         hyd += 0.5*rho*g*e*e*this.rc[i]*this.drc[i]*dth;
       }
-    const cap = this.gamma*(this.surfaceArea() - Math.PI*this.R*this.R);
+    const cap = this.gamma*this.surfaceExcessArea();
     return { kinetic: ke, hydrostatic: hyd, capillary: cap, total: ke + hyd + cap };
   }
 
