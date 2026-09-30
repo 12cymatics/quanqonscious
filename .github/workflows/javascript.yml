@@ -59,11 +59,17 @@
 # declared no character set, so every micron and s^-1 on it decoded as
 # windows-1252. Neither is visible from node.
 #
-# dns/check-cell3d.mjs shares the DNS job rather than taking one of its own: seven
-# seconds does not earn a runner. It goes FIRST in that job so its signal arrives
-# before the two-and-a-half minute suite behind it. It was not run by any job at all
-# until now, which is the same gap that once let a red suite sit on the default
-# branch -- a suite that exists and is not run is not a gate.
+# dns/check-cell3d.mjs shares the DNS job rather than taking one of its own. That
+# line read "seven seconds does not earn a runner" and the seven seconds is long
+# gone: the gate now assembles the whole solver and integrates it, and measured on
+# this container it takes 3m00s, of which gate 9's four-grid frequency sweep and 9b's
+# four two-hundred-step stability runs are most. It still shares the job -- three
+# minutes beside a two-and-a-half minute suite is a five-and-a-half minute runner,
+# not two runners -- but the reason is now the total and not the smallness, and the
+# figure is one that was timed rather than remembered. It goes FIRST so its signal
+# arrives before the suite behind it. It was not run by any job at all until S6f,
+# which is the same gap that once let a red suite sit on the default branch -- a
+# suite that exists and is not run is not a gate.
 #
 # dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
 # rather than a twenty-second one, and because it gates something different: not
