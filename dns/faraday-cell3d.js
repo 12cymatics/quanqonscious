@@ -209,6 +209,33 @@ class FaradayCell3D {
     this.Hdr  = new Float64Array(NE);    // dH/dr at cell centres
     this.Hdth = new Float64Array(NE);    // dH/dtheta at cell centres
     this.Ht   = new Float64Array(NE);    // dH/dt, for the grid-relative transport
+    /* The same chain again for d eta/d t, because a renderer needs the surface's RATE and its
+       gradient, not only its height. `Ht` is d eta/d t exactly -- step() sets it from the
+       corrected Omega at sigma = 1, which IS the kinematic condition -- so what is missing is
+       only the face, slope and extended-column machinery H already has. It is built alongside
+       rather than by generalising H's, because H's is bit-exact load-bearing for every
+       measured order in this file and the two differ anyway at the pinned rim: eta is zero on
+       the wall for all time, so d eta/d t is zero there where H is h. */
+    this.Tr   = new Float64Array((nr + 1)*nth);
+    this.Tth  = new Float64Array(nr*nth);
+    this.Tdr  = new Float64Array(NE);
+    this.Tdth = new Float64Array(NE);
+    /* AND THE SAME CHAIN FOR ETA'S OWN SLOPES, which is not the same thing as H's even though
+       eta_r is H_r in exact arithmetic. H's face values are formed as
+       (h + eta_lo) + f*((h + eta_hi) - (h + eta_lo)), and that inner difference loses the low
+       bits of eta_hi - eta_lo: with h = 3e-3 m and eta differing by 1.7e-6 across a cell, the
+       ulp of h + eta is 4.3e-19 and the difference carries 2.5e-13 of relative error. The
+       solver does not care -- Hdr and Hdth feed flux terms where 2.5e-13 is far below the
+       discretisation -- but the RENDERER does, because its transport forms
+       Re grad Im - Im grad Re, a difference of two products that cancels exactly for a
+       standing wave. Measured: with H's slopes that cancellation left 2.046e-12 of the terms
+       instead of round-off, which is a drift the page would have drawn under a pattern going
+       nowhere. Differencing eta directly is the fix, and the two chains are kept separate so
+       that H's -- bit-exact load-bearing for every measured order in this file -- is untouched. */
+    this.Er   = new Float64Array((nr + 1)*nth);
+    this.Eth  = new Float64Array(nr*nth);
+    this.Edr  = new Float64Array(NE);
+    this.Edth = new Float64Array(NE);
 
     this._r = new Float64Array(NP);
     this._d = new Float64Array(NP);
@@ -242,6 +269,12 @@ class FaradayCell3D {
     this.Hxt = new Float64Array((nr + 2)*nth);
     /* eta on the same extended nodes, so a renderer can have it without subtracting h */
     this.Ex = new Float64Array((nr + 2)*nth);
+    /* and d eta/d t with its slopes, on those same nodes */
+    this.Tx  = new Float64Array((nr + 2)*nth);
+    this.Txr = new Float64Array((nr + 2)*nth);
+    this.Txt = new Float64Array((nr + 2)*nth);
+    this.Exr = new Float64Array((nr + 2)*nth);
+    this.Ext = new Float64Array((nr + 2)*nth);
     this.rx[0] = -this.rc[0];
     for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
     this.rx[nr+1] = this.R;
@@ -452,6 +485,83 @@ class FaradayCell3D {
       this.Ex[0*nth + k] = eta[this.ie(0, ka)];
       for (let i = 0; i < nr; i++) this.Ex[(i+1)*nth + k] = eta[this.ie(i, k)];
       this.Ex[(nr+1)*nth + k] = free ? eta[this.ie(nr-1, k)] : 0;
+    }
+
+    /* eta's OWN faces and slopes, differenced from eta and never from H -- see the comment on
+       `Er` in the constructor for the 2.046e-12 that made this necessary. Same shape as H's,
+       with the rim value 0 rather than h, since a pinned line holds eta at zero there. */
+    for (let k = 0; k < nth; k++){
+      this.Er[0*nth + k] = eta[this.ie(0, k)];
+      for (let i = 1; i < nr; i++){
+        const a = this.drc[i-1], b = this.drc[i];
+        const lo = eta[this.ie(i-1, k)], hi = eta[this.ie(i, k)];
+        this.Er[i*nth + k] = lo + (a/(a + b))*(hi - lo);
+      }
+      this.Er[nr*nth + k] = free ? eta[this.ie(nr-1, k)] : 0;
+    }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        this.Eth[i*nth + k] = 0.5*(eta[this.ie(i, k-1)] + eta[this.ie(i, k)]);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this.Edr[e] = (this.Er[(i+1)*nth + this.kw(k)] - this.Er[i*nth + this.kw(k)])
+                      /this.drc[i];
+        this.Edth[e] = (this.Eth[i*nth + this.kw(k+1)] - this.Eth[i*nth + this.kw(k)])
+                       /this.dth;
+      }
+    for (let k = 0; k < nth; k++){
+      const ka = this.kw(k + half);
+      this.Exr[0*nth + k] = -this.Edr[this.ie(0, ka)];
+      this.Ext[0*nth + k] =  this.Edth[this.ie(0, ka)];
+      for (let i = 0; i < nr; i++){
+        this.Exr[(i+1)*nth + k] = this.Edr[this.ie(i, k)];
+        this.Ext[(i+1)*nth + k] = this.Edth[this.ie(i, k)];
+      }
+      this.Exr[(nr+1)*nth + k] = free ? 0
+        : (0 - eta[this.ie(nr-1, k)])/this.drf[nr];
+      this.Ext[(nr+1)*nth + k] = free ? this.Edth[this.ie(nr-1, k)] : 0;
+    }
+
+    /* d eta/d t, through the same faces, slopes and extended columns. Identical in shape to
+       H's chain above, with the rim value 0 rather than h: a pinned contact line holds eta at
+       zero for all time, so its rate there is zero too. Under a free line deta/dr = 0 at the
+       wall, hence so is the rate's radial slope, exactly as for H. */
+    const Ht = this.Ht;
+    for (let k = 0; k < nth; k++){
+      this.Tr[0*nth + k] = Ht[this.ie(0, k)];
+      for (let i = 1; i < nr; i++){
+        const a = this.drc[i-1], b = this.drc[i];
+        const lo = Ht[this.ie(i-1, k)], hi = Ht[this.ie(i, k)];
+        this.Tr[i*nth + k] = lo + (a/(a + b))*(hi - lo);
+      }
+      this.Tr[nr*nth + k] = free ? Ht[this.ie(nr-1, k)] : 0;
+    }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        this.Tth[i*nth + k] = 0.5*(Ht[this.ie(i, k-1)] + Ht[this.ie(i, k)]);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this.Tdr[e] = (this.Tr[(i+1)*nth + this.kw(k)] - this.Tr[i*nth + this.kw(k)])
+                      /this.drc[i];
+        this.Tdth[e] = (this.Tth[i*nth + this.kw(k+1)] - this.Tth[i*nth + this.kw(k)])
+                       /this.dth;
+      }
+    for (let k = 0; k < nth; k++){
+      const ka = this.kw(k + half);
+      this.Tx[0*nth + k]  =  Ht[this.ie(0, ka)];
+      this.Txr[0*nth + k] = -this.Tdr[this.ie(0, ka)];
+      this.Txt[0*nth + k] =  this.Tdth[this.ie(0, ka)];
+      for (let i = 0; i < nr; i++){
+        this.Tx[(i+1)*nth + k]  = Ht[this.ie(i, k)];
+        this.Txr[(i+1)*nth + k] = this.Tdr[this.ie(i, k)];
+        this.Txt[(i+1)*nth + k] = this.Tdth[this.ie(i, k)];
+      }
+      this.Tx[(nr+1)*nth + k]  = free ? Ht[this.ie(nr-1, k)] : 0;
+      this.Txr[(nr+1)*nth + k] = free ? 0
+        : (0 - Ht[this.ie(nr-1, k)])/this.drf[nr];
+      this.Txt[(nr+1)*nth + k] = free ? this.Tdth[this.ie(nr-1, k)] : 0;
     }
     return this;
   }
@@ -810,6 +920,71 @@ class FaradayCell3D {
    * It reads `Ex`, the extension of ETA, and NOT `HatH(r, th) - this.h`. That was the first
    * version and it was wrong by exactly one ulp of h + eta everywhere it mattered; the reason,
    * and the three measurements, are in `refreshMetric` where Ex is filled. */
+  /* d eta/d t and the two gradients, at an arbitrary position, on the same extended nodes and
+   * the same bilinear weights `etaAt` uses.
+   *
+   * WHY A RENDERER NEEDS ALL FOUR. The page's grain transport is driven by a COMPLEX surface
+   * amplitude, not a height: it forms
+   *
+   *     PG = -K_I grad |A|^2 + K_F (Re grad Im - Im grad Re)
+   *
+   * an intensity gradient plus a phase flux. The modal renderer built A from each mode's own
+   * phase offset. A direct simulation has no per-mode phase, and does not need one: for any
+   * oscillation the instantaneous pair (eta, -eta_t/omega) IS that amplitude, and it reduces
+   * to the modal answer. Check the two limits. For a standing mode eta and eta_t share one
+   * spatial profile, so |A|^2 = A0^2 J_m^2 cos^2(m theta) is time independent and
+   * Re grad Im - Im grad Re vanishes: a standing wave has an intensity pattern and no phase
+   * flux, which is right. For a travelling one the flux is nonzero. So the pair carries what
+   * the transport asks for, and carries it from the instantaneous state rather than from an
+   * assumption that each mode has a single frequency. */
+  etaDotAt(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Tx = this.Tx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const t00 = Tx[a*nth + k0], t01 = Tx[a*nth + k1];
+    const t10 = Tx[(a+1)*nth + k0], t11 = Tx[(a+1)*nth + k1];
+    return (1 - fr)*((1 - ft)*t00 + ft*t01) + fr*((1 - ft)*t10 + ft*t11);
+  }
+  /* The gradient of eta at an arbitrary position, from ETA's own extended slope columns.
+     Deliberately NOT `Hslope`: eta_r is H_r in exact arithmetic and not in doubles, because
+     H's face values difference two h + eta sums and lose the low bits of eta's own difference.
+     That was 2.046e-12 of relative error in the renderer's phase flux, which is a difference
+     of two products that must cancel exactly for a standing wave. See `Er` in the constructor. */
+  etaSlopeAt(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5, kb = Math.floor(tt), ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const lerp = A => (1 - fr)*((1 - ft)*A[a*nth + k0] + ft*A[a*nth + k1])
+                    + fr*((1 - ft)*A[(a+1)*nth + k0] + ft*A[(a+1)*nth + k1]);
+    return { Hr: lerp(this.Exr), Hth: lerp(this.Ext) };
+  }
+  /* And the gradient of d eta/d t, from its own extended slope columns. */
+  etaDotSlopeAt(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5, kb = Math.floor(tt), ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const lerp = A => (1 - fr)*((1 - ft)*A[a*nth + k0] + ft*A[a*nth + k1])
+                    + fr*((1 - ft)*A[(a+1)*nth + k0] + ft*A[(a+1)*nth + k1]);
+    return { Tr: lerp(this.Txr), Tth: lerp(this.Txt) };
+  }
+
   etaAt(r, th){
     const nth = this.nth, nr = this.nr, rx = this.rx, Ex = this.Ex, dth = this.dth;
     let a = 0;
