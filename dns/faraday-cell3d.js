@@ -218,6 +218,7 @@ class FaradayCell3D {
     this._gu = new Float64Array(NU);
     this._gv = new Float64Array(NV);
     this._gw = new Float64Array(NW);
+    this._gom = new Float64Array(NW);
     this._pdiag = new Float64Array(NP);
 
     /* H on a radially extended grid, so a face midpoint anywhere between the axis
@@ -254,6 +255,19 @@ class FaradayCell3D {
     this._ry4 = new Float64Array(4);       // and its values
     this._tx4 = new Float64Array(4);       // one azimuthal stencil's abscissae
     this._ty4 = new Float64Array(4);       // and its values
+    this._kap = new Float64Array(NE);      // the surface's mean curvature
+    this._ps  = new Float64Array(NE);      // and the pressure it carries
+    this._lu = new Float64Array(NU); this._au = new Float64Array(NU);
+    this._lv = new Float64Array(NV); this._av = new Float64Array(NV);
+    this._lw = new Float64Array(NW); this._aw = new Float64Array(NW);
+
+    /* No slip on the floor and on the sidewall, which is the physical condition and not a
+       convenient zero: the wall does not move. They are written once here rather than at
+       every call so that `step` cannot pass a different closure than the gates do. The free
+       surface is NOT among them -- its condition is a traction, which `viscous` takes as a
+       flux through `surfaceLapFluxes`, and famLaplacian never asks a `bc` for the surface
+       while a flux is supplied. */
+    this._bcU = () => 0; this._bcV = () => 0; this._bcW = () => 0;
     this._fsr = new Float64Array(NE);      // and those three, over the whole surface
     this._fst = new Float64Array(NE);
     this._fsz = new Float64Array(NE);
@@ -469,6 +483,52 @@ class FaradayCell3D {
         }
       }
     }
+    /* THE SLOPE OPERATOR'S TRANSPOSE, which is what makes this the PHYSICAL pressure
+       gradient rather than the covariant one, and without which nothing else here is a
+       Navier-Stokes solver.
+
+       The divergence above reads Omega. Expressed in the physical w it reads
+       w - sigma(u H_r + (v/r) H_theta), so u and v enter it through that term too, and the
+       transpose must return part of every sigma face's contribution to the four r faces and
+       the four theta faces that meet there. Adding it converts
+
+           d p / d r at constant SIGMA   into   d p / d r at constant Z
+
+       and likewise azimuthally, which is exactly what the momentum equations for the
+       physical components ask for. Without it the projection's corrector applies the
+       covariant gradient: measured on p = A r + B z over a surface at eta/h = 0.4, the
+       radial component returned 86.99 at r/R = 0.888, sigma = 0.63, against the physical
+       137.00 -- a 36 per cent error at O(1), matching A + B sigma H_r to five digits.
+
+       The file's header used to say that carrying w instead of Omega would cost the
+       symmetry conjugate gradients needs. That is not so, and it is worth saying why: the
+       divergence in the physical variables is D composed with this change of variable, its
+       transpose is the change of variable's transpose composed with D's, and
+       D W^-1 D^T is symmetric for ANY diagonal positive W whatever D is. What carrying w
+       costs is a wider stencil -- a sigma face's pressure reaches eight horizontal faces --
+       and nothing else. Gate 1 measures the symmetry either way.
+
+       Also: the sigma face's control volume includes H, exactly as the r and theta faces' do.
+       That was missing, and with any positive weight the operator stays symmetric negative
+       definite and the projection still removes the divergence, so gates 1 and 2 passed
+       either way -- but the vertical component then returned B H rather than B, smaller than
+       the physical gradient by a factor of H, 333 on this cell. */
+    for (let i = 0; i < nr; i++){
+      const ri = rc[i];
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        const cr = -0.25*this.Hdr[e], ct = -0.25*this.Hdth[e]/ri;
+        for (let j = 1; j <= nz; j++){
+          const raw = gw[this.iw(i, k, j)], s = this.sf[j];
+          const jm = j - 1, jp = j === nz ? nz - 1 : j;
+          const du = cr*s*raw, dv = ct*s*raw;
+          gu[this.iu(i, k, jm)] += du; gu[this.iu(i+1, k, jm)] += du;
+          gu[this.iu(i, k, jp)] += du; gu[this.iu(i+1, k, jp)] += du;
+          gv[this.iv(i, k, jm)] += dv; gv[this.iv(i, k+1, jm)] += dv;
+          gv[this.iv(i, k, jp)] += dv; gv[this.iv(i, k+1, jp)] += dv;
+        }
+      }
+    }
     /* Divide by minus the control volume of each face. u at the axis and the rim
        is prescribed, so its gradient there is not solved for and is zeroed; the
        same for Omega on the floor. */
@@ -491,43 +551,61 @@ class FaradayCell3D {
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
+        const H = this.H[this.ie(i, k)];
         gw[this.iw(i, k, 0)] = 0;               // impermeable floor
         for (let j = 1; j <= nz; j++)
-          gw[this.iw(i, k, j)] /= -(rc[i]*drc[i]*dth*dsf[j]);
+          gw[this.iw(i, k, j)] /= -(rc[i]*drc[i]*dth*H*dsf[j]);
       }
     return [gu, gv, gw];
   }
 
+  /* The pressure operator, D W^-1 D^T, where D is the divergence read in the PHYSICAL
+     velocity: `divergence` takes Omega, so the composition puts the gradient's three
+     physical components through the same change of variable the transpose above went
+     through. Leaving that out would compose D with the transpose of a different operator
+     and the result would not be symmetric -- which gate 1 measures, so it cannot drift. */
   applyL(q, out){
     this.gradient(q, this._gu, this._gv, this._gw);
-    this.divergence(this._gu, this._gv, this._gw, out);
+    this.omegaOf(this._gu, this._gv, this._gw, this._gom);
+    this.divergence(this._gu, this._gv, this._gom, out);
     return out;
   }
 
-  /* The diagonal of divergence(gradient(.)), exactly, in eight applications.
-     The stencil reaches (i+-1, k, j), (i, k+-1, j) and (i, k, j+-1) and no
-     diagonal neighbour, so cells whose (i, k, j) parities all agree are never in
-     each other's stencil: setting one parity class to one and reading the result
-     at those same cells returns their diagonal entries with nothing else
-     contributing. Eight classes, eight applications. Two would do in two
-     dimensions and do next door; three indices need eight.
+  /* The diagonal of divergence(gradient(.)), exactly, by colouring. Set one colour class
+     to one, apply the operator, and read the result at those same cells: if no two cells of
+     a class are in each other's stencil, nothing but the diagonal contributes.
+
+     THE STRIDES ARE (2, 2, 3) AND THAT IS NOT A MARGIN, it is the stencil. Once `gradient`
+     carries the slope operator's transpose, a sigma face's pressure reaches the eight r and
+     theta faces that meet there, and the reach becomes
+
+         delta i in [-1, 1],  delta k in [-1, 1],  delta sigma in [-2, 2]
+
+     including the corners -- delta i = +-1 together with delta sigma = +-2. Two cells of one
+     class differ by an even delta i, an even delta k and a multiple of three in sigma, and
+     the only such triple inside that box is the zero one. It used to be (2, 2, 2) in eight
+     classes, which was right for the narrower stencil and is not right for this one: with it
+     the diagonal came out wrong, the Jacobi preconditioner with it, and a projection asked
+     for 1e-14 left a divergence of 6.7e-2 where the same projection at 1e-9 left 3.3e-8.
+     Twelve classes, twelve applications, and gate 3 compares the result against the diagonal
+     read one unit vector at a time, so a wrong stride cannot pass.
 
      Read from applyL rather than rederived, so the preconditioner cannot drift
      from the operator it preconditions. */
   pressureDiagonal(){
     const nr = this.nr, nth = this.nth, nz = this.nz;
     const d = this._pdiag, probe = new Float64Array(this.NP), q = new Float64Array(this.NP);
-    for (let c = 0; c < 8; c++){
-      const pi = c & 1, pk = (c >> 1) & 1, pj = (c >> 2) & 1;
+    for (let c = 0; c < 12; c++){
+      const pi = c & 1, pk = (c >> 1) & 1, pj = c >> 2;
       probe.fill(0);
       for (let i = 0; i < nr; i++) if ((i & 1) === pi)
         for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if ((j & 1) === pj)
+          for (let j = 0; j < nz; j++) if (j % 3 === pj)
             probe[this.ip(i, k, j)] = 1;
       this.applyL(probe, q);
       for (let i = 0; i < nr; i++) if ((i & 1) === pi)
         for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if ((j & 1) === pj)
+          for (let j = 0; j < nz; j++) if (j % 3 === pj)
             d[this.ip(i, k, j)] = q[this.ip(i, k, j)];
     }
     for (let c = 0; c < d.length; c++)
@@ -1789,17 +1867,316 @@ class FaradayCell3D {
         }
     return this;
   }
+  /* ---- the free surface's pressure, and the time step ------------------- */
+
+  /* The pressure the free surface carries, at every pressure column: the hydrostatic
+     response of the displaced elevation to the instantaneous gravity, the capillary term
+     with the FULL mean curvature rather than its linearisation, and the viscous normal
+     stress with the full rate-of-strain contraction against the true normal.
+
+         p_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)/|n|^2
+
+     This is the same expression `surfacePressure` carries in dns/faraday-disc.js, whose two
+     right-hand terms are that solver's flat-surface linearisations of these: `surfaceLaplacian`
+     for the curvature and `wzSurface` for the stress. Nothing is linearised here.
+
+     It is the inhomogeneous DIRICHLET value on the projection, never a force on the
+     predictor -- see `step`. */
+  surfacePressure(out){
+    const rho = this.rho, g = this.gravity();
+    this.curvature(this._kap);
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        const e = this.ie(i, k);
+        out[e] = rho*g*this.eta[e] - this.gamma*this._kap[e]
+               + this.surfaceNormalStress(i, k);
+      }
+    return out;
+  }
+
+  /* ONE STEP OF THE NAVIER-STOKES EQUATIONS. Everything above is an operator; this is what
+     makes the file a solver.
+
+     The order is not a matter of taste, and three parts of it were established by
+     measurement rather than by choice:
+
+     1. THE SURFACE PRESSURE IS AN INHOMOGENEOUS DIRICHLET VALUE INSIDE THE PROJECTION, not
+        a force on the predictor. As a predictor force it is p_s/(rho H dsigma) -- O(1/dsigma)
+        -- and the projection then cancels almost all of it, leaving the physical
+        acceleration as the difference of two large numbers and a step limit that collapses
+        with the grid. dns/faraday-disc.js went non-finite 0.57 periods in that way, at
+        nr = 48, nz = 20, m = 12. Resolved inside the projection nothing large cancels: the
+        surface face's gradient gains p_s/(H dsigma) and the top row of the right-hand side
+        loses that term's divergence.
+     2. THE AXIS AND WALL VALUES ARE SET BEFORE Omega IS FORMED FROM THE VELOCITY. Omega is
+        derived from u, v and w, and u at the axis face enters it through the innermost cell's
+        slope term, so setting that value after forming Omega leaves the two inconsistent and
+        the next projection undoes the one before it: measured, a projection asked for 1e-14
+        reported a divergence of 6.74e-2 where the same projection at 1e-9 reported 3.40e-8.
+     3. ETA ADVANCES ON THE CORRECTED Omega AT sigma = 1, which IS the kinematic condition --
+        Omega there is dH/dt by construction, not by differencing H. Pairing the surface
+        pressure at the old time with the surface velocity at the new one is symplectic Euler
+        on the surface oscillator, stable for omega dt < 2 rather than merely less unstable
+        than forward Euler.
+
+     The predictor carries the viscous and advective terms in full. Gravity does not appear in
+     it: this pressure is the total one, and the whole of gravity's effect on the interior is
+     the hydrostatic head the surface value carries. */
+  step(dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    const nr = this.nr, nth = this.nth, nz = this.nz, nu = this.nu, rho = this.rho;
+    const u = this.u, v = this.v, w = this.w;
+    const lu = this._lu, lv = this._lv, lw = this._lw;
+    const au = this._au, av = this._av, aw = this._aw;
+
+    /* the surface's own state, read BEFORE anything moves: the stresses and the curvature
+       belong to the surface the velocity is being advanced over */
+    this.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) this.Ht[this.ie(i, k)] = this.om[this.iw(i, k, nz)];
+    this.surfacePressure(this._ps);
+
+    /* the explicit right-hand side: viscous, with the free surface's own traction on the
+       sigma = 1 face, and advective, in the conservative grid-relative form */
+    this.viscous(lu, lv, lw, this._bcU, this._bcV, this._bcW);
+    this.advect(au, av, aw);
+
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iu(i, k, j);
+          u[c] += dt*(nu*lu[c] + au[c]);
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iv(i, k, j);
+          v[c] += dt*(nu*lv[c] + av[c]);
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){
+          const c = this.iw(i, k, j);
+          w[c] += dt*(nu*lw[c] + aw[c]);
+        }
+
+    /* the prescribed values, and only then Omega -- reason 2 above */
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++) u[this.iu(nr, k, j)] = 0;      // no penetration at the rim
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[this.iw(i, k, 0)] = 0;      // no slip on the floor
+    this.axisU();
+    this.omegaFromW();
+
+    /* the projection, with the surface pressure as its Dirichlet value -- reason 1 above */
+    this.divergence(u, v, this.om, this._div);
+    const scale = rho/dt;
+    for (let c = 0; c < this._div.length; c++) this._div[c] *= scale;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        this._div[this.ip(i, k, nz - 1)] -= this.rc[i]*this.drc[i]*this.dth
+          *this._ps[this.ie(i, k)]/(this.H[this.ie(i, k)]*this.dsf[nz]);
+    this.pressureDiagonal();
+    this.p.fill(0);
+    this.solveP(this._div, 1e-11, 400*(nr + nth + nz));
+
+    this.gradient(this.p, this._gu, this._gv, this._gw);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this._gw[this.iw(i, k, nz)] += this._ps[e]/(this.H[e]*this.dsf[nz]);
+      }
+
+    const s2 = dt/rho;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iu(i, k, j);
+          u[c] -= s2*this._gu[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iv(i, k, j);
+          v[c] -= s2*this._gv[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){
+          const c = this.iw(i, k, j);
+          w[c] -= s2*this._gw[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[this.iw(i, k, 0)] = 0;
+    this.axisU();
+    this.omegaFromW();
+
+    /* eta on the corrected Omega at the surface, which IS dH/dt -- reason 3 above */
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this.eta[e] += dt*this.om[this.iw(i, k, nz)];
+        this.Ht[e] = this.om[this.iw(i, k, nz)];
+      }
+    this.t += dt;
+    this.refreshMetric();
+    return this;
+  }
+
+  /* The explicit step's limits, from the discrete operators' own wavenumber bounds rather
+     than from a Cartesian rule of thumb. Four of them, and the azimuthal one is not
+     decoration: dns/faraday-disc.js's first version of this ignored it and was wrong by a
+     factor of three at m = 12, because the stiffest capillary mode is set by m/r at the
+     INNERMOST cell and not by dr. Here every azimuthal mode the grid carries is present at
+     once, so the stiffest is nth/2 at rc[0] always, with no mode number to be lucky about.
+
+       capillary   the surface oscillator at the largest wavenumber the grid carries, from
+                   the DISPERSION RELATION, omega^2 = (g_eff k + gamma k^3/rho) tanh(k h)
+       viscous     the explicit diffusion bound, 2/(nu sum k_i^2)
+       advective   1/max(|u|/dr + |v|/(r dtheta) + |w|/dz) over the cells, from the field
+                   as it stands
+       gravity     the shallow-water signal speed across the finest horizontal cell
+
+     THE CAPILLARY ONE IS THE DISPERSION RELATION AND NOT THE HALF CELL, and the difference
+     was measured rather than argued. dns/faraday-disc.js takes the surface stiffness to be
+     (g + gamma k^2/rho) divided by the top half cell's thickness, on the reasoning that the
+     surface pressure lands there; that is right for its own scheme and is too strict for
+     this one, because the projection distributes that pressure through the whole column and
+     the surface then responds at the PHYSICAL frequency. Measured directly: released from
+     rest with eta = eps J_m(kr) cos(m theta), one step gives d eta/dt = -omega^2 eta dt with
+     omega the continuum gravity-capillary frequency, to 2.1 per cent on a 32x48x20 grid --
+     so the physical dispersion relation is what the discrete surface obeys and what its step
+     limit follows from.
+
+     It is still conservative, by a factor measured on two grids: the scheme is stable at
+     1.35 and 2.03 times this limit on 10x16x8 and diverges at 2.71, and on 14x24x10 it is
+     stable at 1.40 and diverges at 2.80. With `stableStep`'s safety factor of 0.4 that puts
+     the default step between 3.5 and 7 times below where the scheme actually breaks, which
+     gate 9 asserts on both sides rather than leaving as a claim.
+
+     Returned together, so a caller can see which one binds. */
+  stepLimits(){
+    const nr = this.nr, nth = this.nth, nz = this.nz;
+    let drMin = Infinity, dzMin = Infinity, Hmin = Infinity;
+    for (let i = 0; i < nr; i++) drMin = Math.min(drMin, this.drc[i]);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const H = this.H[this.ie(i, k)];
+        Hmin = Math.min(Hmin, H);
+        for (let j = 0; j < nz; j++) dzMin = Math.min(dzMin, H*this.dsc[j]);
+      }
+    const kr2 = 4/(drMin*drMin), kz2 = 4/(dzMin*dzMin);
+    const mMax = nth >> 1, ka2 = (mMax*mMax)/(this.rc[0]*this.rc[0]);
+    const kSurf2 = kr2 + ka2, kSurf = Math.sqrt(kSurf2);
+    const gEff = this.g + Math.abs(this.accel);
+    const omegaSurf = Math.sqrt((gEff*kSurf + this.gamma*kSurf2*kSurf/this.rho)
+                                *Math.tanh(kSurf*Hmin));
+
+    let adv = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const r = this.rc[i], H = this.H[this.ie(i, k)];
+        for (let j = 0; j < nz; j++){
+          const uu = Math.max(Math.abs(this.u[this.iu(i, k, j)]),
+                              Math.abs(this.u[this.iu(i+1, k, j)]));
+          const vv = Math.max(Math.abs(this.v[this.iv(i, k, j)]),
+                              Math.abs(this.v[this.iv(i, k+1, j)]));
+          const ww = Math.max(Math.abs(this.w[this.iw(i, k, j)]),
+                              Math.abs(this.w[this.iw(i, k, j+1)]));
+          adv = Math.max(adv, uu/this.drc[i] + vv/(r*this.dth)
+                            + ww/(H*this.dsc[j]));
+        }
+      }
+    return { capillary: 2/omegaSurf,
+             viscous: 2/(this.nu*(kr2 + kz2 + ka2)),
+             advective: adv > 0 ? 1/adv : Infinity,
+             gravity: Math.min(drMin, this.rc[0]*this.dth)/Math.sqrt(gEff*Hmin),
+             kRadial: Math.sqrt(kr2), kVertical: Math.sqrt(kz2),
+             kAzimuthal: Math.sqrt(ka2) };
+  }
+
+  stableStep(safety){
+    const s = safety === undefined ? 0.4 : requireFinitePositive(safety, 'safety');
+    const L = this.stepLimits();
+    return s*Math.min(L.capillary, L.viscous, L.advective, L.gravity);
+  }
+
+  /* The energy, by the same control volumes the projection weights its faces with -- which
+     is what makes the projection non-increasing in this kinetic energy rather than in some
+     other one.
+
+     The capillary part is gamma times the surface's EXCESS area over the flat disc, and it
+     uses `surfaceArea`, of which the curvature is the exact variational derivative: that is
+     what makes the capillary work exactly -gamma dA/dt rather than approximately so.
+
+     With a drive the total is not a conserved quantity -- the shaker does work on the cell --
+     and the hydrostatic term is reported against the INSTANTANEOUS effective gravity, so it
+     is a diagnostic of the state under the force acting on it rather than a state function.
+     With accel = 0 and nu = 0 the total is conserved and that is the gate. */
+  energy(){
+    const nr = this.nr, nth = this.nth, nz = this.nz, rho = this.rho, dth = this.dth;
+    let ke = 0;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rf[i]*this.drf[i]*dth*this.Hr[i*nth + this.kw(k)];
+        for (let j = 0; j < nz; j++){
+          const a = this.u[this.iu(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsc[j];
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rc[i]*this.drc[i]*dth*this.Hth[i*nth + this.kw(k)];
+        for (let j = 0; j < nz; j++){
+          const a = this.v[this.iv(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsc[j];
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rc[i]*this.drc[i]*dth*this.H[this.ie(i, k)];
+        for (let j = 1; j <= nz; j++){
+          const a = this.w[this.iw(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsf[j];
+        }
+      }
+    const g = this.gravity();
+    let hyd = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.eta[this.ie(i, k)];
+        hyd += 0.5*rho*g*e*e*this.rc[i]*this.drc[i]*dth;
+      }
+    const cap = this.gamma*(this.surfaceArea() - Math.PI*this.R*this.R);
+    return { kinetic: ke, hydrostatic: hyd, capillary: cap, total: ke + hyd + cap };
+  }
+
   /* sigma (u dH/dr + (v/r) dH/dtheta) at a sigma face, with u and v averaged from
-     the four faces of the cell that meet there. */
-  slopeTerm(i, k, j){
+     the four faces of the cell that meet there. Taken over GIVEN arrays rather than over
+     the state, because the projection needs the same operator's transpose applied to the
+     pressure gradient, not only to the velocity. */
+  slopeTerm(i, k, j){ return this.slopeTermOf(this.u, this.v, i, k, j); }
+  slopeTermOf(u, v, i, k, j){
     const e = this.ie(i, k), s = this.sf[j];
     if (s === 0) return 0;
     const jm = j === 0 ? 0 : j - 1, jp = j === this.nz ? this.nz - 1 : j;
-    const uu = 0.25*(this.u[this.iu(i, k, jm)] + this.u[this.iu(i+1, k, jm)]
-                   + this.u[this.iu(i, k, jp)] + this.u[this.iu(i+1, k, jp)]);
-    const vv = 0.25*(this.v[this.iv(i, k, jm)] + this.v[this.iv(i, k+1, jm)]
-                   + this.v[this.iv(i, k, jp)] + this.v[this.iv(i, k+1, jp)]);
+    const uu = 0.25*(u[this.iu(i, k, jm)] + u[this.iu(i+1, k, jm)]
+                   + u[this.iu(i, k, jp)] + u[this.iu(i+1, k, jp)]);
+    const vv = 0.25*(v[this.iv(i, k, jm)] + v[this.iv(i, k+1, jm)]
+                   + v[this.iv(i, k, jp)] + v[this.iv(i, k+1, jp)]);
     return s*(uu*this.Hdr[e] + (vv/this.rc[i])*this.Hdth[e]);
+  }
+  /* Omega from a given (u, v, w) triple into a given array -- the same definition
+     omegaFromW applies to the state. */
+  omegaOf(u, v, w, out){
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++)
+        for (let j = 0; j <= this.nz; j++){
+          const c = this.iw(i, k, j);
+          out[c] = w[c] - this.slopeTermOf(u, v, i, k, j);
+        }
+    return out;
   }
 
 }

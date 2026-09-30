@@ -123,9 +123,28 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0], [8, 12, 6, 0.4],
   const one = new Float64Array(n).fill(1), L1 = new Float64Array(n);
   const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV), gw = new Float64Array(S.NW);
   S.gradient(one, gu, gv, gw);
-  ok(maxAbs(gu) === 0 && maxAbs(gv) === 0,
-     `${tag}: a constant pressure has exactly zero horizontal gradient`,
-     `max|gu| = ${maxAbs(gu).toExponential(2)}, max|gv| = ${maxAbs(gv).toExponential(2)}`);
+  /* A constant pressure has exactly zero horizontal gradient BELOW THE TOP ROW, and exactly
+     zero everywhere when the surface is flat. In the top row of a deformed cell it does not,
+     and that is the physical gradient being right rather than wrong: the pressure is
+     prescribed above the surface, so a constant interior pressure is a real jump across it,
+     and the jump's gradient at constant HEIGHT has a horizontal component wherever the
+     surface is sloped. Before `gradient` carried the slope operator's transpose it returned
+     the covariant gradient, which is zero there -- and which is not what the momentum
+     equations ask for: measured on p = A r + B z at eta/h = 0.4, the radial component read
+     86.99 against the physical 137.00 at r/R = 0.888. */
+  let hzBelow = 0, hzTop = 0;
+  for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++){
+    const g = Math.abs(gu[S.iu(i,k,j)]);
+    if (j < nz - 1) hzBelow = Math.max(hzBelow, g); else hzTop = Math.max(hzTop, g);
+  }
+  for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++){
+    const g = Math.abs(gv[S.iv(i,k,j)]);
+    if (j < nz - 1) hzBelow = Math.max(hzBelow, g); else hzTop = Math.max(hzTop, g);
+  }
+  ok(hzBelow === 0 && (amp === 0 ? hzTop === 0 : hzTop > 0),
+     `${tag}: a constant pressure has exactly zero horizontal gradient below the top row, `
+     + `and in it exactly when the surface is ${amp === 0 ? 'flat' : 'sloped it does not'}`,
+     `below ${hzBelow.toExponential(2)}, top row ${hzTop.toExponential(2)}`);
   let interiorGw = 0, surfaceGw = 0;
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
     for (let j = 0; j < nz; j++) interiorGw = Math.max(interiorGw, Math.abs(gw[S.iw(i,k,j)]));
@@ -136,14 +155,20 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0], [8, 12, 6, 0.4],
      + `is prescribed`,
      `interior ${interiorGw.toExponential(2)}, surface ${surfaceGw.toExponential(2)}`);
   S.applyL(one, L1);
+  /* and so L applied to a constant is exactly zero below the top TWO rows: the surface
+     value's horizontal gradient lives in the top row, and Omega at the face below it reads
+     that row's u and v through the slope term, so the divergence of it reaches one row
+     further down than the gradient does. Flat, it is exactly zero below the top row alone. */
+  const depth = amp === 0 ? 1 : 2;
   let interiorL = 0, topL = 0;
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
-    for (let j = 0; j < nz - 1; j++) interiorL = Math.max(interiorL, Math.abs(L1[S.ip(i,k,j)]));
-    topL = Math.max(topL, Math.abs(L1[S.ip(i,k,nz-1)]));
+    for (let j = 0; j < nz - depth; j++)
+      interiorL = Math.max(interiorL, Math.abs(L1[S.ip(i,k,j)]));
+    for (let j = nz - depth; j < nz; j++) topL = Math.max(topL, Math.abs(L1[S.ip(i,k,j)]));
   }
   ok(interiorL === 0 && topL > 0,
-     `${tag}: so L applied to a constant is exactly zero in every sigma row but `
-     + `the surface row`,
+     `${tag}: so L applied to a constant is exactly zero in every sigma row but the top `
+     + `${depth}`,
      `interior ${interiorL.toExponential(2)}, top ${topL.toExponential(2)}`);
 }
 
@@ -164,8 +189,16 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     S.u[S.iu(i,k,j)] = 1e-3*r();
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
     S.v[S.iv(i,k,j)] = 1e-3*r();
+  /* THE STATE IS THE PHYSICAL VELOCITY and Omega is derived from it, which is what the
+     header says and what `step` does, so the projection is exercised that way here: w is
+     what carries a random value and what the correction is applied to, and Omega is formed
+     from the three of them before and after. Correcting Omega directly would be correcting
+     a variable the momentum equations are not written for, and the gradient's horizontal
+     components now carry the slope operator's transpose precisely so that this order is the
+     consistent one. */
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-    S.om[S.iw(i,k,j)] = 1e-3*r();
+    S.w[S.iw(i,k,j)] = 1e-3*r();
+  S.omegaFromW();
   const before = S.maxDivergence();
   S.pressureDiagonal();
   const project = tol => {
@@ -178,7 +211,8 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
       S.v[S.iv(i,k,j)] -= S._gv[S.iv(i,k,j)];
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-      S.om[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+      S.w[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+    S.omegaFromW();
     return S.maxDivergence();
   };
   const loose = project(1e-11), iters = S.cgIters;
@@ -191,6 +225,112 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
      `${tag}: and removes more when the tolerance is tightened, so what is left `
      + `is the solve's tolerance and not a floor in the operator`,
      `${loose.toExponential(3)} then ${tight.toExponential(3)}`);
+}
+
+section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact');
+/* Two properties of the projection that nothing checked while nothing used the gradient for
+ * anything but its own transpose -- and both were wrong.
+ *
+ * THE GRADIENT IS THE PHYSICAL PRESSURE GRADIENT, because `step` multiplies it by dt/rho and
+ * subtracts it from the velocity. `divergence` reads Omega, so the divergence written in the
+ * physical w is that operator composed with w - sigma(u H_r + (v/r) H_theta), and its
+ * transpose must carry that composition too. Without it the gradient's horizontal components
+ * are the derivatives at constant SIGMA rather than at constant HEIGHT, which differ by
+ * sigma H_r dp/dz -- O(1), not a correction: measured on p = A r + B z at eta/h = 0.4 the
+ * radial component read 86.99 against the physical 137.00 at r/R = 0.888, sigma = 0.63. The
+ * vertical component was separately short of a factor of H, its control volume having been
+ * written without one.
+ *
+ * THE DIAGONAL IS READ BY COLOURING and the strides must match the stencil. Carrying the
+ * slope transpose widens it to delta sigma = +-2 with delta i = +-1 at the same time, so the
+ * eight parity classes that were right before are not right now. Compared here against the
+ * diagonal read one unit vector at a time, which is slow and exact and cannot be fooled by a
+ * stride that is too short.
+ *
+ * The top sigma row and the surface face are excluded from the gradient comparison, because
+ * there the operator carries its own Dirichlet value -- zero above the surface -- which this
+ * probe does not satisfy. Gate 1 checks that boundary exactly, on a constant. */
+{
+  const S = deform(new FaradayCell3D({ nr: 6, nth: 8, nz: 5, ...CELL }), 0.4);
+  const d = Float64Array.from(S.pressureDiagonal());
+  const e = new Float64Array(S.NP), q = new Float64Array(S.NP);
+  let worst = 0, scale = 0;
+  for (let c = 0; c < S.NP; c++){
+    e.fill(0); e[c] = 1;
+    S.applyL(e, q);
+    worst = Math.max(worst, Math.abs(q[c] - d[c]));
+    scale = Math.max(scale, Math.abs(q[c]));
+  }
+  ok(worst === 0,
+     'the coloured diagonal is exactly the diagonal read one unit vector at a time, so the '
+     + 'colour strides match the operator\'s stencil',
+     `worst difference ${worst.toExponential(3)} against entries up to `
+     + `${scale.toExponential(3)}`);
+}
+{
+  const A = 4.1e3, B = -9.7e2, C = 2.3e3, D = 1.7e3, h = CELL.h, R = CELL.R;
+  const pf = (r, th, z) => { const x = r/R;
+    return A*x*x + B*z + C*x*x*Math.cos(2*th) + D*x*Math.cos(th)*(z/h); };
+  const pr = (r, th, z) => { const x = r/R;
+    return (2*A*x + 2*C*x*Math.cos(2*th) + D*Math.cos(th)*(z/h))/R; };
+  const pt = (r, th, z) => { const x = r/R;
+    return (-2*C*x*Math.sin(2*th) - D*Math.sin(th)*(z/h))/R; };   // (1/r) dp/dtheta
+  const pz = (r, th, z) => B + D*(r/R)*Math.cos(th)/h;
+  const errorOn = (nr, nth, nz) => {
+    const S = deform(new FaradayCell3D({ nr, nth, nz, ...CELL }), 0.4);
+    const q = new Float64Array(S.NP);
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, H = S.H[S.ie(i,k)];
+      for (let j = 0; j < nz; j++) q[S.ip(i,k,j)] = pf(S.rc[i], th, S.sc[j]*H);
+    }
+    const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV),
+          gw = new Float64Array(S.NW);
+    S.gradient(q, gu, gv, gw);
+    const n = [0,0,0], dn = [0,0,0];
+    for (let i = 1; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i], H = S.Hat(r, th).H;
+      for (let j = 0; j < nz - 1; j++){
+        const w = pr(r, th, S.sc[j]*H), e2 = gu[S.iu(i,k,j)] - w;
+        n[0] += e2*e2; dn[0] += w*w;
+      }
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i], H = S.Hat(r, th).H;
+      for (let j = 0; j < nz - 1; j++){
+        const w = pt(r, th, S.sc[j]*H), e2 = gv[S.iv(i,k,j)] - w;
+        n[1] += e2*e2; dn[1] += w*w;
+      }
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i], H = S.H[S.ie(i,k)];
+      for (let j = 1; j < nz; j++){
+        const w = pz(r, th, S.sf[j]*H), e2 = gw[S.iw(i,k,j)] - w;
+        n[2] += e2*e2; dn[2] += w*w;
+      }
+    }
+    return n.map((x, c) => Math.sqrt(x/dn[c]));
+  };
+  const NAME = ['radial', 'azimuthal', 'vertical'];
+  const a = errorOn(16, 24, 16), b = errorOn(32, 48, 32), c = errorOn(64, 96, 64);
+  const o1 = a.map((x, j) => Math.log(x/b[j])/Math.LN2);
+  const o2 = b.map((x, j) => Math.log(x/c[j])/Math.LN2);
+  console.log('       ' + NAME.map((nm, j) => `${nm} ${a[j].toExponential(2)} -> `
+    + `${b[j].toExponential(2)} -> ${c[j].toExponential(2)}, order ${o1[j].toFixed(2)} then `
+    + `${o2[j].toFixed(2)}`).join('; '));
+  for (let j = 0; j < 2; j++)
+    ok(o1[j] > 1.8 && o2[j] > 1.8,
+       `the ${NAME[j]} pressure gradient is second order against calculus at constant `
+       + `HEIGHT on a deformed surface`,
+       `${a[j].toExponential(3)} -> ${b[j].toExponential(3)} -> ${c[j].toExponential(3)}, `
+       + `order ${o1[j].toFixed(3)} then ${o2[j].toFixed(3)}`);
+  /* The vertical one is asked for EXACTNESS rather than an order, which is the stronger
+     statement available here: this probe is linear in z, so a difference of two nodes over
+     H dsigma returns dp/dz to round-off, and the H that the control volume was missing would
+     show as a relative error of order one rather than of order h^2. */
+  ok(a[2] < 1e-12 && b[2] < 1e-12 && c[2] < 1e-12,
+     'and the vertical one is EXACT on a field linear in z, which is where the control '
+     + 'volume\'s missing H would have shown as a factor of H',
+     `${a[2].toExponential(3)}, ${b[2].toExponential(3)}, ${c[2].toExponential(3)} relative`);
 }
 
 /* ── 4b. the axis reflection ─────────────────────────────────────────────── */
@@ -1036,14 +1176,23 @@ section('6f. on a divergence-free field the only energy it moves is the mesh vol
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
       S.v[S.iv(i,k,j)] -= S._gv[S.iv(i,k,j)];
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-      S.om[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
-    S.wFromOmega();
-    /* the surface stays material: the mesh follows it, so dH/dt is Omega at sigma = 1 */
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++) S.Ht[S.ie(i,k)] = S.om[S.iw(i,k,nz)];
+      S.w[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+    /* THE AXIS VALUE IS SET BEFORE Omega IS FORMED FROM IT, and the order is not free.
+       Omega is derived from u, v and w, and u at the axis face enters it through the slope
+       term of the innermost cell, so changing that value AFTER forming Omega leaves the two
+       inconsistent -- and the next projection then recomputes Omega and undoes the one
+       before it. Measured with the order reversed: a projection to 1e-14 reported a
+       divergence of 6.74e-2 where the same projection at 1e-9 reported 3.40e-8. The
+       correction itself cannot disturb this, because `gradient` zeroes the axis and rim r
+       faces, whose velocity is prescribed rather than solved. `step` carries the same
+       ordering for the same reason. */
     S.axisU();
     /* the axis row is the one term the identity leaves open; measured in 6g */
     for (let k = 0; k < nth; k++) for (let b = 0; b < nz; b++) S.u[S.iu(0,k,b)] = 0;
+    S.omegaFromW();
+    /* the surface stays material: the mesh follows it, so dH/dt is Omega at sigma = 1 */
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) S.Ht[S.ie(i,k)] = S.om[S.iw(i,k,nz)];
     return S.maxDivergence();
   };
   const dLoose = project(1e-9), eLoose = residual();
@@ -2274,6 +2423,185 @@ section('8d. the surface flux: no tangential traction, and the flat limit next d
          + `order ${o1[1].toFixed(3)} then ${o2[1].toFixed(3)}`);
     }
   }
+}
+
+section('9. step(): the equations integrated, against the dispersion relation');
+/* THE CHECK THAT EVERYTHING ELSE WAS FOR. Every gate above measures one operator; this one
+ * measures the assembled solver against a result it cannot have got from its own internals.
+ *
+ * Released from rest with eta = eps J_m(k r) cos(m theta) and J_m'(kR) = 0 -- which IS the
+ * free contact line, so the profile is admissible -- the linear surface oscillator gives
+ *
+ *     d2 eta / dt2  =  -omega^2 eta,     omega^2 = (g k + gamma k^3 / rho) tanh(k h)
+ *
+ * so ONE step from rest must leave d eta / dt = -omega^2 eta dt. That single step runs the
+ * whole assembly: the curvature, the normal, the strain and the viscous normal stress into
+ * the surface pressure; the surface pressure as the projection's Dirichlet value; the
+ * pressure solve; the corrector on the physical velocity; and the kinematic condition that
+ * turns Omega at sigma = 1 into d eta/dt. Get any of them wrong and the frequency is wrong.
+ *
+ * Asserted as CONVERGENCE, because the discrete surface's frequency is the continuum one
+ * only in the limit: the capillary term is about half the restoring force at this wavenumber
+ * and the curvature's rim closure is first order (7d), so the whole is first order.
+ * Measured for m = 3 over four grids: -13.1%, -6.6%, -3.9%, -2.1%. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const m = 3;
+  const kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+  const omega2 = (CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h);
+  const ratio = (nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL });
+    const AMP = 2e-7;                                   // 6.7e-5 of the depth: linear
+    const prof = (i, kk) => K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i,kk)] = AMP*prof(i, kk);
+    S.refreshMetric();
+    S.step(1e-7);
+    let num = 0, den = 0;
+    for (let i = 1; i < nr - 1; i++) for (let kk = 0; kk < nth; kk++){
+      const b = prof(i, kk);
+      num += S.om[S.iw(i,kk,nz)]*b*S.rc[i]*S.drc[i]; den += b*b*S.rc[i]*S.drc[i];
+    }
+    return (num/den)/(-omega2*AMP*1e-7);
+  };
+  const r = [ratio(12,16,10), ratio(16,24,12), ratio(24,32,16), ratio(32,48,20)];
+  const err = r.map(x => Math.abs(x - 1));
+  console.log(`       m = ${m}, omega = ${Math.sqrt(omega2).toFixed(3)} rad/s: measured/theory `
+    + r.map(x => x.toFixed(5)).join(', ') + ` (error `
+    + err.map(x => (100*x).toFixed(2) + '%').join(', ') + ')');
+  ok(err[0] > err[1] && err[1] > err[2] && err[2] > err[3],
+     'step() reproduces the linear gravity-capillary frequency, and the error falls on every '
+     + 'refinement -- which no single operator in this file could produce on its own',
+     err.map(x => (100*x).toFixed(2) + '%').join(' -> '));
+  ok(err[3] < 0.05,
+     'and on the finest grid it is within five per cent of the continuum value',
+     `${(100*err[3]).toFixed(3)}% at 32x48x20`);
+  ok(r.every(x => x > 0),
+     'and the sign is right, so the surface is restored towards flat rather than driven away '
+     + 'from it',
+     r.map(x => x.toFixed(4)).join(', '));
+}
+
+section('9b. the step limit, falsifiable on both sides');
+/* A limit is only a limit if the scheme survives below it and breaks above it. Seeded from
+ * noise so what is measured is the SCHEME's growth and not a physical mode's.
+ *
+ * The margin is stated rather than hidden: the capillary limit is the dispersion relation at
+ * the largest wavenumber the grid carries, which is conservative by a measured factor of
+ * 1.4 to 2.8, and `stableStep`'s safety factor of 0.4 puts the default step 3.5 to 7 times
+ * below where the scheme actually breaks. So the assertion is stable at 1x and divergent at
+ * 10x, which brackets that measured band without straddling it. */
+{
+  const rmsEta = S => { let a = 0, n = 0; for (const x of S.eta){ a += x*x; n++; }
+                        return Math.sqrt(a/n); };
+  const growth = (mult, steps, nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL });
+    const rr = rnd(4242);
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
+      S.eta[S.ie(i,k)] = 1e-14*rr();
+    for (let c = 0; c < S.NU; c++) S.u[c] = 1e-12*rr();
+    for (let c = 0; c < S.NV; c++) S.v[c] = 1e-12*rr();
+    for (let c = 0; c < S.NW; c++) S.w[c] = 1e-12*rr();
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) S.w[S.iw(i,k,0)] = 0;
+    for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++) S.u[S.iu(nr,k,j)] = 0;
+    S.refreshMetric();
+    const dt = mult*S.stableStep(), a0 = rmsEta(S);
+    for (let n = 0; n < steps; n++){
+      try { S.step(dt); } catch (e) { return { per: Infinity, at: n + 1, dt }; }
+      if (!Number.isFinite(rmsEta(S))) return { per: Infinity, at: n + 1, dt };
+    }
+    return { per: Math.pow(rmsEta(S)/a0, 1/steps), dt };
+  };
+  for (const [nr, nth, nz] of [[10, 16, 8], [14, 24, 10]]){
+    const tag = `${nr}x${nth}x${nz}`;
+    const at1 = growth(1, 200, nr, nth, nz), at10 = growth(10, 200, nr, nth, nz);
+    console.log(`       ${tag}: at stableStep = ${at1.dt.toExponential(3)} s, growth `
+      + `${at1.per.toFixed(6)} per step; at ten times it, `
+      + (Number.isFinite(at10.per) ? at10.per.toExponential(2) : `diverged by step ${at10.at}`));
+    ok(Number.isFinite(at1.per) && at1.per <= 1,
+       `${tag}: at stableStep() noise does not grow`,
+       `growth ${at1.per.toFixed(8)} per step over 200 steps`);
+    ok(!Number.isFinite(at10.per) || at10.per > 1.05,
+       `${tag}: and at ten times stableStep() it does, so the limit is not vacuous`,
+       Number.isFinite(at10.per) ? `growth ${at10.per.toExponential(3)} per step`
+                                 : `diverged at step ${at10.at}`);
+  }
+}
+
+section('9c. the energy, and what the solver does to it');
+/* With no drive and the smallest viscosity the constructor accepts, the total energy must be
+ * very nearly conserved and must only ever FALL: the advection redistributes it (6f), the
+ * projection is orthogonal in exactly this kinetic energy because `gradient` divides by the
+ * same control volumes, and viscosity removes it. A scheme that made energy would show here.
+ *
+ * The capillary part is gamma times the surface's excess area, whose variational derivative
+ * IS the curvature the surface pressure carries (7c) -- which is what makes the exchange
+ * between the hydrostatic, capillary and kinetic parts an identity rather than a coincidence.
+ *
+ * Run for a QUARTER PERIOD, which is what makes the exchange assertion mean anything: from
+ * rest the whole energy is hydrostatic and capillary, and a quarter period later it must be
+ * almost entirely kinetic. This gate first ran two hundred steps on a 14x24x10 grid, which
+ * is 5.714 ms of a period that is 88.860 ms long -- six per cent of it -- and the kinetic
+ * share reached 14.70%. That is not a weak result, it is the right answer to a question about
+ * six per cent of a period: sin^2(2*pi*0.0643) = 15.5%. It tested the drift and not the
+ * exchange, and no threshold on 14.70% could have told a real oscillator from a scheme that
+ * merely leaked a little energy into motion. A quarter period on 10x16x8 takes 377 steps and
+ * 17 s and reaches 99.19%.
+ *
+ * THE KINETIC BRACKET IS TWO-SIDED because the lower half alone passes for the wrong reason.
+ * Injecting forward Euler on the surface oscillator -- eta advanced on the PRE-corrector Omega
+ * instead of the corrected one -- made the energy grow by a factor of 6.3e+7 over the quarter
+ * period, and `kemax > 0.9*e0.total` was then satisfied by the blow-up: 3.4e+9 times the initial
+ * total is indeed more than nine tenths of it. The other three assertions went red, so the gate
+ * caught that defect, but the assertion that names the exchange did not, and an assertion that
+ * can pass for the reason it exists to exclude is not one. Bracketed above by the same drift
+ * bound, it says what it means: the kinetic energy at a quarter period is between ninety per cent
+ * and a hundred and a half of the energy the surface started with. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const m = 3, kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const T = 2*Math.PI/omega;
+  const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL, nu: 1e-12 });
+  const AMP = 1e-7;
+  for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+    S.eta[S.ie(i,kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+  S.refreshMetric();
+  const e0 = S.energy();
+  const dt = S.stableStep();
+  const steps = Math.ceil(0.25*T/dt);
+  let worstRise = 0, kemax = 0;
+  let prev = e0.total;
+  for (let n = 0; n < steps; n++){
+    S.step(dt);
+    const e = S.energy();
+    kemax = Math.max(kemax, e.kinetic);
+    worstRise = Math.max(worstRise, (e.total - prev)/e0.total);
+    prev = e.total;
+  }
+  const e1 = S.energy();
+  const drift = (e1.total - e0.total)/e0.total;
+  console.log(`       a quarter of the ${(1e3*T).toFixed(3)} ms period in ${steps} steps: total `
+    + `${e0.total.toExponential(4)} -> ${e1.total.toExponential(4)} J, drift `
+    + `${(100*drift).toFixed(4)}%; kinetic reached ${(100*kemax/e0.total).toFixed(2)}% of it; `
+    + `worst single-step rise ${(100*worstRise).toExponential(2)}%`);
+  ok(Math.abs(drift) < 5e-3,
+     'the total energy is conserved to half a per cent over a quarter period with no drive '
+     + 'and a viscosity of 1e-12',
+     `drift ${(100*drift).toFixed(4)}% of ${e0.total.toExponential(4)} J`);
+  ok(drift <= 0,
+     'and it falls rather than rises, which is the only direction an undriven viscous fluid '
+     + 'can go',
+     `drift ${(100*drift).toFixed(4)}%`);
+  ok(kemax > 0.9*e0.total && kemax < 1.005*e0.total,
+     'and by the quarter period nearly all of it has become kinetic -- between ninety per cent '
+     + 'and the drift bound above it, so this is an oscillator exchanging the energy it started '
+     + 'with, neither a field sitting still nor one manufacturing motion',
+     `kinetic reached ${(100*kemax/e0.total).toFixed(2)}% of the initial total`);
+  ok(worstRise < 1e-3,
+     'and no single step raises it appreciably, which is what a scheme that made energy '
+     + 'would do',
+     `worst single-step rise ${(100*worstRise).toExponential(3)}%`);
 }
 
 /* ── 5. refusals ────────────────────────────────────────────────────────── */

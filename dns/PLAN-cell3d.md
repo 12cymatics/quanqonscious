@@ -1,12 +1,22 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
-**Session counter: 4**
-**Stages complete: 6 of 14, and S6 is nearly closed**
-**Next action: the surface pressure, which is all that is left of S6.
-`p_s = p_ext - gamma kappa + n.T` as the inhomogeneous DIRICHLET value inside the projection,
-never as a predictor force -- that mistake made the two-dimensional solver non-finite at 0.57
-periods. Then S7: `step()`, the stability limit from the capillary, viscous and advective
-limits including the azimuthal direction, and the energy diagnostic.**
+**Session counter: 5**
+**Stages complete: 7 of 14 -- S6 and S7 are closed, and the file is a SOLVER rather than a
+set of operators.**
+**Next action: S8, validation against the independent linear solver. The frequency check in
+gate 9 is its simplest case and already passes (13.1% to 2.1% over four grids); what S8 adds
+is the driven Floquet growth rate per mode against `dns/faraday-disc.js`, energy conserved as
+nu falls, harmonics at finite amplitude, and demonstrable mode coupling. Then S9, the
+renderer.**
+
+**What session 5 did.** `faraday-cell3d.js` had no `step()` at all: forty-three methods, every
+one an operator, and nothing that advanced anything in time. Building the assembly found two
+O(1) defects in the committed projection that nothing had noticed BECAUSE nothing used the
+gradient for anything but its own transpose -- the Omega control volume was missing its H, and
+the horizontal components were the covariant gradient rather than the physical one (86.99
+against 137.00 at r/R = 0.888). Both are fixed and gated. `surfacePressure`, `step`,
+`stepLimits`, `stableStep` and `energy` exist, and the assembled solver reproduces the linear
+gravity-capillary dispersion relation. See "S7: the file becomes a solver" below.
 
 **What session 4 did, in one line each.** The surface-row defect session 3 diagnosed was
 mostly the GATE's: its test surface was inadmissible at the axis and contradicted the free
@@ -77,8 +87,8 @@ against this and need no further decision.
 | S6e | Free surface: the flux hook in famLaplacian, and u, v, w closed by it | **done** | the hook changes the surface row by exactly the flux over the volume it crosses and changes no other row at all; `viscous` supplies it for all three; `FAM.w.sHi` is `nz`, so w is solved at sigma = 1 over the half cell its advection already uses |
 | S6f | Free surface: the Laplacian second order at EVERY row, and what w's surface unknown means | **done** | every face derivative cubic, so no boundary row relies on a cancellation: 4e reads 1.99 to 2.00 at all eight (family, amplitude) pairs against a floor raised from 1.2 to 1.9; the sigma = 0 row's first-order term identified in closed form and measured to three digits against it before the fix; 4g asserts grad^2 w at the surface row second order against the exact average over its half cell, AND pins its gap to the point value at sigma = 1 as the centroid offset in closed form, over eight cases -- azimuthal and axisymmetric probes, flat and deformed, at the renderer's grid aspect and at one where the azimuthal surface-slope resolution matches the radial; five injected defects red, the fifth only after the axisymmetric probe was added, which is why it is there |
 | S6g | Free surface: the flux interpolation, gated | **done** | the interpolation of each surface-flux component onto its OWN family's sigma = 1 face -- radially for u, azimuthally for v -- is second order against `wantFlux` evaluated at that face, 2.12 then 2.07 for u and 1.96 then 1.98 for v over 16/32/64 at eta/h = 0.3 and 0.6; one cell's value in place of either reads 0.92 and 0.99. The plan said this needed a probe satisfying zero tangential stress; it does not, because the analytic flux can be asked for the face's own position |
-| S6h | Free surface: the surface pressure | todo | `p_s = p_ext - gamma kappa + n.T` as the inhomogeneous Dirichlet value inside the projection, never as a predictor force |
-| S7 | `step()`, its stability limit, and the energy diagnostic | todo | amplification below one at the stated limit and above it at twice the limit |
+| S6h | Free surface: the surface pressure | **done** | `rho g eta - gamma kappa + 2 rho nu n.E.n`, entering the projection's right-hand side top row and the corrector's sigma = 1 face and nowhere else -- never the predictor, where it is O(1/dsigma) and the projection cancels almost all of it |
+| S7 | `step()`, its stability limit, and the energy diagnostic | **done** | the assembled solver reproduces the linear gravity-capillary frequency for m = 3, error 13.11% -> 6.62% -> 3.92% -> 2.08% over four grids, which no single operator in the file could produce alone; building it found two O(1) defects in the committed projection (the Omega control volume missing its H; the horizontal components covariant rather than physical, 86.99 against 137.00); `stableStep` from the DISPERSION relation, with no growth at 1x (0.997392 and 0.997441 per step on two grids) and divergence at 10x (by step 14 and step 15), so the limit is falsifiable on both sides; over a quarter period at nu = 1e-12 the energy drifts -0.0343%, never rises, and 99.19% of it becomes kinetic |
 | S8 | Validation against the independent linear solver | todo | at small amplitude, per-mode growth rate agrees with `faraday-disc.js`; energy conserved as nu goes to zero; harmonics appear at finite amplitude |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
@@ -661,6 +671,157 @@ still exact: on a w profile quadratic in z, which both stencils differentiate ex
 agree to 7.7e-13, 2.1e-12, 6.3e-12 relative (a three-point derivative's cancellation gets
 relatively worse as the spacing shrinks); on the sinusoid the gap between them falls at
 order 2.69 then 2.32, the order the quadratic can promise.
+
+## S7: the file becomes a solver, and two O(1) defects the projection had been hiding
+
+`faraday-cell3d.js` had forty-three methods and not one that advanced anything in time. It was
+a library of gated operators, and the two defects below had survived every gate in it because
+**nothing used `gradient` for anything except its own transpose**: `divergence(gradient(.))` is
+symmetric negative definite for any positive face weight and any consistent divergence, so the
+symmetry, definiteness and divergence-removal gates all passed while the gradient itself was
+not the pressure gradient.
+
+### The Omega control volume was missing its H
+
+Every other face divided by its physical volume; the sigma faces divided by
+`rc dr dtheta dsigma` with no H. Measured on `p = A r + B z`, where every centred difference is
+exact, one face returned `-gw = 2.73300e+0` against `B H = -2.73300e+0` at H = 3.00e-3 m: the
+vertical pressure gradient was smaller than the physical one by a factor of H, 333 on this
+cell. Gate 3 now asks for EXACTNESS there, on a probe linear in z, which is where a missing H
+shows as a factor of H rather than as an order.
+
+### The horizontal components were the COVARIANT gradient, not the physical one
+
+`divergence` reads Omega. Written in the physical w it reads `w - sigma(u H_r + (v/r) H_theta)`,
+so u and v enter it through that term and the transpose must carry the composition -- returning
+part of every sigma face's contribution to the eight r and theta faces that meet there. Without
+it the horizontal components are the derivatives at constant SIGMA and not at constant HEIGHT,
+and the two differ by `sigma H_r dp/dz`, which is not a correction: measured on the same probe
+over a surface at eta/h = 0.4, the radial component read **86.99 where the physical value is
+137.00** at r/R = 0.888, sigma = 0.63 -- 36 per cent, and matching `A + B sigma H_r` to five
+digits.
+
+**The file's header was wrong about why Omega is the unknown.** It said that carrying w would
+cost "the symmetry conjugate gradients needs". It does not: the divergence in the physical
+variables is D composed with a change of variable, its transpose is that change of variable's
+transpose composed with D's, and `D W^-1 D^T` is symmetric for any diagonal positive W whatever
+D is. What carrying w costs is a WIDER STENCIL, and that had a second consequence:
+`pressureDiagonal` read its diagonal by eight parity classes on the assumption that the stencil
+reaches no diagonal neighbour. With the slope transpose it reaches `delta sigma = +-2` together
+with `delta i = +-1`, so the colouring must be (2, 2, 3) in twelve classes. With the old strides
+the diagonal came out wrong, the Jacobi preconditioner with it, and a projection asked for 1e-14
+left a divergence of **6.7e-2** where the same projection at 1e-9 left 3.3e-8. Gate 3 now
+compares the coloured diagonal against the diagonal read one unit vector at a time, exactly, so
+a stride that is too short cannot pass.
+
+### And one ordering constraint, established the same way
+
+The axis and wall values must be set BEFORE Omega is formed from the velocity. Omega is derived
+from u, v and w, and u at the axis face enters it through the innermost cell's slope term, so
+setting that value afterwards leaves the two inconsistent and the next projection undoes the one
+before it: measured, a projection asked for 1e-14 reported a divergence of 6.74e-2 where the
+same projection at 1e-9 reported 3.40e-8. `step` carries that order, and so does the gate.
+
+### What step() is
+
+Predictor (viscous with the surface traction on the sigma = 1 face, plus the conservative
+grid-relative advection) -> prescribed values -> Omega -> the projection with the surface
+pressure as its inhomogeneous DIRICHLET value -> corrector on the physical velocity -> eta on
+the corrected Omega at sigma = 1, which IS the kinematic condition.
+
+`p_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)/|n|^2`, the same expression
+`dns/faraday-disc.js` carries with its two right-hand terms linearised; nothing is linearised
+here. It is the Dirichlet value and never a predictor force, because as a predictor force it is
+O(1/dsigma) and the projection cancels almost all of it -- which made the two-dimensional solver
+non-finite 0.57 periods in.
+
+### The check that everything else was for
+
+Released from rest with `eta = eps J_m(kr) cos(m theta)` and `J_m'(kR) = 0` -- the free contact
+line, so the profile is admissible -- one step must leave `d eta/dt = -omega^2 eta dt` with
+`omega^2 = (g k + gamma k^3/rho) tanh(k h)`. That single step runs the curvature, the normal,
+the strain, the viscous normal stress, the surface pressure, the pressure solve, the corrector
+and the kinematic condition. Measured, m = 3, omega = 70.709 rad/s:
+
+| grid | measured/theory | error |
+|---|---|---|
+| 12x16x10 | 0.86886 | 13.11% |
+| 16x24x12 | 0.93382 | 6.62% |
+| 24x32x16 | 0.96077 | 3.92% |
+| 32x48x20 | 0.97921 | 2.08% |
+
+First order, and that is expected rather than disappointing: the capillary term is about half
+the restoring force at this wavenumber and the curvature's rim closure is first order (7d).
+
+### The step limit, and why it is the dispersion relation
+
+`dns/faraday-disc.js` takes the surface stiffness to be `(g + gamma k^2/rho)` divided by the top
+half cell's thickness. That is right for its scheme and too strict for this one, because the
+projection distributes the surface pressure through the whole column and the surface responds at
+the PHYSICAL frequency -- which the table above measures directly. So the capillary limit here is
+`2/omega` with omega from the dispersion relation at the largest wavenumber the grid carries,
+`k^2 = 4/dr_min^2 + (nth/2)^2/rc[0]^2`. Every azimuthal mode is present at once, so unlike next
+door there is no mode number to be lucky about.
+
+Still conservative, and the margin is measured rather than assumed: on 10x16x8 the scheme is
+stable at 1.35 and 2.03 times that limit and diverges at 2.71; on 14x24x10 stable at 1.40 and
+divergent at 2.80. With the safety factor 0.4 the default step is 3.5 to 7 times below where the
+scheme breaks, and gate 9b asserts both sides -- no growth at `stableStep()`, divergence at ten
+times it (measured: by step 14 and step 15 on the two grids).
+
+### The energy
+
+Kinetic by the same control volumes the projection weights its faces with, which is what makes
+the projection non-increasing in THIS kinetic energy rather than some other one; hydrostatic
+against the instantaneous effective gravity; capillary as gamma times the surface's excess area,
+whose variational derivative IS the curvature the surface pressure carries (7c).
+
+Measured, released from rest with eta = 1e-7 J_3(kr) cos(3 theta) on 10x16x8 and nu = 1e-12, over
+a quarter of the 88.860 ms period in 377 steps: the total goes 1.8784e-15 -> 1.8777e-15 J, a drift
+of -0.0343%, and it falls at every step rather than rising anywhere -- worst single-step rise
+5.22e-3% of the initial total. The kinetic part reaches 99.19% of that initial total, which is the
+whole point of running a quarter period rather than a fixed number of steps.
+
+**That last figure is why this gate was restructured, and the first version of it is worth
+recording.** It ran two hundred steps on 14x24x10 and asserted that the kinetic energy took "a
+large share" of the total, reading 14.70%. Nothing was wrong with the solver: two hundred steps at
+that grid's `stableStep` is 5.714 ms of an 88.860 ms period, six per cent of it, and
+sin^2(2 pi 0.0643) = 15.5% -- so 14.70% is very nearly the right answer to a question about six
+per cent of a period. The defect was in the gate, and it was not a loose threshold but a
+meaningless one: no number that can be asserted about 14.70% distinguishes an oscillator from a
+scheme leaking a little energy into motion. A quarter period is the only duration at which the
+assertion says something, because at a quarter period an oscillator must have converted nearly all
+of it and anything else cannot.
+
+### What the regeneration test found about these three gates
+
+Five defects, one at a time, on a worktree under `/tmp`; all five red on the gate they target
+and 214 passed, 0 failed on restore. Two of them said something about the gates rather than
+about the solver, and both are worth keeping.
+
+| injected | what went red |
+|---|---|
+| the hydrostatic head dropped from the surface pressure | gate 9's absolute check, 54.47% error at 32x48x20; 9c's drift, -38.84% |
+| `stableStep` ten times too large | 9b's "no growth at 1x", Infinity on both grids, and then the floor-contact refusal fires in 9c |
+| `stableStep` ten times too small | 9b's "and at ten times it does", 0.9974 per step on both grids |
+| eta advanced on the PRE-corrector Omega (forward Euler on the surface) | 9b's "no growth at 1x", 1.0335 per step; 9c's drift, +6.3e+9%, its direction, and its single-step rise |
+| no surface pressure at all | gate 9 entirely, 100% error and zero response; 9c's exchange, 0.00% kinetic |
+
+**Gate 9's two assertions are not redundant, and the convergence one is the weaker.** With the
+hydrostatic head missing the error still fell on every refinement -- 62.13%, 57.70%, 55.77%,
+54.47% -- so the sequence was monotone and the check passed while the surface pressure was
+missing a quarter of itself. Only the absolute bound caught it. A convergence assertion says the
+discretisation is consistent with *something*; it does not say what.
+
+**And one assertion passed for exactly the reason it exists to exclude, so it was rewritten.**
+"By the quarter period nearly all of it has become kinetic" was `kemax > 0.9*e0.total`. Under
+forward Euler on the surface the energy grew by a factor of 6.3e+7, and 3.4e+9 times the initial
+total is indeed more than nine tenths of it, so that assertion went GREEN on a scheme that was
+manufacturing motion out of nothing. The other three in 9c went red, so the gate caught the
+defect -- but the assertion that names the exchange did not, and a one-sided bound on a quantity
+that can run away is not a bound. It is now bracketed above by the same drift tolerance:
+between 90% and 100.5% of the energy the surface started with, measured 99.19%. Re-injected
+against the bracket, it is red.
 
 ## Rules this build keeps
 
