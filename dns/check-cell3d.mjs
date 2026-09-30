@@ -3704,11 +3704,26 @@ section('16. eta at an arbitrary position, which is what the renderer asks for')
       worst3 = Math.max(worst3, Math.abs(S.etaAt(0, k*S.dth/4)));
     const amp3 = 1e-4*Math.pow(0.5, 3);
     console.log(`       m = 3 surface at r = 0: worst |eta| ${worst3.toExponential(2)}, `
-      + `against ${amp3.toExponential(2)} at mid-radius`);
-    ok(worst3 < 0.02*amp3,
-       'and an m = 3 surface has no elevation on the axis, because the antipodal continuation '
-       + 'carries the opposite sign there and the two cancel',
-       `${worst3.toExponential(3)} against ${amp3.toExponential(3)} at mid-radius`);
+      + `${(worst3/amp3).toExponential(2)} of the ${amp3.toExponential(2)} at mid-radius`);
+    /* THE BOUND IS ROUND-OFF AND NOT A PERCENTAGE, and it took an injection to establish that.
+       It was `0.02*amp3` -- two per cent of the mid-radius amplitude -- on the reasoning that an
+       m = 3 mode has "no elevation" on the axis. Taking the row below the axis at the SAME
+       azimuth instead of the antipode then left this GREEN: the measured value went from
+       9.26e-23 to 4.68e-8, fifteen orders, and 4.68e-8 is still under two per cent of 1.25e-5.
+       A threshold five times above a defect is not a threshold.
+
+       What the antipodal row actually gives is an EXACT cancellation, which is why round-off is
+       the right bound. At r = 0 the radial weight is (0 - rx[0])/(rx[1] - rx[0]) = 1/2 exactly,
+       and the two rows it averages are eta[ie(0, k)] and eta[ie(0, k + nth/2)], which for m = 3
+       differ by cos(3 pi) = -1 and so sum to zero to the last bit of the cosine. Measured
+       9.26e-23 of 1.25e-5, which is 7.4e-18 relative -- and the defect reads 3.7e-3, nine
+       orders away from the 1e-12 asserted here. */
+    ok(worst3 < 1e-12*amp3,
+       'and an m = 3 surface has no elevation on the axis AT ALL, to round-off and not merely '
+       + 'to a small fraction -- the antipodal continuation carries the opposite sign there and '
+       + 'the two cancel exactly',
+       `${worst3.toExponential(3)} of ${amp3.toExponential(3)}, `
+       + `${(worst3/amp3).toExponential(3)} relative`);
   }
 
   /* --- the rim is the contact condition, not an extrapolation --- */
