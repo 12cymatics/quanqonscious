@@ -255,6 +255,8 @@ class FaradayCell3D {
     this._ry4 = new Float64Array(4);       // and its values
     this._tx4 = new Float64Array(4);       // one azimuthal stencil's abscissae
     this._ty4 = new Float64Array(4);       // and its values
+    this._hA = new Float64Array(3);        // (H, H_r, H_theta) at a cell's own centre
+    this._hB = new Float64Array(3);        // and at one of its six faces
     this._kap = new Float64Array(NE);      // the surface's mean curvature
     this._ps  = new Float64Array(NE);      // and the pressure it carries
     this._lu = new Float64Array(NU); this._au = new Float64Array(NU);
@@ -295,13 +297,13 @@ class FaradayCell3D {
     sbW[nz+1] = 1;
 
     this.FAM = {
-      p: { idx: (i, k, j) => this.ip(i, k, j), axisSign: +1, thOff: 0.5,
+      p: { idx: (i, k, j) => this.ip(i, k, j), axisSign: +1, thOff: 0.5, stride: nz,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      u: { idx: (i, k, j) => this.iu(i, k, j), axisSign: -1, thOff: 0.5,
+      u: { idx: (i, k, j) => this.iu(i, k, j), axisSign: -1, thOff: 0.5, stride: nz,
            rn: this.rf, rb: rbU, rLo: 1, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
+      v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0, stride: nz,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
       /* w's nodes run 0..nz and its viscous term is solved on 1..nz, the surface node
@@ -322,10 +324,24 @@ class FaradayCell3D {
          is second order at the node and not conservative. Conservation is kept here
          instead: an advective term in flux form beside a pointwise viscous one would
          leave the energy identity neither exactly dissipative nor exactly conservative. */
-      w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
+      w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5, stride: nz + 1,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sf, sb: sbW, sLo: 1, sHi: nz }
     };
+    /* Each family's node radii sit in fixed brackets of the extended radial node list, so
+       the linear search HatH does can be done once per family node here instead of on every
+       reconstruction. colValueAtZ was 38.5 per cent of a step before this, and at the rim
+       node that search walked the whole list. The bracket found is the same one, so what
+       follows it is unchanged arithmetic. */
+    for (const key of ['p', 'u', 'v', 'w']){
+      const fam = this.FAM[key], rn = fam.rn, br = new Int32Array(rn.length);
+      for (let a = 0; a < rn.length; a++){
+        let b = 0;
+        while (b < nr && this.rx[b+1] < rn[a]) b++;
+        br[a] = b > nr ? nr : b;
+      }
+      fam.hBr = br;
+    }
     this.refreshMetric();
   }
 
@@ -433,22 +449,25 @@ class FaradayCell3D {
   divergence(u, v, om, out){
     const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
     const rf = this.rf, rc = this.rc, drc = this.drc, dsc = this.dsc;
+    const Hr = this.Hr, Hth = this.Hth, nw = nz + 1;
     for (let i = 0; i < nr; i++){
-      const rci = rc[i], dr = drc[i];
+      const rci = rc[i], dr = drc[i], rIn = rf[i], rOut = rf[i+1];
       for (let k = 0; k < nth; k++){
-        const kk = this.kw(k);
-        const HrIn = this.Hr[i*nth + kk], HrOut = this.Hr[(i+1)*nth + kk];
-        const HthIn = this.Hth[i*nth + kk], HthOut = this.Hth[i*nth + this.kw(k+1)];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const HrIn = Hr[i*nth + k], HrOut = Hr[(i+1)*nth + k];
+        const HthIn = Hth[i*nth + k], HthOut = Hth[i*nth + kp];
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
         for (let j = 0; j < nz; j++){
           const radial = dth*dsc[j]*(
-              rf[i+1]*HrOut*u[this.iu(i+1, k, j)]
-            - rf[i]  *HrIn *u[this.iu(i,   k, j)]);
+              rOut*HrOut*u[bOut + j]
+            - rIn *HrIn *u[bIn + j]);
           const azim = dr*dsc[j]*(
-              HthOut*v[this.iv(i, k+1, j)]
-            - HthIn *v[this.iv(i, k,   j)]);
+              HthOut*v[bK + j]
+            - HthIn *v[bIn + j]);
           const vert = rci*dr*dth*(
-              om[this.iw(i, k, j+1)] - om[this.iw(i, k, j)]);
-          out[this.ip(i, k, j)] = radial + azim + vert;
+              om[bW + j + 1] - om[bW + j]);
+          out[bIn + j] = radial + azim + vert;
         }
       }
     }
@@ -466,20 +485,23 @@ class FaradayCell3D {
     const rf = this.rf, rc = this.rc, drc = this.drc, dsc = this.dsc,
           drf = this.drf, dsf = this.dsf;
     gu.fill(0); gv.fill(0); gw.fill(0);
+    const Hrm = this.Hr, Hthm = this.Hth, nw = nz + 1;
     for (let i = 0; i < nr; i++){
-      const rci = rc[i], dr = drc[i];
+      const rci = rc[i], dr = drc[i], rIn = rf[i], rOut = rf[i+1];
       for (let k = 0; k < nth; k++){
-        const kk = this.kw(k);
-        const HrIn = this.Hr[i*nth + kk], HrOut = this.Hr[(i+1)*nth + kk];
-        const HthIn = this.Hth[i*nth + kk], HthOut = this.Hth[i*nth + this.kw(k+1)];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const HrIn = Hrm[i*nth + k], HrOut = Hrm[(i+1)*nth + k];
+        const HthIn = Hthm[i*nth + k], HthOut = Hthm[i*nth + kp];
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
         for (let j = 0; j < nz; j++){
-          const qc = q[this.ip(i, k, j)];
-          gu[this.iu(i+1, k, j)] += qc*dth*dsc[j]*rf[i+1]*HrOut;
-          gu[this.iu(i,   k, j)] -= qc*dth*dsc[j]*rf[i]  *HrIn;
-          gv[this.iv(i, k+1, j)] += qc*dr*dsc[j]*HthOut;
-          gv[this.iv(i, k,   j)] -= qc*dr*dsc[j]*HthIn;
-          gw[this.iw(i, k, j+1)] += qc*rci*dr*dth;
-          gw[this.iw(i, k, j  )] -= qc*rci*dr*dth;
+          const qc = q[bIn + j];
+          gu[bOut + j] += qc*dth*dsc[j]*rOut*HrOut;
+          gu[bIn  + j] -= qc*dth*dsc[j]*rIn *HrIn;
+          gv[bK  + j] += qc*dr*dsc[j]*HthOut;
+          gv[bIn + j] -= qc*dr*dsc[j]*HthIn;
+          gw[bW + j + 1] += qc*rci*dr*dth;
+          gw[bW + j    ] -= qc*rci*dr*dth;
         }
       }
     }
@@ -513,48 +535,53 @@ class FaradayCell3D {
        definite and the projection still removes the divergence, so gates 1 and 2 passed
        either way -- but the vertical component then returned B H rather than B, smaller than
        the physical gradient by a factor of H, 333 on this cell. */
+    const Hdr = this.Hdr, Hdth = this.Hdth, sfa = this.sf;
     for (let i = 0; i < nr; i++){
       const ri = rc[i];
       for (let k = 0; k < nth; k++){
-        const e = this.ie(i, k);
-        const cr = -0.25*this.Hdr[e], ct = -0.25*this.Hdth[e]/ri;
+        const e = i*nth + k;
+        const cr = -0.25*Hdr[e], ct = -0.25*Hdth[e]/ri;
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
         for (let j = 1; j <= nz; j++){
-          const raw = gw[this.iw(i, k, j)], s = this.sf[j];
+          const raw = gw[bW + j], s = sfa[j];
           const jm = j - 1, jp = j === nz ? nz - 1 : j;
           const du = cr*s*raw, dv = ct*s*raw;
-          gu[this.iu(i, k, jm)] += du; gu[this.iu(i+1, k, jm)] += du;
-          gu[this.iu(i, k, jp)] += du; gu[this.iu(i+1, k, jp)] += du;
-          gv[this.iv(i, k, jm)] += dv; gv[this.iv(i, k+1, jm)] += dv;
-          gv[this.iv(i, k, jp)] += dv; gv[this.iv(i, k+1, jp)] += dv;
+          gu[bIn + jm] += du; gu[bOut + jm] += du;
+          gu[bIn + jp] += du; gu[bOut + jp] += du;
+          gv[bIn + jm] += dv; gv[bK + jm] += dv;
+          gv[bIn + jp] += dv; gv[bK + jp] += dv;
         }
       }
     }
     /* Divide by minus the control volume of each face. u at the axis and the rim
        is prescribed, so its gradient there is not solved for and is zeroed; the
        same for Omega on the floor. */
+    const Hm = this.H;
     for (let k = 0; k < nth; k++)
       for (let j = 0; j < nz; j++){
-        gu[this.iu(0, k, j)] = 0;
-        gu[this.iu(nr, k, j)] = 0;
+        gu[k*nz + j] = 0;
+        gu[(nr*nth + k)*nz + j] = 0;
       }
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hr[i*nth + this.kw(k)];
+        const Hf = Hrm[i*nth + k], b = (i*nth + k)*nz;
         for (let j = 0; j < nz; j++)
-          gu[this.iu(i, k, j)] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
+          gu[b + j] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hth[i*nth + this.kw(k)];
+        const Hf = Hthm[i*nth + k], b = (i*nth + k)*nz;
         for (let j = 0; j < nz; j++)
-          gv[this.iv(i, k, j)] /= -(rc[i]*drc[i]*dth*Hf*dsc[j]);
+          gv[b + j] /= -(rc[i]*drc[i]*dth*Hf*dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const H = this.H[this.ie(i, k)];
-        gw[this.iw(i, k, 0)] = 0;               // impermeable floor
+        const H = Hm[i*nth + k], b = (i*nth + k)*nw;
+        gw[b] = 0;                              // impermeable floor
         for (let j = 1; j <= nz; j++)
-          gw[this.iw(i, k, j)] /= -(rc[i]*drc[i]*dth*H*dsf[j]);
+          gw[b + j] /= -(rc[i]*drc[i]*dth*H*dsf[j]);
       }
     return [gu, gv, gw];
   }
@@ -696,6 +723,55 @@ class FaradayCell3D {
     return { H, Hr, Hth };
   }
 
+  /* The same bilinear interpolation, without the object. `Hat` is called from inside the
+     face loops of `famLaplacian` and was 12.7 per cent of a step's time on a 16x24x10 grid,
+     most of it allocating and collecting one three-field object per face per stencil point.
+     These two write the same arithmetic in the same order -- `HatH` when only H is wanted,
+     which is five of the nine call sites, and `HatInto` into a caller-owned triple for the
+     three that want the slopes as well. Nothing here rounds differently from `Hat`, and the
+     bit-for-bit gate over forty driven and undriven steps is what says so rather than the
+     claim. `Hat` itself stays, because the gate calls it and an object is the right shape
+     for a one-off. */
+  HatH(r, th){
+    const nr = this.nr, rx = this.rx;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    return this.HatHBr(a, r, th);
+  }
+  /* The same, with the radial bracket already known -- which it is at every family node,
+     from the table the constructor builds. */
+  HatHBr(a, r, th){
+    const nth = this.nth, rx = this.rx, Hx = this.Hx, dth = this.dth;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const h00 = Hx[a*nth + k0], h01 = Hx[a*nth + k1];
+    const h10 = Hx[(a+1)*nth + k0], h11 = Hx[(a+1)*nth + k1];
+    return (1 - fr)*((1 - ft)*h00 + ft*h01) + fr*((1 - ft)*h10 + ft*h11);
+  }
+  HatInto(r, th, o){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Hx = this.Hx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const h00 = Hx[a*nth + k0], h01 = Hx[a*nth + k1];
+    const h10 = Hx[(a+1)*nth + k0], h11 = Hx[(a+1)*nth + k1];
+    o[0] = (1 - fr)*((1 - ft)*h00 + ft*h01) + fr*((1 - ft)*h10 + ft*h11);
+    o[1] = (((1 - ft)*h10 + ft*h11) - ((1 - ft)*h00 + ft*h01))/(r1 - r0);
+    o[2] = ((1 - fr)*(h01 - h00) + fr*(h11 - h10))/dth;
+    return o;
+  }
+
   /* The centred slopes of H at an arbitrary position, bilinear on the extended
      slope grids. Distinct from Hat's slopes, which are the bracket's own and so
      are centred only at a face midpoint: these are what the sigma-face cross
@@ -773,10 +849,10 @@ class FaradayCell3D {
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
     const th = (kk + fam.thOff)*this.dth;
-    const H = this.Hat(fam.rn[aa], th).H;
+    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
     const ss = z/H;
-    const at = b => f[fam.idx(aa, kk, b)];
-    if (nJ === 1) return sign*at(0);
+    const base = (aa*this.nth + this.kw(kk))*fam.stride;
+    if (nJ === 1) return sign*f[base];
     const n = nJ < 4 ? nJ : 4;
     /* `bracket` puts the stencil around the target instead of around `lev`, by a binary
        search for the interval holding it -- for the callers whose target is far from the
@@ -795,7 +871,7 @@ class FaradayCell3D {
       let L = 1;
       for (let m = 0; m < n; m++)
         if (m !== i) L *= (ss - sn[j0 + m])/(sn[j0 + i] - sn[j0 + m]);
-      v += at(j0 + i)*L;
+      v += f[base + j0 + i]*L;
     }
     return sign*v;
   }
@@ -813,7 +889,7 @@ class FaradayCell3D {
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
     const th = (kk + fam.thOff)*this.dth;
-    const H = this.Hat(fam.rn[aa], th).H;
+    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
     const ss = z/H;
     if (nJ === 1) return 0;
     const n = nJ < 4 ? nJ : 4;
@@ -821,7 +897,8 @@ class FaradayCell3D {
     if (j0 + n > nJ) j0 = nJ - n;
     if (j0 < 0) j0 = 0;
     const sx = this._sx, sy = this._sy;
-    for (let m = 0; m < n; m++){ sx[m] = sn[j0 + m]; sy[m] = f[fam.idx(aa, kk, j0 + m)]; }
+    const base = (aa*this.nth + this.kw(kk))*fam.stride;
+    for (let m = 0; m < n; m++){ sx[m] = sn[j0 + m]; sy[m] = f[base + j0 + m]; }
     return sign*polyDerivAt(sx, sy, n, ss)/H;
   }
 
@@ -1058,7 +1135,7 @@ class FaradayCell3D {
       if (j0 + 3 > aHi) j0 = aHi - 3;
       if (j0 < aLo) j0 = aLo;
       const th = thOf(k);
-      const HR = this.Hat(this.R, th).H;
+      const HR = this.HatH(this.R, th);
       for (let m = 0; m < 4; m++){
         const a = j0 + m;
         rx[m] = a > nI - 1 ? this.R : colR(a);
@@ -1162,7 +1239,7 @@ class FaradayCell3D {
       let j = a - 1;
       if (j + 3 > aHi) j = aHi - 3;
       if (j < aLo) j = aLo;
-      const th2 = thOf(k), HR = this.Hat(this.R, th2).H;
+      const th2 = thOf(k), HR = this.HatH(this.R, th2);
       for (let m = 0; m < 4; m++){
         const a2 = j + m;
         rx[m] = a2 > nI - 1 ? this.R : colR(a2);
@@ -1182,7 +1259,7 @@ class FaradayCell3D {
       const dra = rb[a+1] - rb[a];
       for (let k = 0; k < nth; k++){
         const th = thOf(k);
-        const mid = this.Hat(rn[a], th);
+        const mid = this.HatInto(rn[a], th, this._hA);
         const midS = this.Hslope(rn[a], th);
         for (let b = fam.sLo; b <= fam.sHi; b++){
           const dsb = sb[b+1] - sb[b];
@@ -1202,21 +1279,21 @@ class FaradayCell3D {
           for (const side of [-1, +1]){
             const rface = side < 0 ? rb[a] : rb[a+1];
             if (rface === 0) continue;                  // the axis: zero area
-            const g = this.Hat(rface, th);
+            const g = this.HatInto(rface, th, this._hB);
             if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
-            const z = sMid*g.H;
+            const z = sMid*g[0];
             const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
-            flux += side*rface*dth*g.H*dsb*d;
+            flux += side*rface*dth*g[0]*dsb*d;
           }
 
           /* ---- the two theta faces: normal theta-hat ---- */
           for (const side of [-1, +1]){
             const thf = th + side*0.5*dth;
-            const g = this.Hat(rn[a], thf);
-            const z = sMid*g.H;
+            const g = this.HatInto(rn[a], thf, this._hB);
+            const z = sMid*g[0];
             const d = side < 0 ? dPhysThFace(a, k - 1, k, z, b)
                                : dPhysThFace(a, k, k + 1, z, b);
-            flux += side*dra*g.H*dsb*d/rn[a];
+            flux += side*dra*g[0]*dsb*d/rn[a];
           }
 
           /* ---- the two sigma faces: the curved sheets z = sigma H, whose normal
@@ -1238,13 +1315,13 @@ class FaradayCell3D {
             if ((bn < 0 || bn > nJ - 1) && !bc) continue;
             loadS(a, k, sStencil(b, side), th);
             const dsg = polyDerivAt(sx, sy, 4, sface);
-            const z = sface*mid.H;
-            flux += side*proj*( dsg/mid.H
+            const z = sface*mid[0];
+            flux += side*proj*( dsg/mid[0]
                               - sface*midS.Hr*dSigR(a, k, z)
                               - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
           }
 
-          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid.H*dsb);
+          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
         }
       }
     }
@@ -1332,7 +1409,7 @@ class FaradayCell3D {
     for (let i = FU.rLo; i <= FU.rHi; i++){
       const r = this.rf[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
-        const Hu = this.Hat(r, (k + 0.5)*this.dth).H;
+        const Hu = this.HatH(r, (k + 0.5)*this.dth);
         for (let j = 0; j < nz; j++){
           const c = this.iu(i, k, j);
           const z = this.sc[j]*Hu;
@@ -1349,7 +1426,7 @@ class FaradayCell3D {
     for (let i = FV.rLo; i <= FV.rHi; i++){
       const r = this.rc[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
-        const Hv = this.Hat(r, k*this.dth).H;
+        const Hv = this.HatH(r, k*this.dth);
         for (let j = 0; j < nz; j++){
           const c = this.iv(i, k, j);
           const z = this.sc[j]*Hv;
@@ -2170,12 +2247,32 @@ class FaradayCell3D {
   /* Omega from a given (u, v, w) triple into a given array -- the same definition
      omegaFromW applies to the state. */
   omegaOf(u, v, w, out){
-    for (let i = 0; i < this.nr; i++)
-      for (let k = 0; k < this.nth; k++)
-        for (let j = 0; j <= this.nz; j++){
-          const c = this.iw(i, k, j);
-          out[c] = w[c] - this.slopeTermOf(u, v, i, k, j);
+    /* slopeTermOf inlined, with the index arithmetic hoisted out of the innermost loop.
+       This is the second half of the conjugate-gradient matvec and runs once per iteration
+       -- a hundred and more times a step -- so a per-point call that recomputes eight wrapped
+       indices is most of it. Same expressions, same order, and the bit-for-bit gate says so. */
+    const nr = this.nr, nth = this.nth, nz = this.nz, nw = nz + 1;
+    const Hdr = this.Hdr, Hdth = this.Hdth, sfa = this.sf, rc = this.rc;
+    for (let i = 0; i < nr; i++){
+      const rci = rc[i];
+      for (let k = 0; k < nth; k++){
+        const e = i*nth + k;
+        const hr = Hdr[e], hth = Hdth[e];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const bIn = e*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = e*nw;
+        for (let j = 0; j <= nz; j++){
+          const c = bW + j, s = sfa[j];
+          if (s === 0){ out[c] = w[c]; continue; }
+          const jm = j === 0 ? 0 : j - 1, jp = j === nz ? nz - 1 : j;
+          const uu = 0.25*(u[bIn + jm] + u[bOut + jm]
+                         + u[bIn + jp] + u[bOut + jp]);
+          const vv = 0.25*(v[bIn + jm] + v[bK + jm]
+                         + v[bIn + jp] + v[bK + jp]);
+          out[c] = w[c] - s*(uu*hr + (vv/rci)*hth);
         }
+      }
+    }
     return out;
   }
 

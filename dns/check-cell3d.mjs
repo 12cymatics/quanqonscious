@@ -2604,6 +2604,299 @@ section('9c. the energy, and what the solver does to it');
      `worst single-step rise ${(100*worstRise).toExponential(3)}%`);
 }
 
+section('10. the hoisted operators are the same operators, bit for bit');
+/* A step used to cost 146 ms on 16x24x10 and costs 85.6 ms now, and none of that came
+ * from changing what is computed. `divergence`, `gradient` and `omegaOf` are the
+ * conjugate-gradient matvec, so they run over a hundred times per step, and they were
+ * calling `this.ip/iu/iv/iw` -- each a wrapped modulo behind a method call -- six to
+ * fourteen times per cell. `colValueAtZ`, 38.5% of a step on its own, allocated a closure
+ * per call and searched the radial node list linearly inside it, from the start, every time;
+ * at the rim node that walk is the whole list. `Hat` allocated one three-field object per
+ * face per stencil point.
+ *
+ * All of that is repeated work, not arithmetic, and removing it must not move a single bit.
+ * So this section carries its OWN implementation of each operator -- the obvious loop,
+ * written against the public index accessors and `Hat` -- and asserts EXACT equality with
+ * the solver's, on a deformed surface with every degree of freedom excited. Not a tolerance:
+ * `===`. A refactor that changes the answer by one unit in the last place fails here.
+ *
+ * One such change was caught this way while the work was being done. Hoisting
+ * `(vv/rc[i])*Hdth[e]` out of omegaOf's inner loop as `vv*(Hdth[e]*(1/rc[i]))` is the same
+ * number in exact arithmetic and a different one in doubles -- two of the sixteen digits of
+ * eta[0] moved. The reassociation was reverted; the loop now hoists only what can be hoisted
+ * without reordering a single operation. */
+{
+  const S = new FaradayCell3D({ nr: 9, nth: 14, nz: 7, ...CELL });
+  deform(S, 0.4);
+  const r = rnd(97531);
+  for (let c = 0; c < S.NU; c++) S.u[c] = r();
+  for (let c = 0; c < S.NV; c++) S.v[c] = r();
+  for (let c = 0; c < S.NW; c++) S.w[c] = r();
+  for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++) S.u[S.iu(S.nr, k, j)] = 0;
+  S.axisU();
+  const nr = S.nr, nth = S.nth, nz = S.nz;
+
+  /* --- Hat, HatH and HatInto are one interpolation --- */
+  {
+    let worstH = 0, worstR = 0, worstT = 0, nPts = 0;
+    const o = new Float64Array(3);
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      for (let a = 0; a < F.rn.length; a++)
+        for (let k = 0; k < nth; k++){
+          const th = (k + F.thOff)*S.dth, rr = F.rn[a];
+          const ref = S.Hat(rr, th);
+          S.HatInto(rr, th, o);
+          worstH = Math.max(worstH, Math.abs(S.HatH(rr, th) - ref.H), Math.abs(o[0] - ref.H));
+          worstR = Math.max(worstR, Math.abs(o[1] - ref.Hr));
+          worstT = Math.max(worstT, Math.abs(o[2] - ref.Hth));
+          nPts++;
+        }
+    }
+    /* And at positions interior to BOTH interpolation directions, which the family nodes
+       are not and which is the whole reason this loop exists. A family node with thOff = 0.5
+       lands on a theta cell centre, so the bilinear azimuthal weight ft is exactly 0; a
+       family node in r lands on rx[a+1], so fr is exactly 1. Every one of the eight bilinear
+       products is therefore multiplied by zero at some node, and a probe made only of nodes
+       cannot see a wrong one. Measured: replacing h01 by h00 in HatHBr -- an outright wrong
+       azimuthal node -- left this section GREEN on a probe of family nodes plus positions at
+       theta = (k + 1/2) dtheta, because that theta is a cell centre too and ft was 0 at every
+       single point. The offsets below are deliberately not 0, 1/2 or 1. */
+    for (const rr of [0, 0.3*S.rc[0], S.rc[0], 0.5*(S.rc[0] + S.rc[1]),
+                      0.37*S.rc[1] + 0.63*S.rc[2], 0.77*S.R, S.R])
+      for (const off of [0, 0.19, 0.5, 0.73])
+        for (let k = 0; k < nth; k++){
+          const th = (k + off)*S.dth;
+          const ref = S.Hat(rr, th);
+          S.HatInto(rr, th, o);
+          worstH = Math.max(worstH, Math.abs(S.HatH(rr, th) - ref.H), Math.abs(o[0] - ref.H));
+          worstR = Math.max(worstR, Math.abs(o[1] - ref.Hr));
+          worstT = Math.max(worstT, Math.abs(o[2] - ref.Hth));
+          nPts++;
+        }
+    console.log(`       Hat vs HatH vs HatInto over ${nPts} positions: worst |dH| `
+      + `${worstH.toExponential(1)}, |dH_r| ${worstR.toExponential(1)}, |dH_theta| `
+      + `${worstT.toExponential(1)}`);
+    ok(worstH === 0 && worstR === 0 && worstT === 0,
+       'HatH and HatInto return exactly what Hat returns, at every family node and off them',
+       `worst differences ${worstH}, ${worstR}, ${worstT} over ${nPts} positions`);
+  }
+
+  /* --- the precomputed radial bracket is the one the linear search finds --- */
+  {
+    let wrong = 0, n = 0;
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      for (let a = 0; a < F.rn.length; a++){
+        let b = 0;
+        while (b < nr && S.rx[b+1] < F.rn[a]) b++;
+        if (b > nr) b = nr;
+        if (F.hBr[a] !== b) wrong++;
+        n++;
+      }
+    }
+    ok(wrong === 0,
+       'the precomputed radial bracket equals the search it replaces, for every family node',
+       `${wrong} of ${n} wrong`);
+  }
+
+  /* --- the stride base equals the index map --- */
+  {
+    let wrong = 0, n = 0;
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      const nJ = F.sn.length;
+      for (let a = 0; a < F.rn.length; a++)
+        for (let k = -nth; k < 2*nth; k++)
+          for (let b = 0; b < nJ; b++){
+            const base = (a*nth + S.kw(k))*F.stride;
+            if (base + b !== F.idx(a, k, b)) wrong++;
+            n++;
+          }
+    }
+    ok(wrong === 0,
+       'a column\'s base index plus its level is exactly the family\'s own index map, '
+       + 'including for wrapped and negative azimuthal indices',
+       `${wrong} of ${n} wrong`);
+  }
+
+  /* --- divergence --- */
+  {
+    const om = new Float64Array(S.NW);
+    S.omegaOf(S.u, S.v, S.w, om);
+    const got = S.divergence(S.u, S.v, om, new Float64Array(S.NP));
+    const want = new Float64Array(S.NP);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const kk = S.kw(k);
+        const HrIn = S.Hr[i*nth + kk], HrOut = S.Hr[(i+1)*nth + kk];
+        const HthIn = S.Hth[i*nth + kk], HthOut = S.Hth[i*nth + S.kw(k+1)];
+        for (let j = 0; j < nz; j++){
+          const radial = S.dth*S.dsc[j]*(
+              S.rf[i+1]*HrOut*S.u[S.iu(i+1, k, j)]
+            - S.rf[i]  *HrIn *S.u[S.iu(i,   k, j)]);
+          const azim = S.drc[i]*S.dsc[j]*(
+              HthOut*S.v[S.iv(i, k+1, j)]
+            - HthIn *S.v[S.iv(i, k,   j)]);
+          const vert = S.rc[i]*S.drc[i]*S.dth*(
+              om[S.iw(i, k, j+1)] - om[S.iw(i, k, j)]);
+          want[S.ip(i, k, j)] = radial + azim + vert;
+        }
+      }
+    let bad = 0;
+    for (let c = 0; c < want.length; c++) if (got[c] !== want[c]) bad++;
+    ok(bad === 0, 'divergence with the indices hoisted is bit for bit the plain loop',
+       `${bad} of ${want.length} differ; scale ${maxAbs(want).toExponential(3)}`);
+  }
+
+  /* --- omegaOf --- */
+  {
+    const got = S.omegaOf(S.u, S.v, S.w, new Float64Array(S.NW));
+    const want = new Float64Array(S.NW);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j <= nz; j++){
+          const c = S.iw(i, k, j), s = S.sf[j];
+          if (s === 0){ want[c] = S.w[c]; continue; }
+          const jm = j === 0 ? 0 : j - 1, jp = j === nz ? nz - 1 : j;
+          const uu = 0.25*(S.u[S.iu(i, k, jm)] + S.u[S.iu(i+1, k, jm)]
+                         + S.u[S.iu(i, k, jp)] + S.u[S.iu(i+1, k, jp)]);
+          const vv = 0.25*(S.v[S.iv(i, k, jm)] + S.v[S.iv(i, k+1, jm)]
+                         + S.v[S.iv(i, k, jp)] + S.v[S.iv(i, k+1, jp)]);
+          want[c] = S.w[c] - s*(uu*S.Hdr[S.ie(i,k)] + (vv/S.rc[i])*S.Hdth[S.ie(i,k)]);
+        }
+    let bad = 0;
+    for (let c = 0; c < want.length; c++) if (got[c] !== want[c]) bad++;
+    ok(bad === 0, 'omegaOf with the slope term inlined is bit for bit the plain loop',
+       `${bad} of ${want.length} differ; scale ${maxAbs(want).toExponential(3)}`);
+  }
+
+  /* --- gradient, all three components --- */
+  {
+    const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV), gw = new Float64Array(S.NW);
+    const q = new Float64Array(S.NP);
+    const rq = rnd(24680);
+    for (let c = 0; c < q.length; c++) q[c] = rq();
+    S.gradient(q, gu, gv, gw);
+    const wu = new Float64Array(S.NU), wv = new Float64Array(S.NV), ww = new Float64Array(S.NW);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const kk = S.kw(k);
+        const HrIn = S.Hr[i*nth + kk], HrOut = S.Hr[(i+1)*nth + kk];
+        const HthIn = S.Hth[i*nth + kk], HthOut = S.Hth[i*nth + S.kw(k+1)];
+        for (let j = 0; j < nz; j++){
+          const qc = q[S.ip(i, k, j)];
+          wu[S.iu(i+1, k, j)] += qc*S.dth*S.dsc[j]*S.rf[i+1]*HrOut;
+          wu[S.iu(i,   k, j)] -= qc*S.dth*S.dsc[j]*S.rf[i]  *HrIn;
+          wv[S.iv(i, k+1, j)] += qc*S.drc[i]*S.dsc[j]*HthOut;
+          wv[S.iv(i, k,   j)] -= qc*S.drc[i]*S.dsc[j]*HthIn;
+          ww[S.iw(i, k, j+1)] += qc*S.rc[i]*S.drc[i]*S.dth;
+          ww[S.iw(i, k, j  )] -= qc*S.rc[i]*S.drc[i]*S.dth;
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = S.ie(i, k);
+        const cr = -0.25*S.Hdr[e], ct = -0.25*S.Hdth[e]/S.rc[i];
+        for (let j = 1; j <= nz; j++){
+          const raw = ww[S.iw(i, k, j)], s = S.sf[j];
+          const jm = j - 1, jp = j === nz ? nz - 1 : j;
+          const du = cr*s*raw, dv = ct*s*raw;
+          wu[S.iu(i, k, jm)] += du; wu[S.iu(i+1, k, jm)] += du;
+          wu[S.iu(i, k, jp)] += du; wu[S.iu(i+1, k, jp)] += du;
+          wv[S.iv(i, k, jm)] += dv; wv[S.iv(i, k+1, jm)] += dv;
+          wv[S.iv(i, k, jp)] += dv; wv[S.iv(i, k+1, jp)] += dv;
+        }
+      }
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++){ wu[S.iu(0, k, j)] = 0; wu[S.iu(nr, k, j)] = 0; }
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = S.Hr[i*nth + S.kw(k)];
+        for (let j = 0; j < nz; j++)
+          wu[S.iu(i, k, j)] /= -(S.rf[i]*S.drf[i]*S.dth*Hf*S.dsc[j]);
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = S.Hth[i*nth + S.kw(k)];
+        for (let j = 0; j < nz; j++)
+          wv[S.iv(i, k, j)] /= -(S.rc[i]*S.drc[i]*S.dth*Hf*S.dsc[j]);
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const H = S.H[S.ie(i, k)];
+        ww[S.iw(i, k, 0)] = 0;
+        for (let j = 1; j <= nz; j++)
+          ww[S.iw(i, k, j)] /= -(S.rc[i]*S.drc[i]*S.dth*H*S.dsf[j]);
+      }
+    let bu = 0, bv = 0, bw = 0;
+    for (let c = 0; c < wu.length; c++) if (gu[c] !== wu[c]) bu++;
+    for (let c = 0; c < wv.length; c++) if (gv[c] !== wv[c]) bv++;
+    for (let c = 0; c < ww.length; c++) if (gw[c] !== ww[c]) bw++;
+    ok(bu === 0 && bv === 0 && bw === 0,
+       'gradient with the indices hoisted is bit for bit the plain loop, in all three '
+       + 'components including the slope transpose and the volume divisions',
+       `${bu}, ${bv}, ${bw} differ of ${wu.length}, ${wv.length}, ${ww.length}; scales `
+       + `${maxAbs(wu).toExponential(2)}, ${maxAbs(wv).toExponential(2)}, `
+       + `${maxAbs(ww).toExponential(2)}`);
+  }
+
+  /* --- and the reconstruction primitives, against the closure form they replace --- */
+  {
+    const f = new Float64Array(S.NP);
+    const rf2 = rnd(13579);
+    for (let c = 0; c < f.length; c++) f[c] = rf2();
+    const F = S.FAM.p, nJ = F.sn.length;
+    /* the plain form: a closure over the index map, the linear search inside Hat */
+    const plain = (a, k, z, lev, bracket) => {
+      const half = S.nth >> 1;
+      let aa = a, kk = k, sign = 1;
+      if (a < 0){ aa = -1 - a; kk = k + half; sign = F.axisSign; }
+      const th = (kk + F.thOff)*S.dth;
+      const H = S.Hat(F.rn[aa], th).H;
+      const ss = z/H;
+      const at = b => f[F.idx(aa, kk, b)];
+      if (nJ === 1) return sign*at(0);
+      const n = nJ < 4 ? nJ : 4;
+      let j0;
+      if (bracket){
+        let lo = 0, hi = nJ - 1;
+        while (hi - lo > 1){ const m = (lo + hi) >> 1; if (F.sn[m] <= ss) lo = m; else hi = m; }
+        j0 = lo - 1;
+      } else j0 = (lev === undefined ? 1 : lev) - 1;
+      if (j0 + n > nJ) j0 = nJ - n;
+      if (j0 < 0) j0 = 0;
+      let v = 0;
+      for (let i = 0; i < n; i++){
+        let L = 1;
+        for (let m = 0; m < n; m++)
+          if (m !== i) L *= (ss - F.sn[j0 + m])/(F.sn[j0 + i] - F.sn[j0 + m]);
+        v += at(j0 + i)*L;
+      }
+      return sign*v;
+    };
+    let bad = 0, n = 0, scale = 0;
+    for (let a = -3; a < nr; a++)
+      for (let k = 0; k < nth; k++)
+        for (let lev = 0; lev < nJ; lev++)
+          for (const br of [false, true]){
+            const H = S.H[S.ie(a < 0 ? -1 - a : a, a < 0 ? k + (nth >> 1) : k)];
+            for (const frac of [0.07, 0.41, 0.93]){
+              const z = frac*H;
+              const g = S.colValueAtZ(f, F, a, k, z, lev, br);
+              const w = plain(a, k, z, lev, br);
+              if (g !== w) bad++;
+              scale = Math.max(scale, Math.abs(w));
+              n++;
+            }
+          }
+    ok(bad === 0,
+       'colValueAtZ without the closure or the linear search is bit for bit the form with '
+       + 'them, anchored and bracketed, at the axis reflection and away from it',
+       `${bad} of ${n} differ; scale ${scale.toExponential(3)}`);
+  }
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

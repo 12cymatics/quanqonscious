@@ -2,7 +2,9 @@
 
 **Session counter: 5**
 **Stages complete: 7 of 14 -- S6 and S7 are closed, and the file is a SOLVER rather than a
-set of operators.**
+set of operators. A step then cost 146 ms on 16x24x10, so an oscillation period cost eleven
+minutes and S8's comparison over drive periods was not affordable; S7b halved it to 85.6 ms
+with the operators proven bit-for-bit unchanged.**
 **Next action: S8, validation against the independent linear solver. The frequency check in
 gate 9 is its simplest case and already passes (13.1% to 2.1% over four grids); what S8 adds
 is the driven Floquet growth rate per mode against `dns/faraday-disc.js`, energy conserved as
@@ -822,6 +824,82 @@ defect -- but the assertion that names the exchange did not, and a one-sided bou
 that can run away is not a bound. It is now bracketed above by the same drift tolerance:
 between 90% and 100.5% of the energy the surface started with, measured 99.19%. Re-injected
 against the bracket, it is red.
+
+## S7b: the step made affordable, and not one bit changed
+
+S8 is a comparison against `dns/faraday-disc.js` over drive periods, so before writing it I
+measured what a period costs. At 16x24x10, the coarsest grid that carries m = 3 with eight
+cells per azimuthal wavelength, **one oscillation period of the m = 3 mode was 3876 steps at
+146 ms each: eleven minutes**. At 20x32x12 it was thirty-six. Several grids times several
+periods times two solvers is not a stage, it is a week, so the cost had to be understood
+before the physics could be validated.
+
+Profiled with V8's sampler over a hundred steps rather than guessed at:
+
+| | before | after |
+|---|---|---|
+| `colValueAtZ` | 38.5% of the step | (still the largest, 35%) |
+| `gradient` | 16.4% | 13.1% |
+| `Hat` | 12.7% | gone from the profile |
+| one `applyL` (the CG matvec) | 0.50 ms | 0.16 ms |
+| a step at 16x24x10 | 146 ms | **85.6 ms** |
+| a step at 20x32x12 | 316 ms | **174 ms** |
+| the whole gate | 3m00s | **1m18s** |
+
+None of it was arithmetic. Three things were being done again and again that did not need
+doing once:
+
+- **`divergence`, `gradient` and `omegaOf` are the conjugate-gradient matvec**, so they run a
+  hundred and more times per step, and each was calling `this.ip/iu/iv/iw` -- a wrapped modulo
+  behind a method call -- six to fourteen times per cell. Every one of those indices is
+  `(i*nth + kw(k))*stride + j` with `kw(k) = k` for the loop variable, so the column base is
+  one multiply hoisted to the k loop and the wrap is one comparison for `k+1`.
+- **`colValueAtZ` allocated a closure per call** over `fam.idx`, and called `Hat`, which
+  searched the radial node list linearly from the start every time -- at the rim node that walk
+  is the whole list. The bracket for a family node is fixed at construction, so the constructor
+  now tabulates it; `HatHBr` takes it, `HatH` finds it as before for an arbitrary position.
+- **`Hat` allocated one three-field object per face per stencil point.** `HatH` returns the
+  scalar for the five call sites that want only H, `HatInto` fills a caller-owned triple for
+  the three that want the slopes.
+
+**The gate for this is bit-for-bit equality, and it is not a tolerance.** Section 10 carries
+its OWN implementation of each operator -- the obvious loop, written against the public index
+accessors and `Hat` -- and asserts `===` on a deformed surface with every degree of freedom
+excited. That is the only assertion that can distinguish "faster" from "different", and one
+change was caught by it while the work was being done: hoisting `(vv/rc[i])*Hdth[e]` as
+`vv*(Hdth[e]*(1/rc[i]))` is the same number in exact arithmetic and a different one in doubles,
+and two of the sixteen digits of eta[0] moved. Reverted; the loops now hoist only what can be
+hoisted without reordering a single operation.
+
+### The regeneration test found a probe that could not see its own defect
+
+Seven injected defects, each red on the assertion it targets, 221 passed 0 failed on restore.
+The third was **green at first, and the reason is worth more than the fix.** It replaced `h01`
+by `h00` in `HatHBr` -- an outright wrong azimuthal interpolation node -- and the section did
+not notice, because of what the probe positions were:
+
+- a family node with `thOff = 0.5` sits on a theta cell centre, so the bilinear azimuthal
+  weight `ft` is exactly **0**;
+- a family node in r sits on `rx[a+1]`, so the radial weight `fr` is exactly **1**;
+- and the off-node positions I had added used `theta = (k + 1/2) dtheta`, which is a cell
+  centre too, so `ft` was 0 at every single one of the 602 points.
+
+Each of the eight bilinear products is multiplied by zero somewhere on that set, so a wrong one
+is invisible. The probe now sweeps azimuthal offsets 0, 0.19, 0.5 and 0.73 of a cell and radial
+positions strictly between nodes -- 910 points, deliberately not 0, 1/2 or 1 -- and the same
+injection reads 1.31e-4. This is the same lesson as the axisymmetric probe in S6f and the
+one-sided input range in `CLAUDE.md`: **a probe that lands on the symmetry points of the thing
+it is testing tests nothing.**
+
+### What was NOT done, and why
+
+`colValueAtZ` is still the largest single cost, and what is left in it is twelve divisions per
+call in the Lagrange product, `L *= (ss - sn[j0+m])/(sn[j0+i] - sn[j0+m])`. The denominators
+depend only on `j0` and could be tabulated as reciprocals -- but `a/b` and `a*(1/b)` do not
+round alike, so that would forfeit the bit-for-bit argument and put every measured order in
+this file back in question for perhaps another 20%. It is not taken. The answer to the step
+cost is S10 and S11, where the same discretisation compiled and spread over eight cores buys
+far more than reassociating a product.
 
 ## Rules this build keeps
 
