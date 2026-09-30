@@ -71,6 +71,50 @@ function requireFinite(v, name){
   return v;
 }
 
+/* The derivative at x of the polynomial through the first n of (xs, ys).
+   Written as the sum over j of ys[j] times the derivative of the j-th Lagrange
+   basis polynomial, and that derivative as the sum over i != j of the product
+   over m != i, j of (x - xs[m]) -- which has no removable singularity, so x may
+   be a node as well as a point between nodes.
+
+   WHY A CUBIC IS NEEDED, not merely convenient. A finite-volume row's Laplacian
+   is a difference of two face fluxes divided by the row's own thickness. In the
+   interior the two fluxes carry the same truncation error to leading order and it
+   cancels, so second-order fluxes leave a second-order operator. At a boundary row
+   one of the two faces is the boundary, where the stencil is one-sided or the flux
+   is prescribed outright, so there is nothing for the interior face's error to
+   cancel against and it is divided by the row's thickness undiminished -- which
+   costs an order. With the two-point difference the surviving term is the offset
+   between the face and the midpoint of the two nodes differenced there,
+   (ds_neighbour - ds_row)/4 times f_ss, and on a graded grid that is first order:
+   measured on the sigma = 0 row, relative error 1.748e-1, 7.679e-2, 3.598e-2,
+   1.741e-2 over nz = 16, 32, 64, 128, against the closed form above of 1.730e-1,
+   7.623e-2, 3.575e-2, 1.731e-2 -- three digits, so the mechanism is not in doubt.
+   Four points make each face flux third order, the division by the row thickness
+   leaves second order, and no cancellation is relied on: the same rows then read
+   6.98e-5, 6.38e-6, 9.32e-7, 1.76e-7. */
+/* The four columns that straddle a theta node symmetrically with the node itself left out,
+   as offsets in k -- on a uniform grid the classical fourth-order central difference. Module
+   level, because it is a constant and the innermost loop must not allocate. */
+const TH_NODE = new Int8Array([-2, -1, 1, 2]);
+
+function polyDerivAt(xs, ys, n, x){
+  let d = 0;
+  for (let j = 0; j < n; j++){
+    let den = 1;
+    for (let m = 0; m < n; m++) if (m !== j) den *= xs[j] - xs[m];
+    let num = 0;
+    for (let i = 0; i < n; i++){
+      if (i === j) continue;
+      let prod = 1;
+      for (let m = 0; m < n; m++) if (m !== j && m !== i) prod *= x - xs[m];
+      num += prod;
+    }
+    d += ys[j]*num/den;
+  }
+  return d;
+}
+
 /* The same graded maps the two-dimensional solver uses, so the grid code has one
    implementation and the two cannot drift. */
 const GRADE = (function(){
@@ -174,6 +218,7 @@ class FaradayCell3D {
     this._gu = new Float64Array(NU);
     this._gv = new Float64Array(NV);
     this._gw = new Float64Array(NW);
+    this._gom = new Float64Array(NW);
     this._pdiag = new Float64Array(NP);
 
     /* H on a radially extended grid, so a face midpoint anywhere between the axis
@@ -195,6 +240,8 @@ class FaradayCell3D {
        operator an order and a half: every family read 0.5 instead of 2. */
     this.Hxr = new Float64Array((nr + 2)*nth);
     this.Hxt = new Float64Array((nr + 2)*nth);
+    /* eta on the same extended nodes, so a renderer can have it without subtracting h */
+    this.Ex = new Float64Array((nr + 2)*nth);
     this.rx[0] = -this.rc[0];
     for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
     this.rx[nr+1] = this.R;
@@ -204,6 +251,30 @@ class FaradayCell3D {
     this._st = new Float64Array(6);        // one surface point's rate-of-strain tensor
     this._sg = new Float64Array(9);        // and its nine covariant derivatives
     this._sf3 = new Float64Array(3);       // the three surface Laplacian fluxes
+    this._sx = new Float64Array(4);        // one sigma-face stencil's abscissae
+    this._sy = new Float64Array(4);        // and its values
+    this._rx4 = new Float64Array(4);       // one radial stencil's abscissae
+    this._ry4 = new Float64Array(4);       // and its values
+    this._tx4 = new Float64Array(4);       // one azimuthal stencil's abscissae
+    this._ty4 = new Float64Array(4);       // and its values
+    this._hA = new Float64Array(3);        // (H, H_r, H_theta) at a cell's own centre
+    this._hB = new Float64Array(3);        // and at one of its six faces
+    this._kap = new Float64Array(NE);      // the surface's mean curvature
+    this._ps  = new Float64Array(NE);      // and the pressure it carries
+    this._lu = new Float64Array(NU); this._au = new Float64Array(NU);
+    this._lv = new Float64Array(NV); this._av = new Float64Array(NV);
+    this._lw = new Float64Array(NW); this._aw = new Float64Array(NW);
+
+    /* No slip on the floor and on the sidewall, which is the physical condition and not a
+       convenient zero: the wall does not move. They are written once here rather than at
+       every call so that `step` cannot pass a different closure than the gates do. The free
+       surface is NOT among them -- its condition is a traction, which `viscous` takes as a
+       flux through `surfaceLapFluxes`, and famLaplacian never asks a `bc` for the surface
+       while a flux is supplied. */
+    this._bcU = () => 0; this._bcV = () => 0; this._bcW = () => 0;
+    this._fsr = new Float64Array(NE);      // and those three, over the whole surface
+    this._fst = new Float64Array(NE);
+    this._fsz = new Float64Array(NE);
 
     /* Node geometry, one descriptor per staggered family. Every family shares the
        same periodic uniform theta and the same flux algebra; they differ only in
@@ -228,24 +299,51 @@ class FaradayCell3D {
     sbW[nz+1] = 1;
 
     this.FAM = {
-      p: { idx: (i, k, j) => this.ip(i, k, j), axisSign: +1, thOff: 0.5,
+      p: { idx: (i, k, j) => this.ip(i, k, j), axisSign: +1, thOff: 0.5, stride: nz,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      u: { idx: (i, k, j) => this.iu(i, k, j), axisSign: -1, thOff: 0.5,
+      u: { idx: (i, k, j) => this.iu(i, k, j), axisSign: -1, thOff: 0.5, stride: nz,
            rn: this.rf, rb: rbU, rLo: 1, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0,
+      v: { idx: (i, k, j) => this.iv(i, k, j), axisSign: -1, thOff: 0, stride: nz,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
            sn: this.sc, sb: this.sf, sLo: 0, sHi: nz - 1 },
-      /* w's nodes run 0..nz, but its momentum equation is solved on 1..nz-1: the
-         floor value is zero by no slip and the surface value is set by the
-         free-surface conditions rather than by a momentum balance -- it has no
-         half cell above it to take a flux through. Both remain readable
-         neighbours. */
-      w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5,
+      /* w's nodes run 0..nz and its viscous term is solved on 1..nz, the surface node
+         included -- S5 made that node a solved ADVECTION unknown and this closes its
+         viscous side, over the same half control volume [sc[nz-1], 1] the advection uses,
+         because it is that shared volume which makes the discrete energy identity exact.
+
+         AT THAT NODE THE UNKNOWN IS THE HALF CELL'S AVERAGE, not the point value at
+         sigma = 1, and the two differ by O(1/nz). A staggered face-centred unknown on the
+         domain boundary BOUNDS its control volume instead of straddling it, so the flux
+         balance is a statement about the average and that average's centroid sits
+         ds_top/4 below the node. Measured, with the surface flux supplied analytically:
+         against the exact average over the half cell 6.78e-5, 1.80e-5, 4.58e-6 over
+         16/32/64, order 1.92 then 1.97; against the point value at sigma = 1, 4.63e-3 at
+         order 1.21 then 1.11. No choice of volume closes that gap -- a node cannot be the
+         centroid of a cell it bounds -- and the alternative is the one
+         dns/faraday-disc.js takes in lapW, a pointwise one-sided second derivative, which
+         is second order at the node and not conservative. Conservation is kept here
+         instead: an advective term in flux form beside a pointwise viscous one would
+         leave the energy identity neither exactly dissipative nor exactly conservative. */
+      w: { idx: (i, k, j) => this.iw(i, k, j), axisSign: +1, thOff: 0.5, stride: nz + 1,
            rn: this.rc, rb: this.rf, rLo: 0, rHi: nr - 1,
-           sn: this.sf, sb: sbW, sLo: 1, sHi: nz - 1 }
+           sn: this.sf, sb: sbW, sLo: 1, sHi: nz }
     };
+    /* Each family's node radii sit in fixed brackets of the extended radial node list, so
+       the linear search HatH does can be done once per family node here instead of on every
+       reconstruction. colValueAtZ was 38.5 per cent of a step before this, and at the rim
+       node that search walked the whole list. The bracket found is the same one, so what
+       follows it is unchanged arithmetic. */
+    for (const key of ['p', 'u', 'v', 'w']){
+      const fam = this.FAM[key], rn = fam.rn, br = new Int32Array(rn.length);
+      for (let a = 0; a < rn.length; a++){
+        let b = 0;
+        while (b < nr && this.rx[b+1] < rn[a]) b++;
+        br[a] = b > nr ? nr : b;
+      }
+      fam.hBr = br;
+    }
     this.refreshMetric();
   }
 
@@ -338,6 +436,23 @@ class FaradayCell3D {
         : (h - H[this.ie(nr-1, k)])/this.drf[nr];
       this.Hxt[(nr+1)*nth + k] = free ? this.Hdth[this.ie(nr-1, k)] : 0;
     }
+    /* THE SAME EXTENSION OF ETA ITSELF, and not H minus h, because that subtraction has no
+       low bits to give back. Here h is 3e-3 m and the elevations a renderer draws are 1e-4 m
+       and smaller, so h + eta has an ulp of 4.3e-19 and (h + eta) - h loses everything below
+       it. Measured, before this array existed: `etaAt` as `HatH(r, th) - this.h` missed the
+       stored eta at a cell centre by 6.505e-19 where it should have been exact, the
+       axisymmetric surface's elevation on the axis spread 4.337e-19 over theta where it
+       should have been one number, and the free rim missed the last cell's own elevation by
+       5.421e-19. All three are that one ulp, and all three are the same defect the capillary
+       energy had in section 11: a small quantity reconstructed as the difference of two large
+       ones. Interpolating eta on its own nodes makes a cell centre exact again, because the
+       bilinear weights there are fr = 1 and ft = 0 and the value is the stored one. */
+    for (let k = 0; k < nth; k++){
+      const ka = this.kw(k + half);
+      this.Ex[0*nth + k] = eta[this.ie(0, ka)];
+      for (let i = 0; i < nr; i++) this.Ex[(i+1)*nth + k] = eta[this.ie(i, k)];
+      this.Ex[(nr+1)*nth + k] = free ? eta[this.ie(nr-1, k)] : 0;
+    }
     return this;
   }
 
@@ -353,22 +468,25 @@ class FaradayCell3D {
   divergence(u, v, om, out){
     const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
     const rf = this.rf, rc = this.rc, drc = this.drc, dsc = this.dsc;
+    const Hr = this.Hr, Hth = this.Hth, nw = nz + 1;
     for (let i = 0; i < nr; i++){
-      const rci = rc[i], dr = drc[i];
+      const rci = rc[i], dr = drc[i], rIn = rf[i], rOut = rf[i+1];
       for (let k = 0; k < nth; k++){
-        const kk = this.kw(k);
-        const HrIn = this.Hr[i*nth + kk], HrOut = this.Hr[(i+1)*nth + kk];
-        const HthIn = this.Hth[i*nth + kk], HthOut = this.Hth[i*nth + this.kw(k+1)];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const HrIn = Hr[i*nth + k], HrOut = Hr[(i+1)*nth + k];
+        const HthIn = Hth[i*nth + k], HthOut = Hth[i*nth + kp];
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
         for (let j = 0; j < nz; j++){
           const radial = dth*dsc[j]*(
-              rf[i+1]*HrOut*u[this.iu(i+1, k, j)]
-            - rf[i]  *HrIn *u[this.iu(i,   k, j)]);
+              rOut*HrOut*u[bOut + j]
+            - rIn *HrIn *u[bIn + j]);
           const azim = dr*dsc[j]*(
-              HthOut*v[this.iv(i, k+1, j)]
-            - HthIn *v[this.iv(i, k,   j)]);
+              HthOut*v[bK + j]
+            - HthIn *v[bIn + j]);
           const vert = rci*dr*dth*(
-              om[this.iw(i, k, j+1)] - om[this.iw(i, k, j)]);
-          out[this.ip(i, k, j)] = radial + azim + vert;
+              om[bW + j + 1] - om[bW + j]);
+          out[bIn + j] = radial + azim + vert;
         }
       }
     }
@@ -386,82 +504,154 @@ class FaradayCell3D {
     const rf = this.rf, rc = this.rc, drc = this.drc, dsc = this.dsc,
           drf = this.drf, dsf = this.dsf;
     gu.fill(0); gv.fill(0); gw.fill(0);
+    const Hrm = this.Hr, Hthm = this.Hth, nw = nz + 1;
     for (let i = 0; i < nr; i++){
-      const rci = rc[i], dr = drc[i];
+      const rci = rc[i], dr = drc[i], rIn = rf[i], rOut = rf[i+1];
       for (let k = 0; k < nth; k++){
-        const kk = this.kw(k);
-        const HrIn = this.Hr[i*nth + kk], HrOut = this.Hr[(i+1)*nth + kk];
-        const HthIn = this.Hth[i*nth + kk], HthOut = this.Hth[i*nth + this.kw(k+1)];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const HrIn = Hrm[i*nth + k], HrOut = Hrm[(i+1)*nth + k];
+        const HthIn = Hthm[i*nth + k], HthOut = Hthm[i*nth + kp];
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
         for (let j = 0; j < nz; j++){
-          const qc = q[this.ip(i, k, j)];
-          gu[this.iu(i+1, k, j)] += qc*dth*dsc[j]*rf[i+1]*HrOut;
-          gu[this.iu(i,   k, j)] -= qc*dth*dsc[j]*rf[i]  *HrIn;
-          gv[this.iv(i, k+1, j)] += qc*dr*dsc[j]*HthOut;
-          gv[this.iv(i, k,   j)] -= qc*dr*dsc[j]*HthIn;
-          gw[this.iw(i, k, j+1)] += qc*rci*dr*dth;
-          gw[this.iw(i, k, j  )] -= qc*rci*dr*dth;
+          const qc = q[bIn + j];
+          gu[bOut + j] += qc*dth*dsc[j]*rOut*HrOut;
+          gu[bIn  + j] -= qc*dth*dsc[j]*rIn *HrIn;
+          gv[bK  + j] += qc*dr*dsc[j]*HthOut;
+          gv[bIn + j] -= qc*dr*dsc[j]*HthIn;
+          gw[bW + j + 1] += qc*rci*dr*dth;
+          gw[bW + j    ] -= qc*rci*dr*dth;
+        }
+      }
+    }
+    /* THE SLOPE OPERATOR'S TRANSPOSE, which is what makes this the PHYSICAL pressure
+       gradient rather than the covariant one, and without which nothing else here is a
+       Navier-Stokes solver.
+
+       The divergence above reads Omega. Expressed in the physical w it reads
+       w - sigma(u H_r + (v/r) H_theta), so u and v enter it through that term too, and the
+       transpose must return part of every sigma face's contribution to the four r faces and
+       the four theta faces that meet there. Adding it converts
+
+           d p / d r at constant SIGMA   into   d p / d r at constant Z
+
+       and likewise azimuthally, which is exactly what the momentum equations for the
+       physical components ask for. Without it the projection's corrector applies the
+       covariant gradient: measured on p = A r + B z over a surface at eta/h = 0.4, the
+       radial component returned 86.99 at r/R = 0.888, sigma = 0.63, against the physical
+       137.00 -- a 36 per cent error at O(1), matching A + B sigma H_r to five digits.
+
+       The file's header used to say that carrying w instead of Omega would cost the
+       symmetry conjugate gradients needs. That is not so, and it is worth saying why: the
+       divergence in the physical variables is D composed with this change of variable, its
+       transpose is the change of variable's transpose composed with D's, and
+       D W^-1 D^T is symmetric for ANY diagonal positive W whatever D is. What carrying w
+       costs is a wider stencil -- a sigma face's pressure reaches eight horizontal faces --
+       and nothing else. Gate 1 measures the symmetry either way.
+
+       Also: the sigma face's control volume includes H, exactly as the r and theta faces' do.
+       That was missing, and with any positive weight the operator stays symmetric negative
+       definite and the projection still removes the divergence, so gates 1 and 2 passed
+       either way -- but the vertical component then returned B H rather than B, smaller than
+       the physical gradient by a factor of H, 333 on this cell. */
+    const Hdr = this.Hdr, Hdth = this.Hdth, sfa = this.sf;
+    for (let i = 0; i < nr; i++){
+      const ri = rc[i];
+      for (let k = 0; k < nth; k++){
+        const e = i*nth + k;
+        const cr = -0.25*Hdr[e], ct = -0.25*Hdth[e]/ri;
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const bIn = (i*nth + k)*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = (i*nth + k)*nw;
+        for (let j = 1; j <= nz; j++){
+          const raw = gw[bW + j], s = sfa[j];
+          const jm = j - 1, jp = j === nz ? nz - 1 : j;
+          const du = cr*s*raw, dv = ct*s*raw;
+          gu[bIn + jm] += du; gu[bOut + jm] += du;
+          gu[bIn + jp] += du; gu[bOut + jp] += du;
+          gv[bIn + jm] += dv; gv[bK + jm] += dv;
+          gv[bIn + jp] += dv; gv[bK + jp] += dv;
         }
       }
     }
     /* Divide by minus the control volume of each face. u at the axis and the rim
        is prescribed, so its gradient there is not solved for and is zeroed; the
        same for Omega on the floor. */
+    const Hm = this.H;
     for (let k = 0; k < nth; k++)
       for (let j = 0; j < nz; j++){
-        gu[this.iu(0, k, j)] = 0;
-        gu[this.iu(nr, k, j)] = 0;
+        gu[k*nz + j] = 0;
+        gu[(nr*nth + k)*nz + j] = 0;
       }
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hr[i*nth + this.kw(k)];
+        const Hf = Hrm[i*nth + k], b = (i*nth + k)*nz;
         for (let j = 0; j < nz; j++)
-          gu[this.iu(i, k, j)] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
+          gu[b + j] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hth[i*nth + this.kw(k)];
+        const Hf = Hthm[i*nth + k], b = (i*nth + k)*nz;
         for (let j = 0; j < nz; j++)
-          gv[this.iv(i, k, j)] /= -(rc[i]*drc[i]*dth*Hf*dsc[j]);
+          gv[b + j] /= -(rc[i]*drc[i]*dth*Hf*dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        gw[this.iw(i, k, 0)] = 0;               // impermeable floor
+        const H = Hm[i*nth + k], b = (i*nth + k)*nw;
+        gw[b] = 0;                              // impermeable floor
         for (let j = 1; j <= nz; j++)
-          gw[this.iw(i, k, j)] /= -(rc[i]*drc[i]*dth*dsf[j]);
+          gw[b + j] /= -(rc[i]*drc[i]*dth*H*dsf[j]);
       }
     return [gu, gv, gw];
   }
 
+  /* The pressure operator, D W^-1 D^T, where D is the divergence read in the PHYSICAL
+     velocity: `divergence` takes Omega, so the composition puts the gradient's three
+     physical components through the same change of variable the transpose above went
+     through. Leaving that out would compose D with the transpose of a different operator
+     and the result would not be symmetric -- which gate 1 measures, so it cannot drift. */
   applyL(q, out){
     this.gradient(q, this._gu, this._gv, this._gw);
-    this.divergence(this._gu, this._gv, this._gw, out);
+    this.omegaOf(this._gu, this._gv, this._gw, this._gom);
+    this.divergence(this._gu, this._gv, this._gom, out);
     return out;
   }
 
-  /* The diagonal of divergence(gradient(.)), exactly, in eight applications.
-     The stencil reaches (i+-1, k, j), (i, k+-1, j) and (i, k, j+-1) and no
-     diagonal neighbour, so cells whose (i, k, j) parities all agree are never in
-     each other's stencil: setting one parity class to one and reading the result
-     at those same cells returns their diagonal entries with nothing else
-     contributing. Eight classes, eight applications. Two would do in two
-     dimensions and do next door; three indices need eight.
+  /* The diagonal of divergence(gradient(.)), exactly, by colouring. Set one colour class
+     to one, apply the operator, and read the result at those same cells: if no two cells of
+     a class are in each other's stencil, nothing but the diagonal contributes.
+
+     THE STRIDES ARE (2, 2, 3) AND THAT IS NOT A MARGIN, it is the stencil. Once `gradient`
+     carries the slope operator's transpose, a sigma face's pressure reaches the eight r and
+     theta faces that meet there, and the reach becomes
+
+         delta i in [-1, 1],  delta k in [-1, 1],  delta sigma in [-2, 2]
+
+     including the corners -- delta i = +-1 together with delta sigma = +-2. Two cells of one
+     class differ by an even delta i, an even delta k and a multiple of three in sigma, and
+     the only such triple inside that box is the zero one. It used to be (2, 2, 2) in eight
+     classes, which was right for the narrower stencil and is not right for this one: with it
+     the diagonal came out wrong, the Jacobi preconditioner with it, and a projection asked
+     for 1e-14 left a divergence of 6.7e-2 where the same projection at 1e-9 left 3.3e-8.
+     Twelve classes, twelve applications, and gate 3 compares the result against the diagonal
+     read one unit vector at a time, so a wrong stride cannot pass.
 
      Read from applyL rather than rederived, so the preconditioner cannot drift
      from the operator it preconditions. */
   pressureDiagonal(){
     const nr = this.nr, nth = this.nth, nz = this.nz;
     const d = this._pdiag, probe = new Float64Array(this.NP), q = new Float64Array(this.NP);
-    for (let c = 0; c < 8; c++){
-      const pi = c & 1, pk = (c >> 1) & 1, pj = (c >> 2) & 1;
+    for (let c = 0; c < 12; c++){
+      const pi = c & 1, pk = (c >> 1) & 1, pj = c >> 2;
       probe.fill(0);
       for (let i = 0; i < nr; i++) if ((i & 1) === pi)
         for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if ((j & 1) === pj)
+          for (let j = 0; j < nz; j++) if (j % 3 === pj)
             probe[this.ip(i, k, j)] = 1;
       this.applyL(probe, q);
       for (let i = 0; i < nr; i++) if ((i & 1) === pi)
         for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if ((j & 1) === pj)
+          for (let j = 0; j < nz; j++) if (j % 3 === pj)
             d[this.ip(i, k, j)] = q[this.ip(i, k, j)];
     }
     for (let c = 0; c < d.length; c++)
@@ -552,6 +742,90 @@ class FaradayCell3D {
     return { H, Hr, Hth };
   }
 
+  /* The same bilinear interpolation, without the object. `Hat` is called from inside the
+     face loops of `famLaplacian` and was 12.7 per cent of a step's time on a 16x24x10 grid,
+     most of it allocating and collecting one three-field object per face per stencil point.
+     These two write the same arithmetic in the same order -- `HatH` when only H is wanted,
+     which is five of the nine call sites, and `HatInto` into a caller-owned triple for the
+     three that want the slopes as well. Nothing here rounds differently from `Hat`, and the
+     bit-for-bit gate over forty driven and undriven steps is what says so rather than the
+     claim. `Hat` itself stays, because the gate calls it and an object is the right shape
+     for a one-off. */
+  HatH(r, th){
+    const nr = this.nr, rx = this.rx;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    return this.HatHBr(a, r, th);
+  }
+  /* The same, with the radial bracket already known -- which it is at every family node,
+     from the table the constructor builds. */
+  HatHBr(a, r, th){
+    const nth = this.nth, rx = this.rx, Hx = this.Hx, dth = this.dth;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const h00 = Hx[a*nth + k0], h01 = Hx[a*nth + k1];
+    const h10 = Hx[(a+1)*nth + k0], h11 = Hx[(a+1)*nth + k1];
+    return (1 - fr)*((1 - ft)*h00 + ft*h01) + fr*((1 - ft)*h10 + ft*h11);
+  }
+  HatInto(r, th, o){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Hx = this.Hx, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const h00 = Hx[a*nth + k0], h01 = Hx[a*nth + k1];
+    const h10 = Hx[(a+1)*nth + k0], h11 = Hx[(a+1)*nth + k1];
+    o[0] = (1 - fr)*((1 - ft)*h00 + ft*h01) + fr*((1 - ft)*h10 + ft*h11);
+    o[1] = (((1 - ft)*h10 + ft*h11) - ((1 - ft)*h00 + ft*h01))/(r1 - r0);
+    o[2] = ((1 - fr)*(h01 - h00) + fr*(h11 - h10))/dth;
+    return o;
+  }
+
+  /* THE SURFACE ELEVATION AT AN ARBITRARY POSITION, which is what a renderer asks for.
+   *
+   * It is `HatH` minus the still depth and not a separate interpolation, deliberately. The
+   * extended grid `Hx` that HatH reads already carries the two things a resampler would
+   * otherwise have to reinvent, and would reinvent differently: the row below the axis is the
+   * ANTIPODAL continuation, `H[ie(0, k + nth/2)]` at r = -rc[0], so a point at or near r = 0
+   * is interpolated across the axis rather than extrapolated up to it; and the row at r = R is
+   * the contact condition itself, the last cell's own H under a free line and h under a pinned
+   * one. A renderer that interpolated eta on its own would have to get both right to draw the
+   * same surface the solver is solving, and any difference would appear as a defect in the
+   * physics rather than in the drawing.
+   *
+   * Exact at a cell centre: rx[i+1] is rc[i] and Ex[(i+1)*nth + k] is eta[ie(i,k)], so the
+   * bilinear weights there are fr = 1 and ft = 0 and the value is the stored one to the bit.
+   * Second order between centres, which is the interpolation's own order and is gated as such.
+   *
+   * It reads `Ex`, the extension of ETA, and NOT `HatH(r, th) - this.h`. That was the first
+   * version and it was wrong by exactly one ulp of h + eta everywhere it mattered; the reason,
+   * and the three measurements, are in `refreshMetric` where Ex is filled. */
+  etaAt(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Ex = this.Ex, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const e00 = Ex[a*nth + k0], e01 = Ex[a*nth + k1];
+    const e10 = Ex[(a+1)*nth + k0], e11 = Ex[(a+1)*nth + k1];
+    return (1 - fr)*((1 - ft)*e00 + ft*e01) + fr*((1 - ft)*e10 + ft*e11);
+  }
+
   /* The centred slopes of H at an arbitrary position, bilinear on the extended
      slope grids. Distinct from Hat's slopes, which are the bracket's own and so
      are centred only at a face midpoint: these are what the sigma-face cross
@@ -605,35 +879,55 @@ class FaradayCell3D {
    * error that vanishes when flat and does not converge when not. That error is
    * what made the coupling terms read order 2.00 flat and -0.52 at eta/h = 0.4.
    *
-   * Quadratic in sigma, on the stencil centred at level `lev` -- centred on the
-   * LEVEL and not chosen by bracketing the target, so that two columns compared at
-   * one height use the same node positions and their reconstruction errors cancel
-   * instead of jumping as a target crosses a node.
+   * CUBIC in sigma, on the four nodes lev-1 .. lev+2 -- anchored on the LEVEL and not
+   * chosen by bracketing the target, so that two columns compared at one height use the
+   * same node positions and their reconstruction errors cancel instead of jumping as a
+   * target crosses a node.
+   *
+   * Cubic and not quadratic for the reason polyDerivAt gives, one step removed. A
+   * quadratic leaves the reconstruction wrong by O(ds^2 dr) at a height one column's own
+   * surface fixes, so the difference of two columns over dr carries O(ds^2); between the
+   * two sigma faces of an interior row that cancels, but at the SURFACE row -- where the
+   * other face's flux comes from the stress condition and is not a discretisation of
+   * anything -- there is nothing to cancel against, and dividing by the top row's
+   * thickness turns it into O(ds). Measured with a quadratic and the surface flux supplied
+   * analytically, family p's surface row read 1.68e-2, 1.58e-2, 1.05e-2 over 16, 32, 64:
+   * order 0.08 then 0.59. The cubic makes it O(ds^3) instead, which the same division
+   * leaves second order.
    *
    * Radial index a < 0 is the antipodal column reflected through the axis, carrying
    * the family's own sign: plus for a scalar or the vertical component, minus for a
    * horizontal one. */
-  colValueAtZ(f, fam, a, k, z, lev){
+  colValueAtZ(f, fam, a, k, z, lev, bracket){
     const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
     const th = (kk + fam.thOff)*this.dth;
-    const H = this.Hat(fam.rn[aa], th).H;
+    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
     const ss = z/H;
-    const at = b => f[fam.idx(aa, kk, b)];
-    if (nJ === 1) return sign*at(0);
-    if (nJ === 2){
-      const t = (ss - sn[0])/(sn[1] - sn[0]);
-      return sign*((1 - t)*at(0) + t*at(1));
+    const base = (aa*this.nth + this.kw(kk))*fam.stride;
+    if (nJ === 1) return sign*f[base];
+    const n = nJ < 4 ? nJ : 4;
+    /* `bracket` puts the stencil around the target instead of around `lev`, by a binary
+       search for the interval holding it -- for the callers whose target is far from the
+       level, where anchoring would extrapolate. famLaplacian's sigma-face cross terms say
+       why, with the numbers; every other caller leaves it off. */
+    let j0;
+    if (bracket){
+      let lo = 0, hi = nJ - 1;
+      while (hi - lo > 1){ const m = (lo + hi) >> 1; if (sn[m] <= ss) lo = m; else hi = m; }
+      j0 = lo - 1;
+    } else j0 = (lev === undefined ? 1 : lev) - 1;
+    if (j0 + n > nJ) j0 = nJ - n;
+    if (j0 < 0) j0 = 0;
+    let v = 0;
+    for (let i = 0; i < n; i++){
+      let L = 1;
+      for (let m = 0; m < n; m++)
+        if (m !== i) L *= (ss - sn[j0 + m])/(sn[j0 + i] - sn[j0 + m]);
+      v += f[base + j0 + i]*L;
     }
-    let j = lev === undefined ? 1 : lev;
-    if (j < 1) j = 1;
-    if (j > nJ - 2) j = nJ - 2;
-    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
-    const L0 = ((ss - s1)*(ss - s2))/((s0 - s1)*(s0 - s2));
-    const L1 = ((ss - s0)*(ss - s2))/((s1 - s0)*(s1 - s2));
-    const L2 = ((ss - s0)*(ss - s1))/((s2 - s0)*(s2 - s1));
-    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2);
+    return sign*v;
   }
 
   /* The same stencil as colValueAtZ, differentiated instead of evaluated: df/dz in one
@@ -649,20 +943,17 @@ class FaradayCell3D {
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
     const th = (kk + fam.thOff)*this.dth;
-    const H = this.Hat(fam.rn[aa], th).H;
+    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
     const ss = z/H;
-    const at = b => f[fam.idx(aa, kk, b)];
     if (nJ === 1) return 0;
-    if (nJ === 2) return sign*(at(1) - at(0))/((sn[1] - sn[0])*H);
-    let j = lev === undefined ? 1 : lev;
-    if (j < 1) j = 1;
-    if (j > nJ - 2) j = nJ - 2;
-    const s0 = sn[j-1], s1 = sn[j], s2 = sn[j+1];
-    /* d/ds of the three Lagrange basis polynomials, at s = ss */
-    const L0 = ((ss - s1) + (ss - s2))/((s0 - s1)*(s0 - s2));
-    const L1 = ((ss - s0) + (ss - s2))/((s1 - s0)*(s1 - s2));
-    const L2 = ((ss - s0) + (ss - s1))/((s2 - s0)*(s2 - s1));
-    return sign*(at(j-1)*L0 + at(j)*L1 + at(j+1)*L2)/H;
+    const n = nJ < 4 ? nJ : 4;
+    let j0 = (lev === undefined ? 1 : lev) - 1;
+    if (j0 + n > nJ) j0 = nJ - n;
+    if (j0 < 0) j0 = 0;
+    const sx = this._sx, sy = this._sy;
+    const base = (aa*this.nth + this.kw(kk))*fam.stride;
+    for (let m = 0; m < n; m++){ sx[m] = sn[j0 + m]; sy[m] = f[base + j0 + m]; }
+    return sign*polyDerivAt(sx, sy, n, ss)/H;
   }
 
   /* The nine covariant derivatives of the velocity at the free surface above one pressure
@@ -848,9 +1139,11 @@ class FaradayCell3D {
    * offset, and their boundaries, so this is written once and instantiated four
    * times. `bc(kind, r, th, sigma)` gives the field's value on a boundary face,
    * kind being 'rim', 'floor' or 'surface'; omitted, boundary faces carry zero
-   * flux. The axis needs no entry: at r = 0 the face area is exactly zero, and
+   * flux. `sFlux(a, k)`, if given, overrides the sigma = 1 face with grad f . N
+   * directly -- which is how the free surface is closed, because its condition is a
+   * traction and a traction is a flux, not a value. The axis needs no entry: at r = 0 the face area is exactly zero, and
    * inward stencils use the antipodal column with the family's reflection sign. */
-  famLaplacian(f, out, fam, bc){
+  famLaplacian(f, out, fam, bc, sFlux){
     const nth = this.nth, dth = this.dth;
     const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
     const nI = rn.length, nJ = sn.length;
@@ -865,83 +1158,196 @@ class FaradayCell3D {
 
     const atZ = (a, k, z, lev) => this.colValueAtZ(f, fam, a, k, z, lev);
 
-    /* df/dr|_z and df/dtheta|_z, each a difference of reconstructions at ONE
-       height. Beyond the node list the wall value comes from bc, which already
-       delivers a value at a requested sigma and therefore at a requested height. */
-    /* At the rim the face IS the wall, so a two-point difference between the wall
-       and the nearest column is centred at their midpoint and only first order AT
-       the face -- and a flux error of that order does not converge. It cost the w
-       family its last radial row, 2.9e-3 growing to 3.7e-3 while every interior row
-       ran at second order; the same three-point quadratic the sigma boundaries use
-       fixes it. u never showed it, because its node list reaches the wall and the
-       wall is an ordinary neighbour there rather than a boundary. */
-    const dPhysR = (aL, aR, k, z, lev) => {
-      const th = thOf(k);
-      const HR = this.Hat(this.R, th).H;
-      const outL = aL > nI - 1, outR = aR > nI - 1;
-      if (outR){
-        if (!bc) return 0;
-        const fo = bc('rim', this.R, th, z/HR);
-        const fc = atZ(aL, k, z, lev);
-        const d1 = this.R - colR(aL);
-        if (aL - 1 < 0) return (fo - fc)/d1;
-        const ff = atZ(aL - 1, k, z, lev);
-        const d2 = this.R - colR(aL - 1);
-        return fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
-      }
-      const vL = outL ? (bc ? bc('rim', this.R, th, z/HR) : 0) : atZ(aL, k, z, lev);
-      const vR = atZ(aR, k, z, lev);
-      const rL = outL ? this.R : colR(aL), rR = colR(aR);
-      return (vR - vL)/(rR - rL);
-    };
-    const dPhysTh = (a, kL, kR, z, lev) =>
-      (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
+    /* df/dr|_z at a chosen radius, third order there, from the cubic through the four
+       columns that straddle it -- each column reconstructed at the SAME physical height,
+       which is rule 1 above and the reason for colValueAtZ. Four and not two for the
+       reason polyDerivAt gives: the radial grid is graded too, so the two-point difference
+       is centred at the midpoint of its columns rather than at the face, and at the rim
+       column -- where the outward face is the wall and its stencil is one-sided -- there is
+       nothing for that error to cancel against. Measured on family p over a flat surface,
+       the rim column read 2.27e-3 at order 1.71 then 1.43 while every interior column ran
+       at 2.04 or better; the corner where the rim meets a sigma boundary was first order
+       for the same reason in both directions at once.
 
-    /* d f / d sigma at a node, centred where both neighbours exist. This one needs
-       no common-height treatment: it is already a derivative along the coordinate,
-       with nothing to cancel against. */
-    const dfds = (a, k, b) => {
-      if (nJ < 2) return 0;
-      if (b === 0) return (at(a, k, 1) - at(a, k, 0))/(sn[1] - sn[0]);
-      if (b === nJ - 1) return (at(a, k, nJ-1) - at(a, k, nJ-2))/(sn[nJ-1] - sn[nJ-2]);
-      return (at(a, k, b+1) - at(a, k, b-1))/(sn[b+1] - sn[b-1]);
+       A column past the rim is the wall, whose value bc delivers at the requested height;
+       one inside the axis is the antipodal column, which colValueAtZ carries with the
+       family's own reflection sign. The wall is therefore an ordinary fourth point rather
+       than a special case, and the three-point rim closure this replaces is gone with it.
+       `a0` is the first column of the stencil; it is clamped so the four exist. */
+    const aHi = (bc && rn[nI-1] < this.R) ? nI : nI - 1;
+    /* How far inward the stencil may reach. A family whose first node is ON the axis --
+       u, whose nodes are the r faces -- has no antipodal continuation to offer: column
+       -1 would be that same node reflected, at the same radius zero, and two stencil
+       points at one abscissa is a division by zero rather than a wide stencil. Such a
+       family stops at its own axis node, which carries the reflection already (axisU).
+       The others, whose nodes are cell centres, continue across as far as the stencil
+       needs. */
+    const aLo = rn[0] > 0 ? -nI : 0;
+    const rx = this._rx4, ry = this._ry4;
+    const dPhysR = (k, z, lev, x, a0) => {
+      let j0 = a0;
+      if (j0 + 3 > aHi) j0 = aHi - 3;
+      if (j0 < aLo) j0 = aLo;
+      const th = thOf(k);
+      const HR = this.HatH(this.R, th);
+      for (let m = 0; m < 4; m++){
+        const a = j0 + m;
+        rx[m] = a > nI - 1 ? this.R : colR(a);
+        ry[m] = a > nI - 1 ? bc('rim', this.R, th, z/HR) : atZ(a, k, z, lev);
+      }
+      return polyDerivAt(rx, ry, 4, x);
     };
-    /* and at a boundary face, second order, from the three-point quadratic --
-       a plain one-sided difference is second order at the midpoint between face
-       and node and only first order AT the face, and a flux error of that order
-       does not converge at all. dns/faraday-disc.js does the same in wzSurface. */
-    const faceDeriv = (fo, fc, ff, d1, d2) =>
-      fo*(d1 + d2)/(d1*d2) - fc*d2/(d1*(d2 - d1)) + ff*d1/(d2*(d2 - d1));
+    /* df/dtheta|_z AT A THETA FACE, two points, and two points deliberately.
+       theta is uniform and periodic, so the difference over the interval it spans is
+       centred exactly at the face and its truncation coefficient is the same at every k --
+       which cancels between opposite faces. More than that, THIS STENCIL IS LOAD-BEARING
+       for the cylindrical coupling: for a field uniform in Cartesian terms the azimuthal
+       part of the scalar Laplacian is a spurious -u/r^2 and it is the coupling term
+       (2/r^2) du_theta/dtheta that cancels it, and that cancellation is between two
+       DISCRETE expressions, so it holds only while the two use matching stencils. Raising
+       this one to four points on its own took the vector Laplacian from order 2.10 to 0.67
+       on a flat surface -- the mismatch is O(dtheta^2)/r^2, which at the first cell is
+       O(1). */
+    const dPhysThFace = (a, kL, kR, z, lev) =>
+      (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
+    const tx = this._tx4, ty = this._ty4;
+
+    /* d f / d sigma AT a sigma face, third order there, from the cubic through the
+       four values that straddle it -- polyDerivAt says why four and not two, with
+       the measurement, and the short of it is that a boundary row has nothing for
+       its interior face's error to cancel against.
+
+       A boundary value counts as one of the four, at the boundary's own sigma. It
+       exists only where the family's outermost node is off the boundary AND a `bc`
+       is given to supply it: w's first and last nodes ARE sigma = 0 and sigma = 1,
+       so w reads only its own nodes, and no family reads a surface value while
+       `sFlux` closes that face -- a traction is not a value, and there is no surface
+       Dirichlet datum to read. Where a boundary value is unavailable the four run
+       one-sided into the interior, which is third order there too. */
+    const sLoB = sb[0], sHiB = sb[nJ];
+    const jLo = (bc && sn[0] > sLoB) ? -1 : 0;
+    const jHi = (bc && !sFlux && sn[nJ-1] < sHiB) ? nJ : nJ - 1;
+    if (jHi - jLo < 3) throw new Error(
+      `famLaplacian: this family offers ${jHi - jLo + 1} values in sigma and the `
+      + `face derivative needs four. nz >= 4 guarantees them, so this is a `
+      + `descriptor error rather than a grid that is too coarse.`);
+    const sAbs = j => j < 0 ? sLoB : (j > nJ - 1 ? sHiB : sn[j]);
+    const sVal = (a, k, j, th) => j < 0 ? bc('floor', rn[a], th, sLoB)
+                               : (j > nJ - 1 ? bc('surface', rn[a], th, sHiB)
+                                             : at(a, k, j));
+    const sx = this._sx, sy = this._sy;
+    /* The four values straddling one sigma face of row b, loaded into sx and sy, and the
+       index the first of them sits at -- returned because the cross terms below interpolate
+       the SAME four levels in the neighbouring columns, so that every column's interpolation
+       error carries the same coefficient and the r and theta differences see a smooth one. */
+    const sStencil = (b, side) => {
+      let j0 = side < 0 ? b - 2 : b - 1;
+      if (j0 < jLo) j0 = jLo;
+      if (j0 + 3 > jHi) j0 = jHi - 3;
+      return j0;
+    };
+    const loadS = (a, k, j0, th) => {
+      for (let m = 0; m < 4; m++){
+        sx[m] = sAbs(j0 + m);
+        sy[m] = sVal(a, k, j0 + m, th);
+      }
+    };
+    /* THE TANGENTIAL GRADIENTS A SIGMA FACE WANTS, and the one place in this operator where
+       rule 1's common height must NOT be used -- with a construction that keeps what rule 1
+       is for and drops the height matching that makes it fail here.
+       .
+       Rule 1 exists because f_r|_z = f_r|_sigma - sigma H_r f_z is a difference of two O(1)
+       terms that must cancel exactly for f = f(z), and reading both columns at one height
+       makes it cancel by construction. On the r and theta faces that works, because the
+       height wanted differs from a neighbour's own level by only H_r dr/H or H_theta dtheta/H
+       of a sheet. On a SIGMA face near the surface it does not: the sheet is at this column's
+       sigma H, and a neighbour's level at that height is off by H_theta dtheta / H, measured
+       at 18 to 20 times the top row's thickness over 16/32/64 -- a ratio refinement does not
+       reduce, since dtheta and ds_top both fall like 1/n. Anchored on the level the cubic was
+       extrapolating ten stencil widths past its own nodes and the azimuthal cross term read
+       3.05e-3, 1.94e-3, 5.91e-4, order 0.65 then 1.71. Choosing the stencil to bracket the
+       target instead removed the extrapolation but made the error jump as the stencil changed
+       between adjacent theta columns, which a theta derivative divides by dtheta: 3.73e-3,
+       9.06e-4, 3.94e-4, 1.25e-4 over four grids, order 2.04, 1.20, 1.66. With the
+       reconstruction replaced by its analytic value the same term read 1.95e-3, 3.15e-4,
+       4.53e-5, 5.84e-6, order 2.63, 2.80, 2.96 -- so neither stencil is the difficulty, the
+       reconstruction is.
+       .
+       Writing the subtraction in sigma instead, with the same discrete operator on H as on
+       the field -- so that f = z cancels to the last bit whatever the stencil -- was tried
+       and is WORSE, by a factor of thirty, and the reason is worth keeping because it is what
+       rule 1 is really about. In sigma coordinates the field carries the surface's own
+       azimuthal variation multiplied by the vertical wavenumber: f(r, theta, sigma H(theta))
+       oscillates in theta at an effective wavenumber k_z H_theta, which here is 3.15 radians
+       per radian of theta, so 0.82 radians per azimuthal cell -- barely resolved. The
+       four-point difference's O(dtheta^4 f^(5)) error then evaluates to 0.05 against a term of
+       size 2, and the surface row divides it by its own thickness: predicted 0.16, measured
+       1.566e-1. Radially the same substitution is harmless (measured indistinguishable from
+       the form below), because the radial slope is gentler; azimuthally it is not. At a
+       COMMON HEIGHT the field varies in theta only through its own shape, which is smooth,
+       and that is the whole of rule 1's content.
+       .
+       So: common height, bracketed. */
+    const atZB = (a, k, z) => this.colValueAtZ(f, fam, a, k, z, undefined, true);
+    const dSigR = (a, k, z) => {
+      let j = a - 1;
+      if (j + 3 > aHi) j = aHi - 3;
+      if (j < aLo) j = aLo;
+      const th2 = thOf(k), HR = this.HatH(this.R, th2);
+      for (let m = 0; m < 4; m++){
+        const a2 = j + m;
+        rx[m] = a2 > nI - 1 ? this.R : colR(a2);
+        ry[m] = a2 > nI - 1 ? bc('rim', this.R, th2, z/HR) : atZB(a2, k, z);
+      }
+      return polyDerivAt(rx, ry, 4, rn[a]);
+    };
+    const dSigTh = (a, k, z) => {
+      for (let m = 0; m < 4; m++){
+        tx[m] = (k + TH_NODE[m])*dth;
+        ty[m] = atZB(a, k + TH_NODE[m], z);
+      }
+      return polyDerivAt(tx, ty, 4, k*dth);
+    };
 
     for (let a = fam.rLo; a <= fam.rHi; a++){
       const dra = rb[a+1] - rb[a];
       for (let k = 0; k < nth; k++){
         const th = thOf(k);
-        const mid = this.Hat(rn[a], th);
+        const mid = this.HatInto(rn[a], th, this._hA);
         const midS = this.Hslope(rn[a], th);
         for (let b = fam.sLo; b <= fam.sHi; b++){
           const dsb = sb[b+1] - sb[b];
-          const fc = at(a, k, b);
+          /* The sigma CENTROID of this row's control volume, which is where the r and theta
+             faces' one-point quadrature belongs -- not the node. For the families whose
+             nodes are cell centres the two are the same number bit for bit; for w, whose
+             nodes are the sigma faces, they differ by O(ds^2) in the interior and by
+             ds_top/4 at the surface, where the control volume is the half cell the node
+             bounds rather than straddles. Evaluating there instead cost the surface row an
+             order: against the exact average over that half cell it read 1.22e-4, 6.53e-5,
+             3.43e-5, order 0.91 then 0.93, and reads second order once the quadrature sits
+             at the centroid. */
+          const sMid = 0.5*(sb[b] + sb[b+1]);
           let flux = 0;
 
           /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
           for (const side of [-1, +1]){
             const rface = side < 0 ? rb[a] : rb[a+1];
             if (rface === 0) continue;                  // the axis: zero area
-            const g = this.Hat(rface, th);
+            const g = this.HatInto(rface, th, this._hB);
             if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
-            const z = sn[b]*g.H;
-            const d = side < 0 ? dPhysR(a - 1, a, k, z, b) : dPhysR(a, a + 1, k, z, b);
-            flux += side*rface*dth*g.H*dsb*d;
+            const z = sMid*g[0];
+            const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
+            flux += side*rface*dth*g[0]*dsb*d;
           }
 
           /* ---- the two theta faces: normal theta-hat ---- */
           for (const side of [-1, +1]){
             const thf = th + side*0.5*dth;
-            const g = this.Hat(rn[a], thf);
-            const z = sn[b]*g.H;
-            const d = side < 0 ? dPhysTh(a, k - 1, k, z, b) : dPhysTh(a, k, k + 1, z, b);
-            flux += side*dra*g.H*dsb*d/rn[a];
+            const g = this.HatInto(rn[a], thf, this._hB);
+            const z = sMid*g[0];
+            const d = side < 0 ? dPhysThFace(a, k - 1, k, z, b)
+                               : dPhysThFace(a, k, k + 1, z, b);
+            flux += side*dra*g[0]*dsb*d/rn[a];
           }
 
           /* ---- the two sigma faces: the curved sheets z = sigma H, whose normal
@@ -950,39 +1356,72 @@ class FaradayCell3D {
             const sface = side < 0 ? sb[b] : sb[b+1];
             const proj = rn[a]*dra*dth;
             const bn = side < 0 ? b - 1 : b + 1;
-            let dsg;
-            if (bn < 0 || bn > nJ - 1){
-              if (!bc) continue;
-              const fo = bc(side < 0 ? 'floor' : 'surface', rn[a], th, sface);
-              if (side < 0){
-                const d1 = sn[b] - sface;
-                dsg = (b + 1 <= nJ - 1)
-                  ? -faceDeriv(fo, fc, at(a, k, b+1), d1, sn[b+1] - sface)
-                  : (fc - fo)/d1;
-              } else {
-                const d1 = sface - sn[b];
-                dsg = (b - 1 >= 0)
-                  ? faceDeriv(fo, fc, at(a, k, b-1), d1, sface - sn[b-1])
-                  : (fo - fc)/d1;
-              }
-            } else {
-              dsg = side < 0 ? (fc - at(a, k, bn))/(sn[b] - sn[bn])
-                             : (at(a, k, bn) - fc)/(sn[bn] - sn[b]);
+            if (bn > nJ - 1 && sFlux){
+              /* THE FREE SURFACE, closed by a FLUX rather than by a value. The bracket below
+                 computes grad f . N, where N is the sheet's unnormalised outward normal, and
+                 proj is its projected area -- so a caller that knows what grad f . N must be
+                 at the surface, because the stress conditions fix it, supplies exactly that
+                 and the rest of the branch is skipped. `bc` cannot express this: a traction is
+                 a flux, and there is no boundary VALUE that carries it. */
+              flux += side*proj*sFlux(a, k);
+              continue;
             }
-            /* the two tangential gradients at this sheet, at its own height */
-            const z = sface*mid.H;
-            const gR = dPhysR(a - 1, a + 1, k, z, b);
-            const gT = dPhysTh(a, k - 1, k + 1, z, b);
-            flux += side*proj*( dsg/mid.H
-                              - sface*midS.Hr*gR
-                              - (sface*midS.Hth/(rn[a]*rn[a]))*gT );
+            if ((bn < 0 || bn > nJ - 1) && !bc) continue;
+            loadS(a, k, sStencil(b, side), th);
+            const dsg = polyDerivAt(sx, sy, 4, sface);
+            const z = sface*mid[0];
+            flux += side*proj*( dsg/mid[0]
+                              - sface*midS.Hr*dSigR(a, k, z)
+                              - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
           }
 
-          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid.H*dsb);
+          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
         }
       }
     }
     return out;
+  }
+
+  /* The free surface's own flux, per velocity component, at every pressure cell. Formed once
+     per viscous evaluation because all three components of `surfaceLapFluxes` come from one
+     rate-of-strain tensor, and forming it three times would be three chances for them to
+     disagree about one surface. */
+  refreshSurfaceFluxes(){
+    const t3 = this._sf3;
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        this.surfaceLapFluxes(i, k, t3);
+        const e = this.ie(i, k);
+        this._fsr[e] = t3[0]; this._fst[e] = t3[1]; this._fsz[e] = t3[2];
+      }
+    return this;
+  }
+
+  /* and that flux where one family's own sigma = 1 face sits, which is not where the
+     pressure cells are. u's faces are at r faces, v's at theta faces, and w's already at the
+     pressure cell's own position.
+     .
+     THE RADIAL ONE IS A WEIGHTED INTERPOLATION RATHER THAN A MEAN, and that is a smaller
+     matter than it looks -- said here because the opposite was expected and measured wrong.
+     An r face is the midpoint of its two cell centres only when the two cells are equally
+     wide, and this radius is graded towards the rim, so the arithmetic mean sits at
+     (rc[a-1] + rc[a])/2 instead of at rf[a]. The offset is O(dr^2) on a smoothly graded grid,
+     not O(dr), so BOTH forms are second order at the face: measured against the analytic flux
+     there, 5.12e-2, 1.17e-2, 2.80e-3 over 16/32/64 at order 2.12 then 2.07 for the weights
+     below, and 6.10e-2, 1.43e-2, 3.46e-3 at order 2.09 then 2.05 for the mean. The weights
+     are kept because they are the right interpolation and cost two arithmetic operations, and
+     because a surface-flux error is divided by the top row's thickness in the surface row --
+     the identity 8e gates -- so a nineteen per cent smaller constant is worth having there.
+     They are refreshMetric's own weights for H at an r face, written the same way, as an
+     increment from one end so that two equal fluxes interpolate to exactly that flux.
+     Azimuthally the mean is right rather than merely close: theta is uniform, so a theta face
+     IS the midpoint of its two cells, exactly. */
+  surfaceFluxFace(which, a, k){
+    if (which === 'v') return 0.5*(this._fst[this.ie(a, k - 1)] + this._fst[this.ie(a, k)]);
+    if (which === 'w') return this._fsz[this.ie(a, k)];
+    const lo = this._fsr[this.ie(a - 1, k)], hi = this._fsr[this.ie(a, k)];
+    const wa = this.drc[a-1], wb = this.drc[a];
+    return lo + (wa/(wa + wb))*(hi - lo);
   }
 
   /* The viscous term for the velocity, as the vector Laplacian in cylindrical
@@ -1003,9 +1442,13 @@ class FaradayCell3D {
      `bcU`, `bcV`, `bcW` close the three scalar operators at the walls. */
   viscous(outU, outV, outW, bcU, bcV, bcW){
     const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
-    this.famLaplacian(this.u, outU, this.FAM.u, bcU);
-    this.famLaplacian(this.v, outV, this.FAM.v, bcV);
-    this.famLaplacian(this.w, outW, this.FAM.w, bcW);
+    this.refreshSurfaceFluxes();
+    this.famLaplacian(this.u, outU, this.FAM.u, bcU,
+      (a, k) => this.surfaceFluxFace('u', a, k));
+    this.famLaplacian(this.v, outV, this.FAM.v, bcV,
+      (a, k) => this.surfaceFluxFace('v', a, k));
+    this.famLaplacian(this.w, outW, this.FAM.w, bcW,
+      (a, k) => this.surfaceFluxFace('w', a, k));
 
     /* d v / d theta at a u node, and d u / d theta at a v node.
      *
@@ -1020,7 +1463,7 @@ class FaradayCell3D {
     for (let i = FU.rLo; i <= FU.rHi; i++){
       const r = this.rf[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
-        const Hu = this.Hat(r, (k + 0.5)*this.dth).H;
+        const Hu = this.HatH(r, (k + 0.5)*this.dth);
         for (let j = 0; j < nz; j++){
           const c = this.iu(i, k, j);
           const z = this.sc[j]*Hu;
@@ -1037,7 +1480,7 @@ class FaradayCell3D {
     for (let i = FV.rLo; i <= FV.rHi; i++){
       const r = this.rc[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
-        const Hv = this.Hat(r, k*this.dth).H;
+        const Hv = this.HatH(r, k*this.dth);
         for (let j = 0; j < nz; j++){
           const c = this.iv(i, k, j);
           const z = this.sc[j]*Hv;
@@ -1420,10 +1863,32 @@ class FaradayCell3D {
      which is what makes the axis face drop out of its own accord; the azimuthal faces
      have equal area, so they are weighted equally. */
   surfaceMetric(i, k){
+    /* Written out rather than as 1 + surfaceSlopeSquared(i, k), because ((1 + A) + B) + C and
+       1 + ((A + B) + C) are not the same double and this quantity feeds the curvature, the
+       surface pressure and every measured order in this file. On the fingerprint case the two
+       happened to agree bit for bit, which is luck at one amplitude and not a property: with
+       A, B, C all far below one, the first form truncates each addend against a leading 1
+       three times and the second only once. The three lines are duplicated so that nothing
+       downstream depends on that coincidence holding at another amplitude. */
     const s = this.etaSlopes(i, k, this._es);
     const rc = this.rc[i];
     return 1 + s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
              + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
+  }
+  /* |grad eta|^2 alone, which is what `surfaceMetric` adds one to. Separate because the
+     excess area needs it WITHOUT the one: sqrt(1 + q) - 1 loses every significant digit for
+     small q, and so does surfaceArea() - pi R^2, where the two operands are 4.6e-4 and their
+     difference at eta = 1e-9 m is 1.2e-18. Measured: the excess area came out 1.1926e-18
+     against the 1.1596e-18 its own amplitude scaling demands, 2.8 per cent wrong, and the
+     total energy then drifted 25.3 per cent over a quarter period where the same run at
+     eta = 1e-7 drifts 0.0356. That was the DIAGNOSTIC failing, not the solver: the drift is
+     -0.0344, -0.0349 and -0.0356 per cent at 1e-5, 1e-6 and 1e-7, flat across three decades
+     as a linear regime must be. Gate 9c happened to sit at 1e-7 and so never saw it. */
+  surfaceSlopeSquared(i, k){
+    const s = this.etaSlopes(i, k, this._es);
+    const rc = this.rc[i];
+    return s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
+         + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
   }
 
   /* The outward unit normal of the free surface at an arbitrary position, from the
@@ -1460,6 +1925,31 @@ class FaradayCell3D {
       for (let k = 0; k < this.nth; k++)
         A += this.rc[i]*this.drc[i]*this.dth*Math.sqrt(this.surfaceMetric(i, k));
     return A;
+  }
+
+  /* The area the surface has IN EXCESS of flat, which is the quantity the capillary energy
+     wants and is not the same computation as taking the difference of two areas.
+
+     Sum_cells rc drc dtheta is exactly pi R^2 -- rc drc telescopes to R^2/2 and dtheta sums
+     to 2 pi -- so the excess is Sum rc drc dtheta (sqrt(1 + q) - 1) term by term, with q the
+     same cell-averaged squared slope `surfaceMetric` adds one to. Written as
+     q/(1 + sqrt(1 + q)), which is the same number in exact arithmetic and keeps every digit
+     for small q, where the subtraction has none: at eta = 1e-9 m the difference of areas is
+     1.2e-18 out of operands of 4.6e-4, twenty times the double's own resolution.
+
+     This is deliberately NOT how `surfaceArea` is written and `surfaceArea` is deliberately
+     not written in terms of this. The curvature is the exact variational derivative of the
+     area as `surfaceArea` computes it (gate 7c), and that identity is in floating point, not
+     to a tolerance. Adding pi R^2 back to this function returns `surfaceArea` to round-off
+     and the gate says by how much. */
+  surfaceExcessArea(){
+    let dA = 0;
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        const q = this.surfaceSlopeSquared(i, k);
+        dA += this.rc[i]*this.drc[i]*this.dth*(q/(1 + Math.sqrt(1 + q)));
+      }
+    return dA;
   }
 
   /* The mean curvature of the free surface, div(grad eta / sqrt(1 + |grad eta|^2)).
@@ -1555,17 +2045,336 @@ class FaradayCell3D {
         }
     return this;
   }
+  /* ---- the free surface's pressure, and the time step ------------------- */
+
+  /* The pressure the free surface carries, at every pressure column: the hydrostatic
+     response of the displaced elevation to the instantaneous gravity, the capillary term
+     with the FULL mean curvature rather than its linearisation, and the viscous normal
+     stress with the full rate-of-strain contraction against the true normal.
+
+         p_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)/|n|^2
+
+     This is the same expression `surfacePressure` carries in dns/faraday-disc.js, whose two
+     right-hand terms are that solver's flat-surface linearisations of these: `surfaceLaplacian`
+     for the curvature and `wzSurface` for the stress. Nothing is linearised here.
+
+     It is the inhomogeneous DIRICHLET value on the projection, never a force on the
+     predictor -- see `step`. */
+  surfacePressure(out){
+    const rho = this.rho, g = this.gravity();
+    this.curvature(this._kap);
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < this.nth; k++){
+        const e = this.ie(i, k);
+        out[e] = rho*g*this.eta[e] - this.gamma*this._kap[e]
+               + this.surfaceNormalStress(i, k);
+      }
+    return out;
+  }
+
+  /* ONE STEP OF THE NAVIER-STOKES EQUATIONS. Everything above is an operator; this is what
+     makes the file a solver.
+
+     The order is not a matter of taste, and three parts of it were established by
+     measurement rather than by choice:
+
+     1. THE SURFACE PRESSURE IS AN INHOMOGENEOUS DIRICHLET VALUE INSIDE THE PROJECTION, not
+        a force on the predictor. As a predictor force it is p_s/(rho H dsigma) -- O(1/dsigma)
+        -- and the projection then cancels almost all of it, leaving the physical
+        acceleration as the difference of two large numbers and a step limit that collapses
+        with the grid. dns/faraday-disc.js went non-finite 0.57 periods in that way, at
+        nr = 48, nz = 20, m = 12. Resolved inside the projection nothing large cancels: the
+        surface face's gradient gains p_s/(H dsigma) and the top row of the right-hand side
+        loses that term's divergence.
+     2. THE AXIS AND WALL VALUES ARE SET BEFORE Omega IS FORMED FROM THE VELOCITY. Omega is
+        derived from u, v and w, and u at the axis face enters it through the innermost cell's
+        slope term, so setting that value after forming Omega leaves the two inconsistent and
+        the next projection undoes the one before it: measured, a projection asked for 1e-14
+        reported a divergence of 6.74e-2 where the same projection at 1e-9 reported 3.40e-8.
+     3. ETA ADVANCES ON THE CORRECTED Omega AT sigma = 1, which IS the kinematic condition --
+        Omega there is dH/dt by construction, not by differencing H. Pairing the surface
+        pressure at the old time with the surface velocity at the new one is symplectic Euler
+        on the surface oscillator, stable for omega dt < 2 rather than merely less unstable
+        than forward Euler.
+
+     The predictor carries the viscous and advective terms in full. Gravity does not appear in
+     it: this pressure is the total one, and the whole of gravity's effect on the interior is
+     the hydrostatic head the surface value carries. */
+  step(dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    const nr = this.nr, nth = this.nth, nz = this.nz, nu = this.nu, rho = this.rho;
+    const u = this.u, v = this.v, w = this.w;
+    const lu = this._lu, lv = this._lv, lw = this._lw;
+    const au = this._au, av = this._av, aw = this._aw;
+
+    /* the surface's own state, read BEFORE anything moves: the stresses and the curvature
+       belong to the surface the velocity is being advanced over */
+    this.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) this.Ht[this.ie(i, k)] = this.om[this.iw(i, k, nz)];
+    this.surfacePressure(this._ps);
+
+    /* the explicit right-hand side: viscous, with the free surface's own traction on the
+       sigma = 1 face, and advective, in the conservative grid-relative form */
+    this.viscous(lu, lv, lw, this._bcU, this._bcV, this._bcW);
+    this.advect(au, av, aw);
+
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iu(i, k, j);
+          u[c] += dt*(nu*lu[c] + au[c]);
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iv(i, k, j);
+          v[c] += dt*(nu*lv[c] + av[c]);
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){
+          const c = this.iw(i, k, j);
+          w[c] += dt*(nu*lw[c] + aw[c]);
+        }
+
+    /* the prescribed values, and only then Omega -- reason 2 above */
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++) u[this.iu(nr, k, j)] = 0;      // no penetration at the rim
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[this.iw(i, k, 0)] = 0;      // no slip on the floor
+    this.axisU();
+    this.omegaFromW();
+
+    /* the projection, with the surface pressure as its Dirichlet value -- reason 1 above */
+    this.divergence(u, v, this.om, this._div);
+    const scale = rho/dt;
+    for (let c = 0; c < this._div.length; c++) this._div[c] *= scale;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        this._div[this.ip(i, k, nz - 1)] -= this.rc[i]*this.drc[i]*this.dth
+          *this._ps[this.ie(i, k)]/(this.H[this.ie(i, k)]*this.dsf[nz]);
+    this.pressureDiagonal();
+    this.p.fill(0);
+    this.solveP(this._div, 1e-11, 400*(nr + nth + nz));
+
+    this.gradient(this.p, this._gu, this._gv, this._gw);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this._gw[this.iw(i, k, nz)] += this._ps[e]/(this.H[e]*this.dsf[nz]);
+      }
+
+    const s2 = dt/rho;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iu(i, k, j);
+          u[c] -= s2*this._gu[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){
+          const c = this.iv(i, k, j);
+          v[c] -= s2*this._gv[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){
+          const c = this.iw(i, k, j);
+          w[c] -= s2*this._gw[c];
+        }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[this.iw(i, k, 0)] = 0;
+    this.axisU();
+    this.omegaFromW();
+
+    /* eta on the corrected Omega at the surface, which IS dH/dt -- reason 3 above */
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k);
+        this.eta[e] += dt*this.om[this.iw(i, k, nz)];
+        this.Ht[e] = this.om[this.iw(i, k, nz)];
+      }
+    this.t += dt;
+    this.refreshMetric();
+    return this;
+  }
+
+  /* The explicit step's limits, from the discrete operators' own wavenumber bounds rather
+     than from a Cartesian rule of thumb. Four of them, and the azimuthal one is not
+     decoration: dns/faraday-disc.js's first version of this ignored it and was wrong by a
+     factor of three at m = 12, because the stiffest capillary mode is set by m/r at the
+     INNERMOST cell and not by dr. Here every azimuthal mode the grid carries is present at
+     once, so the stiffest is nth/2 at rc[0] always, with no mode number to be lucky about.
+
+       capillary   the surface oscillator at the largest wavenumber the grid carries, from
+                   the DISPERSION RELATION, omega^2 = (g_eff k + gamma k^3/rho) tanh(k h)
+       viscous     the explicit diffusion bound, 2/(nu sum k_i^2)
+       advective   1/max(|u|/dr + |v|/(r dtheta) + |w|/dz) over the cells, from the field
+                   as it stands
+       gravity     the shallow-water signal speed across the finest horizontal cell
+
+     THE CAPILLARY ONE IS THE DISPERSION RELATION AND NOT THE HALF CELL, and the difference
+     was measured rather than argued. dns/faraday-disc.js takes the surface stiffness to be
+     (g + gamma k^2/rho) divided by the top half cell's thickness, on the reasoning that the
+     surface pressure lands there; that is right for its own scheme and is too strict for
+     this one, because the projection distributes that pressure through the whole column and
+     the surface then responds at the PHYSICAL frequency. Measured directly: released from
+     rest with eta = eps J_m(kr) cos(m theta), one step gives d eta/dt = -omega^2 eta dt with
+     omega the continuum gravity-capillary frequency, to 2.1 per cent on a 32x48x20 grid --
+     so the physical dispersion relation is what the discrete surface obeys and what its step
+     limit follows from.
+
+     It is still conservative, by a factor measured on two grids: the scheme is stable at
+     1.35 and 2.03 times this limit on 10x16x8 and diverges at 2.71, and on 14x24x10 it is
+     stable at 1.40 and diverges at 2.80. With `stableStep`'s safety factor of 0.4 that puts
+     the default step between 3.5 and 7 times below where the scheme actually breaks, which
+     gate 9 asserts on both sides rather than leaving as a claim.
+
+     Returned together, so a caller can see which one binds. */
+  stepLimits(){
+    const nr = this.nr, nth = this.nth, nz = this.nz;
+    let drMin = Infinity, dzMin = Infinity, Hmin = Infinity;
+    for (let i = 0; i < nr; i++) drMin = Math.min(drMin, this.drc[i]);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const H = this.H[this.ie(i, k)];
+        Hmin = Math.min(Hmin, H);
+        for (let j = 0; j < nz; j++) dzMin = Math.min(dzMin, H*this.dsc[j]);
+      }
+    const kr2 = 4/(drMin*drMin), kz2 = 4/(dzMin*dzMin);
+    const mMax = nth >> 1, ka2 = (mMax*mMax)/(this.rc[0]*this.rc[0]);
+    const kSurf2 = kr2 + ka2, kSurf = Math.sqrt(kSurf2);
+    const gEff = this.g + Math.abs(this.accel);
+    const omegaSurf = Math.sqrt((gEff*kSurf + this.gamma*kSurf2*kSurf/this.rho)
+                                *Math.tanh(kSurf*Hmin));
+
+    let adv = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const r = this.rc[i], H = this.H[this.ie(i, k)];
+        for (let j = 0; j < nz; j++){
+          const uu = Math.max(Math.abs(this.u[this.iu(i, k, j)]),
+                              Math.abs(this.u[this.iu(i+1, k, j)]));
+          const vv = Math.max(Math.abs(this.v[this.iv(i, k, j)]),
+                              Math.abs(this.v[this.iv(i, k+1, j)]));
+          const ww = Math.max(Math.abs(this.w[this.iw(i, k, j)]),
+                              Math.abs(this.w[this.iw(i, k, j+1)]));
+          adv = Math.max(adv, uu/this.drc[i] + vv/(r*this.dth)
+                            + ww/(H*this.dsc[j]));
+        }
+      }
+    return { capillary: 2/omegaSurf,
+             viscous: 2/(this.nu*(kr2 + kz2 + ka2)),
+             advective: adv > 0 ? 1/adv : Infinity,
+             gravity: Math.min(drMin, this.rc[0]*this.dth)/Math.sqrt(gEff*Hmin),
+             kRadial: Math.sqrt(kr2), kVertical: Math.sqrt(kz2),
+             kAzimuthal: Math.sqrt(ka2) };
+  }
+
+  stableStep(safety){
+    const s = safety === undefined ? 0.4 : requireFinitePositive(safety, 'safety');
+    const L = this.stepLimits();
+    return s*Math.min(L.capillary, L.viscous, L.advective, L.gravity);
+  }
+
+  /* The energy, by the same control volumes the projection weights its faces with -- which
+     is what makes the projection non-increasing in this kinetic energy rather than in some
+     other one.
+
+     The capillary part is gamma times the surface's EXCESS area over the flat disc, and it
+     uses `surfaceArea`, of which the curvature is the exact variational derivative: that is
+     what makes the capillary work exactly -gamma dA/dt rather than approximately so.
+
+     With a drive the total is not a conserved quantity -- the shaker does work on the cell --
+     and the hydrostatic term is reported against the INSTANTANEOUS effective gravity, so it
+     is a diagnostic of the state under the force acting on it rather than a state function.
+     With accel = 0 and nu = 0 the total is conserved and that is the gate. */
+  energy(){
+    const nr = this.nr, nth = this.nth, nz = this.nz, rho = this.rho, dth = this.dth;
+    let ke = 0;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rf[i]*this.drf[i]*dth*this.Hr[i*nth + this.kw(k)];
+        for (let j = 0; j < nz; j++){
+          const a = this.u[this.iu(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsc[j];
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rc[i]*this.drc[i]*dth*this.Hth[i*nth + this.kw(k)];
+        for (let j = 0; j < nz; j++){
+          const a = this.v[this.iv(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsc[j];
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const vol = this.rc[i]*this.drc[i]*dth*this.H[this.ie(i, k)];
+        for (let j = 1; j <= nz; j++){
+          const a = this.w[this.iw(i, k, j)];
+          ke += 0.5*rho*a*a*vol*this.dsf[j];
+        }
+      }
+    const g = this.gravity();
+    let hyd = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.eta[this.ie(i, k)];
+        hyd += 0.5*rho*g*e*e*this.rc[i]*this.drc[i]*dth;
+      }
+    const cap = this.gamma*this.surfaceExcessArea();
+    return { kinetic: ke, hydrostatic: hyd, capillary: cap, total: ke + hyd + cap };
+  }
+
   /* sigma (u dH/dr + (v/r) dH/dtheta) at a sigma face, with u and v averaged from
-     the four faces of the cell that meet there. */
-  slopeTerm(i, k, j){
+     the four faces of the cell that meet there. Taken over GIVEN arrays rather than over
+     the state, because the projection needs the same operator's transpose applied to the
+     pressure gradient, not only to the velocity. */
+  slopeTerm(i, k, j){ return this.slopeTermOf(this.u, this.v, i, k, j); }
+  slopeTermOf(u, v, i, k, j){
     const e = this.ie(i, k), s = this.sf[j];
     if (s === 0) return 0;
     const jm = j === 0 ? 0 : j - 1, jp = j === this.nz ? this.nz - 1 : j;
-    const uu = 0.25*(this.u[this.iu(i, k, jm)] + this.u[this.iu(i+1, k, jm)]
-                   + this.u[this.iu(i, k, jp)] + this.u[this.iu(i+1, k, jp)]);
-    const vv = 0.25*(this.v[this.iv(i, k, jm)] + this.v[this.iv(i, k+1, jm)]
-                   + this.v[this.iv(i, k, jp)] + this.v[this.iv(i, k+1, jp)]);
+    const uu = 0.25*(u[this.iu(i, k, jm)] + u[this.iu(i+1, k, jm)]
+                   + u[this.iu(i, k, jp)] + u[this.iu(i+1, k, jp)]);
+    const vv = 0.25*(v[this.iv(i, k, jm)] + v[this.iv(i, k+1, jm)]
+                   + v[this.iv(i, k, jp)] + v[this.iv(i, k+1, jp)]);
     return s*(uu*this.Hdr[e] + (vv/this.rc[i])*this.Hdth[e]);
+  }
+  /* Omega from a given (u, v, w) triple into a given array -- the same definition
+     omegaFromW applies to the state. */
+  omegaOf(u, v, w, out){
+    /* slopeTermOf inlined, with the index arithmetic hoisted out of the innermost loop.
+       This is the second half of the conjugate-gradient matvec and runs once per iteration
+       -- a hundred and more times a step -- so a per-point call that recomputes eight wrapped
+       indices is most of it. Same expressions, same order, and the bit-for-bit gate says so. */
+    const nr = this.nr, nth = this.nth, nz = this.nz, nw = nz + 1;
+    const Hdr = this.Hdr, Hdth = this.Hdth, sfa = this.sf, rc = this.rc;
+    for (let i = 0; i < nr; i++){
+      const rci = rc[i];
+      for (let k = 0; k < nth; k++){
+        const e = i*nth + k;
+        const hr = Hdr[e], hth = Hdth[e];
+        const kp = k + 1 === nth ? 0 : k + 1;
+        const bIn = e*nz, bOut = ((i+1)*nth + k)*nz, bK = (i*nth + kp)*nz;
+        const bW = e*nw;
+        for (let j = 0; j <= nz; j++){
+          const c = bW + j, s = sfa[j];
+          if (s === 0){ out[c] = w[c]; continue; }
+          const jm = j === 0 ? 0 : j - 1, jp = j === nz ? nz - 1 : j;
+          const uu = 0.25*(u[bIn + jm] + u[bOut + jm]
+                         + u[bIn + jp] + u[bOut + jp]);
+          const vv = 0.25*(v[bIn + jm] + v[bK + jm]
+                         + v[bIn + jp] + v[bK + jp]);
+          out[c] = w[c] - s*(uu*hr + (vv/rci)*hth);
+        }
+      }
+    }
+    return out;
   }
 
 }

@@ -42,14 +42,44 @@ function rnd(seed){
   return () => { s = (s*1103515245 + 12345) & 0x7fffffff; return s/0x7fffffff - 0.5; };
 }
 
-/* A lumpy surface, so the metric is genuinely three-dimensional rather than a
-   flat special case that would hide every term carrying dH/dr or dH/dtheta. */
+/* A lumpy surface, so the metric is genuinely three-dimensional rather than a flat
+   special case that would hide every term carrying dH/dr or dH/dtheta -- and a surface
+   THE SOLVER CAN ACTUALLY BE IN, which the one this replaces was not.
+
+   Two conditions, and both were broken, each at the place the operator then failed to
+   converge.
+
+   ADMISSIBLE AT THE AXIS. A field with azimuthal mode m must vanish like r^m there, or it
+   is not a smooth function of position at all: r itself is not. The surface this replaces
+   carried m = 3 as rho^2 and m = 5 as rho^1, so dH/dtheta / r^2 -- which every sigma face's
+   azimuthal cross term carries -- diverged like 1/r. That term was measured to be the whole
+   of the surface rows' failure to converge: family w's rows read 1.4e-2, 8.0e-3, 2.4e-3,
+   order 0.84 then 1.75, and with the m-th mode carried as rho^m instead the same rows read
+   second order flat and deformed alike. Rule 3 in dns/PLAN-cell3d.md said this about probe
+   FIELDS; it is just as true of the surface, and saying it only about fields is what let an
+   inadmissible one sit in this file and be read as a defect in the operator. The
+   even-in-r^2 factors below keep each mode of the form r^m times a function of r^2, which
+   is what an analytic field looks like.
+
+   CONSISTENT WITH THE CONTACT LINE. A free contact line means a 90 degree contact angle,
+   which is deta/dr = 0 at r = R exactly -- and refreshMetric closes the rim with precisely
+   that, Hxr = 0 there. A surface with a rim slope contradicts its own metric by O(1), and
+   the rim column then does not converge either: family w read 4.39e-2, 2.59e-2, 1.44e-2,
+   order 0.76 then 0.85, against 1.85 then 1.88 with the slope removed. Each mode below
+   therefore carries a factor that makes its radial derivative vanish at rho = 1.
+
+   Normalised by the sup of the shape over the unit disc, 0.803963385774, computed by a
+   20000 x 7200 scan -- so `ampFraction` is max|eta|/h exactly rather than nominally. */
+const DEFORM_SUP = 0.803963385774;
 function deform(S, ampFraction){
   for (let i = 0; i < S.nr; i++)
-    for (let k = 0; k < S.nth; k++)
-      S.eta[S.ie(i, k)] = ampFraction*S.h*(
-          Math.cos(3*k*S.dth)*Math.pow(S.rc[i]/S.R, 2)
-        + 0.4*Math.sin(5*k*S.dth + 1)*(S.rc[i]/S.R));
+    for (let k = 0; k < S.nth; k++){
+      const x = S.rc[i]/S.R, x2 = x*x, th = k*S.dth;
+      S.eta[S.ie(i, k)] = (ampFraction*S.h/DEFORM_SUP)*(
+          0.6*x2*(1 - 0.5*x2)                                    // m = 0
+        + Math.cos(3*th)*x2*x*(1 - 0.6*x2)                       // m = 3, as rho^3
+        + 0.4*Math.sin(5*th + 1)*x2*x2*x*(1 - (5/7)*x2));        // m = 5, as rho^5
+    }
   S.refreshMetric();
   return S;
 }
@@ -93,9 +123,28 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0], [8, 12, 6, 0.4],
   const one = new Float64Array(n).fill(1), L1 = new Float64Array(n);
   const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV), gw = new Float64Array(S.NW);
   S.gradient(one, gu, gv, gw);
-  ok(maxAbs(gu) === 0 && maxAbs(gv) === 0,
-     `${tag}: a constant pressure has exactly zero horizontal gradient`,
-     `max|gu| = ${maxAbs(gu).toExponential(2)}, max|gv| = ${maxAbs(gv).toExponential(2)}`);
+  /* A constant pressure has exactly zero horizontal gradient BELOW THE TOP ROW, and exactly
+     zero everywhere when the surface is flat. In the top row of a deformed cell it does not,
+     and that is the physical gradient being right rather than wrong: the pressure is
+     prescribed above the surface, so a constant interior pressure is a real jump across it,
+     and the jump's gradient at constant HEIGHT has a horizontal component wherever the
+     surface is sloped. Before `gradient` carried the slope operator's transpose it returned
+     the covariant gradient, which is zero there -- and which is not what the momentum
+     equations ask for: measured on p = A r + B z at eta/h = 0.4, the radial component read
+     86.99 against the physical 137.00 at r/R = 0.888. */
+  let hzBelow = 0, hzTop = 0;
+  for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++){
+    const g = Math.abs(gu[S.iu(i,k,j)]);
+    if (j < nz - 1) hzBelow = Math.max(hzBelow, g); else hzTop = Math.max(hzTop, g);
+  }
+  for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++){
+    const g = Math.abs(gv[S.iv(i,k,j)]);
+    if (j < nz - 1) hzBelow = Math.max(hzBelow, g); else hzTop = Math.max(hzTop, g);
+  }
+  ok(hzBelow === 0 && (amp === 0 ? hzTop === 0 : hzTop > 0),
+     `${tag}: a constant pressure has exactly zero horizontal gradient below the top row, `
+     + `and in it exactly when the surface is ${amp === 0 ? 'flat' : 'sloped it does not'}`,
+     `below ${hzBelow.toExponential(2)}, top row ${hzTop.toExponential(2)}`);
   let interiorGw = 0, surfaceGw = 0;
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
     for (let j = 0; j < nz; j++) interiorGw = Math.max(interiorGw, Math.abs(gw[S.iw(i,k,j)]));
@@ -106,14 +155,20 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0], [8, 12, 6, 0.4],
      + `is prescribed`,
      `interior ${interiorGw.toExponential(2)}, surface ${surfaceGw.toExponential(2)}`);
   S.applyL(one, L1);
+  /* and so L applied to a constant is exactly zero below the top TWO rows: the surface
+     value's horizontal gradient lives in the top row, and Omega at the face below it reads
+     that row's u and v through the slope term, so the divergence of it reaches one row
+     further down than the gradient does. Flat, it is exactly zero below the top row alone. */
+  const depth = amp === 0 ? 1 : 2;
   let interiorL = 0, topL = 0;
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
-    for (let j = 0; j < nz - 1; j++) interiorL = Math.max(interiorL, Math.abs(L1[S.ip(i,k,j)]));
-    topL = Math.max(topL, Math.abs(L1[S.ip(i,k,nz-1)]));
+    for (let j = 0; j < nz - depth; j++)
+      interiorL = Math.max(interiorL, Math.abs(L1[S.ip(i,k,j)]));
+    for (let j = nz - depth; j < nz; j++) topL = Math.max(topL, Math.abs(L1[S.ip(i,k,j)]));
   }
   ok(interiorL === 0 && topL > 0,
-     `${tag}: so L applied to a constant is exactly zero in every sigma row but `
-     + `the surface row`,
+     `${tag}: so L applied to a constant is exactly zero in every sigma row but the top `
+     + `${depth}`,
      `interior ${interiorL.toExponential(2)}, top ${topL.toExponential(2)}`);
 }
 
@@ -134,8 +189,16 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     S.u[S.iu(i,k,j)] = 1e-3*r();
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
     S.v[S.iv(i,k,j)] = 1e-3*r();
+  /* THE STATE IS THE PHYSICAL VELOCITY and Omega is derived from it, which is what the
+     header says and what `step` does, so the projection is exercised that way here: w is
+     what carries a random value and what the correction is applied to, and Omega is formed
+     from the three of them before and after. Correcting Omega directly would be correcting
+     a variable the momentum equations are not written for, and the gradient's horizontal
+     components now carry the slope operator's transpose precisely so that this order is the
+     consistent one. */
   for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-    S.om[S.iw(i,k,j)] = 1e-3*r();
+    S.w[S.iw(i,k,j)] = 1e-3*r();
+  S.omegaFromW();
   const before = S.maxDivergence();
   S.pressureDiagonal();
   const project = tol => {
@@ -148,7 +211,8 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
       S.v[S.iv(i,k,j)] -= S._gv[S.iv(i,k,j)];
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-      S.om[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+      S.w[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+    S.omegaFromW();
     return S.maxDivergence();
   };
   const loose = project(1e-11), iters = S.cgIters;
@@ -161,6 +225,112 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
      `${tag}: and removes more when the tolerance is tightened, so what is left `
      + `is the solve's tolerance and not a floor in the operator`,
      `${loose.toExponential(3)} then ${tight.toExponential(3)}`);
+}
+
+section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact');
+/* Two properties of the projection that nothing checked while nothing used the gradient for
+ * anything but its own transpose -- and both were wrong.
+ *
+ * THE GRADIENT IS THE PHYSICAL PRESSURE GRADIENT, because `step` multiplies it by dt/rho and
+ * subtracts it from the velocity. `divergence` reads Omega, so the divergence written in the
+ * physical w is that operator composed with w - sigma(u H_r + (v/r) H_theta), and its
+ * transpose must carry that composition too. Without it the gradient's horizontal components
+ * are the derivatives at constant SIGMA rather than at constant HEIGHT, which differ by
+ * sigma H_r dp/dz -- O(1), not a correction: measured on p = A r + B z at eta/h = 0.4 the
+ * radial component read 86.99 against the physical 137.00 at r/R = 0.888, sigma = 0.63. The
+ * vertical component was separately short of a factor of H, its control volume having been
+ * written without one.
+ *
+ * THE DIAGONAL IS READ BY COLOURING and the strides must match the stencil. Carrying the
+ * slope transpose widens it to delta sigma = +-2 with delta i = +-1 at the same time, so the
+ * eight parity classes that were right before are not right now. Compared here against the
+ * diagonal read one unit vector at a time, which is slow and exact and cannot be fooled by a
+ * stride that is too short.
+ *
+ * The top sigma row and the surface face are excluded from the gradient comparison, because
+ * there the operator carries its own Dirichlet value -- zero above the surface -- which this
+ * probe does not satisfy. Gate 1 checks that boundary exactly, on a constant. */
+{
+  const S = deform(new FaradayCell3D({ nr: 6, nth: 8, nz: 5, ...CELL }), 0.4);
+  const d = Float64Array.from(S.pressureDiagonal());
+  const e = new Float64Array(S.NP), q = new Float64Array(S.NP);
+  let worst = 0, scale = 0;
+  for (let c = 0; c < S.NP; c++){
+    e.fill(0); e[c] = 1;
+    S.applyL(e, q);
+    worst = Math.max(worst, Math.abs(q[c] - d[c]));
+    scale = Math.max(scale, Math.abs(q[c]));
+  }
+  ok(worst === 0,
+     'the coloured diagonal is exactly the diagonal read one unit vector at a time, so the '
+     + 'colour strides match the operator\'s stencil',
+     `worst difference ${worst.toExponential(3)} against entries up to `
+     + `${scale.toExponential(3)}`);
+}
+{
+  const A = 4.1e3, B = -9.7e2, C = 2.3e3, D = 1.7e3, h = CELL.h, R = CELL.R;
+  const pf = (r, th, z) => { const x = r/R;
+    return A*x*x + B*z + C*x*x*Math.cos(2*th) + D*x*Math.cos(th)*(z/h); };
+  const pr = (r, th, z) => { const x = r/R;
+    return (2*A*x + 2*C*x*Math.cos(2*th) + D*Math.cos(th)*(z/h))/R; };
+  const pt = (r, th, z) => { const x = r/R;
+    return (-2*C*x*Math.sin(2*th) - D*Math.sin(th)*(z/h))/R; };   // (1/r) dp/dtheta
+  const pz = (r, th, z) => B + D*(r/R)*Math.cos(th)/h;
+  const errorOn = (nr, nth, nz) => {
+    const S = deform(new FaradayCell3D({ nr, nth, nz, ...CELL }), 0.4);
+    const q = new Float64Array(S.NP);
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, H = S.H[S.ie(i,k)];
+      for (let j = 0; j < nz; j++) q[S.ip(i,k,j)] = pf(S.rc[i], th, S.sc[j]*H);
+    }
+    const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV),
+          gw = new Float64Array(S.NW);
+    S.gradient(q, gu, gv, gw);
+    const n = [0,0,0], dn = [0,0,0];
+    for (let i = 1; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rf[i], H = S.Hat(r, th).H;
+      for (let j = 0; j < nz - 1; j++){
+        const w = pr(r, th, S.sc[j]*H), e2 = gu[S.iu(i,k,j)] - w;
+        n[0] += e2*e2; dn[0] += w*w;
+      }
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = k*S.dth, r = S.rc[i], H = S.Hat(r, th).H;
+      for (let j = 0; j < nz - 1; j++){
+        const w = pt(r, th, S.sc[j]*H), e2 = gv[S.iv(i,k,j)] - w;
+        n[1] += e2*e2; dn[1] += w*w;
+      }
+    }
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
+      const th = (k + 0.5)*S.dth, r = S.rc[i], H = S.H[S.ie(i,k)];
+      for (let j = 1; j < nz; j++){
+        const w = pz(r, th, S.sf[j]*H), e2 = gw[S.iw(i,k,j)] - w;
+        n[2] += e2*e2; dn[2] += w*w;
+      }
+    }
+    return n.map((x, c) => Math.sqrt(x/dn[c]));
+  };
+  const NAME = ['radial', 'azimuthal', 'vertical'];
+  const a = errorOn(16, 24, 16), b = errorOn(32, 48, 32), c = errorOn(64, 96, 64);
+  const o1 = a.map((x, j) => Math.log(x/b[j])/Math.LN2);
+  const o2 = b.map((x, j) => Math.log(x/c[j])/Math.LN2);
+  console.log('       ' + NAME.map((nm, j) => `${nm} ${a[j].toExponential(2)} -> `
+    + `${b[j].toExponential(2)} -> ${c[j].toExponential(2)}, order ${o1[j].toFixed(2)} then `
+    + `${o2[j].toFixed(2)}`).join('; '));
+  for (let j = 0; j < 2; j++)
+    ok(o1[j] > 1.8 && o2[j] > 1.8,
+       `the ${NAME[j]} pressure gradient is second order against calculus at constant `
+       + `HEIGHT on a deformed surface`,
+       `${a[j].toExponential(3)} -> ${b[j].toExponential(3)} -> ${c[j].toExponential(3)}, `
+       + `order ${o1[j].toFixed(3)} then ${o2[j].toFixed(3)}`);
+  /* The vertical one is asked for EXACTNESS rather than an order, which is the stronger
+     statement available here: this probe is linear in z, so a difference of two nodes over
+     H dsigma returns dp/dz to round-off, and the H that the control volume was missing would
+     show as a relative error of order one rather than of order h^2. */
+  ok(a[2] < 1e-12 && b[2] < 1e-12 && c[2] < 1e-12,
+     'and the vertical one is EXACT on a field linear in z, which is where the control '
+     + 'volume\'s missing H would have shown as a factor of H',
+     `${a[2].toExponential(3)}, ${b[2].toExponential(3)}, ${c[2].toExponential(3)} relative`);
 }
 
 /* ── 4b. the axis reflection ─────────────────────────────────────────────── */
@@ -354,10 +524,17 @@ section('4e. the Laplacian at every node family, against calculus');
   const fOf = (r, th, z) =>
     (1 + (r/CELL.R)*(r/CELL.R)*Math.cos(2*th))*Math.sin(KZ*z);
   const lapOf = (r, th, z) => -KZ*KZ*fOf(r, th, z);
-  /* mixed, and every component admissible: m = 1 as r, m = 2 as r^2, m = 3 as r^3 */
-  const surf = (x, th) => 0.6*x*Math.cos(th) + 0.5*x*x*Math.cos(2*th)
-                        - 0.3*x*x*x*Math.sin(3*th);
-  const errorOn = (famName, nr, nth, nz, amp, skipIn) => {
+  /* Mixed, every component admissible at the axis -- m = 1 as r, m = 2 as r^2, m = 3 as
+     r^3 -- AND with zero radial slope at the rim, which a free contact line means and which
+     refreshMetric closes the rim with. Without that last factor the rim contradicted the
+     metric by O(1) in the slope, and family u was the one that showed it, because its node
+     list reaches the wall and the wall is therefore an ordinary member of its stencils:
+     u read 1.79e-3, 7.41e-4, 4.49e-4 at eta/h = 0.4, order 1.27 then 0.72, while p, v and w
+     stayed at 1.99. With the factor every family reads 1.99 to 2.03 on all three grids. */
+  const surf = (x, th) => 0.6*x*(1 - x*x/3)*Math.cos(th)
+                        + 0.5*x*x*(1 - 0.5*x*x)*Math.cos(2*th)
+                        - 0.3*x*x*x*(1 - 0.6*x*x)*Math.sin(3*th);
+  const errorOn = (famName, nr, nth, nz, amp, skipIn, skipTop = 0) => {
     const S = new FaradayCell3D({ nr, nth, nz, ...CELL, rStretch: 0, zStretch: 0 });
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
       S.eta[S.ie(i,k)] = amp*S.h*surf(S.rc[i]/S.R, (k + 0.5)*S.dth);
@@ -375,7 +552,7 @@ section('4e. the Laplacian at every node family, against calculus');
     let num = 0, den = 0;
     for (let a = Math.max(fam.rLo, skipIn); a <= fam.rHi; a++)
       for (let k = 0; k < nth; k++)
-        for (let b = fam.sLo; b <= fam.sHi; b++){
+        for (let b = fam.sLo; b <= fam.sHi - skipTop; b++){
           const want = lapOf(fam.rn[a], thOf(k), zOf(a,k,b));
           const d = got[fam.idx(a,k,b)] - want;
           num += d*d; den += want*want;
@@ -389,18 +566,35 @@ section('4e. the Laplacian at every node family, against calculus');
      property of the probe, not the operator: v's order recovers from 0.28 to 1.45,
      matching p and u, once those rows are dropped. The axis treatment is gated on
      its own terms in 4c, where u_r's antisymmetry is exact. */
-  for (const [fam, skip] of [['p', 0], ['u', 2], ['v', 2], ['w', 0]]){
+  /* SECOND order asked for, not merely convergence. The floor used to be 1.2, which is what
+     an operator that loses an order at a boundary row can manage, and it passed while three
+     separate first-order closures sat in the sigma and radial directions. With the face
+     derivatives cubic -- see polyDerivAt -- the measured orders are 1.99, 1.99, 1.99, 2.00,
+     1.99, 2.00, 2.04, 2.03 over the eight (family, amplitude) pairs, so 1.9 is a floor the
+     operator clears and a first-order closure could not. */
+  /* w's SURFACE row is excluded here and gated in 4g instead, against the reference it
+     actually approximates. Every other unknown in this file sits at the centroid of its
+     control volume, so the flux balance over that volume is a second-order approximation
+     to the point value at the node and `lapOf` is the right thing to compare with. w's
+     node at sigma = 1 bounds its half cell rather than straddling it, so the balance
+     approximates the average over a cell whose centroid is ds_top/4 lower, and comparing
+     it with the point value at the node is first order by construction: including it here
+     dragged the RMS order from 2.04 to 1.77. 4g asserts second order against the exact
+     average AND pins the gap to the point value in closed form, which is strictly more
+     than this row was ever asked for. */
+  for (const [fam, skip, skipTop] of
+       [['p', 0, 0], ['u', 2, 0], ['v', 2, 0], ['w', 0, 1]]){
     for (const amp of [0, 0.4]){
-      const coarse = errorOn(fam, 16, 24, 16, amp, skip);
-      const fine = errorOn(fam, 32, 48, 32, amp, skip);
+      const coarse = errorOn(fam, 16, 24, 16, amp, skip, skipTop);
+      const fine = errorOn(fam, 32, 48, 32, amp, skip, skipTop);
       const order = Math.log(coarse/fine)/Math.log(2);
       console.log(`       ${fam} eta/h = ${amp}: ${coarse.toExponential(2)} -> `
         + `${fine.toExponential(2)}, order ${order.toFixed(2)}`);
       ok(fine < coarse,
          `${fam}, eta/h = ${amp}: refining reduces the error in grad^2 f`,
          `${coarse.toExponential(3)} then ${fine.toExponential(3)}`);
-      ok(order > 1.2,
-         `${fam}, eta/h = ${amp}: and it converges (order ${order.toFixed(2)})`,
+      ok(order > 1.9,
+         `${fam}, eta/h = ${amp}: and it is second order (${order.toFixed(2)})`,
          `observed order ${order.toFixed(3)}`);
     }
   }
@@ -487,6 +681,186 @@ section('4g. the state is the physical velocity; Omega is derived');
      'and the slope term is non-zero on a deformed surface, so the round trip is '
      + 'not two copies of the same array',
      `largest |Omega - w| = ${slope.toExponential(3)}`);
+}
+
+section('4g. the vertical component at the surface, over the half cell it bounds');
+/* The one unknown in this solver whose node is not the centroid of its control volume.
+ * w sits on the sigma faces, so its momentum cell is the dual cell between two pressure
+ * centres -- and at sigma = 1 there is no cell above, so that dual cell is the half
+ * [sc[nz-1], 1] and the node sits on its upper boundary. A flux balance over a cell is a
+ * statement about that cell's AVERAGE, and this cell's centroid is ds_top/4 below its node.
+ *
+ * So two things are asserted, and the first is the finite-volume method's own claim:
+ *
+ *   1. the operator's surface row converges at SECOND order to the exact average of
+ *      grad^2 f over the half cell -- computed here by seven-point Gauss-Legendre, exact
+ *      for degree 13 and therefore the analytic average to round-off, not a second reading
+ *      of the solver's own one-point rule;
+ *   2. its gap to the POINT value at sigma = 1 is not noise but exactly the centroid
+ *      offset: got = grad^2 f(sigma = 1) - hw H d(grad^2 f)/dz + O(hw^2) with hw the half
+ *      width ds_top/4. Subtracting that closed form leaves a second-order remainder, which
+ *      pins the mechanism rather than tolerating it.
+ *
+ * Without the second, "first order at the node" would be an excuse. With it, the row's
+ * behaviour is predicted in closed form and a change of stencil that broke the prediction
+ * would fail here. The surface flux is supplied ANALYTICALLY, so what is measured is the
+ * operator and not the stress condition -- 8d gates that separately.
+ *
+ * The probe is A(r, theta) g(z) with A = 1 + c (r/R)^2 cos 2theta, which is harmonic in the
+ * plane, so grad^2 f = A g''(z) exactly; and admissible, its m = 2 mode vanishing as r^2. */
+{
+  const KZ = 700, C = 0.5, D = 0.5;
+  const GLX = [-0.9491079123427585, -0.7415311855993945, -0.4058451513773972, 0,
+                0.4058451513773972, 0.7415311855993945, 0.9491079123427585];
+  const GLW = [0.1294849661688697, 0.2797053914892766, 0.3818300505051189,
+               0.4179591836911263,
+               0.3818300505051189, 0.2797053914892766, 0.1294849661688697];
+  /* Two horizontal profiles, and both are needed.
+     `c` scales an m = 2 part, x^2 cos 2theta, which is harmonic in the plane, and it is what
+     makes the sigma faces' cross terms bite. `d` scales an AXISYMMETRIC part, x^2 - x^4, with
+     radial structure but no azimuthal variation; it is not harmonic, so its planar Laplacian
+     is carried explicitly below. That second profile is the only one that sees the r and
+     theta faces' quadrature POINT, and it took two tries to find out why. With cos 2theta in
+     the field the sigma cross terms' error is twenty times the quadrature term and buries it:
+     moving that quadrature from the control volume's sigma centroid back to the node leaves
+     the m = 2 family reading 4.34e-4 at order 2.00 against 4.25e-4 at 1.98 -- no signal at
+     all. A probe with no radial structure EITHER cannot see it, because the r faces' flux is
+     then identically zero: `c = d = 0` also passed the injection. It takes an axisymmetric
+     profile that varies in r, and with one the same defect reads 0.91 against 2.74.
+     Both parts vanish at the axis as r^2, which is admissible there. */
+  const A    = (r, th, c, d) => { const x2 = (r/CELL.R)*(r/CELL.R);
+                                  return 1 + c*x2*Math.cos(2*th) + d*(x2 - x2*x2); };
+  const Ar   = (r, th, c, d) => { const R2 = CELL.R*CELL.R;
+                                  return 2*c*r*Math.cos(2*th)/R2
+                                       + d*(2*r/R2 - 4*r*r*r/(R2*R2)); };
+  const Ath  = (r, th, c, d) => -2*c*(r/CELL.R)*(r/CELL.R)*Math.sin(2*th);
+  /* the planar Laplacian of A: the m = 2 part is harmonic, so only the axisymmetric part
+     contributes, and A_rr + A_r/r = d(4 - 16 x^2)/R^2 */
+  const Alap = (r, th, c, d) => d*(4 - 16*(r/CELL.R)*(r/CELL.R))/(CELL.R*CELL.R);
+  const g   = z => Math.cos(KZ*z) + 0.3*Math.sin(KZ*z);
+  const g1  = z => KZ*(-Math.sin(KZ*z) + 0.3*Math.cos(KZ*z));
+  const g3  = z => KZ*KZ*KZ*(Math.sin(KZ*z) - 0.3*Math.cos(KZ*z));
+  const f   = (r, th, z, c, d) => A(r, th, c, d)*g(z);
+  const lap = (r, th, z, c, d) =>
+    (Alap(r, th, c, d) - KZ*KZ*A(r, th, c, d))*g(z);
+  const lapZ = (r, th, z, c, d) =>
+    (Alap(r, th, c, d) - KZ*KZ*A(r, th, c, d))*g1(z);   // d/dz of the above
+  void g3;
+
+  const measure = (nr, nth, nz, amp, c, d) => {
+    const S = deform(new FaradayCell3D({ nr, nth, nz, ...CELL }), amp);
+    const fam = S.FAM.w;
+    const fld = new Float64Array(S.NW), got = new Float64Array(S.NW);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const th = (k + 0.5)*S.dth, r = S.rc[i], H = S.Hat(r, th).H;
+        for (let b = 0; b <= nz; b++) fld[S.iw(i,k,b)] = f(r, th, S.sf[b]*H, c, d);
+      }
+    const sFlux = (i, k) => {
+      const th = (k + 0.5)*S.dth, r = S.rc[i];
+      const H = S.Hat(r, th).H, sl = S.Hslope(r, th);
+      return A(r, th, c, d)*g1(H) - sl.Hr*Ar(r, th, c, d)*g(H)
+           - (sl.Hth/(r*r))*Ath(r, th, c)*g(H);
+    };
+    S.famLaplacian(fld, got, fam,
+      (kd, r, th, sg) => f(r, th, sg*S.Hat(r, th).H, c, d), sFlux);
+    const lo = S.sc[nz-1], hw = 0.5*(1 - lo), cen = 0.5*(1 + lo);
+    let nAvg = 0, nNode = 0, nPred = 0, den = 0, slopeTh = 0, slopeR = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const th = (k + 0.5)*S.dth, r = S.rc[i], H = S.Hat(r, th).H;
+        const sl = S.Hslope(r, th);
+        slopeTh = Math.max(slopeTh, Math.abs(sl.Hth)*S.dth/H);
+        slopeR = Math.max(slopeR, Math.abs(sl.Hr)*S.drc[i]/H);
+        let avg = 0;
+        for (let q = 0; q < 7; q++) avg += GLW[q]*lap(r, th, (cen + hw*GLX[q])*H, c, d);
+        avg *= 0.5;
+        const mine = got[S.iw(i,k,nz)], node = lap(r, th, H, c, d);
+        den += avg*avg;
+        nAvg += (mine - avg)**2;
+        nNode += (mine - node)**2;
+        nPred += (mine - (node - hw*H*lapZ(r, th, H, c, d)))**2;
+      }
+    return { avg: Math.sqrt(nAvg/den), node: Math.sqrt(nNode/den),
+             pred: Math.sqrt(nPred/den), slopeTh, slopeR };
+  };
+
+  /* Two grid families, because the limiting error is the grid's and not the operator's.
+   * The azimuthal cross term reads the neighbouring columns AT THIS SHEET'S HEIGHT, and a
+   * neighbour's own surface is |H_theta| dtheta / H of a depth away; the four-point stencil
+   * reaches twice that, and once it exceeds 1 - sigma the point it wants is above the
+   * neighbouring column's surface, where there is no fluid and no reconstruction can help.
+   * That is a statement about the grid, and it is established three ways below. At
+   * nth = 1.5 nr -- the aspect the renderer uses -- the azimuthal ratio is 3.3 times the
+   * radial one, and the surface row reads 2.41 then 1.74 with cos 2theta in the probe and
+   * 1.37 then 1.14 with an axisymmetric one, where the azimuthal cross term ought to vanish
+   * identically and is instead all that is left. With the two resolutions matched, at
+   * nth = 6 nr, the same two read 2.35/1.99 and 3.44/2.41. So every case is gated, each at
+   * the floor it is measured to clear, and the matched ones at 1.9: a change that broke the
+   * operator would fail those whatever the aspect, while the renderer's-aspect floors record
+   * honestly what that aspect delivers. The matched cases use 8/16/32 rather than 16/32/64
+   * only to keep the suite under a minute.
+   *
+   * Narrowing the azimuthal stencil does not help and was measured: three points and two
+   * points both read 3.86e-2 at order 0.68 then 0.83, ten times worse, because their
+   * O(dtheta^2) truncation is then what the row divides by its own thickness.
+   *
+   * THE FLOORS BELOW ARE WHAT EACH CASE IS MEASURED TO CLEAR, AND TWO OF THEM ARE UNDER 1.9.
+   * That is not a tolerance chosen to make a red case green: it is the surface slope the grid
+   * resolves, and it is the same mechanism in both directions. The bracketed stencil follows
+   * its target, so it CHANGES between adjacent columns whenever the target moves by more than
+   * a cell, and a derivative divides that jump by dr or dtheta. The azimuthal version of it
+   * limits the renderer's-aspect cases (order 1.42 then 1.17 axisymmetric, 2.41 then 1.74
+   * with cos 2theta); the radial version limits the matched axisymmetric case, where the two
+   * ratios are equal by construction and the radial profile is what makes the radial cross
+   * term non-zero (2.02 then 1.59). Removing the jump needs a reconstruction that is C1 in
+   * its target -- a blended or Hermite cubic rather than a chosen stencil -- and that is a
+   * pass of its own, recorded in dns/PLAN-cell3d.md. What is NOT in doubt is the operator
+   * away from the surface row: 4e reads 1.99 to 2.00 at all eight (family, amplitude) pairs
+   * against a floor of 1.9. */
+  for (const [mt, n0, cc, dd, amp, floor, tag] of [
+        /* the renderer's aspect: nth = 1.5 nr */
+        [1.5, 16, C, 0, 0,   1.7,  'cos 2theta, flat, renderer\'s aspect'],
+        [1.5, 16, C, 0, 0.4, 1.6,  'cos 2theta, deformed, renderer\'s aspect'],
+        [1.5, 16, 0, D, 0,   1.7,  'axisymmetric, flat, renderer\'s aspect'],
+        [1.5, 16, 0, D, 0.4, 1.05, 'axisymmetric, deformed, renderer\'s aspect'],
+        /* and with the azimuthal surface-slope resolution matched to the radial one */
+        [6,   8,  C, 0, 0,   1.9,  'cos 2theta, flat, matched'],
+        [6,   8,  C, 0, 0.4, 1.9,  'cos 2theta, deformed, matched'],
+        [6,   8,  0, D, 0,   1.9,  'axisymmetric, flat, matched'],
+        [6,   8,  0, D, 0.4, 1.45, 'axisymmetric, deformed, matched']]){
+    {
+      const m = [measure(n0, n0*mt, n0, amp, cc, dd),
+                 measure(2*n0, 2*n0*mt, 2*n0, amp, cc, dd),
+                 measure(4*n0, 4*n0*mt, 4*n0, amp, cc, dd)];
+      const ord = key => [Math.log(m[0][key]/m[1][key])/Math.LN2,
+                          Math.log(m[1][key]/m[2][key])/Math.LN2];
+      const [a1, a2] = ord('avg'), [n1, n2] = ord('node'), [p1, p2] = ord('pred');
+      console.log(`       ${tag}: |H_th|dth/H `
+        + `${m.map(x => x.slopeTh.toFixed(3)).join('/')} against |H_r|dr/H `
+        + `${m.map(x => x.slopeR.toFixed(3)).join('/')}; against the half cell's exact `
+        + `average ${m.map(x => x.avg.toExponential(2)).join(' -> ')}, order `
+        + `${a1.toFixed(2)} then ${a2.toFixed(2)}; at the node order ${n1.toFixed(2)} then `
+        + `${n2.toFixed(2)}; with the centroid offset removed ${p1.toFixed(2)} then `
+        + `${p2.toFixed(2)}`);
+      ok(a1 > floor && a2 > floor,
+         `${tag}: grad^2 w at the surface row converges at order `
+         + `${floor} or better against the exact average over the half cell it bounds`,
+         `${m.map(x => x.avg.toExponential(3)).join(' -> ')}, order ${a1.toFixed(2)} then `
+         + `${a2.toFixed(2)}`);
+      ok(p1 > floor && p2 > floor,
+         `${tag}: and its gap to the point value at sigma = 1 is `
+         + `the centroid offset in closed form, to the same order`,
+         `${m.map(x => x.pred.toExponential(3)).join(' -> ')}, order ${p1.toFixed(2)} then `
+         + `${p2.toFixed(2)}`);
+      ok(n1 < 1.5 && n2 < 1.5 && m[2].node > 4*m[2].avg,
+         `${tag}: while the point value at the node is first order `
+         + `and larger, which is what a node on its own control volume's boundary costs`,
+         `node ${m.map(x => x.node.toExponential(3)).join(' -> ')} at order `
+         + `${n1.toFixed(2)} then ${n2.toFixed(2)}, against the average's `
+         + `${m[2].avg.toExponential(3)} on the finest grid`);
+    }
+  }
 }
 
 /* ── 6. advection ────────────────────────────────────────────────────────── */
@@ -802,14 +1176,23 @@ section('6f. on a divergence-free field the only energy it moves is the mesh vol
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++)
       S.v[S.iv(i,k,j)] -= S._gv[S.iv(i,k,j)];
     for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) for (let j = 1; j <= nz; j++)
-      S.om[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
-    S.wFromOmega();
-    /* the surface stays material: the mesh follows it, so dH/dt is Omega at sigma = 1 */
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++) S.Ht[S.ie(i,k)] = S.om[S.iw(i,k,nz)];
+      S.w[S.iw(i,k,j)] -= S._gw[S.iw(i,k,j)];
+    /* THE AXIS VALUE IS SET BEFORE Omega IS FORMED FROM IT, and the order is not free.
+       Omega is derived from u, v and w, and u at the axis face enters it through the slope
+       term of the innermost cell, so changing that value AFTER forming Omega leaves the two
+       inconsistent -- and the next projection then recomputes Omega and undoes the one
+       before it. Measured with the order reversed: a projection to 1e-14 reported a
+       divergence of 6.74e-2 where the same projection at 1e-9 reported 3.40e-8. The
+       correction itself cannot disturb this, because `gradient` zeroes the axis and rim r
+       faces, whose velocity is prescribed rather than solved. `step` carries the same
+       ordering for the same reason. */
     S.axisU();
     /* the axis row is the one term the identity leaves open; measured in 6g */
     for (let k = 0; k < nth; k++) for (let b = 0; b < nz; b++) S.u[S.iu(0,k,b)] = 0;
+    S.omegaFromW();
+    /* the surface stays material: the mesh follows it, so dH/dt is Omega at sigma = 1 */
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) S.Ht[S.ie(i,k)] = S.om[S.iw(i,k,nz)];
     return S.maxDivergence();
   };
   const dLoose = project(1e-9), eLoose = residual();
@@ -1655,17 +2038,32 @@ section('8b. the rate-of-strain tensor at the surface, against calculus');
 
 section('8c. the viscous normal stress, and its flat limit against the solver next door');
 /* On a FLAT surface the outward normal is z-hat exactly, so n.E.n collapses to E_zz and the
- * viscous normal stress must be exactly 2 rho nu dw/dz -- which is `wzSurface` in
+ * viscous normal stress must be 2 rho nu dw/dz -- which is `wzSurface` in
  * dns/faraday-disc.js, an independently written solver, quadratic through the three
  * vertical faces below the surface.
  *
- * Asserted at round-off of the CANCELLATION, not bit for bit. The two are the same
- * quadratic but not the same sequence of operations -- one works in sigma and divides by H,
- * the other in z -- and a three-point derivative differences nearly equal values over a
- * small spacing, so agreement is limited by that cancellation. Measured: 3.2e-17 against a
- * stress of 2.9e-4, which is 1.1e-13 relative. Asked for 1e-13 first, and that was the
- * third time in this build that two algebraically identical expressions were expected to
- * agree more closely than their operation order allows.
+ * THE TWO NO LONGER USE THE SAME STENCIL, and that is deliberate. `colDerivAtZ` is a cubic
+ * through four nodes, because the surface flux's error is divided by the top row's thickness
+ * in that row's flux balance -- the identity 8e gates below -- and on a grid graded towards
+ * the surface that thickness falls like 1/nz, so a second-order surface quantity leaves the
+ * surface row first order. The two-dimensional solver keeps its quadratic: it is the
+ * independent reference for S8 and changing it would spend that independence.
+ *
+ * So the cross-code check is made twice, and the first of the two is still exact. On a w
+ * profile QUADRATIC in z both stencils differentiate exactly, so they must agree to
+ * round-off whatever their order: the check is then of the formula -- n.E.n collapsing to
+ * E_zz, and the factor 2 rho nu -- rather than of the stencil. Asserted at round-off of the
+ * CANCELLATION, not bit for bit: the two are not the same sequence of operations, one
+ * working in sigma and dividing by H and the other in z, and a three-point derivative
+ * differences nearly equal values over a small spacing, so agreement is limited by that
+ * cancellation and gets RELATIVELY worse as the grid refines and the spacing shrinks.
+ * Measured 5.09e-17, 1.37e-16, 4.25e-16 against a stress of 6.6e-5 over nz = 16, 32, 64:
+ * 7.7e-13, 2.1e-12, 6.3e-12 relative.
+ *
+ * On the sinusoid the two stencils differ by their own truncation, and that gap must
+ * CONVERGE, which is the second check: measured 1.578e-8, 2.463e-9, 4.935e-10, order 2.68
+ * then 2.32. A gap between two approximations of one true value falls at the worse of their
+ * orders, so the floor asserted is second order -- what the quadratic can promise.
  *
  * On a deformed surface it must instead be the full contraction, and the gap between the
  * two forms is measured rather than asserted small: it is most of the stress, which is the
@@ -1673,8 +2071,12 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
 {
   const R = 12.125e-3, KZ = 400, D = 3.8e3;
   const uzf = (r, t, z) => D*r*r*(R - r)*Math.cos(t)*Math.sin(KZ*z);
-  const build = amp => {
-    const S = new FaradayCell3D({ nr: 16, nth: 24, nz: 16, ...CELL, R });
+  /* the same shape in r and theta, but quadratic in z, which both stencils differentiate
+     exactly -- so their agreement on it is the formula's and not the stencil's */
+  const uzq = (r, t, z, h) =>
+    D*r*r*(R - r)*Math.cos(t)*(0.3 + 1.7*(z/h) - 0.9*(z/h)*(z/h));
+  const build = (amp, nr = 16, nth = 24, nz = 16, prof = uzf) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, R });
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++){
         const x = S.rc[i]/R, th = (k + 0.5)*S.dth;
@@ -1684,7 +2086,8 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
     const H = (r, th) => S.Hat(r, th).H;
     for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
       const th = (k + 0.5)*S.dth, r = S.rc[i];
-      for (let b = 0; b <= S.nz; b++) S.w[S.iw(i,k,b)] = uzf(r, th, S.sf[b]*H(r, th));
+      for (let b = 0; b <= S.nz; b++)
+        S.w[S.iw(i,k,b)] = prof(r, th, S.sf[b]*H(r, th), S.h);
     }
     return S;
   };
@@ -1696,8 +2099,8 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
     const a = z(nz) - z(nz-1), b = z(nz) - z(nz-2);
     return w0*(a + b)/(a*b) - w1*b/(a*(b - a)) + w2*a/(b*(b - a));
   };
-  {
-    const S = build(0);
+  const gap = (nz, prof) => {
+    const S = build(0, 16, 24, nz, prof);
     let worst = 0, scale = 0;
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++){
@@ -1706,13 +2109,33 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
         worst = Math.max(worst, Math.abs(mine - theirs));
         scale = Math.max(scale, Math.abs(theirs));
       }
-    ok(worst < 1e-12*scale,
+    return { worst, scale };
+  };
+  {
+    /* the quadratic profile: both stencils are exact on it, so this is the formula */
+    const q = [gap(16, uzq), gap(32, uzq), gap(64, uzq)];
+    const rel = q.map(x => x.worst/x.scale);
+    ok(rel.every(x => x < 1e-11),
        'on a flat surface the viscous normal stress is exactly the two-dimensional '
-       + 'solver\'s 2 rho nu dw/dz, to round-off',
-       `worst ${worst.toExponential(3)} against ${scale.toExponential(3)}, relative `
-       + `${(worst/scale).toExponential(2)}`);
-    ok(scale > 0, 'and that stress is not zero, so the agreement is not two blank arrays',
-       `largest ${scale.toExponential(3)} Pa`);
+       + 'solver\'s 2 rho nu dw/dz, to round-off, on a profile both stencils differentiate '
+       + 'exactly',
+       `relative ${rel.map(x => x.toExponential(2)).join(', ')} over nz = 16, 32, 64, `
+       + `against a stress of ${q[0].scale.toExponential(3)} Pa`);
+    ok(q.every(x => x.scale > 0),
+       'and that stress is not zero, so the agreement is not two blank arrays',
+       `largest ${q[0].scale.toExponential(3)} Pa`);
+    /* the sinusoid: the stencils differ by their truncation, and that must converge */
+    const t = [gap(16, uzf), gap(32, uzf), gap(64, uzf)];
+    const o1 = Math.log(t[0].worst/t[1].worst)/Math.LN2;
+    const o2 = Math.log(t[1].worst/t[2].worst)/Math.LN2;
+    console.log(`       cubic against the two-dimensional solver's quadratic: `
+      + `${t.map(x => x.worst.toExponential(3)).join(' -> ')}, order `
+      + `${o1.toFixed(2)} then ${o2.toFixed(2)}`);
+    ok(o1 > 1.9 && o2 > 1.9,
+       'and on a profile they differentiate differently the gap between them converges at '
+       + 'the order the quadratic can promise, so the two codes agree in the limit',
+       `order ${o1.toFixed(2)} then ${o2.toFixed(2)}, from `
+       + `${t[0].worst.toExponential(3)} down to ${t[2].worst.toExponential(3)}`);
   }
   {
     const S = build(0.5);
@@ -1734,6 +2157,44 @@ section('8c. the viscous normal stress, and its flat limit against the solver ne
        `worst gap ${worst.toExponential(3)} against a largest stress of `
        + `${scale.toExponential(3)}, ${(100*worst/scale).toFixed(1)}%`);
   }
+}
+
+section('8e. the hook that puts a flux on the surface face, exactly');
+/* `surfaceLapFluxes` is gated in 8d and famLaplacian is gated in 4e and 4f, but the HOOK
+   between them is neither's business, and it is live: `viscous` uses it for u and v. So it is
+   checked on its own terms, and exactly rather than under refinement. The sigma = 1 face's
+   contribution is side*proj*sFlux and the operator divides by rn*dra*dtheta*H*dsigma, so
+   changing the supplied flux by C must change the surface row by exactly C/(H dsigma) and
+   must change nothing else at all. */
+{
+  const S = deform(new FaradayCell3D({ nr: 12, nth: 16, nz: 10, ...CELL }), 0.4);
+  const r = rnd(8123);
+  for (let c = 0; c < S.NU; c++) S.u[c] = 1e-3*r();
+  const fam = S.FAM.u, C = 0.37;
+  const a0 = new Float64Array(S.NU), a1 = new Float64Array(S.NU);
+  S.famLaplacian(S.u, a0, fam, () => 0, () => 0);
+  S.famLaplacian(S.u, a1, fam, () => 0, () => C);
+  let worstTop = 0, worstRest = 0, scale = 0;
+  for (let i = fam.rLo; i <= fam.rHi; i++)
+    for (let k = 0; k < S.nth; k++){
+      const H = S.Hat(S.rf[i], (k + 0.5)*S.dth).H;
+      for (let b = 0; b < S.nz; b++){
+        const c = S.iu(i, k, b), d = a1[c] - a0[c];
+        if (b === S.nz - 1){
+          const want = C/(H*S.dsc[b]);
+          worstTop = Math.max(worstTop, Math.abs(d - want));
+          scale = Math.max(scale, Math.abs(want));
+        } else worstRest = Math.max(worstRest, Math.abs(d));
+      }
+    }
+  ok(worstTop < 1e-12*scale,
+     'changing the supplied surface flux changes the surface row by exactly the flux over '
+     + 'the volume it crosses',
+     `worst ${worstTop.toExponential(3)} against ${scale.toExponential(3)}, relative `
+     + `${(worstTop/scale).toExponential(2)}`);
+  ok(worstRest === 0,
+     'and changes no other row at all, so the hook reaches the surface face and nothing else',
+     `worst change elsewhere ${worstRest.toExponential(3)}`);
 }
 
 section('8d. the surface flux: no tangential traction, and the flat limit next door');
@@ -1899,6 +2360,1393 @@ section('8d. the surface flux: no tangential traction, and the flat limit next d
         ok(o[c] > 1.7,
            `eta/h = ${amp}: the ${NAME[c]} surface flux is second order against the identity`,
            `${a[c].toExponential(3)} -> ${b[c].toExponential(3)}, order ${o[c].toFixed(3)}`);
+    }
+  }
+
+  /* AND WHERE EACH COMPONENT'S OWN FACE SITS, which is not where the pressure cells are.
+   * `surfaceLapFluxes` gives the flux at a pressure cell; u's sigma = 1 face is at an r face
+   * and v's at a theta face, so each is interpolated, and until now nothing checked that
+   * interpolation -- replacing u's with one cell's value left the whole suite passing. The
+   * plan said closing this needed a probe satisfying zero tangential stress at the surface.
+   * It does not: `wantFlux` above is the analytic flux at ANY (r, theta), so it can be asked
+   * for the face's own position, and the interpolation is then gated directly against
+   * calculus. That is both simpler and stronger than gating it through a composed operator.
+   *
+   * What it found was NOT the defect expected. The arithmetic mean it replaces is also second
+   * order at the face -- 2.09 then 2.05, against 2.12 then 2.07 for the weighted form, and a
+   * nineteen per cent larger error -- because on a smoothly graded grid the offset between an
+   * r face and the midpoint of its two cell centres is O(dr^2) and not O(dr). The weighted
+   * form is kept for the constant, and the gate is kept because a coarser slip than a mean --
+   * one cell's value in place of either -- IS first order, and nothing saw that before. */
+  {
+    const errorOn = (nr, nth, nz, amp) => {
+      const S = build(nr, nth, nz, amp);
+      S.refreshSurfaceFluxes();
+      const num = [0, 0], den = [0, 0];
+      for (let i = 1; i < nr; i++){
+        if (S.rf[i] < 0.25*R || S.rf[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = (k + 0.5)*S.dth, r = S.rf[i];
+          const w = wantFlux(amp, r, th, S.Hat(r, th).H)[0];
+          const d = S.surfaceFluxFace('u', i, k) - w;
+          num[0] += d*d; den[0] += w*w;
+        }
+      }
+      for (let i = 0; i < nr; i++){
+        if (S.rc[i] < 0.25*R || S.rc[i] > 0.9*R) continue;
+        for (let k = 0; k < nth; k++){
+          const th = k*S.dth, r = S.rc[i];
+          const w = wantFlux(amp, r, th, S.Hat(r, th).H)[1];
+          const d = S.surfaceFluxFace('v', i, k) - w;
+          num[1] += d*d; den[1] += w*w;
+        }
+      }
+      return num.map((n, c) => Math.sqrt(n/den[c]));
+    };
+    for (const amp of [0.3, 0.6]){
+      const a = errorOn(16, 24, 16, amp), b = errorOn(32, 48, 32, amp),
+            c = errorOn(64, 96, 64, amp);
+      const o1 = a.map((x, j) => Math.log(x/b[j])/Math.LN2);
+      const o2 = b.map((x, j) => Math.log(x/c[j])/Math.LN2);
+      console.log(`       eta/h = ${amp}: at u's own face ${a[0].toExponential(2)} -> `
+        + `${b[0].toExponential(2)} -> ${c[0].toExponential(2)}, order ${o1[0].toFixed(2)} `
+        + `then ${o2[0].toFixed(2)}; at v's own face ${o1[1].toFixed(2)} then `
+        + `${o2[1].toFixed(2)}`);
+      ok(o1[0] > 1.8 && o2[0] > 1.8,
+         `eta/h = ${amp}: the radial surface flux is second order AT THE r FACE u's surface `
+         + `condition is applied on, not only at the pressure cells it is formed at`,
+         `${a[0].toExponential(3)} -> ${b[0].toExponential(3)} -> ${c[0].toExponential(3)}, `
+         + `order ${o1[0].toFixed(3)} then ${o2[0].toFixed(3)}`);
+      ok(o1[1] > 1.8 && o2[1] > 1.8,
+         `eta/h = ${amp}: and the azimuthal one at the theta face v's is applied on`,
+         `${a[1].toExponential(3)} -> ${b[1].toExponential(3)} -> ${c[1].toExponential(3)}, `
+         + `order ${o1[1].toFixed(3)} then ${o2[1].toFixed(3)}`);
+    }
+  }
+}
+
+section('9. step(): the equations integrated, against the dispersion relation');
+/* THE CHECK THAT EVERYTHING ELSE WAS FOR. Every gate above measures one operator; this one
+ * measures the assembled solver against a result it cannot have got from its own internals.
+ *
+ * Released from rest with eta = eps J_m(k r) cos(m theta) and J_m'(kR) = 0 -- which IS the
+ * free contact line, so the profile is admissible -- the linear surface oscillator gives
+ *
+ *     d2 eta / dt2  =  -omega^2 eta,     omega^2 = (g k + gamma k^3 / rho) tanh(k h)
+ *
+ * so ONE step from rest must leave d eta / dt = -omega^2 eta dt. That single step runs the
+ * whole assembly: the curvature, the normal, the strain and the viscous normal stress into
+ * the surface pressure; the surface pressure as the projection's Dirichlet value; the
+ * pressure solve; the corrector on the physical velocity; and the kinematic condition that
+ * turns Omega at sigma = 1 into d eta/dt. Get any of them wrong and the frequency is wrong.
+ *
+ * Asserted as CONVERGENCE, because the discrete surface's frequency is the continuum one
+ * only in the limit: the capillary term is about half the restoring force at this wavenumber
+ * and the curvature's rim closure is first order (7d), so the whole is first order.
+ * Measured for m = 3 over four grids: -13.1%, -6.6%, -3.9%, -2.1%. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const m = 3;
+  const kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+  const omega2 = (CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h);
+  const ratio = (nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL });
+    const AMP = 2e-7;                                   // 6.7e-5 of the depth: linear
+    const prof = (i, kk) => K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i,kk)] = AMP*prof(i, kk);
+    S.refreshMetric();
+    S.step(1e-7);
+    let num = 0, den = 0;
+    for (let i = 1; i < nr - 1; i++) for (let kk = 0; kk < nth; kk++){
+      const b = prof(i, kk);
+      num += S.om[S.iw(i,kk,nz)]*b*S.rc[i]*S.drc[i]; den += b*b*S.rc[i]*S.drc[i];
+    }
+    return (num/den)/(-omega2*AMP*1e-7);
+  };
+  const r = [ratio(12,16,10), ratio(16,24,12), ratio(24,32,16), ratio(32,48,20)];
+  const err = r.map(x => Math.abs(x - 1));
+  console.log(`       m = ${m}, omega = ${Math.sqrt(omega2).toFixed(3)} rad/s: measured/theory `
+    + r.map(x => x.toFixed(5)).join(', ') + ` (error `
+    + err.map(x => (100*x).toFixed(2) + '%').join(', ') + ')');
+  ok(err[0] > err[1] && err[1] > err[2] && err[2] > err[3],
+     'step() reproduces the linear gravity-capillary frequency, and the error falls on every '
+     + 'refinement -- which no single operator in this file could produce on its own',
+     err.map(x => (100*x).toFixed(2) + '%').join(' -> '));
+  ok(err[3] < 0.05,
+     'and on the finest grid it is within five per cent of the continuum value',
+     `${(100*err[3]).toFixed(3)}% at 32x48x20`);
+  ok(r.every(x => x > 0),
+     'and the sign is right, so the surface is restored towards flat rather than driven away '
+     + 'from it',
+     r.map(x => x.toFixed(4)).join(', '));
+}
+
+section('9b. the step limit, falsifiable on both sides');
+/* A limit is only a limit if the scheme survives below it and breaks above it. Seeded from
+ * noise so what is measured is the SCHEME's growth and not a physical mode's.
+ *
+ * The margin is stated rather than hidden: the capillary limit is the dispersion relation at
+ * the largest wavenumber the grid carries, which is conservative by a measured factor of
+ * 1.4 to 2.8, and `stableStep`'s safety factor of 0.4 puts the default step 3.5 to 7 times
+ * below where the scheme actually breaks. So the assertion is stable at 1x and divergent at
+ * 10x, which brackets that measured band without straddling it. */
+{
+  const rmsEta = S => { let a = 0, n = 0; for (const x of S.eta){ a += x*x; n++; }
+                        return Math.sqrt(a/n); };
+  const growth = (mult, steps, nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL });
+    const rr = rnd(4242);
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++)
+      S.eta[S.ie(i,k)] = 1e-14*rr();
+    for (let c = 0; c < S.NU; c++) S.u[c] = 1e-12*rr();
+    for (let c = 0; c < S.NV; c++) S.v[c] = 1e-12*rr();
+    for (let c = 0; c < S.NW; c++) S.w[c] = 1e-12*rr();
+    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++) S.w[S.iw(i,k,0)] = 0;
+    for (let k = 0; k < nth; k++) for (let j = 0; j < nz; j++) S.u[S.iu(nr,k,j)] = 0;
+    S.refreshMetric();
+    const dt = mult*S.stableStep(), a0 = rmsEta(S);
+    for (let n = 0; n < steps; n++){
+      try { S.step(dt); } catch (e) { return { per: Infinity, at: n + 1, dt }; }
+      if (!Number.isFinite(rmsEta(S))) return { per: Infinity, at: n + 1, dt };
+    }
+    return { per: Math.pow(rmsEta(S)/a0, 1/steps), dt };
+  };
+  for (const [nr, nth, nz] of [[10, 16, 8], [14, 24, 10]]){
+    const tag = `${nr}x${nth}x${nz}`;
+    const at1 = growth(1, 200, nr, nth, nz), at10 = growth(10, 200, nr, nth, nz);
+    console.log(`       ${tag}: at stableStep = ${at1.dt.toExponential(3)} s, growth `
+      + `${at1.per.toFixed(6)} per step; at ten times it, `
+      + (Number.isFinite(at10.per) ? at10.per.toExponential(2) : `diverged by step ${at10.at}`));
+    ok(Number.isFinite(at1.per) && at1.per <= 1,
+       `${tag}: at stableStep() noise does not grow`,
+       `growth ${at1.per.toFixed(8)} per step over 200 steps`);
+    ok(!Number.isFinite(at10.per) || at10.per > 1.05,
+       `${tag}: and at ten times stableStep() it does, so the limit is not vacuous`,
+       Number.isFinite(at10.per) ? `growth ${at10.per.toExponential(3)} per step`
+                                 : `diverged at step ${at10.at}`);
+  }
+}
+
+section('9c. the energy, and what the solver does to it');
+/* With no drive and the smallest viscosity the constructor accepts, the total energy must be
+ * very nearly conserved and must only ever FALL: the advection redistributes it (6f), the
+ * projection is orthogonal in exactly this kinetic energy because `gradient` divides by the
+ * same control volumes, and viscosity removes it. A scheme that made energy would show here.
+ *
+ * The capillary part is gamma times the surface's excess area, whose variational derivative
+ * IS the curvature the surface pressure carries (7c) -- which is what makes the exchange
+ * between the hydrostatic, capillary and kinetic parts an identity rather than a coincidence.
+ *
+ * Run for a QUARTER PERIOD, which is what makes the exchange assertion mean anything: from
+ * rest the whole energy is hydrostatic and capillary, and a quarter period later it must be
+ * almost entirely kinetic. This gate first ran two hundred steps on a 14x24x10 grid, which
+ * is 5.714 ms of a period that is 88.860 ms long -- six per cent of it -- and the kinetic
+ * share reached 14.70%. That is not a weak result, it is the right answer to a question about
+ * six per cent of a period: sin^2(2*pi*0.0643) = 15.5%. It tested the drift and not the
+ * exchange, and no threshold on 14.70% could have told a real oscillator from a scheme that
+ * merely leaked a little energy into motion. A quarter period on 10x16x8 takes 377 steps and
+ * 17 s and reaches 99.20%. (99.19% when this was written; the capillary energy is computed
+ * from the surface's excess area directly since then, rather than as the difference of two
+ * areas that agree to thirteen digits -- see section 11, which is where the change and the
+ * defect behind it are measured. Drift -0.0343% became -0.0333% and the worst single-step
+ * rise 8.08e-3% became 1.52e-3% for the same reason.)
+ *
+ * THE KINETIC BRACKET IS TWO-SIDED because the lower half alone passes for the wrong reason.
+ * Injecting forward Euler on the surface oscillator -- eta advanced on the PRE-corrector Omega
+ * instead of the corrected one -- made the energy grow by a factor of 6.3e+7 over the quarter
+ * period, and `kemax > 0.9*e0.total` was then satisfied by the blow-up: 3.4e+9 times the initial
+ * total is indeed more than nine tenths of it. The other three assertions went red, so the gate
+ * caught that defect, but the assertion that names the exchange did not, and an assertion that
+ * can pass for the reason it exists to exclude is not one. Bracketed above by the same drift
+ * bound, it says what it means: the kinetic energy at a quarter period is between ninety per cent
+ * and a hundred and a half of the energy the surface started with. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const m = 3, kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const T = 2*Math.PI/omega;
+  const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL, nu: 1e-12 });
+  const AMP = 1e-7;
+  for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+    S.eta[S.ie(i,kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+  S.refreshMetric();
+  const e0 = S.energy();
+  const dt = S.stableStep();
+  const steps = Math.ceil(0.25*T/dt);
+  let worstRise = 0, kemax = 0;
+  let prev = e0.total;
+  for (let n = 0; n < steps; n++){
+    S.step(dt);
+    const e = S.energy();
+    kemax = Math.max(kemax, e.kinetic);
+    worstRise = Math.max(worstRise, (e.total - prev)/e0.total);
+    prev = e.total;
+  }
+  const e1 = S.energy();
+  const drift = (e1.total - e0.total)/e0.total;
+  console.log(`       a quarter of the ${(1e3*T).toFixed(3)} ms period in ${steps} steps: total `
+    + `${e0.total.toExponential(4)} -> ${e1.total.toExponential(4)} J, drift `
+    + `${(100*drift).toFixed(4)}%; kinetic reached ${(100*kemax/e0.total).toFixed(2)}% of it; `
+    + `worst single-step rise ${(100*worstRise).toExponential(2)}%`);
+  ok(Math.abs(drift) < 5e-3,
+     'the total energy is conserved to half a per cent over a quarter period with no drive '
+     + 'and a viscosity of 1e-12',
+     `drift ${(100*drift).toFixed(4)}% of ${e0.total.toExponential(4)} J`);
+  ok(drift <= 0,
+     'and it falls rather than rises, which is the only direction an undriven viscous fluid '
+     + 'can go',
+     `drift ${(100*drift).toFixed(4)}%`);
+  ok(kemax > 0.9*e0.total && kemax < 1.005*e0.total,
+     'and by the quarter period nearly all of it has become kinetic -- between ninety per cent '
+     + 'and the drift bound above it, so this is an oscillator exchanging the energy it started '
+     + 'with, neither a field sitting still nor one manufacturing motion',
+     `kinetic reached ${(100*kemax/e0.total).toFixed(2)}% of the initial total`);
+  ok(worstRise < 1e-3,
+     'and no single step raises it appreciably, which is what a scheme that made energy '
+     + 'would do',
+     `worst single-step rise ${(100*worstRise).toExponential(3)}%`);
+}
+
+section('10. the hoisted operators are the same operators, bit for bit');
+/* A step used to cost 146 ms on 16x24x10 and costs 85.6 ms now, and none of that came
+ * from changing what is computed. `divergence`, `gradient` and `omegaOf` are the
+ * conjugate-gradient matvec, so they run over a hundred times per step, and they were
+ * calling `this.ip/iu/iv/iw` -- each a wrapped modulo behind a method call -- six to
+ * fourteen times per cell. `colValueAtZ`, 38.5% of a step on its own, allocated a closure
+ * per call and searched the radial node list linearly inside it, from the start, every time;
+ * at the rim node that walk is the whole list. `Hat` allocated one three-field object per
+ * face per stencil point.
+ *
+ * All of that is repeated work, not arithmetic, and removing it must not move a single bit.
+ * So this section carries its OWN implementation of each operator -- the obvious loop,
+ * written against the public index accessors and `Hat` -- and asserts EXACT equality with
+ * the solver's, on a deformed surface with every degree of freedom excited. Not a tolerance:
+ * `===`. A refactor that changes the answer by one unit in the last place fails here.
+ *
+ * One such change was caught this way while the work was being done. Hoisting
+ * `(vv/rc[i])*Hdth[e]` out of omegaOf's inner loop as `vv*(Hdth[e]*(1/rc[i]))` is the same
+ * number in exact arithmetic and a different one in doubles -- two of the sixteen digits of
+ * eta[0] moved. The reassociation was reverted; the loop now hoists only what can be hoisted
+ * without reordering a single operation. */
+{
+  const S = new FaradayCell3D({ nr: 9, nth: 14, nz: 7, ...CELL });
+  deform(S, 0.4);
+  const r = rnd(97531);
+  for (let c = 0; c < S.NU; c++) S.u[c] = r();
+  for (let c = 0; c < S.NV; c++) S.v[c] = r();
+  for (let c = 0; c < S.NW; c++) S.w[c] = r();
+  for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++) S.u[S.iu(S.nr, k, j)] = 0;
+  S.axisU();
+  const nr = S.nr, nth = S.nth, nz = S.nz;
+
+  /* --- Hat, HatH and HatInto are one interpolation --- */
+  {
+    let worstH = 0, worstR = 0, worstT = 0, nPts = 0;
+    const o = new Float64Array(3);
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      for (let a = 0; a < F.rn.length; a++)
+        for (let k = 0; k < nth; k++){
+          const th = (k + F.thOff)*S.dth, rr = F.rn[a];
+          const ref = S.Hat(rr, th);
+          S.HatInto(rr, th, o);
+          worstH = Math.max(worstH, Math.abs(S.HatH(rr, th) - ref.H), Math.abs(o[0] - ref.H));
+          worstR = Math.max(worstR, Math.abs(o[1] - ref.Hr));
+          worstT = Math.max(worstT, Math.abs(o[2] - ref.Hth));
+          nPts++;
+        }
+    }
+    /* And at positions interior to BOTH interpolation directions, which the family nodes
+       are not and which is the whole reason this loop exists. A family node with thOff = 0.5
+       lands on a theta cell centre, so the bilinear azimuthal weight ft is exactly 0; a
+       family node in r lands on rx[a+1], so fr is exactly 1. Every one of the eight bilinear
+       products is therefore multiplied by zero at some node, and a probe made only of nodes
+       cannot see a wrong one. Measured: replacing h01 by h00 in HatHBr -- an outright wrong
+       azimuthal node -- left this section GREEN on a probe of family nodes plus positions at
+       theta = (k + 1/2) dtheta, because that theta is a cell centre too and ft was 0 at every
+       single point. The offsets below are deliberately not 0, 1/2 or 1. */
+    for (const rr of [0, 0.3*S.rc[0], S.rc[0], 0.5*(S.rc[0] + S.rc[1]),
+                      0.37*S.rc[1] + 0.63*S.rc[2], 0.77*S.R, S.R])
+      for (const off of [0, 0.19, 0.5, 0.73])
+        for (let k = 0; k < nth; k++){
+          const th = (k + off)*S.dth;
+          const ref = S.Hat(rr, th);
+          S.HatInto(rr, th, o);
+          worstH = Math.max(worstH, Math.abs(S.HatH(rr, th) - ref.H), Math.abs(o[0] - ref.H));
+          worstR = Math.max(worstR, Math.abs(o[1] - ref.Hr));
+          worstT = Math.max(worstT, Math.abs(o[2] - ref.Hth));
+          nPts++;
+        }
+    console.log(`       Hat vs HatH vs HatInto over ${nPts} positions: worst |dH| `
+      + `${worstH.toExponential(1)}, |dH_r| ${worstR.toExponential(1)}, |dH_theta| `
+      + `${worstT.toExponential(1)}`);
+    ok(worstH === 0 && worstR === 0 && worstT === 0,
+       'HatH and HatInto return exactly what Hat returns, at every family node and off them',
+       `worst differences ${worstH}, ${worstR}, ${worstT} over ${nPts} positions`);
+  }
+
+  /* --- the precomputed radial bracket is the one the linear search finds --- */
+  {
+    let wrong = 0, n = 0;
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      for (let a = 0; a < F.rn.length; a++){
+        let b = 0;
+        while (b < nr && S.rx[b+1] < F.rn[a]) b++;
+        if (b > nr) b = nr;
+        if (F.hBr[a] !== b) wrong++;
+        n++;
+      }
+    }
+    ok(wrong === 0,
+       'the precomputed radial bracket equals the search it replaces, for every family node',
+       `${wrong} of ${n} wrong`);
+  }
+
+  /* --- the stride base equals the index map --- */
+  {
+    let wrong = 0, n = 0;
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      const nJ = F.sn.length;
+      for (let a = 0; a < F.rn.length; a++)
+        for (let k = -nth; k < 2*nth; k++)
+          for (let b = 0; b < nJ; b++){
+            const base = (a*nth + S.kw(k))*F.stride;
+            if (base + b !== F.idx(a, k, b)) wrong++;
+            n++;
+          }
+    }
+    ok(wrong === 0,
+       'a column\'s base index plus its level is exactly the family\'s own index map, '
+       + 'including for wrapped and negative azimuthal indices',
+       `${wrong} of ${n} wrong`);
+  }
+
+  /* --- divergence --- */
+  {
+    const om = new Float64Array(S.NW);
+    S.omegaOf(S.u, S.v, S.w, om);
+    const got = S.divergence(S.u, S.v, om, new Float64Array(S.NP));
+    const want = new Float64Array(S.NP);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const kk = S.kw(k);
+        const HrIn = S.Hr[i*nth + kk], HrOut = S.Hr[(i+1)*nth + kk];
+        const HthIn = S.Hth[i*nth + kk], HthOut = S.Hth[i*nth + S.kw(k+1)];
+        for (let j = 0; j < nz; j++){
+          const radial = S.dth*S.dsc[j]*(
+              S.rf[i+1]*HrOut*S.u[S.iu(i+1, k, j)]
+            - S.rf[i]  *HrIn *S.u[S.iu(i,   k, j)]);
+          const azim = S.drc[i]*S.dsc[j]*(
+              HthOut*S.v[S.iv(i, k+1, j)]
+            - HthIn *S.v[S.iv(i, k,   j)]);
+          const vert = S.rc[i]*S.drc[i]*S.dth*(
+              om[S.iw(i, k, j+1)] - om[S.iw(i, k, j)]);
+          want[S.ip(i, k, j)] = radial + azim + vert;
+        }
+      }
+    let bad = 0;
+    for (let c = 0; c < want.length; c++) if (got[c] !== want[c]) bad++;
+    ok(bad === 0, 'divergence with the indices hoisted is bit for bit the plain loop',
+       `${bad} of ${want.length} differ; scale ${maxAbs(want).toExponential(3)}`);
+  }
+
+  /* --- omegaOf --- */
+  {
+    const got = S.omegaOf(S.u, S.v, S.w, new Float64Array(S.NW));
+    const want = new Float64Array(S.NW);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j <= nz; j++){
+          const c = S.iw(i, k, j), s = S.sf[j];
+          if (s === 0){ want[c] = S.w[c]; continue; }
+          const jm = j === 0 ? 0 : j - 1, jp = j === nz ? nz - 1 : j;
+          const uu = 0.25*(S.u[S.iu(i, k, jm)] + S.u[S.iu(i+1, k, jm)]
+                         + S.u[S.iu(i, k, jp)] + S.u[S.iu(i+1, k, jp)]);
+          const vv = 0.25*(S.v[S.iv(i, k, jm)] + S.v[S.iv(i, k+1, jm)]
+                         + S.v[S.iv(i, k, jp)] + S.v[S.iv(i, k+1, jp)]);
+          want[c] = S.w[c] - s*(uu*S.Hdr[S.ie(i,k)] + (vv/S.rc[i])*S.Hdth[S.ie(i,k)]);
+        }
+    let bad = 0;
+    for (let c = 0; c < want.length; c++) if (got[c] !== want[c]) bad++;
+    ok(bad === 0, 'omegaOf with the slope term inlined is bit for bit the plain loop',
+       `${bad} of ${want.length} differ; scale ${maxAbs(want).toExponential(3)}`);
+  }
+
+  /* --- gradient, all three components --- */
+  {
+    const gu = new Float64Array(S.NU), gv = new Float64Array(S.NV), gw = new Float64Array(S.NW);
+    const q = new Float64Array(S.NP);
+    const rq = rnd(24680);
+    for (let c = 0; c < q.length; c++) q[c] = rq();
+    S.gradient(q, gu, gv, gw);
+    const wu = new Float64Array(S.NU), wv = new Float64Array(S.NV), ww = new Float64Array(S.NW);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const kk = S.kw(k);
+        const HrIn = S.Hr[i*nth + kk], HrOut = S.Hr[(i+1)*nth + kk];
+        const HthIn = S.Hth[i*nth + kk], HthOut = S.Hth[i*nth + S.kw(k+1)];
+        for (let j = 0; j < nz; j++){
+          const qc = q[S.ip(i, k, j)];
+          wu[S.iu(i+1, k, j)] += qc*S.dth*S.dsc[j]*S.rf[i+1]*HrOut;
+          wu[S.iu(i,   k, j)] -= qc*S.dth*S.dsc[j]*S.rf[i]  *HrIn;
+          wv[S.iv(i, k+1, j)] += qc*S.drc[i]*S.dsc[j]*HthOut;
+          wv[S.iv(i, k,   j)] -= qc*S.drc[i]*S.dsc[j]*HthIn;
+          ww[S.iw(i, k, j+1)] += qc*S.rc[i]*S.drc[i]*S.dth;
+          ww[S.iw(i, k, j  )] -= qc*S.rc[i]*S.drc[i]*S.dth;
+        }
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = S.ie(i, k);
+        const cr = -0.25*S.Hdr[e], ct = -0.25*S.Hdth[e]/S.rc[i];
+        for (let j = 1; j <= nz; j++){
+          const raw = ww[S.iw(i, k, j)], s = S.sf[j];
+          const jm = j - 1, jp = j === nz ? nz - 1 : j;
+          const du = cr*s*raw, dv = ct*s*raw;
+          wu[S.iu(i, k, jm)] += du; wu[S.iu(i+1, k, jm)] += du;
+          wu[S.iu(i, k, jp)] += du; wu[S.iu(i+1, k, jp)] += du;
+          wv[S.iv(i, k, jm)] += dv; wv[S.iv(i, k+1, jm)] += dv;
+          wv[S.iv(i, k, jp)] += dv; wv[S.iv(i, k+1, jp)] += dv;
+        }
+      }
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++){ wu[S.iu(0, k, j)] = 0; wu[S.iu(nr, k, j)] = 0; }
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = S.Hr[i*nth + S.kw(k)];
+        for (let j = 0; j < nz; j++)
+          wu[S.iu(i, k, j)] /= -(S.rf[i]*S.drf[i]*S.dth*Hf*S.dsc[j]);
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const Hf = S.Hth[i*nth + S.kw(k)];
+        for (let j = 0; j < nz; j++)
+          wv[S.iv(i, k, j)] /= -(S.rc[i]*S.drc[i]*S.dth*Hf*S.dsc[j]);
+      }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const H = S.H[S.ie(i, k)];
+        ww[S.iw(i, k, 0)] = 0;
+        for (let j = 1; j <= nz; j++)
+          ww[S.iw(i, k, j)] /= -(S.rc[i]*S.drc[i]*S.dth*H*S.dsf[j]);
+      }
+    let bu = 0, bv = 0, bw = 0;
+    for (let c = 0; c < wu.length; c++) if (gu[c] !== wu[c]) bu++;
+    for (let c = 0; c < wv.length; c++) if (gv[c] !== wv[c]) bv++;
+    for (let c = 0; c < ww.length; c++) if (gw[c] !== ww[c]) bw++;
+    ok(bu === 0 && bv === 0 && bw === 0,
+       'gradient with the indices hoisted is bit for bit the plain loop, in all three '
+       + 'components including the slope transpose and the volume divisions',
+       `${bu}, ${bv}, ${bw} differ of ${wu.length}, ${wv.length}, ${ww.length}; scales `
+       + `${maxAbs(wu).toExponential(2)}, ${maxAbs(wv).toExponential(2)}, `
+       + `${maxAbs(ww).toExponential(2)}`);
+  }
+
+  /* --- and the reconstruction primitives, against the closure form they replace --- */
+  {
+    const f = new Float64Array(S.NP);
+    const rf2 = rnd(13579);
+    for (let c = 0; c < f.length; c++) f[c] = rf2();
+    const F = S.FAM.p, nJ = F.sn.length;
+    /* the plain form: a closure over the index map, the linear search inside Hat */
+    const plain = (a, k, z, lev, bracket) => {
+      const half = S.nth >> 1;
+      let aa = a, kk = k, sign = 1;
+      if (a < 0){ aa = -1 - a; kk = k + half; sign = F.axisSign; }
+      const th = (kk + F.thOff)*S.dth;
+      const H = S.Hat(F.rn[aa], th).H;
+      const ss = z/H;
+      const at = b => f[F.idx(aa, kk, b)];
+      if (nJ === 1) return sign*at(0);
+      const n = nJ < 4 ? nJ : 4;
+      let j0;
+      if (bracket){
+        let lo = 0, hi = nJ - 1;
+        while (hi - lo > 1){ const m = (lo + hi) >> 1; if (F.sn[m] <= ss) lo = m; else hi = m; }
+        j0 = lo - 1;
+      } else j0 = (lev === undefined ? 1 : lev) - 1;
+      if (j0 + n > nJ) j0 = nJ - n;
+      if (j0 < 0) j0 = 0;
+      let v = 0;
+      for (let i = 0; i < n; i++){
+        let L = 1;
+        for (let m = 0; m < n; m++)
+          if (m !== i) L *= (ss - F.sn[j0 + m])/(F.sn[j0 + i] - F.sn[j0 + m]);
+        v += at(j0 + i)*L;
+      }
+      return sign*v;
+    };
+    let bad = 0, n = 0, scale = 0;
+    for (let a = -3; a < nr; a++)
+      for (let k = 0; k < nth; k++)
+        for (let lev = 0; lev < nJ; lev++)
+          for (const br of [false, true]){
+            const H = S.H[S.ie(a < 0 ? -1 - a : a, a < 0 ? k + (nth >> 1) : k)];
+            for (const frac of [0.07, 0.41, 0.93]){
+              const z = frac*H;
+              const g = S.colValueAtZ(f, F, a, k, z, lev, br);
+              const w = plain(a, k, z, lev, br);
+              if (g !== w) bad++;
+              scale = Math.max(scale, Math.abs(w));
+              n++;
+            }
+          }
+    ok(bad === 0,
+       'colValueAtZ without the closure or the linear search is bit for bit the form with '
+       + 'them, anchored and bracketed, at the axis reflection and away from it',
+       `${bad} of ${n} differ; scale ${scale.toExponential(3)}`);
+  }
+}
+
+section('11. the excess area, which is not the difference of two areas');
+/* `energy().capillary` is gamma times the area the surface has in excess of flat. It was
+ * `gamma*(surfaceArea() - PI*R*R)`, and that subtraction has no significant digits at small
+ * amplitude: at eta = 1e-9 m the two operands are 4.618632074629e-4 and their difference is
+ * 1.2e-18, twenty times a double's own resolution at that magnitude. Measured, the excess
+ * came out 1.1926e-18 where its own amplitude scaling demands 1.1596e-18 -- 2.8% wrong -- and
+ * the total energy then drifted +25.256% over a quarter period on a grid where the identical
+ * run at eta = 1e-7 drifts -0.0356%.
+ *
+ * NOTHING WAS WRONG WITH THE SOLVER, and that is why this section exists. The drift measured
+ * -0.0344, -0.0349, -0.0356 per cent at eta = 1e-5, 1e-6 and 1e-7: flat over three decades,
+ * which is what a linear regime must give. Gate 9c happened to be written at 1e-7, inside the
+ * range where the diagnostic still had digits, so it never saw any of this -- and a diagnostic
+ * that silently loses its significance below an amplitude nothing states is worse than a wrong
+ * one, because every energy claim made with it is conditional on a bound no one wrote down.
+ *
+ * `surfaceExcessArea` sums rc drc dtheta (sqrt(1+q) - 1) cell by cell as q/(1 + sqrt(1+q)),
+ * the same number in exact arithmetic and one that keeps its digits for every q. The two
+ * assertions here are that it agrees with the difference form where the difference form still
+ * works, and that it goes on working where that one does not. */
+{
+  const areaOf = S => S.surfaceArea() - Math.PI*S.R*S.R;
+
+  /* --- at a deformation where the difference form is well conditioned, they agree --- */
+  {
+    const S = new FaradayCell3D({ nr: 12, nth: 20, nz: 8, ...CELL });
+    deform(S, 0.45);
+    const ex = S.surfaceExcessArea(), df = areaOf(S);
+    const rel = Math.abs(ex - df)/Math.abs(df);
+    console.log(`       at eta/h = 0.45: excess ${ex.toExponential(12)}, difference `
+      + `${df.toExponential(12)}, relative gap ${rel.toExponential(2)}`);
+    ok(rel < 1e-11,
+       'at a large deformation the excess area equals surfaceArea() minus pi R^2, so the two '
+       + 'are the same quantity and not two different discretisations',
+       `relative gap ${rel.toExponential(3)}`);
+    /* And adding the flat area back returns surfaceArea itself, to the round-off of a sum of
+       nr*nth terms and no better. The bound here was 1e-15 and that expectation was wrong: it
+       failed at 1.07e-15, which is about ten units in the last place of 4.65e-4 accumulated
+       over 240 cells, and ten ulps over 240 terms is what a correct sum does. 1e-14 is
+       roughly a hundred ulps, which is loose enough to be true and tight enough that the
+       injections in this section still break it -- weighting one cell by the face radius
+       instead of the cell centre reads 6.8e-2, thirteen orders away. */
+    const back = ex + Math.PI*S.R*S.R;
+    const rel2 = Math.abs(back - S.surfaceArea())/S.surfaceArea();
+    const ulp = Math.abs(S.surfaceArea())*Number.EPSILON;
+    ok(rel2 < 1e-14,
+       'and adding pi R^2 back returns surfaceArea to the round-off of a 240-term sum, so the '
+       + 'curvature identity that differentiates surfaceArea is untouched',
+       `${back.toExponential(15)} against ${S.surfaceArea().toExponential(15)}: relative `
+       + `${rel2.toExponential(2)}, about `
+       + `${(rel2*S.surfaceArea()/ulp).toFixed(1)} units in the last place`);
+  }
+
+  /* --- and it keeps its digits where the difference form has none --- *
+   * The excess area of a fixed shape scales exactly as the square of its amplitude in the
+   * small-slope limit, so halving the amplitude must quarter it. That ratio is the reference,
+   * computed from calculus and not from either implementation. Ten decades of amplitude, down
+   * to where the difference of two areas is pure round-off. */
+  {
+    const S = new FaradayCell3D({ nr: 12, nth: 20, nz: 8, ...CELL });
+    const amps = [1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11];
+    const ex = [], df = [];
+    for (const a of amps){
+      deform(S, a);
+      ex.push(S.surfaceExcessArea());
+      df.push(areaOf(S));
+    }
+    let worstEx = 0, worstDf = 0;
+    for (let i = 1; i < amps.length; i++){
+      const want = Math.pow(amps[i]/amps[i-1], 2);
+      worstEx = Math.max(worstEx, Math.abs(ex[i]/ex[i-1]/want - 1));
+      worstDf = Math.max(worstDf, Math.abs(df[i]/df[i-1]/want - 1));
+    }
+    console.log(`       amplitude^2 scaling over ${amps[0].toExponential(0)} .. `
+      + `${amps[amps.length-1].toExponential(0)} of h: worst relative error, excess form `
+      + `${worstEx.toExponential(2)}, difference form ${worstDf.toExponential(2)}`);
+    ok(worstEx < 1e-6,
+       'the excess area scales as the square of the amplitude over eight decades, which is '
+       + 'the small-slope law and is what the capillary energy has to obey',
+       `worst departure ${worstEx.toExponential(3)}`);
+    ok(worstDf > 1e-3,
+       'while the difference of two areas does not, which is why it was replaced -- this is '
+       + 'the defect, measured, not an argument that one existed',
+       `worst departure ${worstDf.toExponential(3)}, against the excess form's `
+       + `${worstEx.toExponential(3)}`);
+  }
+
+  /* --- and the energy's drift no longer depends on the amplitude --- *
+   * The check that matters, because it is the one the defect was found through: released from
+   * rest in a single linear mode, the fractional energy drift over a fixed physical time is a
+   * property of the SCHEME and cannot depend on the amplitude it is applied to. */
+  {
+    const K = require(join(here, '..', 'faraday', 'kernel.js'));
+    const m = 3, kR = K.jpZeroNear(m, m + 2), k = kR/CELL.R;
+    const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+    const tEnd = 0.05*(2*Math.PI/omega);
+    const drifts = [];
+    for (const AMP of [1e-5, 1e-7, 1e-9]){
+      const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+        S.eta[S.ie(i,kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+      S.refreshMetric();
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      const e0 = S.energy().total;
+      for (let n = 0; n < steps; n++) S.step(dt);
+      drifts.push((S.energy().total - e0)/e0);
+    }
+    const spread = Math.max(...drifts) - Math.min(...drifts);
+    console.log(`       drift at eta = 1e-5, 1e-7, 1e-9 m: `
+      + drifts.map(d => (100*d).toFixed(5) + '%').join(', ')
+      + `; spread ${(100*spread).toExponential(2)} points`);
+    ok(Math.abs(spread) < 1e-5,
+       'the energy drift over a fixed time is the same at 1e-5, 1e-7 and 1e-9 m of elevation, '
+       + 'so it is a property of the scheme and not of the amplitude -- which is exactly what '
+       + 'the difference-of-areas form could not say',
+       `spread ${(100*spread).toExponential(3)} percentage points across four decades`);
+  }
+}
+
+section('12. a quarter period\'s energy decay, against an independently written solver');
+/* THE CHECK THE WHOLE FILE EXISTS TO PASS. Every other section compares the solver with
+ * calculus, with an identity it must satisfy, or with itself. This one compares it with
+ * `dns/faraday-disc.js`: a different solver, written separately, linear rather than
+ * nonlinear, one azimuthal mode at a time rather than all of them, and -- the part that
+ * makes the comparison worth anything -- in a DIFFERENT VERTICAL COORDINATE. That one solves
+ * in z on a fixed grid with the surface conditions at the top; this one solves in
+ * sigma = z/H on a grid that follows the surface. Nothing is shared but the physics.
+ *
+ * The quantity is the total mechanical energy's fractional decay over a fixed physical window,
+ * `-ln(E/E0)/(2t)`, from a state released from rest in a single Bessel mode. It is chosen
+ * because there is NO closed form for it: the frequency has one and gate 9 already checks
+ * against it, but the dissipation is set by the Stokes layers at the floor, the sidewall and
+ * the surface, and the only reference for it is another solver. The disc gate measures the
+ * exponent of its own nu-dependence at 0.755 -- between the bulk term's 1 and a pure boundary
+ * layer's 1/2 -- so most of this number comes from those layers, which is to say from
+ * precisely the part of the discretisation the two codes do differently.
+ *
+ * IT IS NOT THE ASYMPTOTIC MODAL DAMPING RATE, and this section said it was until the number
+ * was measured. Over a quarter period the energy is still sloshing between kinetic and
+ * potential and the Stokes layers are still forming, so the ratio is a transient. Measured on
+ * dns/faraday-disc.js at 20x12, the same figure over lengthening windows:
+ *
+ *      window   0.125T   0.25T    0.5T     1T      2T      4T      8T
+ *      rate     0.641    1.334    1.242    1.468   1.522   1.553   1.565
+ *
+ * and that code's own Floquet multiplier for the same grid gives 1.513. The quarter-period
+ * value is 1.334 -- which is exactly the number this section compares, and 15 per cent below
+ * where the sequence is heading.
+ *
+ * That does not weaken the comparison and arguably sharpens it. What is compared is a
+ * well-defined functional of one initial-value problem: identical initial condition, identical
+ * physical window, matched nr and nz. It includes the transient formation of the boundary
+ * layers, which is where two discretisations of a viscous free surface differ most, rather
+ * than only an asymptotic eigenvalue. What it must not be called is the modal damping rate,
+ * and S8c is where the asymptotic quantity gets compared, against `floquetDisc`.
+ *
+ * Measured over the m = 3, n = 1 free-contact mode at eta = 1e-9 m, a quarter of its 88.860 ms
+ * period, matching nr and nz:
+ *
+ *      grid        disc        cell3d      gap
+ *      12x8        1.26121     1.33232     +5.64%
+ *      14x10       1.29079     1.32578     +2.71%
+ *      16x10       1.30927     1.32165     +0.95%
+ *      20x12       1.33430     1.33377     -0.04%
+ *      24x14       1.35070     1.34333     -0.55%
+ *
+ * The last two are outside this gate's time budget -- 24x40x14 alone is 862 s -- and are
+ * recorded in dns/PLAN-cell3d.md. The first three are here, and what they assert is the gap
+ * and its convergence. Each code is still moving in its own grid over that range (the disc
+ * from 1.261 to 1.351, this solver from 1.332 to 1.343), so agreement to four parts in ten
+ * thousand at 20x12 is the two of them converging to the same limit from opposite sides and
+ * not either one being right.
+ *
+ * m = 2 was measured too: +6.13% at 16x10 and +3.35% at 20x12, also converging.
+ *
+ * WHAT THIS GATE CAN AND CANNOT RESOLVE, measured by injection rather than asserted. Making
+ * the floor and sidewall free-slip instead of no-slip -- removing the Stokes layers that the
+ * disc gate's own nu-exponent of 0.755 says carry most of the damping -- takes the rate from
+ * 1.326 to 0.526, a 59 per cent gap, and fails at every pair. Halving the viscosity in the
+ * RADIAL predictor alone moves it by about three per cent, and that was GREEN on the first
+ * version of this section, which stopped at 14x24x10 with a four per cent window: 1.32578
+ * became 1.28233 and the window swallowed it. It also made the coarse pair's agreement
+ * BETTER, so a two-point convergence test passed as well. Both holes are why the third pair
+ * is here -- at 16x24x10 the clean gap is +0.95% and the defect reads -2.47%, so a two per
+ * cent window separates them -- and why the convergence assertion now runs over all three.
+ * The honest statement of this gate's power is: it resolves a defect of a few per cent in the
+ * damping and not one of a few tenths.
+ *
+ * ONE DEFECT WAS FOUND BY THIS COMPARISON AND IT WAS IN THE ENERGY DIAGNOSTIC, not the
+ * solver: see section 11. The first run of this section reported the 3-D solver's rate as
+ * -2.034 s^-1 -- a growth -- because `energy().capillary` was the difference of two areas
+ * agreeing to thirteen digits and eta = 1e-9 m is below where that difference has any. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const { FaradayDisc } = require(join(here, 'faraday-disc.js'));
+  const m = 3;
+  const jp = K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0], k = jp/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const tEnd = 0.25*(2*Math.PI/omega);
+  const AMP = 1e-9;
+
+  const discRate = (nr, nz) => {
+    const S = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free', accel: 0, omegaD: 1 });
+    for (let i = 0; i < nr; i++) S.eta[i] = AMP*K.besselJ(m, k*S.rc[i]);
+    const dt = S.stableStep(0.4), steps = Math.round(tEnd/dt);
+    const E0 = S.energy().total;
+    for (let s = 0; s < steps; s++) S.step(dt);
+    return -Math.log(S.energy().total/E0)/(2*steps*dt);
+  };
+  const cellRate = (nr, nth, nz) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: 'free' });
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i, kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    S.refreshMetric();
+    const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+    const E0 = S.energy().total;
+    for (let s = 0; s < steps; s++) S.step(dt);
+    return -Math.log(S.energy().total/E0)/(2*steps*dt);
+  };
+
+  /* `tEnd` is a quarter of the mode's linear period. Both solvers get exactly this window and
+     exactly this initial condition; the figure is that window's decay and not an eigenvalue. */
+  const gaps = [], rates = [];
+  for (const [nr, nth, nz] of [[12, 20, 8], [14, 24, 10], [16, 24, 10]]){
+    const d = discRate(nr, nz), c = cellRate(nr, nth, nz);
+    gaps.push(c/d - 1); rates.push([d, c]);
+    console.log(`       ${nr}x${nz} disc ${d.toFixed(5)} s^-1 vs ${nr}x${nth}x${nz} cell3d `
+      + `${c.toFixed(5)} s^-1: ${(100*(c/d - 1)).toFixed(2)}%`);
+  }
+  ok(rates.every(([d, c]) => d > 0 && c > 0),
+     'both solvers report a decay and not a growth, which is the sign the energy diagnostic '
+     + 'got wrong before section 11 fixed it',
+     rates.map(([d, c]) => `${d.toFixed(4)}/${c.toFixed(4)}`).join(', '));
+  ok(Math.abs(gaps[0]) < 0.08,
+     'at 12x20x8 the nonlinear surface-following solver agrees with the linear fixed-grid one '
+     + 'on a quarter period\'s energy decay to within eight per cent',
+     `${(100*gaps[0]).toFixed(3)}%`);
+  ok(Math.abs(gaps[1]) < 0.04,
+     'and at 14x24x10 to within four per cent -- two codes sharing nothing but the physics, '
+     + 'on a quantity that has no closed form',
+     `${(100*gaps[1]).toFixed(3)}%`);
+  ok(Math.abs(gaps[2]) < 0.02,
+     'and at 16x24x10 to within two per cent, which is the window that resolves a three per '
+     + 'cent error in one component\'s viscous term',
+     `${(100*gaps[2]).toFixed(3)}%`);
+  ok(Math.abs(gaps[2]) < Math.abs(gaps[1]) && Math.abs(gaps[1]) < Math.abs(gaps[0]),
+     'and refining both grids narrows the gap at every step, so they are converging to one '
+     + 'another rather than happening to be close on one grid',
+     gaps.map(g => (100*g).toFixed(2) + '%').join(' -> '));
+  const bulk = 2*CELL.nu*k*k;
+  ok(rates[2][1] > 3*bulk,
+     'and the decay is several times the bulk term 2 nu k^2, so the floor, sidewall and '
+     + 'surface Stokes layers are present in it -- which is what makes the agreement above a '
+     + 'statement about the boundary treatment and not about the interior',
+     `${rates[1][1].toFixed(4)} against 2 nu k^2 = ${bulk.toFixed(4)} s^-1`);
+}
+
+section('13. the nonlinearity, doing the thing a linear solver cannot');
+/* This solver exists because dns/faraday-disc.js cannot answer "what do you see". That one is
+ * linear and per-mode: it answers "does this mode grow" to eight digits and stays the
+ * instrument for the threshold, because Floquet stability of the flat state IS the linear
+ * problem. What it cannot produce is a saturated finite-amplitude figure, because a growing
+ * linear mode grows without bound, and it cannot produce a pattern made of several m at once,
+ * because nothing in it couples them.
+ *
+ * So the two claims here are the reason for the whole file, and both are falsifiable by a
+ * SCALING LAW rather than by a threshold on a value -- which matters, because the size of a
+ * harmonic depends on the grid and the window, while its exponent in the amplitude does not.
+ *
+ * A quadratic nonlinearity acting on cos(m theta) gives cos^2 = (1 + cos 2m theta)/2, so a
+ * single m = 3 mode must generate m = 0 and m = 6 at order A^2 and m = 9 at order A^3. Two
+ * modes m = 2 and m = 3 must generate their SUM and DIFFERENCE, m = 5 and m = 1, at order
+ * a2 a3 -- and those two channels are reachable from neither parent alone, which is what makes
+ * removing a parent the sharpest test there is. A linear solver returns zero for every one of
+ * them, exactly, and so does this one before the first step: the tables below start at 1e-22
+ * and 1e-23.
+ *
+ * m = 1 is worth noticing among the products. dns/faraday-disc.js REFUSES m = 1 -- its radial
+ * singular group -[(m^2+1)u + 2m v]/r^2 stays finite there only through a cancellation its
+ * flux form does not impose -- and here m = 1 arrives on its own out of the coupling, with no
+ * special case anywhere, because S3 made the axis a reflection rather than a boundary.
+ *
+ * WHAT THIS SECTION DOES NOT SAY, measured rather than reasoned about. An exponent is a
+ * STRUCTURAL property: it says a quadratic coupling exists, and it is blind to which term
+ * supplies it and to how large the result is. Two injections confirm that directly.
+ * Deleting the advective term from all three predictors moved the harmonics by under three
+ * per cent -- 4.930e-9 against 4.896e-9 for m = 0 -- and left every exponent right, because at
+ * eta/h = 0.2 the advective term is one part in a hundred of the inertia and its share of a
+ * quadratic harmonic is a correction to a correction. Freezing the metric flat, so the domain
+ * stops following the surface, cut the harmonics by a factor of 28 -- 1.769e-10 for m = 0 --
+ * and the exponents still read 1.998/2.000 and the coupling still halved on halving either
+ * parent. So the harmonics at this amplitude come from the surface: the metric H = h + eta, the
+ * full mean curvature, the traction on a sloped face.
+ *
+ * That is not a fault in the claim, which is that this solver couples modes where the linear
+ * one cannot. It is a limit on what the claim covers, and section 14 exists because of it:
+ * THAT `step` uses each term is a different question from whether the answer is nonlinear, and
+ * the first injection above passed all 239 checks before section 14 was written. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const kOf = m => K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0]/CELL.R;
+  /* the r-weighted L2 norm of eta's m-th azimuthal component */
+  const modeNorm = (S, m) => {
+    let s = 0;
+    for (let i = 0; i < S.nr; i++){
+      let c = 0, d = 0;
+      for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth, e = S.eta[S.ie(i, kk)];
+        c += e*Math.cos(m*th); d += e*Math.sin(m*th);
+      }
+      const amp = (m === 0 ? c/S.nth : 2*Math.sqrt(c*c + d*d)/S.nth);
+      s += amp*amp*S.rc[i]*S.drc[i];
+    }
+    return Math.sqrt(s);
+  };
+
+  /* --- one mode in, its own harmonics out, at the right powers of the amplitude --- */
+  {
+    const m = 3, k = kOf(m);
+    const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+    const tEnd = 0.1*(2*Math.PI/omega);
+    const rels = [0.2, 0.1, 0.05];
+    const rows = [], seeded = [];
+    for (const rel of rels){
+      const S = new FaradayCell3D({ nr: 10, nth: 24, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+        S.eta[S.ie(i, kk)] = rel*S.h*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+      S.refreshMetric();
+      seeded.push([0, 6, 9].map(mm => modeNorm(S, mm)));
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      for (let n = 0; n < steps; n++) S.step(dt);
+      rows.push([0, 3, 6, 9].map(mm => modeNorm(S, mm)));
+      console.log(`       eta/h = ${rel}: m = 0, 3, 6, 9 -> `
+        + rows[rows.length-1].map(x => x.toExponential(3)).join('  '));
+    }
+    /* the exponent, from halving the amplitude twice: 2^p for a mode of order A^p */
+    const exps = [];
+    for (const col of [0, 1, 2, 3]){
+      const r1 = rows[0][col]/rows[1][col], r2 = rows[1][col]/rows[2][col];
+      exps.push([Math.log2(r1), Math.log2(r2)]);
+    }
+    console.log(`       exponent in the amplitude, from each halving: `
+      + exps.map((e, i) => `m=${[0,3,6,9][i]} ${e[0].toFixed(3)}/${e[1].toFixed(3)}`).join('  '));
+    ok(exps[1].every(e => Math.abs(e - 1) < 0.05),
+       'the seeded m = 3 is linear in the amplitude, as the mode that was put in must be',
+       `exponent ${exps[1][0].toFixed(4)} and ${exps[1][1].toFixed(4)}`);
+    ok(exps[0].every(e => Math.abs(e - 2) < 0.15) && exps[2].every(e => Math.abs(e - 2) < 0.15),
+       'and m = 0 and m = 6 appear at the SQUARE of it, which is a quadratic nonlinearity '
+       + 'acting on cos(3 theta) and is what a linear solver returns zero for',
+       `m=0 ${exps[0].map(e => e.toFixed(4)).join(', ')}; `
+       + `m=6 ${exps[2].map(e => e.toFixed(4)).join(', ')}`);
+    ok(exps[3].every(e => e > 2.5 && e < 3.6),
+       'and m = 9 at the CUBE of it, which no quadratic term can produce -- measured at 2.67 '
+       + 'cells per azimuthal wavelength, so the exponent is bracketed rather than pinned',
+       `m=9 ${exps[3].map(e => e.toFixed(4)).join(', ')}`);
+    const floor = Math.max(...seeded.flat());
+    ok(Math.min(rows[2][0], rows[2][2]) > 1e6*floor,
+       'and all of it grew from nothing: the harmonics are at 1e-22 before the first step, '
+       + 'thirteen orders below where they end up, so they are generated and not seeded',
+       `seeded at most ${floor.toExponential(2)}, smallest harmonic after `
+       + `${Math.min(rows[2][0], rows[2][2]).toExponential(2)}`);
+  }
+
+  /* --- two modes in, their sum and difference out, bilinear in the pair --- */
+  {
+    const k2 = kOf(2), k3 = kOf(3);
+    const w3 = Math.sqrt((CELL.g*k3 + CELL.gamma*k3*k3*k3/CELL.rho)*Math.tanh(k3*CELL.h));
+    const tEnd = 0.1*(2*Math.PI/w3);
+    const run = (r2, r3) => {
+      const S = new FaradayCell3D({ nr: 10, nth: 24, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth;
+        S.eta[S.ie(i, kk)] = r2*S.h*K.besselJ(2, k2*S.rc[i])*Math.cos(2*th)
+                           + r3*S.h*K.besselJ(3, k3*S.rc[i])*Math.cos(3*th);
+      }
+      S.refreshMetric();
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      for (let n = 0; n < steps; n++) S.step(dt);
+      return { m1: modeNorm(S, 1), m5: modeNorm(S, 5) };
+    };
+    const both = run(0.1, 0.1), half2 = run(0.05, 0.1), half3 = run(0.1, 0.05);
+    const only3 = run(0, 0.1), only2 = run(0.1, 0);
+    for (const [tag, r] of [['a2=a3=0.1h', both], ['a2 halved', half2], ['a3 halved', half3],
+                            ['m=3 alone', only3], ['m=2 alone', only2]])
+      console.log(`       ${tag.padEnd(11)}: m = 1 ${r.m1.toExponential(3)}, m = 5 `
+        + `${r.m5.toExponential(3)}`);
+    const r1a = both.m1/half2.m1, r1b = both.m1/half3.m1;
+    const r5a = both.m5/half2.m5, r5b = both.m5/half3.m5;
+    console.log(`       halving either parent divides the child by: m = 1 `
+      + `${r1a.toFixed(4)}, ${r1b.toFixed(4)};  m = 5 ${r5a.toFixed(4)}, ${r5b.toFixed(4)}`);
+    ok([r1a, r1b, r5a, r5b].every(r => Math.abs(r - 2) < 0.1),
+       'm = 1 and m = 5 are bilinear in the pair that makes them: halving EITHER parent halves '
+       + 'the child, which is the difference and the sum of two modes and nothing else',
+       `${[r1a, r1b, r5a, r5b].map(r => r.toFixed(4)).join(', ')} against 2`);
+    ok(Math.max(only3.m1, only3.m5, only2.m1, only2.m5) < 1e-6*Math.min(both.m1, both.m5),
+       'and with either parent removed they vanish to round-off, six orders down at least, so '
+       + 'they come from the product and not from each mode separately',
+       `alone at most ${Math.max(only3.m1, only3.m5, only2.m1, only2.m5).toExponential(2)}, `
+       + `together at least ${Math.min(both.m1, both.m5).toExponential(2)}`);
+    ok(both.m1 > 0 && only2.m1 < 1e-20,
+       'and m = 1 in particular arrives with no special case anywhere -- the solver next door '
+       + 'refuses m = 1 outright, and here it is a product of the axis being a reflection',
+       `m = 1 reaches ${both.m1.toExponential(3)} from a seed of ${only2.m1.toExponential(2)}`);
+  }
+}
+
+section('14. step() is the composition it documents, term for term');
+/* THIS SECTION EXISTS BECAUSE THE SUITE FAILED TO NOTICE THE ADVECTIVE TERM BEING DELETED.
+ * Injected as a regeneration test of section 13 -- `au`, `av` and `aw` removed from all three
+ * predictors, so `step` integrates the viscous term alone and nothing else changes -- and all
+ * 239 checks passed. The harmonics moved by under three per cent and every exponent stayed
+ * right: 2.001/2.000 for m = 0, 2.000/2.000 for m = 6, 2.997/2.999 for m = 9.
+ *
+ * Nothing was wrong with section 13's reasoning, and the arithmetic says why it could not see
+ * this. At eta/h = 0.2 the surface velocity is of order omega eta ~ 2e-2 m/s, so u.grad u is
+ * of order u^2/R ~ 3e-2 m/s^2, against a gravity-capillary acceleration of omega^2 eta ~
+ * 3 m/s^2 -- one part in a hundred, and its contribution to a QUADRATIC harmonic is a
+ * correction to a correction. The harmonics at that amplitude come from the surface: the
+ * metric H = h + eta, the full mean curvature, the traction on a sloped face. Section 13's
+ * claim -- that this solver is nonlinear where the linear one is not -- is true, and it is not
+ * the claim that every nonlinear term is present.
+ *
+ * `advect` itself is thoroughly gated in section 6: the net-flux identity to 1e-16, exact
+ * telescoping, the curvature pair cancelling to 7e-18, second order against calculus, seven
+ * injected defects all red. What had no gate at all was that `step` USES it. That is the gap
+ * this section closes, and it closes it for every other term at the same time: the section
+ * reassembles one step from the solver's own public operators, in the order the file
+ * documents, and asserts the result is bit for bit what `step` produces.
+ *
+ * It is a composition check and not a physics check -- the physics of each operator is
+ * sections 1 to 8, and the physics of the assembly is section 9 against the dispersion
+ * relation and section 12 against another solver. What it catches is a term dropped, a term
+ * added, a term scaled, the surface pressure moved out of the projection, the axis prescribed
+ * after Omega instead of before, or the kinematic update taken from w instead of the corrected
+ * Omega. Every one of those is a defect the rest of the suite either misses or only sees as a
+ * few per cent somewhere. */
+{
+  const S = new FaradayCell3D({ nr: 8, nth: 16, nz: 7, ...CELL });
+  const T = new FaradayCell3D({ nr: 8, nth: 16, nz: 7, ...CELL });
+  /* a state with everything excited: a deformed surface and a divergent velocity field, so no
+     term can be zero by accident */
+  for (const X of [S, T]){
+    deform(X, 0.35);
+    const r = rnd(80808);
+    for (let c = 0; c < X.NU; c++) X.u[c] = 1e-3*r();
+    for (let c = 0; c < X.NV; c++) X.v[c] = 1e-3*r();
+    for (let c = 0; c < X.NW; c++) X.w[c] = 1e-3*r();
+    for (let k = 0; k < X.nth; k++) for (let j = 0; j < X.nz; j++) X.u[X.iu(X.nr, k, j)] = 0;
+    for (let i = 0; i < X.nr; i++) for (let k = 0; k < X.nth; k++) X.w[X.iw(i, k, 0)] = 0;
+    X.axisU();
+    X.omegaFromW();
+  }
+  const dt = S.stableStep();
+  S.step(dt);
+
+  /* the same step, reassembled here */
+  {
+    const nr = T.nr, nth = T.nth, nz = T.nz, nu = T.nu, rho = T.rho;
+    const u = T.u, v = T.v, w = T.w;
+    const lu = new Float64Array(T.NU), au = new Float64Array(T.NU);
+    const lv = new Float64Array(T.NV), av = new Float64Array(T.NV);
+    const lw = new Float64Array(T.NW), aw = new Float64Array(T.NW);
+    const ps = new Float64Array(T.NE), div = new Float64Array(T.NP);
+    const gu = new Float64Array(T.NU), gv = new Float64Array(T.NV), gw = new Float64Array(T.NW);
+
+    T.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) T.Ht[T.ie(i, k)] = T.om[T.iw(i, k, nz)];
+    T.surfacePressure(ps);
+    T.viscous(lu, lv, lw, () => 0, () => 0, () => 0);
+    T.advect(au, av, aw);
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iu(i, k, j); u[c] += dt*(nu*lu[c] + au[c]); }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iv(i, k, j); v[c] += dt*(nu*lv[c] + av[c]); }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){ const c = T.iw(i, k, j); w[c] += dt*(nu*lw[c] + aw[c]); }
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++) u[T.iu(nr, k, j)] = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[T.iw(i, k, 0)] = 0;
+    T.axisU();
+    T.omegaFromW();
+    T.divergence(u, v, T.om, div);
+    const scale = rho/dt;
+    for (let c = 0; c < div.length; c++) div[c] *= scale;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        div[T.ip(i, k, nz - 1)] -= T.rc[i]*T.drc[i]*T.dth
+          *ps[T.ie(i, k)]/(T.H[T.ie(i, k)]*T.dsf[nz]);
+    T.pressureDiagonal();
+    T.p.fill(0);
+    T.solveP(div, 1e-11, 400*(nr + nth + nz));
+    T.gradient(T.p, gu, gv, gw);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = T.ie(i, k);
+        gw[T.iw(i, k, nz)] += ps[e]/(T.H[e]*T.dsf[nz]);
+      }
+    const s2 = dt/rho;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iu(i, k, j); u[c] -= s2*gu[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iv(i, k, j); v[c] -= s2*gv[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){ const c = T.iw(i, k, j); w[c] -= s2*gw[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[T.iw(i, k, 0)] = 0;
+    T.axisU();
+    T.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = T.ie(i, k);
+        T.eta[e] += dt*T.om[T.iw(i, k, nz)];
+        T.Ht[e] = T.om[T.iw(i, k, nz)];
+      }
+    T.t += dt;
+    T.refreshMetric();
+  }
+
+  const fields = [['u', S.u, T.u], ['v', S.v, T.v], ['w', S.w, T.w], ['Omega', S.om, T.om],
+                  ['eta', S.eta, T.eta], ['p', S.p, T.p], ['H', S.H, T.H], ['Ht', S.Ht, T.Ht]];
+  const bad = [];
+  for (const [name, a, b] of fields){
+    let n = 0;
+    for (let c = 0; c < a.length; c++) if (a[c] !== b[c]) n++;
+    if (n) bad.push(`${name} ${n}/${a.length}`);
+  }
+  console.log(`       one step at dt = ${dt.toExponential(3)} s on a 8x16x7 grid at `
+    + `eta/h = 0.35, reassembled from the public operators: `
+    + (bad.length ? bad.join(', ') + ' differ' : 'every field identical')
+    + `; max |u| ${maxAbs(S.u).toExponential(3)}, ${S.cgIters} CG iterations`);
+  ok(bad.length === 0,
+     'step() is exactly the documented composition -- viscous plus advective predictor, the '
+     + 'prescribed values before Omega, the surface pressure as an inhomogeneous Dirichlet '
+     + 'value inside the projection, the corrector, and eta on the corrected Omega',
+     bad.length ? bad.join('; ') : 'all eight fields bit for bit');
+  ok(S.t === T.t && S.t > 0,
+     'and it advanced the clock by exactly the step it was given',
+     `${S.t.toExponential(17)} against ${T.t.toExponential(17)}`);
+}
+
+section('15. the drive, and that the growth is parametric resonance');
+/* Section 12 compares the two solvers with the drive OFF. This one turns it on, which is the
+ * regime the renderer runs in and the one the whole apparatus exists for: a Faraday cell shaken
+ * vertically at twice a mode's frequency, where that mode grows out of nothing.
+ *
+ * The comparison is the same shape as section 12 -- matched nr and nz, identical initial
+ * condition, identical physical window, `dns/faraday-disc.js` beside this solver -- and the
+ * quantity is the amplification of the seeded mode's r-weighted L2 norm over each drive period.
+ * The subharmonic point is used, omega_D = 2 omega, with omega the linear gravity-capillary
+ * frequency of m = 3, n = 1 and a = 20 m/s^2, comfortably above threshold.
+ *
+ * THE FIRST PERIOD IS NOT THE MULTIPLIER, and this is why the window is three periods. Released
+ * from rest, the initial condition is not the Floquet eigenvector -- that one carries a
+ * particular phase between eta and the velocity field -- so the first period's ratio is a
+ * projection onto both Floquet modes. Measured, the disc gives 1.24704, 1.78613, 2.01139 over
+ * three periods and this solver 1.22821, 1.73828, 1.96195: both climbing toward an asymptote as
+ * the growing mode takes over. The asymptote is known independently: `floquetDisc` in
+ * dns/faraday-floquet.js, which does Arnoldi on the period map rather than integrating a seed,
+ * returns |mu| = 2.08649212 for this operating point. It is not computed here because it refuses
+ * every grid coarser than 20x12 for this mode -- its surface-operator tolerance is one per cent
+ * and 18x10 misses by 1.12 -- and matching 20x12 costs this solver 394 s per drive period, which
+ * is a measurement and not a gate. Six periods at 20x24x12 are recorded in dns/PLAN-cell3d.md.
+ *
+ * OFF RESONANCE THE SAME DRIVE MUST NOT DO THIS, and asserting that is what separates
+ * parametric resonance from a drive that merely pumps energy into everything. At omega_D
+ * detuned by 35 per cent the per-period ratio stops meaning anything -- the amplitude beats
+ * instead of growing, so a period boundary can land near a node and the ratio reads 28 -- and
+ * the honest measure is the amplification over the whole window, which is below one in both
+ * codes. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const { FaradayDisc } = require(join(here, 'faraday-disc.js'));
+  const m = 3;
+  const jp = K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0], k = jp/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const ACCEL = 20, AMP = 1e-9;
+
+  const discAmp = S => { let s = 0;
+    for (let i = 0; i < S.nr; i++) s += S.eta[i]*S.eta[i]*S.rc[i]*S.drc[i];
+    return Math.sqrt(s); };
+  const cellAmp = S => { let s = 0;
+    for (let i = 0; i < S.nr; i++){
+      let c = 0, d = 0;
+      for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth, e = S.eta[S.ie(i, kk)];
+        c += e*Math.cos(m*th); d += e*Math.sin(m*th);
+      }
+      const a = 2*Math.sqrt(c*c + d*d)/S.nth;
+      s += a*a*S.rc[i]*S.drc[i];
+    }
+    return Math.sqrt(s); };
+
+  const discRun = (nr, nz, omegaD, nper) => {
+    const Td = 2*Math.PI/omegaD;
+    const S = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free', accel: ACCEL, omegaD });
+    for (let i = 0; i < nr; i++) S.eta[i] = AMP*K.besselJ(m, k*S.rc[i]);
+    const steps = Math.ceil(Td/S.stableStep(0.4)), dt = Td/steps;
+    const mus = []; let prev = discAmp(S);
+    for (let p = 0; p < nper; p++){
+      for (let s = 0; s < steps; s++) S.step(dt);
+      const now = discAmp(S); mus.push(now/prev); prev = now;
+    }
+    return mus;
+  };
+  const cellRun = (nr, nth, nz, omegaD, nper) => {
+    const Td = 2*Math.PI/omegaD;
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: 'free', accel: ACCEL, omegaD });
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i, kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    S.refreshMetric();
+    const steps = Math.ceil(Td/S.stableStep()), dt = Td/steps;
+    const mus = []; let prev = cellAmp(S);
+    for (let p = 0; p < nper; p++){
+      for (let s = 0; s < steps; s++) S.step(dt);
+      const now = cellAmp(S); mus.push(now/prev); prev = now;
+    }
+    return mus;
+  };
+  const prod = a => a.reduce((x, y) => x*y, 1);
+
+  /* --- on resonance, three periods --- */
+  const dOn = discRun(12, 8, 2*omega, 3), cOn = cellRun(12, 20, 8, 2*omega, 3);
+  const dTot = prod(dOn), cTot = prod(cOn);
+  console.log(`       on resonance, a = ${ACCEL} m/s^2, drive ${(2*omega).toFixed(3)} rad/s:`);
+  console.log(`         12x8    disc   mu per period ` + dOn.map(x => x.toFixed(5)).join(', ')
+    + `  total ${dTot.toFixed(4)}`);
+  console.log(`         12x20x8 cell3d mu per period ` + cOn.map(x => x.toFixed(5)).join(', ')
+    + `  total ${cTot.toFixed(4)}`);
+  ok(dTot > 1.5 && cTot > 1.5,
+     'a drive at twice the mode frequency makes the mode grow, in BOTH solvers -- which is '
+     + 'parametric resonance and is the regime the renderer runs in',
+     `amplified ${dTot.toFixed(4)} and ${cTot.toFixed(4)} over three drive periods`);
+  ok(Math.abs(cOn[2]/dOn[2] - 1) < 0.05,
+     'and the two agree on the third period\'s multiplier to within five per cent, with the '
+     + 'drive on and the surface growing',
+     `${cOn[2].toFixed(5)} against ${dOn[2].toFixed(5)}, `
+     + `${(100*(cOn[2]/dOn[2] - 1)).toFixed(2)}%`);
+  ok(Math.abs(cTot/dTot - 1) < 0.10,
+     'and on the amplification over the whole window to within ten per cent, which is the '
+     + 'transient and the growth together rather than the growth alone',
+     `${cTot.toFixed(4)} against ${dTot.toFixed(4)}, ${(100*(cTot/dTot - 1)).toFixed(2)}%`);
+  ok(cOn[0] < cOn[1] && cOn[1] < cOn[2] && cOn[2] < 2.08649212,
+     'and this solver\'s multiplier climbs toward the Arnoldi value floquetDisc computes '
+     + 'independently, 2.08649212, from below -- which is what a projection onto the growing '
+     + 'Floquet mode does and what a spurious growth would not',
+     cOn.map(x => x.toFixed(5)).join(' -> ') + ' against 2.08649212');
+
+  /* --- off resonance, same drive amplitude, two periods --- */
+  const det = 1.35;
+  const dOff = discRun(12, 8, det*2*omega, 2), cOff = cellRun(12, 20, 8, det*2*omega, 2);
+  const dOffT = prod(dOff), cOffT = prod(cOff);
+  console.log(`       detuned by ${((det-1)*100).toFixed(0)}%, same a = ${ACCEL} m/s^2, drive `
+    + `${(det*2*omega).toFixed(3)} rad/s:`);
+  console.log(`         12x8    disc   mu per period ` + dOff.map(x => x.toFixed(5)).join(', ')
+    + `  total ${dOffT.toExponential(3)}`);
+  console.log(`         12x20x8 cell3d mu per period ` + cOff.map(x => x.toFixed(5)).join(', ')
+    + `  total ${cOffT.toExponential(3)}`);
+  ok(dOffT < 1 && cOffT < 1,
+     'while the same drive amplitude detuned by a third amplifies nothing in either solver, so '
+     + 'the growth above is resonant and not a drive pumping energy into whatever is there',
+     `${dOffT.toExponential(3)} and ${cOffT.toExponential(3)} against ${dTot.toFixed(3)} and `
+     + `${cTot.toFixed(3)} on resonance`);
+  ok(cTot/cOffT > 5,
+     'and the on-resonance amplification beats the off-resonance one by more than five times '
+     + 'in this solver, so the tongue is a feature of the answer and not of the threshold',
+     `${(cTot/cOffT).toFixed(1)}x`);
+}
+
+section('16. eta at an arbitrary position, which is what the renderer asks for');
+/* The page draws a GR x GR Cartesian raster and the solver holds eta on a graded polar grid, so
+ * something has to resample. `etaAt` is that something, and it is `HatH` minus the still depth
+ * rather than a separate interpolation -- which is the whole point of this section.
+ *
+ * The extended grid HatH reads already carries the two conventions a renderer would otherwise
+ * have to reinvent, and would reinvent differently. The row below the axis is the ANTIPODAL
+ * continuation, H[ie(0, k + nth/2)] at r = -rc[0], so a point near r = 0 is interpolated ACROSS
+ * the axis instead of extrapolated up to it; and the row at r = R is the contact condition
+ * itself, the last cell's own H under a free line and h under a pinned one. A renderer
+ * interpolating eta on its own would have to reproduce both to draw the surface the solver is
+ * actually solving, and any difference would show up as a defect in the physics rather than in
+ * the drawing.
+ *
+ * So the assertions here are: exact at a cell centre, second order between them, single-valued
+ * at the axis with the right limit for each m, and equal to the contact condition at the rim. */
+{
+  /* --- at a cell centre it IS the stored eta, to the resolution of the sample position --- *
+   * This asserted `=== 0` and that expectation was wrong twice over. Both corrections are worth
+   * keeping, because they are different mistakes.
+   *
+   * The FIRST was in the code. `etaAt` was `HatH(r, th) - this.h`, and with h = 3e-3 m against
+   * elevations of 1e-4 m the sum h + eta has an ulp of 4.3e-19, so the subtraction cannot give
+   * the low bits back: it missed the stored value at a centre by 6.505e-19, spread 4.337e-19
+   * over theta on the axis where one value was owed, and missed the free rim by 5.421e-19. That
+   * was a real defect -- the same one section 11 found in the capillary energy -- and eta now
+   * has its own extended grid, `Ex`, filled from eta and never from H.
+   *
+   * The SECOND is in the probe and cannot be fixed. The sample position is `(k + 0.5)*dth`, and
+   * recovering k from it inside etaAt costs a multiply and a divide: `th/dth - 0.5` is k plus a
+   * few ulp, not k, so the floor and the remainder put the azimuthal weight a few ulp off the
+   * corner instead of exactly on it. What survives is that weight times the difference between
+   * two neighbouring elevations. Measured 5.421e-19 against a 1.188e-3 deformation, which is
+   * 4.56e-16 relative -- four ulp of the amplitude, and the bound below is 1e-13, still three
+   * orders above it and twelve below any defect this section has to catch. Asking for zero is
+   * asking the coordinates to express something they cannot. */
+  for (const contact of ['free', 'pinned']){
+    const S = new FaradayCell3D({ nr: 11, nth: 18, nz: 7, ...CELL, contact });
+    deform(S, 0.4);
+    let worst = 0, n = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const got = S.etaAt(S.rc[i], (k + 0.5)*S.dth);
+        worst = Math.max(worst, Math.abs(got - S.eta[S.ie(i, k)]));
+        scale = Math.max(scale, Math.abs(S.eta[S.ie(i, k)]));
+        n++;
+      }
+    if (contact === 'free')
+      console.log(`       at cell centres: worst ${worst.toExponential(3)} against a `
+        + `${scale.toExponential(3)} deformation, ${(worst/scale).toExponential(2)} relative`);
+    ok(worst/scale < 1e-13,
+       `${contact}: at every cell centre etaAt returns the stored eta, to the resolution of `
+       + `the sample position -- so the raster and the solver draw one surface and not two`,
+       `worst ${worst.toExponential(3)} of ${scale.toExponential(3)}, `
+       + `${(worst/scale).toExponential(3)} relative, over ${n} centres`);
+  }
+
+  /* --- second order between centres, against an analytic surface --- *
+   * The probe is the gate's own admissible deformation evaluated in closed form at the sample
+   * point, so the reference is calculus and not the interpolation. */
+  {
+    const prof = (S, r, th) => {
+      const x = r/S.R, x2 = x*x;
+      return (0.4*S.h/DEFORM_SUP)*(
+          0.6*x2*(1 - 0.5*x2)
+        + Math.cos(3*th)*x2*x*(1 - 0.6*x2)
+        + 0.4*Math.sin(5*th + 1)*x2*x2*x*(1 - (5/7)*x2));
+    };
+    const errOn = (nr, nth) => {
+      const S = new FaradayCell3D({ nr, nth, nz: 6, ...CELL });
+      for (let i = 0; i < S.nr; i++)
+        for (let k = 0; k < S.nth; k++)
+          S.eta[S.ie(i, k)] = prof(S, S.rc[i], (k + 0.5)*S.dth);
+      S.refreshMetric();
+      let worst = 0;
+      /* strictly between centres in both directions, and inside the rim cell so the one-sided
+         contact closure is not what is being measured */
+      for (let i = 0; i < S.nr - 1; i++)
+        for (let k = 0; k < S.nth; k++)
+          for (const fr of [0.31, 0.5, 0.77])
+            for (const ft of [0.23, 0.5, 0.81]){
+              const r = S.rc[i] + fr*(S.rc[i+1] - S.rc[i]);
+              const th = (k + 0.5 + ft)*S.dth;
+              worst = Math.max(worst, Math.abs(S.etaAt(r, th) - prof(S, r, th)));
+            }
+      return worst;
+    };
+    const e = [errOn(12, 20), errOn(24, 40), errOn(48, 80)];
+    const ord = [Math.log2(e[0]/e[1]), Math.log2(e[1]/e[2])];
+    console.log(`       between centres: ${e.map(x => x.toExponential(3)).join(', ')} over `
+      + `12x20, 24x40, 48x80 -- order ${ord.map(x => x.toFixed(3)).join(' then ')}`);
+    ok(ord.every(o => o > 1.85 && o < 2.15),
+       'and it is second order between them against the analytic surface, which is the '
+       + 'bilinear interpolation\'s own order and not better',
+       `order ${ord.map(x => x.toFixed(4)).join(' then ')}`);
+  }
+
+  /* --- the axis is single-valued, and each m has the right limit there --- *
+   * This is what the antipodal row buys. An m = 0 surface must give one value at r = 0 whatever
+   * theta is asked for; an m = 3 surface must give zero there, because a mode vanishing as r^3
+   * has no elevation on the axis and the two sides of the axis carry opposite signs. */
+  {
+    const S = new FaradayCell3D({ nr: 14, nth: 24, nz: 6, ...CELL });
+    const set = f => { for (let i = 0; i < S.nr; i++)
+                         for (let k = 0; k < S.nth; k++)
+                           S.eta[S.ie(i, k)] = f(S.rc[i]/S.R, (k + 0.5)*S.dth);
+                       S.refreshMetric(); };
+    set((x, th) => 1e-4*(1 - x*x));                           // m = 0
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < 4*S.nth; k++){
+      const v = S.etaAt(0, k*S.dth/4);
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+    const spread0 = hi - lo, scale0 = Math.max(Math.abs(lo), Math.abs(hi));
+    console.log(`       axisymmetric surface at r = 0: spread over theta `
+      + `${spread0.toExponential(2)} of ${scale0.toExponential(2)}`);
+    ok(spread0 <= 4*Number.EPSILON*scale0,
+       'an axisymmetric surface has ONE elevation on the axis, to round-off, however theta is '
+       + 'approached -- which is what the antipodal row is for',
+       `spread ${spread0.toExponential(3)} against the value ${scale0.toExponential(3)}`);
+
+    set((x, th) => 1e-4*x*x*x*(1 - x*x)*Math.cos(3*th));      // m = 3, as rho^3
+    let worst3 = 0;
+    for (let k = 0; k < 4*S.nth; k++)
+      worst3 = Math.max(worst3, Math.abs(S.etaAt(0, k*S.dth/4)));
+    const amp3 = 1e-4*Math.pow(0.5, 3);
+    console.log(`       m = 3 surface at r = 0: worst |eta| ${worst3.toExponential(2)}, `
+      + `${(worst3/amp3).toExponential(2)} of the ${amp3.toExponential(2)} at mid-radius`);
+    /* THE BOUND IS ROUND-OFF AND NOT A PERCENTAGE, and it took an injection to establish that.
+       It was `0.02*amp3` -- two per cent of the mid-radius amplitude -- on the reasoning that an
+       m = 3 mode has "no elevation" on the axis. Taking the row below the axis at the SAME
+       azimuth instead of the antipode then left this GREEN: the measured value went from
+       9.26e-23 to 4.68e-8, fifteen orders, and 4.68e-8 is still under two per cent of 1.25e-5.
+       A threshold five times above a defect is not a threshold.
+
+       What the antipodal row actually gives is an EXACT cancellation, which is why round-off is
+       the right bound. At r = 0 the radial weight is (0 - rx[0])/(rx[1] - rx[0]) = 1/2 exactly,
+       and the two rows it averages are eta[ie(0, k)] and eta[ie(0, k + nth/2)], which for m = 3
+       differ by cos(3 pi) = -1 and so sum to zero to the last bit of the cosine. Measured
+       9.26e-23 of 1.25e-5, which is 7.4e-18 relative -- and the defect reads 3.7e-3, nine
+       orders away from the 1e-12 asserted here. */
+    ok(worst3 < 1e-12*amp3,
+       'and an m = 3 surface has no elevation on the axis AT ALL, to round-off and not merely '
+       + 'to a small fraction -- the antipodal continuation carries the opposite sign there and '
+       + 'the two cancel exactly',
+       `${worst3.toExponential(3)} of ${amp3.toExponential(3)}, `
+       + `${(worst3/amp3).toExponential(3)} relative`);
+  }
+
+  /* --- the rim is the contact condition, not an extrapolation --- */
+  {
+    for (const contact of ['free', 'pinned']){
+      const S = new FaradayCell3D({ nr: 12, nth: 16, nz: 6, ...CELL, contact });
+      deform(S, 0.35);
+      let worst = 0, scale = 0;
+      for (let k = 0; k < S.nth; k++){
+        const want = contact === 'free' ? S.eta[S.ie(S.nr - 1, k)] : 0;
+        worst = Math.max(worst, Math.abs(S.etaAt(S.R, (k + 0.5)*S.dth) - want));
+        scale = Math.max(scale, Math.abs(S.eta[S.ie(S.nr - 1, k)]));
+      }
+      /* The pinned branch IS exactly zero: both corner values of the rim row are zero and no
+         weight can make anything else of them. The free branch carries the same few-ulp
+         azimuthal weight as the cell-centre check above. */
+      ok(contact === 'pinned' ? worst === 0 : worst/scale < 1e-13,
+         `${contact}: at r = R the resampled eta IS the contact condition -- `
+         + (contact === 'free' ? 'the last cell\'s own elevation, since deta/dr = 0 there'
+                               : 'exactly zero, since the line is pinned')
+         + ' -- rather than whatever an extrapolation would give',
+         `worst ${worst.toExponential(3)}` + (contact === 'free'
+           ? ` of ${scale.toExponential(3)}, ${(worst/scale).toExponential(3)} relative` : ''));
     }
   }
 }
