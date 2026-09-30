@@ -1,15 +1,15 @@
 # The renderer's picture becomes a Navier-Stokes solve
 
 **Session counter: 5**
-**Stages complete: 7 of 14 -- S6 and S7 are closed, and the file is a SOLVER rather than a
-set of operators. A step then cost 146 ms on 16x24x10, so an oscillation period cost eleven
-minutes and S8's comparison over drive periods was not affordable; S7b halved it to 85.6 ms
-with the operators proven bit-for-bit unchanged.**
-**Next action: S8, validation against the independent linear solver. The frequency check in
-gate 9 is its simplest case and already passes (13.1% to 2.1% over four grids); what S8 adds
-is the driven Floquet growth rate per mode against `dns/faraday-disc.js`, energy conserved as
-nu falls, harmonics at finite amplitude, and demonstrable mode coupling. Then S9, the
-renderer.**
+**Stages complete: 8 of 14 -- S6, S7 and S8 are closed. The file is a SOLVER, and it has been
+validated against an independently written one, driven and undriven. A step cost 146 ms on
+16x24x10 when S7 landed, so an oscillation period cost eleven minutes and S8 was not
+affordable; S7b halved it to 85.6 ms with the operators proven bit-for-bit unchanged.**
+**Next action: S9, the renderer draws this solver. Replace the modal field in
+`recompute()`/`renderSurface()` with eta from the 3-D solver, in a worker; show the physics
+clock against the wall clock and report the ratio; size the grid by the same measured-resolution
+logic `suggestGrid` already applies. Gate by extending `dns/check-page.mjs`: the page's field
+equals the solver's eta to the digit, and both clocks are present.**
 
 **What session 5 did.** `faraday-cell3d.js` had no `step()` at all: forty-three methods, every
 one an operator, and nothing that advanced anything in time. Building the assembly found two
@@ -91,9 +91,9 @@ against this and need no further decision.
 | S6g | Free surface: the flux interpolation, gated | **done** | the interpolation of each surface-flux component onto its OWN family's sigma = 1 face -- radially for u, azimuthally for v -- is second order against `wantFlux` evaluated at that face, 2.12 then 2.07 for u and 1.96 then 1.98 for v over 16/32/64 at eta/h = 0.3 and 0.6; one cell's value in place of either reads 0.92 and 0.99. The plan said this needed a probe satisfying zero tangential stress; it does not, because the analytic flux can be asked for the face's own position |
 | S6h | Free surface: the surface pressure | **done** | `rho g eta - gamma kappa + 2 rho nu n.E.n`, entering the projection's right-hand side top row and the corrector's sigma = 1 face and nowhere else -- never the predictor, where it is O(1/dsigma) and the projection cancels almost all of it |
 | S7 | `step()`, its stability limit, and the energy diagnostic | **done** | the assembled solver reproduces the linear gravity-capillary frequency for m = 3, error 13.11% -> 6.62% -> 3.92% -> 2.08% over four grids, which no single operator in the file could produce alone; building it found two O(1) defects in the committed projection (the Omega control volume missing its H; the horizontal components covariant rather than physical, 86.99 against 137.00); `stableStep` from the DISPERSION relation, with no growth at 1x (0.997392 and 0.997441 per step on two grids) and divergence at 10x (by step 14 and step 15), so the limit is falsifiable on both sides; over a quarter period at nu = 1e-12 the energy drifts -0.0343%, never rises, and 99.19% of it becomes kinetic |
-| S8a | Validation: the viscous damping rate against `faraday-disc.js` | **done** | a quantity with no closed form, from two solvers sharing nothing but the physics and not even a vertical coordinate: 1.26121/1.33232, 1.29079/1.32578, 1.30927/1.32165, 1.33430/1.33377, 1.35070/1.34333 over five grid pairs -- gap +5.64%, +2.71%, +0.95%, -0.04%, -0.55%, each code still moving in its own grid, so they converge to one limit from opposite sides; m = 2 likewise +6.13% then +3.35%. Found one real defect, in the ENERGY DIAGNOSTIC: the capillary part was the difference of two areas agreeing to thirteen digits, which at eta = 1e-9 m reported a 9.4% energy GAIN where the scheme drifts -0.035%. Free-slip walls read -59% and are red; half the radial viscosity reads -2.47% and is red only since the third pair was added, which is why it was |
+| S8a | Validation: a quarter period's energy decay against `faraday-disc.js` | **done** | a quantity with no closed form, from two solvers sharing nothing but the physics and not even a vertical coordinate: 1.26121/1.33232, 1.29079/1.32578, 1.30927/1.32165, 1.33430/1.33377, 1.35070/1.34333 over five grid pairs -- gap +5.64%, +2.71%, +0.95%, -0.04%, -0.55%, each code still moving in its own grid, so they converge to one limit from opposite sides; m = 2 likewise +6.13% then +3.35%. Found one real defect, in the ENERGY DIAGNOSTIC: the capillary part was the difference of two areas agreeing to thirteen digits, which at eta = 1e-9 m reported a 9.4% energy GAIN where the scheme drifts -0.035%. Free-slip walls read -59% and are red; half the radial viscosity reads -2.47% and is red only since the third pair was added, which is why it was |
 | S8b | Validation: harmonics, mode coupling, and step() as a composition | **done** | a single m = 3 mode generates m = 0 and m = 6 at exponent 1.998/1.999 in the amplitude and m = 9 at 2.853/2.960, all from 1e-22; m = 2 and m = 3 together generate m = 1 and m = 5 bilinearly (1.9803, 1.9991, 1.9992, 1.9992 on halving either parent) and neither parent alone produces them at better than 1e-22. The regeneration test then found that the whole ADVECTIVE TERM can be deleted from `step()` with all 239 checks green -- at eta/h = 0.2 it is one part in a hundred of the inertia -- so section 14 now reassembles one step from the public operators and asserts the eight state arrays bit for bit. Four step-composition defects red |
-| S8c | Validation: driven Floquet growth rate against `faraday-disc.js` | todo | per-mode growth under drive against `floquetDisc`'s dominant multiplier; a drive period costs 133 s at 14x24x10, so this is the expensive one |
+| S8c | Validation: the driven growth rate against the Arnoldi multiplier | **done** | six drive periods at 20x24x12 give \|mu\| = 1.235690, 1.762186, 1.987387, 2.041031, 2.053208, 2.055543 -- increments 0.0536, 0.0122, 0.0023 -- against `floquetDisc`'s Arnoldi value 2.08649212 for the same nr and nz: **-1.49%**, two solvers with different vertical coordinates agreeing on a driven Floquet multiplier. That costs 400 s per period so it is recorded, not gated; section 15 gates the disc's own time-domain driven run at a matched 12x8 / 12x20x8, where the third period reads 2.01139 against 1.96195 (-2.46%) and the window's amplification 4.4801 against 4.1887 (-6.50%), plus the off-resonance contrast (1.836e-1 and 2.058e-2 against 4.48 and 4.19) |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
@@ -918,12 +918,33 @@ coordinate**. It solves in z on a fixed grid with the surface conditions applied
 this one solves in sigma = z/H on a grid that follows the surface. They share the physics and
 the cell, and nothing else.
 
-The quantity is the viscous decay rate of one free mode, `gamma = -ln(E/E0)/(2t)`, chosen
-because there is **no closed form for it**. The frequency has one and gate 9 already checks
-against it. The damping is set by the Stokes layers at the floor, the sidewall and the surface,
-and the only reference for it is another solver -- the disc gate measures the exponent of its
-own nu-dependence at 0.755, between the bulk term's 1 and a pure boundary layer's 1/2, so most
-of this number comes from exactly the part the two codes do differently.
+The quantity is the total mechanical energy's fractional decay over a fixed physical window,
+`-ln(E/E0)/(2t)`, from a state released from rest in one Bessel mode. It is chosen because there
+is **no closed form for it**. The frequency has one and gate 9 already checks against it. The
+dissipation is set by the Stokes layers at the floor, the sidewall and the surface, and the only
+reference for it is another solver -- the disc gate measures the exponent of its own
+nu-dependence at 0.755, between the bulk term's 1 and a pure boundary layer's 1/2, so most of
+this number comes from exactly the part the two codes do differently.
+
+**It is not the asymptotic modal damping rate, and this section called it that until the number
+was measured.** Over a quarter period the energy is still sloshing between kinetic and potential
+and the boundary layers are still forming, so the ratio is a transient. The same figure on
+`dns/faraday-disc.js` at 20x12 over lengthening windows:
+
+| window | 0.125T | 0.25T | 0.5T | 1T | 2T | 4T | 8T |
+|---|---|---|---|---|---|---|---|
+| rate | 0.641 | **1.334** | 1.242 | 1.468 | 1.522 | 1.553 | 1.565 |
+
+and that code's own Floquet multiplier for the same grid gives 1.513. The quarter-period value
+is 1.334 -- exactly the number the table below compares, and fifteen per cent below where the
+sequence is heading.
+
+That does not weaken the comparison and arguably sharpens it. What is compared is a well-defined
+functional of one initial-value problem: identical initial condition, identical physical window,
+matched nr and nz. It includes the transient formation of the boundary layers, which is where
+two discretisations of a viscous free surface differ most, rather than only an asymptotic
+eigenvalue. What it must not be called is the modal damping rate. S8c is where the asymptotic
+quantity gets compared, against `floquetDisc`.
 
 m = 3, n = 1, free contact, eta = 1e-9 m, a quarter of the 88.860 ms period, matching nr and nz:
 
@@ -1090,6 +1111,87 @@ which code path produced it. Sections 10 and 14 are the two that ask the other q
 this the computation it says it is", and both were written after something got past everything
 else: section 10 after the index hoisting could have changed bits silently, section 14 after an
 entire nonlinear term did.
+
+## S8c: the driven growth rate, against the Arnoldi multiplier next door
+
+Section 12 compares the two solvers with the drive off. S8c turns it on, which is the regime the
+renderer runs in: the cell shaken vertically at twice a mode's frequency, where that mode grows
+out of nothing. The subharmonic point for m = 3, n = 1, at a = 20 m/s^2, comfortably above
+threshold.
+
+**The reference is `floquetDisc` in `dns/faraday-floquet.js`**, which does Arnoldi on the disc's
+period map rather than integrating a seed, so it returns the asymptotic multiplier directly:
+|mu| = **2.08649212** at nr = 20, nz = 12, with a Krylov spread of 5.81e-6.
+
+Matching that grid, this solver integrated six drive periods at 20x24x12 -- 2787 steps and 400 s
+each -- and the per-period amplification of the m = 3 component of eta:
+
+| period | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| \|mu\| | 1.235690 | 1.762186 | 1.987387 | 2.041031 | 2.053208 | **2.055543** |
+| growth s^-1 | 4.763 | 12.752 | 15.458 | 16.058 | 16.192 | 16.217 |
+
+Increments 0.0536, 0.0122, 0.0023: converging, and the limit is **1.49 per cent below** the
+Arnoldi value for the same nr and nz. That residual is the discretisation difference between the
+two -- same radial and vertical resolution, a different vertical coordinate, and an azimuthal
+direction one of them does not have.
+
+**The first period is not the multiplier**, and the sequence above is why the gated window is
+three periods and not one. Released from rest the initial condition is not the Floquet
+eigenvector, which carries a particular phase between eta and the velocity field, so the first
+period's ratio is a projection onto both Floquet modes; the growing one takes over as
+(2.09/0.4)^n.
+
+### What is gated, and why the Arnoldi comparison is not
+
+`floquetDisc` refuses every grid coarser than 20x12 for this mode -- its surface-operator
+tolerance is one per cent and 18x10 misses by 1.12, 16x10 by 1.37, 14x10 by 1.71 -- and matching
+20x12 costs this solver 400 s per drive period. Six periods is 40 minutes. So the Arnoldi
+comparison is a recorded measurement and section 15 gates the affordable equivalent: the disc's
+own TIME-DOMAIN driven run, which has no such grid restriction, beside this solver at a matched
+12x8 / 12x20x8, three periods each.
+
+| | period 1 | 2 | 3 | total |
+|---|---|---|---|---|
+| disc 12x8 | 1.24704 | 1.78613 | 2.01139 | 4.4801 |
+| cell3d 12x20x8 | 1.22821 | 1.73828 | 1.96195 | 4.1887 |
+| gap | | | **-2.46%** | **-6.50%** |
+
+The coarse grid tracks the fine one closely -- 1.22821, 1.73828, 1.96195 against 1.235690,
+1.762186, 1.987387 -- which is what makes the cheap gate worth having.
+
+### Off resonance, the same drive must do nothing, and the per-period ratio stops meaning anything
+
+Detuning omega_D by 35 per cent at the same amplitude:
+
+| | period 1 | 2 | total |
+|---|---|---|---|
+| disc 12x8 | 0.73793 | 0.24879 | 1.836e-1 |
+| cell3d 12x20x8 | 0.68113 | 0.03022 | 2.058e-2 |
+
+Both amplify nothing, which is what separates parametric resonance from a drive that pumps energy
+into whatever is there. Note what the per-period ratio does off resonance in a three-period
+window: 0.73793, 0.24879, **2.12167** for the disc and 0.68113, 0.03022, **28.34476** for this
+solver. Nothing is growing -- the amplitude beats instead, and a period boundary landing near a
+node makes the ratio meaningless. The measure has to be the amplification over the whole window,
+and that is what is asserted.
+
+### Regeneration
+
+| injected | on-resonance mu per period | red |
+|---|---|---|
+| the drive dropped from the effective gravity | 0.92913, 0.89060, 0.86590 (total 0.7165) | 4 of 5 |
+| the drive frequency doubled, so the subharmonic point is not one | 0.93930, 0.91614, 0.91171 (total 0.7845) | 4 of 5 |
+| the drive amplitude 30 per cent too large | 1.43678, 2.26450, 2.50018 (total 8.1346) | 3 of 5 |
+
+The third is the discriminating one and it is why the cross-code assertions are there at all. The
+mode still grows, so "a drive at twice the mode frequency makes the mode grow" stays GREEN and so
+does the off-resonance contrast -- a qualitative gate would have passed a thirty per cent error in
+the drive. What catches it is the agreement with the other solver, at +24.30% on the third
+period's multiplier and +81.57% on the window, and the climb toward the Arnoldi value, which
+2.50018 overshoots rather than approaches from below.
+
+Clean: 247 checks, 0 failed, 11m37s.
 
 ## Rules this build keeps
 

@@ -3020,7 +3020,7 @@ section('11. the excess area, which is not the difference of two areas');
   }
 }
 
-section('12. the damping rate, against an independently written solver');
+section('12. a quarter period\'s energy decay, against an independently written solver');
 /* THE CHECK THE WHOLE FILE EXISTS TO PASS. Every other section compares the solver with
  * calculus, with an identity it must satisfy, or with itself. This one compares it with
  * `dns/faraday-disc.js`: a different solver, written separately, linear rather than
@@ -3029,13 +3029,33 @@ section('12. the damping rate, against an independently written solver');
  * in z on a fixed grid with the surface conditions at the top; this one solves in
  * sigma = z/H on a grid that follows the surface. Nothing is shared but the physics.
  *
- * The quantity is the viscous decay rate of a single free mode, gamma = -ln(E/E0)/(2t). It is
- * chosen because there is NO closed form for it: the frequency has one and gate 9 already
- * checks against it, but the damping is set by the Stokes layers at the floor, the sidewall
- * and the surface, and the only reference for it is another solver. The disc gate measures
- * the exponent of its own nu-dependence at 0.755 -- between the bulk term's 1 and a pure
- * boundary layer's 1/2 -- so most of this number comes from those layers, which is to say
- * from precisely the part of the discretisation the two codes do differently.
+ * The quantity is the total mechanical energy's fractional decay over a fixed physical window,
+ * `-ln(E/E0)/(2t)`, from a state released from rest in a single Bessel mode. It is chosen
+ * because there is NO closed form for it: the frequency has one and gate 9 already checks
+ * against it, but the dissipation is set by the Stokes layers at the floor, the sidewall and
+ * the surface, and the only reference for it is another solver. The disc gate measures the
+ * exponent of its own nu-dependence at 0.755 -- between the bulk term's 1 and a pure boundary
+ * layer's 1/2 -- so most of this number comes from those layers, which is to say from
+ * precisely the part of the discretisation the two codes do differently.
+ *
+ * IT IS NOT THE ASYMPTOTIC MODAL DAMPING RATE, and this section said it was until the number
+ * was measured. Over a quarter period the energy is still sloshing between kinetic and
+ * potential and the Stokes layers are still forming, so the ratio is a transient. Measured on
+ * dns/faraday-disc.js at 20x12, the same figure over lengthening windows:
+ *
+ *      window   0.125T   0.25T    0.5T     1T      2T      4T      8T
+ *      rate     0.641    1.334    1.242    1.468   1.522   1.553   1.565
+ *
+ * and that code's own Floquet multiplier for the same grid gives 1.513. The quarter-period
+ * value is 1.334 -- which is exactly the number this section compares, and 15 per cent below
+ * where the sequence is heading.
+ *
+ * That does not weaken the comparison and arguably sharpens it. What is compared is a
+ * well-defined functional of one initial-value problem: identical initial condition, identical
+ * physical window, matched nr and nz. It includes the transient formation of the boundary
+ * layers, which is where two discretisations of a viscous free surface differ most, rather
+ * than only an asymptotic eigenvalue. What it must not be called is the modal damping rate,
+ * and S8c is where the asymptotic quantity gets compared, against `floquetDisc`.
  *
  * Measured over the m = 3, n = 1 free-contact mode at eta = 1e-9 m, a quarter of its 88.860 ms
  * period, matching nr and nz:
@@ -3101,6 +3121,8 @@ section('12. the damping rate, against an independently written solver');
     return -Math.log(S.energy().total/E0)/(2*steps*dt);
   };
 
+  /* `tEnd` is a quarter of the mode's linear period. Both solvers get exactly this window and
+     exactly this initial condition; the figure is that window's decay and not an eigenvalue. */
   const gaps = [], rates = [];
   for (const [nr, nth, nz] of [[12, 20, 8], [14, 24, 10], [16, 24, 10]]){
     const d = discRate(nr, nz), c = cellRate(nr, nth, nz);
@@ -3114,7 +3136,7 @@ section('12. the damping rate, against an independently written solver');
      rates.map(([d, c]) => `${d.toFixed(4)}/${c.toFixed(4)}`).join(', '));
   ok(Math.abs(gaps[0]) < 0.08,
      'at 12x20x8 the nonlinear surface-following solver agrees with the linear fixed-grid one '
-     + 'on the viscous damping rate to within eight per cent',
+     + 'on a quarter period\'s energy decay to within eight per cent',
      `${(100*gaps[0]).toFixed(3)}%`);
   ok(Math.abs(gaps[1]) < 0.04,
      'and at 14x24x10 to within four per cent -- two codes sharing nothing but the physics, '
@@ -3130,7 +3152,7 @@ section('12. the damping rate, against an independently written solver');
      gaps.map(g => (100*g).toFixed(2) + '%').join(' -> '));
   const bulk = 2*CELL.nu*k*k;
   ok(rates[2][1] > 3*bulk,
-     'and the damping is several times the bulk term 2 nu k^2, so the floor, sidewall and '
+     'and the decay is several times the bulk term 2 nu k^2, so the floor, sidewall and '
      + 'surface Stokes layers are present in it -- which is what makes the agreement above a '
      + 'statement about the boundary treatment and not about the interior',
      `${rates[1][1].toFixed(4)} against 2 nu k^2 = ${bulk.toFixed(4)} s^-1`);
@@ -3425,6 +3447,134 @@ section('14. step() is the composition it documents, term for term');
   ok(S.t === T.t && S.t > 0,
      'and it advanced the clock by exactly the step it was given',
      `${S.t.toExponential(17)} against ${T.t.toExponential(17)}`);
+}
+
+section('15. the drive, and that the growth is parametric resonance');
+/* Section 12 compares the two solvers with the drive OFF. This one turns it on, which is the
+ * regime the renderer runs in and the one the whole apparatus exists for: a Faraday cell shaken
+ * vertically at twice a mode's frequency, where that mode grows out of nothing.
+ *
+ * The comparison is the same shape as section 12 -- matched nr and nz, identical initial
+ * condition, identical physical window, `dns/faraday-disc.js` beside this solver -- and the
+ * quantity is the amplification of the seeded mode's r-weighted L2 norm over each drive period.
+ * The subharmonic point is used, omega_D = 2 omega, with omega the linear gravity-capillary
+ * frequency of m = 3, n = 1 and a = 20 m/s^2, comfortably above threshold.
+ *
+ * THE FIRST PERIOD IS NOT THE MULTIPLIER, and this is why the window is three periods. Released
+ * from rest, the initial condition is not the Floquet eigenvector -- that one carries a
+ * particular phase between eta and the velocity field -- so the first period's ratio is a
+ * projection onto both Floquet modes. Measured, the disc gives 1.24704, 1.78613, 2.01139 over
+ * three periods and this solver 1.22821, 1.73828, 1.96195: both climbing toward an asymptote as
+ * the growing mode takes over. The asymptote is known independently: `floquetDisc` in
+ * dns/faraday-floquet.js, which does Arnoldi on the period map rather than integrating a seed,
+ * returns |mu| = 2.08649212 for this operating point. It is not computed here because it refuses
+ * every grid coarser than 20x12 for this mode -- its surface-operator tolerance is one per cent
+ * and 18x10 misses by 1.12 -- and matching 20x12 costs this solver 394 s per drive period, which
+ * is a measurement and not a gate. Six periods at 20x24x12 are recorded in dns/PLAN-cell3d.md.
+ *
+ * OFF RESONANCE THE SAME DRIVE MUST NOT DO THIS, and asserting that is what separates
+ * parametric resonance from a drive that merely pumps energy into everything. At omega_D
+ * detuned by 35 per cent the per-period ratio stops meaning anything -- the amplitude beats
+ * instead of growing, so a period boundary can land near a node and the ratio reads 28 -- and
+ * the honest measure is the amplification over the whole window, which is below one in both
+ * codes. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const { FaradayDisc } = require(join(here, 'faraday-disc.js'));
+  const m = 3;
+  const jp = K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0], k = jp/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const ACCEL = 20, AMP = 1e-9;
+
+  const discAmp = S => { let s = 0;
+    for (let i = 0; i < S.nr; i++) s += S.eta[i]*S.eta[i]*S.rc[i]*S.drc[i];
+    return Math.sqrt(s); };
+  const cellAmp = S => { let s = 0;
+    for (let i = 0; i < S.nr; i++){
+      let c = 0, d = 0;
+      for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth, e = S.eta[S.ie(i, kk)];
+        c += e*Math.cos(m*th); d += e*Math.sin(m*th);
+      }
+      const a = 2*Math.sqrt(c*c + d*d)/S.nth;
+      s += a*a*S.rc[i]*S.drc[i];
+    }
+    return Math.sqrt(s); };
+
+  const discRun = (nr, nz, omegaD, nper) => {
+    const Td = 2*Math.PI/omegaD;
+    const S = new FaradayDisc({ m, nr, nz, ...CELL, contact: 'free', accel: ACCEL, omegaD });
+    for (let i = 0; i < nr; i++) S.eta[i] = AMP*K.besselJ(m, k*S.rc[i]);
+    const steps = Math.ceil(Td/S.stableStep(0.4)), dt = Td/steps;
+    const mus = []; let prev = discAmp(S);
+    for (let p = 0; p < nper; p++){
+      for (let s = 0; s < steps; s++) S.step(dt);
+      const now = discAmp(S); mus.push(now/prev); prev = now;
+    }
+    return mus;
+  };
+  const cellRun = (nr, nth, nz, omegaD, nper) => {
+    const Td = 2*Math.PI/omegaD;
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: 'free', accel: ACCEL, omegaD });
+    for (let i = 0; i < nr; i++) for (let kk = 0; kk < nth; kk++)
+      S.eta[S.ie(i, kk)] = AMP*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+    S.refreshMetric();
+    const steps = Math.ceil(Td/S.stableStep()), dt = Td/steps;
+    const mus = []; let prev = cellAmp(S);
+    for (let p = 0; p < nper; p++){
+      for (let s = 0; s < steps; s++) S.step(dt);
+      const now = cellAmp(S); mus.push(now/prev); prev = now;
+    }
+    return mus;
+  };
+  const prod = a => a.reduce((x, y) => x*y, 1);
+
+  /* --- on resonance, three periods --- */
+  const dOn = discRun(12, 8, 2*omega, 3), cOn = cellRun(12, 20, 8, 2*omega, 3);
+  const dTot = prod(dOn), cTot = prod(cOn);
+  console.log(`       on resonance, a = ${ACCEL} m/s^2, drive ${(2*omega).toFixed(3)} rad/s:`);
+  console.log(`         12x8    disc   mu per period ` + dOn.map(x => x.toFixed(5)).join(', ')
+    + `  total ${dTot.toFixed(4)}`);
+  console.log(`         12x20x8 cell3d mu per period ` + cOn.map(x => x.toFixed(5)).join(', ')
+    + `  total ${cTot.toFixed(4)}`);
+  ok(dTot > 1.5 && cTot > 1.5,
+     'a drive at twice the mode frequency makes the mode grow, in BOTH solvers -- which is '
+     + 'parametric resonance and is the regime the renderer runs in',
+     `amplified ${dTot.toFixed(4)} and ${cTot.toFixed(4)} over three drive periods`);
+  ok(Math.abs(cOn[2]/dOn[2] - 1) < 0.05,
+     'and the two agree on the third period\'s multiplier to within five per cent, with the '
+     + 'drive on and the surface growing',
+     `${cOn[2].toFixed(5)} against ${dOn[2].toFixed(5)}, `
+     + `${(100*(cOn[2]/dOn[2] - 1)).toFixed(2)}%`);
+  ok(Math.abs(cTot/dTot - 1) < 0.10,
+     'and on the amplification over the whole window to within ten per cent, which is the '
+     + 'transient and the growth together rather than the growth alone',
+     `${cTot.toFixed(4)} against ${dTot.toFixed(4)}, ${(100*(cTot/dTot - 1)).toFixed(2)}%`);
+  ok(cOn[0] < cOn[1] && cOn[1] < cOn[2] && cOn[2] < 2.08649212,
+     'and this solver\'s multiplier climbs toward the Arnoldi value floquetDisc computes '
+     + 'independently, 2.08649212, from below -- which is what a projection onto the growing '
+     + 'Floquet mode does and what a spurious growth would not',
+     cOn.map(x => x.toFixed(5)).join(' -> ') + ' against 2.08649212');
+
+  /* --- off resonance, same drive amplitude, two periods --- */
+  const det = 1.35;
+  const dOff = discRun(12, 8, det*2*omega, 2), cOff = cellRun(12, 20, 8, det*2*omega, 2);
+  const dOffT = prod(dOff), cOffT = prod(cOff);
+  console.log(`       detuned by ${((det-1)*100).toFixed(0)}%, same a = ${ACCEL} m/s^2, drive `
+    + `${(det*2*omega).toFixed(3)} rad/s:`);
+  console.log(`         12x8    disc   mu per period ` + dOff.map(x => x.toFixed(5)).join(', ')
+    + `  total ${dOffT.toExponential(3)}`);
+  console.log(`         12x20x8 cell3d mu per period ` + cOff.map(x => x.toFixed(5)).join(', ')
+    + `  total ${cOffT.toExponential(3)}`);
+  ok(dOffT < 1 && cOffT < 1,
+     'while the same drive amplitude detuned by a third amplifies nothing in either solver, so '
+     + 'the growth above is resonant and not a drive pumping energy into whatever is there',
+     `${dOffT.toExponential(3)} and ${cOffT.toExponential(3)} against ${dTot.toFixed(3)} and `
+     + `${cTot.toFixed(3)} on resonance`);
+  ok(cTot/cOffT > 5,
+     'and the on-resonance amplification beats the off-resonance one by more than five times '
+     + 'in this solver, so the tongue is a feature of the answer and not of the threshold',
+     `${(cTot/cOffT).toFixed(1)}x`);
 }
 
 /* ── 5. refusals ────────────────────────────────────────────────────────── */

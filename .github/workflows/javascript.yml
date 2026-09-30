@@ -65,14 +65,16 @@
 # of a number to go stale again. Timed on this container: 3m00s for 214 checks;
 # 1m18s for the same checks once the step's repeated index arithmetic was hoisted
 # out of the conjugate-gradient matvec and the reconstruction primitives, bit for
-# bit unchanged; 6m33s for 241, of which four minutes is section 12, which
-# integrates BOTH this solver and dns/faraday-disc.js for a quarter of a mode's
-# period on three grids to compare their damping rates, and ninety seconds is
-# section 13's eight finite-amplitude runs. That section is the most
-# expensive thing in the file and the only check in the project that compares two
-# independently written solvers, so it is also the last thing that should be cut
-# for time. It still shares the job: five minutes beside a two-and-a-half minute
-# suite is one eight-minute runner instead of two. It goes FIRST so its signal
+# bit unchanged; 6m33s for 241; 11m37s for 247. Almost all of the growth is the
+# two sections that integrate BOTH this solver and dns/faraday-disc.js and
+# compare them -- section 12 over a quarter of a mode's period on three grids
+# undriven, section 15 over ten drive periods on and off the subharmonic
+# resonance -- plus ninety seconds for section 13's eight finite-amplitude runs.
+# Those are the only checks in the project that compare two independently
+# written solvers, so they are the last thing that should be cut for time.
+#
+# It still shares the job: twelve minutes beside a two-and-a-half minute suite is
+# one fifteen-minute runner instead of two. It goes FIRST so its signal
 # arrives before the suite behind it. It was not run by any job at all until S6f,
 # which is the same gap that once let a red suite sit on the default branch -- a
 # suite that exists and is not run is not a gate.
