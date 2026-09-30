@@ -1255,6 +1255,34 @@ Second order between centres against the analytic surface: 1.072e-4, 2.747e-5, 7
 12x20, 24x40, 48x80, order 1.965 then 1.919 -- the bilinear interpolation's own order and not
 better.
 
+### Regeneration: four injections, and two of them were about the gate
+
+| injected | what section 16 reported |
+|---|---|
+| the eta row below the axis at the same azimuth, not the antipode | **GREEN at first.** The m = 3 elevation on the axis went 9.26e-23 -> 4.68e-8, fifteen orders, and the threshold was two per cent of the 1.25e-5 mid-radius amplitude, so 4.68e-8 slipped under 2.5e-7 by a factor of five. Re-run against the round-off bound: RED at 4.677e-8 of 1.250e-5, **3.742e-3 relative** |
+| the rim row extrapolated instead of carrying the free contact condition | RED, 2.322e-6 of a 1.040e-3 rim elevation, 2.234e-3 relative |
+| `etaAt` reverted to `HatH - h` | RED, on the axis spread: 4.337e-19 where one value is owed |
+| the radial weight snapped to the nearer node | RED on the order: 1.293 then 0.925, against the clean 1.965 then 1.919 |
+
+**The axis bound had to become round-off, not a percentage.** "An m = 3 mode has no elevation on
+the axis" was written as though it were an approximate statement. It is not. At r = 0 the radial
+weight is `(0 - rx[0])/(rx[1] - rx[0])` = 1/2 **exactly**, and the two rows it averages are
+`eta[ie(0, k)]` and `eta[ie(0, k + nth/2)]`, which for m = 3 differ by cos(3 pi) = -1 and sum to
+zero to the last bit of the cosine. So the bound is 1e-12 relative: six orders above the clean
+7.41e-18 and nine below the defect's 3.7e-3. That is the third time this session an injection has
+shown a threshold loose enough to be meaningless -- after `kemax > 0.9*e0.total` passing on a
+scheme that manufactured energy, and section 12's four per cent window swallowing a three per cent
+error in the radial viscous term -- and the second in this section alone.
+
+Clean, with the tightened bound: **254 checks, 0 failed**, and the axis figure reads 9.26e-23,
+7.41e-18 of the mid-radius amplitude.
+
+**And the cell-centre assertion cannot resolve the `HatH - h` defect at all.** It reads 5.48e-16
+with the defect against 4.56e-16 clean: twenty per cent apart, which no honest threshold
+separates. What catches that defect is the axis spread, because that assertion demands exact
+round-off rather than a fraction of something. Worth recording because it is not the check one
+would guess: the section works, and not through the assertion whose name mentions exactness.
+
 ### What S9 still needs
 
 `etaAt` is the resampler. The rest of S9 is the wiring: a worker carrying `faraday-cell3d.js`
