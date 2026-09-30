@@ -3577,6 +3577,165 @@ section('15. the drive, and that the growth is parametric resonance');
      `${(cTot/cOffT).toFixed(1)}x`);
 }
 
+section('16. eta at an arbitrary position, which is what the renderer asks for');
+/* The page draws a GR x GR Cartesian raster and the solver holds eta on a graded polar grid, so
+ * something has to resample. `etaAt` is that something, and it is `HatH` minus the still depth
+ * rather than a separate interpolation -- which is the whole point of this section.
+ *
+ * The extended grid HatH reads already carries the two conventions a renderer would otherwise
+ * have to reinvent, and would reinvent differently. The row below the axis is the ANTIPODAL
+ * continuation, H[ie(0, k + nth/2)] at r = -rc[0], so a point near r = 0 is interpolated ACROSS
+ * the axis instead of extrapolated up to it; and the row at r = R is the contact condition
+ * itself, the last cell's own H under a free line and h under a pinned one. A renderer
+ * interpolating eta on its own would have to reproduce both to draw the surface the solver is
+ * actually solving, and any difference would show up as a defect in the physics rather than in
+ * the drawing.
+ *
+ * So the assertions here are: exact at a cell centre, second order between them, single-valued
+ * at the axis with the right limit for each m, and equal to the contact condition at the rim. */
+{
+  /* --- at a cell centre it IS the stored eta, to the resolution of the sample position --- *
+   * This asserted `=== 0` and that expectation was wrong twice over. Both corrections are worth
+   * keeping, because they are different mistakes.
+   *
+   * The FIRST was in the code. `etaAt` was `HatH(r, th) - this.h`, and with h = 3e-3 m against
+   * elevations of 1e-4 m the sum h + eta has an ulp of 4.3e-19, so the subtraction cannot give
+   * the low bits back: it missed the stored value at a centre by 6.505e-19, spread 4.337e-19
+   * over theta on the axis where one value was owed, and missed the free rim by 5.421e-19. That
+   * was a real defect -- the same one section 11 found in the capillary energy -- and eta now
+   * has its own extended grid, `Ex`, filled from eta and never from H.
+   *
+   * The SECOND is in the probe and cannot be fixed. The sample position is `(k + 0.5)*dth`, and
+   * recovering k from it inside etaAt costs a multiply and a divide: `th/dth - 0.5` is k plus a
+   * few ulp, not k, so the floor and the remainder put the azimuthal weight a few ulp off the
+   * corner instead of exactly on it. What survives is that weight times the difference between
+   * two neighbouring elevations. Measured 5.421e-19 against a 1.188e-3 deformation, which is
+   * 4.56e-16 relative -- four ulp of the amplitude, and the bound below is 1e-13, still three
+   * orders above it and twelve below any defect this section has to catch. Asking for zero is
+   * asking the coordinates to express something they cannot. */
+  for (const contact of ['free', 'pinned']){
+    const S = new FaradayCell3D({ nr: 11, nth: 18, nz: 7, ...CELL, contact });
+    deform(S, 0.4);
+    let worst = 0, n = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const got = S.etaAt(S.rc[i], (k + 0.5)*S.dth);
+        worst = Math.max(worst, Math.abs(got - S.eta[S.ie(i, k)]));
+        scale = Math.max(scale, Math.abs(S.eta[S.ie(i, k)]));
+        n++;
+      }
+    if (contact === 'free')
+      console.log(`       at cell centres: worst ${worst.toExponential(3)} against a `
+        + `${scale.toExponential(3)} deformation, ${(worst/scale).toExponential(2)} relative`);
+    ok(worst/scale < 1e-13,
+       `${contact}: at every cell centre etaAt returns the stored eta, to the resolution of `
+       + `the sample position -- so the raster and the solver draw one surface and not two`,
+       `worst ${worst.toExponential(3)} of ${scale.toExponential(3)}, `
+       + `${(worst/scale).toExponential(3)} relative, over ${n} centres`);
+  }
+
+  /* --- second order between centres, against an analytic surface --- *
+   * The probe is the gate's own admissible deformation evaluated in closed form at the sample
+   * point, so the reference is calculus and not the interpolation. */
+  {
+    const prof = (S, r, th) => {
+      const x = r/S.R, x2 = x*x;
+      return (0.4*S.h/DEFORM_SUP)*(
+          0.6*x2*(1 - 0.5*x2)
+        + Math.cos(3*th)*x2*x*(1 - 0.6*x2)
+        + 0.4*Math.sin(5*th + 1)*x2*x2*x*(1 - (5/7)*x2));
+    };
+    const errOn = (nr, nth) => {
+      const S = new FaradayCell3D({ nr, nth, nz: 6, ...CELL });
+      for (let i = 0; i < S.nr; i++)
+        for (let k = 0; k < S.nth; k++)
+          S.eta[S.ie(i, k)] = prof(S, S.rc[i], (k + 0.5)*S.dth);
+      S.refreshMetric();
+      let worst = 0;
+      /* strictly between centres in both directions, and inside the rim cell so the one-sided
+         contact closure is not what is being measured */
+      for (let i = 0; i < S.nr - 1; i++)
+        for (let k = 0; k < S.nth; k++)
+          for (const fr of [0.31, 0.5, 0.77])
+            for (const ft of [0.23, 0.5, 0.81]){
+              const r = S.rc[i] + fr*(S.rc[i+1] - S.rc[i]);
+              const th = (k + 0.5 + ft)*S.dth;
+              worst = Math.max(worst, Math.abs(S.etaAt(r, th) - prof(S, r, th)));
+            }
+      return worst;
+    };
+    const e = [errOn(12, 20), errOn(24, 40), errOn(48, 80)];
+    const ord = [Math.log2(e[0]/e[1]), Math.log2(e[1]/e[2])];
+    console.log(`       between centres: ${e.map(x => x.toExponential(3)).join(', ')} over `
+      + `12x20, 24x40, 48x80 -- order ${ord.map(x => x.toFixed(3)).join(' then ')}`);
+    ok(ord.every(o => o > 1.85 && o < 2.15),
+       'and it is second order between them against the analytic surface, which is the '
+       + 'bilinear interpolation\'s own order and not better',
+       `order ${ord.map(x => x.toFixed(4)).join(' then ')}`);
+  }
+
+  /* --- the axis is single-valued, and each m has the right limit there --- *
+   * This is what the antipodal row buys. An m = 0 surface must give one value at r = 0 whatever
+   * theta is asked for; an m = 3 surface must give zero there, because a mode vanishing as r^3
+   * has no elevation on the axis and the two sides of the axis carry opposite signs. */
+  {
+    const S = new FaradayCell3D({ nr: 14, nth: 24, nz: 6, ...CELL });
+    const set = f => { for (let i = 0; i < S.nr; i++)
+                         for (let k = 0; k < S.nth; k++)
+                           S.eta[S.ie(i, k)] = f(S.rc[i]/S.R, (k + 0.5)*S.dth);
+                       S.refreshMetric(); };
+    set((x, th) => 1e-4*(1 - x*x));                           // m = 0
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < 4*S.nth; k++){
+      const v = S.etaAt(0, k*S.dth/4);
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+    const spread0 = hi - lo, scale0 = Math.max(Math.abs(lo), Math.abs(hi));
+    console.log(`       axisymmetric surface at r = 0: spread over theta `
+      + `${spread0.toExponential(2)} of ${scale0.toExponential(2)}`);
+    ok(spread0 <= 4*Number.EPSILON*scale0,
+       'an axisymmetric surface has ONE elevation on the axis, to round-off, however theta is '
+       + 'approached -- which is what the antipodal row is for',
+       `spread ${spread0.toExponential(3)} against the value ${scale0.toExponential(3)}`);
+
+    set((x, th) => 1e-4*x*x*x*(1 - x*x)*Math.cos(3*th));      // m = 3, as rho^3
+    let worst3 = 0;
+    for (let k = 0; k < 4*S.nth; k++)
+      worst3 = Math.max(worst3, Math.abs(S.etaAt(0, k*S.dth/4)));
+    const amp3 = 1e-4*Math.pow(0.5, 3);
+    console.log(`       m = 3 surface at r = 0: worst |eta| ${worst3.toExponential(2)}, `
+      + `against ${amp3.toExponential(2)} at mid-radius`);
+    ok(worst3 < 0.02*amp3,
+       'and an m = 3 surface has no elevation on the axis, because the antipodal continuation '
+       + 'carries the opposite sign there and the two cancel',
+       `${worst3.toExponential(3)} against ${amp3.toExponential(3)} at mid-radius`);
+  }
+
+  /* --- the rim is the contact condition, not an extrapolation --- */
+  {
+    for (const contact of ['free', 'pinned']){
+      const S = new FaradayCell3D({ nr: 12, nth: 16, nz: 6, ...CELL, contact });
+      deform(S, 0.35);
+      let worst = 0, scale = 0;
+      for (let k = 0; k < S.nth; k++){
+        const want = contact === 'free' ? S.eta[S.ie(S.nr - 1, k)] : 0;
+        worst = Math.max(worst, Math.abs(S.etaAt(S.R, (k + 0.5)*S.dth) - want));
+        scale = Math.max(scale, Math.abs(S.eta[S.ie(S.nr - 1, k)]));
+      }
+      /* The pinned branch IS exactly zero: both corner values of the rim row are zero and no
+         weight can make anything else of them. The free branch carries the same few-ulp
+         azimuthal weight as the cell-centre check above. */
+      ok(contact === 'pinned' ? worst === 0 : worst/scale < 1e-13,
+         `${contact}: at r = R the resampled eta IS the contact condition -- `
+         + (contact === 'free' ? 'the last cell\'s own elevation, since deta/dr = 0 there'
+                               : 'exactly zero, since the line is pinned')
+         + ' -- rather than whatever an extrapolation would give',
+         `worst ${worst.toExponential(3)}` + (contact === 'free'
+           ? ` of ${scale.toExponential(3)}, ${(worst/scale).toExponential(3)} relative` : ''));
+    }
+  }
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

@@ -240,6 +240,8 @@ class FaradayCell3D {
        operator an order and a half: every family read 0.5 instead of 2. */
     this.Hxr = new Float64Array((nr + 2)*nth);
     this.Hxt = new Float64Array((nr + 2)*nth);
+    /* eta on the same extended nodes, so a renderer can have it without subtracting h */
+    this.Ex = new Float64Array((nr + 2)*nth);
     this.rx[0] = -this.rc[0];
     for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
     this.rx[nr+1] = this.R;
@@ -433,6 +435,23 @@ class FaradayCell3D {
       this.Hxr[(nr+1)*nth + k] = free ? 0
         : (h - H[this.ie(nr-1, k)])/this.drf[nr];
       this.Hxt[(nr+1)*nth + k] = free ? this.Hdth[this.ie(nr-1, k)] : 0;
+    }
+    /* THE SAME EXTENSION OF ETA ITSELF, and not H minus h, because that subtraction has no
+       low bits to give back. Here h is 3e-3 m and the elevations a renderer draws are 1e-4 m
+       and smaller, so h + eta has an ulp of 4.3e-19 and (h + eta) - h loses everything below
+       it. Measured, before this array existed: `etaAt` as `HatH(r, th) - this.h` missed the
+       stored eta at a cell centre by 6.505e-19 where it should have been exact, the
+       axisymmetric surface's elevation on the axis spread 4.337e-19 over theta where it
+       should have been one number, and the free rim missed the last cell's own elevation by
+       5.421e-19. All three are that one ulp, and all three are the same defect the capillary
+       energy had in section 11: a small quantity reconstructed as the difference of two large
+       ones. Interpolating eta on its own nodes makes a cell centre exact again, because the
+       bilinear weights there are fr = 1 and ft = 0 and the value is the stored one. */
+    for (let k = 0; k < nth; k++){
+      const ka = this.kw(k + half);
+      this.Ex[0*nth + k] = eta[this.ie(0, ka)];
+      for (let i = 0; i < nr; i++) this.Ex[(i+1)*nth + k] = eta[this.ie(i, k)];
+      this.Ex[(nr+1)*nth + k] = free ? eta[this.ie(nr-1, k)] : 0;
     }
     return this;
   }
@@ -770,6 +789,41 @@ class FaradayCell3D {
     o[1] = (((1 - ft)*h10 + ft*h11) - ((1 - ft)*h00 + ft*h01))/(r1 - r0);
     o[2] = ((1 - fr)*(h01 - h00) + fr*(h11 - h10))/dth;
     return o;
+  }
+
+  /* THE SURFACE ELEVATION AT AN ARBITRARY POSITION, which is what a renderer asks for.
+   *
+   * It is `HatH` minus the still depth and not a separate interpolation, deliberately. The
+   * extended grid `Hx` that HatH reads already carries the two things a resampler would
+   * otherwise have to reinvent, and would reinvent differently: the row below the axis is the
+   * ANTIPODAL continuation, `H[ie(0, k + nth/2)]` at r = -rc[0], so a point at or near r = 0
+   * is interpolated across the axis rather than extrapolated up to it; and the row at r = R is
+   * the contact condition itself, the last cell's own H under a free line and h under a pinned
+   * one. A renderer that interpolated eta on its own would have to get both right to draw the
+   * same surface the solver is solving, and any difference would appear as a defect in the
+   * physics rather than in the drawing.
+   *
+   * Exact at a cell centre: rx[i+1] is rc[i] and Ex[(i+1)*nth + k] is eta[ie(i,k)], so the
+   * bilinear weights there are fr = 1 and ft = 0 and the value is the stored one to the bit.
+   * Second order between centres, which is the interpolation's own order and is gated as such.
+   *
+   * It reads `Ex`, the extension of ETA, and NOT `HatH(r, th) - this.h`. That was the first
+   * version and it was wrong by exactly one ulp of h + eta everywhere it mattered; the reason,
+   * and the three measurements, are in `refreshMetric` where Ex is filled. */
+  etaAt(r, th){
+    const nth = this.nth, nr = this.nr, rx = this.rx, Ex = this.Ex, dth = this.dth;
+    let a = 0;
+    while (a < nr && rx[a+1] < r) a++;
+    if (a > nr) a = nr;
+    const r0 = rx[a], r1 = rx[a+1];
+    const fr = (r - r0)/(r1 - r0);
+    const tt = th/dth - 0.5;
+    const kb = Math.floor(tt);
+    const ft = tt - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const e00 = Ex[a*nth + k0], e01 = Ex[a*nth + k1];
+    const e10 = Ex[(a+1)*nth + k0], e11 = Ex[(a+1)*nth + k1];
+    return (1 - fr)*((1 - ft)*e00 + ft*e01) + fr*((1 - ft)*e10 + ft*e11);
   }
 
   /* The centred slopes of H at an arbitrary position, bilinear on the extended

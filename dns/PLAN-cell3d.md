@@ -5,7 +5,7 @@
 validated against an independently written one, driven and undriven. A step cost 146 ms on
 16x24x10 when S7 landed, so an oscillation period cost eleven minutes and S8 was not
 affordable; S7b halved it to 85.6 ms with the operators proven bit-for-bit unchanged.**
-**Next action: S9, the renderer draws this solver. Replace the modal field in
+**Next action: S9b, the renderer draws this solver (S9a, the resampler, is done). Replace the modal field in
 `recompute()`/`renderSurface()` with eta from the 3-D solver, in a worker; show the physics
 clock against the wall clock and report the ratio; size the grid by the same measured-resolution
 logic `suggestGrid` already applies. Gate by extending `dns/check-page.mjs`: the page's field
@@ -94,7 +94,8 @@ against this and need no further decision.
 | S8a | Validation: a quarter period's energy decay against `faraday-disc.js` | **done** | a quantity with no closed form, from two solvers sharing nothing but the physics and not even a vertical coordinate: 1.26121/1.33232, 1.29079/1.32578, 1.30927/1.32165, 1.33430/1.33377, 1.35070/1.34333 over five grid pairs -- gap +5.64%, +2.71%, +0.95%, -0.04%, -0.55%, each code still moving in its own grid, so they converge to one limit from opposite sides; m = 2 likewise +6.13% then +3.35%. Found one real defect, in the ENERGY DIAGNOSTIC: the capillary part was the difference of two areas agreeing to thirteen digits, which at eta = 1e-9 m reported a 9.4% energy GAIN where the scheme drifts -0.035%. Free-slip walls read -59% and are red; half the radial viscosity reads -2.47% and is red only since the third pair was added, which is why it was |
 | S8b | Validation: harmonics, mode coupling, and step() as a composition | **done** | a single m = 3 mode generates m = 0 and m = 6 at exponent 1.998/1.999 in the amplitude and m = 9 at 2.853/2.960, all from 1e-22; m = 2 and m = 3 together generate m = 1 and m = 5 bilinearly (1.9803, 1.9991, 1.9992, 1.9992 on halving either parent) and neither parent alone produces them at better than 1e-22. The regeneration test then found that the whole ADVECTIVE TERM can be deleted from `step()` with all 239 checks green -- at eta/h = 0.2 it is one part in a hundred of the inertia -- so section 14 now reassembles one step from the public operators and asserts the eight state arrays bit for bit. Four step-composition defects red |
 | S8c | Validation: the driven growth rate against the Arnoldi multiplier | **done** | six drive periods at 20x24x12 give \|mu\| = 1.235690, 1.762186, 1.987387, 2.041031, 2.053208, 2.055543 -- increments 0.0536, 0.0122, 0.0023 -- against `floquetDisc`'s Arnoldi value 2.08649212 for the same nr and nz: **-1.49%**, two solvers with different vertical coordinates agreeing on a driven Floquet multiplier. That costs 400 s per period so it is recorded, not gated; section 15 gates the disc's own time-domain driven run at a matched 12x8 / 12x20x8, where the third period reads 2.01139 against 1.96195 (-2.46%) and the window's amplification 4.4801 against 4.1887 (-6.50%), plus the off-resonance contrast (1.836e-1 and 2.058e-2 against 4.48 and 4.19) |
-| S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
+| S9a | The resampler: eta at an arbitrary position | **done** | `etaAt` reads the extended grid `HatH` reads, so the axis is interpolated ACROSS (antipodal row) and the rim IS the contact condition, rather than a renderer reinventing both. Exact at a cell centre to four ulp of the amplitude (5.421e-19 of 1.188e-3, and the residual is the sample position, not the interpolation), second order between centres at 1.965 then 1.919, spread 0.00e+0 over theta on the axis for an axisymmetric surface and 9.26e-23 for m = 3, and exactly the contact condition at r = R. Found a real defect in its own first version: `HatH - h` cannot return eta, because h + eta has an ulp of 4.3e-19 against elevations of 1e-9 to 1e-4 m |
+| S9b | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown; a worker stepping the solver, on the pattern the Floquet panel already uses |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | todo | f64 answer unchanged by the preconditioner; render timing measured |
@@ -1192,6 +1193,77 @@ period's multiplier and +81.57% on the window, and the climb toward the Arnoldi 
 2.50018 overshoots rather than approaches from below.
 
 Clean: 247 checks, 0 failed, 11m37s.
+
+## S9a: eta where the renderer asks for it, and one ulp that was a real defect
+
+The page draws a GR x GR Cartesian raster; the solver holds eta on a graded polar grid.
+Something has to resample, and the point of `etaAt` is that it is **not a new interpolation**.
+
+It reads the extended grid that `HatH` already reads, because that grid carries the two
+conventions a renderer would otherwise reinvent, and reinvent differently:
+
+- the row below the axis is the **antipodal continuation**, `eta[ie(0, k + nth/2)]` at
+  r = -rc[0], so a point near r = 0 is interpolated ACROSS the axis rather than extrapolated up
+  to it;
+- the row at r = R is the **contact condition itself**: the last cell's own elevation under a
+  free line, zero under a pinned one.
+
+A renderer interpolating eta on its own would have to reproduce both to draw the surface the
+solver is solving, and any difference would appear as a defect in the physics rather than in the
+drawing.
+
+### One ulp, and it was not cosmetic
+
+The first version was `etaAt(r, th) = HatH(r, th) - this.h`. Section 16 caught it on its first
+run:
+
+| | measured | owed |
+|---|---|---|
+| at a cell centre | off by 6.505e-19 | exact |
+| on the axis, axisymmetric surface | spread 4.337e-19 over theta | one value |
+| at the free rim | off by 5.421e-19 | exact |
+
+All three are **one ulp of h + eta**. With h = 3e-3 m and the elevations a renderer draws at
+1e-4 m and below, that sum has an ulp of 4.3e-19 and the subtraction cannot give the low bits
+back. It is the same defect section 11 found in the capillary energy -- a small quantity
+reconstructed as the difference of two large ones -- and it would have put a floor of 4.3e-19 m
+under every elevation the page could draw. That is 1.4e-16 of the depth, which sounds harmless
+until you notice the amplitudes S8 validates the solver at: 1e-9 m. The renderer would have been
+drawing round-off.
+
+So eta has its own extended grid, `Ex`, filled from `eta` and never from `H`. Afterwards the axis
+assertions are satisfied exactly: spread **0.00e+0** over theta for an axisymmetric surface, and
+9.26e-23 against a 1.25e-5 mid-radius amplitude for an m = 3 one. The step fingerprint is
+bit-for-bit unchanged, so nothing else in the solver moved.
+
+### And one expectation that cannot be met, corrected rather than engineered around
+
+The cell-centre and free-rim checks still asserted `=== 0` and still failed, at 5.421e-19 and
+4.336e-19. That residual is the **probe**, not the code. The sample position is `(k + 0.5)*dth`,
+and recovering k from it inside `etaAt` costs a multiply and a divide: `th/dth - 0.5` is k plus a
+few ulp, not k, so the floor and the remainder put the azimuthal weight a few ulp off the corner
+instead of on it, and what survives is that weight times the difference between two neighbouring
+elevations. 5.421e-19 of a 1.188e-3 deformation is 4.56e-16 relative -- four ulp of the
+amplitude. The bound is now 1e-13: three orders above that residual and twelve below any defect
+the section has to catch. Asking for zero was asking the coordinates to express something they
+cannot.
+
+The **pinned** rim is still asserted exact, and is: both corner values of that row are zero and
+no weight can make anything else of them.
+
+Second order between centres against the analytic surface: 1.072e-4, 2.747e-5, 7.264e-6 over
+12x20, 24x40, 48x80, order 1.965 then 1.919 -- the bilinear interpolation's own order and not
+better.
+
+### What S9 still needs
+
+`etaAt` is the resampler. The rest of S9 is the wiring: a worker carrying `faraday-cell3d.js`
+that steps and streams eta back, the page calling `etaAt(RAD[i]*R, ANG[i])` per covered pixel in
+place of the modal superposition in `buildSurface`, the physics and wall clocks with their ratio,
+and a grid sizing rule for the three-dimensional case. The existing Floquet panel in
+`cymatic.html` already has the worker pattern to follow -- `ensureWorker` builds one from the
+`<script id="dns...">` sources -- so S9b is that panel's structure applied to a running
+simulation rather than a one-shot solve.
 
 ## Rules this build keeps
 
