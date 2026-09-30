@@ -3913,6 +3913,35 @@ section('17. the surface RATE, and the complex amplitude the renderer transports
     ok(hi - lo <= 4*Number.EPSILON*Math.max(Math.abs(lo), Math.abs(hi)),
        'and an axisymmetric rate has ONE value on the axis, however theta is approached',
        `spread ${(hi - lo).toExponential(3)} of ${hi.toExponential(3)}`);
+
+    /* AND AN m = 3 RATE HAS NONE, which is the assertion that actually tests the antipodal
+       row -- the check above cannot, and I had to be shown that twice.
+       Taking the rate's axis row at the same azimuth instead of the antipode left this section
+       GREEN at 263 passed, 0 failed, because the probe above is AXISYMMETRIC: for a field with
+       no theta dependence, Ht[ie(0, k + nth/2)] and Ht[ie(0, k)] are the same number, so the
+       two rows are identical and the defect is invisible. That is exactly the gap section 16's
+       own axis check had, found by the same injection, and repeating it here while writing a
+       structurally identical section is the reason this comment names it rather than just
+       fixing it. An odd azimuthal order is what distinguishes the two rows: the antipodal value
+       carries the opposite sign, and the two cancel at r = 0 to the last bit of the cosine. */
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const x = S.rc[i]/S.R;
+        S.Ht[S.ie(i, k)] = 1e-3*x*x*x*(1 - x*x)*Math.cos(3*(k + 0.5)*S.dth);
+      }
+    S.refreshMetric();
+    let worst3 = 0;
+    for (let k = 0; k < 4*S.nth; k++)
+      worst3 = Math.max(worst3, Math.abs(S.etaDotAt(0, k*S.dth/4)));
+    const amp3 = 1e-3*Math.pow(0.5, 3)*(1 - 0.25);
+    console.log(`       m = 3 rate at r = 0: worst ${worst3.toExponential(2)}, `
+      + `${(worst3/amp3).toExponential(2)} of the ${amp3.toExponential(2)} at mid-radius`);
+    ok(worst3 < 1e-12*amp3,
+       'and an m = 3 rate has NO value on the axis, to round-off -- which is the assertion '
+       + 'that tests the antipodal row, because an axisymmetric probe cannot tell it from one '
+       + 'taken at the same azimuth',
+       `${worst3.toExponential(3)} of ${amp3.toExponential(3)}, `
+       + `${(worst3/amp3).toExponential(3)} relative`);
   }
 
   /* --- THE MAPPING ITSELF: the phase flux vanishes for a standing mode --- *
