@@ -3136,6 +3136,297 @@ section('12. the damping rate, against an independently written solver');
      `${rates[1][1].toFixed(4)} against 2 nu k^2 = ${bulk.toFixed(4)} s^-1`);
 }
 
+section('13. the nonlinearity, doing the thing a linear solver cannot');
+/* This solver exists because dns/faraday-disc.js cannot answer "what do you see". That one is
+ * linear and per-mode: it answers "does this mode grow" to eight digits and stays the
+ * instrument for the threshold, because Floquet stability of the flat state IS the linear
+ * problem. What it cannot produce is a saturated finite-amplitude figure, because a growing
+ * linear mode grows without bound, and it cannot produce a pattern made of several m at once,
+ * because nothing in it couples them.
+ *
+ * So the two claims here are the reason for the whole file, and both are falsifiable by a
+ * SCALING LAW rather than by a threshold on a value -- which matters, because the size of a
+ * harmonic depends on the grid and the window, while its exponent in the amplitude does not.
+ *
+ * A quadratic nonlinearity acting on cos(m theta) gives cos^2 = (1 + cos 2m theta)/2, so a
+ * single m = 3 mode must generate m = 0 and m = 6 at order A^2 and m = 9 at order A^3. Two
+ * modes m = 2 and m = 3 must generate their SUM and DIFFERENCE, m = 5 and m = 1, at order
+ * a2 a3 -- and those two channels are reachable from neither parent alone, which is what makes
+ * removing a parent the sharpest test there is. A linear solver returns zero for every one of
+ * them, exactly, and so does this one before the first step: the tables below start at 1e-22
+ * and 1e-23.
+ *
+ * m = 1 is worth noticing among the products. dns/faraday-disc.js REFUSES m = 1 -- its radial
+ * singular group -[(m^2+1)u + 2m v]/r^2 stays finite there only through a cancellation its
+ * flux form does not impose -- and here m = 1 arrives on its own out of the coupling, with no
+ * special case anywhere, because S3 made the axis a reflection rather than a boundary.
+ *
+ * WHAT THIS SECTION DOES NOT SAY, measured rather than reasoned about. An exponent is a
+ * STRUCTURAL property: it says a quadratic coupling exists, and it is blind to which term
+ * supplies it and to how large the result is. Two injections confirm that directly.
+ * Deleting the advective term from all three predictors moved the harmonics by under three
+ * per cent -- 4.930e-9 against 4.896e-9 for m = 0 -- and left every exponent right, because at
+ * eta/h = 0.2 the advective term is one part in a hundred of the inertia and its share of a
+ * quadratic harmonic is a correction to a correction. Freezing the metric flat, so the domain
+ * stops following the surface, cut the harmonics by a factor of 28 -- 1.769e-10 for m = 0 --
+ * and the exponents still read 1.998/2.000 and the coupling still halved on halving either
+ * parent. So the harmonics at this amplitude come from the surface: the metric H = h + eta, the
+ * full mean curvature, the traction on a sloped face.
+ *
+ * That is not a fault in the claim, which is that this solver couples modes where the linear
+ * one cannot. It is a limit on what the claim covers, and section 14 exists because of it:
+ * THAT `step` uses each term is a different question from whether the answer is nonlinear, and
+ * the first injection above passed all 239 checks before section 14 was written. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const kOf = m => K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0]/CELL.R;
+  /* the r-weighted L2 norm of eta's m-th azimuthal component */
+  const modeNorm = (S, m) => {
+    let s = 0;
+    for (let i = 0; i < S.nr; i++){
+      let c = 0, d = 0;
+      for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth, e = S.eta[S.ie(i, kk)];
+        c += e*Math.cos(m*th); d += e*Math.sin(m*th);
+      }
+      const amp = (m === 0 ? c/S.nth : 2*Math.sqrt(c*c + d*d)/S.nth);
+      s += amp*amp*S.rc[i]*S.drc[i];
+    }
+    return Math.sqrt(s);
+  };
+
+  /* --- one mode in, its own harmonics out, at the right powers of the amplitude --- */
+  {
+    const m = 3, k = kOf(m);
+    const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+    const tEnd = 0.1*(2*Math.PI/omega);
+    const rels = [0.2, 0.1, 0.05];
+    const rows = [], seeded = [];
+    for (const rel of rels){
+      const S = new FaradayCell3D({ nr: 10, nth: 24, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++)
+        S.eta[S.ie(i, kk)] = rel*S.h*K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+      S.refreshMetric();
+      seeded.push([0, 6, 9].map(mm => modeNorm(S, mm)));
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      for (let n = 0; n < steps; n++) S.step(dt);
+      rows.push([0, 3, 6, 9].map(mm => modeNorm(S, mm)));
+      console.log(`       eta/h = ${rel}: m = 0, 3, 6, 9 -> `
+        + rows[rows.length-1].map(x => x.toExponential(3)).join('  '));
+    }
+    /* the exponent, from halving the amplitude twice: 2^p for a mode of order A^p */
+    const exps = [];
+    for (const col of [0, 1, 2, 3]){
+      const r1 = rows[0][col]/rows[1][col], r2 = rows[1][col]/rows[2][col];
+      exps.push([Math.log2(r1), Math.log2(r2)]);
+    }
+    console.log(`       exponent in the amplitude, from each halving: `
+      + exps.map((e, i) => `m=${[0,3,6,9][i]} ${e[0].toFixed(3)}/${e[1].toFixed(3)}`).join('  '));
+    ok(exps[1].every(e => Math.abs(e - 1) < 0.05),
+       'the seeded m = 3 is linear in the amplitude, as the mode that was put in must be',
+       `exponent ${exps[1][0].toFixed(4)} and ${exps[1][1].toFixed(4)}`);
+    ok(exps[0].every(e => Math.abs(e - 2) < 0.15) && exps[2].every(e => Math.abs(e - 2) < 0.15),
+       'and m = 0 and m = 6 appear at the SQUARE of it, which is a quadratic nonlinearity '
+       + 'acting on cos(3 theta) and is what a linear solver returns zero for',
+       `m=0 ${exps[0].map(e => e.toFixed(4)).join(', ')}; `
+       + `m=6 ${exps[2].map(e => e.toFixed(4)).join(', ')}`);
+    ok(exps[3].every(e => e > 2.5 && e < 3.6),
+       'and m = 9 at the CUBE of it, which no quadratic term can produce -- measured at 2.67 '
+       + 'cells per azimuthal wavelength, so the exponent is bracketed rather than pinned',
+       `m=9 ${exps[3].map(e => e.toFixed(4)).join(', ')}`);
+    const floor = Math.max(...seeded.flat());
+    ok(Math.min(rows[2][0], rows[2][2]) > 1e6*floor,
+       'and all of it grew from nothing: the harmonics are at 1e-22 before the first step, '
+       + 'thirteen orders below where they end up, so they are generated and not seeded',
+       `seeded at most ${floor.toExponential(2)}, smallest harmonic after `
+       + `${Math.min(rows[2][0], rows[2][2]).toExponential(2)}`);
+  }
+
+  /* --- two modes in, their sum and difference out, bilinear in the pair --- */
+  {
+    const k2 = kOf(2), k3 = kOf(3);
+    const w3 = Math.sqrt((CELL.g*k3 + CELL.gamma*k3*k3*k3/CELL.rho)*Math.tanh(k3*CELL.h));
+    const tEnd = 0.1*(2*Math.PI/w3);
+    const run = (r2, r3) => {
+      const S = new FaradayCell3D({ nr: 10, nth: 24, nz: 8, ...CELL, nu: 1e-12 });
+      for (let i = 0; i < S.nr; i++) for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth;
+        S.eta[S.ie(i, kk)] = r2*S.h*K.besselJ(2, k2*S.rc[i])*Math.cos(2*th)
+                           + r3*S.h*K.besselJ(3, k3*S.rc[i])*Math.cos(3*th);
+      }
+      S.refreshMetric();
+      const dt = S.stableStep(), steps = Math.round(tEnd/dt);
+      for (let n = 0; n < steps; n++) S.step(dt);
+      return { m1: modeNorm(S, 1), m5: modeNorm(S, 5) };
+    };
+    const both = run(0.1, 0.1), half2 = run(0.05, 0.1), half3 = run(0.1, 0.05);
+    const only3 = run(0, 0.1), only2 = run(0.1, 0);
+    for (const [tag, r] of [['a2=a3=0.1h', both], ['a2 halved', half2], ['a3 halved', half3],
+                            ['m=3 alone', only3], ['m=2 alone', only2]])
+      console.log(`       ${tag.padEnd(11)}: m = 1 ${r.m1.toExponential(3)}, m = 5 `
+        + `${r.m5.toExponential(3)}`);
+    const r1a = both.m1/half2.m1, r1b = both.m1/half3.m1;
+    const r5a = both.m5/half2.m5, r5b = both.m5/half3.m5;
+    console.log(`       halving either parent divides the child by: m = 1 `
+      + `${r1a.toFixed(4)}, ${r1b.toFixed(4)};  m = 5 ${r5a.toFixed(4)}, ${r5b.toFixed(4)}`);
+    ok([r1a, r1b, r5a, r5b].every(r => Math.abs(r - 2) < 0.1),
+       'm = 1 and m = 5 are bilinear in the pair that makes them: halving EITHER parent halves '
+       + 'the child, which is the difference and the sum of two modes and nothing else',
+       `${[r1a, r1b, r5a, r5b].map(r => r.toFixed(4)).join(', ')} against 2`);
+    ok(Math.max(only3.m1, only3.m5, only2.m1, only2.m5) < 1e-6*Math.min(both.m1, both.m5),
+       'and with either parent removed they vanish to round-off, six orders down at least, so '
+       + 'they come from the product and not from each mode separately',
+       `alone at most ${Math.max(only3.m1, only3.m5, only2.m1, only2.m5).toExponential(2)}, `
+       + `together at least ${Math.min(both.m1, both.m5).toExponential(2)}`);
+    ok(both.m1 > 0 && only2.m1 < 1e-20,
+       'and m = 1 in particular arrives with no special case anywhere -- the solver next door '
+       + 'refuses m = 1 outright, and here it is a product of the axis being a reflection',
+       `m = 1 reaches ${both.m1.toExponential(3)} from a seed of ${only2.m1.toExponential(2)}`);
+  }
+}
+
+section('14. step() is the composition it documents, term for term');
+/* THIS SECTION EXISTS BECAUSE THE SUITE FAILED TO NOTICE THE ADVECTIVE TERM BEING DELETED.
+ * Injected as a regeneration test of section 13 -- `au`, `av` and `aw` removed from all three
+ * predictors, so `step` integrates the viscous term alone and nothing else changes -- and all
+ * 239 checks passed. The harmonics moved by under three per cent and every exponent stayed
+ * right: 2.001/2.000 for m = 0, 2.000/2.000 for m = 6, 2.997/2.999 for m = 9.
+ *
+ * Nothing was wrong with section 13's reasoning, and the arithmetic says why it could not see
+ * this. At eta/h = 0.2 the surface velocity is of order omega eta ~ 2e-2 m/s, so u.grad u is
+ * of order u^2/R ~ 3e-2 m/s^2, against a gravity-capillary acceleration of omega^2 eta ~
+ * 3 m/s^2 -- one part in a hundred, and its contribution to a QUADRATIC harmonic is a
+ * correction to a correction. The harmonics at that amplitude come from the surface: the
+ * metric H = h + eta, the full mean curvature, the traction on a sloped face. Section 13's
+ * claim -- that this solver is nonlinear where the linear one is not -- is true, and it is not
+ * the claim that every nonlinear term is present.
+ *
+ * `advect` itself is thoroughly gated in section 6: the net-flux identity to 1e-16, exact
+ * telescoping, the curvature pair cancelling to 7e-18, second order against calculus, seven
+ * injected defects all red. What had no gate at all was that `step` USES it. That is the gap
+ * this section closes, and it closes it for every other term at the same time: the section
+ * reassembles one step from the solver's own public operators, in the order the file
+ * documents, and asserts the result is bit for bit what `step` produces.
+ *
+ * It is a composition check and not a physics check -- the physics of each operator is
+ * sections 1 to 8, and the physics of the assembly is section 9 against the dispersion
+ * relation and section 12 against another solver. What it catches is a term dropped, a term
+ * added, a term scaled, the surface pressure moved out of the projection, the axis prescribed
+ * after Omega instead of before, or the kinematic update taken from w instead of the corrected
+ * Omega. Every one of those is a defect the rest of the suite either misses or only sees as a
+ * few per cent somewhere. */
+{
+  const S = new FaradayCell3D({ nr: 8, nth: 16, nz: 7, ...CELL });
+  const T = new FaradayCell3D({ nr: 8, nth: 16, nz: 7, ...CELL });
+  /* a state with everything excited: a deformed surface and a divergent velocity field, so no
+     term can be zero by accident */
+  for (const X of [S, T]){
+    deform(X, 0.35);
+    const r = rnd(80808);
+    for (let c = 0; c < X.NU; c++) X.u[c] = 1e-3*r();
+    for (let c = 0; c < X.NV; c++) X.v[c] = 1e-3*r();
+    for (let c = 0; c < X.NW; c++) X.w[c] = 1e-3*r();
+    for (let k = 0; k < X.nth; k++) for (let j = 0; j < X.nz; j++) X.u[X.iu(X.nr, k, j)] = 0;
+    for (let i = 0; i < X.nr; i++) for (let k = 0; k < X.nth; k++) X.w[X.iw(i, k, 0)] = 0;
+    X.axisU();
+    X.omegaFromW();
+  }
+  const dt = S.stableStep();
+  S.step(dt);
+
+  /* the same step, reassembled here */
+  {
+    const nr = T.nr, nth = T.nth, nz = T.nz, nu = T.nu, rho = T.rho;
+    const u = T.u, v = T.v, w = T.w;
+    const lu = new Float64Array(T.NU), au = new Float64Array(T.NU);
+    const lv = new Float64Array(T.NV), av = new Float64Array(T.NV);
+    const lw = new Float64Array(T.NW), aw = new Float64Array(T.NW);
+    const ps = new Float64Array(T.NE), div = new Float64Array(T.NP);
+    const gu = new Float64Array(T.NU), gv = new Float64Array(T.NV), gw = new Float64Array(T.NW);
+
+    T.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) T.Ht[T.ie(i, k)] = T.om[T.iw(i, k, nz)];
+    T.surfacePressure(ps);
+    T.viscous(lu, lv, lw, () => 0, () => 0, () => 0);
+    T.advect(au, av, aw);
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iu(i, k, j); u[c] += dt*(nu*lu[c] + au[c]); }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iv(i, k, j); v[c] += dt*(nu*lv[c] + av[c]); }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){ const c = T.iw(i, k, j); w[c] += dt*(nu*lw[c] + aw[c]); }
+    for (let k = 0; k < nth; k++)
+      for (let j = 0; j < nz; j++) u[T.iu(nr, k, j)] = 0;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[T.iw(i, k, 0)] = 0;
+    T.axisU();
+    T.omegaFromW();
+    T.divergence(u, v, T.om, div);
+    const scale = rho/dt;
+    for (let c = 0; c < div.length; c++) div[c] *= scale;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        div[T.ip(i, k, nz - 1)] -= T.rc[i]*T.drc[i]*T.dth
+          *ps[T.ie(i, k)]/(T.H[T.ie(i, k)]*T.dsf[nz]);
+    T.pressureDiagonal();
+    T.p.fill(0);
+    T.solveP(div, 1e-11, 400*(nr + nth + nz));
+    T.gradient(T.p, gu, gv, gw);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = T.ie(i, k);
+        gw[T.iw(i, k, nz)] += ps[e]/(T.H[e]*T.dsf[nz]);
+      }
+    const s2 = dt/rho;
+    for (let i = 1; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iu(i, k, j); u[c] -= s2*gu[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 0; j < nz; j++){ const c = T.iv(i, k, j); v[c] -= s2*gv[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++)
+        for (let j = 1; j <= nz; j++){ const c = T.iw(i, k, j); w[c] -= s2*gw[c]; }
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) w[T.iw(i, k, 0)] = 0;
+    T.axisU();
+    T.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = T.ie(i, k);
+        T.eta[e] += dt*T.om[T.iw(i, k, nz)];
+        T.Ht[e] = T.om[T.iw(i, k, nz)];
+      }
+    T.t += dt;
+    T.refreshMetric();
+  }
+
+  const fields = [['u', S.u, T.u], ['v', S.v, T.v], ['w', S.w, T.w], ['Omega', S.om, T.om],
+                  ['eta', S.eta, T.eta], ['p', S.p, T.p], ['H', S.H, T.H], ['Ht', S.Ht, T.Ht]];
+  const bad = [];
+  for (const [name, a, b] of fields){
+    let n = 0;
+    for (let c = 0; c < a.length; c++) if (a[c] !== b[c]) n++;
+    if (n) bad.push(`${name} ${n}/${a.length}`);
+  }
+  console.log(`       one step at dt = ${dt.toExponential(3)} s on a 8x16x7 grid at `
+    + `eta/h = 0.35, reassembled from the public operators: `
+    + (bad.length ? bad.join(', ') + ' differ' : 'every field identical')
+    + `; max |u| ${maxAbs(S.u).toExponential(3)}, ${S.cgIters} CG iterations`);
+  ok(bad.length === 0,
+     'step() is exactly the documented composition -- viscous plus advective predictor, the '
+     + 'prescribed values before Omega, the surface pressure as an inhomogeneous Dirichlet '
+     + 'value inside the projection, the corrector, and eta on the corrected Omega',
+     bad.length ? bad.join('; ') : 'all eight fields bit for bit');
+  ok(S.t === T.t && S.t > 0,
+     'and it advanced the clock by exactly the step it was given',
+     `${S.t.toExponential(17)} against ${T.t.toExponential(17)}`);
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

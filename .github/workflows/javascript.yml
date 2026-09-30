@@ -65,9 +65,10 @@
 # of a number to go stale again. Timed on this container: 3m00s for 214 checks;
 # 1m18s for the same checks once the step's repeated index arithmetic was hoisted
 # out of the conjugate-gradient matvec and the reconstruction primitives, bit for
-# bit unchanged; 5m12s for 232, the added four minutes being section 12, which
+# bit unchanged; 6m33s for 241, of which four minutes is section 12, which
 # integrates BOTH this solver and dns/faraday-disc.js for a quarter of a mode's
-# period on three grids to compare their damping rates. That section is the most
+# period on three grids to compare their damping rates, and ninety seconds is
+# section 13's eight finite-amplitude runs. That section is the most
 # expensive thing in the file and the only check in the project that compares two
 # independently written solvers, so it is also the last thing that should be cut
 # for time. It still shares the job: five minutes beside a two-and-a-half minute

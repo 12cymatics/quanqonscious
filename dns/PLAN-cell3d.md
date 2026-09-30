@@ -92,7 +92,8 @@ against this and need no further decision.
 | S6h | Free surface: the surface pressure | **done** | `rho g eta - gamma kappa + 2 rho nu n.E.n`, entering the projection's right-hand side top row and the corrector's sigma = 1 face and nowhere else -- never the predictor, where it is O(1/dsigma) and the projection cancels almost all of it |
 | S7 | `step()`, its stability limit, and the energy diagnostic | **done** | the assembled solver reproduces the linear gravity-capillary frequency for m = 3, error 13.11% -> 6.62% -> 3.92% -> 2.08% over four grids, which no single operator in the file could produce alone; building it found two O(1) defects in the committed projection (the Omega control volume missing its H; the horizontal components covariant rather than physical, 86.99 against 137.00); `stableStep` from the DISPERSION relation, with no growth at 1x (0.997392 and 0.997441 per step on two grids) and divergence at 10x (by step 14 and step 15), so the limit is falsifiable on both sides; over a quarter period at nu = 1e-12 the energy drifts -0.0343%, never rises, and 99.19% of it becomes kinetic |
 | S8a | Validation: the viscous damping rate against `faraday-disc.js` | **done** | a quantity with no closed form, from two solvers sharing nothing but the physics and not even a vertical coordinate: 1.26121/1.33232, 1.29079/1.32578, 1.30927/1.32165, 1.33430/1.33377, 1.35070/1.34333 over five grid pairs -- gap +5.64%, +2.71%, +0.95%, -0.04%, -0.55%, each code still moving in its own grid, so they converge to one limit from opposite sides; m = 2 likewise +6.13% then +3.35%. Found one real defect, in the ENERGY DIAGNOSTIC: the capillary part was the difference of two areas agreeing to thirteen digits, which at eta = 1e-9 m reported a 9.4% energy GAIN where the scheme drifts -0.035%. Free-slip walls read -59% and are red; half the radial viscosity reads -2.47% and is red only since the third pair was added, which is why it was |
-| S8b | Validation: driven Floquet growth rate, harmonics, mode coupling | todo | per-mode growth against `faraday-disc.js` under drive; harmonics at finite amplitude scaling as the square of the amplitude; two modes producing their sum and difference |
+| S8b | Validation: harmonics, mode coupling, and step() as a composition | **done** | a single m = 3 mode generates m = 0 and m = 6 at exponent 1.998/1.999 in the amplitude and m = 9 at 2.853/2.960, all from 1e-22; m = 2 and m = 3 together generate m = 1 and m = 5 bilinearly (1.9803, 1.9991, 1.9992, 1.9992 on halving either parent) and neither parent alone produces them at better than 1e-22. The regeneration test then found that the whole ADVECTIVE TERM can be deleted from `step()` with all 239 checks green -- at eta/h = 0.2 it is one part in a hundred of the inertia -- so section 14 now reassembles one step from the public operators and asserts the eight state arrays bit for bit. Four step-composition defects red |
+| S8c | Validation: driven Floquet growth rate against `faraday-disc.js` | todo | per-mode growth under drive against `floquetDisc`'s dominant multiplier; a drive period costs 133 s at 14x24x10, so this is the expensive one |
 | S9 | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
@@ -995,6 +996,100 @@ is 1e-14 now, still thirteen orders tighter than the injections it has to catch.
 
 So: this gate resolves a defect of a few per cent in the damping and not one of a few tenths.
 That is its measured power and it is stated in the section rather than implied by a threshold.
+
+## S8b: the nonlinearity, and the term the whole suite could not see
+
+Two claims, both falsifiable by a SCALING LAW rather than by a threshold on a value -- which
+matters, because a harmonic's size depends on the grid and the window and its exponent in the
+amplitude does not.
+
+**One mode in, its own harmonics out.** A quadratic nonlinearity acting on cos(3 theta) gives
+cos^2 = (1 + cos 6 theta)/2, so a single m = 3 mode must generate m = 0 and m = 6 at order A^2
+and m = 9 at order A^3. Measured on 10x24x8 over a tenth of a period, at eta/h = 0.2, 0.1 and
+0.05, as the r-weighted L2 norm of each azimuthal component of eta:
+
+| | m = 0 | m = 3 | m = 6 | m = 9 |
+|---|---|---|---|---|
+| eta/h = 0.2 | 4.896e-9 | 1.273e-6 | 1.485e-8 | 3.002e-11 |
+| eta/h = 0.1 | 1.226e-9 | 6.361e-7 | 3.718e-9 | 4.156e-12 |
+| eta/h = 0.05 | 3.066e-10 | 3.180e-7 | 9.297e-10 | 5.342e-13 |
+| exponent | **1.998/1.999** | 1.001/1.000 | **1.998/1.999** | **2.853/2.960** |
+
+The seeded mode is linear, the two quadratic channels are square, and m = 9 is cubic, which no
+quadratic term can produce. All of it grew from 1e-22: the harmonics before the first step are
+at round-off, thirteen orders below where they finish. A linear solver returns exactly zero for
+every one of them.
+
+**Two modes in, their sum and difference out.** m = 2 and m = 3 together must give m = 5 and
+m = 1, at order a2 a3, and those two channels are reachable from neither parent alone:
+
+| | m = 1 | m = 5 |
+|---|---|---|
+| a2 = a3 = 0.1 h | 2.563e-9 | 7.358e-9 |
+| a2 halved | 1.294e-9 | 3.681e-9 |
+| a3 halved | 1.282e-9 | 3.681e-9 |
+| m = 3 alone | 1.956e-22 | 3.722e-22 |
+| m = 2 alone | 2.463e-22 | 5.642e-22 |
+
+Halving either parent divides the child by 1.9803, 1.9991, 1.9992, 1.9992; removing either
+parent drops it thirteen orders to round-off. And m = 1 arrives with no special case anywhere,
+which is worth noting because `dns/faraday-disc.js` REFUSES m = 1 outright -- its radial
+singular group `-[(m^2+1)u + 2m v]/r^2` stays finite there only through a cancellation its flux
+form does not impose. Here it is a product of S3 having made the axis a reflection.
+
+### The advective term can be deleted from step() and 239 checks pass
+
+That was the regeneration test of the section above, and it came back **green**. `au`, `av` and
+`aw` removed from all three predictors: the harmonics moved by under three per cent -- 4.930e-9
+against 4.896e-9 for m = 0 -- and every exponent stayed right at 2.001/2.000, 2.000/2.000,
+2.997/2.999. Freezing the metric flat instead cut the harmonics by a factor of **28**, to
+1.769e-10, and the exponents still read 1.998/2.000 and the coupling still halved on halving
+either parent.
+
+The arithmetic says why. At eta/h = 0.2 the surface velocity is of order omega eta ~ 2e-2 m/s,
+so `u.grad u` is of order u^2/R ~ 3e-2 m/s^2 against a gravity-capillary acceleration of
+omega^2 eta ~ 3 m/s^2: **one part in a hundred**, and its share of a quadratic harmonic is a
+correction to a correction. The harmonics at that amplitude come from the surface -- the metric
+H = h + eta, the full mean curvature, the traction on a sloped face.
+
+**An exponent is a structural property.** It says a quadratic coupling exists; it is blind to
+which term supplies it and to how large the result is. Section 13's claim -- that this solver
+couples modes where the linear one cannot -- is true, and it is not the claim that every
+nonlinear term is present. `advect` itself is thoroughly gated in section 6 (the net-flux
+identity to 1e-16, exact telescoping, the curvature pair cancelling to 7e-18, second order
+against calculus, seven injected defects red). What had no gate anywhere was that **`step`
+uses it**.
+
+### Section 14: step() is the composition it documents, term for term
+
+The section reassembles one step from the solver's own public operators -- `omegaFromW`,
+`surfacePressure`, `viscous`, `advect`, `divergence`, `pressureDiagonal`, `solveP`, `gradient`,
+`axisU` -- in the order the file documents, on a deformed surface at eta/h = 0.35 with a
+divergent random velocity field, and asserts all eight state arrays are **bit for bit** what
+`step` produces.
+
+It is a composition check and not a physics check. The physics of each operator is sections 1
+to 8; the physics of the assembly is section 9 against the dispersion relation and section 12
+against another solver. What it catches is a term dropped, added or scaled, the surface pressure
+moved out of the projection, the axis prescribed after Omega instead of before, or the kinematic
+update taken from w instead of the corrected Omega. Four injections, all red:
+
+| injected | what section 14 reports |
+|---|---|
+| the advective term dropped -- the defect the suite missed | every field differs: u 896/1008, v 896/896, w 896/1024, Omega 896/1024, eta, p, H, Ht all |
+| the axis prescribed after Omega instead of before | every field differs, identically wide |
+| eta advanced on the physical w instead of the corrected Omega | eta 128/128 and H 128/128 -- exactly the two it should touch |
+| the surface pressure left out of the right-hand side top row | every field differs, and seven other sections go red too |
+
+The third is the one to read carefully: it changes eta and H and **nothing else** on the first
+step, which is right, and it is the kind of defect that takes many steps to show anywhere else.
+
+**The general lesson, and it is the fourth time this session.** A gate that measures a
+*property* of the answer -- an exponent, a convergence order, an invariant -- cannot tell you
+which code path produced it. Sections 10 and 14 are the two that ask the other question, "is
+this the computation it says it is", and both were written after something got past everything
+else: section 10 after the index hoisting could have changed bits silently, section 14 after an
+entire nonlinear term did.
 
 ## Rules this build keeps
 
