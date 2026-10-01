@@ -40,7 +40,15 @@ export const SCRIPTS = [
   { tag: '<script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>',
     path: 'dns/faraday-disc-wasm.js', open: '<script id="dnsDiscWasm">' },
   { tag: '<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>',
-    path: 'dns/faraday-floquet.js', open: '<script id="dnsFloquet">' }
+    path: 'dns/faraday-floquet.js', open: '<script id="dnsFloquet">' },
+  /* The three-dimensional solver. AFTER faraday-disc.js, which it takes its graded
+     grid maps from at load time and refuses without. Left out of this list when the
+     page first referenced it, and dns/check-page.mjs caught it twice over: the
+     standalone build kept the <script src> tag, so a single file opened by
+     double-click tried to fetch a sibling that file:// gives it no origin for, and
+     both "fetches no script at all" and "no resource failed to load" went red. */
+  { tag: '<script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>',
+    path: 'dns/faraday-cell3d.js', open: '<script id="dnsCell3d">' }
 ];
 
 /* The compiled period map travels as base64 in its own tag. A single file opened

@@ -517,8 +517,86 @@ async function checkPage(url, name, expectInline){
   return page;
 }
 
+/* ---- the solver actually draws, which loading the page does not prove -------
+   Everything above establishes that the page comes up and logs nothing. This turns
+   the surface source over to dns/faraday-cell3d.js, waits for the worker's first
+   frame, and then checks the thing that matters: that the raster the page renders IS
+   the solver's surface and not a leftover modal pattern that happens to be on screen.
+
+   The comparison is made in the page, against the page's own resampling vessel, at
+   pixel positions chosen across the disc. If buildSurface had run instead of the
+   solver path -- or if the solver path had silently fallen back -- ETA would hold a
+   normalised modal sum and the residual would be of order one, not of order the
+   normalisation's own rounding. */
+async function checkSolverDraws(page){
+  section('the surface drawn from the three-dimensional solver');
+
+  const before = await page.json('({ src: document.querySelector("#srcSeg [data-s=\'modal\']")'
+    + '.getAttribute("aria-pressed"), useSolver })');
+  ok(before.src === 'true' && before.useSolver === false,
+     'the page starts on the modal superposition, so the solver is opt-in and nothing '
+     + 'about the existing picture changed by adding it',
+     JSON.stringify(before));
+
+  await page.eval('document.querySelector("#srcSeg [data-s=\'dns\']").click()');
+  const waited = await page.waitFor('CELL3D.clocks().have === true', 60000,
+                                    "the worker's first frame");
+  const c = await page.json('CELL3D.clocks()');
+  console.log(`       first frame after ${waited.toFixed(1)} s: ${c.grid.nr} x ${c.grid.nth} `
+    + `x ${c.grid.nz}, ${c.stepsDone} steps, ${c.perStep.toFixed(0)} ms a step, `
+    + `physics ${(c.physT*1e3).toFixed(2)} ms in ${c.wall.toFixed(1)} s wall`);
+  ok(!c.err, 'the worker starts, steps and posts a frame without erroring',
+     String(c.err));
+  ok(c.stepsDone > 0 && c.physT > 0,
+     'and it advanced the physics clock, so the solver is integrating and not idling',
+     `${c.stepsDone} steps, t = ${c.physT}`);
+
+  /* force one build with the solver on, then compare the raster against the vessel */
+  await page.eval('recompute()');
+  const cmp = await page.json(`(() => {
+    const V = CELL3D.vesselFor ? CELL3D.vesselFor() : null;
+    let worst = 0, scale = 0, n = 0;
+    for (let y = 4; y < GR - 4; y += 17)
+      for (let x = 4; x < GR - 4; x += 17){
+        const i = y*GR + x; if (COVER[i] <= 0) continue;
+        const rho = Math.min(1, RAD[i]);
+        const th = ANG[i] < 0 ? ANG[i] + 2*Math.PI : ANG[i];
+        const want = CELL3D.etaAtPixel(rho, th);
+        worst = Math.max(worst, Math.abs(ETA[i] - want));
+        scale = Math.max(scale, Math.abs(want));
+        n++;
+      }
+    return { worst, scale, n, rel: scale > 0 ? worst/scale : Infinity };
+  })()`);
+  console.log(`       page raster against the solver's own surface at ${cmp.n} pixels: `
+    + `worst ${cmp.worst.toExponential(3)} of ${cmp.scale.toExponential(3)}, `
+    + `${cmp.rel.toExponential(2)} relative`);
+  ok(cmp.n > 50, 'the comparison covers the disc rather than a handful of pixels',
+     `${cmp.n} pixels`);
+  /* The bound is 1e-6 and the residual is 5.52e-8, which is NOT interpolation error: ETA is
+     a Float32Array, and Float32 epsilon is 1.19e-7. What is being measured is the raster's own
+     storage precision, so a tighter bound would be asserting something about f32 that f32
+     cannot deliver. Anything that drew a different surface would be of order one here. */
+  ok(cmp.rel < 1e-6,
+     "the page's field IS the solver's surface, normalised -- not a modal pattern left "
+     + 'on screen while the deck claims otherwise',
+     `${cmp.rel.toExponential(3)} relative over ${cmp.n} pixels`);
+
+  const deck = await page.eval('document.getElementById("ro").textContent');
+  ok(/3-D Navier-Stokes solver/.test(deck),
+     'and the deck says so, so what is drawn and what is claimed cannot disagree',
+     deck.slice(0, 160));
+  ok(/physics clock/.test(deck) && /wall clock/.test(deck) && /slower than real time/.test(deck),
+     'both clocks and their ratio are on the deck, which is how the page states that a '
+     + 'direct simulation of this cell does not run at real time',
+     deck.slice(0, 200));
+
+  await page.shot(join(tmpdir(), 'check-page-solver.png'));
+}
+
 try {
-  await checkPage(`http://127.0.0.1:${port}/cymatic.html`, 'the checkout page', false);
+  const first = await checkPage(`http://127.0.0.1:${port}/cymatic.html`, 'the checkout page', false);
+  await checkSolverDraws(first);
 
   const { buildStandalone } = await import(join(REPO, 'faraday', 'build-standalone.mjs'));
   writeFileSync(built, buildStandalone());

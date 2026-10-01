@@ -178,6 +178,13 @@ footer b{color:var(--ink2);font-weight:500}
       </div>
     </div>
     <div class="fld">
+      <span class="lab">surface</span>
+      <div class="seg" id="srcSeg">
+        <button data-s="modal" aria-pressed="true">modal sum</button>
+        <button data-s="dns" aria-pressed="false">Navier-Stokes</button>
+      </div>
+    </div>
+    <div class="fld">
       <span class="lab">photographed phase</span>
       <div class="seg" id="phaseSeg">
         <button data-p="1" aria-pressed="true">phase I</button>
@@ -253,6 +260,7 @@ footer b{color:var(--ink2);font-weight:500}
 <script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>
 <script id="dnsWasmBase64"></script>
 <script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
+<script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>
 <script>
 
 const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
@@ -389,13 +397,20 @@ function buildSurface(state){
     }
   }
 
+  state.render = { drawn, gatedRms: Math.sqrt(unresolved),
+                   gated: state.states.filter(x => x.gated).length };
+  finishSurface(state);
+}
+
+/* The normalisation and the grain transport, shared by the modal path above and the
+   solver path below so there is ONE copy and the two cannot drift. Everything here reads
+   the six rasters and writes PGX/PGY; nothing in it knows where the rasters came from. */
+function finishSurface(state){
   let mx = 1e-9, gx = 1e-9;
   for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){
     mx = Math.max(mx, Math.abs(ETA[i]));
     gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
   }
-  state.render = { drawn, gatedRms: Math.sqrt(unresolved),
-                   gated: state.states.filter(x => x.gated).length };
   const inv = 1/mx, ginv = 1/gx;
 
   const tc = transportCoefficients(state.damping, state.wavelength);
@@ -666,7 +681,10 @@ function recompute(){
                                 depthMm: depth, rim, tSec: simT, tfeSec: tfeOf(),
 
                                 driveR: 0 });
-  buildSurface(state);
+  /* The solver path when it is on AND has posted a frame. Until the first frame
+     arrives the modal surface is drawn, and the deck says which one you are looking
+     at -- it never shows one and labels it the other. */
+  if (!(useSolver && CELL3D.build(state))) buildSurface(state);
   paintDeck(); paintInspector();
   drawAtlas(cellKey, freq);
   if (dnsShowInput) dnsShowInput();
@@ -727,6 +745,28 @@ function paintDeck(){
         ? `${(2*Math.PI*RR/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
     ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
+    ['SEP', ''],
+    ['surface drawn from', (() => {
+       const c = CELL3D.clocks();
+       if (c.err) return `<b style="color:var(--bad,#e66)">solver failed</b> `
+                       + `<span class="u">${c.err}</span>`;
+       if (!useSolver) return 'modal superposition <span class="u">(kernel.js)</span>';
+       if (!c.have) return '<b>modal</b> <span class="u">— solver starting…</span>';
+       return '<b>the 3-D Navier-Stokes solver</b>';
+     })()],
+    ...(() => {
+       const c = CELL3D.clocks();
+       if (!useSolver || !c.have) return [];
+       return [
+         ['  grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} `
+            + `<span class="u">= ${c.grid.nr*c.grid.nth*c.grid.nz} cells</span>`],
+         ['  physics clock', `<b>${(c.physT*1e3).toFixed(2)}</b> <span class="u">ms</span>`],
+         ['  wall clock', `${c.wall.toFixed(1)} <span class="u">s</span>`],
+         ['  ratio', `<b>${c.ratio.toFixed(0)}×</b> <span class="u">slower than real time`
+            + ` — ${c.perStep.toFixed(0)} ms a step</span>`],
+         ['  steps taken', `${c.stepsDone}`]
+       ];
+     })(),
     ['SEP', ''],
     ['empirical fold', s.selectedEmpiricalFold != null
         ? `<b>${s.selectedEmpiricalFold}</b>-fold` : '<span class="u">none in atlas</span>'],
@@ -811,6 +851,16 @@ seg('phaseSeg', b => {
   else { swapping = false; phaseSign = +b.dataset.p; }
 });
 seg('viewSeg', b => { view = b.dataset.v; });
+/* Switching to the solver starts it from the deck's current operating point. Switching
+   back stops the worker rather than leaving it burning a core behind a picture nobody
+   is looking at. */
+seg('srcSeg', b => {
+  const want = b.dataset.s === 'dns';
+  if (want === useSolver) return;
+  useSolver = want;
+  if (want) CELL3D.start(state); else CELL3D.stop();   /* start() reports its own errors */
+  dirty = true;
+});
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
 });
@@ -1675,5 +1725,219 @@ function loop(now){
   paintOverlay();
   requestAnimationFrame(loop);
 }
+/* ───────────────────────────────────────────────────────────────────────────
+   S9b: THE PAGE DRAWS THE THREE-DIMENSIONAL SOLVER.
+
+   Everything above this block draws a modal Bessel superposition from
+   faraday/kernel.js -- a sum of known eigenfunctions with known phases. This
+   block replaces the source of the six surface rasters with dns/faraday-cell3d.js,
+   which integrates the incompressible Navier-Stokes equations in a
+   surface-following coordinate and knows nothing about modes.
+
+   Three decisions worth stating, because each had an easier wrong answer.
+
+   THE SOLVER RUNS IN A WORKER and the page holds a SECOND instance that never
+   steps. The worker owns the physics; it posts back eta and its time derivative on
+   the solver's own polar grid. The page's instance is a resampling vessel: it
+   receives those two fields, calls refreshMetric, and is then asked for values at
+   pixel positions through etaAt, etaDotAt, etaSlopeAt and etaDotSlopeAt. The
+   alternative -- rasterising inside the worker -- would have put a second,
+   ungated copy of that interpolation in the codebase, which is the mistake
+   section 16 of the gate exists to prevent.
+
+   THE QUADRATURE IS THE SURFACE'S RATE, not a per-mode phase. The transport in
+   finishSurface needs a complex amplitude A = Re + i Im, and the modal path built
+   it from each mode's phase offset. A direct simulation has none. For any
+   oscillation the instantaneous pair (eta, -eta_t/omega) IS that amplitude: it
+   gives a standing mode an intensity pattern and no phase flux, and a travelling
+   one a flux of one sign, which is what section 17 of the gate measures.
+
+   NO ENVELOPE. The modal path multiplies by centreBiasEnvelope, a cosmetic
+   weighting that tilts a sum of eigenfunctions toward what the printed atlas
+   shows. The solver's surface is the surface; nothing here reweights it.
+   ─────────────────────────────────────────────────────────────────────────── */
+const CELL3D = (function(){
+  let worker = null, vessel = null, running3d = false, err = null;
+  let physT = 0, wall = 0, stepsDone = 0, perStep = 0, grid = null;
+  let etaBuf = null, htBuf = null, omegaRef = 1, haveFrame = false, peakRaw = 0;
+
+  async function sourceOf(id){
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`cell3d: no <script id="${id}">`);
+    if (el.textContent && el.textContent.trim().length) return el.textContent;
+    if (el.src){
+      const r = await fetch(el.src);
+      if (!r.ok) throw new Error(`cell3d: fetching ${el.src} gave ${r.status}`);
+      return await r.text();
+    }
+    throw new Error(`cell3d: <script id="${id}"> has neither inline source nor src`);
+  }
+
+  /* The worker carries faraday-disc.js first, because faraday-cell3d.js takes its
+     graded grid maps from it, then steps in slices so the page can draw between
+     them. A slice is wall-clock bounded rather than a fixed step count, so a
+     coarse grid posts often and a fine one posts seldom instead of freezing. */
+  async function ensureWorker(){
+    if (worker) return worker;
+    const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
+      `let S = null, dt = 0, sliceMs = 120;
+       self.onmessage = (e) => {
+         const d = e.data;
+         try {
+           if (d.cmd === 'init'){
+             S = new FARADAY_CELL3D.FaradayCell3D(d.opts);
+             for (let i = 0; i < S.nr; i++)
+               for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = d.eta0[i*S.nth + k];
+             S.refreshMetric();
+             dt = S.stableStep();
+             self.postMessage({ ok: true, kind: 'ready', dt,
+               nr: S.nr, nth: S.nth, nz: S.nz, dth: S.dth,
+               rc: Array.from(S.rc), R: S.R, h: S.h });
+             return;
+           }
+           if (d.cmd === 'slice'){
+             const t0 = Date.now(); let n = 0;
+             while (Date.now() - t0 < sliceMs){ S.step(dt); n++; }
+             const eta = new Float64Array(S.eta), ht = new Float64Array(S.Ht);
+             self.postMessage({ ok: true, kind: 'frame', t: S.t, steps: n,
+               ms: Date.now() - t0, eta, ht, cg: S.cgIters },
+               [eta.buffer, ht.buffer]);
+             return;
+           }
+           throw new Error('cell3d worker: unknown command ' + d.cmd);
+         } catch (e2){
+           self.postMessage({ ok: false, error: String(e2 && e2.message || e2) });
+         }
+       };`].join('\n;\n');
+    worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
+    return worker;
+  }
+
+  /* The initial condition: the mode the deck says is nearest, at an amplitude small
+     enough to be linear. Under a drive it grows on its own; that is the point. */
+  function seed(S, m, k){
+    const AMP = 1e-7, out = new Float64Array(S.nr*S.nth);
+    for (let i = 0; i < S.nr; i++)
+      for (let j = 0; j < S.nth; j++)
+        out[i*S.nth + j] = AMP*FARADAY_KERNEL.besselJ(m, k*S.rc[i])
+                               *Math.cos(m*(j + 0.5)*S.dth);
+    return out;
+  }
+
+  async function start(st){
+    try { await startInner(st); }
+    catch (e){ err = String(e && e.message || e); running3d = false; dirty = true; }
+  }
+  async function startInner(st){
+    err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
+    const m = Math.max(0, st.nearestTheoryModes[0].m);
+    const k = st.wavenumber;
+    omegaRef = 2*Math.PI*st.responseHz || 1;
+    /* The grid: enough azimuthal cells for this m at eight per wavelength, and the
+       radial and vertical counts the two-dimensional solver's own resolution logic
+       picks for the same mode. nth is forced even -- the solver refuses an odd
+       count, since the top azimuthal mode would lose its conjugate. */
+    const nth = Math.max(16, 2*Math.ceil(4*Math.max(1, m)));
+    /* nr and nz from the two-dimensional solver's own resolution logic for this mode --
+       the same suggestGrid the Floquet panel uses -- rather than numbers chosen here.
+       It sizes for the surface operator's error and for cells inside the Stokes layers,
+       which is what sets the damping. If it cannot place the mode at all it returns
+       unreachable, and then the grid below is the floor the solver itself accepts. */
+    let nrS = 16, nzS = 10;
+    try {
+      const g = FARADAY_DISC.suggestGrid({
+        m: Math.max(2, m), k, R: st.cellDiameterMm*5e-4, h: depth*1e-3,
+        rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma,
+        contact: rim === 'pinned' ? 'pinned' : 'free',
+        omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*freq,
+        profile: r => FARADAY_KERNEL.besselJ(Math.max(2, m), k*r) });
+      if (!g.unreachable && g.nr && g.nz){ nrS = g.nr; nzS = g.nz; }
+    } catch { /* suggestGrid refuses some operating points; the floor above stands */ }
+    const opts = { nr: nrS, nth, nz: nzS,
+                   /* `depth` is the page's own slider in mm; the resolved state carries
+                      cellDiameterMm but not the depth, which cost one NaN refusal to find */
+                   R: st.cellDiameterMm*5e-4, h: depth*1e-3,
+                   rho: st.water.rho, nu: st.water.mu/st.water.rho,
+                   gamma: st.water.sigma, g: 9.80665,
+                   accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
+                   contact: rim === 'pinned' ? 'pinned' : 'free' };
+    vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
+    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz };
+    const eta0 = seed(vessel, m, k);
+    const w = await ensureWorker();
+    w.onmessage = ev => {
+      const d = ev.data;
+      if (!d.ok){ err = d.error; running3d = false; return; }
+      if (d.kind === 'ready'){ w.postMessage({ cmd: 'slice' }); return; }
+      if (d.kind === 'frame'){
+        etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
+        wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
+        haveFrame = true; dirty = true;
+        if (running3d) w.postMessage({ cmd: 'slice' });
+      }
+    };
+    w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
+    running3d = true;
+    w.postMessage({ cmd: 'init', opts, eta0 });
+  }
+
+  function stop(){ running3d = false; }
+
+  /* Fill the six rasters from the solver's surface, through the gated resamplers.
+     Im is -eta_t/omega, and the gradients are taken in the NORMALISED radius the
+     modal path uses -- NX/NY are derivatives with respect to RAD, not metres --
+     so the factor of R converts the solver's per-metre slopes to that coordinate. */
+  function build(st){
+    if (!haveFrame || !vessel) return false;
+    const nth = vessel.nth;
+    for (let i = 0; i < vessel.nr; i++)
+      for (let j = 0; j < nth; j++){
+        const e = vessel.ie(i, j);
+        vessel.eta[e] = etaBuf[i*nth + j];
+        vessel.Ht[e]  = htBuf[i*nth + j];
+      }
+    vessel.refreshMetric();
+    const R = vessel.R, iw = 1/omegaRef;
+    for (let i = 0; i < NSZ; i++){
+      if (COVER[i] <= 0){ ETA[i] = IMF[i] = NX[i] = NY[i] = GIX[i] = GIY[i] = 0; continue; }
+      const rho = Math.min(1, RAD[i]), th = ANG[i] < 0 ? ANG[i] + 2*Math.PI : ANG[i];
+      const r = rho*R;
+      const re = vessel.etaAt(r, th), im = -vessel.etaDotAt(r, th)*iw;
+      const gE = vessel.etaSlopeAt(r, th), gT = vessel.etaDotSlopeAt(r, th);
+      /* polar to Cartesian, in the normalised radius: d/drho = R d/dr, and the
+         azimuthal part divides by rho rather than by r for the same reason */
+      const c = Math.cos(th), sn = Math.sin(th), rr = Math.max(rho, 1e-6);
+      const eR = gE.Hr*R, eT = gE.Hth/rr;
+      const tR = gT.Tr*R*-iw, tT = (gT.Tth/rr)*-iw;
+      ETA[i] = re;  IMF[i] = im;
+      NX[i]  = eR*c - eT*sn;  NY[i]  = eR*sn + eT*c;
+      GIX[i] = tR*c - tT*sn;  GIY[i] = tR*sn + tT*c;
+    }
+    /* The raw peak over covered pixels, which is exactly what finishSurface divides
+       the rasters by. Kept so a caller -- dns/check-page.mjs -- can ask what a pixel
+       OUGHT to hold and compare, without reimplementing the normalisation. */
+    peakRaw = 0;
+    for (let i = 0; i < NSZ; i++)
+      if (COVER[i] > 0) peakRaw = Math.max(peakRaw, Math.abs(ETA[i]));
+    st.render = { drawn: 1, gatedRms: 0, gated: 0 };
+    finishSurface(st);
+    return true;
+  }
+
+  /* What the raster should hold at a pixel: the solver's own surface there, through
+     the gated resampler, divided by the same peak finishSurface used. */
+  function etaAtPixel(rho, th){
+    if (!vessel || !(peakRaw > 0)) return NaN;
+    return vessel.etaAt(Math.min(1, rho)*vessel.R, th)/peakRaw;
+  }
+
+  const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
+                          live: running3d, have: haveFrame,
+                          ratio: physT > 0 ? wall/physT : 0 });
+  return { start, stop, build, clocks, etaAtPixel,
+           vesselFor: () => vessel, isOn: () => running3d };
+})();
+let useSolver = false;
+
 sprinkle(); recompute(); requestAnimationFrame(loop);
 </script>
