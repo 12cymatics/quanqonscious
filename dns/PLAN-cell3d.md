@@ -99,7 +99,7 @@ against this and need no further decision.
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | todo | f64 answer unchanged by the preconditioner; render timing measured |
-| S13 | Ship: one zip, README, everything gated in CI | todo | suites pass from a fresh unpack, as `faraday-cell.zip` already does |
+| S13 | Ship: one zip, README, everything gated in CI | todo | suites pass from a fresh unpack. **There is no zip yet and this row used to say there was** -- "as `faraday-cell.zip` already does" -- which was false: no such file is on disk, none has ever been committed, and `faraday/build-standalone.mjs` writes one inlined HTML file and no archive. Checked when the owner asked where the zip was, which is how a borrowed claim gets found. Building one is part of this stage, not a thing to verify against |
 
 ## What S5 found, in the order it was found
 
@@ -1292,6 +1292,34 @@ and a grid sizing rule for the three-dimensional case. The existing Floquet pane
 `cymatic.html` already has the worker pattern to follow -- `ensureWorker` builds one from the
 `<script id="dns...">` sources -- so S9b is that panel's structure applied to a running
 simulation rather than a one-shot solve.
+
+## Two things that do not exist yet, recorded because they were asked for
+
+**There is no zip.** Nothing on disk, nothing in git history, and
+`faraday/build-standalone.mjs` emits `faraday-cell-standalone.html` -- one file with the
+scripts inlined -- and no archive. The S13 row above asserted that a `faraday-cell.zip`
+already existed and already passed its suites from a fresh unpack; it did not. Building it is
+S13's work.
+
+And when it is built it will not contain this solver until S9b is finished. `build-standalone`
+inlines four scripts -- `faraday-dns.js`, `faraday-disc.js`, `faraday-disc-wasm.js`,
+`faraday-floquet.js` -- and `faraday-cell3d.js` is not among them, because the page still draws
+the modal superposition.
+
+**There is no GPU path, and the physics is never going to have one.** Zero references to WebGL,
+WebGPU or WGSL in `dns/faraday-cell3d.js`, anywhere under `dns/`, or in `cymatic.html`; the only
+mention in the project is S12 in this file. That is not an oversight waiting to be corrected.
+Metal has no `double`, so WGSL has no `f64`, and no GPU on an Intel Mac carries a
+double-precision type -- the constraint is recorded under "The one hard constraint" above and
+was confirmed by the owner. S12 is a RENDER path plus an optional f32 preconditioner inside the
+f64 conjugate gradient, legitimate because a preconditioner steers the search direction and
+never the converged answer. Moving the physics to f32 would discard the validation S8 bought:
+the cross-solver agreement is four parts in ten thousand, and f32 carries seven decimal digits
+in total.
+
+What makes the solver faster is S10, the same discretisation compiled to wasm, and S11, eight
+CPU cores with a deterministic reduction order. Today it is single-core node at 85.6 ms a step
+on 16x24x10.
 
 ## Rules this build keeps
 
