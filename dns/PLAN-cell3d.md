@@ -1338,6 +1338,16 @@ Measured speed: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page f
 slower than real time to 489x. Reported in the gate rather than asserted, because a timing
 is a property of the machine.
 
+**And it is not a property of this container's compiler.** Commit `9bd9d67` is green on
+GitHub's `ubuntu-latest` across all eleven checks, among them the two that carry this work:
+the `faraday disc` job, which rebuilds `dns/faraday_cell3d.cpp` with THE RUNNER'S OWN clang
+and requires the fresh module, the committed module and the JavaScript to produce identical
+values, and then builds the zip, unpacks it elsewhere and runs four suites from there; and
+`cymatic.html in a browser`, 156 checks, driving the C++ engine on the served checkout and
+on the single file. That is why the gate asserts equality of the NUMBERS and only reports
+byte identity: equality of numbers is compiler independent and was just shown to be, while
+byte identity is a property of one build and would have failed here for no good reason.
+
 ### The page runs it
 
 A third `surface` button, `N-S in C++`. The worker carries the loader's source alongside
