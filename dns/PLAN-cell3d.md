@@ -1383,16 +1383,27 @@ And the ones that taught something:
    is green. The flag stays -- it is the correct intent, and it is what the two-dimensional
    module's build uses -- but it is recorded as unverified rather than as load-bearing.
 
-**The second round, as far as it has been measured at the time of writing.** The
-genuine regrouping `dth*(dsc[j]*(A - B))` in `divergence` is **RED, 12 checks** -- which
-is the number that makes point 1 above a measurement rather than an argument about
-IEEE-754. Four more are running and are **not yet measured**: the gravity clearing
-re-injected against the strengthened check, `polyDerivAt` accumulating as
-`(ys[j]/den)*num` instead of `ys[j]*num/den`, the surface flux interpolated by the
-arithmetic mean instead of the face-area weights, and `colValueAtZ`'s bracketed branch
-disabled so the sigma-face cross terms anchor on the level. Their verdicts are recorded
-here when they land and not before; an expectation written down before the run is exactly
-the thing this file keeps being wrong about.
+**The second round, measured.** Baseline green at 55 checks before and after, on a copy
+under `/tmp`.
+
+| injected | verdict |
+|---|---|
+| a GENUINE regrouping in `divergence`: `dth*(dsc[j]*(A - B))` for `dth*dsc[j]*(A - B)` | **RED, 12** |
+| the gravity clearing deleted again, against the STRENGTHENED check | **RED, 1** -- which is the whole point of having strengthened it: the same deletion was green against the old one |
+| `polyDerivAt` accumulating as `(ys[j]/den)*num` instead of `ys[j]*num/den` | **RED, 10** |
+| the surface flux interpolated by the arithmetic mean instead of the face-area weights | **RED, 8** |
+| `colValueAtZ`'s bracketed branch disabled, so the sigma-face cross terms anchor on the level | **RED, 8** |
+
+`polyDerivAt`'s is the one worth keeping in mind: it is the Lagrange-derivative primitive
+every face flux in the viscous operator runs through, and the only thing wrong with it is
+which order the division lands in.
+
+**And the flag, on both modules.** With `-ffp-contract=fast` the three-dimensional gate is
+green at 55 and the two-dimensional one, `dns/check-wasm-build.mjs`, is green at 5 -- and
+that second one is not a weak statement: it holds the freshly built module, the committed
+module and the JavaScript solver to element-wise identical values over a FULL DRIVE PERIOD
+on every unknown. So the flag's stated purpose cannot be demonstrated on either module
+here. Both build scripts now say so, instead of calling it load bearing.
 
 
 ## The zip: what was claimed, what was false, and what is there now

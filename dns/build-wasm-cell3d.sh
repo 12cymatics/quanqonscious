@@ -17,8 +17,13 @@
 #                       71 403 and dns/check-cell3d-wasm.mjs stays green -- so on
 #                       this target, with this source, the flag's effect on the
 #                       numbers could not be demonstrated. It stays because it is
-#                       the correct intent and because dns/build-wasm.sh uses it;
-#                       it is not load bearing on any evidence collected here.
+#                       the correct intent; it is not load bearing on any
+#                       evidence collected here. The same injection on the
+#                       two-dimensional module leaves dns/check-wasm-build.mjs
+#                       green as well, and that gate compares three
+#                       implementations element for element over a full drive
+#                       period -- so dns/build-wasm.sh now records the flag the
+#                       same way rather than claiming it.
 #   -fno-exceptions     nothing to unwind, and no libc to unwind with. The
 #                       module reports a refusal as an error code and the loader
 #                       raises the Error the JavaScript would have thrown.
