@@ -182,6 +182,7 @@ footer b{color:var(--ink2);font-weight:500}
       <div class="seg" id="srcSeg">
         <button data-s="modal" aria-pressed="true">modal sum</button>
         <button data-s="dns" aria-pressed="false">Navier-Stokes</button>
+        <button data-s="dnscpp" aria-pressed="false">N-S in C++</button>
       </div>
     </div>
     <div class="fld">
@@ -261,6 +262,8 @@ footer b{color:var(--ink2);font-weight:500}
 <script id="dnsWasmBase64"></script>
 <script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
 <script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>
+<script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>
+<script id="dnsCell3dWasmBase64"></script>
 <script>
 
 const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
@@ -752,7 +755,15 @@ function paintDeck(){
                        + `<span class="u">${c.err}</span>`;
        if (!useSolver) return 'modal superposition <span class="u">(kernel.js)</span>';
        if (!c.have) return '<b>modal</b> <span class="u">— solver starting…</span>';
-       return '<b>the 3-D Navier-Stokes solver</b>';
+       /* Which engine ANSWERED, read off the worker's own frames. The two give
+          identical fields, so this is not a disclaimer about the picture -- it is
+          there because the clocks below mean different things for each, and
+          because a C++ engine that had quietly fallen back to JavaScript would
+          otherwise be invisible. */
+       return '<b>the 3-D Navier-Stokes solver</b>'
+         + (c.engine === 'cpp'
+            ? ' <span class="u">· C++ (faraday_cell3d.wasm)</span>'
+            : ' <span class="u">· JavaScript</span>');
      })()],
     ...(() => {
        const c = CELL3D.clocks();
@@ -855,8 +866,15 @@ seg('viewSeg', b => { view = b.dataset.v; });
    back stops the worker rather than leaving it burning a core behind a picture nobody
    is looking at. */
 seg('srcSeg', b => {
-  const want = b.dataset.s === 'dns';
-  if (want === useSolver) return;
+  const want = b.dataset.s !== 'modal';
+  /* The two solver buttons are the SAME solver: dns/faraday_cell3d.cpp is a
+     transcription of dns/faraday-cell3d.js and dns/check-cell3d-wasm.mjs holds the
+     two to identical fields over a whole drive period, so this chooses how long
+     you wait and nothing about what you see. The deck reports which one ran, and
+     the C++ one refuses rather than falling back if its module cannot be loaded. */
+  const eng = b.dataset.s === 'dnscpp' ? 'cpp' : 'js';
+  if (want === useSolver && eng === cell3dEngine) return;
+  cell3dEngine = eng;
   useSolver = want;
   if (want) CELL3D.start(state); else CELL3D.stop();   /* start() reports its own errors */
   dirty = true;
@@ -1759,6 +1777,10 @@ function loop(now){
 const CELL3D = (function(){
   let worker = null, vessel = null, running3d = false, err = null;
   let physT = 0, wall = 0, stepsDone = 0, perStep = 0, grid = null;
+  /* The generation this run belongs to, and the engine that actually answered.
+     `ranEngine` is read back off the worker's own messages rather than copied from
+     what was asked for, so the deck reports what ran and not what was requested. */
+  let gen = 0, ranEngine = null;
   let etaBuf = null, htBuf = null, omegaRef = 1, haveFrame = false, peakRaw = 0;
 
   async function sourceOf(id){
@@ -1777,36 +1799,92 @@ const CELL3D = (function(){
      graded grid maps from it, then steps in slices so the page can draw between
      them. A slice is wall-clock bounded rather than a fixed step count, so a
      coarse grid posts often and a fine one posts seldom instead of freezing. */
+  /* The bytes of the three-dimensional C++ module, for the engine that runs it.
+     Same two sources the two-dimensional one has and the same refusal: the
+     single-file build carries them inline as base64, a served checkout fetches
+     them, and a page opened straight off the filesystem can do neither -- so this
+     says so instead of running the JavaScript under the C++ engine's name and
+     reporting a time that means something else. */
+  let cellWasmCache = null;
+  async function cellWasmBytes(){
+    if (cellWasmCache) return cellWasmCache;
+    if (globalThis.FARADAY_CELL3D_WASM_BASE64)
+      return (cellWasmCache = FARADAY_CELL3D_WASM.cell3dWasmBytes());
+    let r;
+    try { r = await fetch('dns/faraday_cell3d.wasm'); }
+    catch (e){ throw new Error(
+      `the three-dimensional C++ module could not be loaded (${e.message}). This `
+      + `page is running from a checkout, where the bytes are fetched from `
+      + `dns/faraday_cell3d.wasm beside it; that works when the directory is served `
+      + `over http and not when the file is opened directly. Either serve the `
+      + `checkout, or use the single-file build, which carries the bytes inline, or `
+      + `pick the JavaScript engine -- the two give identical fields. Not falling `
+      + `back to it silently under the C++ name.`); }
+    if (!r.ok) throw new Error(
+      `dns/faraday_cell3d.wasm gave ${r.status}. Build it with `
+      + `dns/build-wasm-cell3d.sh.`);
+    return (cellWasmCache = new Uint8Array(await r.arrayBuffer()));
+  }
+
+  /* The worker carries faraday-disc.js first, because faraday-cell3d.js takes its
+     graded grid maps from it, then the solver, then the C++ loader. It steps in
+     slices so the page can draw between them. A slice is wall-clock bounded rather
+     than a fixed step count, so a coarse grid posts often and a fine one posts
+     seldom instead of freezing.
+
+     EVERY MESSAGE CARRIES THE GENERATION it belongs to. Switching engine or
+     operating point re-inits the same worker, and a slice already in flight would
+     otherwise post its frame into the new run and be counted as part of it -- the
+     clocks would read as though the new engine had done the old one's work. The
+     page ignores anything stamped with a generation it has moved past. */
   async function ensureWorker(){
     if (worker) return worker;
     const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
-      `let S = null, dt = 0, sliceMs = 120;
+      await sourceOf('dnsCell3dWasm'),
+      `let S = null, W = null, dt = 0, sliceMs = 120, gen = -1, engine = 'js';
        self.onmessage = (e) => {
          const d = e.data;
          try {
            if (d.cmd === 'init'){
-             S = new FARADAY_CELL3D.FaradayCell3D(d.opts);
+             /* The C++ module's arena is static, so the previous cell has to give
+                it up before a new one can take it -- the loader refuses rather than
+                letting two states alias. */
+             if (W){ W.release(); W = null; }
+             gen = d.gen; engine = d.engine === 'cpp' ? 'cpp' : 'js';
+             if (engine === 'cpp'){
+               W = new FARADAY_CELL3D_WASM.FaradayCell3DWasm(d.opts,
+                     { bytes: d.wasmBytes });
+               S = W.js;
+             } else {
+               W = null;
+               S = new FARADAY_CELL3D.FaradayCell3D(d.opts);
+             }
              for (let i = 0; i < S.nr; i++)
                for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = d.eta0[i*S.nth + k];
              S.refreshMetric();
+             if (W){ W.pushState(); W.refreshMetric(); }
              dt = S.stableStep();
-             self.postMessage({ ok: true, kind: 'ready', dt,
+             self.postMessage({ ok: true, kind: 'ready', gen, engine, dt,
                nr: S.nr, nth: S.nth, nz: S.nz, dth: S.dth,
                rc: Array.from(S.rc), R: S.R, h: S.h });
              return;
            }
            if (d.cmd === 'slice'){
+             if (d.gen !== gen) return;      /* a slice for a run that has ended */
              const t0 = Date.now(); let n = 0;
-             while (Date.now() - t0 < sliceMs){ S.step(dt); n++; }
-             const eta = new Float64Array(S.eta), ht = new Float64Array(S.Ht);
-             self.postMessage({ ok: true, kind: 'frame', t: S.t, steps: n,
-               ms: Date.now() - t0, eta, ht, cg: S.cgIters },
+             if (W){ while (Date.now() - t0 < sliceMs){ W.step(dt); n++; } }
+             else   { while (Date.now() - t0 < sliceMs){ S.step(dt); n++; } }
+             const src = W ? W.views : S;
+             const eta = new Float64Array(src.eta), ht = new Float64Array(src.Ht);
+             self.postMessage({ ok: true, kind: 'frame', gen, engine,
+               t: W ? W.t : S.t, steps: n,
+               ms: Date.now() - t0, eta, ht, cg: W ? W.cgIters : S.cgIters },
                [eta.buffer, ht.buffer]);
              return;
            }
            throw new Error('cell3d worker: unknown command ' + d.cmd);
          } catch (e2){
-           self.postMessage({ ok: false, error: String(e2 && e2.message || e2) });
+           self.postMessage({ ok: false, gen, error: String(e2 && e2.message || e2) });
          }
        };`].join('\n;\n');
     worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
@@ -1864,21 +1942,35 @@ const CELL3D = (function(){
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
     grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz };
     const eta0 = seed(vessel, m, k);
+    /* Fetched on the page rather than in the worker: a worker has no `require` and
+       the single-file build's base64 lives in a tag the page owns. Only for the C++
+       engine -- asking for the bytes on the JavaScript path would make a page served
+       without the module refuse for no reason. */
+    const wasmBytes = cell3dEngine === 'cpp' ? await cellWasmBytes() : null;
+    const myGen = ++gen;
+    ranEngine = null;
     const w = await ensureWorker();
     w.onmessage = ev => {
       const d = ev.data;
-      if (!d.ok){ err = d.error; running3d = false; return; }
-      if (d.kind === 'ready'){ w.postMessage({ cmd: 'slice' }); return; }
+      if (d.gen !== undefined && d.gen !== myGen) return;   /* a previous run's slice */
+      if (!d.ok){ err = d.error; running3d = false; dirty = true; return; }
+      if (d.kind === 'ready'){
+        ranEngine = d.engine;
+        w.postMessage({ cmd: 'slice', gen: myGen });
+        return;
+      }
       if (d.kind === 'frame'){
+        ranEngine = d.engine;
         etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
         wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
         haveFrame = true; dirty = true;
-        if (running3d) w.postMessage({ cmd: 'slice' });
+        if (running3d) w.postMessage({ cmd: 'slice', gen: myGen });
       }
     };
     w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
     running3d = true;
-    w.postMessage({ cmd: 'init', opts, eta0 });
+    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
+                    engine: cell3dEngine, wasmBytes });
   }
 
   function stop(){ running3d = false; }
@@ -1933,11 +2025,16 @@ const CELL3D = (function(){
 
   const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
                           live: running3d, have: haveFrame,
+                          engine: ranEngine, asked: cell3dEngine,
                           ratio: physT > 0 ? wall/physT : 0 });
   return { start, stop, build, clocks, etaAtPixel,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
 let useSolver = false;
+/* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
+   same discretisation compiled to WebAssembly. They produce identical fields, which
+   dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
+let cell3dEngine = 'js';
 
 sprinkle(); recompute(); requestAnimationFrame(loop);
 </script>

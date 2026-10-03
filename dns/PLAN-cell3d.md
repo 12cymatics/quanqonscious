@@ -96,7 +96,7 @@ against this and need no further decision.
 | S8c | Validation: the driven growth rate against the Arnoldi multiplier | **done** | six drive periods at 20x24x12 give \|mu\| = 1.235690, 1.762186, 1.987387, 2.041031, 2.053208, 2.055543 -- increments 0.0536, 0.0122, 0.0023 -- against `floquetDisc`'s Arnoldi value 2.08649212 for the same nr and nz: **-1.49%**, two solvers with different vertical coordinates agreeing on a driven Floquet multiplier. That costs 400 s per period so it is recorded, not gated; section 15 gates the disc's own time-domain driven run at a matched 12x8 / 12x20x8, where the third period reads 2.01139 against 1.96195 (-2.46%) and the window's amplification 4.4801 against 4.1887 (-6.50%), plus the off-resonance contrast (1.836e-1 and 2.058e-2 against 4.48 and 4.19) |
 | S9a | The resampler: eta at an arbitrary position | **done** | `etaAt` reads the extended grid `HatH` reads, so the axis is interpolated ACROSS (antipodal row) and the rim IS the contact condition, rather than a renderer reinventing both. Exact at a cell centre to four ulp of the amplitude (5.421e-19 of 1.188e-3, and the residual is the sample position, not the interpolation), second order between centres at 1.965 then 1.919, spread 0.00e+0 over theta on the axis for an axisymmetric surface and 9.26e-23 for m = 3, and exactly the contact condition at r = R. Found a real defect in its own first version: `HatH - h` cannot return eta, because h + eta has an ulp of 4.3e-19 against elevations of 1e-9 to 1e-4 m |
 | S9b | The renderer draws this solver's surface | **done** | the page's drawn field agrees with `CELL3D.etaAtPixel` at 379 pixels to a relative 1e-6, through four resamplers and a polar-to-Cartesian rotation in the normalised radius; the deck carries the physics clock, the wall clock, their ratio and the step count; a worker built from the two `<script id="dns...">` sources, slices bounded at 120 ms of wall clock. Found a real precision defect on the way in -- `st.depthMm` does not exist on the resolved state, so `h` arrived as NaN -- and the page suite caught the standalone build still carrying a `<script src>` for the solver, twice over |
-| S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
+| S10 | C++ port of the three-dimensional step | **done** | `dns/faraday_cell3d.cpp`, 1 862 lines, compiled freestanding for wasm32 by clang with no Emscripten and no libc. Bit for bit against the JavaScript, by `Object.is` on every element: the metric's 22 arrays; the projection's seven operators and the conjugate gradient's own **iteration count** and residual; `axisU`, the three surface fluxes and the vector Laplacian; the advection's six arrays, the mean curvature, the surface area, the excess area and the surface pressure; 40 steps undriven and driven on both contact branches; and **894 steps, one whole drive period at 12x24x8, all 29 arrays**. Measured: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x slower than real time to 489x. The page offers it as a third `surface` button and the deck names the module that answered, read off the worker's own frames. `dns/check-cell3d-wasm.mjs`, 55 checks. Fourteen injected defects, four of them findings about the GATE rather than the port -- below |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | todo | f64 answer unchanged by the preconditioner; render timing measured |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
@@ -1293,6 +1293,107 @@ and a grid sizing rule for the three-dimensional case. The existing Floquet pane
 `cymatic.html` already has the worker pattern to follow -- `ensureWorker` builds one from the
 `<script id="dns...">` sources -- so S9b is that panel's structure applied to a running
 simulation rather than a one-shot solve.
+
+## S10 — the three-dimensional step in C++, and what the injections found
+
+`dns/faraday_cell3d.cpp` is a TRANSCRIPTION of `dns/faraday-cell3d.js`, not a
+reimplementation: same discretisation, same flux forms, same conjugate gradient with the
+same tolerance and cap, same order of operations down to the grouping of each sum. It is
+compiled freestanding for wasm32 by clang -- no Emscripten, no libc, no sysroot -- and
+uses only `+ - * /` and `sqrt`, which is a single wasm instruction and IEEE-754 exact, so
+it agrees with `Math.sqrt` to the last bit.
+
+**It computes no transcendental at all, and that is what makes parity achievable rather
+than approximate.** The physics needs two: the `cos` in `g + a cos(omega_d t)`, and the
+`tanh` in the step limit. JavaScript evaluates both. The module exposes
+`cell3d_setGravity`, REFUSES to step until it has been told this instant's value, and
+clears it again afterwards so the next step cannot silently reuse the previous instant of
+the drive. `stableStep` and `energy` are not ported for the same reason and a second one:
+they are diagnostics called once a step at most, and the renderer's own resamplers are
+called once per pixel per frame in JavaScript anyway, so `pullState` copies the field back
+and everything deliberately left in JavaScript reads the real thing.
+
+**The grid is not rebuilt either.** A JavaScript `FaradayCell3D` is constructed for the
+same cell and its node arrays are copied in, so the graded-grid code has exactly one
+implementation. That is the arrangement `faraday-disc-wasm.js` already uses.
+
+### What is asserted, and how
+
+`dns/check-cell3d-wasm.mjs`, 55 checks, by `Object.is` on every element of every array --
+not a tolerance. An agreement to twelve digits would mean the two had drifted and nobody
+could say where.
+
+| | measured |
+|---|---|
+| the metric | all 22 arrays, both contact lines |
+| the projection | `omegaFromW`, `divergence`, all three components of `gradient`, `omegaOf`, `applyL`, `pressureDiagonal`, `wFromOmega`; the conjugate gradient's own **iteration count** (110 and 111) and residual, and the pressure field |
+| the viscous operator | `axisU`, the three surface fluxes, and all three components of the vector Laplacian -- which carries the whole reconstruction chain, `colValueAtZ`, `polyDerivAt`, the common-height differences and the surface traction |
+| advection and the surface | the six advection arrays, the mean curvature, the surface area, the excess area, and the surface pressure with the drive's `cos` in it |
+| whole steps | 40 steps undriven, 40 driven, both contact lines: all 29 arrays and the clock |
+| a whole drive period | **894 steps at 12x24x8, all 29 arrays**, then the energy split and `etaAt` at 40 positions after `pullState` |
+| the modules | the freshly built one and the committed one produce identical fields over 25 steps; both import **nothing at all** |
+| the refusals | a second live cell, a non-positive step, a step without this instant's gravity, and the layer breaking -- which both implementations refuse and both name the same radius for |
+
+Measured speed: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x
+slower than real time to 489x. Reported in the gate rather than asserted, because a timing
+is a property of the machine.
+
+### The page runs it
+
+A third `surface` button, `N-S in C++`. The worker carries the loader's source alongside
+the solver's and the page hands it the bytes -- fetched from `dns/faraday_cell3d.wasm` on a
+served checkout, carried as base64 in the single-file build, which `faraday/check-standalone.mjs`
+decodes and compares against the module on disk. **The deck names the engine that
+ANSWERED**, read off the worker's own frames rather than copied from what was requested,
+because an engine that had quietly fallen back would otherwise be invisible. Every worker
+message carries the generation it belongs to: switching engine re-inits the same worker,
+and a slice already in flight would otherwise post its frame into the new run and be
+counted into its clocks. `dns/check-page.mjs` is now 156 checks, up from 135, and exercises the C++
+engine on both pages.
+
+### The injections, and the ones that were findings about the GATE
+
+Each on a disposable copy under `/tmp`, never in the working tree.
+
+| injected | verdict |
+|---|---|
+| the slope operator's transpose dropped from `gradient` | **RED**, 12 checks |
+| the node in place of the sigma centroid in `famLaplacian` | **RED**, 8 |
+| the moving-mesh volume-rate term dropped from the advection | **RED**, 8 |
+| the radial face value as `(b lo + a hi)/(a+b)` instead of an increment | **RED**, 18 |
+| `-msimd128` removed | **GREEN**, and correctly: the gate is about arithmetic, and SIMD here is speed with none of it changed |
+
+And the ones that taught something:
+
+1. **A commutation is not a reassociation.** The first injection swapped `dth*dsc[j]` for
+   `dsc[j]*dth` in `divergence` and the gate stayed green. It was right to: `a*b` is `b*a`
+   to the bit in IEEE-754, so nothing had changed. A genuine regrouping was needed to make
+   the point -- `dth*(dsc[j]*(A - B))` for `dth*dsc[j]*(A - B)` -- and the second round
+   carries it.
+2. **The gravity-clearing check did not check the clearing.** It asserted the refusal on a
+   cell that had never stepped, where the gravity is unset from `cell3d_init`. Deleting the
+   `gEff = UNSET` at the end of `cell3d_step` left the gate entirely GREEN. It now takes a
+   successful step first, so what is asserted is that the gravity the step consumed was
+   given back -- and the second round re-injects the deletion against the strengthened
+   version.
+3. **`-ffp-contract=off` cannot be shown to matter here, and the build script no longer
+   claims it can.** The flag's stated purpose is to stop the compiler fusing a multiply and
+   an add, because an FMA rounds once where JavaScript rounds twice. Measured: with
+   `-ffp-contract=fast` the module differs by **one byte out of 71 403** and the parity gate
+   is green. The flag stays -- it is the correct intent, and it is what the two-dimensional
+   module's build uses -- but it is recorded as unverified rather than as load-bearing.
+
+**The second round, as far as it has been measured at the time of writing.** The
+genuine regrouping `dth*(dsc[j]*(A - B))` in `divergence` is **RED, 12 checks** -- which
+is the number that makes point 1 above a measurement rather than an argument about
+IEEE-754. Four more are running and are **not yet measured**: the gravity clearing
+re-injected against the strengthened check, `polyDerivAt` accumulating as
+`(ys[j]/den)*num` instead of `ys[j]*num/den`, the surface flux interpolated by the
+arithmetic mean instead of the face-area weights, and `colValueAtZ`'s bracketed branch
+disabled so the sigma-face cross terms anchor on the level. Their verdicts are recorded
+here when they land and not before; an expectation written down before the run is exactly
+the thing this file keeps being wrong about.
+
 
 ## The zip: what was claimed, what was false, and what is there now
 

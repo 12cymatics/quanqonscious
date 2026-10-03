@@ -9,7 +9,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildStandalone, SCRIPTS, WASM_TAG, WASM_PATH } from './build-standalone.mjs';
+import { buildStandalone, SCRIPTS, WASM_TAG, WASM_PATH,
+         CELL_WASM_TAG, CELL_WASM_PATH } from './build-standalone.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => readFileSync(resolve(REPO, p), 'utf8');
@@ -71,6 +72,8 @@ check('the page around the scripts is untouched', () => {
 
 const wasmBytes = readFileSync(resolve(REPO, WASM_PATH));
 const wasmB64 = Buffer.from(wasmBytes).toString('base64');
+const cellBytes = readFileSync(resolve(REPO, CELL_WASM_PATH));
+const cellB64 = Buffer.from(cellBytes).toString('base64');
 
 check('the output grew by exactly the inlined bodies', () => {
   // Pins that nothing else was added or dropped: each src tag is replaced by
@@ -82,6 +85,9 @@ check('the output grew by exactly the inlined bodies', () => {
   });
   const wasmBlock = `<script id="dnsWasmBase64">\nglobalThis.FARADAY_DISC_WASM_BASE64 = "${wasmB64}";\n</script>`;
   want += wasmBlock.length - WASM_TAG.length;
+  const cellBlock = `<script id="dnsCell3dWasmBase64">\n`
+    + `globalThis.FARADAY_CELL3D_WASM_BASE64 = "${cellB64}";\n</script>`;
+  want += cellBlock.length - CELL_WASM_TAG.length;
   eq(built.length, want, 'built length');
 });
 
@@ -99,6 +105,33 @@ check('the compiled period map is carried, and decodes to the committed bytes', 
   // And the decoded bytes are a module WebAssembly will take, which a corrupted
   // encoding would not be even at the right length.
   eq(WebAssembly.validate(back), true, 'the decoded module validates');
+});
+
+check('the three-dimensional C++ module is carried, and decodes to its bytes', () => {
+  // The page's solver panel offers this module as its C++ engine, and that engine
+  // REFUSES rather than running the JavaScript under its name -- so a single file
+  // without these bytes would carry a button that could only fail. Decoded and
+  // compared, not merely found: a truncated inline would still look like base64.
+  eq(built.includes(`globalThis.FARADAY_CELL3D_WASM_BASE64 = "${cellB64}";`), true,
+     'the assignment is present with the exact encoding');
+  const m = built.match(/globalThis\.FARADAY_CELL3D_WASM_BASE64 = "([A-Za-z0-9+/=]+)";/);
+  eq(m !== null, true, 'the assignment parses');
+  const back = Buffer.from(m[1], 'base64');
+  eq(back.length, cellBytes.length, 'decoded byte length');
+  eq(Buffer.compare(back, cellBytes), 0, 'decoded bytes equal the module on disk');
+  eq(WebAssembly.validate(back), true, 'the decoded module validates');
+  // And it is a DIFFERENT module from the two-dimensional one, which a tag
+  // pointed at the wrong path would not be.
+  eq(cellB64 === wasmB64, false, 'it is not the two-dimensional module again');
+});
+
+check('a page without the three-dimensional wasm tag is refused', () => {
+  let threw = null;
+  try { buildStandalone({ 'cymatic.html': html.replace(CELL_WASM_TAG, '') }); }
+  catch (e) { threw = e; }
+  if (threw === null)
+    eq('no throw', 'a throw', 'a page missing the three-dimensional wasm tag');
+  else eq(/exactly once/.test(threw.message), true, threw.message.slice(0, 80));
 });
 
 check('a page without the wasm tag is refused', () => {

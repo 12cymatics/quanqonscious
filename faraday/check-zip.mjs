@@ -106,9 +106,15 @@ section('1. the manifest describes the checkout');
      omitted.length ? `not in MANIFEST: ${omitted.join(', ')}` : '');
   ok(EXCLUDED.size === 0, 'nothing is deliberately left out', [...EXCLUDED].join(', '));
 
-  const slow = SUITES.filter(s => s.slow).map(s => s.file);
-  ok(slow.length === 1 && slow[0] === 'dns/check-cell3d.mjs',
-     'the slow suite is the three-dimensional solver gate and only that',
+  /* The slow ones are the two that integrate the three-dimensional solver over
+     many grids and many steps: its own gate, and the gate that holds the C++
+     transcription to the JavaScript bit for bit over a whole drive period. Named
+     here rather than counted, so that a third suite becoming slow is a decision
+     and not a drift. */
+  const slow = SUITES.filter(s => s.slow).map(s => s.file).sort();
+  ok(slow.length === 2 && slow[0] === 'dns/check-cell3d-wasm.mjs'
+     && slow[1] === 'dns/check-cell3d.mjs',
+     'the slow suites are the two three-dimensional solver gates and only those',
      slow.join(', '));
 }
 
@@ -229,8 +235,10 @@ section('6. the runner inside the unpack');
   const fast = spawnSync(process.execPath, [join(U, 'run-checks.mjs'), '--list', '--fast'],
                          { encoding: 'utf8' });
   const fastNamed = fast.stdout.split('\n').map(s => s.trim().split('   ')[0]).filter(Boolean);
-  ok(fastNamed.length === SUITES.length - 1 && !fastNamed.includes('dns/check-cell3d.mjs'),
-     '--fast leaves out exactly the one slow suite', fastNamed.join(', '));
+  ok(fastNamed.length === SUITES.length - 2
+     && !fastNamed.includes('dns/check-cell3d.mjs')
+     && !fastNamed.includes('dns/check-cell3d-wasm.mjs'),
+     '--fast leaves out exactly the two slow suites', fastNamed.join(', '));
 
   const bad = spawnSync(process.execPath, [join(U, 'run-checks.mjs'), '--nope'],
                         { encoding: 'utf8' });
@@ -253,6 +261,19 @@ section('7. the terminal runner, from the unpack');
   ok(/energy  total/.test(r.stdout), 'it reports the energy split');
   const m = r.stdout.match(/peak \|eta\| = ([0-9.]+) mm/);
   ok(m && Number(m[1]) > 0, 'the surface it drew is not identically flat', m && m[1]);
+
+  /* And the C++ engine, from the unpack: the module and its loader have to travel
+     and the loader has to find the module beside itself. It refuses rather than
+     falling back, so if the bytes had not travelled this would fail here rather
+     than quietly run the JavaScript and report its time under the C++ name. */
+  const cpp = spawnSync(process.execPath,
+    [join(U, 'dns', 'run-cell3d.mjs'), '--engine', 'cpp', '--nr', '6', '--nth', '8',
+     '--nz', '4', '--m', '2', '--periods', '0.02', '--frames', '1', '--width', '21'],
+    { encoding: 'utf8' });
+  ok(cpp.status === 0, 'the C++ engine runs out of the unpack too',
+     `status ${cpp.status}: ${(cpp.stderr || '').slice(0, 200)}`);
+  ok(/faraday_cell3d\.wasm/.test(cpp.stdout),
+     'and says which module answered', (cpp.stdout || '').slice(0, 120));
 
   const bad = spawnSync(process.execPath, [join(U, 'dns', 'run-cell3d.mjs'), '--nope', '1'],
                         { encoding: 'utf8' });
@@ -287,7 +308,7 @@ section('8. the fast suites, run from the unpack');
      2.2 s of check-wasm-build, which crosses the same directory boundary. A gate
      nobody can afford to run by hand stops being run. */
   const expect = [
-    ['faraday/check-standalone.mjs', 10],
+    ['faraday/check-standalone.mjs', 12],
     ['dns/check-wasm-build.mjs', 5],
     ['boundary/boundarykernel.test.js', 36],
     ['fsi/check-coupled-affine.mjs', 102]

@@ -48,7 +48,12 @@ export const SCRIPTS = [
      double-click tried to fetch a sibling that file:// gives it no origin for, and
      both "fetches no script at all" and "no resource failed to load" went red. */
   { tag: '<script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>',
-    path: 'dns/faraday-cell3d.js', open: '<script id="dnsCell3d">' }
+    path: 'dns/faraday-cell3d.js', open: '<script id="dnsCell3d">' },
+  /* The loader for the three-dimensional C++ module. AFTER faraday-cell3d.js,
+     whose FaradayCell3D it asks globalThis for -- a worker has no `require`, so
+     the global is the whole mechanism there. */
+  { tag: '<script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>',
+    path: 'dns/faraday-cell3d-wasm.js', open: '<script id="dnsCell3dWasm">' }
 ];
 
 /* The compiled period map travels as base64 in its own tag. A single file opened
@@ -61,6 +66,13 @@ export const SCRIPTS = [
    dns/faraday_disc.wasm over http instead. */
 export const WASM_TAG = '<script id="dnsWasmBase64"></script>';
 export const WASM_PATH = 'dns/faraday_disc.wasm';
+
+/* And the same for the three-dimensional module, which the page's solver panel
+   offers as its C++ engine. Without the bytes that engine refuses -- it does not
+   substitute the JavaScript under the C++ name -- so a single file that left them
+   out would carry a button that could only fail. */
+export const CELL_WASM_TAG = '<script id="dnsCell3dWasmBase64"></script>';
+export const CELL_WASM_PATH = 'dns/faraday_cell3d.wasm';
 
 // `overrides` maps a repo-relative path to substitute content. It exists so
 // check-standalone.mjs can exercise the </script> guard on a source that
@@ -96,6 +108,13 @@ export function buildStandalone(overrides = {}) {
       + `engine and the Navier-Stokes panel refuses, because it does not run the `
       + `JavaScript solver under the C++ engine's name.`);
 
+  if (html.split(CELL_WASM_TAG).length - 1 !== 1)
+    throw new Error(
+      `cymatic.html must contain ${CELL_WASM_TAG} exactly once: it is where the `
+      + `three-dimensional C++ module is inlined. Without it the single file has a `
+      + `C++ engine button that can only fail, because that engine refuses rather `
+      + `than falling back to the JavaScript one.`);
+
   let out = html;
   for (let i = 0; i < SCRIPTS.length; i++){
     const { tag, open } = SCRIPTS[i];
@@ -106,6 +125,13 @@ export function buildStandalone(overrides = {}) {
   const b64 = Buffer.from(wasm).toString('base64');
   out = out.replace(WASM_TAG,
     `<script id="dnsWasmBase64">\nglobalThis.FARADAY_DISC_WASM_BASE64 = "${b64}";\n</script>`);
+
+  const cellWasm = overrides[CELL_WASM_PATH]
+    ?? readFileSync(resolve(REPO, CELL_WASM_PATH));
+  const cellB64 = Buffer.from(cellWasm).toString('base64');
+  out = out.replace(CELL_WASM_TAG,
+    `<script id="dnsCell3dWasmBase64">\n`
+    + `globalThis.FARADAY_CELL3D_WASM_BASE64 = "${cellB64}";\n</script>`);
   return out;
 }
 

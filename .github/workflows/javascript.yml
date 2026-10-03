@@ -38,6 +38,17 @@
 # the axis instead of the rim, and uniform grids that measured the damping
 # inconsistently because the Stokes layers were never resolved.
 #
+# dns/check-cell3d-wasm.mjs runs in the disc job rather than the DNS one, because
+# what it needs is the toolchain: it rebuilds dns/faraday_cell3d.cpp with the
+# runner's own clang and requires the fresh module, the committed module and
+# dns/faraday-cell3d.js to produce IDENTICAL fields -- not close ones -- operator
+# by operator and then over a whole drive period, 894 steps at 12x24x8. Identical
+# rather than close because the C++ is a transcription, and the only property
+# worth asserting about a transcription is that it changed nothing; agreement to
+# twelve digits would mean the two had drifted and nobody could say where. It is a
+# failure and never a skip if the rebuild cannot happen, for the same reason the
+# two-dimensional one is.
+#
 # dns/check-wasm-build.mjs runs in the disc job, before the suite it supports.
 #
 # faraday/check-zip.mjs runs there too, for the toolchain rather than the
@@ -175,6 +186,8 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y clang lld
     - name: The committed module is the committed source
       run: node dns/check-wasm-build.mjs
+    - name: The three-dimensional C++ module is the JavaScript, bit for bit
+      run: node dns/check-cell3d-wasm.mjs
     - name: The distribution zip, unpacked elsewhere and run from there
       run: node faraday/check-zip.mjs
     - name: Linearised free-surface Navier-Stokes in the cell

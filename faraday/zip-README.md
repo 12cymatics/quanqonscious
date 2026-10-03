@@ -24,7 +24,8 @@ The solvers:
 | `faraday/kernel.js` | The linear theory: Bessel modes, viscous damping, the Kumar–Tuckerman-style threshold problem, the mode map the page draws its labels from. |
 | `dns/faraday-disc.js` | A two-dimensional axisymmetric Navier–Stokes solver, **one azimuthal mode at a time**, linear in the surface amplitude. Its Floquet growth rates are the reference the three-dimensional solver is measured against. |
 | `dns/faraday-cell3d.js` | The three-dimensional **nonlinear** solver: every azimuthal mode at once and coupled, in a domain that follows the surface. This is what the page draws. |
-| `dns/faraday_disc.cpp`, `dns/faraday_disc.wasm` | The two-dimensional solver again in C++, compiled to WebAssembly, bit for bit against the JavaScript. `dns/build-wasm.sh` rebuilds it if you have `emcc`. |
+| `dns/faraday_disc.cpp`, `dns/faraday_disc.wasm` | The two-dimensional solver again in C++, compiled to WebAssembly, bit for bit against the JavaScript. `dns/build-wasm.sh` rebuilds it. |
+| `dns/faraday_cell3d.cpp`, `dns/faraday_cell3d.wasm` | **The three-dimensional solver in C++**, likewise compiled to WebAssembly and likewise bit for bit — operator by operator and then over a whole drive period, 894 steps at 12 × 24 × 8, every element by `Object.is`. `dns/build-wasm-cell3d.sh` rebuilds it; neither needs Emscripten, only `clang` with the wasm32 target and `lld`. |
 | `dns/faraday-floquet.js`, `dns/faraday-dns.js` | The Floquet machinery and the periodic-box solver the disc one was built from. |
 | `boundary/boundarykernel.js`, `fsi/coupled-affine-benchmark.js` | A boundary-condition kernel and an exact fluid–structure benchmark in rational arithmetic. |
 
@@ -48,14 +49,26 @@ then open <http://localhost:8000/cymatic.html>.
 ```
 node dns/run-cell3d.mjs
 node dns/run-cell3d.mjs --nr 16 --nth 32 --nz 10 --m 4 --accel 12 --periods 4
+node dns/run-cell3d.mjs --engine cpp
 ```
 
 Options: `nr nth nz` (grid), `m` (azimuthal mode seeded), `rel` (seed amplitude
 as a fraction of the depth), `accel` and `freq` (the shaker; with no `freq` it
 drives at twice the mode's own frequency, which is the subharmonic resonance
 Faraday waves live on), `periods`, `frames`, `contact` (`free` or `pinned`),
-`R h rho nu gamma g`, `rStretch zStretch`, `width`. An unknown option is
-refused rather than ignored.
+`R h rho nu gamma g`, `rStretch zStretch`, `width`, and `engine` (`js` or
+`cpp`). An unknown option is refused rather than ignored.
+
+`--engine cpp` is not a faster-but-looser mode. The C++ is a transcription of the
+JavaScript — same discretisation, same flux forms, same conjugate gradient with
+the same tolerance and cap, same order of operations down to the grouping of each
+sum, and no fused multiply-add, because an FMA rounds once where JavaScript rounds
+twice. It computes no transcendental at all: the `cos` in the drive is evaluated in
+JavaScript and passed in, which is what makes bit-for-bit parity achievable rather
+than approximate. Measured on the container this was built on: **3.2× at 10 × 24 × 8
+and 2.7× at 16 × 24 × 10**, with identical fields. If the module cannot be loaded it
+refuses and says so, rather than running the JavaScript under the C++ engine's
+name and reporting a time that means something else.
 
 **The suites.**
 
@@ -65,17 +78,19 @@ node run-checks.mjs --fast      # everything but the three-dimensional solver ga
 node run-checks.mjs             # everything
 ```
 
-`dns/check-cell3d.mjs` takes minutes — it integrates the solver over many grids
-to measure convergence orders — which is why `--fast` exists and why it is the
-only thing `--fast` leaves out. `dns/check-page.mjs` drives a real Chrome over
+`dns/check-cell3d.mjs` and `dns/check-cell3d-wasm.mjs` take minutes — the first
+integrates the solver over many grids to measure convergence orders, the second
+rebuilds the C++ and holds it to the JavaScript over a whole drive period — which
+is why `--fast` exists and why those two are the only things it leaves out. `dns/check-page.mjs` drives a real Chrome over
 the DevTools protocol; it **refuses** rather than skipping if it cannot find one,
 and `CHROME=/path/to/chrome` tells it where to look.
 
 ## Two things to know before you file a bug
 
 **It does not run at real time, and it cannot.** On the cloud container this was
-built on, a 10 × 24 × 8 grid takes 64.3 ms per step and the step is set by the
-capillary limit, which came out at 1278× slower than real time. The page shows
+built on, a 10 × 24 × 8 grid takes 64.3 ms per step in JavaScript and 23.5 ms in
+C++, and the step is set by the capillary limit: 1278× slower than real time for
+the first and 489× for the second. The page shows
 you the physics clock, the wall clock and their ratio rather than hiding the
 gap; `dns/run-cell3d.mjs` prints the same three numbers. Your machine will give a
 different ratio and the number it prints is measured on it, not estimated.

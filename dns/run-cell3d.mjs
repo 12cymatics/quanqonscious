@@ -8,6 +8,16 @@
  *
  *     node dns/run-cell3d.mjs
  *     node dns/run-cell3d.mjs --nr 16 --nth 32 --nz 10 --m 4 --accel 12 --periods 4
+ *     node dns/run-cell3d.mjs --engine cpp
+ *
+ * `--engine cpp` runs dns/faraday_cell3d.wasm, the same discretisation transcribed
+ * to C++ and compiled freestanding for wasm32. It is not a faster-but-looser mode:
+ * dns/check-cell3d-wasm.mjs holds the two to IDENTICAL fields, operator by
+ * operator and then over a whole drive period, so the only thing that changes is
+ * the wait. Measured here: 3.2x at 10x24x8 and 2.7x at 16x24x10. There is no
+ * silent fallback -- if the module cannot be loaded this refuses and says so,
+ * rather than running the JavaScript under the C++ engine's name and reporting a
+ * time that means something else.
  *
  * Every figure it prints is measured in the run, including the wall clock. It
  * does not estimate.
@@ -26,6 +36,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const K = require(join(here, '..', 'faraday', 'kernel.js'));
 const { FaradayCell3D } = require(join(here, 'faraday-cell3d.js'));
+const { FaradayCell3DWasm } = require(join(here, 'faraday-cell3d-wasm.js'));
 
 /* ---- the apparatus ------------------------------------------------------- */
 /* A 24.25 mm quartz cell holding 3 mm of water at 20 C: the same constants the
@@ -37,7 +48,8 @@ const DEFAULTS = {
   nr: 12, nth: 24, nz: 8,
   m: 4, rel: 0.15, accel: 0, freq: 0,
   periods: 1, frames: 6, contact: 'free',
-  rStretch: 2.2, zStretch: 2.2, width: 61
+  rStretch: 2.2, zStretch: 2.2, width: 61,
+  engine: 'js'
 };
 
 const NUMERIC = new Set(['R', 'h', 'rho', 'nu', 'gamma', 'g', 'nr', 'nth', 'nz',
@@ -62,6 +74,14 @@ function parseArgs(argv){
       o[name] = v;
     } else o[name] = raw;
   }
+  if (o.engine !== 'js' && o.engine !== 'cpp') throw new Error(
+    `--engine ${JSON.stringify(o.engine)}: either 'js' for dns/faraday-cell3d.js `
+    + `or 'cpp' for the same discretisation compiled to WebAssembly. The two agree `
+    + `bit for bit, which dns/check-cell3d-wasm.mjs asserts, so the choice is `
+    + `about time and nothing else.`);
+  if (o.contact !== 'free' && o.contact !== 'pinned') throw new Error(
+    `--contact ${JSON.stringify(o.contact)}: the contact line is either 'free' or `
+    + `'pinned'.`);
   return o;
 }
 
@@ -119,18 +139,28 @@ function main(){
      the subharmonic resonance Faraday waves live on. */
   const omegaD = o.freq > 0 ? 2*Math.PI*o.freq : 2*omega;
 
-  const S = new FaradayCell3D({
+  const cellOpts = {
     nr: o.nr, nth: o.nth, nz: o.nz,
     R: o.R, h: o.h, rho: o.rho, nu: o.nu, gamma: o.gamma, g: o.g,
     accel: o.accel, omegaD, contact: o.contact,
     rStretch: o.rStretch, zStretch: o.zStretch
-  });
+  };
+  /* The C++ engine holds the field and the JavaScript object holds the clock, the
+     grid and everything deliberately not ported -- the resampler, the stability
+     limit with its tanh, the energy split. `pullState` copies the field across,
+     once a frame rather than once a step, so every number printed below comes from
+     whichever engine was asked for. */
+  const W = o.engine === 'cpp' ? new FaradayCell3DWasm(cellOpts) : null;
+  const S = W ? W.js : new FaradayCell3D(cellOpts);
 
   for (let i = 0; i < S.nr; i++)
     for (let kk = 0; kk < S.nth; kk++)
       S.eta[S.ie(i, kk)] = o.rel*o.h*K.besselJ(o.m, k*S.rc[i])
                                    *Math.cos(o.m*(kk + 0.5)*S.dth);
   S.refreshMetric();
+  if (W){ W.pushState(); W.refreshMetric(); }
+  const advance = W ? (dt => W.step(dt)) : (dt => S.step(dt));
+  const sync = W ? (() => W.pullState()) : (() => S);
 
   const L = S.stepLimits();
   const dt = S.stableStep();
@@ -143,6 +173,9 @@ function main(){
               + `gamma = ${o.gamma.toFixed(6)} N/m`);
   console.log(`grid            ${S.nr} x ${S.nth} x ${S.nz}  `
               + `(graded r ${o.rStretch}, sigma ${o.zStretch})`);
+  console.log(`engine          ${o.engine === 'cpp'
+    ? 'dns/faraday_cell3d.wasm, the C++ transcription'
+    : 'dns/faraday-cell3d.js'}`);
   console.log(`mode            m = ${o.m}, k = ${k.toFixed(4)} 1/m, `
               + `f = ${(omega/(2*Math.PI)).toFixed(4)} Hz, seed ${(o.rel*100).toFixed(1)}% of h`);
   console.log(`drive           a = ${o.accel} m/s^2 at ${(omegaD/(2*Math.PI)).toFixed(4)} Hz`);
@@ -157,8 +190,9 @@ function main(){
   const wall0 = process.hrtime.bigint();
   let shown = 0;
   for (let n = 1; n <= steps; n++){
-    S.step(dt);
+    advance(dt);
     if (n % every === 0 || n === steps){
+      sync();
       const wall = Number(process.hrtime.bigint() - wall0)/1e9;
       const { art, peak } = plan(S, o.width);
       const e = S.energy();
