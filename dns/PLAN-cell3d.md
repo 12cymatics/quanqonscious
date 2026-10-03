@@ -95,11 +95,12 @@ against this and need no further decision.
 | S8b | Validation: harmonics, mode coupling, and step() as a composition | **done** | a single m = 3 mode generates m = 0 and m = 6 at exponent 1.998/1.999 in the amplitude and m = 9 at 2.853/2.960, all from 1e-22; m = 2 and m = 3 together generate m = 1 and m = 5 bilinearly (1.9803, 1.9991, 1.9992, 1.9992 on halving either parent) and neither parent alone produces them at better than 1e-22. The regeneration test then found that the whole ADVECTIVE TERM can be deleted from `step()` with all 239 checks green -- at eta/h = 0.2 it is one part in a hundred of the inertia -- so section 14 now reassembles one step from the public operators and asserts the eight state arrays bit for bit. Four step-composition defects red |
 | S8c | Validation: the driven growth rate against the Arnoldi multiplier | **done** | six drive periods at 20x24x12 give \|mu\| = 1.235690, 1.762186, 1.987387, 2.041031, 2.053208, 2.055543 -- increments 0.0536, 0.0122, 0.0023 -- against `floquetDisc`'s Arnoldi value 2.08649212 for the same nr and nz: **-1.49%**, two solvers with different vertical coordinates agreeing on a driven Floquet multiplier. That costs 400 s per period so it is recorded, not gated; section 15 gates the disc's own time-domain driven run at a matched 12x8 / 12x20x8, where the third period reads 2.01139 against 1.96195 (-2.46%) and the window's amplification 4.4801 against 4.1887 (-6.50%), plus the off-resonance contrast (1.836e-1 and 2.058e-2 against 4.48 and 4.19) |
 | S9a | The resampler: eta at an arbitrary position | **done** | `etaAt` reads the extended grid `HatH` reads, so the axis is interpolated ACROSS (antipodal row) and the rim IS the contact condition, rather than a renderer reinventing both. Exact at a cell centre to four ulp of the amplitude (5.421e-19 of 1.188e-3, and the residual is the sample position, not the interpolation), second order between centres at 1.965 then 1.919, spread 0.00e+0 over theta on the axis for an axisymmetric surface and 9.26e-23 for m = 3, and exactly the contact condition at r = R. Found a real defect in its own first version: `HatH - h` cannot return eta, because h + eta has an ulp of 4.3e-19 against elevations of 1e-9 to 1e-4 m |
-| S9b | The renderer draws this solver's surface | todo | the page's field equals the solver's eta to the digit; physics and wall clocks both shown; a worker stepping the solver, on the pattern the Floquet panel already uses |
+| S9b | The renderer draws this solver's surface | **done** | the page's drawn field agrees with `CELL3D.etaAtPixel` at 379 pixels to a relative 1e-6, through four resamplers and a polar-to-Cartesian rotation in the normalised radius; the deck carries the physics clock, the wall clock, their ratio and the step count; a worker built from the two `<script id="dns...">` sources, slices bounded at 120 ms of wall clock. Found a real precision defect on the way in -- `st.depthMm` does not exist on the resolved state, so `h` arrived as NaN -- and the page suite caught the standalone build still carrying a `<script src>` for the solver, twice over |
 | S10 | C++ port of the three-dimensional step | todo | bit-for-bit against the JavaScript over a full drive period, as `faraday_disc.cpp` already is |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | todo | f64 answer unchanged by the preconditioner; render timing measured |
-| S13 | Ship: one zip, README, everything gated in CI | todo | suites pass from a fresh unpack. **There is no zip yet and this row used to say there was** -- "as `faraday-cell.zip` already does" -- which was false: no such file is on disk, none has ever been committed, and `faraday/build-standalone.mjs` writes one inlined HTML file and no archive. Checked when the owner asked where the zip was, which is how a borrowed claim gets found. Building one is part of this stage, not a thing to verify against |
+| S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
+| S13b | Ship: the README's claims, and the whole suite set from the unpack | todo | the slow suite run from the unpack too, in CI rather than by hand; `dns/check-page.mjs` from the unpack, which needs a browser on the machine doing the unpacking |
 
 ## What S5 found, in the order it was found
 
@@ -1293,18 +1294,53 @@ and a grid sizing rule for the three-dimensional case. The existing Floquet pane
 `<script id="dns...">` sources -- so S9b is that panel's structure applied to a running
 simulation rather than a one-shot solve.
 
-## Two things that do not exist yet, recorded because they were asked for
+## The zip: what was claimed, what was false, and what is there now
 
-**There is no zip.** Nothing on disk, nothing in git history, and
-`faraday/build-standalone.mjs` emits `faraday-cell-standalone.html` -- one file with the
-scripts inlined -- and no archive. The S13 row above asserted that a `faraday-cell.zip`
-already existed and already passed its suites from a fresh unpack; it did not. Building it is
-S13's work.
+**It did not exist, and this file said it did.** The S13 row asserted that a
+`faraday-cell.zip` already existed and already passed its suites from a fresh unpack --
+"as `faraday-cell.zip` already does". Nothing on disk, nothing in git history;
+`faraday/build-standalone.mjs` emits `faraday-cell-standalone.html`, one file with the
+scripts inlined, and no archive. The claim was borrowed from the shape of the sentence
+around it and was found the moment the owner asked where the zip was.
 
-And when it is built it will not contain this solver until S9b is finished. `build-standalone`
-inlines four scripts -- `faraday-dns.js`, `faraday-disc.js`, `faraday-disc-wasm.js`,
-`faraday-floquet.js` -- and `faraday-cell3d.js` is not among them, because the page still draws
-the modal superposition.
+**It exists now, it is generated, and it is not committed.** `node faraday/build-zip.mjs`
+writes it; `.gitignore` carries it for the same reason it carries the single-file build.
+A committed zip is a second copy of every file inside it, and the first time one side is
+edited the copy drifts -- and a drifted copy that still *runs* is the worst failure mode
+this repository has, because it returns an answer.
+
+**A zip is only ever wrong in what is missing from it, and everything missing still
+builds cleanly.** So the gate does not check a zip, it checks an unpack: build, unzip into
+a temp directory, compare every file against the checkout byte for byte, rebuild the
+single-file page and compare it, read the README and require every path it names to
+resolve, run the terminal runner, run four suites from inside that directory. Seven
+injected defects, each required to go red on a disposable copy and green on restore:
+
+| injected | what went red |
+|---|---|
+| `dns/faraday-disc.js` dropped from `MANIFEST` | 7 checks: the terminal runner cannot load the solver out of the unpack at all, and the README names the file |
+| a suite file in the checkout that `SUITES` does not list | 1: the generated runner would ship without it, which is the silent omission a runner must never make |
+| `faraday-cell3d.js` left out of the single-file inliner | 3: the page still carries a `<script src>`, which `file://` gives no origin to fetch |
+| the README naming a file that does not travel | 1 |
+| the generated runner filtering out the slow suite | 1: `--list` names eight of nine |
+| a suite exiting zero after 7 of its 102 checks | 1: the count, not the exit code |
+| `faraday/benchmark.js` or `faraday/zip-README.md` dropped | 1, and **only** the inverse-manifest check -- measured: without it the gate stays entirely green while the zip ships without them |
+
+The last row is why the manifest is also read backwards: every source file in `faraday/`,
+`dns/`, `boundary/` and `fsi/` must travel, and the deliberate-exclusion list is empty.
+The first example that comment gave was `boundary/boundaries.html`, and the injection
+disproved it -- `boundary/boundarykernel.test.js` reads that page, and dropping it fails 2
+of that suite's 36 checks from the unpack. It was covered all along, and the comment now
+says so.
+
+**What the zip does not yet do.** `dns/check-cell3d.mjs` is not run from the unpack by the
+gate: it is 264 checks over many grids and it costs minutes, and a gate nobody can afford
+to run by hand stops being run. `dns/check-dns.mjs` was in the gate's fast set and was
+taken out for the same reason -- measured at 506 s on this container, against 2.2 s for
+`dns/check-wasm-build.mjs`, which crosses the same directory boundary and additionally
+rebuilds the C++ with clang. Both still run in CI on the checkout. Closing that gap is
+S13b. While measuring it, the CI comment calling `check-dns` "a two-and-a-half minute run"
+was found stale and corrected in place.
 
 **There is no GPU path, and the physics is never going to have one.** Zero references to WebGL,
 WebGPU or WGSL in `dns/faraday-cell3d.js`, anywhere under `dns/`, or in `cymatic.html`; the only
@@ -1319,7 +1355,9 @@ in total.
 
 What makes the solver faster is S10, the same discretisation compiled to wasm, and S11, eight
 CPU cores with a deterministic reduction order. Today it is single-core node at 85.6 ms a step
-on 16x24x10.
+on 16x24x10, and 64.3 ms on 10x24x8, where `dns/run-cell3d.mjs` measured the ratio the page
+reports: **1278x slower than real time** on this container, with the step set by the capillary
+limit.
 
 ## Rules this build keeps
 
