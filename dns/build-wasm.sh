@@ -17,7 +17,18 @@
 #                       rather than substituting anything.
 #   -ffp-contract=off   no fused multiply-add. An FMA rounds once where
 #                       JavaScript rounds twice, and the two would drift apart,
-#                       which would destroy the parity the tests assert.
+#                       which would destroy the parity the tests assert. THAT IS
+#                       THE INTENT AND IT IS UNVERIFIED, and it is recorded that
+#                       way rather than asserted. Measured by injection: built
+#                       with -ffp-contract=fast, dns/check-wasm-build.mjs is still
+#                       green -- and that gate holds the fresh module, the
+#                       committed module and the JavaScript solver to element-wise
+#                       identical values over a FULL DRIVE PERIOD on every
+#                       unknown. The same injection on dns/faraday_cell3d.cpp
+#                       leaves its own 55-check parity gate green too, changing
+#                       the module by one byte out of 71403. The flag stays
+#                       because it is the correct intent; it is not load bearing
+#                       on any evidence collected here.
 #   -fno-exceptions     nothing to unwind, and no libc to unwind with.
 #   -fno-rtti           no type info, nothing needs it.
 #   -nostdlib           freestanding.

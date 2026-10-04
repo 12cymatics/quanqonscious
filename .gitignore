@@ -19,3 +19,9 @@ vedic_capability_profile
 # Generated single-file build of cymatic.html (node faraday/build-standalone.mjs).
 # Never committed: a second copy of the kernel would drift from the original.
 faraday-cell-standalone.html
+
+# Generated distribution zip (node faraday/build-zip.mjs). Never committed, for
+# the same reason the single-file build is not: it is a second copy of every file
+# in it, and a drifted copy that still runs is the worst failure mode here.
+# faraday/check-zip.mjs builds one, unpacks it elsewhere and runs it from there.
+faraday-cell.zip

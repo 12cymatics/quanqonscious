@@ -3751,6 +3751,282 @@ section('16. eta at an arbitrary position, which is what the renderer asks for')
   }
 }
 
+section('17. the surface RATE, and the complex amplitude the renderer transports with');
+/* The page does not draw a height. It draws grains driven by
+ *
+ *     PG = -K_I grad |A|^2 + K_F (Re grad Im - Im grad Re)
+ *
+ * an intensity gradient plus a phase flux, where A = Re + i Im is a COMPLEX surface amplitude.
+ * The modal renderer built A from each mode's own phase offset, which a direct simulation does
+ * not have and does not need: for any oscillation the instantaneous pair (eta, -eta_t/omega) is
+ * that amplitude. So the solver has to supply eta_t and both gradients, not just eta, and this
+ * section is what says it does.
+ *
+ * `Ht` is eta_t EXACTLY -- step() sets it from the corrected Omega at sigma = 1, which is the
+ * kinematic condition -- so what had to be built is the face, slope and extended-column chain
+ * that H already has, with one difference: at a PINNED contact line eta is zero on the wall for
+ * all time, so its rate is zero there where H is h.
+ *
+ * The last two assertions are the ones that earn the mapping rather than assuming it. A
+ * standing mode has eta and eta_t sharing one spatial profile, so the phase flux
+ * Re grad Im - Im grad Re must vanish identically; a mode travelling in theta has them a
+ * quarter wave apart, so it must not. If the first failed the renderer would show grains
+ * drifting under a standing pattern; if the second failed it would show none under a
+ * travelling one. */
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const m = 3;
+  const kR = K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0];
+
+  /* --- eta_t at a cell centre is the stored Ht --- */
+  {
+    const S = new FaradayCell3D({ nr: 11, nth: 18, nz: 7, ...CELL });
+    deform(S, 0.4);
+    const r = rnd(5150);
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++) S.Ht[S.ie(i, k)] = 1e-3*r();
+    S.refreshMetric();
+    let worst = 0, scale = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const e = S.ie(i, k);
+        worst = Math.max(worst, Math.abs(S.etaDotAt(S.rc[i], (k + 0.5)*S.dth) - S.Ht[e]));
+        scale = Math.max(scale, Math.abs(S.Ht[e]));
+      }
+    console.log(`       eta_t at cell centres: worst ${worst.toExponential(3)} of `
+      + `${scale.toExponential(3)}, ${(worst/scale).toExponential(2)} relative`);
+    ok(worst/scale < 1e-13,
+       'etaDotAt returns the stored eta_t at every cell centre, to the resolution of the '
+       + 'sample position -- the same bound and the same reason as etaAt in section 16',
+       `${worst.toExponential(3)} of ${scale.toExponential(3)}`);
+  }
+
+  /* --- and it IS d eta / d t, in floating point and not to a tolerance --- *
+   * step() advances eta by `eta[e] += dt*om[...]` and sets `Ht[e]` from the same om in the same
+   * loop, so the kinematic condition is an identity between stored numbers: the new eta is the
+   * old one plus dt times the new Ht, to the bit. Asserted that way rather than as a difference
+   * quotient, because (eta_new - eta_old) is not exactly dt*Ht once the sum has rounded. */
+  {
+    const S = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL });
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++)
+        S.eta[S.ie(i, k)] = 1e-6*K.besselJ(m, (kR/S.R)*S.rc[i])*Math.cos(m*(k + 0.5)*S.dth);
+    S.refreshMetric();
+    const before = Float64Array.from(S.eta);
+    const dt = S.stableStep();
+    S.step(dt);
+    let bad = 0, nz2 = 0;
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const e = S.ie(i, k);
+        if (S.eta[e] !== before[e] + dt*S.Ht[e]) bad++;
+        if (S.Ht[e] !== 0) nz2++;
+      }
+    ok(bad === 0 && nz2 > 0,
+       'and the new eta is exactly the old one plus dt times the new eta_t, so the kinematic '
+       + 'condition holds between the stored numbers and not merely to a tolerance',
+       `${bad} of ${S.NE} cells differ; ${nz2} have a nonzero rate`);
+  }
+
+  /* --- both gradients second order against calculus --- */
+  {
+    const prof = (S, r, th) => {
+      const x = r/S.R, x2 = x*x;
+      return (0.3*S.h)*(x2*(1 - 0.5*x2) + Math.cos(3*th)*x2*x*(1 - 0.6*x2));
+    };
+    const dProf = (S, r, th) => {            // (d/dr, (1/r) d/dtheta) in closed form
+      const R = S.R, x = r/R, x2 = x*x;
+      const dr = (0.3*S.h/R)*(2*x*(1 - 0.5*x2) + x2*(-x)
+                 + Math.cos(3*th)*(3*x2*(1 - 0.6*x2) + x2*x*(-1.2*x)));
+      const dth = (0.3*S.h)*(-3*Math.sin(3*th)*x2*x*(1 - 0.6*x2));
+      return { dr, dth };
+    };
+    const errOn = (nr, nth, which) => {
+      const S = new FaradayCell3D({ nr, nth, nz: 6, ...CELL });
+      for (let i = 0; i < S.nr; i++)
+        for (let k = 0; k < S.nth; k++){
+          const v = prof(S, S.rc[i], (k + 0.5)*S.dth);
+          if (which === 'eta') S.eta[S.ie(i, k)] = v; else S.Ht[S.ie(i, k)] = v;
+        }
+      S.refreshMetric();
+      let worst = 0;
+      for (let i = 1; i < S.nr - 1; i++)
+        for (let k = 0; k < S.nth; k++)
+          for (const fr of [0.37, 0.71]){
+            const r = S.rc[i] + fr*(S.rc[i+1] - S.rc[i]), th = (k + 0.5)*S.dth;
+            const want = dProf(S, r, th);
+            const got = which === 'eta' ? S.etaSlopeAt(r, th) : S.etaDotSlopeAt(r, th);
+            const gr = which === 'eta' ? got.Hr : got.Tr;
+            const gt = which === 'eta' ? got.Hth : got.Tth;
+            worst = Math.max(worst, Math.abs(gr - want.dr)/(0.3*S.h/S.R),
+                                    Math.abs(gt - want.dth)/(0.3*S.h));
+          }
+      return worst;
+    };
+    for (const which of ['eta', 'etaDot']){
+      const e = [errOn(12, 20, which), errOn(24, 40, which), errOn(48, 80, which)];
+      const ord = [Math.log2(e[0]/e[1]), Math.log2(e[1]/e[2])];
+      console.log(`       grad ${which === 'eta' ? 'eta    ' : 'eta_t  '}: `
+        + e.map(x => x.toExponential(3)).join(', ') + ` -- order `
+        + ord.map(x => x.toFixed(3)).join(' then '));
+      ok(ord.every(o => o > 1.80 && o < 2.20),
+         `the gradient of ${which === 'eta' ? 'eta' : 'eta_t'} is second order against the `
+         + `analytic gradient of the same surface`,
+         `order ${ord.map(x => x.toFixed(4)).join(' then ')}`);
+    }
+  }
+
+  /* --- the rate's own rim and axis conventions --- */
+  {
+    for (const contact of ['free', 'pinned']){
+      const S = new FaradayCell3D({ nr: 12, nth: 16, nz: 6, ...CELL, contact });
+      deform(S, 0.3);
+      const r = rnd(2718);
+      for (let i = 0; i < S.nr; i++)
+        for (let k = 0; k < S.nth; k++) S.Ht[S.ie(i, k)] = 1e-3*r();
+      S.refreshMetric();
+      let worst = 0, scale = 0;
+      for (let k = 0; k < S.nth; k++){
+        const want = contact === 'free' ? S.Ht[S.ie(S.nr - 1, k)] : 0;
+        worst = Math.max(worst, Math.abs(S.etaDotAt(S.R, (k + 0.5)*S.dth) - want));
+        scale = Math.max(scale, Math.abs(S.Ht[S.ie(S.nr - 1, k)]));
+      }
+      ok(contact === 'pinned' ? worst === 0 : worst/scale < 1e-13,
+         `${contact}: at r = R the rate carries the contact condition -- `
+         + (contact === 'free'
+            ? 'the last cell\'s own rate, since deta/dr = 0 there for all time'
+            : 'exactly zero, since a pinned line holds eta at zero and so holds its rate at '
+              + 'zero too'),
+         `worst ${worst.toExponential(3)}`);
+    }
+    /* and an axisymmetric rate is single-valued on the axis, as eta is */
+    const S = new FaradayCell3D({ nr: 14, nth: 24, nz: 6, ...CELL });
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++)
+        S.Ht[S.ie(i, k)] = 1e-3*(1 - Math.pow(S.rc[i]/S.R, 2));
+    S.refreshMetric();
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < 4*S.nth; k++){
+      const v = S.etaDotAt(0, k*S.dth/4);
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+    ok(hi - lo <= 4*Number.EPSILON*Math.max(Math.abs(lo), Math.abs(hi)),
+       'and an axisymmetric rate has ONE value on the axis, however theta is approached',
+       `spread ${(hi - lo).toExponential(3)} of ${hi.toExponential(3)}`);
+
+    /* AND AN m = 3 RATE HAS NONE, which is the assertion that actually tests the antipodal
+       row -- the check above cannot, and I had to be shown that twice.
+       Taking the rate's axis row at the same azimuth instead of the antipode left this section
+       GREEN at 263 passed, 0 failed, because the probe above is AXISYMMETRIC: for a field with
+       no theta dependence, Ht[ie(0, k + nth/2)] and Ht[ie(0, k)] are the same number, so the
+       two rows are identical and the defect is invisible. That is exactly the gap section 16's
+       own axis check had, found by the same injection, and repeating it here while writing a
+       structurally identical section is the reason this comment names it rather than just
+       fixing it. An odd azimuthal order is what distinguishes the two rows: the antipodal value
+       carries the opposite sign, and the two cancel at r = 0 to the last bit of the cosine. */
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++){
+        const x = S.rc[i]/S.R;
+        S.Ht[S.ie(i, k)] = 1e-3*x*x*x*(1 - x*x)*Math.cos(3*(k + 0.5)*S.dth);
+      }
+    S.refreshMetric();
+    let worst3 = 0;
+    for (let k = 0; k < 4*S.nth; k++)
+      worst3 = Math.max(worst3, Math.abs(S.etaDotAt(0, k*S.dth/4)));
+    const amp3 = 1e-3*Math.pow(0.5, 3)*(1 - 0.25);
+    console.log(`       m = 3 rate at r = 0: worst ${worst3.toExponential(2)}, `
+      + `${(worst3/amp3).toExponential(2)} of the ${amp3.toExponential(2)} at mid-radius`);
+    ok(worst3 < 1e-12*amp3,
+       'and an m = 3 rate has NO value on the axis, to round-off -- which is the assertion '
+       + 'that tests the antipodal row, because an axisymmetric probe cannot tell it from one '
+       + 'taken at the same azimuth',
+       `${worst3.toExponential(3)} of ${amp3.toExponential(3)}, `
+       + `${(worst3/amp3).toExponential(3)} relative`);
+  }
+
+  /* --- THE MAPPING ITSELF: the phase flux vanishes for a standing mode --- *
+   * A standing mode has eta and eta_t proportional in space, so
+   *   Re grad Im - Im grad Re = -(1/omega)(eta grad eta_t - eta_t grad eta) = 0
+   * identically, whatever the profile and whatever the two amplitudes. If this were nonzero
+   * the page would show grains drifting under a pattern that is not going anywhere. */
+  {
+    const S = new FaradayCell3D({ nr: 16, nth: 24, nz: 8, ...CELL });
+    const k = kR/S.R, A = 2e-5, B = -7e-3;        // amplitudes deliberately unrelated
+    for (let i = 0; i < S.nr; i++)
+      for (let kk = 0; kk < S.nth; kk++){
+        const prof = K.besselJ(m, k*S.rc[i])*Math.cos(m*(kk + 0.5)*S.dth);
+        S.eta[S.ie(i, kk)] = A*prof;
+        S.Ht[S.ie(i, kk)]  = B*prof;
+      }
+    S.refreshMetric();
+    const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+    let worstFlux = 0, scale = 0;
+    for (let i = 1; i < S.nr - 1; i++)
+      for (let kk = 0; kk < S.nth; kk++)
+        for (const fr of [0.29, 0.63]){
+          const r = S.rc[i] + fr*(S.rc[i+1] - S.rc[i]), th = (kk + 0.5)*S.dth;
+          const Re = S.etaAt(r, th), Im = -S.etaDotAt(r, th)/omega;
+          const gR = S.etaSlopeAt(r, th), gT = S.etaDotSlopeAt(r, th);
+          const gIr = -gT.Tr/omega, gIth = -gT.Tth/omega;
+          const fr_ = Re*gIr - Im*gR.Hr, fth = Re*gIth - Im*gR.Hth;
+          worstFlux = Math.max(worstFlux, Math.abs(fr_), Math.abs(fth));
+          scale = Math.max(scale, Math.abs(Re*gIr), Math.abs(Im*gR.Hr),
+                                  Math.abs(Re*gIth), Math.abs(Im*gR.Hth));
+        }
+    console.log(`       standing mode: worst phase flux ${worstFlux.toExponential(3)} against `
+      + `terms of ${scale.toExponential(3)} -- ${(worstFlux/scale).toExponential(2)} relative`);
+    /* THIS ASSERTION FOUND A PRECISION DEFECT AND THEN CORRECTED MY BOUND, in that order.
+       It was 1e-14, on the reasoning that the cancellation is algebraic so round-off is 1e-16.
+       It failed at 2.046e-12 -- four orders too large -- and the cause was upstream:
+       `etaSlopeAt` returned H's centred slope, whose face values are formed as
+       (h + eta_lo) + f*((h + eta_hi) - (h + eta_lo)). With h = 3e-3 m and eta differing by
+       1.7e-6 across a cell, the ulp of h + eta is 4.3e-19 and that inner difference carries
+       2.5e-13 of relative error. eta now has its own face and slope chain, differenced from
+       eta and never from H, and the flux reads 1.444e-14 -- better by 141 times.
+
+       And 1e-16 was still wrong, for a reason that is arithmetic rather than a defect. The two
+       fields are proportional only to a rounding: the nodes hold fl(A*prof) and fl(B*prof), so
+       eta/eta_t is A/B to within an ulp per node, and differencing across a cell amplifies
+       that by eta/(delta eta) which is about twelve here. A few such steps put the floor near
+       1e-14, which is what is measured. The bound is 1e-13: seven times the measured floor and
+       still 140 times below what H's slopes gave. */
+    ok(worstFlux/scale < 1e-13,
+       'for a STANDING mode the phase flux Re grad Im - Im grad Re vanishes to the arithmetic\'s '
+       + 'own floor, because eta and eta_t share one spatial profile -- so the renderer will '
+       + 'not drift grains under a pattern that is going nowhere',
+       `${worstFlux.toExponential(3)} of ${scale.toExponential(3)}, `
+       + `${(worstFlux/scale).toExponential(3)} relative`);
+
+    /* --- and does NOT vanish for one travelling in theta --- *
+     * Put eta_t a quarter wave around: eta ~ cos(m th), eta_t ~ -omega sin(m th), which is
+     * eta(t) for a wave running in theta. The azimuthal flux is then of order |A|^2 m/r and
+     * has ONE sign all the way round, which is what a wave carrying momentum looks like. */
+    for (let i = 0; i < S.nr; i++)
+      for (let kk = 0; kk < S.nth; kk++){
+        const th = (kk + 0.5)*S.dth, J = K.besselJ(m, k*S.rc[i]);
+        S.eta[S.ie(i, kk)] = A*J*Math.cos(m*th);
+        S.Ht[S.ie(i, kk)]  = -omega*A*J*Math.sin(m*th);
+      }
+    S.refreshMetric();
+    let minFth = Infinity, maxFth = -Infinity, nSamples = 0;
+    for (let i = 4; i < S.nr - 2; i++)
+      for (let kk = 0; kk < S.nth; kk++){
+        const r = S.rc[i], th = (kk + 0.5)*S.dth;
+        const Re = S.etaAt(r, th), Im = -S.etaDotAt(r, th)/omega;
+        const gR = S.etaSlopeAt(r, th), gT = S.etaDotSlopeAt(r, th);
+        const fth = Re*(-gT.Tth/omega) - Im*gR.Hth;
+        minFth = Math.min(minFth, fth); maxFth = Math.max(maxFth, fth);
+        nSamples++;
+      }
+    console.log(`       travelling mode: azimuthal flux over ${nSamples} samples in `
+      + `[${minFth.toExponential(3)}, ${maxFth.toExponential(3)}]`);
+    ok(minFth > 0 || maxFth < 0,
+       'while for a mode TRAVELLING in theta the azimuthal flux is one sign the whole way '
+       + 'round, so the same expression does carry momentum where there is momentum to carry',
+       `range [${minFth.toExponential(3)}, ${maxFth.toExponential(3)}]`);
+  }
+}
+
 /* ── 5. refusals ────────────────────────────────────────────────────────── */
 section('5. what it refuses rather than answering');
 throws('an odd azimuthal count is refused, since the top mode loses its conjugate',

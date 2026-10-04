@@ -88,6 +88,30 @@ ASPIRATIONAL = {
     "cad_build/data/master_parameters.json",
 }
 
+#: Paths named because a documented command *writes* them: build outputs,
+#: covered by `.gitignore` and deliberately never committed. They are a third
+#: category and they needed one. ASPIRATIONAL could not hold them — it asserts
+#: its entries are absent, and a build output is present on any machine that has
+#: run the build and absent on any that has not, so the gate's answer would have
+#: depended on whether someone had run a command. Nor could they simply resolve:
+#: that is what a tracked file does, and a build output is exactly the thing that
+#: must NOT be tracked, because a committed copy of a generated file drifts from
+#: its source the first time one side is edited — and a drifted copy that still
+#: *runs* is the worst failure mode in this repository, since it returns an
+#: answer.
+#:
+#: The value is the command that writes it, so a reader of this list can produce
+#: the file. Each entry is asserted below to be cited, to be matched by
+#: `.gitignore`, and to be untracked — which is what stops this list absorbing a
+#: rename: a renamed tracked file is still tracked, and a path that is neither
+#: tracked nor ignored is a dead pointer like any other.
+GENERATED = {
+    # dns/PLAN-cell3d.md and faraday/zip-README.md name it: the single-file build
+    # of cymatic.html, kernel and all three solvers inlined, plus the compiled
+    # period map as base64, so it opens by double-click with nothing fetched.
+    "faraday-cell-standalone.html": "node faraday/build-standalone.mjs",
+}
+
 _PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|json|yaml|yml|jsonl|"
                    r"sh|html|txt|md|hpp|cpp|ipynb|toml|cfg|jl|adoc))`")
 
@@ -128,7 +152,8 @@ def resolves(citation: str, doc: str) -> bool:
 def is_live(citation: str, doc: str) -> bool:
     """The whole decision, in one pure function — see the trainer's gate for
     what happens when the tested helper and the called helper drift apart."""
-    return citation in ASPIRATIONAL or resolves(citation, doc)
+    return (citation in ASPIRATIONAL or citation in GENERATED
+            or resolves(citation, doc))
 
 
 def dead_pointers() -> list[str]:
@@ -151,7 +176,9 @@ def test_no_document_points_at_something_that_is_not_there():
         "documented paths that resolve to nothing:\n  " + "\n  ".join(dead)
         + "\n\nEither the file was renamed and the document was not updated, "
           "or the path is named because it does not exist — in which case add "
-          "it to ASPIRATIONAL here, with the reason.")
+          "it to ASPIRATIONAL here, with the reason — or it is written by a "
+          "documented build command, in which case add it to GENERATED with "
+          "that command.")
 
 
 def test_every_aspirational_entry_is_still_cited():
@@ -172,9 +199,49 @@ def test_no_aspirational_entry_actually_exists():
         f"document that describes them as absent, then drop them from here.")
 
 
+def _ignored(path: str) -> bool:
+    """Does `.gitignore` cover this path? `git check-ignore` exits 0 if so."""
+    return subprocess.run(["git", "-C", str(REPO), "check-ignore", "-q", path],
+                          capture_output=True).returncode == 0
+
+
+def test_every_generated_entry_is_still_cited():
+    everything = {c for d in DOCS for c in cited(d)}
+    stale = set(GENERATED) - everything
+    assert not stale, f"GENERATED exempts paths no document mentions: {sorted(stale)}"
+
+
+def test_every_generated_entry_is_ignored_and_untracked():
+    """The exemption says these are build outputs. A tracked file is not one,
+    and neither is a path nothing ignores — in both cases the citation has to
+    stand on its own, and this list would otherwise hide that it cannot."""
+    tracked = sorted(p for p in GENERATED if p in TRACKED)
+    assert not tracked, (
+        f"{tracked} are in GENERATED but tracked by git. A generated file that "
+        f"is committed is a second copy of its source; either stop committing "
+        f"it, or drop it from here and let the citation resolve normally.")
+    unignored = sorted(p for p in GENERATED if not _ignored(p))
+    assert not unignored, (
+        f"{unignored} are in GENERATED but `.gitignore` does not cover them, so "
+        f"nothing stops them being committed. Add them to .gitignore, or they "
+        f"are not generated artefacts and do not belong here.")
+
+
+def test_every_generated_entry_names_the_command_that_writes_it():
+    """A reader who cannot produce the file is looking at a dead pointer with
+    an excuse attached."""
+    for path, cmd in GENERATED.items():
+        assert cmd and cmd.split()[0] in ("node", "python", "python3", "bash", "sh", "make"), \
+            f"GENERATED[{path!r}] = {cmd!r} is not a runnable command"
+        script = cmd.split()[-1]
+        assert script in TRACKED, (
+            f"GENERATED[{path!r}] says to run {script}, which is not tracked — "
+            f"so the instruction cannot be followed from a fresh clone.")
+
+
 # ---------------------------------------------------------------------------
 # Line-range citations
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------""
 #
 # A citation of the form `path.py:START-END` makes a claim the path check
 # above cannot see: that the named construct is at those lines. Nothing

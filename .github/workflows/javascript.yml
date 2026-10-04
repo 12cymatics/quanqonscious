@@ -38,7 +38,31 @@
 # the axis instead of the rim, and uniform grids that measured the damping
 # inconsistently because the Stokes layers were never resolved.
 #
+# dns/check-cell3d-wasm.mjs runs in the disc job rather than the DNS one, because
+# what it needs is the toolchain: it rebuilds dns/faraday_cell3d.cpp with the
+# runner's own clang and requires the fresh module, the committed module and
+# dns/faraday-cell3d.js to produce IDENTICAL fields -- not close ones -- operator
+# by operator and then over a whole drive period, 894 steps at 12x24x8. Identical
+# rather than close because the C++ is a transcription, and the only property
+# worth asserting about a transcription is that it changed nothing; agreement to
+# twelve digits would mean the two had drifted and nobody could say where. It is a
+# failure and never a skip if the rebuild cannot happen, for the same reason the
+# two-dimensional one is.
+#
 # dns/check-wasm-build.mjs runs in the disc job, before the suite it supports.
+#
+# faraday/check-zip.mjs runs there too, for the toolchain rather than the
+# subject: it builds faraday-cell.zip, unpacks it into a temp directory and runs
+# four suites from THERE, and one of those four is check-wasm-build, which needs
+# clang and lld. It is nine seconds beside a job that already installs them.
+# A zip is only ever wrong in what is missing from it, and everything missing
+# still builds cleanly, so building one proves nothing -- it has to be unpacked
+# somewhere else and run from there. Seven injected defects were each required to
+# turn it red: a file dropped from the manifest, a suite the runner does not
+# list, a script left out of the single-file inliner, a README naming a path that
+# does not travel, a generated runner that silently omits the slow suite, a suite
+# that exits zero after fewer checks, and a file nothing but the inverse manifest
+# check covers.
 # dns/faraday_disc.wasm is checked in, because a browser cannot compile C++ and
 # the page has to carry the module; a checked-in binary is a thing that can drift
 # from its source, so this rebuilds dns/faraday_disc.cpp with the runner's own
@@ -79,10 +103,14 @@
 # which is the same gap that once let a red suite sit on the default branch -- a
 # suite that exists and is not run is not a gate.
 #
-# dns/check-dns.mjs is a separate job because it is a two-and-a-half minute run
-# rather than a twenty-second one, and because it gates something different: not
-# a library of special functions but a solver, checked against analytic forces,
-# analytic Laplacians, exact identities and the dispersion relation. It runs in
+# dns/check-dns.mjs is a separate job because it is a long run rather than a
+# twenty-second one, and because it gates something different: not a library of
+# special functions but a solver, checked against analytic forces, analytic
+# Laplacians, exact identities and the dispersion relation. This line said "a
+# two-and-a-half minute run" and that figure was never remeasured: timed on this
+# container it is 506 s. The figure is recorded here rather than relied on --
+# what matters is that it is minutes, not seconds, which is the reason for the
+# separate job and the reason faraday/check-zip.mjs does not run it again. It runs in
 # CI for the reason the others do -- the first version of that solver was wrong
 # by 28% on the physics while reporting eight green checks, and the gate that
 # now catches it has to be executed by something other than me remembering to.
@@ -158,6 +186,10 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y clang lld
     - name: The committed module is the committed source
       run: node dns/check-wasm-build.mjs
+    - name: The three-dimensional C++ module is the JavaScript, bit for bit
+      run: node dns/check-cell3d-wasm.mjs
+    - name: The distribution zip, unpacked elsewhere and run from there
+      run: node faraday/check-zip.mjs
     - name: Linearised free-surface Navier-Stokes in the cell
       run: node dns/check-disc.mjs
 
