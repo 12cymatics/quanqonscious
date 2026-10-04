@@ -30,6 +30,7 @@ header p b{color:var(--ink2);font-weight:500}
   border:1px solid var(--edge)}
 .stage{position:relative;background:#000;aspect-ratio:1/1}
 .stage canvas{width:100%;height:100%;display:block}
+.stage canvas#cgl{position:absolute;left:0;top:0}
 .ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
 .ov b{color:var(--cy);font-weight:600}
 .ov.tl{left:11px;top:10px;line-height:1.75}
@@ -121,6 +122,7 @@ footer b{color:var(--ink2);font-weight:500}
 <div class="rig">
   <div class="stage">
     <canvas id="c" width="381" height="381"></canvas>
+    <canvas id="cgl" width="381" height="381" style="display:none"></canvas>
     <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">55.5</b> Hz<br>
       cell ⌀ <b id="oD">24.25</b> mm<br>
       <span class="ph" id="oPh"></span><span id="oPhT">phase I</span></div>
@@ -175,6 +177,13 @@ footer b{color:var(--ink2);font-weight:500}
         <button data-v="optical" aria-pressed="false">optical</button>
         <button data-v="height" aria-pressed="false">height</button>
         <button data-v="nodal" aria-pressed="false">nodal</button>
+      </div>
+    </div>
+    <div class="fld">
+      <span class="lab">draw on</span>
+      <div class="seg" id="engSeg">
+        <button data-e="cpu" aria-pressed="true">CPU</button>
+        <button data-e="gpu" aria-pressed="false">GPU</button>
       </div>
     </div>
     <div class="fld">
@@ -256,6 +265,7 @@ footer b{color:var(--ink2);font-weight:500}
 </footer>
 </div>
 <script src="faraday/kernel.js"></script>
+<script id="renderGl" src="faraday/render-gl.js"></script>
 <script id="dnsSolver" src="dns/faraday-dns.js"></script>
 <script id="dnsDisc" src="dns/faraday-disc.js"></script>
 <script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>
@@ -433,7 +443,12 @@ function finishSurface(state){
   const dinv = 1/dmax;
   for (let i = 0; i < NSZ; i++){ PGX[i] *= dinv; PGY[i] *= dinv; }
   state.transport = { stokesRatio: stokes, fluxGain: KF, fluxGainAssumed: true };
+  /* Every way the surface is built -- the modal sum and both solver engines -- ends
+     here, so this is the one place that can say the rasters changed. The GPU
+     renderer uploads them only when this moves, rather than 2 MB every frame. */
+  FIELD_GEN++;
 }
+let FIELD_GEN = 0;
 
 const NP = 60000;
 const PX = new Float32Array(NP), PY = new Float32Array(NP),
@@ -546,7 +561,34 @@ function fieldRms(field, cover){
 }
 
 const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
+/* How many grains sit in each pixel, for the sand view. Shared by both renderers:
+   the CPU one reads BIN directly, the GPU one uploads it. */
+function binGrains(){
+  BIN.fill(0);
+  for (let p = 0; p < NP; p++){
+    const i = (PY[p]|0)*GR + (PX[p]|0);
+    if (i >= 0 && i < NSZ) BIN[i]++;
+  }
+}
+/* Which processor draws the surface: 'cpu', the per-pixel loop below, or 'gpu',
+   faraday/render-gl.js. Not the physics -- that is double precision on the CPU
+   either way. The two are held to the same bytes, within one level per channel, by
+   dns/check-page.mjs. */
+let renderEngine = 'cpu';
+let renderCost = { cpu: 0, gpu: 0 };
 function renderSurface(state){
+  const t0 = performance.now();
+  if (renderEngine === 'gpu') GPU_SURFACE.draw(state);
+  else renderSurfaceCpu(state);
+  /* main-thread time per frame, smoothed, for the deck */
+  const dt = performance.now() - t0;
+  renderCost[renderEngine] = renderCost[renderEngine] ? 0.9*renderCost[renderEngine] + 0.1*dt : dt;
+}
+/* `rawOut`, when given, receives the three shading values of every pixel BEFORE they
+   are rounded to a byte. Only dns/check-page.mjs passes it, to hold the GPU to these
+   values rather than only to the bytes; the page never does, and with it absent the
+   loop below stores exactly what it always stored. */
+function renderSurfaceCpu(state, rawOut){
   renderRnd = mulberry32(RENDER_SEED);
 
   const k = phaseSign*state.expression;
@@ -554,13 +596,7 @@ function renderSurface(state){
   const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
   const tex = vs ? vs.textureConc : 0;
   const SLOPE = 0.8;
-  if (view === 'sand'){
-    BIN.fill(0);
-    for (let p = 0; p < NP; p++){
-      const i = (PY[p]|0)*GR + (PX[p]|0);
-      if (i >= 0 && i < NSZ) BIN[i]++;
-    }
-  }
+  if (view === 'sand') binGrains();
   for (let i = 0, q = 0; i < NSZ; i++, q += 4){
     const cov = COVER[i];
     let r0 = 5, g0 = 7, b0 = 10;
@@ -596,12 +632,94 @@ function renderSurface(state){
       }
     }
 
-    pxl[q]   = tone(5 + (r0-5)*cov);
-    pxl[q+1] = tone(7 + (g0-7)*cov);
-    pxl[q+2] = tone(10 + (b0-10)*cov);
+    const tr = tone(5 + (r0-5)*cov), tg = tone(7 + (g0-7)*cov), tb = tone(10 + (b0-10)*cov);
+    if (rawOut){ rawOut[q] = tr; rawOut[q+1] = tg; rawOut[q+2] = tb; }
+    pxl[q]   = tr;
+    pxl[q+1] = tg;
+    pxl[q+2] = tb;
     pxl[q+3] = 255;
   }
   ctx.putImageData(im, 0, 0);
+}
+
+/* The GPU renderer, owned here. Built on first use rather than at load, so a
+   browser without WebGL2 pays nothing and loses nothing until GPU is asked for --
+   and then is told why it cannot have it, instead of being drawn on by the CPU
+   under the GPU's name. */
+const GPU_SURFACE = (() => {
+  const canvas = document.getElementById('cgl');
+  let gl = null, err = null, fieldGen = -1;
+
+  /* The texture noise the CPU loop adds, as a static raster. renderSurfaceCpu
+     restarts renderRnd from RENDER_SEED every frame and draws one value per COVERED
+     pixel in scan order, so the k-th covered pixel always gets the k-th value of
+     that sequence: the noise is the same every frame, and can be built once. */
+  function noiseTable(){
+    const r = mulberry32(RENDER_SEED), out = new Float32Array(NSZ);
+    for (let i = 0; i < NSZ; i++) if (COVER[i] > 0) out[i] = r() - 0.5;
+    return out;
+  }
+
+  function start(){
+    if (gl) return true;
+    if (err) return false;
+    try {
+      if (typeof FARADAY_RENDER_GL === 'undefined') throw new Error(
+        'faraday/render-gl.js did not load, so there is no GPU renderer on this page.');
+      gl = new FARADAY_RENDER_GL.SurfaceGL(canvas, GR);
+      gl.uploadStatic(COVER, noiseTable());
+      fieldGen = -1;
+      return true;
+    } catch (e){
+      err = String(e && e.message || e); gl = null;
+      return false;
+    }
+  }
+
+  /* What both draw() and readRaw() hand the shader: the uniforms, computed exactly as
+     renderSurfaceCpu computes them, and the rasters brought up to date. */
+  function prepare(st){
+    if (!gl) throw new Error('the GPU renderer was asked to draw before it started'
+      + (err ? `, and it could not start: ${err}` : '.'));
+    const k = phaseSign*st.expression;
+    const vs = st.visualSignature;
+    const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+    const tex = vs ? vs.textureConc : 0;
+    if (fieldGen !== FIELD_GEN){ gl.uploadField(ETA, NX, NY); fieldGen = FIELD_GEN; }
+    if (view === 'sand'){ binGrains(); gl.uploadBins(BIN); }
+    return { view, k, contrast, tex, slope: 0.8 };
+  }
+  function draw(st){ const o = prepare(st); gl.draw(o); }
+
+  /* Show one canvas or the other. Display is set directly: the hidden attribute
+     would lose to the stylesheet's `.stage canvas{display:block}`. */
+  function show(engine){
+    cv.style.display = engine === 'gpu' ? 'none' : 'block';
+    canvas.style.display = engine === 'gpu' ? 'block' : 'none';
+  }
+
+  return { start, draw, show,
+           get error(){ return err || (gl && gl.lost ? gl.lostReason : null); },
+           get renderer(){ return gl ? gl.renderer : null },
+           get ready(){ return !!gl && !gl.lost; },
+           readRGBA(){ return gl.readRGBA(); },
+           readRaw(st){ return gl.readRaw(prepare(st)); } };
+})();
+
+/* Choose the engine, refusing GPU where it cannot run. A refusal leaves the CPU
+   drawing -- which it already was -- and the deck says why GPU is not available;
+   the button is marked unavailable so the choice cannot appear to have taken. */
+function setRenderEngine(want){
+  if (want === 'gpu' && !GPU_SURFACE.start()){
+    renderEngine = 'cpu';
+    const b = document.querySelector('#engSeg [data-e="gpu"]');
+    b.disabled = true; b.title = 'GPU unavailable: ' + GPU_SURFACE.error;
+    document.querySelectorAll('#engSeg button').forEach(x =>
+      x.setAttribute('aria-pressed', String(x.dataset.e === 'cpu')));
+  } else renderEngine = want;
+  GPU_SURFACE.show(renderEngine);
+  try { localStorage.setItem('cymatic.renderEngine', renderEngine); } catch { /* storage off */ }
+  dirty = true;
 }
 
 const FOLD_COLOR = { '2':'#4FD1E0','4':'#63C08A','5':'#B9D45C','6':'#E9C65C','8':'#E9A75C',
@@ -748,6 +866,17 @@ function paintDeck(){
         ? `${(2*Math.PI*RR/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
     ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
     ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
+    /* Which processor drew this frame, and what it cost the main thread. GPU time on
+       the device itself is not measured here -- that needs a timer-query extension
+       most browsers do not expose -- so this is the cost that decides the frame rate
+       of the page, labelled as such. */
+    ['drawn on', renderEngine === 'gpu'
+       ? `<b>GPU</b> <span class="u">· WebGL2 · ${GPU_SURFACE.renderer}</span>`
+       : (GPU_SURFACE.error
+          ? `<b>CPU</b> <span class="u">· GPU unavailable: ${GPU_SURFACE.error}</span>`
+          : '<b>CPU</b> <span class="u">· canvas 2D</span>')],
+    ['  main-thread cost', `${(renderCost[renderEngine] || 0).toFixed(2)} `
+       + `<span class="u">ms a frame</span>`],
     ['SEP', ''],
     ['surface drawn from', (() => {
        const c = CELL3D.clocks();
@@ -862,6 +991,7 @@ seg('phaseSeg', b => {
   else { swapping = false; phaseSign = +b.dataset.p; }
 });
 seg('viewSeg', b => { view = b.dataset.v; });
+seg('engSeg', b => setRenderEngine(b.dataset.e));
 /* Switching to the solver starts it from the deck's current operating point. Switching
    back stops the worker rather than leaving it burning a core behind a picture nobody
    is looking at. */
@@ -2036,5 +2166,15 @@ let useSolver = false;
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
 let cell3dEngine = 'js';
 
-sprinkle(); recompute(); requestAnimationFrame(loop);
+sprinkle(); recompute();
+/* The draw-on choice is remembered per browser, as a convenience only: with storage
+   blocked the page starts on the CPU, as it always has. */
+try {
+  if (localStorage.getItem('cymatic.renderEngine') === 'gpu'){
+    document.querySelectorAll('#engSeg button').forEach(x =>
+      x.setAttribute('aria-pressed', String(x.dataset.e === 'gpu')));
+    setRenderEngine('gpu');
+  }
+} catch { /* storage off */ }
+requestAnimationFrame(loop);
 </script>

@@ -82,6 +82,13 @@
 # binary has no way to know the binary matches its source, and the binary is what
 # the page runs.
 #
+# dns/check-page.mjs also draws the surface on the GPU and requires every byte to
+# match the CPU's within one level. The runners have no GPU, so Chrome is launched
+# with --enable-unsafe-swiftshader instead of --disable-gpu: SwiftShader runs the
+# same WebGL2 API through the same ANGLE shader compiler in software. That proves
+# the shader computes what the CPU computes; it is not, and is not reported as, a
+# measurement of GPU speed.
+#
 # dns/check-page.mjs is the only suite here that needs a browser, and it gets
 # one without an install: the ubuntu-latest image ships Google Chrome, and node
 # 22 has a global WebSocket, so it drives it over the DevTools protocol with no

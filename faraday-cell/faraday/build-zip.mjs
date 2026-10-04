@@ -86,6 +86,7 @@ export const MANIFEST = [
   'cymatic.html',
 
   'faraday/kernel.js',
+  'faraday/render-gl.js',
   'faraday/benchmark.js',
   'faraday/reference.json',
   'faraday/build-standalone.mjs',

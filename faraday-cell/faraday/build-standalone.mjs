@@ -40,6 +40,11 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const SCRIPTS = [
   { tag: '<script src="faraday/kernel.js"></script>',
     path: 'faraday/kernel.js', open: '<script>' },
+  /* The GPU renderer. Inlined like the rest: a single file that kept this as a
+     <script src> would have a GPU button whose code could not be fetched from
+     file://, which dns/check-page.mjs's "fetches no script at all" would catch. */
+  { tag: '<script id="renderGl" src="faraday/render-gl.js"></script>',
+    path: 'faraday/render-gl.js', open: '<script id="renderGl">' },
   { tag: '<script id="dnsSolver" src="dns/faraday-dns.js"></script>',
     path: 'dns/faraday-dns.js', open: '<script id="dnsSolver">' },
   { tag: '<script id="dnsDisc" src="dns/faraday-disc.js"></script>',

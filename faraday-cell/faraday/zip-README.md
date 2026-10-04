@@ -97,11 +97,28 @@ different ratio and the number it prints is measured on it, not estimated.
 
 **The physics is in double precision on the CPU, and stays there.** No GPU on an
 Intel Mac has a double-precision type — Metal has no `double`, so WGSL has no
-`f64` — so the GPU is used for *rendering*, where f32 is correct because the
-output is pixels, and never for the field. A single-precision GPU preconditioner
-inside the double-precision solve is legitimate, because a preconditioner changes
-the iteration count and not the converged answer; running the field itself in f32
-is not, and is not done.
+`f64` — so the GPU is used for *drawing*, where single precision is correct
+because the output is an 8-bit pixel, and never for the field.
+
+**Drawing on the GPU.** Pick **GPU** under *draw on*. The surface is then shaded by
+a WebGL2 fragment shader (`faraday/render-gl.js`) instead of a per-pixel JavaScript
+loop that costs 11.6–22.2 ms a frame on the CPU this was built on — more than a
+whole 60 Hz frame on its own. The page remembers the choice. The deck names the
+processor that drew the frame and what it cost the page. Where WebGL2 is not
+available the GPU option is marked unavailable and says why; it never draws with
+the CPU under the GPU's name.
+
+The two are held to the same picture: `dns/check-page.mjs` draws every view both
+ways, at the page's amplitude and at full amplitude in both phases, with the
+texture noise off and on, and again after the field is rebuilt, and requires every
+byte to agree **to within one level out of 255**. That bound is derived rather
+than tuned — the inputs are identical and the two evaluations differ by parts in
+ten million, which can move a byte only at a rounding boundary and only by one
+level. Because a byte check alone cannot see an error smaller than one level — a
+wrong coefficient that moved pixels by half a level passed it — the values
+*before* rounding are compared too, against a bound of 0.02 of a level derived
+from the GLSL precision rules; measured, they agree to 5×10⁻⁴. The grain simulation stays on the CPU: it draws from one seeded random
+sequence in grain order, and a parallel version would be a different algorithm.
 
 ## What this is, and what it is not
 
