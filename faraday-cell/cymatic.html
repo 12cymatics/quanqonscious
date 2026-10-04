@@ -1,0 +1,2040 @@
+<meta charset="utf-8">
+<title>Faraday Cell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --void:#070A0D; --panel:#0D1116; --panel2:#141A21; --panel3:#1B222B;
+  --edge:#1D2530; --edge2:#2E3945;
+  --ink:#DFE6EC; --ink2:#8E9DAB; --dim:#5B6874;
+  --cy:#4FD1E0; --cy-soft:#4FD1E01A;
+  --amb:#E9A75C; --red:#E4695E; --grn:#63C08A; --vio:#9B8CE0;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.5;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:0 16px 40px}
+h1{font-family:"Archivo",sans-serif;font-weight:800;letter-spacing:-.025em;
+  font-size:1.5rem;margin:0;line-height:1}
+h1 span{color:var(--cy)}
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding:20px 0 12px}
+header p{margin:0;color:var(--dim);font-size:11px}
+header p b{color:var(--ink2);font-weight:500}
+
+.lab{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+
+.rig{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:1px;background:var(--edge);
+  border:1px solid var(--edge)}
+.stage{position:relative;background:#000;aspect-ratio:1/1}
+.stage canvas{width:100%;height:100%;display:block}
+.ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
+.ov b{color:var(--cy);font-weight:600}
+.ov.tl{left:11px;top:10px;line-height:1.75}
+.ov.tr{right:11px;top:10px;text-align:right;line-height:1.75}
+.ov.bl{left:11px;bottom:10px}
+.ov.br{right:11px;bottom:10px;text-align:right}
+.ph{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cy);
+  vertical-align:middle;margin-right:5px}
+.ph.two{background:var(--amb)}
+
+.deck{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:11px;
+  overflow-y:auto}
+.deck::-webkit-scrollbar{width:7px}
+.deck::-webkit-scrollbar-thumb{background:var(--edge2)}
+.fld{display:grid;gap:4px}
+.fld .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.fld .v{color:var(--cy);font-weight:600;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--cy);height:17px;margin:0}
+input[type=range]:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
+.seg{display:flex;border:1px solid var(--edge2);border-radius:2px;overflow:hidden}
+.seg button{flex:1;font:inherit;font-size:10.5px;background:transparent;color:var(--ink2);
+  border:0;padding:5px 2px;cursor:pointer;border-right:1px solid var(--edge2)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--cy);color:#070A0D;font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--cy);outline-offset:-2px}
+.btn{font:inherit;font-size:10.5px;background:transparent;color:var(--ink2);
+  border:1px solid var(--edge2);padding:5px 9px;cursor:pointer;border-radius:2px}
+.btn:hover{border-color:var(--cy);color:var(--cy)}
+.btn[aria-pressed="true"]{background:var(--cy);border-color:var(--cy);color:#070A0D;font-weight:600}
+
+dl.ro{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;align-items:baseline}
+dl.ro dt{color:var(--dim);font-size:10px;white-space:nowrap}
+dl.ro dd{margin:0;color:var(--ink);font-size:11.5px;text-align:right}
+dl.ro dd b{color:var(--cy);font-weight:600}
+dl.ro dd .u{color:var(--dim);font-weight:400}
+.sep{border-top:1px solid var(--edge);margin:3px 0 1px}
+
+.warn{border-left:2px solid var(--amb);background:#E9A75C12;padding:7px 9px;
+  font-size:10.5px;color:var(--ink2);line-height:1.5}
+.warn.hard{border-left-color:var(--red);background:#E4695E12}
+.warn b{color:var(--ink)}
+
+.atlas{border:1px solid var(--edge);border-top:0;background:var(--panel)}
+.atlas-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 12px;border-bottom:1px solid var(--edge);flex-wrap:wrap}
+.legend{display:flex;gap:9px;flex-wrap:wrap;font-size:9.5px;color:var(--dim)}
+.legend i{display:inline-block;width:9px;height:9px;margin-right:3px;vertical-align:-1px}
+.strip{position:relative;padding:9px 12px 4px}
+.strip canvas{width:100%;display:block;cursor:crosshair}
+.axis{display:flex;justify-content:space-between;color:var(--dim);font-size:9.5px;padding:1px 12px 9px}
+
+.insp{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--edge);border:1px solid var(--edge);border-top:0}
+.insp > div{background:var(--panel);padding:9px 11px}
+.insp .k{font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+  display:block;margin-bottom:3px}
+.insp .val{font-size:12.5px;color:var(--ink)}
+.insp .val b{color:var(--cy);font-weight:600}
+.insp .val.sm{font-size:10.5px;color:var(--ink2);line-height:1.5}
+.reps{display:flex;gap:3px;margin-top:4px}
+.reps span{flex:1;text-align:center;padding:2px 0;font-size:10px;border-radius:2px;
+  background:var(--panel3);color:var(--ink2)}
+.reps span.u{color:var(--dim)}
+footer{margin-top:16px;color:var(--dim);font-size:9.5px;line-height:1.85}
+.research{border:1px solid var(--edge);border-top:0;background:var(--panel)}
+.research-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:9px 12px;border-bottom:1px solid var(--edge);flex-wrap:wrap}
+.research-body{padding:12px;display:grid;gap:12px}
+.research p{margin:0;color:var(--ink2);font-size:11px;line-height:1.7;max-width:none}
+.research p b{color:var(--ink)}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;
+  background:var(--edge);border:1px solid var(--edge)}
+.qgrid > div{background:var(--panel2);padding:7px 9px}
+.qgrid .k{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);display:block}
+.qgrid .v{font-size:11.5px;color:var(--ink);word-break:break-all;line-height:1.5}
+.qgrid .v b{color:var(--cy)}
+.zero{color:var(--grn)}
+footer b{color:var(--ink2);font-weight:500}
+@media (max-width:900px){.rig{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Faraday <span>Cell</span></h1>
+  <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,
+  circular quartz cells · surface responds at <b>f/2</b></p>
+</header>
+
+<div class="rig">
+  <div class="stage">
+    <canvas id="c" width="381" height="381"></canvas>
+    <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">55.5</b> Hz<br>
+      cell ⌀ <b id="oD">24.25</b> mm<br>
+      <span class="ph" id="oPh"></span><span id="oPhT">phase I</span></div>
+    <div class="ov tr">empirical <b id="oFold">10</b>-fold<br>
+      m = <b id="oM">5</b> &nbsp; conf <b id="oConf">67%</b><br>
+      <span id="oRisk">risk 0.33</span></div>
+    <div class="ov bl"><span id="oExp">expression 0%</span></div>
+    <div class="ov br"><span id="oMode">J′ mode m=5 n=3</span></div>
+  </div>
+
+  <div class="deck">
+    <div class="fld">
+      <span class="lab">cell diameter</span>
+      <div class="seg" id="cellSeg">
+        <button data-c="small" aria-pressed="false">10.00</button>
+        <button data-c="medium" aria-pressed="true">24.25</button>
+        <button data-c="large" aria-pressed="false">49.50</button>
+      </div>
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">drive frequency</span>
+        <span class="v"><input id="fnum" type="number" min="50" max="5000" step="1" value="111"
+          style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
+          font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px"> Hz</span></div>
+      <input type="range" id="f" min="50" max="5000" step="1" value="111">
+      <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180</span> mV</span></div>
+      <input type="range" id="a" min="0" max="1000" step="1" value="229">
+      <span class="lab" id="accLab" style="text-align:right"></span>
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
+      <input type="range" id="t" min="5" max="30" step="1" value="20">
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">depth</span><span class="v"><span id="hv">3.0</span> mm</span></div>
+      <input type="range" id="h" min="1" max="10" step="0.1" value="3">
+    </div>
+    <div class="fld">
+      <span class="lab">contact line</span>
+      <div class="seg" id="rimSeg">
+        <button data-r="free" aria-pressed="true">free</button>
+        <button data-r="pinned" aria-pressed="false">pinned</button>
+      </div>
+    </div>
+    <div class="fld">
+      <span class="lab">render</span>
+      <div class="seg" id="viewSeg">
+        <button data-v="sand" aria-pressed="true">sand</button>
+        <button data-v="optical" aria-pressed="false">optical</button>
+        <button data-v="height" aria-pressed="false">height</button>
+        <button data-v="nodal" aria-pressed="false">nodal</button>
+      </div>
+    </div>
+    <div class="fld">
+      <span class="lab">surface</span>
+      <div class="seg" id="srcSeg">
+        <button data-s="modal" aria-pressed="true">modal sum</button>
+        <button data-s="dns" aria-pressed="false">Navier-Stokes</button>
+        <button data-s="dnscpp" aria-pressed="false">N-S in C++</button>
+      </div>
+    </div>
+    <div class="fld">
+      <span class="lab">photographed phase</span>
+      <div class="seg" id="phaseSeg">
+        <button data-p="1" aria-pressed="true">phase I</button>
+        <button data-p="-1" aria-pressed="false">phase II</button>
+        <button data-p="swap" aria-pressed="false">swap</button>
+      </div>
+    </div>
+    <div class="fld">
+      <div class="top"><span class="lab">agitation</span><span class="v" id="agv">1.15</span></div>
+      <input type="range" id="ag" min="0.15" max="2.4" step="0.01" value="1.15">
+    </div>
+    <div style="display:flex;gap:5px">
+      <button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button>
+      <button class="btn" id="play" aria-pressed="true" style="flex:1">running</button>
+      <button class="btn" id="reset" style="flex:1">re-excite</button>
+    </div>
+    <div class="fld">
+      <span class="lab">image export</span>
+      <div class="seg" id="expSeg">
+        <button data-s="2048" aria-pressed="false">2048</button>
+        <button data-s="3840" aria-pressed="true">4K</button>
+      </div>
+      <button class="btn" id="expBtn" style="margin-top:5px">render &amp; save</button>
+      <span class="lab" id="expNote" style="line-height:1.6"></span>
+    </div>
+    <div id="warnBox" style="display:grid;gap:6px"></div>
+    <div class="sep"></div>
+    <span class="lab">state</span>
+    <dl class="ro" id="ro"></dl>
+  </div>
+</div>
+
+<div class="atlas">
+  <div class="atlas-hd">
+    <span class="lab">printed fold classification · 1 Hz steps · <span id="atlasWho">24.25 mm, 3 day-replicates</span></span>
+    <span class="legend" id="legend"></span>
+  </div>
+  <div class="strip"><canvas id="sc" width="1500" height="96"></canvas></div>
+  <div class="axis"><span>50 Hz</span><span>100</span><span>150</span><span>199 Hz</span></div>
+</div>
+
+<div class="insp" id="insp"></div>
+
+<div class="research">
+  <div class="research-hd">
+    <span class="lab">navier-stokes · Floquet stability in this cell</span>
+    <button id="dnsRun" class="seg" style="padding:4px 10px">run</button>
+  </div>
+  <p>The deck above decides onset from a damped Mathieu form — one amplitude equation, with
+  all the viscous damping folded into a single rate γ. This solves the incompressible
+  Navier–Stokes equations instead, linearised about the flat layer <b>in this disc</b>: the
+  same radius, depth, water and drive, with no slip on the floor and the sidewall, the full
+  normal-stress balance at the free surface, and the contact line as the control above sets
+  it. It integrates one drive period and takes the eigenvalues of that period map; |μ| &gt; 1
+  is growth. Nothing is assumed about the damping — the viscosity enters as the diffusion
+  term and the boundary layers are resolved by a graded grid.</p>
+  <div class="qgrid" id="dnsInput"></div>
+  <div class="qgrid" id="dnsOut"></div>
+  <p id="dnsNote"></p>
+</div>
+<footer>
+  <b>Layers are kept separate.</b> Fold labels are the paper's printed classifications.
+  Contrast / centre-bias / ring / texture figures are image descriptors measured from the
+  rendered PDF panels — renderer hints, never the authors' measurements. Bessel modes and
+  water properties are theory, used for diagnostics and outside the atlas.<br>
+  Amplitude stays in apparatus mV: the paper gives no mV→acceleration transfer function, so
+  none is invented. Surface tension is IAPWS R1-76; viscosity is the Vogel–Andrade fit, not IAPWS.
+</footer>
+</div>
+<script src="faraday/kernel.js"></script>
+<script id="dnsSolver" src="dns/faraday-dns.js"></script>
+<script id="dnsDisc" src="dns/faraday-disc.js"></script>
+<script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>
+<script id="dnsWasmBase64"></script>
+<script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
+<script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>
+<script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>
+<script id="dnsCell3dWasmBase64"></script>
+<script>
+
+const GR = 381, CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha:false });
+const im = ctx.createImageData(GR, GR), pxl = im.data;
+const COVER = new Float32Array(NSZ), RAD = new Float32Array(NSZ), ANG = new Float32Array(NSZ);
+const RSQ = new Int32Array(NSZ);
+for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
+  const dx = x-CC, dy = y-CC, r = Math.hypot(dx, dy), i = y*GR+x;
+  COVER[i] = Math.max(0, Math.min(1, RR - r + 0.5));
+  RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx); RSQ[i] = dx*dx + dy*dy;
+}
+
+const PIN_SHAPE = new Map();
+function shapeOfPinned(m, zeros, coeffs){
+  const key = m + ':p:' + zeros.length + ':' + coeffs[0].toExponential(9);
+  const hit = PIN_SHAPE.get(key); if (hit) return hit;
+  const RSQ_MAX = (RR+2)*(RR+2);
+  const jr = new Float32Array(RSQ_MAX+1), dr = new Float32Array(RSQ_MAX+1);
+  const seen = new Uint8Array(RSQ_MAX+1);
+  const radii = [];
+  for (let ay = 0; ay <= CC; ay++){
+    const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
+    for (let ax = 0; ax <= CC; ax++){
+      const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
+      if (seen[rs]) continue;
+      seen[rs] = 1; radii.push(rs);
+    }
+  }
+  for (const rs of radii){
+    const rho = Math.sqrt(rs)/RR;
+    let v = 0, d = 0;
+    for (let n = 0; n < zeros.length; n++){
+      const pr = besselPair(m, zeros[n]*rho);
+      v += coeffs[n]*pr[0];
+      d += coeffs[n]*zeros[n]*pr[1];
+    }
+    jr[rs] = v; dr[rs] = d;
+  }
+  let peak = 0;
+  for (const rs of radii) if (Math.abs(jr[rs]) > peak) peak = Math.abs(jr[rs]);
+  if (!(peak > 0))
+    throw new Error(`shapeOfPinned: the superposition is identically zero at m=${m}`);
+  const inv = 1/peak;
+  for (const rs of radii){ jr[rs] *= inv; dr[rs] *= inv; }
+  const rec = { jr, dr, evals: radii.length*zeros.length, max: RSQ_MAX, peak, pinned: true };
+  if (PIN_SHAPE.size > 8) PIN_SHAPE.delete(PIN_SHAPE.keys().next().value);
+  PIN_SHAPE.set(key, rec); return rec;
+}
+
+const SHAPE = new Map();
+function shapeOf(m, jp){
+  const key = m + ':' + jp.toFixed(6), hit = SHAPE.get(key); if (hit) return hit;
+
+  const RSQ_MAX = (RR+2)*(RR+2);
+  const jr = new Float32Array(RSQ_MAX+1), dr = new Float32Array(RSQ_MAX+1);
+  const seen = new Uint8Array(RSQ_MAX+1);
+  let evals = 0;
+  for (let ay = 0; ay <= CC; ay++){
+    const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
+    for (let ax = 0; ax <= CC; ax++){
+      const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
+      if (seen[rs]) continue;
+      seen[rs] = 1; evals++;
+      const pr = besselPair(m, jp*Math.sqrt(rs)/RR);
+      jr[rs] = pr[0]; dr[rs] = jp*pr[1];
+    }
+  }
+  const rec = { jr, dr, evals, max: RSQ_MAX };
+  if (SHAPE.size > 24) SHAPE.delete(SHAPE.keys().next().value);
+  SHAPE.set(key, rec); return rec;
+}
+
+const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32Array(NSZ);
+
+const PGX = new Float32Array(NSZ), PGY = new Float32Array(NSZ);
+
+const IMF = new Float32Array(NSZ), GIX = new Float32Array(NSZ), GIY = new Float32Array(NSZ);
+
+const RES_GATE = 4;
+function buildSurface(state){
+  ETA.fill(0); NX.fill(0); NY.fill(0); IMF.fill(0); GIX.fill(0); GIY.fill(0);
+  let unresolved = 0, drawn = 0;
+  for (const s of state.states){
+
+    const pin = s.radial.pinned;
+    const pxPerWave = 2*Math.PI*RR/finestZeroOf(s.radial);
+    s.pxPerWave = pxPerWave;
+    if (pxPerWave < RES_GATE){ unresolved += s.weight*s.weight; s.gated = true; continue; }
+    s.gated = false; drawn++;
+    const sh = pin ? shapeOfPinned(s.m, s.radial.pinnedZeros, pin.coefficients)
+                   : shapeOf(s.m, s.radial.jp);
+    const m = s.m, w = s.weight;
+    const cph = Math.cos(s.phi || 0), sph = Math.sin(s.phi || 0);
+    for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
+      const i = y*GR+x; if (COVER[i] <= 0) continue;
+      const idx = RSQ[i]; if (idx > sh.max) continue;
+      const J = sh.jr[idx], dJ = sh.dr[idx], th = ANG[i], r = RAD[i];
+      const cm = Math.cos(m*th), sm = Math.sin(m*th);
+      ETA[i] += w*J*cm*cph; IMF[i] += w*J*cm*sph;
+
+      const ur = w*dJ*cm;
+      const ut = r > 1e-6 ? -w*m*J*sm/r : 0;
+      const c = r > 1e-6 ? (x-CC)/(r*RR) : 1, sn = r > 1e-6 ? (y-CC)/(r*RR) : 0;
+      const gx = ur*c - ut*sn, gy = ur*sn + ut*c;
+      NX[i] += gx*cph; NY[i] += gy*cph;
+      GIX[i] += gx*sph; GIY[i] += gy*sph;
+    }
+  }
+
+  const vs = state.visualSignature;
+  if (vs){
+    const cb = vs.centerToMid;
+    /* The envelope multiplies the SURFACE, so the stored gradient has to be
+       the gradient OF the enveloped surface:
+
+           grad(g*eta) = g*grad(eta) + eta*grad(g)
+
+       This block used to scale ETA and NX/NY by the same g and stop, dropping
+       the eta*grad(g) term entirely. NX/NY are derivatives with respect to the
+       NORMALISED radius rho = RAD[i] (see the accumulation above: ut divides by
+       r = RAD[i], and c/sn are the unit radial direction), so grad(g) is taken
+       in the same coordinate. `centreBiasEnvelope` in faraday/kernel.js is the
+       single definition of g and dg/drho -- including why its derivative jumps
+       at the breakpoint -- and the export path below calls the same one. */
+    for (let i = 0; i < NSZ; i++){
+      if (COVER[i] <= 0) continue;
+      const { g, dg } = centreBiasEnvelope(RAD[i], cb);
+      const th = ANG[i], c = Math.cos(th), sn = Math.sin(th);
+      const eta0 = ETA[i], imf0 = IMF[i];
+      NX[i]  = g*NX[i]  + eta0*dg*c;   NY[i]  = g*NY[i]  + eta0*dg*sn;
+      GIX[i] = g*GIX[i] + imf0*dg*c;   GIY[i] = g*GIY[i] + imf0*dg*sn;
+      ETA[i] = g*eta0;                 IMF[i] = g*imf0;
+    }
+  }
+
+  state.render = { drawn, gatedRms: Math.sqrt(unresolved),
+                   gated: state.states.filter(x => x.gated).length };
+  finishSurface(state);
+}
+
+/* The normalisation and the grain transport, shared by the modal path above and the
+   solver path below so there is ONE copy and the two cannot drift. Everything here reads
+   the six rasters and writes PGX/PGY; nothing in it knows where the rasters came from. */
+function finishSurface(state){
+  let mx = 1e-9, gx = 1e-9;
+  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){
+    mx = Math.max(mx, Math.abs(ETA[i]));
+    gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
+  }
+  const inv = 1/mx, ginv = 1/gx;
+
+  const tc = transportCoefficients(state.damping, state.wavelength);
+  const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
+  let dmax = 1e-9;
+  for (let i = 0; i < NSZ; i++){
+    ETA[i] *= inv; IMF[i] *= inv;
+    const Re = ETA[i], Im = IMF[i];
+    const gRx = NX[i]*inv, gRy = NY[i]*inv, gIx = GIX[i]*inv, gIy = GIY[i]*inv;
+    const dIx = 2*(Re*gRx + Im*gIx), dIy = 2*(Re*gRy + Im*gIy);
+    const fx  = Re*gIx - Im*gRx,     fy  = Re*gIy - Im*gRy;
+    PGX[i] = -KI*dIx + KF*fx;
+    PGY[i] = -KI*dIy + KF*fy;
+    const d = Math.hypot(PGX[i], PGY[i]); if (d > dmax) dmax = d;
+    NX[i] *= ginv; NY[i] *= ginv;
+  }
+  const dinv = 1/dmax;
+  for (let i = 0; i < NSZ; i++){ PGX[i] *= dinv; PGY[i] *= dinv; }
+  state.transport = { stokesRatio: stokes, fluxGain: KF, fluxGainAssumed: true };
+}
+
+const NP = 60000;
+const PX = new Float32Array(NP), PY = new Float32Array(NP),
+      VX = new Float32Array(NP), VY = new Float32Array(NP);
+const BIN = new Uint16Array(NSZ);
+let settle = 0;
+function sprinkle(){
+  for (let p = 0; p < NP; p++){
+    const a = rnd()*Math.PI*2, r = Math.sqrt(rnd())*(RR-2);
+    PX[p] = CC + r*Math.cos(a); PY[p] = CC + r*Math.sin(a);
+    VX[p] = 0; VY[p] = 0;
+  }
+  settle = 0;
+}
+const DRIFT = 2.2, DAMP = 0.62, AGIT = 0.85;
+
+const PHI_RCP_PREVIEW = 0.84;
+const PREVIEW_CAP = PHI_RCP_PREVIEW*1/(Math.PI*0.25);
+const TOPPLE_BUDGET = 60000;
+const OCC = new Uint16Array(NSZ);
+function stepGrains(gain){
+  const jitter = AGIT*agitation;
+  OCC.fill(0);
+  for (let p = 0; p < NP; p++){
+    let x = PX[p], y = PY[p];
+    const i = (y|0)*GR + (x|0);
+
+    const u = ETA[i]*gain;
+    const a = Math.abs(u)*jitter;
+    let vx = (VX[p] + DRIFT*PGX[i]*gain + (rnd()-0.5)*a)*DAMP;
+    let vy = (VY[p] + DRIFT*PGY[i]*gain + (rnd()-0.5)*a)*DAMP;
+    x += vx; y += vy;
+    const rx = x-CC, ry = y-CC, r = Math.hypot(rx, ry);
+    if (r > RR-1.5){ const k = (RR-1.5)/r; x = CC+rx*k; y = CC+ry*k; vx *= -0.25; vy *= -0.25; }
+    PX[p] = x; PY[p] = y; VX[p] = vx; VY[p] = vy;
+    const ci = (y|0)*GR + (x|0);
+    if (ci >= 0 && ci < NSZ) OCC[ci]++;
+  }
+
+  let budget = TOPPLE_BUDGET;
+  for (let p = 0; p < NP && budget > 0; p++){
+    const xi = PX[p]|0, yi = PY[p]|0;
+    const c = yi*GR + xi;
+    if (c < 0 || c >= NSZ || OCC[c] <= PREVIEW_CAP) continue;
+    let placed = false;
+    budget--;
+    /* An over-dense cell sheds a grain to a free neighbour. Which neighbour is
+       a matter of packing, and the cell is horizontal -- it is vibrated along
+       its normal, so gravity has no in-plane component and there is no
+       preferred direction within the disc.
+
+       This used to take the FIRST admissible cell in scan order, with dy
+       running -ring..+ring outside dx. That is a direction. Measured over
+       200k relocations against random occupancy, the chosen cell carried a
+       mean offset of (-0.47, -0.80) cells -- systematically up and to the
+       left, the vertical component about twice the horizontal because dy is
+       the outer loop. Accumulated over topple passes it drifts the whole
+       bed and shows up as directional streaking.
+
+       Every admissible cell in the ring is now equally likely, chosen by
+       reservoir sampling in the same single pass: the k-th candidate replaces
+       the incumbent with probability 1/k. That needs no scratch array and
+       keeps the run deterministic, since rnd() is the seeded simulation RNG. */
+    for (let ring = 1; ring <= 24 && !placed; ring++){
+      let seen = 0, pickX = 0, pickY = 0, pickC = -1;
+      for (let dy = -ring; dy <= ring; dy++){
+        const edge = Math.abs(dy) === ring;
+        for (let dx = -ring; dx <= ring; dx++){
+          if (!edge && Math.abs(dx) !== ring) continue;
+          const nx = xi + dx, ny = yi + dy;
+          if (nx < 1 || ny < 1 || nx >= GR-1 || ny >= GR-1) continue;
+          const nc = ny*GR + nx;
+          if (OCC[nc] + 1 > PREVIEW_CAP) continue;
+          if (COVER[nc] <= 0) continue;
+          seen++;
+          if (seen === 1 || rnd()*seen < 1){ pickX = nx; pickY = ny; pickC = nc; }
+        }
+      }
+      if (seen > 0){
+        OCC[c]--; OCC[pickC]++;
+        PX[p] = pickX + rnd(); PY[p] = pickY + rnd();
+        VX[p] *= 0.15; VY[p] *= 0.15;
+        placed = true;
+      }
+    }
+  }
+  if (settle < 1) settle = Math.min(1, settle + 0.012);
+}
+
+let view = 'sand';
+let agitation = 1.15;
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const RENDER_SEED = 0x9E3779B9;
+const SIM_SEED = 0x85EBCA6B, EXPORT_SEED = 0xC2B2AE35;
+const EXPORT_TABLE_BUDGET_BYTES = 512*1048576;
+let rnd = mulberry32(SIM_SEED), renderRnd = mulberry32(RENDER_SEED);
+function fieldRms(field, cover){
+  let sum = 0, n = 0;
+  for (let i = 0; i < field.length; i++)
+    if (cover[i] > 0){ sum += field[i]*field[i]; n++; }
+  if (!n) throw new Error('fieldRms: no covered cells to measure the field over');
+  return Math.sqrt(sum/n);
+}
+
+const tone = x => x <= 0 ? 0 : 255*(1 - Math.exp(-x/132));
+function renderSurface(state){
+  renderRnd = mulberry32(RENDER_SEED);
+
+  const k = phaseSign*state.expression;
+  const vs = state.visualSignature;
+  const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+  const tex = vs ? vs.textureConc : 0;
+  const SLOPE = 0.8;
+  if (view === 'sand'){
+    BIN.fill(0);
+    for (let p = 0; p < NP; p++){
+      const i = (PY[p]|0)*GR + (PX[p]|0);
+      if (i >= 0 && i < NSZ) BIN[i]++;
+    }
+  }
+  for (let i = 0, q = 0; i < NSZ; i++, q += 4){
+    const cov = COVER[i];
+    let r0 = 5, g0 = 7, b0 = 10;
+    if (cov > 0){
+      const h = ETA[i]*k;
+      if (view === 'sand'){
+        const n = BIN[i];
+        r0 = 14; g0 = 16; b0 = 20;
+        if (n){ const t = Math.min(1, n/2.0), tt = t*t*(3-2*t);
+          r0 += (246-r0)*tt; g0 += (234-g0)*tt; b0 += (208-b0)*tt; }
+      } else if (view === 'height'){
+        if (h >= 0){ r0 = 8 + 70*h;  g0 = 12 + 190*h; b0 = 18 + 220*h; }
+        else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
+      } else if (view === 'nodal'){
+        const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
+        r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
+      } else {
+
+        const nx = -NX[i]*SLOPE*k, ny = -NY[i]*SLOPE*k;
+        const inv = 1/Math.sqrt(nx*nx + ny*ny + 1);
+        const Nx = nx*inv, Ny = ny*inv, Nz = inv;
+        const tilt = Math.hypot(Nx, Ny);
+        const ring = Math.exp(-Math.pow((tilt - 0.34)/0.105, 2));
+        const spec = Math.pow(Math.max(0, Nz), 30);
+        const cau = Math.max(0, 1 - Math.abs(h)/contrast);
+        r0 = 7 + 168*ring + 20*spec + 30*cau;
+        g0 = 12 + 170*ring + 62*spec + 54*cau;
+        b0 = 20 + 164*ring + 96*spec + 72*cau;
+      }
+      if (tex > 0.18){
+        const n = (renderRnd() - 0.5)*tex*26;
+        r0 += n; g0 += n; b0 += n;
+      }
+    }
+
+    pxl[q]   = tone(5 + (r0-5)*cov);
+    pxl[q+1] = tone(7 + (g0-7)*cov);
+    pxl[q+2] = tone(10 + (b0-10)*cov);
+    pxl[q+3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
+const FOLD_COLOR = { '2':'#4FD1E0','4':'#63C08A','5':'#B9D45C','6':'#E9C65C','8':'#E9A75C',
+  '10':'#E4805E','12':'#E4695E','14':'#D2609B','16':'#9B8CE0','18':'#7C8FE0','20':'#5CA8D4',
+  '26':'#8FA0AF','unclassified':'#222A34' };
+const foldColor = l => FOLD_COLOR[l] || (l && l.includes('/') ? '#6E7A88' : '#222A34');
+const sc = document.getElementById('sc'), sx = sc.getContext('2d');
+function drawAtlas(cellKey, f){
+  const W = sc.width, H = sc.height, cell = CELLS[cellKey];
+  sx.fillStyle = '#0D1116'; sx.fillRect(0, 0, W, H);
+  const n = 150, bw = W/n;
+  const rows = cell.atlas ? CELLS[cellKey].reps : 0;
+  const rh = rows ? Math.floor((H - 22)/rows) : 0;
+  for (let i = 0; i < n; i++){
+    const hz = 50 + i, rec = cell.atlas ? ATLAS[cell.atlas][hz] : null;
+    if (rec){
+      for (let r = 0; r < rows; r++){
+        sx.fillStyle = foldColor(rec.l[r]);
+        sx.fillRect(i*bw, 4 + r*rh, Math.max(1, bw-0.5), rh-1.5);
+      }
+
+      const cls = rec.l.filter(l => l !== 'unclassified');
+      if (rows > 1 && new Set(cls).size > 1){
+        sx.fillStyle = '#FFFFFF'; sx.fillRect(i*bw, H-16, Math.max(1, bw-0.5), 3);
+      }
+    } else {
+      sx.fillStyle = '#141A21'; sx.fillRect(i*bw, 4, Math.max(1, bw-0.5), H-22);
+    }
+    if (TRANSITION[hz]){ sx.fillStyle = '#9B8CE0'; sx.fillRect(i*bw, H-10, Math.max(1.5, bw-0.5), 5); }
+  }
+  if (f <= 199){
+    const px = (f - 50 + 0.5)*bw;
+    sx.strokeStyle = '#FFFFFF'; sx.lineWidth = 1.5;
+    sx.beginPath(); sx.moveTo(px, 0); sx.lineTo(px, H); sx.stroke();
+  } else {
+    sx.fillStyle = 'rgba(7,10,13,0.72)'; sx.fillRect(0, 0, W, H);
+    sx.fillStyle = '#8D9BA9'; sx.font = '13px "IBM Plex Mono", monospace';
+    sx.textAlign = 'center';
+    sx.fillText(`${f} Hz is beyond the atlas — it ends at 199 Hz`, W/2, H/2 + 4);
+    sx.textAlign = 'left';
+  }
+}
+(function legend(){
+  const el = document.getElementById('legend');
+  el.innerHTML = ['2','4','6','8','10','12','14','16','20'].map(k =>
+    `<span><i style="background:${FOLD_COLOR[k]}"></i>${k}</span>`).join('')
+    + `<span><i style="background:#222A34"></i>unclassified</span>`
+    + `<span><i style="background:#FFFFFF"></i>replicates disagree</span>`
+    + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
+})();
+
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
+let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
+let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
+let dnsShowInput = null;
+
+const $ = id => document.getElementById(id);
+
+const TFE_ENVELOPE = {
+  measured: false,
+  source: 'declared envelope: the directions are reported (TFE rises as amplitude '
+        + 'falls and as depth grows) but no calibrated TFE surface is published',
+  scaleSec: 6.5, refMv: 180, minMv: 60, depthBias: 0.55, depthPerMm: 9, floorSec: 0.4
+};
+let tfeMeasuredSec = null;
+function tfeOf(){
+  if (tfeMeasuredSec !== null){
+    if (!(typeof tfeMeasuredSec === 'number' && isFinite(tfeMeasuredSec)
+          && tfeMeasuredSec > 0)) throw new RangeError(
+      `measured TFE ${tfeMeasuredSec} s is not a positive finite number.`);
+    return tfeMeasuredSec;
+  }
+  const e = TFE_ENVELOPE;
+  return Math.max(e.floorSec,
+    e.scaleSec*(e.refMv/Math.max(e.minMv, amp))*(e.depthBias + depth/e.depthPerMm));
+}
+
+function recompute(){
+  state = resolvePatternState({ cellKey, f: freq, amplitudeMv: amp, tempC: temp,
+                                depthMm: depth, rim, tSec: simT, tfeSec: tfeOf(),
+
+                                driveR: 0 });
+  /* The solver path when it is on AND has posted a frame. Until the first frame
+     arrives the modal surface is drawn, and the deck says which one you are looking
+     at -- it never shows one and labels it the other. */
+  if (!(useSolver && CELL3D.build(state))) buildSurface(state);
+  paintDeck(); paintInspector();
+  drawAtlas(cellKey, freq);
+  if (dnsShowInput) dnsShowInput();
+  dirty = false;
+}
+function paintDeck(){
+  const s = state;
+  const dc = s.driveCalibration;
+  $('accLab').innerHTML = `= ${(s.accelAssumed/9.80665).toFixed(3)} g`
+    + `${dc.measured ? '' : ' assumed'} `
+    + `<span style="color:var(--dim)">(${dc.gPerMv} g/mV — ${dc.source})</span>`;
+  $('warnBox').innerHTML = s.warnings.map(w =>
+    `<div class="warn${w.hard ? ' hard' : ''}">${w.text}</div>`).join('');
+  const m = s.nearestTheoryModes[0], w = s.water;
+  const d = s.damping, on = s.onset, R = s.render || {};
+  const rows = [
+    ['drive', `${freq} <span class="u">Hz</span>`],
+    ['surface response', `<b>${s.responseHz.toFixed(1)}</b> <span class="u">Hz</span>`],
+    ['wavelength', `<b>${(s.wavelength*1e6).toFixed(1)}</b> <span class="u">µm</span>`],
+    ['k', `${s.wavenumber.toFixed(1)} <span class="u">m⁻¹</span> · kR ${(s.wavenumber*s.cellDiameterMm/2000).toFixed(1)}`],
+    ['across the cell', `${s.wavelengthsAcross.toFixed(1)} <span class="u">wavelengths</span>`],
+    ['SEP', ''],
+    ['damping γ', `${d.total.toFixed(2)} <span class="u">s⁻¹</span>`],
+    ['  bulk + surface layer', `${d.bulk.toFixed(2)}`],
+    ['    2νk² alone', `<span style="color:var(--dim)">${d.bulkPotential.toFixed(2)}</span>`],
+    ['  bottom Stokes layer', `${d.layer.toExponential(2)}`],
+    ['  δ', `${(d.stokesDepth*1e6).toFixed(1)} <span class="u">µm</span>`],
+    ['Q = ω/2γ', `${(2*Math.PI*s.responseHz/(2*d.total)).toFixed(1)}`],
+    ['SEP', ''],
+    ['Mathieu ε', `${on.eps.toExponential(2)}`],
+    ['ε threshold', `${on.epsThreshold.toExponential(2)}`],
+    ['ε/ε_c', `<b>${(on.eps/on.epsThreshold).toFixed(2)}</b>`],
+    ['a threshold', `${(on.accelThreshold/9.80665).toExponential(2)} <span class="u">g</span>`],
+    ['growth s', `${on.growth.toFixed(2)} <span class="u">s⁻¹</span>`],
+    ['unstable modes', `<b>${s.unstableCount}</b> of ${s.ordersScanned}`],
+    ['SEP', ''],
+    // The plate row is computed from ASSUMED granite constants (see STONE in
+    // faraday/kernel.js): the source does not state what the apparatus base
+    // is. The wall-coupling constants are likewise unsourced. Both sat here
+    // unlabelled, in the same column as quantities derived from the fluid
+    // state, where they read as measured.
+    ['plate |T| (assumed base)', `${s.plate.magnitude.toExponential(2)}`],
+    ['  D', `${s.plate.D.toExponential(2)} <span class="u">N·m</span>`],
+    ['  added mass', `${s.plate.added.toFixed(2)} <span class="u">kg/m²</span>`],
+    ['wall impedance (unsourced)', `${s.boundary.impedance.toExponential(3)}`],
+    ['  bounded range', `${s.boundary.impedanceLo.toExponential(3)} – ${s.boundary.impedanceHi.toExponential(3)}`],
+    ['  walls', `<b>${s.boundary.walls}</b> <span class="u">of 10 · ${s.boundary.exact} exact, ${s.boundary.bounded} bounded</span>`],
+    ['SEP', ''],
+    ['mode set', `<b>${s.angularOrders}</b> angular × <b>${s.radialRoots}</b> radial = ${s.competition ? s.competition.size : 0}`],
+    ['competition', s.competition
+        ? `<b>${s.competition.survivors.length}</b> survive <span class="u">· ${s.competition.killed} suppressed</span>`
+        : '<span class="u">—</span>'],
+    ['Stokes ratio δ/λ', s.transport ? s.transport.stokesRatio.toFixed(4) : '—'],
+    ['phase-flux gain (assumed)',
+     s.transport ? s.transport.fluxGain.toFixed(2) : '—'],
+    ['SEP', ''],
+    ['px per wavelength', s.states[0]
+        ? `${(2*Math.PI*RR/finestZeroOf(s.states[0].radial)).toFixed(1)}` : '—'],
+    ['modes drawn', `${R.drawn ?? 0}${R.gated ? ` <span class="u">· ${R.gated} gated</span>` : ''}`],
+    ['gated RMS', `${(R.gatedRms || 0).toExponential(2)}`],
+    ['SEP', ''],
+    ['surface drawn from', (() => {
+       const c = CELL3D.clocks();
+       if (c.err) return `<b style="color:var(--bad,#e66)">solver failed</b> `
+                       + `<span class="u">${c.err}</span>`;
+       if (!useSolver) return 'modal superposition <span class="u">(kernel.js)</span>';
+       if (!c.have) return '<b>modal</b> <span class="u">— solver starting…</span>';
+       /* Which engine ANSWERED, read off the worker's own frames. The two give
+          identical fields, so this is not a disclaimer about the picture -- it is
+          there because the clocks below mean different things for each, and
+          because a C++ engine that had quietly fallen back to JavaScript would
+          otherwise be invisible. */
+       return '<b>the 3-D Navier-Stokes solver</b>'
+         + (c.engine === 'cpp'
+            ? ' <span class="u">· C++ (faraday_cell3d.wasm)</span>'
+            : ' <span class="u">· JavaScript</span>');
+     })()],
+    ...(() => {
+       const c = CELL3D.clocks();
+       if (!useSolver || !c.have) return [];
+       return [
+         ['  grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} `
+            + `<span class="u">= ${c.grid.nr*c.grid.nth*c.grid.nz} cells</span>`],
+         ['  physics clock', `<b>${(c.physT*1e3).toFixed(2)}</b> <span class="u">ms</span>`],
+         ['  wall clock', `${c.wall.toFixed(1)} <span class="u">s</span>`],
+         ['  ratio', `<b>${c.ratio.toFixed(0)}×</b> <span class="u">slower than real time`
+            + ` — ${c.perStep.toFixed(0)} ms a step</span>`],
+         ['  steps taken', `${c.stepsDone}`]
+       ];
+     })(),
+    ['SEP', ''],
+    ['empirical fold', s.selectedEmpiricalFold != null
+        ? `<b>${s.selectedEmpiricalFold}</b>-fold` : '<span class="u">none in atlas</span>'],
+    ['confidence', `${(s.empiricalConfidence*100).toFixed(0)}<span class="u">%</span>`],
+    ['transition risk', `${s.transitionRisk.toFixed(2)}`],
+    ['states drawn', s.states.map(x => `${x.fold}f·${(x.weight*100).toFixed(0)}%`).join('  ')],
+    ['SEP', ''],
+    ['nearest J′ mode', `m ${m.m} &nbsp; n ${m.n}`],
+
+    ['j′<sub>m,n</sub>', m.jp == null
+        ? `<span style="color:var(--dim)">none — edge-constrained</span>` : m.jp.toFixed(5)],
+    ['predicted', `${m.hz.toFixed(2)} <span class="u">Hz</span>`],
+    ['mismatch', `${(m.mismatch*100).toFixed(1)}<span class="u">%</span>`],
+    ['SEP', ''],
+    ['σ', `${(w.sigma*1000).toFixed(2)} <span class="u">mN/m</span>`],
+    ['ρ', `${w.rho.toFixed(1)} <span class="u">kg/m³</span>`],
+    ['μ', `${(w.mu*1000).toFixed(3)} <span class="u">mPa·s</span>`],
+    ['TFE used', `${tfeOf().toFixed(1)} <span class="u">s</span>`]
+  ];
+  $('ro').innerHTML = rows.map(([k, v]) => k === 'SEP'
+    ? '<dt style="grid-column:1/-1"><div class="sep"></div></dt>'
+    : `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function paintInspector(){
+  const s = state, vs = s.visualSignature;
+  const cells = [];
+  cells.push(['printed classification', s.replicates
+    ? `<b>${s.selectedEmpiricalFold ?? '—'}</b>${s.selectedEmpiricalFold ? '-fold' : ''}
+       <div class="reps">${s.replicates.map(l =>
+         `<span class="${l === 'unclassified' ? 'u' : ''}">${l === 'unclassified' ? '—' : l}</span>`).join('')}</div>`
+    : '<span class="val sm">no atlas for this diameter</span>', false]);
+  if (vs){
+    cells.push(['panel descriptors', `contrast <b>${vs.contrast.toFixed(3)}</b> · entropy <b>${vs.entropy.toFixed(2)}</b> bits
+      <div class="val sm">centre/mid ${vs.centerToMid.toFixed(2)} · outer/mid ${vs.outerToMid.toFixed(2)}
+      · radial peaks ${vs.peaks.toFixed(1)} · texture ${vs.textureConc.toFixed(3)} · ang harm ${vs.angHarm.toFixed(1)}</div>`, false]);
+    const hint = [];
+    hint.push(vs.centerToMid > 1.25 ? 'bright centre' : vs.centerToMid < 0.85 ? 'dark centre' : 'balanced centre');
+    hint.push(vs.peaks >= 3 ? 'ring-rich' : 'radially simple');
+    hint.push(vs.contrast > 0.22 ? 'high contrast' : 'medium contrast');
+    hint.push(vs.textureConc > 0.2 ? 'high texture' : 'low texture');
+    cells.push(['renderer hints', `<span class="val sm">${hint.join(' · ')}</span>`, false]);
+  }
+  cells.push(['theory modes near f/2', `<span class="val sm">` +
+    s.nearestTheoryModes.map(m => `m${m.m} n${m.n} → ${m.hz.toFixed(1)} Hz (${(m.mismatch*100).toFixed(1)}%)`).join('<br>')
+    + `</span>`, false]);
+  if (s.transitionStudy) cells.push(['dedicated transition', `<b>${s.transitionStudy.states.join(' / ')}</b>-fold
+    <div class="val sm">switched in ${(s.transitionStudy.switched*100).toFixed(1)}% of slow amplitude reductions.
+    Higher atmospheric pressure favoured the higher-order state.</div>`, false]);
+  $('insp').innerHTML = cells.map(([k, v]) =>
+    `<div><span class="k">${k}</span><div class="val">${v}</div></div>`).join('');
+}
+function paintOverlay(){
+  const s = state;
+  $('oF').textContent = freq; $('oR').textContent = s.responseHz.toFixed(1);
+  $('oD').textContent = CELLS[cellKey].d.toFixed(2);
+  const pI = phaseSign > 0;
+  $('oPh').className = 'ph' + (pI ? '' : ' two');
+  $('oPhT').textContent = pI ? 'phase I' : 'phase II';
+  $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
+  $('oM').textContent = s.states.length ? s.states[0].m : '—';
+  $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
+  $('oRisk').textContent = 'risk ' + s.transitionRisk.toFixed(2);
+  $('oExp').textContent = 'expression ' + (s.expression*100).toFixed(0) + '%'
+    + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
+  const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
+  $('oMode').textContent = `J′ mode m=${m.m} n=${m.n}`;
+}
+
+function seg(id, apply){
+  document.querySelectorAll('#'+id+' button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#'+id+' button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    apply(b); dirty = true;
+  }));
+}
+seg('cellSeg', b => { cellKey = b.dataset.c;
+  $('atlasWho').textContent = CELLS[cellKey].atlas
+    ? `${CELLS[cellKey].d.toFixed(2)} mm, ${CELLS[cellKey].note}`
+    : `${CELLS[cellKey].d.toFixed(2)} mm — ${CELLS[cellKey].note}`; });
+seg('rimSeg', b => { rim = b.dataset.r; });
+seg('phaseSeg', b => {
+  if (b.dataset.p === 'swap'){ swapping = true; }
+  else { swapping = false; phaseSign = +b.dataset.p; }
+});
+seg('viewSeg', b => { view = b.dataset.v; });
+/* Switching to the solver starts it from the deck's current operating point. Switching
+   back stops the worker rather than leaving it burning a core behind a picture nobody
+   is looking at. */
+seg('srcSeg', b => {
+  const want = b.dataset.s !== 'modal';
+  /* The two solver buttons are the SAME solver: dns/faraday_cell3d.cpp is a
+     transcription of dns/faraday-cell3d.js and dns/check-cell3d-wasm.mjs holds the
+     two to identical fields over a whole drive period, so this chooses how long
+     you wait and nothing about what you see. The deck reports which one ran, and
+     the C++ one refuses rather than falling back if its module cannot be loaded. */
+  const eng = b.dataset.s === 'dnscpp' ? 'cpp' : 'js';
+  if (want === useSolver && eng === cell3dEngine) return;
+  cell3dEngine = eng;
+  useSolver = want;
+  if (want) CELL3D.start(state); else CELL3D.stop();   /* start() reports its own errors */
+  dirty = true;
+});
+const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
+  fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
+});
+function setFreq(v){
+  freq = Math.max(50, Math.min(5000, Math.round(v)));
+  $('f').value = freq; $('fnum').value = freq; dirty = true;
+}
+$('f').addEventListener('input', e => setFreq(+e.target.value));
+$('fnum').addEventListener('change', e => setFreq(+e.target.value));
+(function anchors(){
+
+  const A = [[56,'6-fold'],[111,'10-fold'],[180,'14-fold'],[199,'atlas end'],
+             [4392,'acceptance'],[5000,'top']];
+  $('anchors').innerHTML = A.map(([hz,t]) =>
+    `<button class="btn" data-hz="${hz}" title="${t}" style="padding:3px 6px;font-size:10px">${hz}</button>`).join('');
+  $('anchors').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => setFreq(+b.dataset.hz)));
+})();
+
+const MV_MIN_LOG = 1.5, MV_SPAN_LOG = 3.3;
+const mvFromSlider = v => Math.pow(10, MV_MIN_LOG + (v/1000)*MV_SPAN_LOG);
+const sliderFromMv = mv => 1000*(Math.log10(mv) - MV_MIN_LOG)/MV_SPAN_LOG;
+$('a').addEventListener('input', e => {
+  amp = mvFromSlider(+e.target.value);
+  $('av').textContent = amp >= 1000 ? (amp/1000).toFixed(2) + ' k' : amp.toFixed(0);
+  dirty = true;
+});
+bind('t', 'tv', v => temp = v);
+bind('h', 'hv', v => depth = v, v => v.toFixed(1));
+bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
+$('sprinkleBtn').addEventListener('click', sprinkle);
+$('play').addEventListener('click', e => {
+  running = !running; e.target.setAttribute('aria-pressed', String(running));
+  e.target.textContent = running ? 'running' : 'paused';
+});
+$('reset').addEventListener('click', () => { simT = 0; t0 = performance.now(); dirty = true; });
+sc.addEventListener('click', e => {
+  const r = sc.getBoundingClientRect();
+  setFreq(50 + 150*(e.clientX - r.left)/r.width);
+});
+
+let exporting = false;
+async function exportImage(SIZE, onProgress){
+  const exportRnd = mulberry32(EXPORT_SEED);
+
+  const g = SIZE % 2 ? SIZE : SIZE + 1;
+  if (g % 2 === 0) throw new Error('export grid must be odd');
+  const cc = (g - 1)/2, rr = cc - 3;
+  const rsqMax = (rr + 2)*(rr + 2);
+  const st = state;
+
+  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE);
+  if (!usable.length) throw new Error('every mode is below the resolution gate even at this size');
+
+  const tableBytes = usable.length*(2*4 + 1)*(rsqMax + 1);
+  if (tableBytes > EXPORT_TABLE_BUDGET_BYTES){
+    const mb = b => (b/1048576).toFixed(0);
+    throw new Error(
+      `export needs ${mb(tableBytes)} MB of mode tables: ${usable.length} surviving modes `
+      + `at ${g}x${g} is ${mb(tableBytes/usable.length)} MB each, over the `
+      + `${mb(EXPORT_TABLE_BUDGET_BYTES)} MB budget, before the image, transport and sand `
+      + `buffers. Every one of those modes is standing, so dropping some would export a `
+      + `pattern the physics did not predict. Reduce the export size, or drive fewer modes.`);
+  }
+
+  onProgress(`building ${usable.length} mode tables at ${g}`);
+  const tables = [];
+  for (let mi = 0; mi < usable.length; mi++){
+    const sMode = usable[mi], jp = sMode.radial.jp, m = sMode.m;
+
+    const pinE = sMode.radial.pinned;
+    const zsE = pinE ? sMode.radial.pinnedZeros : null;
+    const coE = pinE ? pinE.coefficients : null;
+    const jr = new Float32Array(rsqMax + 1), dr = new Float32Array(rsqMax + 1);
+    const seen = new Uint8Array(rsqMax + 1);
+    for (let ay = 0; ay <= cc; ay++){
+      const ay2 = ay*ay; if (ay2 > rsqMax) break;
+      for (let ax = 0; ax <= cc; ax++){
+        const q = ax*ax + ay2; if (q > rsqMax) break;
+        if (seen[q]) continue;
+        seen[q] = 1;
+        if (pinE){
+          const rho = Math.sqrt(q)/rr;
+          let v = 0, d = 0;
+          for (let n = 0; n < zsE.length; n++){
+            const pr = besselPair(m, zsE[n]*rho);
+            v += coE[n]*pr[0]; d += coE[n]*zsE[n]*pr[1];
+          }
+          jr[q] = v; dr[q] = d;
+          continue;
+        }
+        const pr = besselPair(m, jp*Math.sqrt(q)/rr);
+        jr[q] = pr[0]; dr[q] = jp*pr[1];
+      }
+    }
+    tables.push({ jr, dr, m, w: sMode.weight, phi: sMode.phi || 0 });
+    onProgress(`mode ${mi+1} of ${usable.length}`);
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  const cvx = document.createElement('canvas');
+  cvx.width = SIZE; cvx.height = SIZE;
+  const cx = cvx.getContext('2d');
+  const out = cx.createImageData(SIZE, SIZE);
+  const op = out.data;
+  const off = Math.floor((g - SIZE)/2);
+  const vs = st.visualSignature;
+  const cbias = vs ? vs.centerToMid : 1;
+  let contrast = vs ? vs.contrast : null;
+  // No floor. `resolvePatternState` sets expression = 0 exactly when the drive
+  // is below the reported minimum, with the warning "no stable Faraday pattern
+  // forms"; the 0.35 that stood here drew a 46x-amplified pattern anyway and
+  // saved it as a PNG. The preview has never had a floor -- the two disagreed.
+  const gain = phaseSign*st.expression;
+
+  const evalAt = (dx, dy) => {
+    const q = dx*dx + dy*dy;
+    if (q > rsqMax) return null;
+    const r = Math.sqrt(q);
+    if (r > rr) return null;
+    const th = Math.atan2(dy, dx);
+    let Re = 0, Im = 0, gRx = 0, gRy = 0, gIx = 0, gIy = 0;
+    for (const t of tables){
+      const J = t.jr[q], dJ = t.dr[q];
+      const cm = Math.cos(t.m*th), sm = Math.sin(t.m*th);
+      const cp = Math.cos(t.phi), sp = Math.sin(t.phi);
+      const rn = r/rr;
+      const { g: gscale, dg: dgs } = centreBiasEnvelope(rn, cbias);
+      const base = t.w*J*cm*gscale;
+      Re += base*cp; Im += base*sp;
+
+      /* Product rule, as in the preview block: d/drn (g*w*J*cm) is
+         w*cm*(g*dJ + J*dg). The dg term was missing, so the exported gradient
+         was g*grad(eta) rather than grad(g*eta). The angular component needs
+         no correction -- g depends on r alone. */
+      const ur = t.w*cm*(dJ*gscale + J*dgs);
+      const ut = rn > 1e-6 ? -t.w*t.m*J*sm/rn*gscale : 0;
+      const c = r > 1e-6 ? dx/r : 1, sn = r > 1e-6 ? dy/r : 0;
+      const gx = ur*c - ut*sn, gy = ur*sn + ut*c;
+      gRx += gx*cp; gRy += gy*cp; gIx += gx*sp; gIy += gy*sp;
+    }
+    return { Re, Im, gRx, gRy, gIx, gIy, r };
+  };
+
+  onProgress('measuring field extent');
+  let mx = 1e-9, gmx = 1e-9, sumsq = 0, nSamp = 0;
+  for (let y = 0; y < SIZE; y++){
+    for (let x = 0; x < SIZE; x++){
+      const v = evalAt(x + off - cc, y + off - cc);
+      if (!v) continue;
+      mx = Math.max(mx, Math.abs(v.Re));
+      gmx = Math.max(gmx, Math.hypot(v.gRx, v.gRy));
+      sumsq += v.Re*v.Re; nSamp++;
+    }
+  }
+  const inv = 1/mx, ginv = 1/gmx;
+  if (contrast === null){
+    if (!nSamp) throw new Error(
+      'export: no covered pixels to measure the field contrast over');
+    contrast = Math.sqrt(sumsq/nSamp)*inv;
+  }
+
+  let sandBIN = null, sandInfo = null;
+  if (view === 'sand'){
+    const SCALE = rr/RR;
+    onProgress('building the transport field');
+    const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
+
+    const tc = transportCoefficients(st.damping, st.wavelength);
+    const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
+    let dmax = 1e-9;
+    for (let y = 0; y < SIZE; y++){
+      for (let x = 0; x < SIZE; x++){
+        const v = evalAt(x + off - cc, y + off - cc);
+        if (!v) continue;
+        const Re = v.Re*inv, Im = v.Im*inv;
+        const gRx = v.gRx*inv, gRy = v.gRy*inv, gIx = v.gIx*inv, gIy = v.gIy*inv;
+        const dIx = 2*(Re*gRx + Im*gIx), dIy = 2*(Re*gRy + Im*gIy);
+        const fx = Re*gIx - Im*gRx,      fy = Re*gIy - Im*gRy;
+        const px = -KI*dIx + KF*fx, py = -KI*dIy + KF*fy;
+        const i = y*SIZE + x;
+        PGXe[i] = px; PGYe[i] = py;
+        const d = Math.hypot(px, py); if (d > dmax) dmax = d;
+      }
+      if ((y & 255) === 0){ onProgress(`transport field ${(100*y/SIZE).toFixed(0)}%`);
+                            await new Promise(r => setTimeout(r, 0)); }
+    }
+    const dinv = 1/dmax;
+    for (let i = 0; i < PGXe.length; i++){ PGXe[i] *= dinv; PGYe[i] *= dinv; }
+
+    const N = NP;
+    const rg0 = Math.max(0.5, SCALE/2);
+
+    const grad = new Float32Array(N);
+    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*exportRnd());
+    const gx = new Float32Array(N), gy = new Float32Array(N),
+          gvx = new Float32Array(N), gvy = new Float32Array(N);
+    const ccE = cc - off;
+    for (let p = 0; p < N; p++){
+      const a = exportRnd()*Math.PI*2, rad = Math.sqrt(exportRnd())*(rr - 2);
+      gx[p] = ccE + rad*Math.cos(a); gy[p] = ccE + rad*Math.sin(a);
+    }
+    const cellPx = Math.max(1, SCALE);
+    const gw = Math.ceil(SIZE/cellPx);
+    const occ = new Float32Array(gw*gw);
+
+    const PHI_RCP = 0.84;
+    const CAP = PHI_RCP*(cellPx*cellPx)/(Math.PI*rg0*rg0);
+    const cellOf = (x, y) => {
+      const cxi = (x/cellPx)|0, cyi = (y/cellPx)|0;
+      if (cxi < 0 || cyi < 0 || cxi >= gw || cyi >= gw) return -1;
+      return cyi*gw + cxi;
+    };
+
+    const STEPS = 520, TOPPLE_EVERY = 8;
+    const jitter = AGIT*agitation;
+    let refused = 0, toppleSweeps = 0;
+    const occLive = new Float32Array(gw*gw);
+    const shedSurplus = () => {
+      toppleSweeps++;
+      occLive.fill(0);
+      for (let p = 0; p < N; p++){
+        const c = cellOf(gx[p], gy[p]); if (c >= 0) occLive[c] += 1;
+      }
+      for (let p = 0; p < N; p++){
+        const cx0i = (gx[p]/cellPx)|0, cy0i = (gy[p]/cellPx)|0;
+        if (cx0i < 0 || cy0i < 0 || cx0i >= gw || cy0i >= gw) continue;
+        const c = cy0i*gw + cx0i;
+        if (occLive[c] <= CAP) continue;
+        let placed = false;
+        for (let ring = 1; ring <= 20 && !placed; ring++){
+          for (let dyr = -ring; dyr <= ring && !placed; dyr++){
+            for (let dxr = -ring; dxr <= ring; dxr++){
+              if (Math.max(Math.abs(dxr), Math.abs(dyr)) !== ring) continue;
+              const nx = cx0i + dxr, ny = cy0i + dyr;
+              if (nx < 0 || ny < 0 || nx >= gw || ny >= gw) continue;
+              const nc = ny*gw + nx;
+              if (occLive[nc] + 1 > CAP) continue;
+              const px2 = (nx + 0.5)*cellPx, py2 = (ny + 0.5)*cellPx;
+              if (Math.hypot(px2 - ccE, py2 - ccE) > rr - 1.5*SCALE) continue;
+              occLive[c]--; occLive[nc]++;
+              gx[p] = (nx + exportRnd())*cellPx;
+              gy[p] = (ny + exportRnd())*cellPx;
+              gvx[p] *= 0.15; gvy[p] *= 0.15;
+              refused++; placed = true; break;
+            }
+          }
+        }
+      }
+    };
+    for (let step = 0; step < STEPS; step++){
+      for (let p = 0; p < N; p++){
+        const x0 = gx[p], y0 = gy[p];
+        const xi = x0|0, yi = y0|0;
+        if (xi < 0 || yi < 0 || xi >= SIZE || yi >= SIZE) continue;
+        const i = yi*SIZE + xi;
+        const v = evalAt(xi + off - cc, yi + off - cc);
+        const u = v ? v.Re*inv*gain : 0;
+        const a = Math.abs(u)*jitter;
+        let vx = (gvx[p] + DRIFT*PGXe[i]*gain + (exportRnd()-0.5)*a)*DAMP;
+        let vy = (gvy[p] + DRIFT*PGYe[i]*gain + (exportRnd()-0.5)*a)*DAMP;
+        let x = x0 + vx*SCALE, y = y0 + vy*SCALE;
+        const rx = x - ccE, ry = y - ccE, r = Math.hypot(rx, ry);
+        if (r > rr - 1.5*SCALE){
+          const k = (rr - 1.5*SCALE)/r; x = ccE + rx*k; y = ccE + ry*k;
+          vx *= -0.25; vy *= -0.25;
+        }
+        gx[p] = x; gy[p] = y; gvx[p] = vx; gvy[p] = vy;
+      }
+      if (step % TOPPLE_EVERY === TOPPLE_EVERY - 1) shedSurplus();
+      if ((step & 31) === 0){ onProgress(`settling grains ${(100*step/STEPS).toFixed(0)}%`);
+                              await new Promise(r => setTimeout(r, 0)); }
+    }
+
+    for (let p = 0; p < N; p++){
+      const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
+    }
+    const sweeps = toppleSweeps;
+
+    const PASS_CAP = 90;
+    onProgress('relaxing the deposit to contact');
+    const hw = gw, hcell = cellPx;
+    const head = new Int32Array(hw*hw).fill(-1), next = new Int32Array(N).fill(-1);
+    const rehash = () => {
+      head.fill(-1);
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        if (cxi < 0 || cyi < 0 || cxi >= hw || cyi >= hw) continue;
+        const c = cyi*hw + cxi; next[q] = head[c]; head[c] = q;
+      }
+    };
+
+    const OMEGA = 0.5;
+    let worstOverlap = 0, passes = 0, best = Infinity;
+    const bx = new Float32Array(N), by = new Float32Array(N);
+    for (; passes < PASS_CAP; passes++){
+      rehash();
+      worstOverlap = 0;
+      for (let q = 0; q < N; q++){
+        const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
+        for (let ddy = -1; ddy <= 1; ddy++) for (let ddx = -1; ddx <= 1; ddx++){
+          const nx = cxi + ddx, ny = cyi + ddy;
+          if (nx < 0 || ny < 0 || nx >= hw || ny >= hw) continue;
+          for (let o = head[ny*hw + nx]; o >= 0; o = next[o]){
+            if (o <= q) continue;
+            const ex = gx[o] - gx[q], ey = gy[o] - gy[q];
+            const dmin = grad[q] + grad[o];
+            const d2 = ex*ex + ey*ey;
+            if (d2 >= dmin*dmin || d2 === 0) continue;
+            const d = Math.sqrt(d2), ov = dmin - d;
+            if (ov/dmin > worstOverlap) worstOverlap = ov/dmin;
+
+            const aq = grad[q]*grad[q], ao = grad[o]*grad[o], tot = aq + ao;
+            const ux = ex/d, uy = ey/d, mv = ov*OMEGA;
+            gx[q] -= ux*mv*(ao/tot); gy[q] -= uy*mv*(ao/tot);
+            gx[o] += ux*mv*(aq/tot); gy[o] += uy*mv*(aq/tot);
+          }
+        }
+      }
+      for (let q = 0; q < N; q++){
+        const rx = gx[q] - ccE, ry = gy[q] - ccE, r = Math.hypot(rx, ry);
+        const lim = rr - grad[q];
+        if (r > lim){ const k = lim/r; gx[q] = ccE + rx*k; gy[q] = ccE + ry*k; }
+      }
+      if (worstOverlap < best){
+        best = worstOverlap;
+        bx.set(gx); by.set(gy);
+      }
+      if (worstOverlap < 0.02) { passes++; break; }
+      if ((passes & 3) === 0){
+        onProgress(`relaxing to contact, pass ${passes+1} (overlap `
+          + `${(100*worstOverlap).toFixed(0)}%)`);
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    if (best < worstOverlap){ gx.set(bx); gy.set(by); worstOverlap = best; }
+
+    sandBIN = new Float32Array(SIZE*SIZE);
+    for (let p = 0; p < N; p++){
+      const rg = grad[p], rg2 = rg + 0.7071;
+      const px = gx[p], py = gy[p];
+      const x0 = Math.max(0, Math.floor(px - rg2)), x1 = Math.min(SIZE-1, Math.ceil(px + rg2));
+      const y0 = Math.max(0, Math.floor(py - rg2)), y1 = Math.min(SIZE-1, Math.ceil(py + rg2));
+      for (let y = y0; y <= y1; y++){
+        const dy2 = (y + 0.5 - py)*(y + 0.5 - py), row = y*SIZE;
+        for (let x = x0; x <= x1; x++){
+          const dx2 = (x + 0.5 - px)*(x + 0.5 - px);
+          const d = Math.sqrt(dx2 + dy2) - rg;
+          if (d >= 0.7071) continue;
+
+          const w = d <= -0.7071 ? 1 : 0.5 - d/1.41421356;
+          sandBIN[row + x] += w;
+        }
+      }
+      if ((p & 8191) === 0){ onProgress(`depositing ${(100*p/N).toFixed(0)}%`);
+                             await new Promise(r => setTimeout(r, 0)); }
+    }
+    const grainMm = st.cellDiameterMm/(2*RR);
+    let filled = 0;
+    for (let c = 0; c < occ.length; c++) if (occ[c] > 0) filled++;
+    sandInfo = { grains: N, steps: STEPS, grainUm: grainMm*1000,
+                 grainPx: SCALE, fluxGain: KF, stokesRatio: stokes,
+                 packingCap: CAP, cellsOccupied: filled, toppled: refused,
+                 toppleSweeps: sweeps,
+
+                 residualOverlap: worstOverlap, relaxPasses: passes,
+                 grainSpreadPct: 20, packingFraction: PHI_RCP };
+  }
+
+  onProgress('painting');
+  const SLOPE = 0.8;
+  for (let y = 0; y < SIZE; y++){
+    for (let x = 0; x < SIZE; x++){
+      const i = (y*SIZE + x)*4;
+      const dx = x + off - cc, dy = y + off - cc;
+      const rpix = Math.hypot(dx, dy);
+      const cov = Math.max(0, Math.min(1, rr - rpix + 0.5));
+      let r0 = 5, g0 = 7, b0 = 10;
+      if (cov > 0){
+        const v = evalAt(dx, dy);
+        if (v){
+          const h = v.Re*inv*gain;
+          if (view === 'height'){
+            if (h >= 0){ r0 = 8 + 70*h; g0 = 12 + 190*h; b0 = 18 + 220*h; }
+            else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
+          } else if (view === 'sand'){
+
+            const n = sandBIN[y*SIZE + x];
+            r0 = 14; g0 = 16; b0 = 20;
+            if (n > 0){
+              const t = Math.min(1, n/1.35), tt = t*t*(3 - 2*t);
+              r0 += (246 - r0)*tt; g0 += (234 - g0)*tt; b0 += (208 - b0)*tt;
+            }
+          } else if (view === 'nodal'){
+            const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
+            r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
+          } else {
+            const nx = -v.gRx*ginv*SLOPE*gain, ny = -v.gRy*ginv*SLOPE*gain;
+            const iv = 1/Math.sqrt(nx*nx + ny*ny + 1);
+            const Nx = nx*iv, Ny = ny*iv, Nz = iv;
+            const tilt = Math.hypot(Nx, Ny);
+            const ring = Math.exp(-Math.pow((tilt - 0.34)/0.105, 2));
+            const spec = Math.pow(Math.max(0, Nz), 30);
+            const cau = Math.max(0, 1 - Math.abs(h)/contrast);
+            r0 = 7 + 168*ring + 20*spec + 30*cau;
+            g0 = 12 + 170*ring + 62*spec + 54*cau;
+            b0 = 20 + 164*ring + 96*spec + 72*cau;
+          }
+        }
+      }
+      op[i]   = tone(5 + (r0-5)*cov);
+      op[i+1] = tone(7 + (g0-7)*cov);
+      op[i+2] = tone(10 + (b0-10)*cov);
+      op[i+3] = 255;
+    }
+    if ((y & 255) === 0){ onProgress(`painting ${(100*y/SIZE).toFixed(0)}%`);
+                          await new Promise(r => setTimeout(r, 0)); }
+  }
+
+  let lit = 0, inside = 0;
+  for (let y = 0; y < SIZE; y += 7) for (let x = 0; x < SIZE; x += 7){
+    const dx = x + off - cc, dy = y + off - cc;
+    if (Math.hypot(dx, dy) > rr - 2) continue;
+    inside++;
+    const i = (y*SIZE + x)*4;
+    if (op[i] + op[i+1] + op[i+2] > 60) lit++;
+  }
+  if (inside && lit/inside < 0.001)
+    throw new Error(`export produced a blank disc (${lit} lit of ${inside} sampled) — not saving it`);
+
+  cx.putImageData(out, 0, 0);
+  return { canvas: cvx, modes: usable.length, litFraction: lit/Math.max(1, inside),
+           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+           sand: sandInfo };
+}
+
+let saver = null, saverReady = false;
+(async () => {
+  try { saver = (typeof claude !== 'undefined' && claude.use)
+    ? await claude.use('downloads') : null; } catch { saver = null; }
+  saverReady = true;
+  const n = document.getElementById('expNote');
+  if (n) n.textContent = saver ? 'saves through the viewer'
+    : (typeof claude !== 'undefined' ? 'saving unavailable in this view' : 'saves to disk');
+})();
+
+let expSize = 3840;
+document.querySelectorAll('#expSeg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#expSeg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  expSize = +b.dataset.s;
+}));
+document.getElementById('expBtn').addEventListener('click', async () => {
+  if (exporting) return;
+  exporting = true;
+  const btn = document.getElementById('expBtn'), note = document.getElementById('expNote');
+  const t0 = performance.now();
+  try {
+    const res = await exportImage(expSize, msg => { btn.textContent = msg; });
+    btn.textContent = 'encoding PNG';
+    const blob = await new Promise(r => res.canvas.toBlob(r, 'image/png'));
+    const name = `faraday-${CELLS[cellKey].d.toFixed(2)}mm-${freq}Hz-${view}-${expSize}.png`;
+    if (saver){ await saver.save({ filename: name, data: blob }); }
+    else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    note.textContent = `${expSize}² · ${res.modes} modes · `
+      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`
+      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
+          + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
+          + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
+          + `${res.sand.relaxPasses} relax passes leaving `
+          + `${(100*res.sand.residualOverlap).toFixed(1)}% residual overlap` : '');
+  } catch (e){
+    note.textContent = (e && e.code === 'declined') ? 'save declined'
+      : 'export failed: ' + (e && (e.message || e.code) || e);
+  } finally {
+    btn.textContent = 'render & save'; exporting = false;
+  }
+});
+
+(function dnsPanel(){
+  /* The deck's onset comes from a damped Mathieu form. The solver in dns/ answers
+     the same question without that reduction AND in this geometry: the linearised
+     incompressible Navier-Stokes equations in the disc, one azimuthal mode at a
+     time, no slip on the floor and the sidewall, the full normal-stress balance
+     at the surface, over one drive period.
+
+     The two disagree in SIGN at the default state, which is why this is here and
+     not a footnote. Measured on the grid the sizing picks there -- 40 x 12,
+     surface operator error 1.2e-3 on the mode, 6.0 cells in the floor and surface
+     Stokes layers and 2.2 at the rim -- the deck's Mathieu growth is +3.24 per
+     second and calls the mode unstable at 2.26 times threshold, while the disc's
+     Floquet growth is -5.259 +/- 1.089 per second and calls it stable. The
+     difference is damping the deck's gamma leaves out: gamma is 2.57 per second
+     there, and the disc dissipates several times that, most of it in the sidewall
+     layer that a rim-concentrated mode sits in.
+
+     Those figures replace -6.38 +/- 0.52 from a fixed 28 x 14 grid, which this
+     panel used to solve on and which the solver now refuses: that grid gets 1.50
+     cells into the floor Stokes layer and 0.95 at the rim, so most of its damping
+     came from truncation error rather than from the viscosity. The verdict
+     survived the correction; the width doubled, which is the honest size of it.
+
+     It runs in a worker because a converged solve is half a minute, not a moment:
+     1456 unknowns, 2580 steps per drive period, sixteen period maps. The period
+     map itself is the C++ transcription compiled to WebAssembly -- measured 33.5 s
+     against 79.1 s for the identical solve in JavaScript, a factor of 2.36,
+     returning the same |mu| to the last bit. A higher radial mode costs more
+     again: m = 12, n = 3 at 277 Hz sizes to 80 x 12 and takes 132 s in C++
+     against 313 s in JavaScript, extending its Krylov space to 24 before the
+     leading modulus settles. Both sides of that were 1.6 times slower before the
+     pressure solve was preconditioned: the same system to the same 1e-11
+     residual, in half the conjugate gradient iterations. */
+  const cell = (k, v, hi) =>
+    `<div><span class="k">${k}</span><span class="v${hi ? ' zero' : ''}">${v}</span></div>`;
+  const note = t => { $('dnsNote').innerHTML = t; };
+  const fmt = (v, n = 4) => Number.isFinite(v) ? v.toFixed(n) : String(v);
+
+  /* The grid is SIZED, not chosen. It was a fixed 28 x 14 here, with a comment
+     saying that put more than one cell inside every Stokes layer -- which was
+     true, and not enough: at the default state that grid gets 1.50 cells into
+     the floor layer, 0.95 at the rim, and misrepresents the surface operator on
+     the mode by 2.6 per cent. Two of the three layers therefore had their
+     damping set by truncation error rather than by the viscosity, and the answer
+     came back anyway. A fixed grid cannot be right for every mode the controls
+     can reach: the same 28 x 14 gives 86 per cent error on the 46th radial mode.
+
+     suggestGrid walks the grid up until the discrete surface operator is within
+     1 per cent of -k^2 on this mode AND every Stokes layer has at least two
+     cells, and returns the cheapest that holds. At the default state that is
+     80 x 12 with the z cells clustered harder (zStretch 3.0) -- wide and shallow,
+     because the vertical structure is smooth while the radial structure is the
+     wave. Where no grid within the caps holds, this refuses with the numbers. */
+  function sizeGrid(c){
+    const g = FARADAY_DISC.suggestGrid({
+      m: c.m, k: c.k, R: c.R, h: c.h, rho: c.rho, nu: c.nu, gamma: c.gamma,
+      contact: c.contact, omegaResponse: c.omegaD/2, omegaDrive: c.omegaD,
+      profile: r => besselJ(c.m, c.k*r) });
+    if (g.unreachable){
+      const best = g.tried.reduce((a, b) => b.err < a.err ? b : a);
+      const layered = g.tried.filter(t => t.layersOk);
+      throw new Error(
+        `no affordable grid can carry this mode. m = ${c.m}, kR = `
+        + `${(c.k*c.R).toFixed(1)}, which is ${(c.k*c.R/Math.PI/2).toFixed(1)} `
+        + `radial wavelengths across the cell. Of ${g.tried.length} grids up to `
+        + `${g.nrCap} x ${g.nzCap}, the closest gets the surface operator to `
+        + `${(best.err*100).toFixed(1)}% against the ${(g.errTol*100).toFixed(0)}% `
+        + `required, at ${best.nr} x ${best.nz} with `
+        + `${best.cellsPerWavelength.toFixed(1)} cells per radial wavelength; `
+        + `${layered.length} of them resolve the Stokes layers. Refusing rather `
+        + `than returning a multiplier from a grid that misrepresents the `
+        + `restoring force by that much. This is a statement about this mode, not `
+        + `about the solver: a mode with that many wavelengths in a 24 mm cell `
+        + `needs a grid this page cannot afford.`);
+    }
+    return g;
+  }
+
+  /* How long a solve will take HERE, measured rather than guessed. One step is
+     one preconditioned conjugate gradient solve; its iteration count grows about
+     as N^0.54 and each iteration touches N values, so a step costs about N^1.5 --
+     measured from 1.90 ms at 1536 unknowns to 51.25 ms at 13824 on one machine,
+     an exponent of 1.500. The constant is the machine's, so it is timed on this
+     one: twenty steps of a small grid, about a twentieth of a second, and the
+     projection scales from there. The C++ engine is measured the same way, not
+     assumed to be a fixed factor faster. */
+  function projectSeconds(c, g, krylov, bytes){
+    const P = { nr: 24, nz: 12, R: c.R, h: c.h, rho: c.rho, nu: c.nu,
+                gamma: c.gamma, m: c.m, rStretch: 2.2, zStretch: 2.2 };
+    const S = new FARADAY_DISC.FaradayDisc(P);
+    const nCal = 2*(P.nr - 1)*P.nz + P.nr*P.nz + P.nr;
+    const dt = S.stableStep(0.4);
+    const calSteps = 20;
+    let ms;
+    if (bytes){
+      const E = FARADAY_DISC_WASM.createDiscEngine({ bytes })
+        .load(S, calSteps, dt, 0, c.omegaD, S.g);
+      const v = new Float64Array(nCal), o = new Float64Array(nCal);
+      v[2*(P.nr-1)*P.nz + P.nr*P.nz] = 1;
+      const t0 = performance.now();
+      E.applyPeriodMap(v, o, dt, 1e-9, 1e-9*(c.omegaD/2));
+      ms = (performance.now() - t0)/calSteps;
+    } else {
+      S.eta[0] = 1e-9;
+      const t0 = performance.now();
+      for (let i = 0; i < calSteps; i++){ S.t = i*dt; S.step(dt); }
+      ms = (performance.now() - t0)/calSteps;
+    }
+    return ms*Math.pow(g.stateSize/nCal, 1.5)*g.stepsPerPeriod*krylov/1000;
+  }
+
+  function config(){
+    if (!state) throw new Error(
+      'dns panel: the renderer has not resolved a state yet, so there is no '
+      + 'cell, layer or drive to build the problem from.');
+    const w = state.water, mode = state.nearestTheoryModes[0];
+    if (!mode) throw new Error(
+      'dns panel: the renderer named no theory mode near f/2 for this state, so '
+      + 'there is no azimuthal mode number to solve at.');
+    if (mode.m === 1) throw new Error(
+      'dns panel: the dominant mode here is m = 1, which the disc solver refuses '
+      + 'rather than mis-handling. Its radial and azimuthal momentum stay finite '
+      + 'at the axis only through a cancellation that no other m needs, and the '
+      + 'regularity condition the solver imposes is wrong for exactly that one.');
+    return { R: state.cellDiameterMm/2000, h: depth/1000,
+             rho: w.rho, nu: w.nu, gamma: w.sigma,
+             m: mode.m, k: mode.k,
+             omegaD: 2*Math.PI*freq, accel: state.accelAssumed,
+             contact: rim === 'pinned' ? 'pinned' : 'free' };
+  }
+
+  /* Sizing costs 150 to 280 ms -- it builds and measures every grid on the
+     ladder -- and recompute() runs on every control change, so it happens when
+     the button is pressed, not while a slider moves. The result is kept against
+     the problem it was sized for, so pressing run twice does not search twice. */
+  let sized = null;
+  function gridFor(c){
+    const key = [c.R, c.h, c.rho, c.nu, c.gamma, c.m, c.k, c.omegaD, c.contact]
+      .join('|');
+    if (!sized || sized.key !== key) sized = { key, grid: sizeGrid(c) };
+    return sized.grid;
+  }
+
+  /* The Arnoldi seed: the surface shape of the mode being asked about, J_m(k r)
+     on the solver's own graded radii. Built here rather than in the worker
+     because besselJ lives in the kernel, which the page has loaded and the
+     worker has not -- and pulling 66 KB of kernel into the worker to evaluate one
+     Bessel function, or serialising the function itself, are both worse than
+     handing over the 28 numbers it produces. The radii are reconstructed from
+     the same map the solver uses, with the stretch passed explicitly so the two
+     cannot drift apart silently. */
+  function seedProfile(c){
+    const rf = FARADAY_DISC.gradeToEnd(c.nr, c.R, c.rStretch);
+    const eta0 = new Float64Array(c.nr);
+    for (let i = 0; i < c.nr; i++)
+      eta0[i] = besselJ(c.m, c.k*0.5*(rf[i] + rf[i+1]));
+    let norm = 0;
+    for (let i = 0; i < c.nr; i++) norm = Math.max(norm, Math.abs(eta0[i]));
+    if (!(norm > 0)) throw new Error(
+      `dns panel: the seed profile J_${c.m}(k r) is identically zero on this grid, `
+      + `so the Krylov space would start from nothing.`);
+    return eta0;
+  }
+
+  function showInput(c, g){
+    const mode = state.nearestTheoryModes[0];
+    $('dnsInput').innerHTML =
+      cell('cell radius R', `${(c.R*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('depth h', `${(c.h*1000).toFixed(3)} <span class="u">mm</span>`) +
+      cell('azimuthal mode m', `<b>${c.m}</b> · ${2*c.m}-fold · n = ${mode.n}`) +
+      cell('drive ω_d', `${(c.omegaD/(2*Math.PI)).toFixed(2)} <span class="u">Hz</span>`) +
+      cell('acceleration a', `${fmt(c.accel)} <span class="u">m/s²</span>`) +
+      cell('ν', `${c.nu.toExponential(4)} <span class="u">m²/s</span>`) +
+      cell('γ surface tension', `${c.gamma.toFixed(5)} <span class="u">N/m</span>`) +
+      cell('contact line', c.contact) +
+      (g ? cell('grid (sized to this mode)',
+                `${g.nr} × ${g.nz} <span class="u">graded r ${g.rStretch}, `
+                + `z ${g.zStretch}</span>`) +
+           cell('surface operator error on this mode',
+                `${(g.err*100).toFixed(2)} <span class="u">%</span> · `
+                + `${g.cellsPerWavelength.toFixed(1)} cells per radial wavelength`) +
+           cell('cells inside the Stokes layer δ',
+                `floor ${g.stokes.cellsInFloorLayer.toFixed(2)} · `
+                + `surface ${g.stokes.cellsInSurfaceLayer.toFixed(2)} · `
+                + `rim ${g.stokes.cellsInRimLayer.toFixed(2)}`) +
+           cell('unknowns · steps per drive period',
+                `${g.stateSize} · ${g.stepsPerPeriod}`)
+         : cell('grid', `<span class="u">sized to the mode when you press run`
+                + `</span>`));
+  }
+
+  /* The worker needs the solvers' SOURCE, not the loaded objects. In the
+     single-file build the script tags carry it inline; served as separate files
+     they carry a src to fetch. Either way it is the same three files, and if
+     none yields source this refuses rather than running a worker with nothing in
+     it. faraday-dns.js comes along because faraday-floquet.js requires it for the
+     periodic-box solver that shares its Arnoldi. */
+  /* The C++ period map's bytes. Two places they can come from, and no third:
+     the single-file build inlines them as base64, and a checkout served over
+     http can fetch them. A checkout opened from file:// can do neither, and that
+     is said rather than worked around -- the alternative would be to run the
+     JavaScript reference under the C++ engine's name and report a time for work
+     the C++ did not do. */
+  let wasmBytesCache = null;
+  async function wasmBytes(){
+    if (wasmBytesCache) return wasmBytesCache;
+    if (globalThis.FARADAY_DISC_WASM_BASE64)
+      return (wasmBytesCache = FARADAY_DISC_WASM.discWasmBytes());
+    let r;
+    try { r = await fetch('dns/faraday_disc.wasm'); }
+    catch (e){ throw new Error(
+      `the C++ period map could not be loaded (${e.message}). This page is `
+      + `running from a checkout, where the bytes are fetched from `
+      + `dns/faraday_disc.wasm beside it; that works when the directory is `
+      + `served over http and not when the file is opened directly. Either serve `
+      + `the checkout, or use the single-file build, which carries the bytes `
+      + `inline. Not falling back to the JavaScript solver under the C++ name.`); }
+    if (!r.ok) throw new Error(
+      `dns/faraday_disc.wasm gave ${r.status}. Build it with dns/build-wasm.sh.`);
+    return (wasmBytesCache = new Uint8Array(await r.arrayBuffer()));
+  }
+
+  async function sourceOf(id){
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`dns panel: no <script id="${id}">`);
+    if (el.textContent && el.textContent.trim().length) return el.textContent;
+    if (el.src){
+      const r = await fetch(el.src);
+      if (!r.ok) throw new Error(`dns panel: fetching ${el.src} gave ${r.status}`);
+      return await r.text();
+    }
+    throw new Error(`dns panel: <script id="${id}"> has neither inline source nor src`);
+  }
+
+  let worker = null;
+  async function ensureWorker(){
+    if (worker) return worker;
+    const body = [await sourceOf('dnsSolver'), await sourceOf('dnsDisc'),
+      await sourceOf('dnsDiscWasm'), await sourceOf('dnsFloquet'),
+      `self.onmessage = (e) => {
+         try {
+           const r = FARADAY_FLOQUET.floquetDisc(e.data);
+           self.postMessage({ ok: true, muMax: r.muMax, growth: r.growth,
+             muSpread: r.muSpread, growthWidth: r.growthWidth,
+             unstable: r.unstable, krylov: r.krylov, steps: r.steps,
+             stokes: r.stokes, stateSize: r.stateSize, engine: r.engine,
+             escalation: r.escalation, drift: r.drift, ladder: r.ladder,
+             surfaceOperatorError: r.surfaceOperatorError });
+         } catch (err) {
+           self.postMessage({ ok: false, error: String(err && err.message || err) });
+         }
+       };`].join('\n;\n');
+    worker = new Worker(URL.createObjectURL(
+      new Blob([body], { type: 'text/javascript' })));
+    return worker;
+  }
+
+  let running = false;
+  $('dnsRun').addEventListener('click', async () => {
+    if (running) return;
+    running = true;
+    const btn = $('dnsRun');
+    let c = null;
+    const t0 = performance.now();
+    const tick = setInterval(() => {
+      btn.textContent = `running ${((performance.now()-t0)/1000).toFixed(0)}s`;
+    }, 500);
+    try {
+      c = config();
+      showInput(c, null);
+      $('dnsOut').innerHTML = '';
+      const g = gridFor(c);
+      c.nr = g.nr; c.nz = g.nz; c.rStretch = g.rStretch; c.zStretch = g.zStretch;
+      showInput(c, g);
+      const bytes = await wasmBytes();
+      const krylov = 16;
+      const projected = projectSeconds(c, g, krylov, bytes);
+      note(`Projected ${projected < 90 ? projected.toFixed(0) + ' s'
+             : (projected/60).toFixed(1) + ' min'} for ${krylov} period maps on `
+         + `${g.stateSize} unknowns at ${g.stepsPerPeriod} steps each, `
+         + `from twenty steps timed on this machine just now. Running in a worker; `
+         + `the renderer above is unaffected.`);
+      const w = await ensureWorker();
+      const r = await new Promise((res, rej) => {
+        w.onmessage = e => e.data.ok ? res(e.data) : rej(new Error(e.data.error));
+        w.onerror = e => rej(new Error(e.message || 'worker failed'));
+        w.postMessage(Object.assign({}, c, { eta0: seedProfile(c), krylov,
+          engine: 'wasm', wasmBytes: bytes }));
+      });
+      const secs = (performance.now()-t0)/1000;
+      const mathieu = state.onset ? state.onset.growth : NaN;
+      const verdict = r.unstable === true ? '<b>unstable — the mode grows</b>'
+        : r.unstable === false ? 'stable — it decays'
+        : '<b>too close to call at this grid</b>';
+      $('dnsOut').innerHTML =
+        cell('|μ| largest Floquet multiplier',
+             `<b>${r.muMax.toFixed(8)}</b> ± ${r.muSpread.toExponential(1)}`,
+             r.unstable === true) +
+        cell('verdict', verdict) +
+        cell('Floquet growth (disc)',
+             `<b>${fmt(r.growth)}</b> ± ${fmt(r.growthWidth, 2)} <span class="u">s⁻¹</span>`) +
+        cell('deck (Mathieu) growth', `${fmt(mathieu)} <span class="u">s⁻¹</span>`) +
+        cell('the two disagree by',
+             Number.isFinite(mathieu)
+               ? `${fmt(r.growth - mathieu, 2)} <span class="u">s⁻¹</span>`
+                 + (Math.sign(r.growth) !== Math.sign(mathieu) ? ' — <b>in sign</b>' : '')
+               : '—') +
+        cell('Stokes depth δ',
+             `${(r.stokes.delta*1e6).toFixed(1)} <span class="u">µm</span>`) +
+        cell('cells inside δ',
+             `floor ${r.stokes.cellsInFloorLayer.toFixed(1)} · `
+             + `surface ${r.stokes.cellsInSurfaceLayer.toFixed(1)} · `
+             + `rim ${r.stokes.cellsInRimLayer.toFixed(1)}`) +
+        cell('Krylov dimension used',
+             `${r.krylov} on ${r.stateSize} unknowns`
+             + (r.escalation.length > 1
+                ? ` · extended ${r.escalation.map(e => e.krylov).join(' → ')}` : '')
+             + ` · drift ${(r.drift*100).toFixed(3)}%`) +
+        cell('period map ran in',
+             `<b>${r.engine === 'wasm' ? 'C++ (WebAssembly)' : 'JavaScript'}</b>`) +
+        cell('solve time',
+             `${secs.toFixed(1)} <span class="u">s</span> · ${r.steps} steps × `
+             + `${r.krylov} period maps · projected `
+             + `${projected < 90 ? projected.toFixed(0) + ' s'
+                 : (projected/60).toFixed(1) + ' min'}`);
+      note(`Growth is ln|μ| over one drive period, from the eigenvalues of the period `
+         + `map of the linearised Navier-Stokes operator in this disc, integrated by `
+         + `the C++ transcription of the solver — bit for bit the same numbers as the `
+         + `JavaScript, which is asserted rather than assumed. The width on the growth `
+         + `is real: the viscous cell has a dense cluster of decaying modes, so which `
+         + `one is largest is ill conditioned, and the figure is quoted with the spread `
+         + `across Krylov dimensions rather than to a precision it does not have. Where `
+         + `this and the deck's Mathieu figure differ, the difference is damping the `
+         + `single-rate γ leaves out — chiefly the sidewall layer.`);
+    } catch (err) {
+      $('dnsOut').innerHTML = '';
+      note(`<b>The Navier-Stokes check did not run:</b> ${err.message} Nothing is `
+         + `reported in its place.`);
+    } finally {
+      clearInterval(tick);
+      btn.textContent = 'run';
+      running = false;
+    }
+  });
+
+  /* Driven by recompute(), not called here. The panel is constructed before the
+     renderer's first recompute(), so state is still null at this point: calling
+     config() here threw, the exception left the top-level script, and
+     sprinkle()/recompute()/requestAnimationFrame(loop) at the end of the file
+     never ran -- a blank page with the panel's own listener attached. Wiring it
+     to recompute() also keeps these cells in step with the controls instead of
+     showing whatever the drive was when the page loaded. */
+  dnsShowInput = () => { try { const c = config();
+      showInput(c, sized && sized.key === [c.R, c.h, c.rho, c.nu, c.gamma, c.m,
+        c.k, c.omegaD, c.contact].join('|') ? sized.grid : null); }
+    catch (e){ $('dnsInput').innerHTML = ''; note(`<b>Not runnable on this state:</b> `
+      + `${e.message}`); } };
+  note('Not run yet. The renderer above is unaffected by this panel.');
+})();
+
+let lastBuild = -1;
+function loop(now){
+  if (running) simT = (now - t0)/1000;
+
+  if (swapping && running){
+    swapAcc += 16.7;
+    if (swapAcc > 900){ swapAcc = 0; phaseSign = -phaseSign; }
+  }
+
+  if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
+  else { state.phase = Math.cos(Math.PI*freq*simT);
+         state.expression = amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
+  if (view === 'sand' && running){
+    const gain = phaseSign*state.expression;
+    stepGrains(gain); stepGrains(gain); stepGrains(gain);
+  }
+  renderSurface(state);
+  paintOverlay();
+  requestAnimationFrame(loop);
+}
+/* ───────────────────────────────────────────────────────────────────────────
+   S9b: THE PAGE DRAWS THE THREE-DIMENSIONAL SOLVER.
+
+   Everything above this block draws a modal Bessel superposition from
+   faraday/kernel.js -- a sum of known eigenfunctions with known phases. This
+   block replaces the source of the six surface rasters with dns/faraday-cell3d.js,
+   which integrates the incompressible Navier-Stokes equations in a
+   surface-following coordinate and knows nothing about modes.
+
+   Three decisions worth stating, because each had an easier wrong answer.
+
+   THE SOLVER RUNS IN A WORKER and the page holds a SECOND instance that never
+   steps. The worker owns the physics; it posts back eta and its time derivative on
+   the solver's own polar grid. The page's instance is a resampling vessel: it
+   receives those two fields, calls refreshMetric, and is then asked for values at
+   pixel positions through etaAt, etaDotAt, etaSlopeAt and etaDotSlopeAt. The
+   alternative -- rasterising inside the worker -- would have put a second,
+   ungated copy of that interpolation in the codebase, which is the mistake
+   section 16 of the gate exists to prevent.
+
+   THE QUADRATURE IS THE SURFACE'S RATE, not a per-mode phase. The transport in
+   finishSurface needs a complex amplitude A = Re + i Im, and the modal path built
+   it from each mode's phase offset. A direct simulation has none. For any
+   oscillation the instantaneous pair (eta, -eta_t/omega) IS that amplitude: it
+   gives a standing mode an intensity pattern and no phase flux, and a travelling
+   one a flux of one sign, which is what section 17 of the gate measures.
+
+   NO ENVELOPE. The modal path multiplies by centreBiasEnvelope, a cosmetic
+   weighting that tilts a sum of eigenfunctions toward what the printed atlas
+   shows. The solver's surface is the surface; nothing here reweights it.
+   ─────────────────────────────────────────────────────────────────────────── */
+const CELL3D = (function(){
+  let worker = null, vessel = null, running3d = false, err = null;
+  let physT = 0, wall = 0, stepsDone = 0, perStep = 0, grid = null;
+  /* The generation this run belongs to, and the engine that actually answered.
+     `ranEngine` is read back off the worker's own messages rather than copied from
+     what was asked for, so the deck reports what ran and not what was requested. */
+  let gen = 0, ranEngine = null;
+  let etaBuf = null, htBuf = null, omegaRef = 1, haveFrame = false, peakRaw = 0;
+
+  async function sourceOf(id){
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`cell3d: no <script id="${id}">`);
+    if (el.textContent && el.textContent.trim().length) return el.textContent;
+    if (el.src){
+      const r = await fetch(el.src);
+      if (!r.ok) throw new Error(`cell3d: fetching ${el.src} gave ${r.status}`);
+      return await r.text();
+    }
+    throw new Error(`cell3d: <script id="${id}"> has neither inline source nor src`);
+  }
+
+  /* The worker carries faraday-disc.js first, because faraday-cell3d.js takes its
+     graded grid maps from it, then steps in slices so the page can draw between
+     them. A slice is wall-clock bounded rather than a fixed step count, so a
+     coarse grid posts often and a fine one posts seldom instead of freezing. */
+  /* The bytes of the three-dimensional C++ module, for the engine that runs it.
+     Same two sources the two-dimensional one has and the same refusal: the
+     single-file build carries them inline as base64, a served checkout fetches
+     them, and a page opened straight off the filesystem can do neither -- so this
+     says so instead of running the JavaScript under the C++ engine's name and
+     reporting a time that means something else. */
+  let cellWasmCache = null;
+  async function cellWasmBytes(){
+    if (cellWasmCache) return cellWasmCache;
+    if (globalThis.FARADAY_CELL3D_WASM_BASE64)
+      return (cellWasmCache = FARADAY_CELL3D_WASM.cell3dWasmBytes());
+    let r;
+    try { r = await fetch('dns/faraday_cell3d.wasm'); }
+    catch (e){ throw new Error(
+      `the three-dimensional C++ module could not be loaded (${e.message}). This `
+      + `page is running from a checkout, where the bytes are fetched from `
+      + `dns/faraday_cell3d.wasm beside it; that works when the directory is served `
+      + `over http and not when the file is opened directly. Either serve the `
+      + `checkout, or use the single-file build, which carries the bytes inline, or `
+      + `pick the JavaScript engine -- the two give identical fields. Not falling `
+      + `back to it silently under the C++ name.`); }
+    if (!r.ok) throw new Error(
+      `dns/faraday_cell3d.wasm gave ${r.status}. Build it with `
+      + `dns/build-wasm-cell3d.sh.`);
+    return (cellWasmCache = new Uint8Array(await r.arrayBuffer()));
+  }
+
+  /* The worker carries faraday-disc.js first, because faraday-cell3d.js takes its
+     graded grid maps from it, then the solver, then the C++ loader. It steps in
+     slices so the page can draw between them. A slice is wall-clock bounded rather
+     than a fixed step count, so a coarse grid posts often and a fine one posts
+     seldom instead of freezing.
+
+     EVERY MESSAGE CARRIES THE GENERATION it belongs to. Switching engine or
+     operating point re-inits the same worker, and a slice already in flight would
+     otherwise post its frame into the new run and be counted as part of it -- the
+     clocks would read as though the new engine had done the old one's work. The
+     page ignores anything stamped with a generation it has moved past. */
+  async function ensureWorker(){
+    if (worker) return worker;
+    const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
+      await sourceOf('dnsCell3dWasm'),
+      `let S = null, W = null, dt = 0, sliceMs = 120, gen = -1, engine = 'js';
+       self.onmessage = (e) => {
+         const d = e.data;
+         try {
+           if (d.cmd === 'init'){
+             /* The C++ module's arena is static, so the previous cell has to give
+                it up before a new one can take it -- the loader refuses rather than
+                letting two states alias. */
+             if (W){ W.release(); W = null; }
+             gen = d.gen; engine = d.engine === 'cpp' ? 'cpp' : 'js';
+             if (engine === 'cpp'){
+               W = new FARADAY_CELL3D_WASM.FaradayCell3DWasm(d.opts,
+                     { bytes: d.wasmBytes });
+               S = W.js;
+             } else {
+               W = null;
+               S = new FARADAY_CELL3D.FaradayCell3D(d.opts);
+             }
+             for (let i = 0; i < S.nr; i++)
+               for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = d.eta0[i*S.nth + k];
+             S.refreshMetric();
+             if (W){ W.pushState(); W.refreshMetric(); }
+             dt = S.stableStep();
+             self.postMessage({ ok: true, kind: 'ready', gen, engine, dt,
+               nr: S.nr, nth: S.nth, nz: S.nz, dth: S.dth,
+               rc: Array.from(S.rc), R: S.R, h: S.h });
+             return;
+           }
+           if (d.cmd === 'slice'){
+             if (d.gen !== gen) return;      /* a slice for a run that has ended */
+             const t0 = Date.now(); let n = 0;
+             if (W){ while (Date.now() - t0 < sliceMs){ W.step(dt); n++; } }
+             else   { while (Date.now() - t0 < sliceMs){ S.step(dt); n++; } }
+             const src = W ? W.views : S;
+             const eta = new Float64Array(src.eta), ht = new Float64Array(src.Ht);
+             self.postMessage({ ok: true, kind: 'frame', gen, engine,
+               t: W ? W.t : S.t, steps: n,
+               ms: Date.now() - t0, eta, ht, cg: W ? W.cgIters : S.cgIters },
+               [eta.buffer, ht.buffer]);
+             return;
+           }
+           throw new Error('cell3d worker: unknown command ' + d.cmd);
+         } catch (e2){
+           self.postMessage({ ok: false, gen, error: String(e2 && e2.message || e2) });
+         }
+       };`].join('\n;\n');
+    worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
+    return worker;
+  }
+
+  /* The initial condition: the mode the deck says is nearest, at an amplitude small
+     enough to be linear. Under a drive it grows on its own; that is the point. */
+  function seed(S, m, k){
+    const AMP = 1e-7, out = new Float64Array(S.nr*S.nth);
+    for (let i = 0; i < S.nr; i++)
+      for (let j = 0; j < S.nth; j++)
+        out[i*S.nth + j] = AMP*FARADAY_KERNEL.besselJ(m, k*S.rc[i])
+                               *Math.cos(m*(j + 0.5)*S.dth);
+    return out;
+  }
+
+  async function start(st){
+    try { await startInner(st); }
+    catch (e){ err = String(e && e.message || e); running3d = false; dirty = true; }
+  }
+  async function startInner(st){
+    err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
+    const m = Math.max(0, st.nearestTheoryModes[0].m);
+    const k = st.wavenumber;
+    omegaRef = 2*Math.PI*st.responseHz || 1;
+    /* The grid: enough azimuthal cells for this m at eight per wavelength, and the
+       radial and vertical counts the two-dimensional solver's own resolution logic
+       picks for the same mode. nth is forced even -- the solver refuses an odd
+       count, since the top azimuthal mode would lose its conjugate. */
+    const nth = Math.max(16, 2*Math.ceil(4*Math.max(1, m)));
+    /* nr and nz from the two-dimensional solver's own resolution logic for this mode --
+       the same suggestGrid the Floquet panel uses -- rather than numbers chosen here.
+       It sizes for the surface operator's error and for cells inside the Stokes layers,
+       which is what sets the damping. If it cannot place the mode at all it returns
+       unreachable, and then the grid below is the floor the solver itself accepts. */
+    let nrS = 16, nzS = 10;
+    try {
+      const g = FARADAY_DISC.suggestGrid({
+        m: Math.max(2, m), k, R: st.cellDiameterMm*5e-4, h: depth*1e-3,
+        rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma,
+        contact: rim === 'pinned' ? 'pinned' : 'free',
+        omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*freq,
+        profile: r => FARADAY_KERNEL.besselJ(Math.max(2, m), k*r) });
+      if (!g.unreachable && g.nr && g.nz){ nrS = g.nr; nzS = g.nz; }
+    } catch { /* suggestGrid refuses some operating points; the floor above stands */ }
+    const opts = { nr: nrS, nth, nz: nzS,
+                   /* `depth` is the page's own slider in mm; the resolved state carries
+                      cellDiameterMm but not the depth, which cost one NaN refusal to find */
+                   R: st.cellDiameterMm*5e-4, h: depth*1e-3,
+                   rho: st.water.rho, nu: st.water.mu/st.water.rho,
+                   gamma: st.water.sigma, g: 9.80665,
+                   accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
+                   contact: rim === 'pinned' ? 'pinned' : 'free' };
+    vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
+    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz };
+    const eta0 = seed(vessel, m, k);
+    /* Fetched on the page rather than in the worker: a worker has no `require` and
+       the single-file build's base64 lives in a tag the page owns. Only for the C++
+       engine -- asking for the bytes on the JavaScript path would make a page served
+       without the module refuse for no reason. */
+    const wasmBytes = cell3dEngine === 'cpp' ? await cellWasmBytes() : null;
+    const myGen = ++gen;
+    ranEngine = null;
+    const w = await ensureWorker();
+    w.onmessage = ev => {
+      const d = ev.data;
+      if (d.gen !== undefined && d.gen !== myGen) return;   /* a previous run's slice */
+      if (!d.ok){ err = d.error; running3d = false; dirty = true; return; }
+      if (d.kind === 'ready'){
+        ranEngine = d.engine;
+        w.postMessage({ cmd: 'slice', gen: myGen });
+        return;
+      }
+      if (d.kind === 'frame'){
+        ranEngine = d.engine;
+        etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
+        wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
+        haveFrame = true; dirty = true;
+        if (running3d) w.postMessage({ cmd: 'slice', gen: myGen });
+      }
+    };
+    w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
+    running3d = true;
+    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
+                    engine: cell3dEngine, wasmBytes });
+  }
+
+  function stop(){ running3d = false; }
+
+  /* Fill the six rasters from the solver's surface, through the gated resamplers.
+     Im is -eta_t/omega, and the gradients are taken in the NORMALISED radius the
+     modal path uses -- NX/NY are derivatives with respect to RAD, not metres --
+     so the factor of R converts the solver's per-metre slopes to that coordinate. */
+  function build(st){
+    if (!haveFrame || !vessel) return false;
+    const nth = vessel.nth;
+    for (let i = 0; i < vessel.nr; i++)
+      for (let j = 0; j < nth; j++){
+        const e = vessel.ie(i, j);
+        vessel.eta[e] = etaBuf[i*nth + j];
+        vessel.Ht[e]  = htBuf[i*nth + j];
+      }
+    vessel.refreshMetric();
+    const R = vessel.R, iw = 1/omegaRef;
+    for (let i = 0; i < NSZ; i++){
+      if (COVER[i] <= 0){ ETA[i] = IMF[i] = NX[i] = NY[i] = GIX[i] = GIY[i] = 0; continue; }
+      const rho = Math.min(1, RAD[i]), th = ANG[i] < 0 ? ANG[i] + 2*Math.PI : ANG[i];
+      const r = rho*R;
+      const re = vessel.etaAt(r, th), im = -vessel.etaDotAt(r, th)*iw;
+      const gE = vessel.etaSlopeAt(r, th), gT = vessel.etaDotSlopeAt(r, th);
+      /* polar to Cartesian, in the normalised radius: d/drho = R d/dr, and the
+         azimuthal part divides by rho rather than by r for the same reason */
+      const c = Math.cos(th), sn = Math.sin(th), rr = Math.max(rho, 1e-6);
+      const eR = gE.Hr*R, eT = gE.Hth/rr;
+      const tR = gT.Tr*R*-iw, tT = (gT.Tth/rr)*-iw;
+      ETA[i] = re;  IMF[i] = im;
+      NX[i]  = eR*c - eT*sn;  NY[i]  = eR*sn + eT*c;
+      GIX[i] = tR*c - tT*sn;  GIY[i] = tR*sn + tT*c;
+    }
+    /* The raw peak over covered pixels, which is exactly what finishSurface divides
+       the rasters by. Kept so a caller -- dns/check-page.mjs -- can ask what a pixel
+       OUGHT to hold and compare, without reimplementing the normalisation. */
+    peakRaw = 0;
+    for (let i = 0; i < NSZ; i++)
+      if (COVER[i] > 0) peakRaw = Math.max(peakRaw, Math.abs(ETA[i]));
+    st.render = { drawn: 1, gatedRms: 0, gated: 0 };
+    finishSurface(st);
+    return true;
+  }
+
+  /* What the raster should hold at a pixel: the solver's own surface there, through
+     the gated resampler, divided by the same peak finishSurface used. */
+  function etaAtPixel(rho, th){
+    if (!vessel || !(peakRaw > 0)) return NaN;
+    return vessel.etaAt(Math.min(1, rho)*vessel.R, th)/peakRaw;
+  }
+
+  const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
+                          live: running3d, have: haveFrame,
+                          engine: ranEngine, asked: cell3dEngine,
+                          ratio: physT > 0 ? wall/physT : 0 });
+  return { start, stop, build, clocks, etaAtPixel,
+           vesselFor: () => vessel, isOn: () => running3d };
+})();
+let useSolver = false;
+/* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
+   same discretisation compiled to WebAssembly. They produce identical fields, which
+   dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
+let cell3dEngine = 'js';
+
+sprinkle(); recompute(); requestAnimationFrame(loop);
+</script>

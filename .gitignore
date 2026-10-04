@@ -16,12 +16,18 @@ vedic
 vedic_pde_tool
 vedic_capability_profile
 
-# Generated single-file build of cymatic.html (node faraday/build-standalone.mjs).
-# Never committed: a second copy of the kernel would drift from the original.
-faraday-cell-standalone.html
+# Generated single-file build of cymatic.html (node faraday/build-standalone.mjs),
+# where that command writes it by default: at the repository root. ANCHORED with a
+# leading slash, and that is load bearing. It used to be ignored by bare name,
+# which matches at any depth -- so when the bundle began to be committed, the copy
+# of this same page inside faraday-cell/ would have been silently skipped by
+# `git add`, and the folder people download would have arrived without the one
+# file they are told to double-click.
+/faraday-cell-standalone.html
 
-# Generated distribution zip (node faraday/build-zip.mjs). Never committed, for
-# the same reason the single-file build is not: it is a second copy of every file
-# in it, and a drifted copy that still runs is the worst failure mode here.
-# faraday/check-zip.mjs builds one, unpacks it elsewhere and runs it from there.
-faraday-cell.zip
+# faraday-cell/ and faraday-cell.zip are NOT ignored: they are committed, so the
+# simulation can be downloaded from the repository as one folder or one file.
+# They are build outputs (node faraday/build-zip.mjs), and a committed build output
+# is acceptable exactly when something fails the moment it stops matching its
+# source -- faraday/check-bundle.mjs, in CI, requires both to be byte for byte
+# what the sources build today.
