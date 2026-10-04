@@ -38,6 +38,16 @@
 # the axis instead of the rim, and uniform grids that measured the damping
 # inconsistently because the Stokes layers were never resolved.
 #
+# faraday/check-bundle.mjs runs in the kernels job, beside the single-file check.
+# faraday-cell/ and faraday-cell.zip are COMMITTED at the repository root so the
+# simulation can be downloaded from the repository as one folder or one file, and
+# a committed build output is acceptable exactly when something fails the moment
+# it stops matching its source. This is that something: it stages a fresh bundle
+# and requires the committed folder byte for byte, file for file, and the
+# committed zip byte for byte -- the builder makes the zip reproducible so that
+# comparison is possible. One second. Edit any source the bundle carries without
+# running `node faraday/build-zip.mjs` and this goes red, naming the file.
+#
 # dns/check-cell3d-wasm.mjs runs in the disc job rather than the DNS one, because
 # what it needs is the toolchain: it rebuilds dns/faraday_cell3d.cpp with the
 # runner's own clang and requires the fresh module, the committed module and
@@ -140,6 +150,8 @@ jobs:
       run: node faraday/check-kernel.mjs
     - name: Single-file build is self-contained
       run: node faraday/check-standalone.mjs
+    - name: The committed faraday-cell bundle is what the sources build today
+      run: node faraday/check-bundle.mjs
     - name: Exact coupled benchmark (residuals zero over Q)
       run: node fsi/check-coupled-affine.mjs
 

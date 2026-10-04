@@ -98,7 +98,11 @@ ASPIRATIONAL = {
 #: must NOT be tracked, because a committed copy of a generated file drifts from
 #: its source the first time one side is edited — and a drifted copy that still
 #: *runs* is the worst failure mode in this repository, since it returns an
-#: answer.
+#: answer. A build output may be committed only where something fails the moment
+#: it stops matching its source: the copy of the single-file page inside
+#: `faraday-cell/` is committed on exactly those terms, under
+#: `faraday/check-bundle.mjs`. The entry below is the OTHER copy, at the root,
+#: which stays generated and ignored.
 #:
 #: The value is the command that writes it, so a reader of this list can produce
 #: the file. Each entry is asserted below to be cited, to be matched by

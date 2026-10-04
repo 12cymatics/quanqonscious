@@ -1,0 +1,1720 @@
+/* Tests for the Faraday kernel embedded in cymatic.html.
+
+   The kernel is not duplicated here. This file slices the region between the
+   FARADAY KERNEL BEGIN and END markers straight out of cymatic.html and
+   evaluates it, so there is exactly one copy of the physics and no second
+   copy that can drift away from the page.
+
+   Every expected value in faraday/reference.json was computed by mpmath,
+   scipy.special or scipy.optimize.brentq -- never by running the code under
+   test. Where a value is fixed by an identity rather than a table (a
+   round-trip, a threshold crossing, a conservation), the identity is asserted
+   directly.
+
+   Run: node faraday/check-kernel.mjs
+*/
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const ROOT = join(here, '..');
+const HTML = readFileSync(join(ROOT, 'cymatic.html'), 'utf8');
+const REF  = JSON.parse(readFileSync(join(here, 'reference.json'), 'utf8'));
+
+/* ---- the physics, required straight from its own files ------------------
+   cymatic.html loads faraday/kernel.js as a classic script; node requires the
+   same file here. There is still exactly one copy of the physics, and the
+   boundary is the FILE rather than a pair of marker comments inside the page.
+   The previous arrangement sliced both regions out of the HTML between
+   comments, which meant deleting a comment silently removed every assertion
+   that depended on it.
+
+   faraday/benchmark.js is still required below, but the page no longer loads
+   it -- see the check that enforces that, further down. */
+const K = require(join(here, 'kernel.js'));
+const B = require(join(here, 'benchmark.js'));
+
+const EXPORTS = Object.keys(K);
+if (EXPORTS.length < 40) throw new Error(
+  `faraday/kernel.js exported ${EXPORTS.length} names; the suite needs the whole `
+  + `kernel surface. Refusing rather than testing a fragment of it.`);
+for (const n of EXPORTS)
+  if (K[n] === undefined) throw new Error(`kernel export ${n} is undefined`);
+for (const n of ['Q', 'evaluate', 'allResidualsZero', 'DEFAULTS', 'S_MIN', 'S_MAX'])
+  if (B[n] === undefined) throw new Error(`benchmark export ${n} is undefined`);
+
+/* The page must actually load every physics file it runs on, or the browser
+   gets a kernel the tests never see. Asserted here because it is the one thing
+   requiring the modules directly can no longer notice. The two dns/ files are
+   named because the page's stability panel loads them; their physics is gated by
+   dns/check-dns.mjs and dns/check-disc.mjs, and this is the line that stops the
+   page and those suites pointing at different files. */
+for (const f of ['faraday/kernel.js', 'dns/faraday-dns.js', 'dns/faraday-disc.js',
+                 'dns/faraday-disc-wasm.js', 'dns/faraday-floquet.js'])
+  if (!HTML.includes(`src="${f}"`)) throw new Error(
+    `cymatic.html does not load ${f}. The page and its suite would be running `
+    + `different code.`);
+
+/* And it must NOT load faraday/benchmark.js. That is not housekeeping. The
+   panel it fed was removed because the request was for the exact coupled
+   benchmark and the rendered Faraday field to be ONE process, and they cannot
+   be: the benchmark is exact over Q, while the Faraday path runs through
+   Bessel zeros and tanh of a rational, both irrational, so no rational
+   arithmetic reaches the renderer's numbers. Section 12 below still gates the
+   construction -- as the standalone module it now is. If this fires, someone
+   has put the panel back, and section 12's preamble and build-standalone's
+   SCRIPTS list need revisiting rather than this line deleting. */
+if (HTML.includes('src="faraday/benchmark.js"')) throw new Error(
+  `cymatic.html loads faraday/benchmark.js again. The exact coupled benchmark `
+  + `cannot share a process with the Faraday renderer; see the comment above `
+  + `this check.`);
+
+/* ---- harness ----------------------------------------------------------- */
+let pass = 0; const failures = [];
+function ok(cond, label, detail){
+  if (cond) { pass++; }
+  else failures.push(`${label}${detail ? '  — ' + detail : ''}`);
+}
+// relative agreement against an independently computed reference. This is not
+// a tolerance standing in for a wrong answer: it is the width of binary64
+// itself, and each call states the decades it demands.
+function rel(got, want, decades, label){
+  if (!isFinite(got)) return ok(false, label, `got ${got}`);
+  const denom = Math.abs(want) > 0 ? Math.abs(want) : 1;
+  const err = Math.abs(got - want)/denom;
+  ok(err <= Math.pow(10, -decades), label,
+     `got ${got}, want ${want}, relative error ${err.toExponential(3)} > 1e-${decades}`);
+}
+function eq(got, want, label){
+  ok(Object.is(got, want), label, `got ${got}, want ${want}`);
+}
+function section(name){ console.log('\n' + name); }
+
+/* ── 1. Bessel functions ────────────────────────────────────────────────── */
+section('1. Bessel J_m and J\'_m against mpmath');
+for (const { m, z, J } of REF.besselJ){
+  // absolute floor for the deeply evanescent entries: J_170(100) = 2e-25 is
+  // below binary64's relative reach next to the O(1) terms in the recurrence,
+  // so those are held to absolute agreement instead, which is the real claim.
+  const got = K.besselJ(m, z);
+  if (Math.abs(J) < 1e-12)
+    ok(Math.abs(got - J) < 1e-15, `J_${m}(${z}) = ${J.toExponential(3)}`,
+       `got ${got.toExponential(3)}, absolute error ${Math.abs(got-J).toExponential(3)}`);
+  else rel(got, J, 12, `J_${m}(${z})`);
+}
+for (const { m, z, Jp } of REF.besselJp) rel(K.besselJp(m, z), Jp, 10, `J'_${m}(${z})`);
+
+/* besselPair returns [J, J'] from one recurrence. The value that matters is
+   its agreement with mpmath, so that is what is asserted; the cross-check
+   against the two scalar calls is held to 14 decades rather than to the bit,
+   because besselJ starts Miller at order m and besselPair at m+1. Same
+   method, one order apart, so the round-off accumulates differently -- at
+   m=150, z=182 they part company at the sixth ulp. Demanding bit-equality
+   there would be asserting something that is not true of the code and need
+   not be. */
+for (const { m, z, J } of REF.besselJ){
+  const p = K.besselPair(m, z);
+  ok(Array.isArray(p) && p.length === 2, `besselPair(${m},${z}) returns a pair`,
+     `got ${JSON.stringify(p)}`);
+  if (Math.abs(J) < 1e-12)
+    ok(Math.abs(p[0] - J) < 1e-15, `besselPair J at m=${m}, z=${z} (evanescent)`,
+       `got ${p[0].toExponential(3)}, want ${J.toExponential(3)}`);
+  else rel(p[0], J, 12, `besselPair J against mpmath at m=${m}, z=${z}`);
+}
+for (const { m, z, Jp } of REF.besselJp)
+  rel(K.besselPair(m, z)[1], Jp, 10, `besselPair J' against mpmath at m=${m}, z=${z}`);
+for (const [m, z] of [[0,1],[5,25],[37,40],[150,182]]){
+  const p = K.besselPair(m, z);
+  rel(p[0], K.besselJ(m, z),  14, `besselPair J tracks besselJ at m=${m}`);
+  rel(p[1], K.besselJp(m, z), 14, `besselPair J' tracks besselJp at m=${m}`);
+}
+// at z = 0 the pair is exact and known: J_m(0) = [m==0], J'_m(0) = 1/2 at m=1
+eq(K.besselPair(0,0)[0], 1, 'J_0(0) = 1');
+eq(K.besselPair(3,0)[0], 0, 'J_3(0) = 0');
+eq(K.besselPair(1,0)[1], 0.5, "J'_1(0) = 1/2");
+eq(K.besselPair(4,0)[1], 0,   "J'_4(0) = 0");
+
+/* ── 2. zeros of J'_m ───────────────────────────────────────────────────── */
+section("2. zeros of J'_m against scipy.special.jnp_zeros");
+for (const { m, zeros } of REF.jpZeros){
+  const got = K.jpZeros(m, zeros.length, zeros[zeros.length-1]);
+  ok(got.length === zeros.length, `jpZeros(${m}) returns ${zeros.length}`,
+     `got ${got.length}`);
+  for (let i = 0; i < Math.min(got.length, zeros.length); i++)
+    rel(got[i], zeros[i], 9, `j'_{${m},${i+1}}`);
+  // and each returned zero really is one
+  for (const z of got)
+    ok(Math.abs(K.besselJp(m, z)) < 1e-9, `J'_${m} vanishes at returned zero ${z.toFixed(6)}`,
+       `J' = ${K.besselJp(m, z).toExponential(3)}`);
+}
+/* jpZerosNearN is the root finder the renderer actually calls -- jpZeros is
+   defined in the page but has no call site, so verifying only jpZeros would
+   have left the live path covered nowhere but indirectly. Both are checked.
+   jpZerosNearN returns the `count` roots nearest a target argument, so the
+   expected set is the scipy roots sorted by distance from that target. */
+for (const { m, zeros } of REF.jpZeros){
+  for (const [target, count] of [[zeros[0], 3], [zeros[3], 3], [zeros[2], 1]]){
+    const got = K.jpZerosNearN(m, target, count).slice().sort((a,b) => a-b);
+    const want = zeros.slice()
+      .sort((a,b) => Math.abs(a-target) - Math.abs(b-target))
+      .slice(0, count).sort((a,b) => a-b);
+    ok(got.length === count, `jpZerosNearN(${m}, ${target.toFixed(3)}, ${count}) returns ${count}`,
+       `got ${got.length}`);
+    for (let i = 0; i < Math.min(got.length, want.length); i++)
+      rel(got[i], want[i], 9, `jpZerosNearN m=${m} near ${target.toFixed(2)}, root ${i+1}`);
+    for (const z of got)
+      ok(Math.abs(K.besselJp(m, z)) < 1e-9,
+         `jpZerosNearN m=${m} returned a true zero at ${z.toFixed(6)}`,
+         `J' = ${K.besselJp(m, z).toExponential(3)}`);
+  }
+  // it must never return a duplicate: three roots means three distinct roots
+  const trio = K.jpZerosNearN(m, zeros[2], 3);
+  ok(new Set(trio.map(z => z.toFixed(6))).size === trio.length,
+     `jpZerosNearN(${m}) returns distinct roots`, `got ${trio.map(z=>z.toFixed(4)).join(',')}`);
+}
+
+// Whatever jpZeroNear returns must BE a zero. The old bare-Newton solver
+// escaped at an inflection, hit its guard, and returned the FLOOR m/2 as
+// though it were a root -- J'_142 has no zero at 71. Those phantom modes had
+// small k, hence little damping, so they ranked highest by growth and
+// dominated the set. The target below is that same 71.21; the bracketed
+// finder walks out to the true first zero at 146.232174 instead.
+{
+  const z = K.jpZeroNear(142, 71.21);
+  ok(z !== null, 'jpZeroNear(142, 71.21) returns a root', `got ${z}`);
+  ok(Math.abs(z - 71) > 1, 'it is not the m/2 floor the old solver returned',
+     `got ${z}`);
+  rel(z, REF.jpZeros.find(x => x.m === 142).zeros[0], 9,
+      "jpZeroNear(142, 71.21) walks out to j'_{142,1}");
+  ok(Math.abs(K.besselJp(142, z)) < 1e-9, 'and it really is a zero',
+     `J' = ${K.besselJp(142, z).toExponential(3)}`);
+}
+for (const [m, t] of [[37,40],[0,10],[150,183],[5,25]]){
+  const z = K.jpZeroNear(m, t);
+  ok(z !== null && Math.abs(K.besselJp(m, z)) < 1e-9,
+     `jpZeroNear(${m}, ${t}) returns a true zero`, `got ${z}`);
+}
+
+/* ── 2b. radial index ───────────────────────────────────────────────────── */
+section("2b. radial index against scipy.special.jnp_zeros");
+for (const { m, n, z } of REF.radialIndex)
+  eq(K.radialIndexOf(m, z), n, `radialIndexOf(${m}, j'_{${m},${n}}) = ${n}`);
+// monotone: a larger argument can never have a smaller index
+for (const m of [0, 12, 37, 150]){
+  const zs = REF.radialIndex.filter(r => r.m === m).map(r => r.z);
+  for (let i = 1; i < zs.length; i++)
+    ok(K.radialIndexOf(m, zs[i]) > K.radialIndexOf(m, zs[i-1]),
+       `radialIndexOf is strictly increasing at m=${m}, root ${i+1}`,
+       `${K.radialIndexOf(m, zs[i-1])} then ${K.radialIndexOf(m, zs[i])}`);
+}
+// and strictly between two roots it holds the lower index
+for (const m of [0, 12, 150]){
+  const zs = REF.radialIndex.filter(r => r.m === m).map(r => r.z);
+  const mid = (zs[2] + zs[3])/2;
+  eq(K.radialIndexOf(m, mid), 3, `radialIndexOf(${m}, midway between roots 3 and 4) = 3`);
+}
+
+/* ── 3. quadrature ──────────────────────────────────────────────────────── */
+section('3. angular and radial quadrature');
+for (const { a, b, I } of REF.angularQuartic)
+  rel(K.angularQuartic(a, b), I, 12, `INT cos^2(${a}t)cos^2(${b}t)`);
+for (const { a, I } of REF.angularSquare)
+  rel(K.angularSquare(a), I, 12, `INT cos^2(${a}t)`);
+// the defect that motivated this file: the two nonzero branches must sit in
+// the same normalisation as the branches with a zero order.  cos^2(0)=1, so
+// angularQuartic(0,b) must equal angularSquare(b) identically.
+for (const b of [1, 3, 12])
+  rel(K.angularQuartic(0, b), K.angularSquare(b), 15,
+      `angularQuartic(0,${b}) == angularSquare(${b})`);
+// ...and a self-overlap must be strictly below the square, never above it:
+// INT cos^4 < INT cos^2 for every nonzero order.
+for (const a of [1, 3, 7, 12])
+  ok(K.angularQuartic(a, a) < K.angularSquare(a),
+     `angularQuartic(${a},${a}) < angularSquare(${a})`,
+     `${K.angularQuartic(a,a)} vs ${K.angularSquare(a)}`);
+// distinct orders: exactly two thirds of the equal-order value
+for (const [a,b] of [[2,5],[1,2],[4,9]])
+  rel(K.angularQuartic(a,b)/K.angularQuartic(a,a), 2/3, 14,
+      `angularQuartic(${a},${b}) is 2/3 of angularQuartic(${a},${a})`);
+
+{
+  const N = K.QUAD_R;
+  ok(N % 2 === 0, `QUAD_R = ${N} is even (Simpson requires it)`);
+  const build = fn => { const v = new Float64Array(N+1);
+    for (let i = 0; i <= N; i++) v[i] = fn(i/N); return v; };
+  rel(K.simpsonR(build(() => 1)),      REF.simpsonR[0].exact, 13, 'INT_0^1 1 * r dr = 1/2');
+  rel(K.simpsonR(build(r => r)),       REF.simpsonR[1].exact, 13, 'INT_0^1 r * r dr = 1/3');
+  rel(K.simpsonR(build(r => r*r)),     REF.simpsonR[2].exact, 13, 'INT_0^1 r^2 * r dr = 1/4');
+  // INT_0^1 J0(a r) r dr = J1(a)/a, and a = j'_{0,1} is a zero of J'_0 = -J1,
+  // so this integral is EXACTLY zero. A relative comparison of two numbers
+  // that are both ~1e-16 says nothing; the claim is absolute.
+  const j01 = REF.jpZeros.find(x => x.m === 0).zeros[0];
+  const zeroInt = K.simpsonR(build(r => K.besselJ(0, j01*r)));
+  ok(Math.abs(zeroInt) < 1e-12, "INT_0^1 J0(j'_{0,1} r) r dr is zero",
+     `got ${zeroInt.toExponential(3)}`);
+  const j32 = REF.jpZeros.find(x => x.m === 3).zeros[1];
+  rel(K.simpsonR(build(r => K.besselJ(3, j32*r)**2)), REF.simpsonR[4].exact, 8,
+      "INT_0^1 J3(j'_{3,2} r)^2 r dr");
+}
+
+/* ── 4. water properties ────────────────────────────────────────────────── */
+section('4. water properties');
+for (const { T, sigma, rho, mu } of REF.water){
+  rel(K.surfaceTension(T), sigma, 13, `sigma(${T} C)`);
+  rel(K.density(T),        rho,   13, `rho(${T} C)`);
+  rel(K.viscosity(T),      mu,    13, `mu(${T} C)`);
+}
+// density must peak near 4 C -- the property the Kell form exists to capture
+ok(K.density(4) > K.density(0) && K.density(4) > K.density(8),
+   'density has its maximum near 4 C',
+   `rho(0)=${K.density(0)}, rho(4)=${K.density(4)}, rho(8)=${K.density(8)}`);
+
+/* ── 5. dispersion ──────────────────────────────────────────────────────── */
+section('5. gravity-capillary dispersion on finite depth');
+for (const { f, T, h_mm, k, lambda } of REF.dispersion){
+  const s = K.surfaceTension(T), r = K.density(T), h = h_mm/1000;
+  const w = 2*Math.PI*(f/2);
+  rel(K.kOfOmega(w, s, r, h), k, 9, `k at ${f} Hz, ${T} C, ${h_mm} mm`);
+  rel(2*Math.PI/K.kOfOmega(w, s, r, h), lambda, 9, `wavelength at ${f} Hz`);
+  // round trip: omega(k(omega)) must return omega
+  rel(K.omegaOf(K.kOfOmega(w, s, r, h), s, r, h), w, 11, `omega round-trip at ${f} Hz`);
+}
+// the two asymptotic limits must emerge, not be assumed: deep-water gravity
+// at long wave, capillary at short.
+{
+  const s = K.surfaceTension(20), r = K.density(20);
+  const kLong = 5;      // 1.26 m wave, deep relative to 1 m
+  rel(K.omegaOf(kLong, s, r, 1)**2/(K.G_ACC*kLong*Math.tanh(kLong*1)), 1, 3,
+      'long-wave limit is gravity-dominated');
+  const kShort = 2e4;   // 314 um
+  const ratio = (s*kShort**3/r)/(K.G_ACC*kShort);
+  rel(ratio, REF.capillaryRatio[0].ratio, 10,
+      'capillary-to-gravity ratio at k = 2e4 matches the independent value');
+  ok(ratio > 1e3, 'short-wave limit is capillary-dominated by three decades',
+     `sigma k^2/(rho g) = ${ratio.toExponential(3)}`);
+}
+
+/* ── 6. damping ─────────────────────────────────────────────────────────── */
+section('6. viscous damping');
+
+/* THE `bulk term is 2 nu k^2` ASSERTION THAT USED TO BE HERE WAS WRONG, and it
+   was wrong about the physics rather than about the code: it pinned the bulk
+   rate to Lamb's ASYMPTOTIC value, which is the delta k -> 0 limit of the exact
+   linear viscous free-surface root and overstates the damping by delta k/2.
+   Measured on the page's own inputs that is 3.6% at 50 Hz, 8.5% at 5 kHz and
+   10.4% at the corner of the input box; the Faraday threshold is linear in
+   gamma, so every threshold the page reported was high by the same margin.
+
+   What established it was not an argument. dns/faraday-dns.js solves the
+   resolved Navier-Stokes problem for this configuration and reproduces the
+   exact root to 0.69%, while the asymptotic value sits 12% away at that test's
+   delta k. The expectation moved because the measurement said so. */
+{
+  const R6 = REF.viscousFreeSurface;
+  ok(Array.isArray(R6 && R6.points) && R6.points.length >= 6,
+     'reference carries the viscous free-surface root', `${R6 && R6.points && R6.points.length} points`);
+  let worst = 0, worstW = null;
+  for (const p of R6.points){
+    const got = K.viscousFreeSurfaceRe(p.W);
+    const e = Math.abs(got - p.re)/Math.abs(p.re);
+    if (e > worst){ worst = e; worstW = p.W; }
+  }
+  ok(worst < 1e-13, 'Re(x) matches mpmath at every reference W',
+     `worst ${worst.toExponential(2)} at W = ${worstW}`);
+
+  /* The asymptotic form is the W -> infinity limit, so the root approaches -2
+     from above and the leading gap is delta k = sqrt(2/W). Read off the
+     reference points, the structure is sharper than that:
+
+         Re(x) = -2 + delta k + delta k^3/4 + O(delta k^5)
+
+     with the third-order coefficient measured at 0.2454 (W=5), 0.2512 (W=47.3),
+     0.2503 (W=200) and 0.250012 (W=5000). Asserting the coefficient is a much
+     tighter statement than bracketing the root, and both sides come from the
+     reference rather than from the kernel. My first attempt here bracketed it
+     as -2 < Re < -2 + 0.75 delta k, which is simply false -- the correction is
+     ABOVE -2 + delta k, not below it -- and the numbers above are what said so. */
+  for (const p of R6.points){
+    const dk = Math.sqrt(2/p.W);
+    const c3 = (p.re - (-2 + dk))/(dk*dk*dk);
+    ok(p.re > -2 + dk, `root is above -2 + delta k at W = ${p.W}`, `Re(x) = ${p.re}`);
+    ok(c3 > 0.24 && c3 < 0.26,
+       `third-order coefficient is 1/4 at W = ${p.W}`, `got ${c3.toFixed(6)}`);
+  }
+  const big = R6.points[R6.points.length - 1];
+  const dkBig = Math.sqrt(2/big.W);
+  rel((big.re - (-2 + dkBig))/(dkBig*dkBig*dkBig), 0.25, 4,
+      'and converges to exactly 1/4 at the largest W');
+
+  const nu = K.viscosity(20)/K.density(20);
+  const k = 1156.359261, w = 2*Math.PI*55.5, h = 0.002;
+  const d = K.dampingRate(k, w, nu, h);
+  const nk2 = nu*k*k;
+  rel(d.bulkPotential, 2*nk2, 15, 'bulkPotential is still exactly 2 nu k^2');
+  rel(d.bulk, -K.viscousFreeSurfaceRe(w/nk2)*nk2, 15,
+      'bulk is the exact free-surface root, not the asymptotic form');
+  ok(d.surfaceLayer < 0, 'the surface layer REDUCES the damping', `${d.surfaceLayer}`);
+  rel(d.surfaceLayer, -nk2*Math.sqrt(2*nu/w)*k, 2,
+      'and its size is nu k^2 delta k to two digits');
+  ok(d.bulk < d.bulkPotential,
+     'so the exact rate is below Lamb asymptotic',
+     `${d.bulk.toFixed(4)} < ${d.bulkPotential.toFixed(4)}`);
+
+  rel(d.stokesDepth, Math.sqrt(2*nu/w), 15, 'Stokes depth is sqrt(2 nu/omega)');
+  rel(d.layer, w*(k*d.stokesDepth)/(2*Math.sinh(2*k*h)), 14, 'layer term matches its formula');
+  /* The bottom layer is unchanged and was already right. Stated the other way,
+     from the Stokes-layer dissipation integral for a standing wave over a rigid
+     bottom, it is (k/2) sqrt(nu omega/2) tanh(kh)/sinh^2(kh) -- the same thing,
+     asserted here so the two forms cannot drift apart. */
+  rel(d.layer, (k/2)*Math.sqrt(nu*w/2)*Math.tanh(k*h)/Math.pow(Math.sinh(k*h), 2), 13,
+      'layer equals the dissipation-integral form');
+  rel(d.total, d.bulk + d.layer, 15, 'total is the sum of both terms');
+  ok(d.layer > 0, 'the bottom layer term is kept, not dropped', `layer = ${d.layer}`);
+
+  const deep = K.dampingRate(k, w, nu, 0.5);
+  ok(deep.layer < d.layer*1e-6, 'layer term vanishes in deep water',
+     `shallow ${d.layer.toExponential(3)} vs deep ${deep.layer.toExponential(3)}`);
+  rel(deep.total, deep.bulk, 6, 'deep water is bulk-damped');
+
+  /* Refuses rather than substituting the potential-flow answer. */
+  let threw = 0;
+  for (const bad of [0, -1, NaN, Infinity]){
+    try { K.viscousFreeSurfaceRe(bad); } catch { threw++; }
+  }
+  eq(threw, 4, 'viscousFreeSurfaceRe refuses a non-finite or non-positive W');
+}
+
+/* ── 7. Mathieu tongue ──────────────────────────────────────────────────── */
+section('7. damped Mathieu, first tongue');
+{
+  const w0 = 2*Math.PI*55.5, gamma = 3.0, k = 1156.36, h = 0.002, wd = 2*w0;
+  const at = 4*gamma*w0/(k*Math.tanh(k*h));
+  const m = K.mathieu(w0, gamma, at, k, h, wd);
+  rel(m.accelThreshold, at, 13, 'accelThreshold inverts epsThreshold');
+  rel(m.eps, m.epsThreshold, 12, 'at threshold acceleration, eps = eps_c');
+  ok(Math.abs(m.growth) < 1e-9, 'growth is exactly zero at threshold', `got ${m.growth}`);
+  eq(m.detune, 0, 'zero detuning at omega_d = 2 omega_0');
+  rel(m.accelOnset, at, 13, 'accelOnset equals accelThreshold when undetuned');
+  // accelOnset is the drive at which THIS mode's growth crosses zero, detuning
+  // included. accelThreshold is the undetuned value and understates the drive
+  // whenever the mode sits off 2:1 -- which is why a "raise the drive to X"
+  // figure built from accelThreshold does not reach onset. The contract is that
+  // growth is exactly zero at accelOnset, at any detuning, so assert that
+  // directly across the tongue rather than only at its centre.
+  for (const r of [0.80, 0.93, 1.0, 1.07, 1.25]){
+    const wdr = 2*w0*r;
+    const mm = K.mathieu(w0, gamma, 1, k, h, wdr);
+    const a0 = mm.accelOnset;
+    const gAt = K.mathieu(w0, gamma, a0, k, h, wdr).growth;
+    ok(Math.abs(gAt) < 1e-9*Math.max(1, gamma),
+       `growth is zero at accelOnset, drive ratio ${r}`,
+       `accelOnset ${a0} gives growth ${gAt}`);
+    ok(K.mathieu(w0, gamma, a0*0.99, k, h, wdr).growth < 0,
+       `just below accelOnset decays, drive ratio ${r}`);
+    ok(K.mathieu(w0, gamma, a0*1.01, k, h, wdr).growth > 0,
+       `just above accelOnset grows, drive ratio ${r}`);
+    if (r !== 1) ok(a0 > m.accelThreshold,
+       `detuned onset needs more drive than the undetuned threshold, ratio ${r}`,
+       `accelOnset ${a0} vs accelThreshold ${m.accelThreshold}`);
+  }
+  // and it must cross: below threshold negative, above positive
+  ok(K.mathieu(w0, gamma, at*0.9, k, h, wd).growth < 0, 'sub-threshold drive decays');
+  ok(K.mathieu(w0, gamma, at*1.5, k, h, wd).growth > 0, 'super-threshold drive grows');
+  // supercritical growth must keep rising with drive -- not be clamped back to
+  // the near-onset value
+  const g2 = K.mathieu(w0, gamma, at*2,  k, h, wd).growth;
+  const g8 = K.mathieu(w0, gamma, at*8,  k, h, wd).growth;
+  ok(g8 > g2*3, 'growth keeps increasing far above onset', `g(2x)=${g2}, g(8x)=${g8}`);
+  // detuning off the tongue must kill it
+  ok(K.mathieu(w0, gamma, at*1.5, k, h, wd*1.5).growth <= 0,
+     'a drive detuned off the tongue does not grow');
+}
+
+/* ── 7b. pinned contact line: the edge-constrained spectrum ─────────────── */
+section('7b. pinned (edge-constrained) spectrum');
+for (const cse of REF.pinnedEdge){
+  const { m, diameterMm, tempC, depthMm, basisN } = cse;
+  const R = diameterMm/2000, sg = K.surfaceTension(tempC), rh = K.density(tempC);
+  const h = depthMm/1000;
+  const tag = `m=${m}, D=${diameterMm}mm, ${tempC}C, ${depthMm}mm`;
+  const raw = K.pinnedEdgeSpectrum(m, R, sg, rh, h, basisN, 6);
+
+  // the free spectrum this is built on
+  for (let i = 0; i < Math.min(6, cse.freeHz.length); i++)
+    rel(Math.sqrt(raw.freeW2[i])/(2*Math.PI), cse.freeHz[i], 9, `${tag}: free mode ${i+1}`);
+  // c_n = 2/(R^2(1 - (m/z_n)^2)) -- the Neumann norm cancels J_m(z_n)^2 outright
+  for (let i = 0; i < Math.min(6, cse.c.length); i++){
+    rel(raw.c[i], cse.c[i], 12, `${tag}: c_${i+1}`);
+    ok(raw.c[i] > 0, `${tag}: c_${i+1} is positive (the interlacing depends on it)`);
+  }
+
+  const ex = K.pinnedEdgeExtrapolated(m, R, sg, rh, h, basisN, 6);
+  ok(ex.extrapolated === true, `${tag}: result is marked extrapolated`);
+  eq(ex.basisPair.join(','), `${basisN/2},${basisN}`, `${tag}: extrapolated from N/2 and N`);
+  eq(ex.pinned.length, cse.pinned.length,
+     `${tag}: the solver returned as many pinned roots as the case expects`);
+  if (ex.pinned.length < cse.pinned.length) throw new Error(
+    `${tag}: pinnedEdgeExtrapolated returned ${ex.pinned.length} roots where the `
+    + `case expects ${cse.pinned.length}. Refusing to compare the prefix: a `
+    + `shortened list silently removes assertions while the suite still reports `
+    + `0 failed.`);
+  for (let i = 0; i < cse.pinned.length; i++){
+    const got = ex.pinned[i], want = cse.pinned[i];
+    rel(got.hz,          want.hz,          9, `${tag}: pinned mode ${i+1}`);
+    rel(got.hzTruncated, want.hzTruncated, 9, `${tag}: pinned mode ${i+1} before extrapolation`);
+    rel(got.kTanhEff,    want.kTanhEff,    9, `${tag}: pinned mode ${i+1} modal k tanh(kh)`);
+    // extrapolation must MOVE the answer and move it the right way: the
+    // truncated root descends to the limit, so the step is negative
+    ok(got.richardsonStep < 0,
+       `${tag}: mode ${i+1} converges from above`, `step ${got.richardsonStep}`);
+    ok(got.hz < got.hzTruncated,
+       `${tag}: extrapolation lowers mode ${i+1} toward the limit`);
+  }
+  /* The extrapolant must be near the converged value, not merely
+     self-consistent, so it is compared against an N=1024 extrapolant computed
+     in scipy. Two claims, both measured rather than picked:
+
+       - the envelope. Across these eight cases the worst extrapolated error is
+         6.55e-6 (m=10, mode 3) and the worst TRUNCATED error is 7.36e-5, so
+         1e-5 is the envelope the method actually holds to at N=128. It is not
+         a tolerance standing in for a wrong answer; raising the basis tightens
+         it, on the N^-2 rate the extrapolation is built on.
+       - the gain, which is the real claim. Extrapolation must beat the
+         truncated root by at least a factor of ten in EVERY case. Measured:
+         184x at m=1 falling to 11.2x at m=10, because the C/N^2 constant grows
+         with the angular order. That fall-off is why the bound above is 1e-5
+         and not 1e-7, and why high m wants a larger basis. */
+  eq(ex.pinned.length >= cse.convergedHz.length, true,
+     `${tag}: enough pinned roots returned to compare every converged limit`);
+  if (ex.pinned.length < cse.convergedHz.length) throw new Error(
+    `${tag}: ${ex.pinned.length} pinned roots against ${cse.convergedHz.length} `
+    + `converged limits. Refusing to compare the prefix.`);
+  for (let i = 0; i < cse.convergedHz.length; i++){
+    const lim = cse.convergedHz[i];
+    const eEx  = Math.abs(ex.pinned[i].hz - lim)/lim;
+    const eRaw = Math.abs(ex.pinned[i].hzTruncated - lim)/lim;
+    ok(eEx < 1e-5, `${tag}: mode ${i+1} is within 1e-5 of the N=1024 limit`,
+       `got ${ex.pinned[i].hz}, limit ${lim}, rel ${eEx.toExponential(2)}`);
+    ok(eRaw/eEx > 10,
+       `${tag}: extrapolation beats the truncated root tenfold on mode ${i+1}`,
+       `truncated ${eRaw.toExponential(2)}, extrapolated ${eEx.toExponential(2)}, ` +
+       `gain ${(eRaw/eEx).toFixed(1)}x`);
+  }
+  /* The reported radial index, checked against the FREE spectrum rather than
+     against itself. Asserting state.radial.n === spectrum.index is
+     self-consistency: injecting a uniform off-by-one (index: i instead of
+     i + 1) left both sides equally wrong and the suite green, which is the
+     regeneration test earning its place. The index of a pinned root is the
+     number of free roots strictly below it -- countable from freeW2, which the
+     index assignment never touches. */
+  ok(raw.pinned.length > 0, `${tag}: the pinned spectrum is non-empty`,
+     `${raw.pinned.length}`);
+  for (const pm of raw.pinned){
+    let below = 0;
+    for (const w of raw.freeW2) if (w < pm.w2) below++;
+    eq(pm.index, below,
+       `${tag}: root at ${pm.hz.toFixed(4)} Hz reports the count of free roots below it`);
+    ok(pm.index >= 1, `${tag}: and that count is at least one`, `index ${pm.index}`);
+  }
+  /* Exactly one root per interval, which is WHY the sign-change guard in the
+     solver is unreachable: every c_n is positive, so the secular function runs
+     monotonically from -inf to +inf between consecutive poles and crosses zero
+     once in each. Removing that guard changed nothing and the suite stayed
+     green -- correct, and this is the property that makes it so. Asking for
+     basisN roots must therefore yield basisN - 1. */
+  {
+    const all = K.pinnedEdgeSpectrum(m, R, sg, rh, h, basisN, basisN);
+    eq(all.pinned.length, basisN - 1,
+       `${tag}: one root in every one of the ${basisN - 1} intervals`);
+    for (let i = 1; i < all.pinned.length; i++)
+      ok(all.pinned[i].w2 > all.pinned[i-1].w2,
+         `${tag}: the root sequence is strictly increasing at ${i}`);
+  }
+  // Rayleigh: a constraint raises every eigenvalue and the result strictly
+  // interlaces the unconstrained spectrum. This is the structural property the
+  // whole construction stands on, so it is asserted, not assumed.
+  ok(raw.pinned.length >= 5, `${tag}: at least five pinned roots to interlace`,
+     `${raw.pinned.length}`);
+  if (raw.pinned.length < 5) throw new Error(
+    `${tag}: ${raw.pinned.length} pinned roots, need five to check interlacing.`);
+  for (let i = 0; i < 5; i++){
+    const f0 = Math.sqrt(raw.freeW2[i])/(2*Math.PI);
+    const f1 = Math.sqrt(raw.freeW2[i+1])/(2*Math.PI);
+    ok(raw.pinned[i].hz > f0 && raw.pinned[i].hz < f1,
+       `${tag}: pinned mode ${i+1} lies strictly between free modes ${i+1} and ${i+2}`,
+       `${f0} < ${raw.pinned[i].hz} < ${f1}`);
+  }
+  // eta(R) = 0 -- the constraint the whole thing exists to impose. It holds by
+  // construction (the wall sum IS the secular function), so it must hold to
+  // machine precision against the largest single term, not merely be small.
+  ok(raw.pinned.length >= 4, `${tag}: four pinned roots for the wall residual`,
+     `${raw.pinned.length}`);
+  for (const pm of raw.pinned.slice(0, 4))
+    ok(Math.abs(pm.wallResidual) < 1e-12*pm.wallScale,
+       `${tag}: eta(R)=0 at ${pm.hz.toFixed(4)} Hz`,
+       `residual ${pm.wallResidual.toExponential(3)} against largest term ` +
+       `${pm.wallScale.toExponential(3)} — ratio ` +
+       `${(Math.abs(pm.wallResidual)/pm.wallScale).toExponential(2)}`);
+  // the modal projection of k tanh(kh) must lie inside the basis range it
+  // averages, or it is not a weighted mean of anything
+  ok(raw.pinned.length >= 3, `${tag}: three pinned roots for the kTanhEff bound`,
+     `${raw.pinned.length}`);
+  for (const pm of raw.pinned.slice(0, 3)){
+    const kt = raw.freeK.map(kk => kk*Math.tanh(kk*h));
+    ok(pm.kTanhEff > Math.min(...kt) && pm.kTanhEff < Math.max(...kt),
+       `${tag}: modal k tanh(kh) at ${pm.hz.toFixed(3)} Hz is inside the basis range`,
+       `${pm.kTanhEff}`);
+    // kEquiv must SOLVE kEquiv*tanh(kEquiv*h) = kTanhEff, not approximate it.
+    // The previous expression was kTanhEff/tanh(kTanhEff*h), a single
+    // fixed-point substitution: exact as h grows (tanh -> 1) and badly wrong
+    // as h shrinks. At h = 1 mm it returned 1067.3 where the true inverse is
+    // 727.8, an 86% error in k tanh(kh) and 4.6x in the k^4 plate term. No
+    // assertion here pinned kEquiv, which is why it survived; this one states
+    // the defining relation itself, so no depth can hide a wrong inverse.
+    const resid = Math.abs(pm.kEquiv*Math.tanh(pm.kEquiv*h)/pm.kTanhEff - 1);
+    ok(resid < 1e-14,
+       `${tag}: kEquiv inverts k tanh(kh) at ${pm.hz.toFixed(3)} Hz`,
+       `kEquiv ${pm.kEquiv} gives ${pm.kEquiv*Math.tanh(pm.kEquiv*h)} ` +
+       `against kTanhEff ${pm.kTanhEff} — relative ${resid.toExponential(2)}`);
+  }
+}
+/* The truncation guard. What it protects against is real and is demonstrated
+   here directly: jpZeros with a hint of 0 scans only to x=40 and returns about
+   a dozen zeros of J'_0 rather than the 64 asked for, and a secular sum over
+   that basis converges to the wrong roots instead of failing. The guard itself
+   is defensive and NOT reachable through pinnedEdgeSpectrum, because that
+   function computes its own hint (m + 3.2N) and the hint is adequate -- which
+   is the property asserted below, for every basis the suite uses. Forcing the
+   guard to fire needs a basis so large the scan runs to x ~ 27000, which is
+   too slow to sit in this suite; it is kept as insurance and labelled as such
+   rather than claimed to be a tested gate. Regeneration-tested and confirmed:
+   deleting the guard leaves the suite green, exactly because nothing reaches
+   it. */
+{
+  const starved = K.jpZeros(0, 64, 0);
+  ok(starved.length < 64,
+     'a zero hint really does starve the basis (what the guard exists for)',
+     `asked 64, got ${starved.length}`);
+  for (const cse of REF.pinnedEdge){
+    const full = K.jpZeros(cse.m, cse.basisN, cse.m + 3.2*cse.basisN);
+    eq(full.length, cse.basisN,
+       `the computed hint supplies a full basis at m=${cse.m}, N=${cse.basisN}`);
+    const half = K.jpZeros(cse.m, cse.basisN/2, cse.m + 3.2*cse.basisN/2);
+    eq(half.length, cse.basisN/2,
+       `and at the half basis used for extrapolation, m=${cse.m}`);
+  }
+}
+// mathieuKT is the same analysis the free path runs, expressed in k tanh(kh)
+for (const [w0, g, acc, k, h, wd] of [[300, 3, 8, 1156, 0.002, 600], [900, 5, 40, 400, 0.005, 1800]]){
+  const a = K.mathieu(w0, g, acc, k, h, wd);
+  const b = K.mathieuKT(w0, g, acc, k*Math.tanh(k*h), wd);
+  rel(b.growth, a.growth, 15, 'mathieuKT reproduces mathieu exactly (growth)');
+  rel(b.eps, a.eps, 15, 'mathieuKT reproduces mathieu exactly (eps)');
+  rel(b.accelThreshold, a.accelThreshold, 15, 'mathieuKT reproduces mathieu exactly (threshold)');
+}
+
+/* ── 8. fluid-loaded plate ──────────────────────────────────────────────── */
+section('8. fluid-loaded Kirchhoff-Love base');
+{
+  const k = 1156.36, w = 2*Math.PI*111, rhoW = K.density(20), h = 0.002;
+  const p = K.plateTransfer(k, w, rhoW, h);
+  const D = K.STONE.E*K.STONE.thickness**3/(12*(1 - K.STONE.poisson**2));
+  rel(p.D, D, 15, 'D = E t^3 / (12(1-nu^2))');
+  rel(p.added, rhoW/(k*Math.tanh(k*h)), 15, 'added mass is rho_w/(k tanh kh)');
+  rel(p.stiff, D*k**4, 14, 'stiffness is D k^4');
+  rel(p.inert, w*w*(K.STONE.density*K.STONE.thickness + p.added), 14,
+      'inertia carries plate mass plus added mass');
+  // The magnitude is fully determined, so it is pinned rather than merely
+  // checked for being finite. The loss term was untested until now.
+  const loss = 2*K.STONE.lossFactor*Math.sqrt(Math.abs(p.stiff*p.inert));
+  rel(p.magnitude, 1/Math.hypot(p.stiff - p.inert, loss), 14,
+      'magnitude is 1/hypot(stiff - inert, loss) with the hysteretic loss term');
+  ok(p.magnitude > 0 && isFinite(p.magnitude), 'transfer magnitude is finite and positive');
+  // and the loss term must be load-bearing: with zero damping the transfer at
+  // resonance would be singular, so it cannot be quietly absent
+  ok(loss > 0, 'the hysteretic loss term is nonzero', `loss = ${loss}`);
+  // At this k the base is stiffness-controlled -- D k^4 exceeds the inertia by
+  // nine decades -- so fluid loading is invisible HERE. That is a result, not
+  // a reason to skip the check: it is tested at the wavenumber where the two
+  // balance, which is where the transfer actually resonates.
+  ok(p.stiff/p.inert > 1e6, 'at kR ~ 14 the base is stiffness-controlled',
+     `stiff/inert = ${(p.stiff/p.inert).toExponential(2)}`);
+  {
+    // solve D k^4 = w^2 (rho_s t + rho_w/(k tanh kh)) for w at fixed k
+    const kr = 200, rw = K.density(20), hh = 0.002;
+    const add = rw/(kr*Math.tanh(kr*hh));
+    const wRes = Math.sqrt(D*kr**4/(K.STONE.density*K.STONE.thickness + add));
+    const at  = K.plateTransfer(kr, wRes,      rw, hh);
+    const off = K.plateTransfer(kr, wRes*1.35, rw, hh);
+    rel(at.stiff, at.inert, 12, 'at the plate resonance, stiffness equals inertia');
+    ok(at.magnitude > off.magnitude*3,
+       'the transfer peaks at the plate resonance',
+       `on ${at.magnitude.toExponential(3)} vs off ${off.magnitude.toExponential(3)}`);
+    // there, dropping the added mass moves the resonance measurably
+    const wBare = Math.sqrt(D*kr**4/(K.STONE.density*K.STONE.thickness));
+    ok(Math.abs(wBare - wRes)/wRes > 0.01,
+       'fluid loading shifts the plate resonance by more than a percent',
+       `${wRes.toFixed(2)} loaded vs ${wBare.toFixed(2)} dry`);
+  }
+}
+
+/* ── 9. elliptic integral and boundary set ──────────────────────────────── */
+section('9. elliptic integral and the ten walls');
+for (const { m, E } of REF.ellipseE) rel(K.ellipseE(m), E, 12, `E(m=${m.toFixed(6)})`);
+{
+  ok(K.BOUNDARY.length === 10, 'ten walls are carried', `got ${K.BOUNDARY.length}`);
+  const exact = K.BOUNDARY.filter(b => b.pd != null).length;
+  const bounded = K.BOUNDARY.filter(b => b.pdRange).length;
+  eq(exact, 8, 'eight walls have an exact P/D');
+  eq(bounded, 2, 'two walls (the eggs) are carried as an interval');
+  // the convexity bound that refuses Egg II's published divisor
+  rel(K.EGG_II_P, 10*Math.PI + 10 - 8*Math.atan(5/4), 15, 'Egg II perimeter from its formula');
+  ok(K.EGG_II_P/20 < 2, "Egg II's published divisor 20 violates P/D >= 2",
+     `P/D = ${(K.EGG_II_P/20).toFixed(4)}`);
+  ok(K.EGG_I_P/18 >= 2 && K.EGG_I_P/18 <= Math.PI,
+     "Egg I's divisor 18 is inside [2, pi] but unsourced",
+     `P/D = ${(K.EGG_I_P/18).toFixed(4)}`);
+  const b = K.boundaryImpedance(0.37, 1.1);
+  ok(b.impedanceLo <= b.impedance && b.impedance <= b.impedanceHi,
+     'the impedance interval brackets its midpoint',
+     `${b.impedanceLo} <= ${b.impedance} <= ${b.impedanceHi}`);
+  ok(b.impedanceHi > b.impedanceLo, 'the eggs make it a genuine interval, not a point',
+     `width ${(b.impedanceHi - b.impedanceLo).toExponential(3)}`);
+  eq(b.walls, 10, 'all ten walls entered the product');
+  eq(b.exact, 8, 'eight entered exactly');
+  // R4 reinforcement is a product of Lorentzians, so strictly decreasing in r
+  ok(K.reinforcedR4(0.5) > K.reinforcedR4(1.5) && K.reinforcedR4(1.5) > K.reinforcedR4(3.0),
+     'R4 reinforcement decreases with source distance');
+  rel(K.reinforcedR4(0), 1, 15, 'R4 reinforcement is 1 at the source');
+}
+
+/* ── 10. atlas folding ──────────────────────────────────────────────────── */
+section('10. atlas priors');
+{
+  // 56 Hz medium is unanimous 6/6/6 -- confidence 1, no competitor
+  const r56 = K.atlasAt('medium', 56);
+  ok(r56 !== null, 'atlas has 56 Hz for the medium cell');
+  const p56 = K.foldPrior(r56);
+  eq(p56.fold, 6, '56 Hz medium folds to 6');
+  rel(p56.confidence, 1, 15, '56 Hz confidence is exactly 1 (unanimous)');
+  eq(p56.competing.length, 0, '56 Hz has no competing state');
+  // 115 Hz medium is 10/16/10 -- 2 of 3, with 16 competing at 1/3
+  const p115 = K.foldPrior(K.atlasAt('medium', 115));
+  eq(p115.fold, 10, '115 Hz medium folds to 10');
+  rel(p115.confidence, 2/3, 14, '115 Hz confidence is 2/3');
+  eq(p115.competing.length, 1, '115 Hz has one competing state');
+  eq(p115.competing[0].fold, 16, '115 Hz competitor is 16');
+  // a split label 2/4 must split its weight, not count twice
+  const p148 = K.foldPrior(K.atlasAt('small', 148));
+  ok(p148.confidence <= 0.5 + 1e-12, 'a lone 2/4 split label gives at most half weight',
+     `confidence ${p148.confidence}`);
+  ok(K.transitionRisk(p148, K.atlasAt('small', 148), 148) >= 0.5,
+     'a split label raises transition risk to at least 0.5');
+  // unclassified must report as unclassified, not as a fold
+  const p52 = K.foldPrior(K.atlasAt('medium', 52));
+  ok(p52.unclassified === true, '52 Hz medium is unanimous-unclassified');
+  eq(K.transitionRisk(p52, K.atlasAt('medium', 52), 52), 1, 'unclassified carries full risk');
+  // confidence is over ALL replicates including unclassified ones
+  const p50 = K.foldPrior(K.atlasAt('medium', 50));   // ["8","unclassified","unclassified"]
+  rel(p50.confidence, 1/3, 14, '50 Hz confidence counts the unclassified replicates');
+}
+
+/* ── 11. the assembled state ────────────────────────────────────────────── */
+section('11. resolvePatternState end to end');
+function state(over = {}){
+  return K.resolvePatternState({ cellKey:'medium', f:111, amplitudeMv:200, tempC:20,
+    depthMm:2, rim:'free', tSec:0, tfeSec:0, driveR:0, ...over });
+}
+{
+  const s = state();
+  rel(s.wavenumber, REF.dispersion.find(d => d.f === 111).k, 8,
+      'assembled wavenumber matches brentq');
+  rel(s.wavelength, 2*Math.PI/s.wavenumber, 15, 'wavelength is 2pi/k');
+  rel(s.responseHz, 111/2, 15, 'the response is subharmonic');
+  // The lineage spec's 48 is sixteen angular orders by three radial roots --
+  // a CAP, not a count that can always be reached. At 111 Hz the rim argument
+  // is kR = 14.02, so m only runs 0..14: fifteen orders exist and forty-five
+  // modes is the whole field, not a truncation of it.
+  eq(s.radialRoots, 3, 'three radial roots per order');
+  const mMax = Math.floor(s.wavenumber*(K.CELLS.medium.d/2000));
+  eq(mMax, 14, 'kR = 14.02 at 111 Hz, so m runs 0..14');
+  eq(s.angularOrders, 15, 'all fifteen available angular orders are kept at 111 Hz');
+  ok(s.angularOrders <= 16, 'the cap of sixteen is respected');
+  eq(s.ordersScanned, s.angularOrders*s.radialRoots,
+     'the assembled field is orders x roots with no root dropped');
+  ok(s.nearestTheoryModes.length === 4, 'four nearest theory modes reported');
+  // sorted by growth, descending -- the defect that once made the "strongest"
+  // modes simply the lowest angular orders present
+  for (let i = 1; i < s.nearestTheoryModes.length; i++)
+    ok(s.nearestTheoryModes[i-1].growth >= s.nearestTheoryModes[i].growth - 1e-12,
+       `theory modes sorted by growth at index ${i}`,
+       `${s.nearestTheoryModes[i-1].growth} then ${s.nearestTheoryModes[i].growth}`);
+  // every reported mode must sit on a true zero of J', and its radial index
+  // must be the honest count, never a McMahon inverse (which gives -16 at m=150)
+  for (const t of s.nearestTheoryModes){
+    ok(Math.abs(K.besselJp(t.m, t.jp)) < 1e-8,
+       `mode m=${t.m} sits on a true J' zero`, `J' = ${K.besselJp(t.m, t.jp).toExponential(3)}`);
+    ok(Number.isInteger(t.n) && t.n >= 1,
+       `mode m=${t.m} has a positive integer radial index`, `n = ${t.n}`);
+    eq(t.n, K.radialIndexOf(t.m, t.jp),
+       `mode m=${t.m} reports the counted radial index`);
+    rel(t.k, t.jp/(K.CELLS.medium.d/2000), 13, `mode m=${t.m}: k = j'/R`);
+  }
+  // competition covers the whole field and ranks what survives
+  const c = s.competition;
+  ok(c && c.size === s.ordersScanned, 'competition covers every assembled mode',
+     `${c && c.size} vs ${s.ordersScanned}`);
+  ok(c.survivors.length >= 1, 'at least one mode survives the competition');
+  ok(c.survivors.length <= c.size, 'survivors do not exceed the field');
+  eq(c.killed, c.size - c.survivors.length, 'killed count is consistent');
+  for (let i = 1; i < c.survivors.length; i++)
+    ok(c.survivors[i-1].amp >= c.survivors[i].amp, `survivors ranked by amplitude at ${i}`);
+  for (const v of c.survivors) ok(v.amp > 0, `survivor m=${v.m} has positive amplitude`);
+  ok(s.growingRetained === s.unstableCount,
+     'every growing mode is retained, none collapsed back to onset');
+  // the surface is one of two discrete phases -- never a slow envelope
+  ok(s.phase === 1 || s.phase === -1 || Math.abs(Math.abs(s.phase) - 1) < 1e-9,
+     'at t=0 the phase is a unit sign, not a fractional envelope', `phase = ${s.phase}`);
+  /* The drawable state set at 111 Hz is fixed by the atlas, not by theory:
+     the medium cell's 111 Hz record is ["10","10","2"], so 10-fold carries 2 of
+     3 replicates and 2-fold carries 1. Both clear the 0.15 share floor, so two
+     states are drawn, and the paper's convention makes fold = 2m. */
+  eq(s.states.length, 2, '111 Hz draws exactly two states');
+  eq(s.states.map(x => x.fold).join(','), '10,2', 'folds are 10 then 2');
+  eq(s.states.map(x => x.m).join(','), '5,1', 'and m = fold/2 is 5 then 1');
+  rel(s.states[0].weight, 2/3, 14, '10-fold carries 2 of 3 replicates');
+  rel(s.states[1].weight, 1/3, 14, '2-fold carries 1 of 3');
+  for (const st of s.states){
+    ok(Math.abs(K.besselJp(st.m, st.radial.jp)) < 1e-8,
+       `state fold=${st.fold} sits on a true J' zero`);
+    eq(st.radial.n, K.radialIndexOf(st.m, st.radial.jp),
+       `state fold=${st.fold} reports the counted radial index`);
+  }
+  // above the atlas the state set comes from the competition instead, and says so
+  {
+    const t = state({ f: 260, amplitudeMv: 430 });
+    ok(t.states.every(x => x.theoryOnly === true),
+       'above 199 Hz every state is flagged theory-only');
+    ok(t.warnings.some(w => /[Tt]heory only|least-damped/.test(w.text)),
+       'and the page says the atlas has run out');
+  }
+}
+// 5000 Hz. 200 mV is 0.8 g and eps = 4.8e-4 against eps_c = 0.103 there, so
+// that drive is far SUB-critical at a 2500 Hz response -- correctly, since eps
+// falls as 1/omega_0^2. Crossing the tongue at 5 kHz takes about 250 g, which
+// is 63000 mV at the declared 0.004 g/mV. Both regimes are checked.
+{
+  const quiet = state({ f: 5000, tempC: 25, depthMm: 1 });
+  ok(quiet.onset.eps < quiet.onset.epsThreshold,
+     '200 mV is sub-critical at 5 kHz', `eps ${quiet.onset.eps} vs ${quiet.onset.epsThreshold}`);
+  eq(quiet.unstableCount, 0, 'a sub-critical drive grows nothing at 5 kHz');
+}
+{
+  const s = state({ f: 5000, tempC: 25, depthMm: 1, amplitudeMv: 63000 });
+  const xStar = s.wavenumber*(K.CELLS.medium.d/2000);
+  ok(xStar > 150, `rim argument at 5 kHz is kR = ${xStar.toFixed(1)}`);
+  const highest = Math.max(...s.nearestTheoryModes.map(t => t.m));
+  ok(highest > 20, 'high angular orders are reached at 5 kHz, not clipped low',
+     `highest reported m = ${highest}`);
+  ok(s.unstableCount > 20,
+     'a supercritical drive retains many growing modes, not just the near-onset one',
+     `${s.unstableCount} growing of ${s.ordersScanned}`);
+  eq(s.growingRetained, s.unstableCount,
+     'every growing mode at 5 kHz is retained, none collapsed back to onset');
+  eq(s.angularOrders, 16, 'at 5 kHz the sixteen-order cap is the binding limit');
+  eq(s.ordersScanned, 48, 'forty-eight modes -- the lineage spec in full');
+  ok(s.aboveAtlas === true, '5 kHz is flagged as beyond the empirical atlas');
+  // and the onset must be far supercritical there
+  ok(s.onset.eps > s.onset.epsThreshold,
+     'the drive is above the Mathieu threshold at 5 kHz',
+     `eps ${s.onset.eps} vs eps_c ${s.onset.epsThreshold}`);
+}
+/* The pinned warning used to be HARD, because it was admitting that the mode
+   drawn was the free basis rather than a pinned solve. That is no longer true,
+   so the assertion changed with the behaviour: it is now a soft note saying
+   what IS solved and what is not. The replacement assertions are in the
+   end-to-end block above -- the states must actually be edge-constrained, the
+   text must not claim the hysteresis model, and it must no longer say the mode
+   shown is the free basis. This one only checks that the rim still explains
+   itself at all. */
+{
+  const s = state({ rim: 'pinned' });
+  ok(s.warnings.some(w => /pinned contact line/i.test(w.text)),
+     'a pinned contact line still explains itself');
+  ok(!s.warnings.some(w => /not a pinned eigenmode solve/.test(w.text)),
+     'and no longer disclaims being a solve');
+}
+// the large cell above 65 Hz has no atlas morphology and must say so
+{
+  const s = state({ cellKey: 'large', f: 111 });
+  ok(s.warnings.some(w => w.hard && /unstable|indistinct/i.test(w.text)),
+     'the large cell above 65 Hz warns hard');
+}
+// below the reported minimum drive, and above the overdrive limit
+{
+  ok(state({ amplitudeMv: K.MIN_MV - 1 }).warnings.some(w => /minimum drive/i.test(w.text)),
+     'a sub-minimum drive is flagged');
+  ok(state({ amplitudeMv: K.OVERDRIVE_MV + 1 }).warnings.some(w => /[Oo]verdriven/.test(w.text)),
+     'an overdriven drive is flagged');
+}
+/* The competition outcome itself, pinned at the two drives where the angular
+   quartic's factor of two changed it. These are the assertions that would have
+   caught that defect in the only place it matters -- what the page draws.
+   Doubling every m != 0 overlap leaves m = 0 under-penalised, so at 184 Hz an
+   axisymmetric mode that the correct matrix kills survives, and at 70 Hz the
+   m = 2 / m = 5 order inverts. Both are deterministic: the amplitudes come
+   from a fixed-seed ODE integrated to steady state. */
+/* WHERE THE DAMPING FIX CHANGES WHAT THE PAGE DRAWS.
+
+   A 3-10% threshold shift is only worth making if it moves the output, and it
+   does. Scanning 50-400 Hz at 229 mV on the medium cell, the unstable-mode
+   count changes at eight frequencies, and the onset cut-off -- the drive above
+   which nothing reaches Faraday onset -- moves from 204 Hz to 210 Hz.
+
+   203 Hz is pinned here because it is the sharpest case: eps/eps_c was 1.0030
+   with the asymptotic damping and is 1.0548 with the exact root, and the page
+   went from showing NO mode at onset to showing three. A frequency that sat
+   just the wrong side of a threshold that was itself 5% too high is exactly the
+   kind of thing this fix exists to correct, and exactly the kind of thing that
+   silently regresses. */
+{
+  const s = state({ f: 203, amplitudeMv: 430 });
+  ok(s.onset.eps/s.onset.epsThreshold > 1,
+     '203 Hz at 430 mV is above onset', `eps/eps_c = ${(s.onset.eps/s.onset.epsThreshold).toFixed(4)}`);
+  const t = state({ f: 203, amplitudeMv: 229 });
+  ok(t.onset.eps/t.onset.epsThreshold > 1.02,
+     '203 Hz at 229 mV clears onset by more than 2%, which the asymptotic damping did not',
+     `eps/eps_c = ${(t.onset.eps/t.onset.epsThreshold).toFixed(4)}`);
+  ok(t.unstableCount > 0,
+     'and so at least one mode is unstable there, where the page used to show none',
+     `${t.unstableCount} unstable of ${t.ordersScanned}`);
+}
+
+/* THE SATURATED AMPLITUDES MOVED WHEN THE DAMPING MODEL DID, and they had to.
+   Replacing Lamb's asymptotic bulk rate with the exact free-surface root lowers
+   gamma by 4.8% at 184 Hz and 3.4% at 70 Hz, which raises the growth rate and
+   so raises the amplitude a cubic saturation settles at. Measured:
+
+       184 Hz  m=13   2.21260 -> 2.25629   (+1.97%)
+       184 Hz  m= 7   2.13145 -> 2.18436   (+2.48%)
+        70 Hz  m= 0   2.92950 -> 2.93469   (+0.18%)
+        70 Hz  m= 2   2.50716 -> 2.51282   (+0.23%)
+        70 Hz  m= 5   2.49881 -> 2.50953   (+0.43%)
+
+   The 70 Hz shifts are small because 430 mV is far above threshold there, so
+   the growth rate is dominated by the forcing rather than by gamma.
+
+   What these pins exist to protect is the competition OUTCOME -- which modes
+   survive -- and that is unchanged: 13,7 and 0,2,5 as before, with the
+   axisymmetric mode still killed at 184 Hz. The amplitudes are the quantitative
+   record alongside it, and they are re-pinned here rather than loosened, so the
+   next model change has to come and say so too. */
+{
+  const s = state({ f: 184, amplitudeMv: 430 });
+  const m = s.competition.survivors.map(v => v.m);
+  eq(m.join(','), '13,7', '184 Hz at 430 mV: exactly m=13 then m=7 survive');
+  ok(!m.includes(0),
+     '184 Hz: the axisymmetric mode is killed, not kept by an under-penalised overlap',
+     `survivors ${m.join(',')}`);
+  rel(s.competition.survivors[0].amp, 2.25629, 4, '184 Hz: m=13 saturates at 2.2563');
+  rel(s.competition.survivors[1].amp, 2.18436, 4, '184 Hz: m=7 saturates at 2.1844');
+}
+{
+  const s = state({ f: 70, amplitudeMv: 430 });
+  const m = s.competition.survivors.map(v => v.m);
+  eq(m.join(','), '0,2,5', '70 Hz at 430 mV: m=0, then m=2, then m=5');
+  rel(s.competition.survivors[0].amp, 2.93469, 4, '70 Hz: m=0 saturates at 2.9347');
+  rel(s.competition.survivors[1].amp, 2.51282, 4, '70 Hz: m=2 saturates at 2.5128');
+  rel(s.competition.survivors[2].amp, 2.50953, 4, '70 Hz: m=5 saturates at 2.5095');
+  ok(s.competition.survivors[1].amp > s.competition.survivors[2].amp,
+     '70 Hz: m=2 outranks m=5 (the doubled matrix inverts this)',
+     `m=2 ${s.competition.survivors[1].amp}, m=5 ${s.competition.survivors[2].amp}`);
+}
+
+/* The pinned control, end to end. The point of the solver is that this
+   control does what it says, so what is asserted here is that the states the
+   page DRAWS are edge-constrained -- not merely that a spectrum exists
+   somewhere. 111 Hz is deliberate: the medium cell has an atlas record there,
+   so the states come from the fold prior rather than from the competition, and
+   that was the path still handing back free modes after the solver was wired
+   into the mode assembly. */
+{
+  const fr = state({ rim: 'free',   depthMm: 3 });
+  const pn = state({ rim: 'pinned', depthMm: 3 });
+  eq(pn.states.length, fr.states.length,
+     'pinning does not change how many states the atlas prior yields');
+  for (const st of pn.states){
+    ok(!!st.radial.pinned, `pinned rim: the ${st.fold}-fold state is edge-constrained`,
+       `radial.pinned = ${st.radial.pinned}`);
+    eq(st.radial.jp, null, `pinned rim: the ${st.fold}-fold state sits on no J' zero`);
+    ok(Number.isInteger(st.radial.n) && st.radial.n >= 1,
+       `pinned rim: the ${st.fold}-fold state has an interlacing index`, `n = ${st.radial.n}`);
+    eq(st.radial.pinnedBasis, 128, 'pinned rim: the 128-term basis is recorded');
+  }
+  for (const st of fr.states){
+    ok(!st.radial.pinned, `free rim: the ${st.fold}-fold state is NOT edge-constrained`);
+    ok(st.radial.jp > 0, `free rim: the ${st.fold}-fold state sits on a J' zero`);
+    ok(Math.abs(K.besselJp(st.m, st.radial.jp)) < 1e-8,
+       `free rim: and it is a true zero`);
+  }
+  /* I first asserted here that pinning raises the drawn frequency, on
+     Rayleigh's theorem. That was wrong, and the measurement says so: at
+     111 Hz the fold-10 state reads 55.802 Hz free and 49.301 Hz pinned.
+
+     Rayleigh raises eigenvalues at MATCHED INDEX, and neither path selects by
+     index -- both take the root nearest resonance, which is what the free path
+     has always done through jpZeroNear(m, xStar). Because a pinned root sits
+     above the free root of the same index, the pinned root nearest a fixed
+     target is generally a LOWER index than the free one, and the selected
+     frequency can move either way. 49.301 Hz is pinned index 2.
+
+     The index-matched statement is the real one and it is asserted in section
+     7b, where every pinned root is required to lie strictly between the free
+     roots bracketing it -- including at m = 5. What belongs here instead is
+     the selection property: the drawn root is the nearest available one. */
+  for (let i = 0; i < Math.min(fr.states.length, pn.states.length); i++)
+    eq(pn.states[i].fold, fr.states[i].fold, `state ${i}: the same fold in both rims`);
+  {
+    const R = K.CELLS.medium.d/2000, target = 2*Math.PI*(111/2);
+    for (const st of pn.states){
+      const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20),
+                                          K.density(20), 0.003, 128, 8);
+      let best = sp.pinned[0];
+      for (const r of sp.pinned)
+        if (Math.abs(r.omega - target) < Math.abs(best.omega - target)) best = r;
+      rel(st.radial.hz, best.hz, 12,
+          `fold ${st.fold}: the drawn root is the pinned root nearest resonance`);
+    }
+  }
+  // and the drawn frequency must BE a root of the pinned spectrum for that m,
+  // not merely some larger number
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes to check',
+     `${pn.states.length}`);
+  for (const st of pn.states){
+    const R = K.CELLS.medium.d/2000;
+    const sp = K.pinnedEdgeExtrapolated(st.m, R, K.surfaceTension(20), K.density(20),
+                                        0.003, 128, 8);
+    const hit = sp.pinned.find(x => Math.abs(x.hz - st.radial.hz) < 1e-9*st.radial.hz);
+    ok(!!hit, `fold ${st.fold}: the drawn frequency is a root of the m=${st.m} pinned spectrum`,
+       `drawn ${st.radial.hz}, roots ${sp.pinned.map(x => x.hz.toFixed(4)).join(', ')}`);
+    if (hit) eq(st.radial.n, hit.index, `fold ${st.fold}: and its interlacing index matches`);
+  }
+  // the warning must now describe a solve, not a diagnostic, and must not
+  // claim the hysteresis model it does not implement
+  const w = pn.warnings.find(x => /[Pp]inned contact line/.test(x.text));
+  ok(!!w, 'pinned rim still says what it is doing');
+  ok(w && /solved/.test(w.text) && !/not a pinned eigenmode solve/.test(w.text),
+     'and it no longer says the mode shown is the free basis');
+  ok(w && /LIMIT/.test(w.text) && /hysteresis/.test(w.text),
+     'and it states that finite mobility and hysteresis are NOT computed');
+  ok(w && w.hard === false, 'so the warning is no longer a hard one');
+}
+/* finestZeroOf. Three resolution gates read it -- the preview, the deck
+   readout and the 4K export -- and two of them read radial.jp directly before
+   it existed, which is null under a pinned rim: the inspector threw on
+   jp.toFixed(5) and the export gate compared a wavelength against null. */
+{
+  const fr = state({ rim: 'free' }), pn = state({ rim: 'pinned', depthMm: 3 });
+  ok(fr.states.length > 0, 'the free state carries drawn modes to check',
+     `${fr.states.length}`);
+  for (const st of fr.states)
+    eq(K.finestZeroOf(st.radial), st.radial.jp,
+       `finestZeroOf is the J' zero itself for a free mode (fold ${st.fold})`);
+  ok(pn.states.length > 0, 'the pinned state carries drawn modes for finestZeroOf',
+     `${pn.states.length}`);
+  for (const st of pn.states){
+    const v = K.finestZeroOf(st.radial);
+    ok(isFinite(v) && v > 0, `finestZeroOf is finite and positive for fold ${st.fold}`, `${v}`);
+    const zs = st.radial.pinnedZeros;
+    ok(v <= zs[zs.length-1] && v >= zs[0],
+       `finestZeroOf for fold ${st.fold} lies inside the basis`, `${v}`);
+    // it must exceed the mode's own equivalent wavenumber scale: the finest
+    // structure is finer than the mean, or it is not the finest
+    ok(v > st.radial.k*(K.CELLS.medium.d/2000),
+       `finestZeroOf for fold ${st.fold} is finer than the modal mean`,
+       `finest ${v} vs kR ${st.radial.k*(K.CELLS.medium.d/2000)}`);
+  }
+}
+// The pinned radial profile must vanish at the wall, like the shape table does.
+{
+  const R = K.CELLS.medium.d/2000;
+  const sp = K.pinnedEdgeExtrapolated(2, R, K.surfaceTension(20), K.density(20), 0.003, 128, 2);
+  const prof = K.radialProfilePinned(2, sp.freeZeros, sp.pinned[0].coefficients);
+  let peak = 0;
+  for (let i = 0; i < prof.length; i++) peak = Math.max(peak, Math.abs(prof[i]));
+  ok(peak > 0, 'the pinned radial profile is not identically zero');
+  ok(Math.abs(prof[prof.length-1]) < 1e-12*peak,
+     'the pinned radial profile vanishes at r = R',
+     `edge ${prof[prof.length-1].toExponential(3)} against peak ${peak.toExponential(3)}`);
+  ok(Math.abs(prof[Math.floor(prof.length/2)]) > 1e-3*peak,
+     'and it is nonzero in the interior (it vanishes at the wall, not everywhere)');
+}
+
+// determinism: same inputs, same state
+{
+  const a = state(), b = state();
+  eq(a.ordersScanned, b.ordersScanned, 'mode count is deterministic');
+  rel(a.wavenumber, b.wavenumber, 15, 'wavenumber is deterministic');
+  eq(a.competition.survivors.length, b.competition.survivors.length,
+     'survivor count is deterministic');
+  for (let i = 0; i < a.nearestTheoryModes.length; i++)
+    rel(a.nearestTheoryModes[i].growth, b.nearestTheoryModes[i].growth, 15,
+        `growth at index ${i} is deterministic`);
+}
+// monotone in drive: more acceleration cannot reduce the growth of a fixed mode
+{
+  const lo = state({ amplitudeMv: 120 }), hi = state({ amplitudeMv: 360 });
+  ok(hi.accelAssumed > lo.accelAssumed, 'more mV means more acceleration');
+  ok(hi.onset.growth > lo.onset.growth,
+     'a stronger drive grows the resonant mode faster',
+     `${lo.onset.growth} then ${hi.onset.growth}`);
+  ok(hi.unstableCount >= lo.unstableCount,
+     'a stronger drive destabilises at least as many modes',
+     `${lo.unstableCount} then ${hi.unstableCount}`);
+}
+
+/* ── 12. the exact coupled benchmark ────────────────────────────────────── */
+/* This is the second region of cymatic.html, not the Faraday kernel: a
+   manufactured coupled solution carried in exact rationals, where every local
+   residual is claimed to be ZERO over Q rather than small. Until now it had no
+   coverage at all.
+
+   What this section can and cannot establish, stated plainly, because that
+   distinction is exactly what let the tautologies survive unnoticed.
+
+   Nine of the nineteen terms are zero as a consequence of their own defining
+   lines rather than of the construction being right. solidMomentum and
+   freeSurfaceCurvature are the literal constant Q.ZERO. incompressibility is
+   a + a − 2a, from gradU as written. The three angularMomentum terms are
+   off-diagonal entries of a product of two diagonal matrices. The three
+   fluidMomentum terms subtract a body force b_f that is DEFINED, three lines
+   above, as the convective term it is subtracted from. An edit to those lines
+   would move them; an error in the material law, the closure or the geometry
+   cannot. Asserting them is close to free and it is not coverage.
+
+   The rest is what the four regeneration defects actually moved, and I had
+   two of these wrong before measuring:
+
+     - a wrong sigma_Z exponent  ->  fluidSolidStressMatch[2], storedEnergyRate
+     - a wrong closure constant  ->  fluidSolidStressMatch[0..2],
+                                     freeSurfaceTraction, energyBalance
+     - a wrong geometry moment   ->  NOTHING. All nineteen stay exactly zero,
+                                     which is why the moments are asserted
+                                     separately below
+     - allResidualsZero returning an empty list -> nothing either, except the
+                                     term COUNT, which is the only thing
+                                     standing between a residual that passed
+                                     and a residual that stopped being
+                                     collected
+
+   freeSurfaceTraction and energyBalance had been written off as identities.
+   They are not: both are zero only because a = d/(6 mu), so both go nonzero
+   when that constant is wrong.
+
+   viscousElasticClosure WAS self-cancelling, and the measurement is what
+   showed it. Written as six*mu*f/s − d with f = s*d/(six*mu) it is d − d for
+   any value of six, so it stayed exactly zero under that injection while
+   claiming to be the check on it. It now reads a back out of the stress match
+   -- a = (sigma_s + p)/(2 mu), which is built from P and F and carries no
+   factor of six -- so a wrong constant moves it: measured 37357803/200000000
+   at s = 5/4 under six = 7n, and exactly zero at all four stretches when the
+   constant is right.
+
+   freeSurfaceKinematic and the two kinetic-power terms were not moved by any
+   defect tried here, so nothing below claims they are covered. */
+section('12. exact coupled benchmark (exact rationals over Q)');
+{
+  const { Q, evaluate, allResidualsZero } = B;
+
+  /* The count is asserted beside allZero because "no nonzero residual" is
+     vacuously true of an empty list, and that is not hypothetical here: the
+     page's first walk handled Q values and arrays but not plain objects, so it
+     collected nothing out of r.residuals and reported allZero over zero terms.
+     A count that shrinks is a residual that stopped being collected, and that
+     reads exactly like a residual that passed. */
+  const TERMS = 19;
+  const KEYS = ['incompressibility','fluidMomentum','solidMomentum',
+    'fluidSolidStressMatch','angularMomentum','freeSurfaceKinematic',
+    'freeSurfaceTraction','freeSurfaceCurvature','energyBalance',
+    'storedEnergyRate','viscousElasticClosure','fluidKineticPower',
+    'solidKineticPower'];
+
+  for (const s of ['5/4', '11/8', '3/2', '7/5']){
+    const r = evaluate({ stretch: s });
+    const z = allResidualsZero(r);
+    eq(z.count, TERMS, `s=${s}: all ${TERMS} residual terms were collected`);
+    ok(z.allZero === true, `s=${s}: every residual is exactly zero over Q`,
+       `nonzero: ${z.nonzero.join(', ')}`);
+    ok(r.scope.stretchInRange === true, `s=${s} lies inside the declared interval`);
+    /* det F = 1 exactly. F is diag(s, s, s^-2), so this is a cancellation
+       between three rationals and not a no-op: the stretch is strictly above
+       one at every case here, which is asserted so that a future case pinned
+       at s = 1 cannot make det F = 1 true for free. */
+    ok(r.state.s.cmp(Q.of(1n)) > 0, `s=${s} is genuinely stretched, so det F = 1 is a cancellation`,
+       `s = ${r.state.s}`);
+    eq(r.state.detF.toString(), '1', `s=${s}: det F = 1 exactly (isochoric)`);
+  }
+
+  // every named residual is present. The count catches a term that stops being
+  // collected; this says which one it was.
+  {
+    const res = evaluate({ stretch: '5/4' }).residuals;
+    for (const k of KEYS) ok(res[k] !== undefined, `residual ${k} is present`);
+    eq(Object.keys(res).length, KEYS.length, 'and no residual term beyond those thirteen');
+  }
+
+  /* Geometry. The page integrates the moments from the declared radii and
+     heights rather than writing 31/2 and 7/3 in by hand, so what is asserted
+     is that the integration reproduces the figures the construction is stated
+     over, per the common factor pi: liquid (unit disk, unit height) volume 1,
+     INT(X²+Y²) = 1/2, INT Z² = 1/3; wall 1<r<2 over 0<z<1 giving 3, 15/2, 1;
+     bottom r<2 over −1<z<0 giving 4, 8, 4/3; solid the sum, 7, 31/2, 7/3.
+
+     The page's own comment says no local residual constrains these, and it is
+     right -- every term they enter carries them on BOTH sides, so a wrong
+     moment moves the two together and all nineteen residuals stay exactly
+     zero. Regeneration-tested: turning the radial /2 into /3 leaves allZero
+     true at every stretch and only these assertions go red. They are therefore
+     the whole of the geometry's coverage, not a supplement to it. */
+  {
+    const g = evaluate({ stretch: '11/8' }).geometry;
+    const moment = (region, key, want) =>
+      eq(g[region][key].toString(), want, `geometry: ${region} ${key} = ${want}`);
+    moment('liquid', 'volume',   '1');
+    moment('liquid', 'radial',   '1/2');
+    moment('liquid', 'vertical', '1/3');
+    moment('wall',   'volume',   '3');
+    moment('wall',   'radial',   '15/2');
+    moment('wall',   'vertical', '1');
+    moment('bottom', 'volume',   '4');
+    moment('bottom', 'radial',   '8');
+    moment('bottom', 'vertical', '4/3');
+    moment('solid',  'volume',   '7');
+    moment('solid',  'radial',   '31/2');
+    moment('solid',  'vertical', '7/3');
+    eq(g.totalVolume.toString(), '8', 'geometry: total volume is 1 + 7 = 8');
+  }
+
+  /* Q refuses binary64 on the way in, which is the boundary the whole
+     exactness claim stands on: admit one float anywhere and "exactly zero over
+     the rationals" becomes "zero to within rounding", a different and much
+     weaker statement. An integral float is refused too -- 2 does not get in
+     just because it happens to be representable. */
+  for (const bad of [1.25, 0.5, 2, 0, NaN]){
+    let e = null;
+    try { Q.of(bad); } catch (err) { e = err; }
+    ok(e instanceof TypeError, `Q.of(${bad}) refuses a binary64 input`,
+       `threw ${e === null ? 'nothing' : e.constructor.name}`);
+  }
+  // the second argument is a denominator, not decoration. It was being dropped:
+  // Q.of(8n, 3n) returned 8, and every fractional constant in the energy ledger
+  // was wrong while all nineteen residuals still read zero.
+  eq(Q.of(8n, 3n).toString(), '8/3', 'Q.of(8n,3n) is 8/3, not 8');
+  eq(Q.of(8n).toString(), '8', 'Q.of(8n) is 8');
+  // and the exact routes the TypeError points the caller at must work
+  eq(Q.of('1.25').toString(), '5/4', "Q.of('1.25') reads the decimal exactly");
+  eq(Q.of('5/4').toString(),  '5/4', "Q.of('5/4') reads the fraction");
+  eq(Q.of('-3/9').toString(), '-1/3', 'Q.of normalises sign and gcd');
+
+  /* allResidualsZero refuses an empty collection rather than reporting allZero
+     over nothing, which is what it did when its walk missed plain objects.
+     Both branches are exercised: it refuses the empty case, and it does report
+     a genuine nonzero -- a checker that has only ever returned true is not
+     known to be able to return false. */
+  for (const [label, arg] of [['an empty residual object', { residuals: {} }],
+                              ['only empty containers', { residuals: { a: {}, b: [], c: { d: [] } } }]]){
+    let e = null;
+    try { allResidualsZero(arg); } catch (err) { e = err; }
+    ok(e !== null && /collected no residuals/.test(e.message),
+       `allResidualsZero refuses ${label}`,
+       `threw ${e === null ? 'nothing' : e.message}`);
+  }
+  {
+    const z = allResidualsZero({ residuals:
+      { good: Q.ZERO, bad: Q.of('7/3'), arr: [Q.ZERO, Q.of(-1n)] } });
+    eq(z.count, 4, 'allResidualsZero walks plain objects and arrays alike');
+    ok(z.allZero === false, 'and reports a collection that is not all zero',
+       `got ${JSON.stringify(z)}`);
+    eq(z.nonzero.join(' '), 'bad=7/3 arr[1]=-1',
+       'naming each offending term by path and exact value');
+  }
+
+  /* Non-positive material parameters are refused rather than divided by. mu = 0
+     would make every rate in the construction a division by zero, and a
+     negative rhoF would report a negative kinetic energy as though it meant
+     something. Each of the five is checked separately, so a check that covers
+     four of them is not mistaken for one that covers all five. */
+  for (const key of ['rhoF','mu','rhoS','G','gamma']){
+    for (const bad of ['0','-1','-1/3']){
+      let e = null;
+      try { evaluate({ [key]: bad }); } catch (err) { e = err; }
+      ok(e instanceof RangeError && e.message.startsWith(`${key} must be positive`),
+         `evaluate refuses ${key} = ${bad}`,
+         `threw ${e === null ? 'nothing' : e.constructor.name + ': ' + e.message}`);
+    }
+  }
+  // ...and a positive, non-unit material set still closes exactly, so the
+  // residuals are not an artefact of every material constant being 1.
+  {
+    const z = allResidualsZero(evaluate({ stretch: '11/8', rhoF: '3/2', mu: '7/5',
+                                          rhoS: '11/4', G: '13/7', gamma: '5/3' }));
+    eq(z.count, TERMS, 'a non-unit material set still collects all 19 terms');
+    ok(z.allZero === true, 'and every residual there is exactly zero too',
+       `nonzero: ${z.nonzero.join(', ')}`);
+  }
+
+  // The T* bracket is ordered the right way round: f is increasing across the
+  // interval, so the LARGER bound comes from the slower end s = 5/4.
+  {
+    const c = evaluate({ stretch: '5/4' }).clock;
+    ok(c.tStarLower.cmp(c.tStarUpper) < 0, 'the T* bracket is ordered',
+       `${c.tStarLower} .. ${c.tStarUpper}`);
+  }
+}
+
+/* ---- report ------------------------------------------------------------ */
+console.log('\n' + '─'.repeat(66));
+/* A silently shortened loop removes assertions without removing a check, so the
+   suite can lose coverage and still print "0 failed". Regeneration-tested: a
+   kernel patched to return four pinned roots where six were asked for took the
+   count from 2451 to 2331 and the suite stayed green. The per-loop length
+   assertions above catch that case; this total catches every other way an
+   assertion can stop running. Update it deliberately when adding checks. */
+section('13. response phase, and that every state carries one');
+
+/* Three defects the 2626 assertions above did not gate, all found by audit
+   rather than by this suite.
+
+   (a) The forced-oscillator lag had BOTH arguments wrong. For
+       x'' + 2gx' + w0^2 x = F cos(wd t) the lag is atan2(2*g*wd, w0^2 - wd^2);
+       the kernel had atan2(2*g*w0, wd^2 - w0^2), which is the answer to the
+       problem with drive and natural frequency exchanged. Verified against RK4
+       integration to steady state: numeric 0.02822 / textbook 0.02817 /
+       old kernel 3.10979 at (w0, wd, g) = (350, 310, 1.2).
+
+       The denominator negation alone maps phi -> pi - phi, which preserves
+       cos(phi) sign patterns but NEGATES sin(phi2 - phi1) -- and the sand
+       transport term fx = Re*gIx - Im*gRx reduces to that difference. So the
+       grains were driven the wrong way.
+
+   (b) The free-rim atlas branch pushed no `phi` at all. The renderer reads
+       `s.phi || 0`, so sin(phi) = 0 killed the phase-flux transport outright
+       on the DEFAULT configuration and the whole 50-199 Hz atlas range.
+
+   The expectation below is the textbook formula written out independently,
+   not a value copied from the kernel. */
+{
+  const forcedLag = (w0, wd, g) => Math.atan2(2*g*wd, w0*w0 - wd*wd);
+
+  for (const rim of ['free', 'pinned']){
+    const s = state({ rim });
+    ok(s.states.length > 0, `${rim}: resolvePatternState returned states`);
+    for (const t of s.states){
+      ok(typeof t.phi === 'number' && Number.isFinite(t.phi),
+         `${rim} fold${t.fold}: phi is a finite number`,
+         `got ${t.phi} -- a state without phi renders at phase 0 and silently `
+         + `zeroes the phase-flux transport`);
+      ok(typeof t.radial.gamma === 'number' && t.radial.gamma > 0,
+         `${rim} fold${t.fold}: the state carries its damping rate`);
+      const w0 = 2*Math.PI*t.radial.hz;
+      const wd = 2*Math.PI*s.responseHz;
+      rel(t.phi, forcedLag(w0, wd, t.radial.gamma), 10,
+          `${rim} fold${t.fold}: phi is the forced-oscillator lag`);
+      ok(t.phi >= 0 && t.phi <= Math.PI,
+         `${rim} fold${t.fold}: a damped lag lies in [0, pi]`, `got ${t.phi}`);
+    }
+  }
+
+  /* Below the reported minimum drive the kernel says no pattern forms. The
+     export path floored the gain at 0.35 and drew one anyway -- a demo mode
+     that guaranteed the picture was never blank, disagreeing with the preview,
+     which never had a floor. Asserted on the source because the floor lived in
+     the renderer, not here. */
+  const page = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  ok(!/Math\.max\(\s*st\.expression\s*,/.test(page),
+     'the export gain has no floor under the formation envelope',
+     'cymatic.html reintroduced Math.max(st.expression, ...) -- that draws a '
+     + 'pattern the kernel reports as non-existent');
+  /* Every pinned state must be DRAWABLE at the page's own resolution gate.
+     finestZeroOf used to threshold the basis coefficient (|a_n| > 1e-6*max)
+     rather than the term's contribution to the profile. The pinned edge kink
+     decays like n^-2.3, so the 128th term always cleared it and `finest` was
+     z_128 ~ 401..412 for every m -- 2.9 px/wave against RES_GATE = 4. Measured:
+     every pinned state at every frequency was gated out and the page drew a
+     uniform disc with no nodal lines, as though that were the answer.
+
+     The three assertions this file already had on finestZeroOf -- finite and
+     positive, inside the basis, finer than the modal mean -- all passed
+     throughout. RR and RES_GATE are read from cymatic.html so this cannot
+     drift from the renderer it is protecting. */
+  {
+    const RR = Number(/const GR = (\d+)/.exec(page)[1]);
+    const rr = (RR - 1)/2 - 3;
+    const resGate = Number(/const RES_GATE = ([\d.]+)/.exec(page)[1]);
+    ok(rr > 0 && resGate > 0, 'render constants read out of cymatic.html',
+       `rr=${rr} resGate=${resGate}`);
+    for (const f of [56, 111, 180, 199]){
+      const s2 = state({ f, rim: 'pinned', depthMm: 3 });
+      ok(s2.states.length > 0, `pinned f=${f}: states exist`);
+      for (const t of s2.states){
+        const px = 2*Math.PI*rr/K.finestZeroOf(t.radial);
+        ok(px >= resGate,
+           `pinned f=${f} fold${t.fold}: resolvable at the page's gate`,
+           `${px.toFixed(2)} px/wave < RES_GATE ${resGate} -- this state is `
+           + `silently dropped and the disc renders blank`);
+      }
+    }
+  }
+
+  const belowMin = state({ amplitudeMv: 40, tSec: 5, tfeSec: 1 });
+  eq(belowMin.expression, 0,
+     'expression is exactly zero below the reported minimum drive');
+}
+
+section('14. centre-bias envelope and the product rule');
+
+/* The envelope multiplies the SURFACE. A caller that scales a field by g must
+   scale its gradient by grad(g*f) = g*grad(f) + f*grad(g); both renderers
+   dropped the second term and scaled the stored gradient by g alone.
+
+   Measured against central differences before the fix: the gradient was wrong
+   by 5.1% at cb = 1.1879, 50.4% at cb = 0.1323, and 192.2% at cb = 3.4011 --
+   the last reversing its direction over part of the inner disc, which pushes
+   the sand the wrong way there.
+
+   `centreBiasEnvelope` now returns g AND dg from one definition that both
+   renderers call, so the term cannot be dropped at one site and kept at the
+   other. The checks below are against finite differences, not against the
+   kernel's own opinion. */
+{
+  const FD = 1e-7;
+  const CBS = [1.1879, 3.4011, 0.1323, 1.0383, 1.0];
+  const brk = 1/K.CENTRE_BIAS_SLOPE;
+
+  for (const cb of CBS){
+    // dg is the derivative of g, away from the corner at rho = 1/slope.
+    for (const rho of [0.02, 0.10, 0.20, 0.30, 0.40, 0.44, 0.50, 0.70, 0.95]){
+      if (Math.abs(rho - brk) < 1e-3) continue;      // the corner is not differentiable
+      const fd = (K.centreBiasEnvelope(rho + FD, cb).g
+                - K.centreBiasEnvelope(rho - FD, cb).g)/(2*FD);
+      const { dg } = K.centreBiasEnvelope(rho, cb);
+      ok(Math.abs(dg - fd) <= 1e-5*Math.max(1, Math.abs(fd)),
+         `cb=${cb} rho=${rho}: dg is the derivative of g`,
+         `dg=${dg} vs central difference ${fd}`);
+    }
+    // Beyond the breakpoint the envelope is exactly inert.
+    for (const rho of [brk + 1e-9, 0.6, 1.0, 2.0]){
+      const e = K.centreBiasEnvelope(rho, cb);
+      eq(e.g, 1, `cb=${cb} rho=${rho}: g is exactly 1 beyond the breakpoint`);
+      eq(e.dg, 0, `cb=${cb} rho=${rho}: dg is exactly 0 beyond the breakpoint`);
+    }
+  }
+
+  // cb = 1 is the identity envelope at every radius.
+  for (const rho of [0.0, 0.2, 0.45, 0.9]){
+    const e = K.centreBiasEnvelope(rho, 1);
+    eq(e.g, 1, `cb=1 rho=${rho}: identity envelope`);
+    eq(e.dg, 0, `cb=1 rho=${rho}: identity envelope has no slope`);
+  }
+
+  /* The whole point: the renderer's radial derivative of the ENVELOPED mode,
+     w*cm*(dJ*g + J*dg), against a central difference of w*J*cm*g itself.
+     Without the dg term this fails by the percentages quoted above. */
+  for (const [m, jp, cb] of [[5, 16.0, 1.1879], [1, 5.33, 3.4011], [2, 6.71, 0.1323]]){
+    const eta = rho => K.besselJ(m, jp*rho)*K.centreBiasEnvelope(rho, cb).g;
+    for (const rho of [0.05, 0.15, 0.25, 0.35, 0.43, 0.55, 0.80]){
+      if (Math.abs(rho - brk) < 1e-3) continue;
+      const pr = K.besselPair(m, jp*rho);
+      const { g, dg } = K.centreBiasEnvelope(rho, cb);
+      const analytic = jp*pr[1]*g + pr[0]*dg;
+      const fd = (eta(rho + FD) - eta(rho - FD))/(2*FD);
+      ok(Math.abs(analytic - fd) <= 1e-4*Math.max(1, Math.abs(fd)),
+         `m=${m} cb=${cb} rho=${rho}: d/drho of the enveloped mode`,
+         `analytic ${analytic} vs central difference ${fd}`);
+    }
+  }
+
+  // Out-of-domain arguments refuse rather than returning a number.
+  for (const bad of [NaN, -1, Infinity]){
+    let threw = false;
+    try { K.centreBiasEnvelope(bad, 1.2); } catch { threw = true; }
+    ok(threw, `centreBiasEnvelope refuses rho = ${bad}`);
+  }
+  {
+    let threw = false;
+    try { K.centreBiasEnvelope(0.2, NaN); } catch { threw = true; }
+    ok(threw, 'centreBiasEnvelope refuses a non-finite centerToMid');
+  }
+
+  /* One definition, not three. If a renderer grows its own copy of the
+     envelope again it can drop dg at that site alone, which is exactly how
+     the two copies came to disagree. */
+  const pageSrc = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  /* Regeneration exposed a hole in an earlier version of this check: it
+     required an opening paren immediately before the 1, so it missed the
+     realistic reintroduction `Math.max(0, 1 - RAD[i]*2.2)`, where the
+     paren is followed by `0,`. It now matches the shape wherever it sits. */
+  ok(!/1\s*-\s*[^;)\n]*2\.2/.test(pageSrc),
+     'cymatic.html carries no open-coded centre-bias envelope',
+     'a bare (1 - rho*2.2) reappeared -- call centreBiasEnvelope instead');
+}
+
+section('15. assumed constants are declared as assumed');
+
+/* Three numbers were printed in the deck as though they were measured:
+   `phase-flux gain` (an unsourced 2.2, scaled against the Stokes ratio at the
+   page's own default condition), `plate |T|` and friends (computed from
+   textbook granite that the source never specifies), and `wall impedance`
+   (unsourced coupling constants). None of them is wrong -- they are
+   assumptions, and the defect was presenting them as results.
+
+   This does not check the VALUES, which are unchanged. It checks that the
+   declaration travels with them, so the next reader meets the assumption. */
+{
+  const src = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+
+  // The transport gain: one definition, and it refuses rather than inventing
+  // a Stokes ratio. The dead `: 0.02` fallback stood in for exactly that.
+  const tc = K.transportCoefficients({ stokesDepth: 1.388e-4 }, 1e-2);
+  eq(tc.intensityGain, 1, 'intensity gain is the unit scale');
+  eq(tc.fluxGainAssumed, true, 'the flux gain declares itself assumed');
+  rel(tc.stokesRatio, 1.388e-2, 12, 'stokes ratio is depth over wavelength');
+  rel(tc.fluxGain,
+      K.PHASE_FLUX_GAIN_AT_REFERENCE*1.388e-2/K.STOKES_RATIO_AT_REFERENCE, 12,
+      'flux gain scales linearly from the reference condition');
+  for (const bad of [null, undefined, {}, { stokesDepth: NaN }]){
+    let threw = false;
+    try { K.transportCoefficients(bad, 1e-2); } catch { threw = true; }
+    ok(threw, `transportCoefficients refuses damping = ${JSON.stringify(bad)}`,
+       'a missing damping record must not yield a stand-in ratio');
+  }
+  ok(!/:\s*0\.02\s*;/.test(src) && !/2\.2\s*\*\s*stokes\s*\/\s*0\.014/.test(src),
+     'cymatic.html open-codes neither the gain nor its dead 0.02 fallback');
+
+  // The plate and wall constants carry their declarations.
+  eq(K.STONE.assumed, true, 'STONE declares itself assumed');
+  ok(typeof K.STONE.note === 'string' && K.STONE.note.length > 20,
+     'STONE says why it is assumed');
+  eq(K.COUPLING_ASSUMED, true, 'the wall-coupling constants declare themselves unsourced');
+
+  // reinforcedR4 is exactly inert at the radius the page actually passes, so
+  // DEFAULT_R4_SCALES changes nothing as shipped. Pinned, because the comment
+  // saying so is only true while this holds.
+  eq(K.reinforcedR4(0), 1, 'reinforcedR4 is exactly 1 at driveR = 0');
+  ok(K.reinforcedR4(1) < 1, 'reinforcedR4 does bite at a non-zero radius');
+  ok(/driveR:\s*0\b/.test(src), 'the page still passes driveR = 0');
+
+  // The deck must not present an assumption as a measurement.
+  for (const label of ['phase-flux gain (assumed)',
+                       'plate |T| (assumed base)',
+                       'wall impedance (unsourced)'])
+    ok(src.includes(label), `the deck labels: ${label}`,
+       'an assumed quantity lost its label and reads as measured again');
+}
+
+section('16. pinned modal damping is the weighted mean, not gamma at the mean k');
+
+/* The pinned mode is a superposition and damping is a per-component rate
+   convex in k, so evaluating it once at the reduced wavenumber under-reports
+   it and puts onset early. Measured at 3 mm, 20 C: gamma rises 6.0-13.8% and
+   the reported onset rises 2.4-6.0%.
+
+   The weights are not assumed. d(omega0^2)/dg, computed by perturbing gravity
+   in the eigensolve end to end, matches the b^2-weighted mean of k*tanh(kh) to
+   1e-12 -- which is also why the HARMONIC mean proposed for the forcing
+   coefficient is wrong and eps was left alone: it disagrees with that same
+   measurement by 4-17%.
+
+   The checks below are properties, not a second copy of the implementation:
+   a one-component mode must reduce exactly, the mean must sit inside the range
+   of what it averages, and an uncoverable mode must refuse. */
+{
+  const R = 24.25e-3/2, sig = 0.0728, rhoW = 998.2, hM = 3e-3, nu = 1.0034e-6;
+
+  for (const m of [0, 3, 5, 8]){
+    const sp = K.pinnedEdgeSpectrum(m, R, sig, rhoW, hM, 128, 1);
+    const pm = sp.pinned[0], w = pm.omega;
+    const md = K.pinnedModalDamping(sp, pm, w, nu, hM);
+
+    ok(md.covered >= 1 - 1e-6,
+       `m=${m}: the averaged terms carry the mode`, `covered ${md.covered}`);
+
+    // It must lie inside the range of the per-component rates it averages --
+    // true of any weighted mean, and false of a value taken from elsewhere.
+    let lo = Infinity, hi = -Infinity;
+    for (let n = 0; n < sp.c.length; n++){
+      let gn; try { gn = K.dampingRate(sp.freeK[n], w, nu, hM).total; } catch { continue; }
+      lo = Math.min(lo, gn); hi = Math.max(hi, gn);
+    }
+    ok(md.total >= lo && md.total <= hi,
+       `m=${m}: the modal damping lies within the component rates`,
+       `${md.total} outside [${lo}, ${hi}]`);
+
+    // Jensen: gamma is convex in k, so averaging the rate exceeds the rate at
+    // the reduced wavenumber. This is the defect's direction, pinned.
+    const atMean = K.dampingRate(pm.kEquiv, w, nu, hM).total;
+    ok(md.total > atMean,
+       `m=${m}: averaging exceeds gamma at the reduced k`,
+       `${md.total} vs ${atMean} -- if this inverts, the mode is no longer `
+       + `being averaged and onset goes back to being reported early`);
+
+    // and the onset moves the way that implies
+    const mk = g => K.mathieuKT(w, g, 1.0, pm.kTanhEff, 2*Math.PI*(w/Math.PI));
+    ok(mk(md.total).accelOnset > mk(atMean).accelOnset,
+       `m=${m}: more damping means a later onset`);
+  }
+
+  // A one-component mode has nothing to average: the mean must be exactly the
+  // component's own rate.
+  {
+    const w = 100, kOne = 300;
+    const fake = { freeW2: [1e9], freeK: [kOne], c: [4] };
+    const md = K.pinnedModalDamping(fake, { w2: 0 }, w, nu, hM);
+    eq(md.total, K.dampingRate(kOne, w, nu, hM).total,
+       'a one-component mode reduces to that component exactly');
+    eq(md.covered, 1, 'a one-component mode is fully covered');
+  }
+
+  // A mode whose components all refuse must refuse, not average nothing.
+  {
+    let threw = null;
+    const bad = { freeW2: [1e9, 1e9], freeK: [5e5, 6e5], c: [4, 4] };
+    try { K.pinnedModalDamping(bad, { w2: 0 }, 100, nu, hM); }
+    catch (e) { threw = e; }
+    ok(threw !== null, 'an uncoverable mode refuses rather than averaging a fragment');
+    ok(/weight/.test(threw ? threw.message : ''),
+       'the refusal says the uncovered weight is why');
+  }
+
+  /* The state REPORTED by resolvePatternState must carry the weighted value.
+     Regeneration exposed this hole: with the checks above alone, reverting
+     both call sites to dampingRate(kEquiv, ...) left the suite fully green --
+     the function was proven correct and then not used. This ties the two
+     together, which is the thing that actually protects the page. */
+  for (const f of [56, 111]){
+    const st = state({ f, rim: 'pinned', depthMm: 3, tempC: 20 });
+    const nu20 = K.viscosity(20)/K.density(20);
+    ok(st.states.length > 0, `pinned f=${f}: states exist`);
+    for (const t of st.states){
+      const atMean = K.dampingRate(t.radial.k, t.radial.pinned.omega, nu20, 3e-3).total;
+      ok(t.radial.gamma > atMean,
+         `pinned f=${f} fold${t.fold}: the reported gamma is the averaged one`,
+         `reported ${t.radial.gamma} is not above gamma(k_bar) = ${atMean}, so the `
+         + `call site is using the mean-k value again and onset is early`);
+    }
+  }
+
+  // The forcing coefficient is NOT changed: eps must still use the arithmetic
+  // k*tanh(kh), which is what d(omega0^2)/dg measures.
+  ok(/kTanhEff:\s*kt\/wsum/.test(readFileSync(new URL('./kernel.js', import.meta.url), 'utf8')),
+     'kTanhEff remains the b^2-weighted arithmetic mean',
+     'the harmonic mean disagrees with d(omega0^2)/dg by 4-17% and must not be '
+     + 'substituted here');
+}
+
+section('17. grain relocation has no preferred direction');
+
+/* The cell is horizontal and vibrated along its normal, so gravity has no
+   in-plane component: nothing inside the disc may prefer a direction.
+
+   The topple step used to hand an over-dense cell's grain to the FIRST
+   admissible neighbour in scan order, dy running -ring..+ring outside dx.
+   That is a direction. Measured over 200k relocations against random
+   occupancy, the chosen cell carried a mean offset of (-0.47, -0.80) cells --
+   up and to the left, the vertical component about twice the horizontal
+   because dy is the outer loop. Accumulated over topple passes it drifts the
+   bed and reads as directional streaking. With every admissible cell in the
+   ring equally likely the same measurement gives (-0.002, +0.002).
+
+   This is a SOURCE check, and says so: the selection lives in the renderer's
+   hot loop, where routing it through a kernel function for the sake of a
+   numeric test would cost a closure per relocation at 60000 relocations a
+   pass. It catches the specific regression -- first-hit returning. */
+{
+  const src = readFileSync(new URL('../cymatic.html', import.meta.url), 'utf8');
+  const topple = src.slice(src.indexOf('let budget = TOPPLE_BUDGET'),
+                           src.indexOf('if (settle < 1)'));
+  ok(topple.length > 200, 'the topple block was located in the page');
+  ok(/rnd\(\)\s*\*\s*seen\s*<\s*1/.test(topple),
+     'relocation picks uniformly among the admissible cells in the ring',
+     'the reservoir pick is gone -- a fixed scan order reintroduces a '
+     + 'direction the physics does not have');
+  ok(!/placed\s*=\s*true;\s*break;/.test(topple),
+     'relocation does not take the first cell in scan order',
+     'first-hit selection is back, which biases every relocation up and left');
+}
+
+section('18. the viscous domain miss is not an exception');
+
+/* pinnedModalDamping averages over a 128-term basis and meets the viscous
+   solver's domain edge on most of the tail. Measured, that cost 15.85 us per
+   failing call when it threw and 6.77 us when it returns null -- the throw
+   alone was 57% of it -- and the failing terms were 56% of the calls but 93%
+   of the time. Routing the average through a null-returning face took
+   resolvePatternState from 129.3 ms to 105.8 ms with NO numerical change:
+   modal damping compared bit-identical across 54 configurations.
+
+   The throwing face is unchanged and still refuses, because a caller that
+   needs a root must not get null silently. What follows checks both faces
+   agree, that null is a domain answer rather than an error, and that a
+   malformed argument still throws on BOTH. */
+{
+  const nu = 1.0034e-6, hM = 3e-3;
+
+  // Where a root exists, the two faces agree exactly.
+  let agreed = 0, tested = 0;
+  for (const k of [10, 50, 100, 300, 800, 2000])
+    for (const w of [50, 200, 700]){
+      const a = K.dampingRateOrNull(k, w, nu, hM);
+      if (a === null) continue;
+      tested++;
+      const b = K.dampingRate(k, w, nu, hM);
+      if (Object.is(a.total, b.total) && Object.is(a.bulk, b.bulk)
+          && Object.is(a.layer, b.layer) && Object.is(a.stokesDepth, b.stokesDepth)) agreed++;
+    }
+  ok(tested > 0, 'the throwing and null faces were compared on real arguments');
+  eq(agreed, tested, 'both faces return exactly the same record where a root exists');
+
+  // Where no root exists, one returns null and the other refuses.
+  let nulls = 0;
+  for (const k of [3e4, 1e5, 3e5]){
+    const a = K.dampingRateOrNull(k, 100, nu, hM);
+    if (a !== null) continue;
+    nulls++;
+    let threw = false;
+    try { K.dampingRate(k, 100, nu, hM); } catch { threw = true; }
+    ok(threw, `k=${k}: the throwing face still refuses where the null face returns null`);
+  }
+  ok(nulls > 0, 'the domain edge was actually reached', 'no k sampled fell outside the domain');
+
+  // A malformed W is a caller bug on both faces, not a domain answer.
+  for (const bad of [NaN, -1, 0, Infinity]){
+    let threwNull = false, threwThrow = false;
+    try { K.viscousFreeSurfaceReOrNull(bad); } catch { threwNull = true; }
+    try { K.viscousFreeSurfaceRe(bad); } catch { threwThrow = true; }
+    ok(threwNull, `viscousFreeSurfaceReOrNull refuses W = ${bad} rather than returning null`,
+       'a malformed argument must not be reported as an empty domain');
+    ok(threwThrow, `viscousFreeSurfaceRe refuses W = ${bad}`);
+  }
+
+  // The solver converges in a handful of steps where it converges at all, so
+  // the 60-iteration cap is only ever reached by a genuine domain miss.
+  ok(K.viscousFreeSurfaceReOrNull(1) !== null, 'W = 1 has a root');
+  ok(K.viscousFreeSurfaceReOrNull(0.3) === null, 'W = 0.3 is outside the domain');
+}
+
+const EXPECTED_ASSERTIONS = 2839;
+if (pass !== EXPECTED_ASSERTIONS)
+  failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
+    + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);
+else pass++;
+
+if (failures.length){
+  console.log(`${pass} passed, ${failures.length} FAILED\n`);
+  for (const f of failures) console.log('  FAIL  ' + f);
+  process.exit(1);
+}
+console.log(`${pass} passed, 0 failed`);
