@@ -104,8 +104,22 @@ class Browser {
   static async launch(){
     const profile = mkdtempSync(join(tmpdir(), 'checkpage-'));
     const port = 9400 + Math.floor(Math.random()*400);
+    /* THE GPU IS ENABLED, and --disable-gpu is gone, because the page now has a GPU
+       renderer and a browser with no GPU could not test it: with --disable-gpu,
+       WebGL2 is simply absent. Measured in this container -- --disable-gpu gives no
+       webgl2 context at all; without it, one is there.
+
+       Chrome has no working --enable-gpu switch: using the GPU is the default, and
+       what has to be done is to stop disabling it. --enable-unsafe-swiftshader is
+       there for the machines with no GPU at all -- GitHub's runners, and the
+       container this was written in. On those Chrome no longer falls back to its
+       software GPU, SwiftShader, for WebGL unless told it may, so without this flag
+       CI would have no WebGL2 and the GPU section would refuse. On a machine WITH a
+       GPU the flag changes nothing and the real one is used. The section reports
+       which renderer it got, so a pass on SwiftShader is never mistaken for a pass
+       on hardware. */
     const proc = spawn(BROWSER, [
-      '--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
+      '--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader',
       '--hide-scrollbars', '--window-size=1400,1100', '--force-device-scale-factor=1',
       `--user-data-dir=${profile}`, `--remote-debugging-port=${port}`, 'about:blank'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -302,8 +316,15 @@ async function checkPage(url, name, expectInline){
      `${s.grains} of ${s.grainTotal} grains placed`);
   ok(s.frames >= 0, 'the animation loop is running', `lastBuild = ${s.frames}`);
 
-  /* 3. both canvases actually drew */
-  const px = await page.json(`[...document.querySelectorAll('canvas')].map(cv => {
+  /* 3. both canvases actually drew.
+     NAMED, not every canvas on the page -- and that is load bearing. Taking a 2D
+     context is not a read: it CLAIMS the canvas for good, and a canvas holds one kind
+     of context for its whole life. This used to walk every canvas, and when the GPU
+     canvas #cgl arrived the walk took a 2D context on it before the GPU renderer
+     could take WebGL2, so "choosing GPU" then found no WebGL2 context at all and the
+     GPU section failed for a reason that was the test's own. #cgl is checked by the
+     GPU section instead, through WebGL's own readPixels. */
+  const px = await page.json(`['c', 'sc'].map(id => document.getElementById(id)).filter(Boolean).map(cv => {
     const g = cv.getContext('2d');
     const d = g.getImageData(0, 0, cv.width, cv.height).data;
     let nz = 0; const seen = new Set();
@@ -598,6 +619,334 @@ async function checkSolverDraws(page){
   await page.shot(join(tmpdir(), 'check-page-solver.png'));
 }
 
+/* The surface drawn on the GPU, held to the CPU's bytes.
+   .
+   THE BOUND IS ONE LEVEL, AND IT IS DERIVED, NOT TUNED. Both renderers read the same
+   Float32Array rasters, so their inputs are identical. The CPU evaluates the shading
+   in double precision and the GPU in single, and the two results differ by parts in
+   ten million. Each is then quantised to an 8-bit level. A difference that small
+   changes the stored byte only when the value sits within it of a rounding boundary,
+   and then by exactly one level -- it cannot reach two. So the assertion is that no
+   channel anywhere differs by more than one, and the count of channels that differ
+   by one is REPORTED, not bounded: it is a property of where boundaries happen to
+   fall, and bounding it would be a tolerance with nothing behind it.
+   .
+   It is checked at the page's own amplitude and then at full amplitude in both
+   phases, because at a low amplitude most pixels sit at the base colour and agree
+   trivially; with the texture noise off and on, because the noise is the one input
+   the GPU does not read from the same array -- it rebuilds the CPU's per-frame
+   random sequence once, as a table; and again after the field is rebuilt, because a
+   renderer that uploaded the field once and never again would agree on the first
+   frame and draw a stale surface on every one after. */
+/* THE VALUES BEFORE ROUNDING, and the bound they are held to.
+   .
+   The byte bound above cannot see an error smaller than one level. Measured: with one
+   shading coefficient changed from 168 to 169 -- a wrong transcription, every optical
+   pixel off by up to half a level -- that check stayed GREEN, the one-level count
+   rising from about 180 to 106 887 while nothing exceeded one. So the shader also
+   writes its values before the 8-bit rounding to a float target, the CPU loop hands
+   back the same values in double precision, and the two are compared directly.
+   .
+   RAW_BOUND IS DERIVED FROM THE GLSL ES 3.00 PRECISION REQUIREMENTS, not from what
+   this GPU happens to do. The largest legitimate error is the optical view's specular
+   term, pow(Nz, 30) = exp2(30 log2 Nz): log2 is allowed 2^-21 absolute error near 1,
+   which times 30 is 1.4e-5 in the exponent, and exp2 of an argument down to -30 is
+   allowed (3 + 2*30) ulp; together about 1.4e-5 relative, times the coefficient 96 is
+   1.3e-3 before the tone curve. The ring, exp(-s^2) with s^2 up to 39.5, is allowed 82
+   ulp, 4.9e-6 relative, times 170 is 8.3e-4. The tone curve's slope is at most 255/132,
+   so the two reach 4.1e-3 of a level, and the tone curve's own exp adds 1.4e-4. About
+   5e-3 in all, so the bound is 2e-2: four times the worst case the precision rules
+   permit any conformant GPU, and twenty-five times below the half level the 168 -> 169
+   transcription error moves a pixel. */
+const RAW_BOUND = 2e-2;
+
+/* This reducer runs IN THE BROWSER, before JSON can turn NaN/Infinity into null.
+   Check both operands and their difference: finite operands can still overflow
+   subtraction. Count invalid channels explicitly instead of putting a NaN in a
+   maximum, where the next finite value could replace it. Alpha is validated too,
+   although only RGB contributes to the existing before-rounding bound. */
+function summarizeRawParity(rawCpu, rawGpu){
+  if (!rawCpu || !rawGpu || !Number.isSafeInteger(rawCpu.length)
+      || rawCpu.length <= 0 || rawCpu.length % 4 || rawCpu.length !== rawGpu.length)
+    throw new Error('raw GPU parity requires equal, nonempty RGBA arrays');
+  let maxRaw = 0, invalidCount = 0;
+  for (let i = 0; i < rawCpu.length; i++){
+    const cpu = rawCpu[i], gpu = rawGpu[i], difference = Math.abs(cpu - gpu);
+    if (!Number.isFinite(cpu) || !Number.isFinite(gpu) || !Number.isFinite(difference)){
+      invalidCount++;
+      continue;
+    }
+    if ((i & 3) !== 3 && difference > maxRaw) maxRaw = difference;
+  }
+  return { status: invalidCount === 0 ? 'finite' : 'invalid', invalidCount,
+    checkedCount: rawCpu.length, maxRaw: invalidCount === 0 ? maxRaw : null };
+}
+
+/* Do not coerce a transported null to zero, or trust the status alone. A broken
+   producer or transport must fail the same gate as a non-finite raw channel. */
+function finiteRawParitySummary(row, expectedCount){
+  return !!row && row.status === 'finite' && row.invalidCount === 0
+    && Number.isSafeInteger(expectedCount) && expectedCount > 0 && expectedCount % 4 === 0
+    && row.checkedCount === expectedCount && Number.isFinite(row.maxRaw) && row.maxRaw >= 0;
+}
+
+async function checkRawParityGuards(page, label){
+  const cases = await page.json(`(() => {
+    const summarize = ${summarizeRawParity.toString()};
+    const cpu = new Float64Array(GR*GR*4);
+    renderSurfaceCpu(state, cpu);
+    const gpu = GPU_SURFACE.readRaw(state);
+    const cases = [{ name: 'unchanged rendered field', summary: summarize(cpu, gpu), valid: true }];
+    const positions = [['beginning', 0], ['middle', Math.floor(cpu.length / 2)], ['end', cpu.length - 1]];
+    for (const side of ['CPU', 'GPU'])
+      for (const [valueName, value] of [['NaN', NaN], ['+Infinity', Infinity], ['-Infinity', -Infinity]])
+        for (const [position, i] of positions){
+          const a = new Float64Array(cpu), b = new Float64Array(gpu);
+          (side === 'CPU' ? a : b)[i] = value;
+          cases.push({ name: side + ' ' + valueName + ' at ' + position,
+            summary: summarize(a, b), valid: false });
+        }
+    const a = new Float64Array(cpu), b = new Float64Array(gpu);
+    a[0] = Number.MAX_VALUE; b[0] = -Number.MAX_VALUE;
+    cases.push({ name: 'finite operands whose difference overflows',
+      summary: summarize(a, b), valid: false });
+    return { count: cpu.length, cases };
+  })()`);
+  for (const { name, summary, valid } of cases.cases){
+    ok(valid ? finiteRawParitySummary(summary, cases.count)
+             : summary.status === 'invalid' && summary.invalidCount === 1
+               && summary.checkedCount === cases.count && summary.maxRaw === null
+               && !finiteRawParitySummary(summary, cases.count),
+       `raw GPU parity ${valid ? 'accepts' : 'rejects'} ${name}${label}`, JSON.stringify(summary));
+  }
+  const good = { status: 'finite', invalidCount: 0, checkedCount: 4, maxRaw: 0 };
+  for (const [name, change] of [
+    ['null maximum after JSON', { maxRaw: null }],
+    ['NaN maximum', { maxRaw: NaN }], ['infinite maximum', { maxRaw: Infinity }],
+    ['negative infinite maximum', { maxRaw: -Infinity }], ['string maximum', { maxRaw: '0' }],
+    ['missing maximum', { maxRaw: undefined }], ['negative maximum', { maxRaw: -1 }],
+    ['invalid status', { status: 'invalid' }], ['missing status', { status: undefined }],
+    ['nonzero invalid count', { invalidCount: 1 }], ['null invalid count', { invalidCount: null }],
+    ['missing invalid count', { invalidCount: undefined }],
+    ['wrong channel count', { checkedCount: 8 }], ['null channel count', { checkedCount: null }]
+  ]) ok(!finiteRawParitySummary({ ...good, ...change }, 4),
+        `raw GPU parity rejects transported ${name}${label}`);
+  ok(!finiteRawParitySummary(null, 4), `raw GPU parity rejects a null summary${label}`);
+}
+
+async function gpuParity(page, label){
+  const r = await page.json(`(() => {
+    const summarizeRawParity = ${summarizeRawParity.toString()};
+    const vs0 = state.visualSignature, e0 = state.expression, ps0 = phaseSign, v0 = view;
+    const rows = [];
+    const rawCpu = new Float64Array(GR*GR*4);
+    try {
+      for (const amp of ['as is', 'full, phase I', 'full, phase II'])
+        for (const texOn of [false, true])
+          for (const v of ['sand', 'optical', 'height', 'nodal']){
+            if (amp !== 'as is'){ state.expression = 1; phaseSign = amp.endsWith('II') ? -1 : 1; }
+            state.visualSignature = vs0 ? Object.assign({}, vs0, { textureConc: texOn ? 0.5 : 0 }) : null;
+            view = v;
+            renderSurfaceCpu(state, rawCpu);
+            const cpu = new Uint8Array(pxl);
+            GPU_SURFACE.draw(state);
+            const gpu = GPU_SURFACE.readRGBA();
+            const rawGpu = GPU_SURFACE.readRaw(state);
+            let maxd = 0, n1 = 0, lit = 0;
+            for (let i = 0; i < cpu.length; i++){
+              const d = Math.abs(cpu[i] - gpu[i]);
+              if (d > maxd) maxd = d;
+              if (d) n1++;
+              if ((i & 3) === 0 && cpu[i] > 40) lit++;
+            }
+            rows.push({ amp, tex: texOn, view: v, maxd, n1, n: cpu.length, lit,
+              ...summarizeRawParity(rawCpu, rawGpu) });
+            state.expression = e0; phaseSign = ps0;
+          }
+    } finally { state.visualSignature = vs0; state.expression = e0; phaseSign = ps0; view = v0; }
+    return rows;
+  })()`);
+  const worst = Math.max(...r.map(x => x.maxd));
+  const ones = r.reduce((a, x) => a + x.n1, 0), all = r.reduce((a, x) => a + x.n, 0);
+  const invalidRaw = r.filter(x => !finiteRawParitySummary(x, x.n));
+  const rawWorst = invalidRaw.length ? null : Math.max(...r.map(x => x.maxRaw));
+  console.log(`       ${r.length} renderings ${label}: worst channel difference ${worst}, `
+    + `${ones} of ${all} channels one level apart; before rounding, worst `
+    + `${rawWorst === null ? 'INVALID' : rawWorst.toExponential(2)} of a level against a bound of ${RAW_BOUND}`);
+  for (const x of r.filter(x => x.maxd > 1))
+    console.log(`       ${x.amp} / tex ${x.tex} / ${x.view}: max ${x.maxd}`);
+  ok(r.length === 24, `twenty-four renderings compared ${label}`, `${r.length}`);
+  ok(worst <= 1,
+     `the GPU's bytes are the CPU's to within one level in every channel of every view ${label}`,
+     `worst ${worst}: ${r.filter(x => x.maxd > 1).map(x => `${x.amp}/${x.tex}/${x.view}=${x.maxd}`).join(', ')}`);
+  ok(invalidRaw.length === 0,
+     `every CPU/GPU raw value and difference is finite before JSON transport ${label}`,
+     JSON.stringify(invalidRaw));
+  ok(invalidRaw.length === 0 && Number.isFinite(rawWorst) && rawWorst <= RAW_BOUND,
+     `before rounding, the GPU's values are the CPU's to within ${RAW_BOUND} of a level ${label}`
+     + ' -- the bound the GLSL precision rules permit, which catches what rounding hides',
+     `worst ${rawWorst}: ${r.filter(x => !finiteRawParitySummary(x, x.n) || x.maxRaw > RAW_BOUND).map(x =>
+        `${x.amp}/${x.tex}/${x.view}=${String(x.maxRaw)} (${x.status}, invalid ${x.invalidCount})`).join(', ')}`);
+  /* And the comparison is not of two blank canvases. */
+  const lit = Math.min(...r.filter(x => x.amp !== 'as is').map(x => x.lit));
+  ok(lit > 1000, `at full amplitude every view lights more than a thousand pixels ${label}`,
+     `fewest ${lit}`);
+  return r;
+}
+
+async function checkGpuBoundary(page, label){
+  const results = await page.json(`(() => {
+    const surface = new FARADAY_RENDER_GL.SurfaceGL(document.createElement('canvas'), 2);
+    const field = new Float32Array([.1,.2,.3,.4]);
+    surface.uploadStatic(new Float32Array(4).fill(1), new Float32Array(4));
+    surface.uploadField(field, field, field); surface.uploadBins(new Uint16Array(4));
+    const options = {view:'optical',k:1,contrast:1,tex:0,slope:.8}, cases = [];
+    const rejects = (name, action) => {
+      let reason = ''; try { action(); } catch (e){ reason = String(e.message); }
+      cases.push({name,reason,glError:surface.gl.getError()});
+    };
+    for (const raster of ['uCover','uNoise','uEta','uNx','uNy'])
+      for (const [position,i] of [['beginning',0],['middle',2],['end',3]])
+        for (const [kind,value] of [['NaN',NaN],['+Infinity',Infinity],['-Infinity',-Infinity]]){
+          const data = new Float32Array(field); data[i] = value;
+          rejects(raster+' '+kind+' at '+position, () => surface.upload(raster,data));
+        }
+    for (const uniform of ['k','contrast','tex','slope'])
+      for (const [kind,value] of [['NaN',NaN],['+Infinity',Infinity],['-Infinity',-Infinity],['float32 overflow',Number.MAX_VALUE]])
+        rejects(uniform+' '+kind, () => surface.draw({...options,[uniform]:value}));
+    for (const mode of ['nodal','optical']) for (const value of [0,-1,Number.MIN_VALUE])
+      rejects(mode+' nonpositive float32 contrast '+value, () => surface.draw({...options,view:mode,contrast:value}));
+    surface.draw(options);
+    const raw = surface.readRaw(options);
+    const normal = raw.every(Number.isFinite) && surface.readRGBA().some((v,i) => (i&3)!==3 && v>0);
+    surface.releaseResources();
+    const lose = surface.gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+    return {cases,normal};
+  })()`);
+  for (const r of results.cases)
+    ok(/finite|float32|positive/i.test(r.reason) && r.glError === 0,
+      `renderer boundary refuses ${r.name} before GL submission${label}`, JSON.stringify(r));
+  ok(results.normal, `valid rendering remains finite and nonblank after refused inputs${label}`);
+}
+
+async function checkGpuContextRecovery(page, label){
+  section('explicit drawing recovery after WebGL context loss' + label);
+  const shot = async name => {
+    if (process.env.PAGE_GATE_SCREENSHOT_DIR) await page.shot(join(process.env.PAGE_GATE_SCREENSHOT_DIR,
+      `gpu-${name}-${label.replace(/[^a-z0-9]+/gi, '-') || 'served'}.png`));
+  };
+  await page.eval(`document.querySelector('#engSeg [data-e="gpu"]').click();
+    globalThis.__recoveryOriginal = renderSurface;
+    globalThis.__recoveryDraws = {cpu:0,gpu:0};
+    renderSurface = function(st){ __recoveryOriginal(st); __recoveryDraws[renderEngine]++; };
+    globalThis.__recoveryGL = document.getElementById('cgl').getContext('webgl2');
+    globalThis.__recoveryLose = __recoveryGL.getExtension('WEBGL_lose_context');
+    globalThis.__recoveryRestored = false;
+    document.getElementById('cgl').addEventListener('webglcontextrestored',
+      () => { __recoveryRestored = true; }, {once:true}); true`);
+  try {
+    const supported = await page.eval('!!__recoveryLose');
+    ok(supported, `WEBGL_lose_context is available for an actual loss/restoration test${label}`);
+    if (!supported) return;
+    await page.waitFor('__recoveryDraws.gpu > 0', 15000, 'the selected GPU to draw');
+    await page.eval('__recoveryLose.loseContext(); true');
+    await page.waitFor('!!renderError && !GPU_SURFACE.ready', 15000, 'visible context loss');
+    const lost = await page.json(`({engine:renderEngine,error:renderError,
+      message:document.getElementById('renderStatus').textContent,
+      hidden:document.getElementById('cgl').style.visibility, cpu:__recoveryDraws.cpu})`);
+    ok(lost.engine === 'gpu' && /context/i.test(lost.error)
+       && /GPU drawing paused/.test(lost.message) && lost.hidden === 'hidden' && lost.cpu === 0,
+       `context loss is visible and withholds the frame without CPU substitution${label}`, JSON.stringify(lost));
+    await shot('context-lost');
+    await page.eval('document.querySelector(\'#engSeg [data-e="gpu"]\').click(); true');
+    ok(await page.eval('renderEngine === "gpu" && !!renderError && !GPU_SURFACE.ready && __recoveryDraws.cpu === 0'),
+       `GPU retry refuses the still-lost object instead of accepting it${label}`);
+    await page.eval('document.querySelector(\'#engSeg [data-e="cpu"]\').click(); true');
+    await page.waitFor('__recoveryDraws.cpu > 0 && !renderError', 15000, 'explicit CPU recovery');
+    ok(await page.eval(`renderEngine === 'cpu' && document.getElementById('c').style.display === 'block'
+      && document.getElementById('c').style.visibility === 'visible'
+      && /CPU drawing/.test(document.getElementById('renderStatus').textContent)`),
+       `explicit CPU selection resumes the live animation after loss${label}`);
+    await shot('cpu-recovered');
+    await page.eval('__recoveryLose.restoreContext(); true');
+    await page.waitFor('__recoveryRestored && !__recoveryGL.isContextLost()', 15000, 'the browser context to restore');
+    ok(await page.eval('renderEngine === "cpu" && !GPU_SURFACE.ready && !renderError'),
+       `restoration keeps CPU selected and waits for explicit GPU reinitialization${label}`);
+    const previous = await page.eval('__recoveryDraws.gpu');
+    await page.eval('document.querySelector(\'#engSeg [data-e="gpu"]\').click(); true');
+    await page.waitFor(`GPU_SURFACE.ready && !renderError && __recoveryDraws.gpu > ${previous}`,
+      15000, 'explicit GPU reinitialization to draw the current rasters');
+    ok(await page.eval('renderEngine === "gpu" && document.getElementById("cgl").style.visibility === "visible"'),
+       `explicit GPU selection rebuilds its resources and resumes drawing${label}`);
+    await shot('gpu-restored');
+    await gpuParity(page, 'after actual context restoration' + label);
+  } finally {
+    await page.eval(`renderSurface = __recoveryOriginal;
+      document.querySelector('#engSeg [data-e="cpu"]').click(); true`);
+  }
+}
+
+async function checkGpuRender(page, label){
+  section('the surface drawn on the GPU' + label);
+  const probe = await page.json('FARADAY_RENDER_GL.renderGlProbe()');
+  ok(probe.ok, 'the test browser offers WebGL2, which it did not while it was launched '
+     + 'with --disable-gpu', JSON.stringify(probe));
+  if (!probe.ok) return;
+  /* Said, not asserted: on a machine with no GPU this is SwiftShader, which runs the
+     same WebGL2 API and the same ANGLE shader compiler in software. A pass there says
+     the shader computes what the CPU computes; it says nothing about GPU speed. */
+  console.log(`       renderer: ${probe.renderer}`
+    + (/swiftshader/i.test(probe.renderer) ? '  (software -- correctness only, not speed)' : ''));
+
+  await page.eval('document.querySelector("#engSeg [data-e=\'gpu\']").click()');
+  const st = await page.json(`({ engine: renderEngine, ready: GPU_SURFACE.ready,
+    error: GPU_SURFACE.error, c: document.getElementById('c').style.display,
+    cgl: document.getElementById('cgl').style.display })`);
+  ok(st.engine === 'gpu' && st.ready && !st.error,
+     'choosing GPU starts the WebGL2 renderer', JSON.stringify(st));
+  ok(st.cgl === 'block' && st.c === 'none',
+     'and the GPU canvas is the one shown, the CPU one hidden', JSON.stringify(st));
+  /* Nothing below can run on a renderer that did not start, and the failure above
+     already says why; carrying on would only crash on its absence. */
+  if (!(st.engine === 'gpu' && st.ready)) return;
+
+  await checkRawParityGuards(page, label);
+  await checkGpuBoundary(page, label);
+  await gpuParity(page, 'on the modal field');
+
+  /* The field rebuilt: a different drive frequency is a different mode and a
+     different surface, so every texture the GPU holds is now stale unless it was
+     re-uploaded. */
+  const gens = await page.json(`(() => { const g0 = FIELD_GEN, f0 = freq;
+    setFreq(f0 + 37); recompute(); const g1 = FIELD_GEN; return { g0, g1, f0, f1: freq }; })()`);
+  ok(gens.g1 > gens.g0, 'rebuilding the field moves its generation, which is what the GPU '
+     + 'renderer re-uploads on', JSON.stringify(gens));
+  await gpuParity(page, 'after the field is rebuilt');
+  await page.eval(`setFreq(${gens.f0}); recompute()`);
+
+  await page.eval('recompute()');
+  const deck = await page.eval('document.getElementById("ro").textContent');
+  ok(/drawn on\s*GPU/.test(deck) && /WebGL2/.test(deck),
+     'the deck says the GPU drew it, and through which API', deck.slice(0, 200));
+  ok(/main-thread cost/.test(deck), 'and states what drawing cost the main thread',
+     deck.slice(0, 200));
+  const cost = await page.json('({ cpu: renderCost.cpu, gpu: renderCost.gpu })');
+  console.log(`       main-thread cost per frame: CPU ${cost.cpu.toFixed(2)} ms, `
+    + `GPU ${cost.gpu.toFixed(2)} ms (submission only; ${/swiftshader/i.test(probe.renderer)
+       ? 'software GPU, so not a speed measurement' : 'hardware GPU'})`);
+
+  await page.eval('document.querySelector("#engSeg [data-e=\'cpu\']").click()');
+  const back = await page.json(`({ engine: renderEngine,
+    c: document.getElementById('c').style.display,
+    cgl: document.getElementById('cgl').style.display })`);
+  ok(back.engine === 'cpu' && back.c === 'block' && back.cgl === 'none',
+     'choosing CPU again draws with the CPU on the CPU canvas', JSON.stringify(back));
+  await page.eval('recompute()');
+  const deck2 = await page.eval('document.getElementById("ro").textContent');
+  ok(/drawn on\s*CPU/.test(deck2), 'and the deck says so', deck2.slice(0, 200));
+  await checkGpuContextRecovery(page, label);
+}
+
 /* The C++ engine, on the page, drawing the same surface.
    .
    dns/check-cell3d-wasm.mjs is what holds the two engines to identical fields;
@@ -681,12 +1030,20 @@ async function checkCppEngine(page, inlined){
 
 try {
   const first = await checkPage(`http://127.0.0.1:${port}/cymatic.html`, 'the checkout page', false);
+  await checkGpuRender(first, '');
   await checkSolverDraws(first);
+  /* and on the solver's field, whose rasters arrive from a different path */
+  await first.eval('document.querySelector("#engSeg [data-e=\'gpu\']").click()');
+  if (await first.json('GPU_SURFACE.ready')) await gpuParity(first, 'on the Navier-Stokes field');
+  else ok(false, 'the GPU renderer is running for the Navier-Stokes parity check',
+          await first.json('String(GPU_SURFACE.error)'));
+  await first.eval('document.querySelector("#engSeg [data-e=\'cpu\']").click()');
   await checkCppEngine(first, false);
 
   const { buildStandalone } = await import(join(REPO, 'faraday', 'build-standalone.mjs'));
   writeFileSync(built, buildStandalone());
   const single = await checkPage(`file://${built}`, 'the single-file build', true);
+  await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
 } finally {
   browser.close();

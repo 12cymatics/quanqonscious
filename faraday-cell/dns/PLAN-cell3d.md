@@ -98,7 +98,7 @@ against this and need no further decision.
 | S9b | The renderer draws this solver's surface | **done** | the page's drawn field agrees with `CELL3D.etaAtPixel` at 379 pixels to a relative 1e-6, through four resamplers and a polar-to-Cartesian rotation in the normalised radius; the deck carries the physics clock, the wall clock, their ratio and the step count; a worker built from the two `<script id="dns...">` sources, slices bounded at 120 ms of wall clock. Found a real precision defect on the way in -- `st.depthMm` does not exist on the resolved state, so `h` arrived as NaN -- and the page suite caught the standalone build still carrying a `<script src>` for the solver, twice over |
 | S10 | C++ port of the three-dimensional step | **done** | `dns/faraday_cell3d.cpp`, 1 862 lines, compiled freestanding for wasm32 by clang with no Emscripten and no libc. Bit for bit against the JavaScript, by `Object.is` on every element: the metric's 22 arrays; the projection's seven operators and the conjugate gradient's own **iteration count** and residual; `axisU`, the three surface fluxes and the vector Laplacian; the advection's six arrays, the mean curvature, the surface area, the excess area and the surface pressure; 40 steps undriven and driven on both contact branches; and **894 steps, one whole drive period at 12x24x8, all 29 arrays**. Measured: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x slower than real time to 489x. The page offers it as a third `surface` button and the deck names the module that answered, read off the worker's own frames. `dns/check-cell3d-wasm.mjs`, 55 checks. Fourteen injected defects, four of them findings about the GATE rather than the port -- below |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
-| S12 | GPU render path, and the optional f32 preconditioner | todo | f64 answer unchanged by the preconditioner; render timing measured |
+| S12 | GPU render path, and the optional f32 preconditioner | **render done; preconditioner declined, with the numbers** | The surface is shaded by a WebGL2 fragment shader (`faraday/render-gl.js`), chosen under *draw on*, the deck naming which processor drew. Held to the CPU's bytes **within one level out of 255 in every channel** -- 24 renderings each on the modal field, after a field rebuild, on the Navier-Stokes field and in the single-file build, worst difference 1, about one channel in 100 000 at that level. Main thread per frame: CPU 9.9-10.3 ms, GPU 2.1-2.3 ms on a SOFTWARE GPU, which is submission cost and not a speed measurement. The f32 preconditioner is not built: at the page's grid the CG is 159 iterations and 40% of a 77 ms step, each GPU application is a round trip whose cost on the owner's hardware is unmeasured, and it would end bit-for-bit parity between the engines -- below |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
 | S13b | Ship: the README's claims, and the whole suite set from the unpack | todo | the slow suite run from the unpack too, in CI rather than by hand; `dns/check-page.mjs` from the unpack, which needs a browser on the machine doing the unpacking |
 
@@ -1416,6 +1416,118 @@ on every unknown. So the flag's stated purpose cannot be demonstrated on either 
 here. Both build scripts now say so, instead of calling it load bearing.
 
 
+## S12 -- the surface drawn on the GPU, and the preconditioner that was not built
+
+**What moved, and why it was the right thing to move.** `cymatic.html` drew the surface with a
+per-pixel JavaScript loop over 381 x 381 = 145 161 pixels, with `exp`, `pow` and `sqrt` in the
+default view's inner loop. Measured in the page on this container: **11.6 to 22.2 ms a frame**
+depending on the view, against 16.7 ms for an entire frame at 60 Hz. That loop is pure shading
+-- each pixel reads its own inputs and writes its own colour, nothing accumulates across pixels,
+nothing feeds back into the simulation -- which is exactly a fragment shader's job.
+`faraday/render-gl.js` is that shader, a line-for-line transcription of the loop's body, chosen
+under **draw on**. The deck names the processor that drew the frame and what it cost the main
+thread; the choice is remembered per browser.
+
+**What did not move.** The physics: f64 on the CPU, for the reason above. And the grains:
+`stepGrains` costs more than the shading did -- 28 ms a frame measured for its three passes --
+but it draws from one seeded random sequence in grain order and topples out of over-full cells
+in scan order, so a parallel version would be a different algorithm with a different outcome
+under the old one's name. Its counts are uploaded each frame as an integer texture.
+
+**Parity, and why the bound is one level.** Both renderers read the same `Float32Array` rasters.
+The CPU evaluates in f64, the GPU in f32, and the results differ by parts in ten million; each
+is quantised to 8 bits. A difference that small changes a byte only at a rounding boundary, and
+then by exactly one level. So `dns/check-page.mjs` asserts **no channel anywhere differs by more
+than one**, and reports -- does not bound -- how many differ by one. Twenty-four renderings per
+pass (four views; noise off and on; the page's amplitude and full amplitude in both phases):
+
+| pass | worst | channels one level apart |
+|---|---|---|
+| modal field | 1 | 181 of 13 935 456 |
+| after the field is rebuilt | 1 | 109 of 13 935 456 |
+| Navier-Stokes field | 1 | 126 of 13 935 456 |
+| single-file build, modal | 1 | 172 of 13 935 456 |
+| single-file build, rebuilt | 1 | 121 of 13 935 456 |
+
+**And the byte bound alone was shown blind, so there is a second one.** Injected on a
+worktree: one shading coefficient changed from 168 to 169 -- a wrong transcription moving every
+optical pixel by up to half a level -- and the one-level byte check stayed GREEN, the count of
+one-level differences rising from about 180 to 106 887 while nothing exceeded one. A count is
+not a bound, and turning it into one would have been a tolerance with nothing behind it. So the
+shader also writes its values BEFORE the 8-bit rounding to a float target, the CPU loop hands
+back the same values in double precision, and they are compared directly against a bound
+derived from the GLSL ES 3.00 precision requirements rather than from this GPU: the largest
+permitted error is the specular term's pow(Nz, 30), about 1.4e-5 relative, which with the ring's
+exp and the tone curve's slope comes to about 5e-3 of a level, so the bound is **2e-2** -- four
+times what any conformant GPU may do. Measured on SwiftShader at full amplitude: 4.6e-5 (sand),
+4.6e-4 (optical), 4.8e-5 (height), 5.6e-5 (nodal). The 168 -> 169 error is about a thousand
+times the measured noise.
+
+Two things the GPU does not take from the same arrays, each gated separately: the texture
+noise, which the CPU draws afresh each frame from `mulberry32(RENDER_SEED)` one value per
+covered pixel and which is therefore the same every frame and built once as a table; and the
+field after it is rebuilt, since a renderer that uploaded once would agree on the first frame
+and draw a stale surface on every one after -- the field carries a generation counter, bumped at
+the end of `finishSurface`, which every surface path goes through.
+
+**Eight injections on a worktree under `/tmp`, each red, green on restore** (192 checks):
+
+| injected | verdict |
+|---|---|
+| one shading coefficient, 168 -> 169 in the optical ring | **GREEN against the byte bound alone** -- the finding above; RED against the pre-rounding bound, 0.547 of a level against 0.02 |
+| the specular coefficient, 96 -> 97 in blue | RED, 0.839 of a level |
+| the row flip removed, picture upside down | RED, worst byte difference 150 |
+| the field uploaded once and never again | RED after the rebuild only, worst 204 -- green on the first frame, which is why the rebuild pass exists |
+| the texture noise from a different seed | RED with noise on only, worst 24 |
+| NEAREST filtering not set, so the float textures are incomplete and read as zero | RED, worst 207 |
+| the old canvas check that took a 2D context on every canvas | RED: the GPU renderer cannot start |
+| restored | GREEN, worst pre-rounding difference 4.9e-4 of a level |
+
+**What the tests run on.** There is no GPU in the container or on GitHub's runners. Chrome's
+SwiftShader runs the same WebGL2 API through the same ANGLE shader compiler in software, so a
+pass there says the shader computes what the CPU computes -- and nothing about speed. Main
+thread per frame on it: CPU 9.9 to 10.3 ms, GPU 2.1 to 2.3 ms, which is submission and upload,
+reported and labelled as such.
+
+**`--disable-gpu` is gone from the page suite**, at the owner's request and because the GPU
+section could not run with it: under that flag Chrome offers no WebGL2 context at all.
+`--enable-unsafe-swiftshader` replaced it, so a machine with no GPU still gets WebGL2 in
+software; on a machine with one, the real GPU is used.
+
+**A defect the new section exposed in an old check.** The page suite's "both canvases drew"
+check walked EVERY canvas and took a 2D context on each to read it back. Taking a context is not
+a read: it claims the canvas for good, and a canvas holds one kind of context for its life. It
+reached the GPU canvas before the GPU renderer did, so "choosing GPU" then found no WebGL2
+context, and the GPU section failed for a reason that was the test's own. It now reads the two
+2D canvases by name.
+
+**Then the owner's follow-up commit (`8d77333`) closed two gaps, and the page suite went from 192
+checks to 425.** First, a GPU that refuses no longer hands the frame to the CPU: the page used to
+switch back to CPU and disable the GPU button. Now GPU stays selected, drawing pauses with both
+canvases hidden, and a status line under *draw on* says why. Recovery is the user's choice: CPU
+to draw there, or GPU again to rebuild the renderer's resources. That includes a real context
+loss: `WEBGL_lose_context` drops and restores the context in the suite, which then holds the
+rebuilt renderer to the same 24-rendering parity. Second, the renderer refuses non-finite rasters and
+uniforms before anything reaches the GPU, and the pre-rounding parity is summarised in the browser,
+before JSON can turn a NaN into `null`. The summariser is itself fed NaN and ±Infinity on
+either side at the start, middle and end of the array, plus two finite values whose difference
+overflows, and must reject each one.
+
+**The f32 preconditioner was not built, and the numbers are why.** Measured with the C++ engine
+at the page's grid, 16 x 40 x 10, 6 400 pressure unknowns: **159 CG iterations a step, 0.192 ms a
+matvec, so the CG is 40% of a 76.9 ms step**; at 10 x 24 x 8 it is 110 iterations and 23%. A GPU
+preconditioner is applied once per iteration, and each application is a round trip -- upload
+the residual, run, read it back, which waits for the GPU to finish. That round trip on the
+owner's hardware is the number that decides whether it wins, and it cannot be measured from a
+container whose only GPU is software. Against an uncertain gain stand two certain costs: an f32
+preconditioner is not exactly symmetric, so the solve would need flexible CG, whose iteration
+path differs -- ending the bit-for-bit agreement between the JavaScript and C++ engines S10
+established -- and the converged answer would then depend on which GPU computed it, within the
+solve's tolerance. It is also single-precision arithmetic inside the physics solve, which the
+owner's standing instruction excludes. It is the owner's call; it is recorded here as declined
+rather than as done. The cheaper route to speed is S11, which attacks the whole step, not 40% of
+it.
+
 ## The zip: what was claimed, what was false, and what is there now
 
 **It did not exist, and this file said it did.** The S13 row asserted that a
@@ -1502,9 +1614,10 @@ rebuilds the C++ with clang. Both still run in CI on the checkout. Closing that 
 S13b. While measuring it, the CI comment calling `check-dns` "a two-and-a-half minute run"
 was found stale and corrected in place.
 
-**There is no GPU path, and the physics is never going to have one.** Zero references to WebGL,
-WebGPU or WGSL in `dns/faraday-cell3d.js`, anywhere under `dns/`, or in `cymatic.html`; the only
-mention in the project is S12 in this file. That is not an oversight waiting to be corrected.
+**There is a GPU path now, for DRAWING, and the physics is never going to have one** -- S12
+below. This paragraph used to begin "There is no GPU path" and count zero references to WebGL
+in the project; that was true when written and is not now. The rest of it stands and is why
+the GPU draws and does not compute: it is not an oversight waiting to be corrected.
 Metal has no `double`, so WGSL has no `f64`, and no GPU on an Intel Mac carries a
 double-precision type -- the constraint is recorded under "The one hard constraint" above and
 was confirmed by the owner. S12 is a RENDER path plus an optional f32 preconditioner inside the
