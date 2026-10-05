@@ -38,7 +38,7 @@
  *
  * IT REFUSES RATHER THAN FALLING BACK. If WebGL2 is not available, or a texture
  * format it needs is missing, or the shaders do not compile, construction throws
- * with the reason, and the page keeps the GPU option unavailable and says why. It
+ * with the reason, and the page reports why GPU rendering could not start. It
  * never quietly draws with the CPU under the GPU's name.
  */
 
@@ -141,6 +141,8 @@ class SurfaceGL {
   /* `canvas` must be a canvas nothing else has taken a context on. GR is the raster
      side, 381 in the page. */
   constructor(canvas, GR){
+    if (!Number.isInteger(GR) || GR <= 0) throw new RangeError(
+      'the GPU raster side must be a positive integer.');
     const gl = canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: false, stencil: false,
       premultipliedAlpha: false, preserveDrawingBuffer: false });
@@ -148,26 +150,109 @@ class SurfaceGL {
       'the GPU renderer needs WebGL2, and this browser offers no WebGL2 context on '
       + 'the surface canvas. Draw with the CPU instead; this does not do so for you.');
     this.gl = gl; this.GR = GR; this.lost = false; this.lostReason = null;
+    this.contextRestored = false; this.initialized = false;
+    this.tex = {}; this.uploaded = new Set();
+    this.onContextLost = ev => {
+      ev.preventDefault();
+      this.markContextLost();
+    };
+    this.onContextRestored = () => {
+      /* Restoration invalidates every old GL object. A user must select GPU again:
+         neither this event nor a draw call silently restarts the renderer. */
+      this.lost = true; this.initialized = false; this.contextRestored = true;
+      this.lostReason = 'the GPU context was restored. Select GPU again to rebuild '
+        + 'its resources and upload the current surface, or select CPU.';
+    };
+    canvas.addEventListener('webglcontextlost', this.onContextLost);
+    canvas.addEventListener('webglcontextrestored', this.onContextRestored);
+    try { this.reinitialize(); }
+    catch (e){
+      canvas.removeEventListener('webglcontextlost', this.onContextLost);
+      canvas.removeEventListener('webglcontextrestored', this.onContextRestored);
+      this.releaseResources();
+      throw e;
+    }
+  }
+
+  markContextLost(){
+    this.lost = true; this.initialized = false; this.contextRestored = false;
+    this.lostReason = 'the GPU dropped this page\'s WebGL context. Select CPU to '
+      + 'continue drawing, or select GPU again after the browser restores the context.';
+  }
+
+  get ready(){
+    if (this.gl.isContextLost()) this.markContextLost();
+    return this.initialized && !this.lost;
+  }
+
+  assertReady(){
+    if (!this.ready) throw new Error(this.lostReason
+      || 'the GPU renderer needs explicit initialization before it can draw.');
+  }
+
+  releaseResources(){
+    const gl = this.gl;
+    /* Objects from a lost context are already invalid; do not submit them to a
+       restored context. Objects from an intact context can be deleted normally. */
+    if (!this.lost && !gl.isContextLost()){
+      for (const { t } of Object.values(this.tex)) gl.deleteTexture(t);
+      if (this.fboTex) gl.deleteTexture(this.fboTex);
+      if (this.fbo) gl.deleteFramebuffer(this.fbo);
+      if (this.vao) gl.deleteVertexArray(this.vao);
+      if (this.prog) gl.deleteProgram(this.prog);
+    }
+    this.tex = {}; this.u = {}; this.uploaded.clear();
+    this.fboTex = null; this.fbo = null; this.vao = null; this.prog = null;
+    this.initialized = false;
+  }
+
+  /* Called by an explicit GPU selection, never by a restoration event or draw.
+     The caller must upload the current rasters again after this returns. */
+  reinitialize(){
+    const gl = this.gl;
+    if (gl.isContextLost()){
+      this.markContextLost();
+      throw new Error(this.lostReason);
+    }
+    this.releaseResources();
+    this.lost = false; this.lostReason = null; this.contextRestored = false;
+    try { this.initializeResources(); }
+    catch (e){ this.releaseResources(); throw e; }
+    if (gl.isContextLost()){
+      this.markContextLost();
+      throw new Error(this.lostReason);
+    }
+    this.initialized = true;
+    return this;
+  }
+
+  initializeResources(){
+    const gl = this.gl, GR = this.GR;
     const d = gl.getExtension('WEBGL_debug_renderer_info');
     this.renderer = String(d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL)
                              : gl.getParameter(gl.RENDERER));
-    canvas.width = GR; canvas.height = GR;
+    gl.canvas.width = GR; gl.canvas.height = GR;
 
     const compile = (type, src, what) => {
       const sh = gl.createShader(type);
       gl.shaderSource(sh, src); gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(
-        `the GPU renderer's ${what} shader did not compile on this GPU: `
-        + gl.getShaderInfoLog(sh));
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)){
+        const reason = gl.getShaderInfoLog(sh);
+        gl.deleteShader(sh);
+        throw new Error(`the GPU renderer's ${what} shader did not compile on this GPU: `
+          + reason);
+      }
       return sh;
     };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, RENDER_GL_VS, 'vertex'));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, RENDER_GL_FS, 'fragment'));
+    const prog = this.prog = gl.createProgram(), shaders = [];
+    try {
+      shaders.push(compile(gl.VERTEX_SHADER, RENDER_GL_VS, 'vertex'));
+      shaders.push(compile(gl.FRAGMENT_SHADER, RENDER_GL_FS, 'fragment'));
+      for (const sh of shaders) gl.attachShader(prog, sh);
+    } finally { for (const sh of shaders) gl.deleteShader(sh); }
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(
       'the GPU renderer\'s shaders did not link on this GPU: ' + gl.getProgramInfoLog(prog));
-    this.prog = prog;
     gl.useProgram(prog);
     this.u = {};
     for (const n of ['uCover', 'uNoise', 'uEta', 'uNx', 'uNy', 'uBin', 'uView', 'uGR',
@@ -202,19 +287,30 @@ class SurfaceGL {
     const err = gl.getError();
     if (err !== gl.NO_ERROR) throw new Error(
       `the GPU renderer could not allocate its textures on this GPU (GL error ${err}).`);
-
-    canvas.addEventListener('webglcontextlost', ev => {
-      ev.preventDefault();
-      this.lost = true;
-      this.lostReason = 'the GPU dropped this page\'s WebGL context -- a driver reset, '
-        + 'a device change, or too many contexts open. Draw with the CPU, or reload.';
-    });
   }
 
-  upload(name, data){
+  validateRaster(name, data){
+    if (!Object.hasOwn(this.tex, name)) throw new RangeError(`unknown GPU raster ${name}.`);
+    if (!data || data.length !== this.GR*this.GR) throw new RangeError(
+      `${name}: ${data && data.length} values for a ${this.GR} x ${this.GR} raster.`);
+    for (let i = 0; i < data.length; i++){
+      const v = data[i];
+      if (!Number.isFinite(v) || !Number.isFinite(Math.fround(v))) throw new RangeError(
+        `${name}[${i}]: ${v} is not a finite float32 raster value.`);
+      if (name === 'uBin' && (!Number.isInteger(v) || v < 0 || v > 65535))
+        throw new RangeError(`${name}[${i}]: ${v} is not an unsigned 16-bit grain count.`);
+    }
+  }
+
+  checkError(operation){
+    this.assertReady();
+    const err = this.gl.getError();
+    if (err !== this.gl.NO_ERROR) throw new Error(
+      `the GPU renderer could not ${operation} (GL error ${err}).`);
+  }
+
+  uploadValidated(name, data){
     const gl = this.gl, { t, unit } = this.tex[name];
-    if (data.length !== this.GR*this.GR) throw new RangeError(
-      `${name}: ${data.length} values for a ${this.GR} x ${this.GR} raster.`);
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, t);
     if (name === 'uBin')
@@ -222,21 +318,51 @@ class SurfaceGL {
                        gl.UNSIGNED_SHORT, data);
     else
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.GR, this.GR, gl.RED, gl.FLOAT, data);
+    this.checkError(`upload ${name}`);
+    this.uploaded.add(name);
+  }
+
+  upload(name, data){
+    this.assertReady();
+    this.validateRaster(name, data);
+    this.uploadValidated(name, data);
+  }
+
+  uploadRasters(rasters){
+    this.assertReady();
+    /* Validate the whole batch before changing any texture. A bad final raster
+       must not leave a mixture of the old and new field on the GPU. */
+    for (const [name, data] of rasters) this.validateRaster(name, data);
+    for (const [name, data] of rasters) this.uploadValidated(name, data);
   }
 
   /* The rasters that change only when the field is rebuilt, never per frame. */
-  uploadStatic(cover, noise){ this.upload('uCover', cover); this.upload('uNoise', noise); }
-  uploadField(eta, nx, ny){ this.upload('uEta', eta); this.upload('uNx', nx); this.upload('uNy', ny); }
+  uploadStatic(cover, noise){ this.uploadRasters([['uCover', cover], ['uNoise', noise]]); }
+  uploadField(eta, nx, ny){ this.uploadRasters([['uEta', eta], ['uNx', nx], ['uNy', ny]]); }
   uploadBins(bin){ this.upload('uBin', bin); }
 
+  validateDraw(o){
+    this.assertReady();
+    for (const n of ['k', 'contrast', 'tex', 'slope'])
+      if (!Number.isFinite(o[n]) || !Number.isFinite(Math.fround(o[n])))
+        throw new RangeError(`${n}: ${o[n]} is not a finite float32 GPU uniform.`);
+    const v = RENDER_GL_VIEW[o.view], shaderView = v === undefined ? 3 : v;
+    if ((shaderView === 2 || shaderView === 3) && !(Math.fround(o.contrast) > 0))
+      throw new RangeError('contrast must remain positive in float32 for nodal and optical shading.');
+    const needed = ['uCover', 'uNoise', 'uEta', 'uNx', 'uNy'];
+    if (shaderView === 0) needed.push('uBin');
+    for (const name of needed) if (!this.uploaded.has(name)) throw new Error(
+      `${name} must be uploaded after GPU initialization before drawing.`);
+    return shaderView;
+  }
+
   draw(o, raw){
-    if (this.lost) throw new Error(this.lostReason);
+    const v = this.validateDraw(o);
     const gl = this.gl, u = this.u;
     gl.viewport(0, 0, this.GR, this.GR);
     gl.useProgram(this.prog);
     gl.bindVertexArray(this.vao);
-    const v = RENDER_GL_VIEW[o.view];
-    gl.uniform1i(u.uView, v === undefined ? 3 : v);
+    gl.uniform1i(u.uView, v);
     gl.uniform1i(u.uGR, this.GR);
     gl.uniform1i(u.uRaw, raw ? 1 : 0);
     gl.uniform1f(u.uK, o.k);
@@ -244,6 +370,7 @@ class SurfaceGL {
     gl.uniform1f(u.uTex, o.tex);
     gl.uniform1f(u.uSlope, o.slope);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.checkError('draw the surface');
   }
 
   /* The shading values BEFORE the 8-bit rounding, three per pixel with row 0 at the
@@ -252,6 +379,7 @@ class SurfaceGL {
      than reading something else -- the gate then fails, which is right, because it
      can no longer see an error smaller than one level. */
   readRaw(o){
+    this.validateDraw(o);
     const gl = this.gl, GR = this.GR;
     if (!this.fbo){
       if (!gl.getExtension('EXT_color_buffer_float')) throw new Error(
@@ -276,6 +404,9 @@ class SurfaceGL {
       this.draw(o, true);
       const raw = new Float32Array(GR*GR*4), out = new Float32Array(GR*GR*4);
       gl.readPixels(0, 0, GR, GR, gl.RGBA, gl.FLOAT, raw);
+      this.checkError('read the raw surface');
+      for (let i = 0; i < raw.length; i++) if (!Number.isFinite(raw[i]))
+        throw new Error(`the GPU raw surface contains a nonfinite value at channel ${i}.`);
       for (let y = 0; y < GR; y++)
         out.set(raw.subarray((GR - 1 - y)*GR*4, (GR - y)*GR*4), y*GR*4);
       return out;
@@ -286,8 +417,10 @@ class SurfaceGL {
      path's ImageData stores it. Valid only in the same task as draw(): the drawing
      buffer is not preserved past compositing, and does not need to be for display. */
   readRGBA(){
+    this.assertReady();
     const gl = this.gl, GR = this.GR, raw = new Uint8Array(GR*GR*4), out = new Uint8Array(GR*GR*4);
     gl.readPixels(0, 0, GR, GR, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+    this.checkError('read the surface');
     for (let y = 0; y < GR; y++)
       out.set(raw.subarray((GR - 1 - y)*GR*4, (GR - y)*GR*4), y*GR*4);
     return out;

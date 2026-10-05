@@ -660,8 +660,83 @@ async function checkSolverDraws(page){
    transcription error moves a pixel. */
 const RAW_BOUND = 2e-2;
 
+/* This reducer runs IN THE BROWSER, before JSON can turn NaN/Infinity into null.
+   Check both operands and their difference: finite operands can still overflow
+   subtraction. Count invalid channels explicitly instead of putting a NaN in a
+   maximum, where the next finite value could replace it. Alpha is validated too,
+   although only RGB contributes to the existing before-rounding bound. */
+function summarizeRawParity(rawCpu, rawGpu){
+  if (!rawCpu || !rawGpu || !Number.isSafeInteger(rawCpu.length)
+      || rawCpu.length <= 0 || rawCpu.length % 4 || rawCpu.length !== rawGpu.length)
+    throw new Error('raw GPU parity requires equal, nonempty RGBA arrays');
+  let maxRaw = 0, invalidCount = 0;
+  for (let i = 0; i < rawCpu.length; i++){
+    const cpu = rawCpu[i], gpu = rawGpu[i], difference = Math.abs(cpu - gpu);
+    if (!Number.isFinite(cpu) || !Number.isFinite(gpu) || !Number.isFinite(difference)){
+      invalidCount++;
+      continue;
+    }
+    if ((i & 3) !== 3 && difference > maxRaw) maxRaw = difference;
+  }
+  return { status: invalidCount === 0 ? 'finite' : 'invalid', invalidCount,
+    checkedCount: rawCpu.length, maxRaw: invalidCount === 0 ? maxRaw : null };
+}
+
+/* Do not coerce a transported null to zero, or trust the status alone. A broken
+   producer or transport must fail the same gate as a non-finite raw channel. */
+function finiteRawParitySummary(row, expectedCount){
+  return !!row && row.status === 'finite' && row.invalidCount === 0
+    && Number.isSafeInteger(expectedCount) && expectedCount > 0 && expectedCount % 4 === 0
+    && row.checkedCount === expectedCount && Number.isFinite(row.maxRaw) && row.maxRaw >= 0;
+}
+
+async function checkRawParityGuards(page, label){
+  const cases = await page.json(`(() => {
+    const summarize = ${summarizeRawParity.toString()};
+    const cpu = new Float64Array(GR*GR*4);
+    renderSurfaceCpu(state, cpu);
+    const gpu = GPU_SURFACE.readRaw(state);
+    const cases = [{ name: 'unchanged rendered field', summary: summarize(cpu, gpu), valid: true }];
+    const positions = [['beginning', 0], ['middle', Math.floor(cpu.length / 2)], ['end', cpu.length - 1]];
+    for (const side of ['CPU', 'GPU'])
+      for (const [valueName, value] of [['NaN', NaN], ['+Infinity', Infinity], ['-Infinity', -Infinity]])
+        for (const [position, i] of positions){
+          const a = new Float64Array(cpu), b = new Float64Array(gpu);
+          (side === 'CPU' ? a : b)[i] = value;
+          cases.push({ name: side + ' ' + valueName + ' at ' + position,
+            summary: summarize(a, b), valid: false });
+        }
+    const a = new Float64Array(cpu), b = new Float64Array(gpu);
+    a[0] = Number.MAX_VALUE; b[0] = -Number.MAX_VALUE;
+    cases.push({ name: 'finite operands whose difference overflows',
+      summary: summarize(a, b), valid: false });
+    return { count: cpu.length, cases };
+  })()`);
+  for (const { name, summary, valid } of cases.cases){
+    ok(valid ? finiteRawParitySummary(summary, cases.count)
+             : summary.status === 'invalid' && summary.invalidCount === 1
+               && summary.checkedCount === cases.count && summary.maxRaw === null
+               && !finiteRawParitySummary(summary, cases.count),
+       `raw GPU parity ${valid ? 'accepts' : 'rejects'} ${name}${label}`, JSON.stringify(summary));
+  }
+  const good = { status: 'finite', invalidCount: 0, checkedCount: 4, maxRaw: 0 };
+  for (const [name, change] of [
+    ['null maximum after JSON', { maxRaw: null }],
+    ['NaN maximum', { maxRaw: NaN }], ['infinite maximum', { maxRaw: Infinity }],
+    ['negative infinite maximum', { maxRaw: -Infinity }], ['string maximum', { maxRaw: '0' }],
+    ['missing maximum', { maxRaw: undefined }], ['negative maximum', { maxRaw: -1 }],
+    ['invalid status', { status: 'invalid' }], ['missing status', { status: undefined }],
+    ['nonzero invalid count', { invalidCount: 1 }], ['null invalid count', { invalidCount: null }],
+    ['missing invalid count', { invalidCount: undefined }],
+    ['wrong channel count', { checkedCount: 8 }], ['null channel count', { checkedCount: null }]
+  ]) ok(!finiteRawParitySummary({ ...good, ...change }, 4),
+        `raw GPU parity rejects transported ${name}${label}`);
+  ok(!finiteRawParitySummary(null, 4), `raw GPU parity rejects a null summary${label}`);
+}
+
 async function gpuParity(page, label){
   const r = await page.json(`(() => {
+    const summarizeRawParity = ${summarizeRawParity.toString()};
     const vs0 = state.visualSignature, e0 = state.expression, ps0 = phaseSign, v0 = view;
     const rows = [];
     const rawCpu = new Float64Array(GR*GR*4);
@@ -677,18 +752,15 @@ async function gpuParity(page, label){
             GPU_SURFACE.draw(state);
             const gpu = GPU_SURFACE.readRGBA();
             const rawGpu = GPU_SURFACE.readRaw(state);
-            let maxd = 0, n1 = 0, lit = 0, maxRaw = 0;
+            let maxd = 0, n1 = 0, lit = 0;
             for (let i = 0; i < cpu.length; i++){
               const d = Math.abs(cpu[i] - gpu[i]);
               if (d > maxd) maxd = d;
               if (d) n1++;
               if ((i & 3) === 0 && cpu[i] > 40) lit++;
-              if ((i & 3) !== 3){
-                const dr = Math.abs(rawCpu[i] - rawGpu[i]);
-                if (!(dr <= maxRaw)) maxRaw = dr;    /* a NaN would stick, not vanish */
-              }
             }
-            rows.push({ amp, tex: texOn, view: v, maxd, n1, n: cpu.length, lit, maxRaw });
+            rows.push({ amp, tex: texOn, view: v, maxd, n1, n: cpu.length, lit,
+              ...summarizeRawParity(rawCpu, rawGpu) });
             state.expression = e0; phaseSign = ps0;
           }
     } finally { state.visualSignature = vs0; state.expression = e0; phaseSign = ps0; view = v0; }
@@ -696,26 +768,122 @@ async function gpuParity(page, label){
   })()`);
   const worst = Math.max(...r.map(x => x.maxd));
   const ones = r.reduce((a, x) => a + x.n1, 0), all = r.reduce((a, x) => a + x.n, 0);
-  const rawWorst = r.reduce((a, x) => (x.maxRaw > a || Number.isNaN(x.maxRaw)) ? x.maxRaw : a, 0);
+  const invalidRaw = r.filter(x => !finiteRawParitySummary(x, x.n));
+  const rawWorst = invalidRaw.length ? null : Math.max(...r.map(x => x.maxRaw));
   console.log(`       ${r.length} renderings ${label}: worst channel difference ${worst}, `
     + `${ones} of ${all} channels one level apart; before rounding, worst `
-    + `${rawWorst.toExponential(2)} of a level against a bound of ${RAW_BOUND}`);
+    + `${rawWorst === null ? 'INVALID' : rawWorst.toExponential(2)} of a level against a bound of ${RAW_BOUND}`);
   for (const x of r.filter(x => x.maxd > 1))
     console.log(`       ${x.amp} / tex ${x.tex} / ${x.view}: max ${x.maxd}`);
   ok(r.length === 24, `twenty-four renderings compared ${label}`, `${r.length}`);
   ok(worst <= 1,
      `the GPU's bytes are the CPU's to within one level in every channel of every view ${label}`,
      `worst ${worst}: ${r.filter(x => x.maxd > 1).map(x => `${x.amp}/${x.tex}/${x.view}=${x.maxd}`).join(', ')}`);
-  ok(rawWorst <= RAW_BOUND,
+  ok(invalidRaw.length === 0,
+     `every CPU/GPU raw value and difference is finite before JSON transport ${label}`,
+     JSON.stringify(invalidRaw));
+  ok(invalidRaw.length === 0 && Number.isFinite(rawWorst) && rawWorst <= RAW_BOUND,
      `before rounding, the GPU's values are the CPU's to within ${RAW_BOUND} of a level ${label}`
      + ' -- the bound the GLSL precision rules permit, which catches what rounding hides',
-     `worst ${rawWorst}: ${r.filter(x => !(x.maxRaw <= RAW_BOUND)).map(x =>
-        `${x.amp}/${x.tex}/${x.view}=${x.maxRaw.toExponential(2)}`).join(', ')}`);
+     `worst ${rawWorst}: ${r.filter(x => !finiteRawParitySummary(x, x.n) || x.maxRaw > RAW_BOUND).map(x =>
+        `${x.amp}/${x.tex}/${x.view}=${String(x.maxRaw)} (${x.status}, invalid ${x.invalidCount})`).join(', ')}`);
   /* And the comparison is not of two blank canvases. */
   const lit = Math.min(...r.filter(x => x.amp !== 'as is').map(x => x.lit));
   ok(lit > 1000, `at full amplitude every view lights more than a thousand pixels ${label}`,
      `fewest ${lit}`);
   return r;
+}
+
+async function checkGpuBoundary(page, label){
+  const results = await page.json(`(() => {
+    const surface = new FARADAY_RENDER_GL.SurfaceGL(document.createElement('canvas'), 2);
+    const field = new Float32Array([.1,.2,.3,.4]);
+    surface.uploadStatic(new Float32Array(4).fill(1), new Float32Array(4));
+    surface.uploadField(field, field, field); surface.uploadBins(new Uint16Array(4));
+    const options = {view:'optical',k:1,contrast:1,tex:0,slope:.8}, cases = [];
+    const rejects = (name, action) => {
+      let reason = ''; try { action(); } catch (e){ reason = String(e.message); }
+      cases.push({name,reason,glError:surface.gl.getError()});
+    };
+    for (const raster of ['uCover','uNoise','uEta','uNx','uNy'])
+      for (const [position,i] of [['beginning',0],['middle',2],['end',3]])
+        for (const [kind,value] of [['NaN',NaN],['+Infinity',Infinity],['-Infinity',-Infinity]]){
+          const data = new Float32Array(field); data[i] = value;
+          rejects(raster+' '+kind+' at '+position, () => surface.upload(raster,data));
+        }
+    for (const uniform of ['k','contrast','tex','slope'])
+      for (const [kind,value] of [['NaN',NaN],['+Infinity',Infinity],['-Infinity',-Infinity],['float32 overflow',Number.MAX_VALUE]])
+        rejects(uniform+' '+kind, () => surface.draw({...options,[uniform]:value}));
+    for (const mode of ['nodal','optical']) for (const value of [0,-1,Number.MIN_VALUE])
+      rejects(mode+' nonpositive float32 contrast '+value, () => surface.draw({...options,view:mode,contrast:value}));
+    surface.draw(options);
+    const raw = surface.readRaw(options);
+    const normal = raw.every(Number.isFinite) && surface.readRGBA().some((v,i) => (i&3)!==3 && v>0);
+    surface.releaseResources();
+    const lose = surface.gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+    return {cases,normal};
+  })()`);
+  for (const r of results.cases)
+    ok(/finite|float32|positive/i.test(r.reason) && r.glError === 0,
+      `renderer boundary refuses ${r.name} before GL submission${label}`, JSON.stringify(r));
+  ok(results.normal, `valid rendering remains finite and nonblank after refused inputs${label}`);
+}
+
+async function checkGpuContextRecovery(page, label){
+  section('explicit drawing recovery after WebGL context loss' + label);
+  const shot = async name => {
+    if (process.env.PAGE_GATE_SCREENSHOT_DIR) await page.shot(join(process.env.PAGE_GATE_SCREENSHOT_DIR,
+      `gpu-${name}-${label.replace(/[^a-z0-9]+/gi, '-') || 'served'}.png`));
+  };
+  await page.eval(`document.querySelector('#engSeg [data-e="gpu"]').click();
+    globalThis.__recoveryOriginal = renderSurface;
+    globalThis.__recoveryDraws = {cpu:0,gpu:0};
+    renderSurface = function(st){ __recoveryOriginal(st); __recoveryDraws[renderEngine]++; };
+    globalThis.__recoveryGL = document.getElementById('cgl').getContext('webgl2');
+    globalThis.__recoveryLose = __recoveryGL.getExtension('WEBGL_lose_context');
+    globalThis.__recoveryRestored = false;
+    document.getElementById('cgl').addEventListener('webglcontextrestored',
+      () => { __recoveryRestored = true; }, {once:true}); true`);
+  try {
+    const supported = await page.eval('!!__recoveryLose');
+    ok(supported, `WEBGL_lose_context is available for an actual loss/restoration test${label}`);
+    if (!supported) return;
+    await page.waitFor('__recoveryDraws.gpu > 0', 15000, 'the selected GPU to draw');
+    await page.eval('__recoveryLose.loseContext(); true');
+    await page.waitFor('!!renderError && !GPU_SURFACE.ready', 15000, 'visible context loss');
+    const lost = await page.json(`({engine:renderEngine,error:renderError,
+      message:document.getElementById('renderStatus').textContent,
+      hidden:document.getElementById('cgl').style.visibility, cpu:__recoveryDraws.cpu})`);
+    ok(lost.engine === 'gpu' && /context/i.test(lost.error)
+       && /GPU drawing paused/.test(lost.message) && lost.hidden === 'hidden' && lost.cpu === 0,
+       `context loss is visible and withholds the frame without CPU substitution${label}`, JSON.stringify(lost));
+    await shot('context-lost');
+    await page.eval('document.querySelector(\'#engSeg [data-e="gpu"]\').click(); true');
+    ok(await page.eval('renderEngine === "gpu" && !!renderError && !GPU_SURFACE.ready && __recoveryDraws.cpu === 0'),
+       `GPU retry refuses the still-lost object instead of accepting it${label}`);
+    await page.eval('document.querySelector(\'#engSeg [data-e="cpu"]\').click(); true');
+    await page.waitFor('__recoveryDraws.cpu > 0 && !renderError', 15000, 'explicit CPU recovery');
+    ok(await page.eval(`renderEngine === 'cpu' && document.getElementById('c').style.display === 'block'
+      && document.getElementById('c').style.visibility === 'visible'
+      && /CPU drawing/.test(document.getElementById('renderStatus').textContent)`),
+       `explicit CPU selection resumes the live animation after loss${label}`);
+    await shot('cpu-recovered');
+    await page.eval('__recoveryLose.restoreContext(); true');
+    await page.waitFor('__recoveryRestored && !__recoveryGL.isContextLost()', 15000, 'the browser context to restore');
+    ok(await page.eval('renderEngine === "cpu" && !GPU_SURFACE.ready && !renderError'),
+       `restoration keeps CPU selected and waits for explicit GPU reinitialization${label}`);
+    const previous = await page.eval('__recoveryDraws.gpu');
+    await page.eval('document.querySelector(\'#engSeg [data-e="gpu"]\').click(); true');
+    await page.waitFor(`GPU_SURFACE.ready && !renderError && __recoveryDraws.gpu > ${previous}`,
+      15000, 'explicit GPU reinitialization to draw the current rasters');
+    ok(await page.eval('renderEngine === "gpu" && document.getElementById("cgl").style.visibility === "visible"'),
+       `explicit GPU selection rebuilds its resources and resumes drawing${label}`);
+    await shot('gpu-restored');
+    await gpuParity(page, 'after actual context restoration' + label);
+  } finally {
+    await page.eval(`renderSurface = __recoveryOriginal;
+      document.querySelector('#engSeg [data-e="cpu"]').click(); true`);
+  }
 }
 
 async function checkGpuRender(page, label){
@@ -742,6 +910,8 @@ async function checkGpuRender(page, label){
      already says why; carrying on would only crash on its absence. */
   if (!(st.engine === 'gpu' && st.ready)) return;
 
+  await checkRawParityGuards(page, label);
+  await checkGpuBoundary(page, label);
   await gpuParity(page, 'on the modal field');
 
   /* The field rebuilt: a different drive frequency is a different mode and a
@@ -774,6 +944,7 @@ async function checkGpuRender(page, label){
   await page.eval('recompute()');
   const deck2 = await page.eval('document.getElementById("ro").textContent');
   ok(/drawn on\s*CPU/.test(deck2), 'and the deck says so', deck2.slice(0, 200));
+  await checkGpuContextRecovery(page, label);
 }
 
 /* The C++ engine, on the page, drawing the same surface.

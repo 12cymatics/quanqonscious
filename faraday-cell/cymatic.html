@@ -185,6 +185,7 @@ footer b{color:var(--ink2);font-weight:500}
         <button data-e="cpu" aria-pressed="true">CPU</button>
         <button data-e="gpu" aria-pressed="false">GPU</button>
       </div>
+      <div id="renderStatus" role="status" aria-live="polite">CPU drawing.</div>
     </div>
     <div class="fld">
       <span class="lab">surface</span>
@@ -575,7 +576,23 @@ function binGrains(){
    either way. The two are held to the same bytes, within one level per channel, by
    dns/check-page.mjs. */
 let renderEngine = 'cpu';
+let renderError = null;
 let renderCost = { cpu: 0, gpu: 0 };
+function paintRenderStatus(){
+  $('renderStatus').textContent = renderError
+    ? `${renderEngine.toUpperCase()} drawing paused: ${renderError} Choose CPU to draw there, or choose GPU to retry when its context is available.`
+    : `${renderEngine.toUpperCase()} drawing.`;
+  $('renderStatus').className = renderError ? 'warn' : '';
+}
+function refuseRender(error){
+  renderError = String(error && error.message || error);
+  GPU_SURFACE.show(renderEngine);
+  paintRenderStatus();
+  // The last frame is withheld; neither a stale image nor another renderer is
+  // presented as the selected engine's current output.
+  const processor = $('renderProcessor');
+  if (processor) processor.textContent = `${renderEngine.toUpperCase()} paused`;
+}
 function renderSurface(state){
   const t0 = performance.now();
   if (renderEngine === 'gpu') GPU_SURFACE.draw(state);
@@ -648,7 +665,7 @@ function renderSurfaceCpu(state, rawOut){
    under the GPU's name. */
 const GPU_SURFACE = (() => {
   const canvas = document.getElementById('cgl');
-  let gl = null, err = null, fieldGen = -1;
+  let gl = null, err = null, fieldGen = -1, staticReady = false;
 
   /* The texture noise the CPU loop adds, as a static raster. renderSurfaceCpu
      restarts renderRnd from RENDER_SEED every frame and draws one value per COVERED
@@ -661,17 +678,27 @@ const GPU_SURFACE = (() => {
   }
 
   function start(){
-    if (gl) return true;
-    if (err) return false;
     try {
       if (typeof FARADAY_RENDER_GL === 'undefined') throw new Error(
         'faraday/render-gl.js did not load, so there is no GPU renderer on this page.');
-      gl = new FARADAY_RENDER_GL.SurfaceGL(canvas, GR);
-      gl.uploadStatic(COVER, noiseTable());
-      fieldGen = -1;
+      if (!gl){
+        gl = new FARADAY_RENDER_GL.SurfaceGL(canvas, GR);
+        staticReady = false;
+      } else if (!gl.ready){
+        // Only an explicit GPU selection reaches this path. Restoring the
+        // browser context alone does not recreate resources or resume drawing.
+        gl.reinitialize();
+        staticReady = false;
+      }
+      if (!staticReady){
+        gl.uploadStatic(COVER, noiseTable());
+        staticReady = true;
+        fieldGen = -1;
+      }
+      err = null;
       return true;
     } catch (e){
-      err = String(e && e.message || e); gl = null;
+      err = String(e && e.message || e);
       return false;
     }
   }
@@ -681,6 +708,7 @@ const GPU_SURFACE = (() => {
   function prepare(st){
     if (!gl) throw new Error('the GPU renderer was asked to draw before it started'
       + (err ? `, and it could not start: ${err}` : '.'));
+    if (!gl.ready) throw new Error(gl.lostReason || 'The GPU context is not ready; choose GPU again after restoration.');
     const k = phaseSign*st.expression;
     const vs = st.visualSignature;
     const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
@@ -696,28 +724,40 @@ const GPU_SURFACE = (() => {
   function show(engine){
     cv.style.display = engine === 'gpu' ? 'none' : 'block';
     canvas.style.display = engine === 'gpu' ? 'block' : 'none';
+    cv.style.visibility = canvas.style.visibility = renderError ? 'hidden' : 'visible';
   }
+
+  canvas.addEventListener('webglcontextlost', event => {
+    // Keep restoration eligible even if first initialization failed before a
+    // SurfaceGL instance could retain its own context-loss listener.
+    event.preventDefault();
+    if (renderEngine === 'gpu') refuseRender(new Error('The GPU context was lost.'));
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    if (renderEngine === 'gpu') refuseRender(new Error('The GPU context was restored; choose GPU to rebuild its drawing resources.'));
+  });
 
   return { start, draw, show,
            get error(){ return err || (gl && gl.lost ? gl.lostReason : null); },
            get renderer(){ return gl ? gl.renderer : null },
-           get ready(){ return !!gl && !gl.lost; },
+           get ready(){ return !!gl && gl.ready; },
            readRGBA(){ return gl.readRGBA(); },
            readRaw(st){ return gl.readRaw(prepare(st)); } };
 })();
 
-/* Choose the engine, refusing GPU where it cannot run. A refusal leaves the CPU
-   drawing -- which it already was -- and the deck says why GPU is not available;
-   the button is marked unavailable so the choice cannot appear to have taken. */
+/* Keep the requested engine selected even if it refuses: recovery is another
+   explicit user choice, never an automatic CPU substitution. */
 function setRenderEngine(want){
+  if (!['cpu', 'gpu'].includes(want)) throw new Error('Unknown drawing engine: ' + want);
+  renderEngine = want;
+  renderError = null;
   if (want === 'gpu' && !GPU_SURFACE.start()){
-    renderEngine = 'cpu';
-    const b = document.querySelector('#engSeg [data-e="gpu"]');
-    b.disabled = true; b.title = 'GPU unavailable: ' + GPU_SURFACE.error;
-    document.querySelectorAll('#engSeg button').forEach(x =>
-      x.setAttribute('aria-pressed', String(x.dataset.e === 'cpu')));
-  } else renderEngine = want;
-  GPU_SURFACE.show(renderEngine);
+    renderError = GPU_SURFACE.error;
+  }
+  document.querySelectorAll('#engSeg button').forEach(x =>
+    x.setAttribute('aria-pressed', String(x.dataset.e === renderEngine)));
+  if (renderError) refuseRender(renderError);
+  else { GPU_SURFACE.show(renderEngine); paintRenderStatus(); }
   try { localStorage.setItem('cymatic.renderEngine', renderEngine); } catch { /* storage off */ }
   dirty = true;
 }
@@ -870,7 +910,7 @@ function paintDeck(){
        the device itself is not measured here -- that needs a timer-query extension
        most browsers do not expose -- so this is the cost that decides the frame rate
        of the page, labelled as such. */
-    ['drawn on', renderEngine === 'gpu'
+    ['drawn on', renderError ? `<b>${renderEngine.toUpperCase()} paused</b>` : renderEngine === 'gpu'
        ? `<b>GPU</b> <span class="u">· WebGL2 · ${GPU_SURFACE.renderer}</span>`
        : (GPU_SURFACE.error
           ? `<b>CPU</b> <span class="u">· GPU unavailable: ${GPU_SURFACE.error}</span>`
@@ -928,7 +968,7 @@ function paintDeck(){
   ];
   $('ro').innerHTML = rows.map(([k, v]) => k === 'SEP'
     ? '<dt style="grid-column:1/-1"><div class="sep"></div></dt>'
-    : `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    : `<dt>${k}</dt><dd${k === 'drawn on' ? ' id="renderProcessor"' : ''}>${v}</dd>`).join('');
 }
 function paintInspector(){
   const s = state, vs = s.visualSignature;
@@ -1855,6 +1895,8 @@ document.getElementById('expBtn').addEventListener('click', async () => {
 
 let lastBuild = -1;
 function loop(now){
+  try {
+  if (renderError) return;
   if (running) simT = (now - t0)/1000;
 
   if (swapping && running){
@@ -1871,7 +1913,13 @@ function loop(now){
   }
   renderSurface(state);
   paintOverlay();
-  requestAnimationFrame(loop);
+  } catch (error){
+    refuseRender(error);
+  } finally {
+    // A failed draw must not terminate the event loop: the CPU selector and an
+    // explicit GPU retry need a live next frame, including after context loss.
+    requestAnimationFrame(loop);
+  }
 }
 /* ───────────────────────────────────────────────────────────────────────────
    S9b: THE PAGE DRAWS THE THREE-DIMENSIONAL SOLVER.
