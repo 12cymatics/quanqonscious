@@ -105,8 +105,10 @@ a WebGL2 fragment shader (`faraday/render-gl.js`) instead of a per-pixel JavaScr
 loop that costs 11.6–22.2 ms a frame on the CPU this was built on — more than a
 whole 60 Hz frame on its own. The page remembers the choice. The deck names the
 processor that drew the frame and what it cost the page. Where WebGL2 is not
-available the GPU option is marked unavailable and says why; it never draws with
-the CPU under the GPU's name.
+available, or the browser takes the GPU's context away, drawing pauses with GPU
+still selected and the line under *draw on* says why: choose CPU to draw there, or
+GPU again to retry once the context is back. It never draws with the CPU under the
+GPU's name, and never switches to the CPU for you.
 
 The two are held to the same picture: `dns/check-page.mjs` draws every view both
 ways, at the page's amplitude and at full amplitude in both phases, with the

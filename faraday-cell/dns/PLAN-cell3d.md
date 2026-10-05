@@ -1501,6 +1501,18 @@ reached the GPU canvas before the GPU renderer did, so "choosing GPU" then found
 context, and the GPU section failed for a reason that was the test's own. It now reads the two
 2D canvases by name.
 
+**Then the owner's follow-up commit (`8d77333`) closed two gaps, and the page suite went from 192
+checks to 425.** First, a GPU that refuses no longer hands the frame to the CPU: the page used to
+switch back to CPU and disable the GPU button. Now GPU stays selected, drawing pauses with both
+canvases hidden, and a status line under *draw on* says why. Recovery is the user's choice: CPU
+to draw there, or GPU again to rebuild the renderer's resources. That includes a real context
+loss: `WEBGL_lose_context` drops and restores the context in the suite, which then holds the
+rebuilt renderer to the same 24-rendering parity. Second, the renderer refuses non-finite rasters and
+uniforms before anything reaches the GPU, and the pre-rounding parity is summarised in the browser,
+before JSON can turn a NaN into `null`. The summariser is itself fed NaN and ±Infinity on
+either side at the start, middle and end of the array, plus two finite values whose difference
+overflows, and must reject each one.
+
 **The f32 preconditioner was not built, and the numbers are why.** Measured with the C++ engine
 at the page's grid, 16 x 40 x 10, 6 400 pressure unknowns: **159 CG iterations a step, 0.192 ms a
 matvec, so the CG is 40% of a 76.9 ms step**; at 10 x 24 x 8 it is 110 iterations and 23%. A GPU
