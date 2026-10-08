@@ -10,6 +10,7 @@ import SutraWS.Contracts
 import SutraWS.WheelerGeometry
 import SutraWS.RenderCertificates
 import SutraWS.DECComplex
+import SutraWS.Interpolation
 
 /-!
 # SutraWS — root module

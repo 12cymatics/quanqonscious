@@ -1831,6 +1831,7 @@ function verifyVersionIntegrity() {
    minimum-bandwidth trigonometric polynomial through them. That polynomial is
    the field. Parseval then ties it back to the exact A4 energy, so the claim
    "the torus is the state" is checkable at runtime rather than asserted.
+   SutraWS/Interpolation.lean proves each of these statements for every state.
    ========================================================================= */
 const FAITHFUL = (() => {
   const Qc = STRICT_V5.Q, A4c = STRICT_V5.A4, C4c = STRICT_V5.C4;
@@ -2108,10 +2109,11 @@ const LEAN_PROVED = Object.freeze({
   removedCeilingDen: 16,
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
-  /* Proved in SutraWS/RenderCertificates.lean and SutraWS/DECComplex.lean,
-     built by `lake build SutraWS`. tools/check_citations.mjs fails the build
-     if any name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero'],
+  /* Proved in SutraWS/RenderCertificates.lean, SutraWS/DECComplex.lean,
+     SutraWS/VertexProofs.lean and SutraWS/Interpolation.lean, built by
+     `lake build SutraWS`. tools/check_citations.mjs fails the build if any
+     name here has no theorem behind it. */
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node'],
   /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
      `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
      an executable decision procedure -- wheelerAudit() below -- that re-decides
@@ -2140,30 +2142,29 @@ const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
       draws: 'R, r, yOff and the gradient terms from |Psi|^2',
-      /* Boundary of what is proved, stated exactly:
-         these three are about the vertex substrate's own real four-axis
-         transform -- the state being interpolated. They are NOT a model of
-         FAITHFUL.coeffs/evaluator, which is a complex 4x4 trigonometric
-         interpolant; the ring mapping, the Fourier signs and the Nyquist term
-         carry no kernel obligation. What stands behind those is the runtime
-         decision in `holds`: the node residual is the interpolant reproducing
-         the exact state, and the energy residual is Parseval measured on it.
-         A Lean model of the interpolation is absent and is not claimed. */
-      theorems: ['inverse_forward', 'parseval', 'sgn_orthogonal'],
+      /* SutraWS/Interpolation.lean transcribes FAITHFUL's pairing, transform
+         and evaluator, and proves for every state the two identities `holds`
+         decides: exactly, node = 0 and rel = 0. The 1e-9 bounds how far the
+         float evaluation strays from those exact values. */
+      theorems: ['cell_bijective', 'cube_edge_iff_torus_edge', 'node_theta', 'node_phi',
+                 'MI_mode', 'node_reproduction', 'interpolant_unique',
+                 'parseval_coeffs', 'parseval_grid'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9
     },
     phase: {
       draws: 'phiShift twist from arg(Psi)',
-      /* inverse_forward covers the reconstruction the argument is taken of.
-         atan2 itself is outside the exact regime and is not claimed; the grid
-         and the read-back are decided by PHASE_CERT instead. */
-      theorems: ['inverse_forward', 'mean_forward_eq_zero'],
+      /* The argument is taken of the interpolant node_reproduction and
+         interpolant_unique pin down. The Lean reads atan2 as Complex.arg, so
+         at a node the drawn phase is that vertex's own argument; the float
+         atan2 approximates it and is not certified. The grid and the
+         read-back are decided by PHASE_CERT. */
+      theorems: ['node_reproduction', 'interpolant_unique', 'phase_at_node'],
       holds: () => FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
                    PHASE_CERT.ok
     },
     wheeler: {
       draws: 'dielectric compression, magnetic dilation, precession rotation',
-      theorems: LEAN_PROVED.wheelerChecked,
+      theorems: [...LEAN_PROVED.wheelerChecked, 'real_node_reproduction'],
       holds: () => WHEELER_CHANNEL.ok
     },
     golden: {
@@ -2248,23 +2249,23 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '70bb2a13f23c125627b8cdf73dee3cd108ebe56cfbfc49b17d860333b64050d1',
+  leanCorpusSha256: '57bb4a660cb09c951a417199a9d60bd0a50dddb962e36ef04f8d8c9e328b2ce2',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2130,
+  leanTheorems: 2181,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
-  leanAxiomsKernelChecked: 2130,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
+  leanAxiomsKernelChecked: 2181,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  interpolationScopeNote: 'The amplitude and phase channels rest at runtime on the FAITHFUL residuals, which decide that the complex 4x4 interpolant reproduces the exact state at the nodes and matches its energy. The interpolation itself is not modelled in Lean: no theorem here constrains the ring mapping, the Fourier signs or the Nyquist term, and atan2 is transcendental and outside an exact-arithmetic development altogether. Both are decided at runtime and neither is claimed as kernel-checked.',
+  interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the exact A4 state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
   wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides.'
 });
 function sourceFingerprint() {
@@ -4548,7 +4549,7 @@ const WHEELER_CHANNEL = {
   gW: new Float32Array(FIELD_TH * FIELD_PH),
   gK: new Float32Array(FIELD_TH * FIELD_PH),
   gKs: new Float32Array(FIELD_TH * FIELD_PH),
-  wMax: 0, audit: null, ok: false, geoD: 0.0625, geoM: 0.125, geoP: 0.0078125
+  wMax: 0, audit: null, node: null, ok: false, geoD: 0.0625, geoM: 0.125, geoP: 0.0078125
 };
 function refreshWheelerChannel() {
   const C5 = WHEELER_CHANNEL, aN = FAITHFUL.aNum;
@@ -4558,13 +4559,15 @@ function refreshWheelerChannel() {
             (params ? STRICT_V5.computeWheeler(STRICT_V5_STATE.dielectric, params) : null);
   C5.audit = STRICT_V5.wheelerAudit(STRICT_V5_STATE.dielectric, params);
   C5.ok = C5.audit.ok && w !== null;
-  if (!C5.ok) {
+  C5.node = null;
+  const flatten = () => {
+    C5.ok = false;
     C5.D.fill(0); C5.M.fill(0); C5.W.fill(0);
     C5.magneticWeight.fill(0); C5.kSigned.fill(0);
     C5.gD.fill(0); C5.gM.fill(0); C5.gW.fill(0); C5.gK.fill(0); C5.gKs.fill(0);
     C5.wMax = 0;
-    return;
-  }
+  };
+  if (!C5.ok) { flatten(); return; }
   C5.geoD = aN(params.geoD); C5.geoM = aN(params.geoM); C5.geoP = aN(params.geoP);
   let wm = 0;
   for (let v = 0; v < 16; v++) {
@@ -4579,8 +4582,23 @@ function refreshWheelerChannel() {
     const a = Math.abs(C5.W[v]); if (a > wm) wm = a;
   }
   C5.wMax = wm;
-  const mev = FAITHFUL.multiRealEvaluator([C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned]);
+  const chans = [C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned];
+  const mev = FAITHFUL.multiRealEvaluator(chans);
   const out = new Float64Array(5);
+  /* real_node_reproduction: exactly, every channel takes its own vertex value
+     at that vertex's node. Decided here as audit() decides it for the state. */
+  let node = 0;
+  for (let v = 0; v < 16; v++) {
+    const pos = tessVertexToTorus(TESS_V[v], 0);
+    mev(pos.theta, pos.phi, out);
+    for (let q = 0; q < chans.length; q++) {
+      let sc = 0;
+      for (let u = 0; u < 16; u++) sc = Math.max(sc, Math.abs(chans[q][u]));
+      node = Math.max(node, Math.abs(out[q] - chans[q][v]) / (sc || 1));
+    }
+  }
+  C5.node = node;
+  if (!(node < 1e-9)) { flatten(); return; }
   for (let i = 0; i < FIELD_TH; i++) {
     const theta = (i / FIELD_TH) * TAU;
     for (let j = 0; j < FIELD_PH; j++) {
