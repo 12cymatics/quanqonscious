@@ -200,7 +200,6 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     S.w[S.iw(i,k,j)] = 1e-3*r();
   S.omegaFromW();
   const before = S.maxDivergence();
-  S.pressureDiagonal();
   const project = tol => {
     S.p.fill(0);
     S.divergence(S.u, S.v, S.om, S._div);
@@ -227,7 +226,7 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
      `${loose.toExponential(3)} then ${tight.toExponential(3)}`);
 }
 
-section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact');
+section('3. the pressure gradient is the PHYSICAL one, and the preconditioner inverts the flat cell');
 /* Two properties of the projection that nothing checked while nothing used the gradient for
  * anything but its own transpose -- and both were wrong.
  *
@@ -241,31 +240,83 @@ section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact
  * vertical component was separately short of a factor of H, its control volume having been
  * written without one.
  *
- * THE DIAGONAL IS READ BY COLOURING and the strides must match the stencil. Carrying the
- * slope transpose widens it to delta sigma = +-2 with delta i = +-1 at the same time, so the
- * eight parity classes that were right before are not right now. Compared here against the
- * diagonal read one unit vector at a time, which is slow and exact and cannot be fooled by a
- * stride that is too short.
+ * THE PRECONDITIONER IS THE FLAT CELL'S EXACT INVERSE, and the test of an inverse is what it
+ * does to the solve: on a flat surface the conjugate gradient must finish in ONE iteration,
+ * whatever the right-hand side and however tight the tolerance. A wrong weight, a wrong sign
+ * on a mode's coupling or a component left unsolved all leave a preconditioner that is still
+ * positive definite -- the solve still converges, every physical check downstream stays green
+ * -- and only the iteration count notices. (This replaced the diagonal preconditioner and the
+ * check that its colouring strides matched the stencil; the diagonal is no longer formed.)
  *
  * The top sigma row and the surface face are excluded from the gradient comparison, because
  * there the operator carries its own Dirichlet value -- zero above the surface -- which this
  * probe does not satisfy. Gate 1 checks that boundary exactly, on a constant. */
 {
-  const S = deform(new FaradayCell3D({ nr: 6, nth: 8, nz: 5, ...CELL }), 0.4);
-  const d = Float64Array.from(S.pressureDiagonal());
-  const e = new Float64Array(S.NP), q = new Float64Array(S.NP);
-  let worst = 0, scale = 0;
-  for (let c = 0; c < S.NP; c++){
-    e.fill(0); e[c] = 1;
-    S.applyL(e, q);
-    worst = Math.max(worst, Math.abs(q[c] - d[c]));
-    scale = Math.max(scale, Math.abs(q[c]));
+  const rowsOf = [];
+  for (const [nr, nth, nz] of [[6, 8, 5], [12, 24, 8]])
+    for (const contact of ['free', 'pinned']){
+      const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact });
+      const r = rnd(4242 + nr), x = new Float64Array(S.NP);
+      for (let c = 0; c < x.length; c++) x[c] = r();
+      const rhs = Float64Array.from(S.applyL(x, new Float64Array(S.NP)));
+      const z = S.applyPreconditioner(rhs, new Float64Array(S.NP));
+      let e = 0, mx = 0;
+      for (let c = 0; c < x.length; c++){ e = Math.max(e, Math.abs(z[c] - x[c])); mx = Math.max(mx, Math.abs(x[c])); }
+      S.p.fill(0); S.solveP(rhs, 1e-11, 1000); const loose = S.cgIters;
+      S.p.fill(0); S.solveP(rhs, 1e-14, 1000); const tight = S.cgIters;
+      rowsOf.push({ tag: `${nr}x${nth}x${nz} ${contact}`, loose, tight, rel: e/mx });
+    }
+  console.log('       flat cell, M L x against x: ' + rowsOf.map(o =>
+    `${o.tag} ${o.rel.toExponential(2)}`).join('; '));
+  ok(rowsOf.every(o => o.loose === 1 && o.tight === 1),
+     'on a flat surface the pressure solve takes exactly ONE iteration, at 1e-11 and at '
+     + '1e-14, on two grids and both contact lines -- which is what the inverse means',
+     rowsOf.map(o => `${o.tag}: ${o.loose} and ${o.tight}`).join('; '));
+
+  /* and on a deformed one it is not the inverse, and the solve still ends on the TRUE
+     operator's residual: formed here from applyL independently of the solver's own
+     bookkeeping, so a solve that stopped on the preconditioned residual would show. */
+  const S = deform(new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }), 0.4);
+  /* It is built on first use, from a flat twin, while this cell has its surface -- so
+     building it must leave this cell exactly as it was. Every array is compared. */
+  {
+    randomState(S, 9191, 1e-3);
+    const before = {};
+    for (const [name, a] of Object.entries(S))
+      if (a instanceof Float64Array && !name.startsWith('_pc')) before[name] = Float64Array.from(a);
+    S.buildPreconditioner();
+    const moved = Object.keys(before).filter(name => {
+      const a = S[name], b = before[name];
+      for (let x = 0; x < a.length; x++) if (!Object.is(a[x], b[x])) return true;
+      return false;
+    });
+    ok(moved.length === 0 && Object.keys(before).length > 40,
+       `building the preconditioner on a deformed, moving cell leaves every one of its `
+       + `${Object.keys(before).length} arrays exactly as it was`,
+       moved.join(', '));
+    /* and what it built is the FLAT cell's, whatever surface it was built under: the same
+       factor, to the bit, as a fresh cell of the same options builds with eta still zero */
+    const fresh = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }).buildPreconditioner();
+    let differ = 0;
+    for (let x = 0; x < S._pcBand.length; x++) if (!Object.is(S._pcBand[x], fresh._pcBand[x])) differ++;
+    ok(differ === 0,
+       'and the factor it built under that surface is the flat cell\'s, bit for bit, as a fresh '
+       + 'cell builds it',
+       `${differ} of ${S._pcBand.length} entries differ`);
   }
-  ok(worst === 0,
-     'the coloured diagonal is exactly the diagonal read one unit vector at a time, so the '
-     + 'colour strides match the operator\'s stencil',
-     `worst difference ${worst.toExponential(3)} against entries up to `
-     + `${scale.toExponential(3)}`);
+  const r = rnd(777), rhs = new Float64Array(S.NP);
+  for (let c = 0; c < rhs.length; c++) rhs[c] = r();
+  S.p.fill(0); S.solveP(rhs, 1e-11, 1000);
+  const Lp = S.applyL(S.p, new Float64Array(S.NP));
+  let num = 0, den = 0;
+  for (let c = 0; c < rhs.length; c++){ num += (rhs[c] - Lp[c])**2; den += rhs[c]**2; }
+  const trueRes = Math.sqrt(num/den);
+  console.log(`       deformed to eta/h = 0.4: ${S.cgIters} iterations to 1e-11, true `
+    + `residual ${trueRes.toExponential(2)}`);
+  ok(trueRes < 1e-11 && S.cgIters > 1,
+     'on a deformed surface it is not the inverse, and the solve still ends on the true '
+     + 'operator\'s residual, below the tolerance',
+     `${S.cgIters} iterations, true residual ${trueRes.toExponential(3)}`);
 }
 {
   const A = 4.1e3, B = -9.7e2, C = 2.3e3, D = 1.7e3, h = CELL.h, R = CELL.R;
@@ -1150,7 +1201,6 @@ section('6f. on a divergence-free field the only energy it moves is the mesh vol
   const nr = 10, nth = 16, nz = 8;
   const S = deform(new FaradayCell3D({ nr, nth, nz, ...CELL }), 0.5);
   randomState(S, 5150, 1e-3);
-  S.pressureDiagonal();
   const residual = () => {
     const TU = new Float64Array(S.NU), TV = new Float64Array(S.NV),
           TW = new Float64Array(S.NW);
@@ -2608,6 +2658,141 @@ section('9c. the energy, and what the solver does to it');
      `worst single-step rise ${(100*worstRise).toExponential(3)}%`);
 }
 
+/* famLaplacian AS IT WAS WRITTEN before each face was formed once: the per-cell loop over all six
+   faces, every interior face formed twice, once by each neighbour. Kept here verbatim as the
+   reference section 10 holds the solver's operator to, bit for bit -- with ONE change, marked,
+   in the theta faces. The per-cell loop found each theta face at two roundings of one angle, one
+   per neighbour; the solver now forms it once, as the upper cell's lower face, and the
+   reference does the same so that the comparison is about the sharing and nothing else.
+   Everything about the r and sigma faces is the old code unchanged, so equality here is the
+   claim that sharing them changed no number. */
+const { polyDerivAt, TH_NODE } = C;
+function plainFamLaplacian(S, f, out, fam, bc, sFlux){
+  const nth = S.nth, dth = S.dth;
+  const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
+  const nI = rn.length, nJ = sn.length;
+  const idx = fam.idx, sgn = fam.axisSign, thOff = fam.thOff;
+  const half = nth >> 1;
+  const thOf = k => (k + thOff)*dth;
+  const at = (a, k, b) => f[idx(a, k, b)];
+  const colR = a => a >= 0 ? rn[a] : -rn[-1 - a];
+  const atZ = (a, k, z, lev) => S.colValueAtZ(f, fam, a, k, z, lev);
+  const aHi = (bc && rn[nI-1] < S.R) ? nI : nI - 1;
+  const aLo = rn[0] > 0 ? -nI : 0;
+  const rx = S._rx4, ry = S._ry4;
+  const dPhysR = (k, z, lev, x, a0) => {
+    let j0 = a0;
+    if (j0 + 3 > aHi) j0 = aHi - 3;
+    if (j0 < aLo) j0 = aLo;
+    const th = thOf(k);
+    const HR = S.HatH(S.R, th);
+    for (let m = 0; m < 4; m++){
+      const a = j0 + m;
+      rx[m] = a > nI - 1 ? S.R : colR(a);
+      ry[m] = a > nI - 1 ? bc('rim', S.R, th, z/HR) : atZ(a, k, z, lev);
+    }
+    return polyDerivAt(rx, ry, 4, x);
+  };
+  const dPhysThFace = (a, kL, kR, z, lev) =>
+    (atZ(a, kR, z, lev) - atZ(a, kL, z, lev))/((kR - kL)*dth);
+  const tx = S._tx4, ty = S._ty4;
+  const sLoB = sb[0], sHiB = sb[nJ];
+  const jLo = (bc && sn[0] > sLoB) ? -1 : 0;
+  const jHi = (bc && !sFlux && sn[nJ-1] < sHiB) ? nJ : nJ - 1;
+  if (jHi - jLo < 3) throw new Error(
+    `famLaplacian: this family offers ${jHi - jLo + 1} values in sigma and the `
+    + `face derivative needs four. nz >= 4 guarantees them, so this is a `
+    + `descriptor error rather than a grid that is too coarse.`);
+  const sAbs = j => j < 0 ? sLoB : (j > nJ - 1 ? sHiB : sn[j]);
+  const sVal = (a, k, j, th) => j < 0 ? bc('floor', rn[a], th, sLoB)
+                             : (j > nJ - 1 ? bc('surface', rn[a], th, sHiB)
+                                           : at(a, k, j));
+  const sx = S._sx, sy = S._sy;
+  const sStencil = (b, side) => {
+    let j0 = side < 0 ? b - 2 : b - 1;
+    if (j0 < jLo) j0 = jLo;
+    if (j0 + 3 > jHi) j0 = jHi - 3;
+    return j0;
+  };
+  const loadS = (a, k, j0, th) => {
+    for (let m = 0; m < 4; m++){
+      sx[m] = sAbs(j0 + m);
+      sy[m] = sVal(a, k, j0 + m, th);
+    }
+  };
+  const atZB = (a, k, z) => S.colValueAtZ(f, fam, a, k, z, undefined, true);
+  const dSigR = (a, k, z) => {
+    let j = a - 1;
+    if (j + 3 > aHi) j = aHi - 3;
+    if (j < aLo) j = aLo;
+    const th2 = thOf(k), HR = S.HatH(S.R, th2);
+    for (let m = 0; m < 4; m++){
+      const a2 = j + m;
+      rx[m] = a2 > nI - 1 ? S.R : colR(a2);
+      ry[m] = a2 > nI - 1 ? bc('rim', S.R, th2, z/HR) : atZB(a2, k, z);
+    }
+    return polyDerivAt(rx, ry, 4, rn[a]);
+  };
+  const dSigTh = (a, k, z) => {
+    for (let m = 0; m < 4; m++){
+      tx[m] = (k + TH_NODE[m])*dth;
+      ty[m] = atZB(a, k + TH_NODE[m], z);
+    }
+    return polyDerivAt(tx, ty, 4, k*dth);
+  };
+  for (let a = fam.rLo; a <= fam.rHi; a++){
+    const dra = rb[a+1] - rb[a];
+    for (let k = 0; k < nth; k++){
+      const th = thOf(k);
+      const mid = S.HatInto(rn[a], th, S._hA);
+      const midS = S.Hslope(rn[a], th);
+      for (let b = fam.sLo; b <= fam.sHi; b++){
+        const dsb = sb[b+1] - sb[b];
+        const sMid = 0.5*(sb[b] + sb[b+1]);
+        let flux = 0;
+        for (const side of [-1, +1]){
+          const rface = side < 0 ? rb[a] : rb[a+1];
+          if (rface === 0) continue;
+          const g = S.HatInto(rface, th, S._hB);
+          if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
+          const z = sMid*g[0];
+          const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
+          flux += side*rface*dth*g[0]*dsb*d;
+        }
+        for (const side of [-1, +1]){
+          /* THE ONE CHANGE from the per-cell loop: the upper theta face is the next
+             cell's lower face, found where that cell finds it -- the face between nth - 1
+             and 0 is face 0 -- rather than at this cell's own theta + dtheta/2. */
+          const kf = side < 0 ? k : (k + 1 === nth ? 0 : k + 1);
+          const thf = thOf(kf) + (-1)*0.5*dth;
+          const g = S.HatInto(rn[a], thf, S._hB);
+          const z = sMid*g[0];
+          const d = dPhysThFace(a, kf - 1, kf, z, b);
+          flux += side*dra*g[0]*dsb*d/rn[a];
+        }
+        for (const side of [-1, +1]){
+          const sface = side < 0 ? sb[b] : sb[b+1];
+          const proj = rn[a]*dra*dth;
+          const bn = side < 0 ? b - 1 : b + 1;
+          if (bn > nJ - 1 && sFlux){
+            flux += side*proj*sFlux(a, k);
+            continue;
+          }
+          if ((bn < 0 || bn > nJ - 1) && !bc) continue;
+          loadS(a, k, sStencil(b, side), th);
+          const dsg = polyDerivAt(sx, sy, 4, sface);
+          const z = sface*mid[0];
+          flux += side*proj*( dsg/mid[0]
+                            - sface*midS.Hr*dSigR(a, k, z)
+                            - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
+        }
+        out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
+      }
+    }
+  }
+  return out;
+}
+
 section('10. the hoisted operators are the same operators, bit for bit');
 /* A step used to cost 146 ms on 16x24x10 and costs 85.6 ms now, and none of that came
  * from changing what is computed. `divergence`, `gradient` and `omegaOf` are the
@@ -2898,6 +3083,85 @@ section('10. the hoisted operators are the same operators, bit for bit');
        'colValueAtZ without the closure or the linear search is bit for bit the form with '
        + 'them, anchored and bracketed, at the axis reflection and away from it',
        `${bad} of ${n} differ; scale ${scale.toExponential(3)}`);
+  }
+
+  /* --- a column has ONE depth, whatever index it is reached by ---
+     colValueAtZ reads its column's depth from a table refreshMetric fills, at the column's
+     azimuth taken in [0, nth). Before the table it interpolated the depth on every call from
+     the index it was given, so column -1 and column nth - 1 -- one column -- were interpolated
+     at two angles 2 pi apart, through two roundings of theta/dtheta, and could come out an ulp
+     apart. Two things are asserted: the table holds exactly that interpolation at the
+     in-range node, and a reconstruction is exactly periodic in the column index. */
+  {
+    let badT = 0, nT = 0;
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      for (let a = 0; a < F.rn.length; a++)
+        for (let k = 0; k < nth; k++){
+          if (F.Hcol[a*nth + k] !== S.HatHBr(F.hBr[a], F.rn[a], (k + F.thOff)*S.dth)) badT++;
+          nT++;
+        }
+    }
+    ok(badT === 0, 'every family\'s column-depth table is the interpolation at its own node',
+       `${badT} of ${nT} differ`);
+    const f = new Float64Array(S.NP);
+    const rf3 = rnd(86420);
+    for (let c = 0; c < f.length; c++) f[c] = rf3();
+    const F = S.FAM.p, nJ = F.sn.length;
+    let bad = 0, n = 0;
+    for (let a = -2; a < nr; a++)
+      for (let k = 0; k < nth; k++)
+        for (const shift of [-nth, nth, 2*nth])
+          for (let lev = 0; lev < nJ; lev++){
+            const H = S.H[S.ie(a < 0 ? -1 - a : a, a < 0 ? k + (nth >> 1) : k)];
+            for (const frac of [0.13, 0.58, 0.97]){
+              const z = frac*H;
+              if (S.colValueAtZ(f, F, a, k + shift, z, lev)
+                  !== S.colValueAtZ(f, F, a, k, z, lev)) bad++;
+              n++;
+            }
+          }
+    ok(bad === 0, 'a reconstruction is exactly periodic in the column index: column k and '
+       + 'column k + nth are one column with one depth',
+       `${bad} of ${n} differ`);
+  }
+
+  /* --- famLaplacian forms each face once, and that is the per-cell operator ---
+     Against plainFamLaplacian above, with === and every family, with and without a wall
+     closure, and with the surface flux hook, on this deformed surface with every degree of
+     freedom excited. The same scratch arrays serve both, which they can: neither keeps
+     anything in them between calls. */
+  {
+    S.refreshSurfaceFluxes();
+    const cases = [];
+    for (const fam of ['p', 'u', 'v', 'w']){
+      const F = S.FAM[fam];
+      const f = fam === 'p' ? (() => { const q = new Float64Array(S.NP), rq = rnd(11223);
+                                       for (let c = 0; c < q.length; c++) q[c] = rq(); return q; })()
+                            : S[fam];
+      const flux = fam === 'p' ? undefined : (a, k) => S.surfaceFluxFace(fam, a, k);
+      cases.push([fam, F, f, undefined, undefined]);
+      cases.push([fam, F, f, S._bcU, undefined]);
+      if (flux){ cases.push([fam, F, f, S._bcU, flux]); cases.push([fam, F, f, undefined, flux]); }
+    }
+    const bad = [];
+    for (const [name, F, f, bc, flux] of cases){
+      const got = S.famLaplacian(f, new Float64Array(f.length), F, bc, flux);
+      const want = plainFamLaplacian(S, f, new Float64Array(f.length), F, bc, flux);
+      let nb = 0;
+      for (let a = F.rLo; a <= F.rHi; a++)
+        for (let k = 0; k < nth; k++)
+          for (let b = F.sLo; b <= F.sHi; b++){
+            const c = F.idx(a, k, b);
+            if (!Object.is(got[c], want[c])) nb++;
+          }
+      if (nb) bad.push(`${name}${bc ? ' walled' : ''}${flux ? ' with the surface flux' : ''}: ${nb}`);
+    }
+    ok(bad.length === 0,
+       `famLaplacian with every face formed once is bit for bit the per-cell operator, over `
+       + `${cases.length} cases: all four families, open and walled, each with and without `
+       + 'the traction closing the surface',
+       bad.join('; '));
   }
 }
 
@@ -3394,7 +3658,6 @@ section('14. step() is the composition it documents, term for term');
       for (let k = 0; k < nth; k++)
         div[T.ip(i, k, nz - 1)] -= T.rc[i]*T.drc[i]*T.dth
           *ps[T.ie(i, k)]/(T.H[T.ie(i, k)]*T.dsf[nz]);
-    T.pressureDiagonal();
     T.p.fill(0);
     T.solveP(div, 1e-11, 400*(nr + nth + nz));
     T.gradient(T.p, gu, gv, gw);

@@ -128,6 +128,8 @@ const GRADE = (function(){
 
 class FaradayCell3D {
   constructor(o){
+    /* kept so buildPreconditioner can build this cell's flat twin from exactly these */
+    this._options = Object.freeze({ ...o });
     const nr = this.nr = o.nr, nth = this.nth = o.nth, nz = this.nz = o.nz;
     if (!(Number.isInteger(nr) && nr >= 4)) throw new RangeError(
       `nr = ${o.nr}: at least four radial cells are needed for the surface stencil.`);
@@ -246,7 +248,30 @@ class FaradayCell3D {
     this._gv = new Float64Array(NV);
     this._gw = new Float64Array(NW);
     this._gom = new Float64Array(NW);
-    this._pdiag = new Float64Array(NP);
+
+    /* The pressure solve's preconditioner: the flat cell's operator, inverted exactly. Its
+       azimuthal Fourier basis, cos and sin of m k dtheta for m = 0..nth/2 -- the only
+       transcendentals it needs, evaluated here once, and handed to the C++ engine rather than
+       evaluated there -- and per mode the band Cholesky factor of the (r, sigma) operator,
+       with its two working rows. buildPreconditioner says what it is and why. */
+    {
+      const M = (nth >> 1) + 1, n2 = nr*nz;
+      this.dftc = new Float64Array(M*nth);
+      this.dfts = new Float64Array(M*nth);
+      for (let m = 0; m < M; m++)
+        for (let k = 0; k < nth; k++){
+          /* the angle reduced in integers first, so m k dtheta is never formed past 2 pi */
+          const ang = ((m*k) % nth)*this.dth;
+          this.dftc[m*nth + k] = Math.cos(ang);
+          /* sin for m = 0 and m = nth/2 is the zero vector -- sin(0) and sin(k pi) -- and is
+             stored as exactly that, rather than as sin(k pi) evaluated to 1e-16 */
+          this.dfts[m*nth + k] = (m === 0 || 2*m === nth) ? 0 : Math.sin(ang);
+        }
+      this._pcBand = new Float64Array(M*n2*(nz + 1));
+      this._pcHatC = new Float64Array(M*n2);
+      this._pcHatS = new Float64Array(M*n2);
+      this._pcReady = false;
+    }
 
     /* H on a radially extended grid, so a face midpoint anywhere between the axis
        and the rim can be interpolated without a special case. Column 0 is cell 0
@@ -292,6 +317,13 @@ class FaradayCell3D {
     this._ty4 = new Float64Array(4);       // and its values
     this._hA = new Float64Array(3);        // (H, H_r, H_theta) at a cell's own centre
     this._hB = new Float64Array(3);        // and at one of its six faces
+    /* famLaplacian's face terms, each formed once and read by both cells it separates:
+       the r faces below and above the current radial row, its theta faces, and one
+       column's sigma faces. famLaplacian says why the sharing is exact. */
+    this._fRlo = new Float64Array(nth*(nz + 1));
+    this._fRhi = new Float64Array(nth*(nz + 1));
+    this._fT = new Float64Array(nth*(nz + 1));
+    this._fS = new Float64Array(nz + 2);
     this._kap = new Float64Array(NE);      // the surface's mean curvature
     this._ps  = new Float64Array(NE);      // and the pressure it carries
     this._lu = new Float64Array(NU); this._au = new Float64Array(NU);
@@ -376,7 +408,11 @@ class FaradayCell3D {
         br[a] = b > nr ? nr : b;
       }
       fam.hBr = br;
+      fam.Hcol = new Float64Array(rn.length*nth);
     }
+    /* by name as well, so the C++ engine's gate can compare them like any other array */
+    this._hcolP = this.FAM.p.Hcol; this._hcolU = this.FAM.u.Hcol;
+    this._hcolV = this.FAM.v.Hcol; this._hcolW = this.FAM.w.Hcol;
     this.refreshMetric();
   }
 
@@ -563,6 +599,27 @@ class FaradayCell3D {
         : (0 - Ht[this.ie(nr-1, k)])/this.drf[nr];
       this.Txt[(nr+1)*nth + k] = free ? this.Tdth[this.ie(nr-1, k)] : 0;
     }
+
+    /* H AT EVERY FAMILY NODE, once per metric rather than once per reconstruction.
+       colValueAtZ needs its column's own H to turn a height into a sigma, and it used to
+       interpolate it afresh on every call: 639 400 times in one viscous evaluation at
+       16x40x10, for 3 x 640 distinct columns. The value is the same interpolation at the
+       same node, computed here with the column's azimuth taken in [0, nth) -- so for an
+       in-range column it is the number the old call returned, bit for bit.
+
+       For a column named from outside that range -- k - 1 at k = 0, k + 2 near the seam, the
+       antipodal k + nth/2 -- it is NOT the old number, and that is the point. The old call
+       formed theta from the unwrapped index, (k + thOff)*dth, so column -1 and column nth - 1
+       were the same column at two different angles 2 pi apart, interpolated through two
+       different roundings of tt = theta/dth - 0.5: one column, two depths, an ulp apart.
+       The field was therefore not exactly periodic in the operators that read it. Here a
+       column has one depth whatever it is called. */
+    for (const key of ['p', 'u', 'v', 'w']){
+      const fam = this.FAM[key], rn = fam.rn, Hc = fam.Hcol;
+      for (let a = 0; a < rn.length; a++)
+        for (let k = 0; k < nth; k++)
+          Hc[a*nth + k] = this.HatHBr(fam.hBr[a], rn[a], (k + fam.thOff)*this.dth);
+    }
     return this;
   }
 
@@ -727,67 +784,205 @@ class FaradayCell3D {
     return out;
   }
 
-  /* The diagonal of divergence(gradient(.)), exactly, by colouring. Set one colour class
-     to one, apply the operator, and read the result at those same cells: if no two cells of
-     a class are in each other's stencil, nothing but the diagonal contributes.
+  /* THE PRESSURE SOLVE'S PRECONDITIONER: THE FLAT CELL, INVERTED EXACTLY.
 
-     THE STRIDES ARE (2, 2, 3) AND THAT IS NOT A MARGIN, it is the stencil. Once `gradient`
-     carries the slope operator's transpose, a sigma face's pressure reaches the eight r and
-     theta faces that meet there, and the reach becomes
+     Conjugate gradients converges in a number of iterations set by how far the
+     preconditioner is from the operator's inverse. The diagonal (Jacobi) took 162 iterations
+     a step at 16x40x10, and the solve was then half of every step. This is a much closer
+     approximation to the inverse, and it is EXACT for one operator: the same cell with a flat
+     surface.
 
-         delta i in [-1, 1],  delta k in [-1, 1],  delta sigma in [-2, 2]
+     Flat, the metric does not depend on theta, so the operator is the same at every azimuth --
+     block circulant in k -- and it couples a column only to itself and its two azimuthal
+     neighbours, symmetrically. It is therefore diagonalised by the azimuthal Fourier basis:
+     cos(m k dtheta) and sin(m k dtheta) each see the same real symmetric (r, sigma) operator
 
-     including the corners -- delta i = +-1 together with delta sigma = +-2. Two cells of one
-     class differ by an even delta i, an even delta k and a multiple of three in sigma, and
-     the only such triple inside that box is the zero one. It used to be (2, 2, 2) in eight
-     classes, which was right for the narrower stencil and is not right for this one: with it
-     the diagonal came out wrong, the Jacobi preconditioner with it, and a projection asked
-     for 1e-14 left a divergence of 6.7e-2 where the same projection at 1e-9 left 3.3e-8.
-     Twelve classes, twelve applications, and gate 3 compares the result against the diagonal
-     read one unit vector at a time, so a wrong stride cannot pass.
+         L_m = C0 + 2 C1 cos(m dtheta),       m = 0 .. nth/2,
 
-     Read from applyL rather than rederived, so the preconditioner cannot drift
-     from the operator it preconditions. */
-  pressureDiagonal(){
-    const nr = this.nr, nth = this.nth, nz = this.nz;
-    const d = this._pdiag, probe = new Float64Array(this.NP), q = new Float64Array(this.NP);
-    for (let c = 0; c < 12; c++){
-      const pi = c & 1, pk = (c >> 1) & 1, pj = c >> 2;
-      probe.fill(0);
-      for (let i = 0; i < nr; i++) if ((i & 1) === pi)
-        for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if (j % 3 === pj)
-            probe[this.ip(i, k, j)] = 1;
-      this.applyL(probe, q);
-      for (let i = 0; i < nr; i++) if ((i & 1) === pi)
-        for (let k = 0; k < nth; k++) if ((k & 1) === pk)
-          for (let j = 0; j < nz; j++) if (j % 3 === pj)
-            d[this.ip(i, k, j)] = q[this.ip(i, k, j)];
+     where C0 couples a column to itself and C1 to either neighbour. Each L_m couples a cell to
+     its radial and vertical neighbours only, so with the cells numbered i*nz + j it is a band
+     matrix of half-width nz, negative definite like the operator it comes from, and -L_m has
+     an exact band Cholesky factor. Applying the preconditioner is then a Fourier analysis in
+     theta, one band solve per mode and component, and a synthesis -- a direct solve of the
+     flat cell's pressure equation.
+
+     ON THE ACTUAL SURFACE IT IS NOT THE INVERSE, AND IT DOES NOT HAVE TO BE. A preconditioner
+     steers the search directions; the iteration stops on the residual of the TRUE operator
+     against the same tolerance as before, so the answer is the answer to that tolerance
+     whatever the preconditioner. What the surface's deformation costs is iterations: measured
+     on a random right-hand side at 16x40x10, 254 iterations with the diagonal and 8 with this
+     at eta/h ~ 0.15, 11 at eta/h ~ 0.4. Everything is double precision, including the
+     factorisation; nothing here is single precision, approximate arithmetic or a tolerance.
+
+     THE MATRICES ARE READ FROM applyL, NOT DERIVED BY HAND, so the preconditioner cannot drift
+     from the operator it preconditions. One unit probe per (i, j) in column k = 0 gives the
+     columns of C0 and of the two neighbour couplings; the probes also CHECK the structure the
+     decomposition rests on -- nothing reaches past the two neighbouring columns, nothing
+     reaches outside the band, and the two neighbour couplings are equal to the bit -- and this
+     refuses if any of it fails, since the Fourier modes would then not decouple and what was
+     built would not be the inverse of anything. Each L_m is symmetrised as the mean of itself
+     and its transpose, which changes it by the operator's own asymmetry, 1e-16 of an entry,
+     and makes the factor exactly that of a symmetric matrix.
+
+     BUILT ONCE, ON A FLAT TWIN, WHEN FIRST NEEDED. It depends on the grid and the depth and
+     nothing else, so it never needs rebuilding; it is read off a second cell constructed from
+     this one's own options, whose eta is zero, so building it touches none of this cell's
+     state -- not its surface, not its metric -- whatever that state is at the time. Built on
+     first use rather than in the constructor because a cell that never solves for pressure
+     should not pay for it: the gate's operator checks build cells of 64x96x64, where the
+     factor would be 104 MB and four thousand probes. The C++ engine does not build it at all:
+     dns/faraday-cell3d-wasm.js copies this one in, as it copies the grid, so the
+     factorisation has one implementation. */
+  buildPreconditioner(){
+    const nr = this.nr, nth = this.nth, nz = this.nz, NP = this.NP;
+    const n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
+    const F = new FaradayCell3D(this._options);
+    for (const name of ['rf', 'sf', 'rc', 'sc', 'drc', 'dsc', 'drf', 'dsf', 'rx'])
+      for (let x = 0; x < this[name].length; x++)
+        if (!Object.is(F[name][x], this[name][x])) throw new Error(
+          `the flat twin built from this cell's own options has ${name}[${x}] = `
+          + `${F[name][x]} against ${this[name][x]}: not the same grid.`);
+    /* the neighbour couplings, lower band only: cK[a*W + d] couples cell a - d into cell a */
+    const c0 = new Float64Array(n2*W), cP = new Float64Array(n2*W), cM = new Float64Array(n2*W);
+    const up = new Float64Array(n2*W), upP = new Float64Array(n2*W), upM = new Float64Array(n2*W);
+    const probe = new Float64Array(NP), q = new Float64Array(NP);
+    const kP = 1, kM = nth - 1;
+    for (let i = 0; i < nr; i++)
+      for (let j = 0; j < nz; j++){
+        const src = i*nz + j;
+        probe.fill(0); probe[this.ip(i, 0, j)] = 1;
+        F.applyL(probe, q);
+        for (let i2 = 0; i2 < nr; i2++)
+          for (let k2 = 0; k2 < nth; k2++)
+            for (let j2 = 0; j2 < nz; j2++){
+              const val = q[this.ip(i2, k2, j2)];
+              if (val === 0) continue;
+              const dst = i2*nz + j2;
+              if (k2 !== 0 && k2 !== kP && k2 !== kM) throw new Error(
+                `the flat pressure operator couples column 0 to column ${k2}: it reaches past `
+                + 'the two neighbouring columns, so its azimuthal Fourier modes do not decouple '
+                + 'and the flat-cell preconditioner would not be its inverse.');
+              if (Math.abs(dst - src) > bw) throw new Error(
+                `the flat pressure operator couples cell (${i}, ${j}) to (${i2}, ${j2}): outside `
+                + `the band of half-width ${bw} the per-mode factor is built for.`);
+              /* stored by (row, column) in the lower band, or in the upper band to be mirrored */
+              const lower = dst >= src;
+              const at = lower ? dst*W + (dst - src) : src*W + (src - dst);
+              const C = k2 === 0 ? (lower ? c0 : up) : k2 === kP ? (lower ? cP : upP)
+                                                                  : (lower ? cM : upM);
+              C[at] = val;
+            }
+      }
+    for (let x = 0; x < n2*W; x++){
+      if (!Object.is(cP[x], cM[x]) || !Object.is(upP[x], upM[x])) throw new Error(
+        'the flat pressure operator couples a column to its two azimuthal neighbours '
+        + 'differently, so it is not symmetric under theta -> -theta; its cos and sin modes '
+        + 'would couple and the flat-cell preconditioner would not be its inverse.');
     }
-    for (let c = 0; c < d.length; c++)
-      if (!(d[c] < 0)) throw new Error(
-        `the pressure operator has a diagonal entry of ${d[c]} at cell ${c} of `
-        + `${d.length}. It is negative definite by construction, so a zero or `
-        + `positive diagonal means a cell is decoupled from the pressure field `
-        + `and no preconditioner can be formed from it.`);
-    return d;
+    /* per mode: -(C0 + (C+ + C-) cos(m dtheta)), symmetrised, then its band Cholesky factor,
+       in place, row by row: L(a, a-d) at B[a*W + d], the diagonal at d = 0 */
+    const B = this._pcBand, C = this.dftc;
+    for (let m = 0; m < M; m++){
+      const cs = C[m*nth + 1], base = m*n2*W;
+      for (let a = 0; a < n2; a++)
+        for (let d = 0; d <= bw && d <= a; d++){
+          const lo = -(c0[a*W + d] + (cP[a*W + d] + cM[a*W + d])*cs);
+          const hi = -(up[a*W + d] + (upP[a*W + d] + upM[a*W + d])*cs);
+          B[base + a*W + d] = d === 0 ? lo : 0.5*(lo + hi);
+        }
+      for (let a = 0; a < n2; a++){
+        const ra = base + a*W;
+        for (let d = Math.min(a, bw); d >= 1; d--){
+          const b = a - d, rb = base + b*W;
+          let sum = B[ra + d];
+          for (let p = Math.max(0, a - bw); p < b; p++) sum -= B[ra + (a - p)]*B[rb + (b - p)];
+          B[ra + d] = sum/B[rb];
+        }
+        let sum = B[ra];
+        for (let p = Math.max(0, a - bw); p < a; p++){ const l = B[ra + (a - p)]; sum -= l*l; }
+        if (!(sum > 0)) throw new Error(
+          `the flat-cell pressure operator's mode ${m} has a pivot of ${sum} at cell ${a} of `
+          + `${n2}: it is negative definite by construction, so a non-positive pivot of its `
+          + 'negation means a cell is decoupled and there is no factor to form.');
+        B[ra] = Math.sqrt(sum);
+      }
+    }
+    this._pcReady = true;
+    return this;
   }
 
-  /* Conjugate gradients with the operator's own diagonal as preconditioner. The
-     azimuthal count is even and periodic, which with the graded radius makes the
-     diagonal span orders of magnitude; scaling it out is what keeps the
-     iteration count near the square root of the unknown count rather than
-     proportional to it. */
+  /* z = the flat cell's inverse applied to r: Fourier analysis in theta, a band solve per
+     mode and component, synthesis. Every sum runs in a fixed order -- k ascending, then the
+     band left to right, then m ascending -- so the same r gives the same z to the bit, in
+     either engine. The flat operator is negative definite, so z is the negation of what the
+     positive definite factor returns. */
+  applyPreconditioner(r, z){
+    if (!this._pcReady) this.buildPreconditioner();
+    const nr = this.nr, nth = this.nth, nz = this.nz;
+    const n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
+    const C = this.dftc, Sn = this.dfts, B = this._pcBand;
+    const hc = this._pcHatC, hs = this._pcHatS;
+    hc.fill(0); hs.fill(0);
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const rb = (i*nth + k)*nz;
+        for (let m = 0; m < M; m++){
+          const cm = C[m*nth + k], sm = Sn[m*nth + k], hb = m*n2 + i*nz;
+          for (let j = 0; j < nz; j++){
+            const x = r[rb + j];
+            hc[hb + j] += x*cm;
+            hs[hb + j] += x*sm;
+          }
+        }
+      }
+    for (let m = 0; m < M; m++){
+      const base = m*n2*W, hb = m*n2;
+      const both = !(m === 0 || 2*m === nth);
+      for (const h of both ? [hc, hs] : [hc]){
+        for (let a = 0; a < n2; a++){
+          let sum = h[hb + a];
+          for (let p = Math.max(0, a - bw); p < a; p++) sum -= B[base + a*W + (a - p)]*h[hb + p];
+          h[hb + a] = sum/B[base + a*W];
+        }
+        for (let a = n2 - 1; a >= 0; a--){
+          let sum = h[hb + a];
+          const top = Math.min(n2 - 1, a + bw);
+          for (let p = a + 1; p <= top; p++) sum -= B[base + p*W + (p - a)]*h[hb + p];
+          h[hb + a] = sum/B[base + a*W];
+        }
+      }
+    }
+    const w0 = 1/nth, w1 = 2/nth;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const rb = (i*nth + k)*nz;
+        for (let j = 0; j < nz; j++){
+          let acc = 0;
+          for (let m = 0; m < M; m++){
+            const a = m*n2 + i*nz + j;
+            const wm = (m === 0 || 2*m === nth) ? w0 : w1;
+            acc += wm*(hc[a]*C[m*nth + k] + hs[a]*Sn[m*nth + k]);
+          }
+          z[rb + j] = -acc;
+        }
+      }
+    return z;
+  }
+
+  /* Conjugate gradients, preconditioned by the flat cell's exact inverse -- above. It stops
+     on the TRUE operator's residual against the caller's tolerance, as it always has, so the
+     preconditioner changes how many iterations that takes and not what it converges to. */
   solveP(rhs, tol, maxIt){
     const n = rhs.length, p = this.p, r = this._r, d = this._d, q = this._q,
-          z = this._z, M = this._pdiag;
+          z = this._z;
     this.applyL(p, q);
     let rr = 0;
     for (let i = 0; i < n; i++){ r[i] = rhs[i] - q[i]; rr += r[i]*r[i]; }
     const rr0 = rr;
     if (rr0 === 0){ this.cgIters = 0; this.cgResidual = 0; return 0; }
+    this.applyPreconditioner(r, z);
     let rz = 0;
-    for (let i = 0; i < n; i++){ z[i] = r[i]/M[i]; d[i] = z[i]; rz += r[i]*z[i]; }
+    for (let i = 0; i < n; i++){ d[i] = z[i]; rz += r[i]*z[i]; }
     let it = 0;
     for (; it < maxIt; it++){
       this.applyL(d, q);
@@ -798,8 +993,9 @@ class FaradayCell3D {
       let rr2 = 0;
       for (let i = 0; i < n; i++){ p[i] += alpha*d[i]; r[i] -= alpha*q[i]; rr2 += r[i]*r[i]; }
       if (Math.sqrt(rr2/rr0) < tol){ rr = rr2; it++; break; }
+      this.applyPreconditioner(r, z);
       let rz2 = 0;
-      for (let i = 0; i < n; i++){ z[i] = r[i]/M[i]; rz2 += r[i]*z[i]; }
+      for (let i = 0; i < n; i++) rz2 += r[i]*z[i];
       const beta = rz2/rz; rz = rz2; rr = rr2;
       for (let i = 0; i < n; i++) d[i] = z[i] + beta*d[i];
     }
@@ -1077,10 +1273,10 @@ class FaradayCell3D {
     const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
-    const th = (kk + fam.thOff)*this.dth;
-    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
+    const col = aa*this.nth + this.kw(kk);
+    const H = fam.Hcol[col];                   // the column's own depth: refreshMetric
     const ss = z/H;
-    const base = (aa*this.nth + this.kw(kk))*fam.stride;
+    const base = col*fam.stride;
     if (nJ === 1) return sign*f[base];
     const n = nJ < 4 ? nJ : 4;
     /* `bracket` puts the stencil around the target instead of around `lev`, by a binary
@@ -1117,8 +1313,7 @@ class FaradayCell3D {
     const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
     let aa = a, kk = k, sign = 1;
     if (a < 0){ aa = -1 - a; kk = k + half; sign = fam.axisSign; }
-    const th = (kk + fam.thOff)*this.dth;
-    const H = this.HatHBr(fam.hBr[aa], fam.rn[aa], th);
+    const H = fam.Hcol[aa*this.nth + this.kw(kk)];
     const ss = z/H;
     if (nJ === 1) return 0;
     const n = nJ < 4 ? nJ : 4;
@@ -1359,16 +1554,21 @@ class FaradayCell3D {
        needs. */
     const aLo = rn[0] > 0 ? -nI : 0;
     const rx = this._rx4, ry = this._ry4;
+    /* The wall's value at height z above column k, which bc delivers given the wall's own
+       sigma there. Formed only when a stencil actually reaches the wall: it used to be
+       interpolated on every radial stencil and discarded by all the ones that do not. */
+    const rimValue = (k, z) => {
+      const th = thOf(k);
+      return bc('rim', this.R, th, z/this.HatH(this.R, th));
+    };
     const dPhysR = (k, z, lev, x, a0) => {
       let j0 = a0;
       if (j0 + 3 > aHi) j0 = aHi - 3;
       if (j0 < aLo) j0 = aLo;
-      const th = thOf(k);
-      const HR = this.HatH(this.R, th);
       for (let m = 0; m < 4; m++){
         const a = j0 + m;
         rx[m] = a > nI - 1 ? this.R : colR(a);
-        ry[m] = a > nI - 1 ? bc('rim', this.R, th, z/HR) : atZ(a, k, z, lev);
+        ry[m] = a > nI - 1 ? rimValue(k, z) : atZ(a, k, z, lev);
       }
       return polyDerivAt(rx, ry, 4, x);
     };
@@ -1468,11 +1668,10 @@ class FaradayCell3D {
       let j = a - 1;
       if (j + 3 > aHi) j = aHi - 3;
       if (j < aLo) j = aLo;
-      const th2 = thOf(k), HR = this.HatH(this.R, th2);
       for (let m = 0; m < 4; m++){
         const a2 = j + m;
         rx[m] = a2 > nI - 1 ? this.R : colR(a2);
-        ry[m] = a2 > nI - 1 ? bc('rim', this.R, th2, z/HR) : atZB(a2, k, z);
+        ry[m] = a2 > nI - 1 ? rimValue(k, z) : atZB(a2, k, z);
       }
       return polyDerivAt(rx, ry, 4, rn[a]);
     };
@@ -1484,75 +1683,117 @@ class FaradayCell3D {
       return polyDerivAt(tx, ty, 4, k*dth);
     };
 
+    /* EVERY FACE IS FORMED ONCE, and both cells it separates read that one number.
+
+       This loop used to walk the cells and form all six faces of each, so every interior
+       face was formed twice -- once by each neighbour -- and with it every reconstruction
+       the face asks for: 562 440 calls to colValueAtZ in one viscous evaluation at
+       16x40x10, 29 per cell, half of them repeats. The work is now done per face and the
+       cell sums its six in the same order as before, with the same signs.
+
+       FOR THE r AND SIGMA FACES THE SHARED NUMBER IS THE OLD NUMBER, BIT FOR BIT, and not
+       by luck: each neighbour formed the face from the same inputs. An r face at rb[A] is
+       the upper face of cell A - 1 and the lower face of cell A, and both anchored its
+       radial stencil at column A - 2, read it at the same height sMid H(rb[A], theta) and
+       weighted it by the same row; a sigma face at sb[B] is the upper face of row B - 1
+       and the lower face of row B, and both anchored its sigma stencil at B - 2 and read the
+       same column. The sign was the only difference, and IEEE arithmetic is exactly
+       symmetric under it: side*rface*dth*... with side = -1 is the negation of the same
+       product with side = +1 at every rounding. So `flux += -T` is the old `flux += side*T`.
+
+       FOR THE THETA FACES IT IS NOT, and that is a correction. Cell k found its lower face at
+       theta_k - dtheta/2 and cell k - 1 found the same face at theta_{k-1} + dtheta/2: the
+       same angle in exact arithmetic, two roundings of it in floating point, and through
+       the interpolation of H there and the height it sets, two face fluxes an ulp or so
+       apart. What leaves one cell did not quite arrive in the next, so the discrete
+       Laplacian was not exactly conservative in theta. Each theta face is now formed once,
+       as cell k's lower face, and the seam is the same face as any other: the face between
+       nth - 1 and 0 is face 0, read through colValueAtZ's column-H table, which gives
+       column -1 and column nth - 1 one depth. */
+    const sLo = fam.sLo, sHi = fam.sHi, nb = sHi - sLo + 1;
+    /* Which faces carry no flux at all -- exactly the old per-side tests, rewritten per face
+       because each face now has one owner. An r face: the axis has zero area, and with no
+       `bc` the wall contributes nothing. A sigma face: with no `bc` neither the floor nor the
+       surface does, except that the surface face carries `sFlux` whenever one is given. */
+    const rSkip = A => rb[A] === 0 || (!bc && A > nI - 1);
+    const sTop = B => B > nJ - 1 && !!sFlux;
+    const sSkip = B => !sTop(B) && (B > nJ - 1 || B < 1) && !bc;
+    const rFaces = (A, buf) => {
+      if (rSkip(A)) return;
+      const rface = rb[A];
+      for (let k = 0; k < nth; k++){
+        const g0 = this.HatH(rface, thOf(k));
+        for (let b = sLo; b <= sHi; b++){
+          const dsb = sb[b+1] - sb[b], sMid = 0.5*(sb[b] + sb[b+1]);
+          const d = dPhysR(k, sMid*g0, b, rface, A - 2);
+          buf[k*nb + b - sLo] = rface*dth*g0*dsb*d;
+        }
+      }
+    };
+    let fRlo = this._fRlo, fRhi = this._fRhi;
+    const fT = this._fT, fS = this._fS;
+    rFaces(fam.rLo, fRlo);
     for (let a = fam.rLo; a <= fam.rHi; a++){
       const dra = rb[a+1] - rb[a];
+      rFaces(a + 1, fRhi);
+      const loR = !rSkip(a), hiR = !rSkip(a + 1);
+
+      /* ---- this column's theta faces: face k lies between columns k - 1 and k ---- */
+      for (let k = 0; k < nth; k++){
+        const g0 = this.HatH(rn[a], thOf(k) - 0.5*dth);
+        for (let b = sLo; b <= sHi; b++){
+          const dsb = sb[b+1] - sb[b], sMid = 0.5*(sb[b] + sb[b+1]);
+          const d = dPhysThFace(a, k - 1, k, sMid*g0, b);
+          fT[k*nb + b - sLo] = dra*g0*dsb*d/rn[a];
+        }
+      }
+
       for (let k = 0; k < nth; k++){
         const th = thOf(k);
         const mid = this.HatInto(rn[a], th, this._hA);
         const midS = this.Hslope(rn[a], th);
-        for (let b = fam.sLo; b <= fam.sHi; b++){
-          const dsb = sb[b+1] - sb[b];
-          /* The sigma CENTROID of this row's control volume, which is where the r and theta
-             faces' one-point quadrature belongs -- not the node. For the families whose
-             nodes are cell centres the two are the same number bit for bit; for w, whose
-             nodes are the sigma faces, they differ by O(ds^2) in the interior and by
-             ds_top/4 at the surface, where the control volume is the half cell the node
-             bounds rather than straddles. Evaluating there instead cost the surface row an
-             order: against the exact average over that half cell it read 1.22e-4, 6.53e-5,
-             3.43e-5, order 0.91 then 0.93, and reads second order once the quadrature sits
-             at the centroid. */
-          const sMid = 0.5*(sb[b] + sb[b+1]);
+        const proj = rn[a]*dra*dth;
+
+        /* ---- this column's sigma faces: the curved sheets z = sigma H, whose normal is
+                proportional to (-sigma H_r, -sigma H_theta / r, 1); face B lies between
+                rows B - 1 and B ---- */
+        for (let B = sLo; B <= sHi + 1; B++){
+          if (sTop(B)){
+            /* THE FREE SURFACE, closed by a FLUX rather than by a value. The bracket below
+               computes grad f . N, where N is the sheet's unnormalised outward normal, and
+               proj is its projected area -- so a caller that knows what grad f . N must be
+               at the surface, because the stress conditions fix it, supplies exactly that
+               and the rest of the branch is skipped. `bc` cannot express this: a traction is
+               a flux, and there is no boundary VALUE that carries it. */
+            fS[B - sLo] = proj*sFlux(a, k);
+            continue;
+          }
+          if (sSkip(B)) continue;
+          const sface = sb[B];
+          loadS(a, k, sStencil(B, -1), th);
+          const dsg = polyDerivAt(sx, sy, 4, sface);
+          const z = sface*mid[0];
+          fS[B - sLo] = proj*( dsg/mid[0]
+                             - sface*midS.Hr*dSigR(a, k, z)
+                             - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
+        }
+
+        const kp = k + 1 === nth ? 0 : k + 1;
+        for (let b = sLo; b <= sHi; b++){
+          const dsb = sb[b+1] - sb[b], c = b - sLo;
+          /* The six faces in the order the cell always summed them: r below and above,
+             theta below and above, sigma below and above. */
           let flux = 0;
-
-          /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
-          for (const side of [-1, +1]){
-            const rface = side < 0 ? rb[a] : rb[a+1];
-            if (rface === 0) continue;                  // the axis: zero area
-            const g = this.HatInto(rface, th, this._hB);
-            if (!bc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
-            const z = sMid*g[0];
-            const d = dPhysR(k, z, b, rface, side < 0 ? a - 2 : a - 1);
-            flux += side*rface*dth*g[0]*dsb*d;
-          }
-
-          /* ---- the two theta faces: normal theta-hat ---- */
-          for (const side of [-1, +1]){
-            const thf = th + side*0.5*dth;
-            const g = this.HatInto(rn[a], thf, this._hB);
-            const z = sMid*g[0];
-            const d = side < 0 ? dPhysThFace(a, k - 1, k, z, b)
-                               : dPhysThFace(a, k, k + 1, z, b);
-            flux += side*dra*g[0]*dsb*d/rn[a];
-          }
-
-          /* ---- the two sigma faces: the curved sheets z = sigma H, whose normal
-                  is proportional to (-sigma H_r, -sigma H_theta / r, 1) ---- */
-          for (const side of [-1, +1]){
-            const sface = side < 0 ? sb[b] : sb[b+1];
-            const proj = rn[a]*dra*dth;
-            const bn = side < 0 ? b - 1 : b + 1;
-            if (bn > nJ - 1 && sFlux){
-              /* THE FREE SURFACE, closed by a FLUX rather than by a value. The bracket below
-                 computes grad f . N, where N is the sheet's unnormalised outward normal, and
-                 proj is its projected area -- so a caller that knows what grad f . N must be
-                 at the surface, because the stress conditions fix it, supplies exactly that
-                 and the rest of the branch is skipped. `bc` cannot express this: a traction is
-                 a flux, and there is no boundary VALUE that carries it. */
-              flux += side*proj*sFlux(a, k);
-              continue;
-            }
-            if ((bn < 0 || bn > nJ - 1) && !bc) continue;
-            loadS(a, k, sStencil(b, side), th);
-            const dsg = polyDerivAt(sx, sy, 4, sface);
-            const z = sface*mid[0];
-            flux += side*proj*( dsg/mid[0]
-                              - sface*midS.Hr*dSigR(a, k, z)
-                              - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
-          }
-
+          if (loR) flux += -fRlo[k*nb + c];
+          if (hiR) flux += fRhi[k*nb + c];
+          flux += -fT[k*nb + c];
+          flux += fT[kp*nb + c];
+          if (!sSkip(b)) flux += -fS[c];
+          if (!sSkip(b + 1)) flux += fS[c + 1];
           out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
         }
       }
+      const t = fRlo; fRlo = fRhi; fRhi = t;
     }
     return out;
   }
@@ -2330,7 +2571,6 @@ class FaradayCell3D {
       for (let k = 0; k < nth; k++)
         this._div[this.ip(i, k, nz - 1)] -= this.rc[i]*this.drc[i]*this.dth
           *this._ps[this.ie(i, k)]/(this.H[this.ie(i, k)]*this.dsf[nz]);
-    this.pressureDiagonal();
     this.p.fill(0);
     this.solveP(this._div, 1e-11, 400*(nr + nth + nz));
 
@@ -2554,6 +2794,8 @@ class FaradayCell3D {
 
 }
 
-const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D };
+/* polyDerivAt and TH_NODE are exported for dns/check-cell3d.mjs, whose reference form of
+   famLaplacian must differentiate with exactly these to be held to it bit for bit. */
+const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D, polyDerivAt, TH_NODE };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_CELL3D;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_CELL3D = FARADAY_CELL3D;

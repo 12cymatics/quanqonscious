@@ -76,8 +76,10 @@ static int   arenaUsed = 0;
    3 the free surface has reached the floor, which is the one refusal the
    JavaScript raises from refreshMetric: z = sigma*(h + eta) requires a positive
    depth everywhere, and a non-positive one means there is no single-valued
-   surface left to follow. The caller turns each of these into the same Error the
-   JavaScript throws -- this module never continues past one. */
+   surface left to follow. 5 to 7 are named where they are raised. (4 was the
+   diagonal preconditioner's, which the flat-cell one replaced; that one is built in
+   JavaScript and refuses there.) The caller turns each of these into the same Error
+   the JavaScript throws -- this module never continues past one. */
 static int lastError = 0;
 static int errI = -1, errK = -1;           // where case 3 was found
 
@@ -92,12 +94,21 @@ static double *H, *Hr, *Hth, *Hdr, *Hdth, *Ht;
 static double *Hx, *Hxr, *Hxt;
 static double *Ex, *Er, *Eth, *Edr, *Edth, *Exr, *Ext;
 static double *Tx, *Txr, *Txt, *Tr, *Tth, *Tdr, *Tdth;
-static double *gu, *gv, *gw, *gom, *pdiag, *divw;
-static double *cgr, *cgd, *cgq, *cgz, *probe, *pq;
+static double *gu, *gv, *gw, *gom, *divw;
+static double *cgr, *cgd, *cgq, *cgz;
+/* The pressure solve's preconditioner: the azimuthal Fourier basis and the per-mode band
+   Cholesky factors, both written in by JavaScript (dftc, dfts, pcband), and the two working
+   rows of an application. buildPreconditioner in the JavaScript says what it is. */
+static double *dftc, *dfts, *pcband, *pchatc, *pchats;
 static int cgIters = 0; static double cgResidual = 0.0;
 static double *lapU, *lapV, *lapW, *advU, *advV, *advW;
 static double *fsr, *fst, *fsz, *kap, *psurf;
 static double *rbU, *sbW, *axEx;
+/* H at every node of each family, one table per family, filled at the end of the
+   metric; and famLaplacian's face terms, each formed once and read by both cells it
+   separates. The JavaScript's FAM[*].Hcol and _fRlo/_fRhi/_fT/_fS. */
+static double *hcolP, *hcolU, *hcolV, *hcolW;
+static double *fRlo, *fRhi, *fT, *fS;
 
 /* The integer bracket tables. A separate arena because the doubles' one holds
    doubles: a reinterpreted slice would be a different alignment on a different
@@ -126,6 +137,7 @@ struct Fam {
   const double* sn; const double* sb; int nJ;
   int rLo, rHi, sLo, sHi;
   const int* hBr;      // the radial bracket of each node in the extended list
+  double* Hcol;        // H at each node, (a*nth + k), refreshed with the metric
 };
 static Fam FAMP, FAMU, FAMV, FAMW;
 
@@ -179,12 +191,13 @@ int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
   Tr = take((nr + 1)*nth); Tth = take(NE); Tdr = take(NE); Tdth = take(NE);
 
   gu = take(NU); gv = take(NV); gw = take(NW); gom = take(NW);
-  pdiag = take(NP); divw = take(NP);
+  divw = take(NP);
   cgr = take(NP); cgd = take(NP); cgq = take(NP); cgz = take(NP);
-  /* pressureDiagonal's two working vectors. The JavaScript allocates them per
-     call; here they come out of the arena once, which changes no arithmetic
-     because both are overwritten before they are read. */
-  probe = take(NP); pq = take(NP);
+  {
+    const int M = (nth >> 1) + 1, n2 = nr*nz, W = nz + 1;
+    dftc = take(M*nth); dfts = take(M*nth);
+    pcband = take(M*n2*W); pchatc = take(M*n2); pchats = take(M*n2);
+  }
 
   lapU = take(NU); lapV = take(NV); lapW = take(NW);
   advU = take(NU); advV = take(NV); advW = take(NW);
@@ -195,6 +208,9 @@ int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
      wasm-ld gives this module a 64 KB stack by default, and a fixed-size local
      array sized for the largest plausible nth would be most of it. */
   axEx = take(nth);
+  hcolP = take(NE); hcolU = take((nr + 1)*nth); hcolV = take(NE); hcolW = take(NE);
+  fRlo = take(nth*(nz + 1)); fRhi = take(nth*(nz + 1)); fT = take(nth*(nz + 1));
+  fS = take(nz + 2);
 
   cgIters = 0; cgResidual = 0.0;
   return lastError;
@@ -219,39 +235,73 @@ int    cell3d_arenaUsed(){ return arenaUsed; }
    which is `rf`, and would have looked like a grid that had gone wrong. */
 double* cell3d_ptr(int which){
   switch (which){
-    case  0: return rf;    case  1: return sf;
-    case  2: return rc;    case  3: return sc;
-    case  4: return drc;   case  5: return dsc;
-    case  6: return drf;   case  7: return dsf;
+    case  0: return rf;
+    case  1: return sf;
+    case  2: return rc;
+    case  3: return sc;
+    case  4: return drc;
+    case  5: return dsc;
+    case  6: return drf;
+    case  7: return dsf;
     case  8: return rx;
-    case  9: return u;     case 10: return v;
-    case 11: return w;     case 12: return om;
-    case 13: return p;     case 14: return eta;
-    case 15: return H;     case 16: return Hr;
-    case 17: return Hth;   case 18: return Hdr;
-    case 19: return Hdth;  case 20: return Ht;
-    case 21: return Hx;    case 22: return Hxr;
+    case  9: return u;
+    case 10: return v;
+    case 11: return w;
+    case 12: return om;
+    case 13: return p;
+    case 14: return eta;
+    case 15: return H;
+    case 16: return Hr;
+    case 17: return Hth;
+    case 18: return Hdr;
+    case 19: return Hdth;
+    case 20: return Ht;
+    case 21: return Hx;
+    case 22: return Hxr;
     case 23: return Hxt;
-    case 24: return Ex;    case 25: return Er;
-    case 26: return Eth;   case 27: return Edr;
-    case 28: return Edth;  case 29: return Exr;
+    case 24: return Ex;
+    case 25: return Er;
+    case 26: return Eth;
+    case 27: return Edr;
+    case 28: return Edth;
+    case 29: return Exr;
     case 30: return Ext;
-    case 31: return Tx;    case 32: return Txr;
-    case 33: return Txt;   case 34: return Tr;
-    case 35: return Tth;   case 36: return Tdr;
+    case 31: return Tx;
+    case 32: return Txr;
+    case 33: return Txt;
+    case 34: return Tr;
+    case 35: return Tth;
+    case 36: return Tdr;
     case 37: return Tdth;
-    case 38: return gu;    case 39: return gv;
-    case 40: return gw;    case 41: return gom;
-    case 42: return pdiag; case 43: return divw;
-    case 44: return cgr;   case 45: return cgd;
-    case 46: return cgq;   case 47: return cgz;
-    case 48: return probe; case 49: return pq;
-    case 50: return lapU;  case 51: return lapV;
-    case 52: return lapW;  case 53: return advU;
-    case 54: return advV;  case 55: return advW;
-    case 56: return fsr;   case 57: return fst;
-    case 58: return fsz;   case 59: return kap;
-    case 60: return psurf;
+    case 38: return gu;
+    case 39: return gv;
+    case 40: return gw;
+    case 41: return gom;
+    case 42: return divw;
+    case 43: return cgr;
+    case 44: return cgd;
+    case 45: return cgq;
+    case 46: return cgz;
+    case 47: return lapU;
+    case 48: return lapV;
+    case 49: return lapW;
+    case 50: return advU;
+    case 51: return advV;
+    case 52: return advW;
+    case 53: return fsr;
+    case 54: return fst;
+    case 55: return fsz;
+    case 56: return kap;
+    case 57: return psurf;
+    case 58: return hcolP;
+    case 59: return hcolU;
+    case 60: return hcolV;
+    case 61: return hcolW;
+    case 62: return dftc;
+    case 63: return dfts;
+    case 64: return pcband;
+    case 65: return pchatc;
+    case 66: return pchats;
     default: return 0;
   }
 }
@@ -261,39 +311,73 @@ double* cell3d_ptr(int which){
    last, which is a defect no comparison of the overlapping part can see. */
 int cell3d_len(int which){
   switch (which){
-    case  0: return nr + 1;  case  1: return nz + 1;
-    case  2: return nr;      case  3: return nz;
-    case  4: return nr;      case  5: return nz;
-    case  6: return nr + 1;  case  7: return nz + 1;
+    case  0: return nr + 1;
+    case  1: return nz + 1;
+    case  2: return nr;
+    case  3: return nz;
+    case  4: return nr;
+    case  5: return nz;
+    case  6: return nr + 1;
+    case  7: return nz + 1;
     case  8: return nr + 2;
-    case  9: return NU;      case 10: return NV;
-    case 11: return NW;      case 12: return NW;
-    case 13: return NP;      case 14: return NE;
-    case 15: return NE;      case 16: return (nr + 1)*nth;
-    case 17: return NE;      case 18: return NE;
-    case 19: return NE;      case 20: return NE;
-    case 21: return NX;      case 22: return NX;
+    case  9: return NU;
+    case 10: return NV;
+    case 11: return NW;
+    case 12: return NW;
+    case 13: return NP;
+    case 14: return NE;
+    case 15: return NE;
+    case 16: return (nr + 1)*nth;
+    case 17: return NE;
+    case 18: return NE;
+    case 19: return NE;
+    case 20: return NE;
+    case 21: return NX;
+    case 22: return NX;
     case 23: return NX;
-    case 24: return NX;      case 25: return (nr + 1)*nth;
-    case 26: return NE;      case 27: return NE;
-    case 28: return NE;      case 29: return NX;
+    case 24: return NX;
+    case 25: return (nr + 1)*nth;
+    case 26: return NE;
+    case 27: return NE;
+    case 28: return NE;
+    case 29: return NX;
     case 30: return NX;
-    case 31: return NX;      case 32: return NX;
-    case 33: return NX;      case 34: return (nr + 1)*nth;
-    case 35: return NE;      case 36: return NE;
+    case 31: return NX;
+    case 32: return NX;
+    case 33: return NX;
+    case 34: return (nr + 1)*nth;
+    case 35: return NE;
+    case 36: return NE;
     case 37: return NE;
-    case 38: return NU;    case 39: return NV;
-    case 40: return NW;    case 41: return NW;
-    case 42: return NP;    case 43: return NP;
-    case 44: return NP;    case 45: return NP;
-    case 46: return NP;    case 47: return NP;
-    case 48: return NP;    case 49: return NP;
-    case 50: return NU;    case 51: return NV;
-    case 52: return NW;    case 53: return NU;
-    case 54: return NV;    case 55: return NW;
-    case 56: return NE;    case 57: return NE;
-    case 58: return NE;    case 59: return NE;
+    case 38: return NU;
+    case 39: return NV;
+    case 40: return NW;
+    case 41: return NW;
+    case 42: return NP;
+    case 43: return NP;
+    case 44: return NP;
+    case 45: return NP;
+    case 46: return NP;
+    case 47: return NU;
+    case 48: return NV;
+    case 49: return NW;
+    case 50: return NU;
+    case 51: return NV;
+    case 52: return NW;
+    case 53: return NE;
+    case 54: return NE;
+    case 55: return NE;
+    case 56: return NE;
+    case 57: return NE;
+    case 58: return NE;
+    case 59: return (nr + 1)*nth;
     case 60: return NE;
+    case 61: return NE;
+    case 62: return ((nth >> 1) + 1)*nth;
+    case 63: return ((nth >> 1) + 1)*nth;
+    case 64: return ((nth >> 1) + 1)*nr*nz*(nz + 1);
+    case 65: return ((nth >> 1) + 1)*nr*nz;
+    case 66: return ((nth >> 1) + 1)*nr*nz;
     default: return -1;
   }
 }
@@ -319,14 +403,17 @@ void cell3d_buildFamilies(){
   FAMP.axisSign = +1; FAMP.thOff = 0.5; FAMP.stride = nz;
   FAMP.rn = rc; FAMP.rb = rf;  FAMP.nI = nr; FAMP.rLo = 0; FAMP.rHi = nr - 1;
   FAMP.sn = sc; FAMP.sb = sf;  FAMP.nJ = nz; FAMP.sLo = 0; FAMP.sHi = nz - 1;
+  FAMP.Hcol = hcolP;
 
   FAMU.axisSign = -1; FAMU.thOff = 0.5; FAMU.stride = nz;
   FAMU.rn = rf; FAMU.rb = rbU; FAMU.nI = nr + 1; FAMU.rLo = 1; FAMU.rHi = nr - 1;
   FAMU.sn = sc; FAMU.sb = sf;  FAMU.nJ = nz; FAMU.sLo = 0; FAMU.sHi = nz - 1;
+  FAMU.Hcol = hcolU;
 
   FAMV.axisSign = -1; FAMV.thOff = 0.0; FAMV.stride = nz;
   FAMV.rn = rc; FAMV.rb = rf;  FAMV.nI = nr; FAMV.rLo = 0; FAMV.rHi = nr - 1;
   FAMV.sn = sc; FAMV.sb = sf;  FAMV.nJ = nz; FAMV.sLo = 0; FAMV.sHi = nz - 1;
+  FAMV.Hcol = hcolV;
 
   /* w's nodes run 0..nz and its viscous term is solved on 1..nz, the surface
      node included: that node is a solved advection unknown and the traction
@@ -336,6 +423,7 @@ void cell3d_buildFamilies(){
   FAMW.axisSign = +1; FAMW.thOff = 0.5; FAMW.stride = nz + 1;
   FAMW.rn = rc; FAMW.rb = rf;  FAMW.nI = nr; FAMW.rLo = 0; FAMW.rHi = nr - 1;
   FAMW.sn = sf; FAMW.sb = sbW; FAMW.nJ = nz + 1; FAMW.sLo = 1; FAMW.sHi = nz;
+  FAMW.Hcol = hcolW;
 
   Fam* fams[4] = { &FAMP, &FAMU, &FAMV, &FAMW };
   for (int t = 0; t < 4; t++){
@@ -366,6 +454,8 @@ void cell3d_buildFamilies(){
      inner difference loses the low bits: with h = 3e-3 the ulp of h + eta is
      4.3e-19. The solver does not care, the renderer does, and the two chains are
      kept separate so H's stays untouched. */
+static double HatHBr(int a, double r, double th);
+
 int cell3d_refreshMetric(){
   for (int i = 0; i < nr; i++)
     for (int k = 0; k < nth; k++){
@@ -478,6 +568,17 @@ int cell3d_refreshMetric(){
     Tx [(nr+1)*nth + k] = freeCL ? Ht[ie(nr-1, k)] : 0.0;
     Txr[(nr+1)*nth + k] = freeCL ? 0.0 : (0.0 - Ht[ie(nr-1, k)])/drf[nr];
     Txt[(nr+1)*nth + k] = freeCL ? Tdth[ie(nr-1, k)] : 0.0;
+  }
+
+  /* H at every family node, once per metric rather than once per reconstruction,
+     with the column's azimuth taken in [0, nth) so that a column has one depth
+     whatever index it is reached by. refreshMetric says why that matters. */
+  Fam* fams[4] = { &FAMP, &FAMU, &FAMV, &FAMW };
+  for (int t = 0; t < 4; t++){
+    Fam& fam = *fams[t];
+    for (int a = 0; a < fam.nI; a++)
+      for (int k = 0; k < nth; k++)
+        fam.Hcol[a*nth + k] = HatHBr(fam.hBr[a], fam.rn[a], (k + fam.thOff)*dth);
   }
   return lastError;
 }
@@ -639,33 +740,74 @@ void cell3d_applyL(const double* q, double* out){
   cell3d_divergence(gu, gv, gom, out);
 }
 
-/* The diagonal of divergence(gradient(.)), exactly, by colouring. The strides
-   are (2, 2, 3) and that is not a margin, it is the stencil: once the gradient
-   carries the slope operator's transpose, a sigma face's pressure reaches the
-   eight r and theta faces that meet there and the reach becomes
-   di in [-1,1], dk in [-1,1], dsigma in [-2,2] including the corners. Two cells
-   of one class differ by an even di, an even dk and a multiple of three in
-   sigma, and the only such triple inside that box is the zero one. */
-int cell3d_pressureDiagonal(){
-  for (int c = 0; c < 12; c++){
-    const int pi = c & 1, pk = (c >> 1) & 1, pj = c >> 2;
-    for (int t = 0; t < NP; t++) probe[t] = 0.0;
-    for (int i = 0; i < nr; i++) if ((i & 1) == pi)
-      for (int k = 0; k < nth; k++) if ((k & 1) == pk)
-        for (int j = 0; j < nz; j++) if (j % 3 == pj)
-          probe[ip(i, k, j)] = 1.0;
-    cell3d_applyL(probe, pq);
-    for (int i = 0; i < nr; i++) if ((i & 1) == pi)
-      for (int k = 0; k < nth; k++) if ((k & 1) == pk)
-        for (int j = 0; j < nz; j++) if (j % 3 == pj)
-          pdiag[ip(i, k, j)] = pq[ip(i, k, j)];
+/* THE PRESSURE SOLVE'S PRECONDITIONER: THE FLAT CELL, INVERTED EXACTLY -- the application
+   of it, transcribed from applyPreconditioner in the JavaScript, which says what it is and
+   why, in its order down to the grouping of every sum. Flat, the operator is block circulant
+   in theta and couples a column only to itself and its two neighbours, symmetrically, so the
+   azimuthal Fourier basis diagonalises it into one real symmetric band matrix per mode, of
+   half-width nz, and -L_m has an exact band Cholesky factor.
+
+   THE FACTOR IS NOT BUILT HERE. JavaScript builds it -- buildPreconditioner, from a flat twin
+   of the cell, checking the structure the decomposition rests on -- and copies it in with
+   the grid, as it copies the grid itself, so the factorisation has one implementation. So
+   are the cos and sin tables: this module evaluates no transcendental. */
+static void applyPreconditioner(const double* r, double* z){
+  const int n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
+  for (int x = 0; x < M*n2; x++){ pchatc[x] = 0.0; pchats[x] = 0.0; }
+  for (int i = 0; i < nr; i++)
+    for (int k = 0; k < nth; k++){
+      const int rb = (i*nth + k)*nz;
+      for (int m = 0; m < M; m++){
+        const double cm = dftc[m*nth + k], sm = dfts[m*nth + k];
+        const int hb = m*n2 + i*nz;
+        for (int j = 0; j < nz; j++){
+          const double x = r[rb + j];
+          pchatc[hb + j] += x*cm;
+          pchats[hb + j] += x*sm;
+        }
+      }
+    }
+  for (int m = 0; m < M; m++){
+    const double* B = pcband + m*n2*W;
+    const int hb = m*n2;
+    const int both = !(m == 0 || 2*m == nth);
+    for (int comp = 0; comp < (both ? 2 : 1); comp++){
+      double* h = (comp == 0 ? pchatc : pchats) + hb;
+      for (int a = 0; a < n2; a++){
+        double sum = h[a];
+        for (int pp = (a - bw > 0 ? a - bw : 0); pp < a; pp++) sum -= B[a*W + (a - pp)]*h[pp];
+        h[a] = sum/B[a*W];
+      }
+      for (int a = n2 - 1; a >= 0; a--){
+        double sum = h[a];
+        const int top = n2 - 1 < a + bw ? n2 - 1 : a + bw;
+        for (int pp = a + 1; pp <= top; pp++) sum -= B[pp*W + (pp - a)]*h[pp];
+        h[a] = sum/B[a*W];
+      }
+    }
   }
-  for (int c = 0; c < NP; c++)
-    if (!(pdiag[c] < 0.0)){ lastError = 4; errI = c; errK = -1; return lastError; }
-  return lastError;
+  const double w0 = 1.0/nth, w1 = 2.0/nth;
+  for (int i = 0; i < nr; i++)
+    for (int k = 0; k < nth; k++){
+      const int rb = (i*nth + k)*nz;
+      for (int j = 0; j < nz; j++){
+        double acc = 0.0;
+        for (int m = 0; m < M; m++){
+          const int a = m*n2 + i*nz + j;
+          const double wm = (m == 0 || 2*m == nth) ? w0 : w1;
+          acc += wm*(pchatc[a]*dftc[m*nth + k] + pchats[a]*dfts[m*nth + k]);
+        }
+        z[rb + j] = -acc;
+      }
+    }
 }
 
-/* Conjugate gradients with the operator's own diagonal as preconditioner. */
+/* The same, exported so the gate can compare it with the JavaScript's on any vector. */
+void cell3d_applyPreconditioner(const double* r, double* z){ applyPreconditioner(r, z); }
+
+/* Conjugate gradients, preconditioned by the flat cell's exact inverse. It stops on the TRUE
+   operator's residual against the caller's tolerance, so the preconditioner changes how many
+   iterations that takes and not what it converges to. */
 double cell3d_solveP(const double* rhs, double tol, int maxIt){
   const int n = NP;
   cell3d_applyL(p, cgq);
@@ -673,9 +815,9 @@ double cell3d_solveP(const double* rhs, double tol, int maxIt){
   for (int i = 0; i < n; i++){ cgr[i] = rhs[i] - cgq[i]; rr += cgr[i]*cgr[i]; }
   const double rr0 = rr;
   if (rr0 == 0.0){ cgIters = 0; cgResidual = 0.0; return 0.0; }
+  applyPreconditioner(cgr, cgz);
   double rz = 0.0;
-  for (int i = 0; i < n; i++){
-    cgz[i] = cgr[i]/pdiag[i]; cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
+  for (int i = 0; i < n; i++){ cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
   int it = 0;
   for (; it < maxIt; it++){
     cell3d_applyL(cgd, cgq);
@@ -687,8 +829,9 @@ double cell3d_solveP(const double* rhs, double tol, int maxIt){
     for (int i = 0; i < n; i++){
       p[i] += alpha*cgd[i]; cgr[i] -= alpha*cgq[i]; rr2 += cgr[i]*cgr[i]; }
     if (__builtin_sqrt(rr2/rr0) < tol){ rr = rr2; it++; break; }
+    applyPreconditioner(cgr, cgz);
     double rz2 = 0.0;
-    for (int i = 0; i < n; i++){ cgz[i] = cgr[i]/pdiag[i]; rz2 += cgr[i]*cgz[i]; }
+    for (int i = 0; i < n; i++) rz2 += cgr[i]*cgz[i];
     const double beta = rz2/rz; rz = rz2; rr = rr2;
     for (int i = 0; i < n; i++) cgd[i] = cgz[i] + beta*cgd[i];
   }
@@ -869,10 +1012,10 @@ static double colValueAtZ(const double* f, const Fam& fam, int a, int k,
   const double* sn = fam.sn; const int nJ = fam.nJ; const int half = nth >> 1;
   int aa = a, kk = k; double sign = 1.0;
   if (a < 0){ aa = -1 - a; kk = k + half; sign = (double)fam.axisSign; }
-  const double th = (kk + fam.thOff)*dth;
-  const double Hc = HatHBr(fam.hBr[aa], fam.rn[aa], th);
+  const int col = aa*nth + kw(kk);
+  const double Hc = fam.Hcol[col];           // the column's own depth: refreshMetric
   const double ss = z/Hc;
-  const int base = (aa*nth + kw(kk))*fam.stride;
+  const int base = col*fam.stride;
   if (nJ == 1) return sign*f[base];
   const int n = nJ < 4 ? nJ : 4;
   int j0;
@@ -902,8 +1045,7 @@ static double colDerivAtZ(const double* f, const Fam& fam, int a, int k,
   const double* sn = fam.sn; const int nJ = fam.nJ; const int half = nth >> 1;
   int aa = a, kk = k; double sign = 1.0;
   if (a < 0){ aa = -1 - a; kk = k + half; sign = (double)fam.axisSign; }
-  const double th = (kk + fam.thOff)*dth;
-  const double Hc = HatHBr(fam.hBr[aa], fam.rn[aa], th);
+  const double Hc = fam.Hcol[aa*nth + kw(kk)];
   const double ss = z/Hc;
   if (nJ == 1) return 0.0;
   const int n = nJ < 4 ? nJ : 4;
@@ -1148,146 +1290,154 @@ static void famLaplacian(const double* f, double* out, const Fam& fam,
   double sx[4], sy[4], rx4[4], ry4[4], tx4[4], ty4[4];
   double hA[3], hB[3], midS[2];
 
+  /* EVERY FACE IS FORMED ONCE, and both cells it separates read that one number --
+     famLaplacian in the JavaScript says why, and why the r and sigma faces' shared
+     value is the old one bit for bit while the theta faces' is a correction. The
+     cell then sums its six faces in the order it always did, with the same signs:
+     IEEE arithmetic is exactly symmetric under negation, so `flux += -T` is the old
+     `flux += side*T` with side = -1. */
+  const int sLo = fam.sLo, sHi = fam.sHi, nb = sHi - sLo + 1;
+  auto rSkip = [&](int A){ return rb[A] == 0.0 || (!hasBc && A > nI - 1); };
+  auto sTop = [&](int B){ return B > nJ - 1 && sFluxKind != 0; };
+  auto sSkip = [&](int B){ return !sTop(B) && (B > nJ - 1 || B < 1) && !hasBc; };
+  /* The r face at rb[A], for every column and row: df/dr|_z there, third order, from
+     the cubic through the four columns that straddle it, each reconstructed at the
+     SAME physical height. Four and not two because the radial grid is graded, so a
+     two-point difference is centred at the midpoint of its columns rather than at
+     the face, and at the rim column there is nothing for that error to cancel
+     against: measured on family p over a flat surface the rim column read 2.27e-3 at
+     order 1.71 then 1.43 while every interior column ran at 2.04 or better. A column
+     past the rim is the wall, so it is an ordinary fourth point. The JavaScript
+     asks bc for the wall's value at the wall's own sigma; every wall value in this
+     solver is zero -- the wall does not move -- so it is written as 0 here. */
+  auto rFaces = [&](int A, double* buf){
+    if (rSkip(A)) return;
+    const double rface = rb[A];
+    for (int k = 0; k < nth; k++){
+      const double g0 = HatH(rface, (k + thOff)*dth);
+      for (int b = sLo; b <= sHi; b++){
+        const double dsb = sb[b+1] - sb[b], sMid = 0.5*(sb[b] + sb[b+1]);
+        const double z = sMid*g0;
+        int j0 = A - 2;
+        if (j0 + 3 > aHi) j0 = aHi - 3;
+        if (j0 < aLo) j0 = aLo;
+        for (int m = 0; m < 4; m++){
+          const int ac = j0 + m;
+          rx4[m] = ac > nI - 1 ? R : (ac >= 0 ? rn[ac] : -rn[-1 - ac]);
+          ry4[m] = ac > nI - 1 ? 0.0 : colValueAtZ(f, fam, ac, k, z, b, 1, 0);
+        }
+        const double d = polyDerivAt(rx4, ry4, 4, rface);
+        buf[k*nb + b - sLo] = rface*dth*g0*dsb*d;
+      }
+    }
+  };
+  double* lo = fRlo; double* hi = fRhi;
+  rFaces(fam.rLo, lo);
   for (int a = fam.rLo; a <= fam.rHi; a++){
     const double dra = rb[a+1] - rb[a];
+    rFaces(a + 1, hi);
+    const bool loR = !rSkip(a), hiR = !rSkip(a + 1);
+
+    /* ---- this column's theta faces: face k lies between columns k - 1 and k ----
+       df/dtheta|_z AT A THETA FACE, two points, and two points deliberately.
+       theta is uniform and periodic, so the difference over the interval it spans is
+       centred exactly at the face and its truncation coefficient is the same at every
+       k, which cancels between opposite faces. More than that, THIS STENCIL IS
+       LOAD-BEARING for the cylindrical coupling: for a field uniform in Cartesian terms
+       the azimuthal part of the scalar Laplacian is a spurious -u/r^2 and it is the
+       coupling term (2/r^2) du_theta/dtheta that cancels it, between two DISCRETE
+       expressions, so it holds only while the two use matching stencils. Raising this
+       one to four points on its own took the vector Laplacian from order 2.10 to 0.67
+       on a flat surface. */
+    for (int k = 0; k < nth; k++){
+      const double g0 = HatH(rn[a], (k + thOff)*dth - 0.5*dth);
+      for (int b = sLo; b <= sHi; b++){
+        const double dsb = sb[b+1] - sb[b], sMid = 0.5*(sb[b] + sb[b+1]);
+        const double z = sMid*g0;
+        const double d = (colValueAtZ(f, fam, a, k, z, b, 1, 0)
+                        - colValueAtZ(f, fam, a, k - 1, z, b, 1, 0))/((k - (k - 1))*dth);
+        fT[k*nb + b - sLo] = dra*g0*dsb*d/rn[a];
+      }
+    }
+
     for (int k = 0; k < nth; k++){
       const double th = (k + thOff)*dth;
       HatInto(rn[a], th, hA);
       Hslope(rn[a], th, midS);
-      for (int b = fam.sLo; b <= fam.sHi; b++){
+      const double proj = rn[a]*dra*dth;
+
+      /* ---- this column's sigma faces: the curved sheets z = sigma H, whose normal
+              is proportional to (-sigma H_r, -sigma H_theta / r, 1); face B lies
+              between rows B - 1 and B ---- */
+      for (int B = sLo; B <= sHi + 1; B++){
+        if (sTop(B)){
+          /* THE FREE SURFACE, closed by a FLUX rather than by a value. */
+          fS[B - sLo] = proj*surfaceFluxFace(sFluxKind, a, k);
+          continue;
+        }
+        if (sSkip(B)) continue;
+        const double sface = sb[B];
+        /* The four values straddling this sigma face. A boundary value counts as one
+           of them, at the boundary's own sigma; where one is unavailable the four run
+           one-sided into the interior, which is third order there too. */
+        int j0 = B - 2;
+        if (j0 < jLo) j0 = jLo;
+        if (j0 + 3 > jHi) j0 = jHi - 3;
+        for (int m = 0; m < 4; m++){
+          const int jj = j0 + m;
+          sx[m] = jj < 0 ? sLoB : (jj > nJ - 1 ? sHiB : sn[jj]);
+          sy[m] = (jj < 0 || jj > nJ - 1) ? 0.0 : f[famIdx(fam, a, k, jj)];
+        }
+        const double dsg = polyDerivAt(sx, sy, 4, sface);
+        const double z = sface*hA[0];
+        /* THE TANGENTIAL GRADIENTS A SIGMA FACE WANTS, and the one place in this
+           operator where rule 1's common height must NOT be anchored on the level. On
+           a sigma face near the surface the height wanted is off a neighbour's own
+           level by H_theta dtheta / H, measured at 18 to 20 times the top row's
+           thickness over 16/32/64 -- a ratio refinement does not reduce. Anchored, the
+           cubic extrapolated ten stencil widths past its own nodes and the azimuthal
+           cross term read 3.05e-3, 1.94e-3, 5.91e-4, order 0.65 then 1.71. Bracketed,
+           3.73e-3, 9.06e-4, 3.94e-4, 1.25e-4 over four grids. With the reconstruction
+           replaced by its analytic value the same term read 1.95e-3, 3.15e-4,
+           4.53e-5, 5.84e-6 at order 2.63, 2.80, 2.96 -- so neither stencil is the
+           difficulty, the reconstruction is, and that is recorded as an open item
+           rather than as a tolerance. */
+        int ja = a - 1;
+        if (ja + 3 > aHi) ja = aHi - 3;
+        if (ja < aLo) ja = aLo;
+        for (int m = 0; m < 4; m++){
+          const int a2 = ja + m;
+          rx4[m] = a2 > nI - 1 ? R : (a2 >= 0 ? rn[a2] : -rn[-1 - a2]);
+          ry4[m] = a2 > nI - 1 ? 0.0 : colValueAtZ(f, fam, a2, k, z, 0, 0, 1);
+        }
+        const double dSigR = polyDerivAt(rx4, ry4, 4, rn[a]);
+        for (int m = 0; m < 4; m++){
+          tx4[m] = (k + TH_NODE[m])*dth;
+          ty4[m] = colValueAtZ(f, fam, a, k + TH_NODE[m], z, 0, 0, 1);
+        }
+        const double dSigTh = polyDerivAt(tx4, ty4, 4, k*dth);
+        fS[B - sLo] = proj*( dsg/hA[0]
+                           - sface*midS[0]*dSigR
+                           - (sface*midS[1]/(rn[a]*rn[a]))*dSigTh );
+      }
+
+      const int kp = k + 1 == nth ? 0 : k + 1;
+      for (int b = sLo; b <= sHi; b++){
         const double dsb = sb[b+1] - sb[b];
-        /* The sigma CENTROID of this row's control volume, which is where the r
-           and theta faces' one-point quadrature belongs -- not the node. For the
-           families whose nodes are cell centres the two are the same number bit
-           for bit; for w, whose nodes are the sigma faces, they differ by O(ds^2)
-           in the interior and by ds_top/4 at the surface, where the control volume
-           is the half cell the node bounds rather than straddles. Evaluating at
-           the node instead cost the surface row an order: 1.22e-4, 6.53e-5,
-           3.43e-5, order 0.91 then 0.93. */
-        const double sMid = 0.5*(sb[b] + sb[b+1]);
+        const int c = b - sLo;
+        /* The six faces in the order the cell always summed them: r below and
+           above, theta below and above, sigma below and above. */
         double flux = 0.0;
-
-        /* ---- the two r faces: normal r-hat, so the flux is df/dr|_z ---- */
-        for (int si = 0; si < 2; si++){
-          const int side = si == 0 ? -1 : +1;
-          const double rface = side < 0 ? rb[a] : rb[a+1];
-          if (rface == 0.0) continue;                 // the axis: zero area
-          HatInto(rface, th, hB);
-          if (!hasBc && (side < 0 ? a - 1 : a + 1) > nI - 1) continue;
-          const double z = sMid*hB[0];
-          /* df/dr|_z at a chosen radius, third order there, from the cubic
-             through the four columns that straddle it -- each reconstructed at
-             the SAME physical height. Four and not two because the radial grid is
-             graded, so a two-point difference is centred at the midpoint of its
-             columns rather than at the face, and at the rim column there is
-             nothing for that error to cancel against: measured on family p over a
-             flat surface the rim column read 2.27e-3 at order 1.71 then 1.43 while
-             every interior column ran at 2.04 or better. A column past the rim is
-             the wall, so it is an ordinary fourth point rather than a special
-             case. */
-          int j0 = side < 0 ? a - 2 : a - 1;
-          if (j0 + 3 > aHi) j0 = aHi - 3;
-          if (j0 < aLo) j0 = aLo;
-          /* The JavaScript evaluates HatH(R, th) here and passes z/HatH as the
-             sigma at which the wall's value is wanted. Every wall value in this
-             solver is zero -- the wall does not move -- so that argument is
-             discarded and the call is dead arithmetic. It is left out here rather
-             than computed and thrown away: it changes no number, and the
-             bit-for-bit gate is what says so. */
-          for (int m = 0; m < 4; m++){
-            const int ac = j0 + m;
-            rx4[m] = ac > nI - 1 ? R : (ac >= 0 ? rn[ac] : -rn[-1 - ac]);
-            ry4[m] = ac > nI - 1 ? 0.0 : colValueAtZ(f, fam, ac, k, z, b, 1, 0);
-          }
-          const double d = polyDerivAt(rx4, ry4, 4, rface);
-          flux += side*rface*dth*hB[0]*dsb*d;
-        }
-
-        /* ---- the two theta faces: normal theta-hat ----
-           df/dtheta|_z AT A THETA FACE, two points, and two points deliberately.
-           theta is uniform and periodic, so the difference over the interval it
-           spans is centred exactly at the face and its truncation coefficient is
-           the same at every k, which cancels between opposite faces. More than
-           that, THIS STENCIL IS LOAD-BEARING for the cylindrical coupling: for a
-           field uniform in Cartesian terms the azimuthal part of the scalar
-           Laplacian is a spurious -u/r^2 and it is the coupling term
-           (2/r^2) du_theta/dtheta that cancels it, between two DISCRETE
-           expressions, so it holds only while the two use matching stencils.
-           Raising this one to four points on its own took the vector Laplacian
-           from order 2.10 to 0.67 on a flat surface. */
-        for (int si = 0; si < 2; si++){
-          const int side = si == 0 ? -1 : +1;
-          const double thf = th + side*0.5*dth;
-          HatInto(rn[a], thf, hB);
-          const double z = sMid*hB[0];
-          const int kL = side < 0 ? k - 1 : k, kR = side < 0 ? k : k + 1;
-          const double d = (colValueAtZ(f, fam, a, kR, z, b, 1, 0)
-                          - colValueAtZ(f, fam, a, kL, z, b, 1, 0))/((kR - kL)*dth);
-          flux += side*dra*hB[0]*dsb*d/rn[a];
-        }
-
-        /* ---- the two sigma faces: the curved sheets z = sigma H, whose normal
-                is proportional to (-sigma H_r, -sigma H_theta / r, 1) ---- */
-        for (int si = 0; si < 2; si++){
-          const int side = si == 0 ? -1 : +1;
-          const double sface = side < 0 ? sb[b] : sb[b+1];
-          const double proj = rn[a]*dra*dth;
-          const int bn = side < 0 ? b - 1 : b + 1;
-          if (bn > nJ - 1 && sFluxKind){
-            /* THE FREE SURFACE, closed by a FLUX rather than by a value. */
-            flux += side*proj*surfaceFluxFace(sFluxKind, a, k);
-            continue;
-          }
-          if ((bn < 0 || bn > nJ - 1) && !hasBc) continue;
-          /* The four values straddling this sigma face. A boundary value counts
-             as one of them, at the boundary's own sigma; where one is unavailable
-             the four run one-sided into the interior, which is third order there
-             too. */
-          int j0 = side < 0 ? b - 2 : b - 1;
-          if (j0 < jLo) j0 = jLo;
-          if (j0 + 3 > jHi) j0 = jHi - 3;
-          for (int m = 0; m < 4; m++){
-            const int jj = j0 + m;
-            sx[m] = jj < 0 ? sLoB : (jj > nJ - 1 ? sHiB : sn[jj]);
-            sy[m] = (jj < 0 || jj > nJ - 1) ? 0.0 : f[famIdx(fam, a, k, jj)];
-          }
-          const double dsg = polyDerivAt(sx, sy, 4, sface);
-          const double z = sface*hA[0];
-          /* THE TANGENTIAL GRADIENTS A SIGMA FACE WANTS, and the one place in
-             this operator where rule 1's common height must NOT be anchored on
-             the level. On a sigma face near the surface the height wanted is off
-             a neighbour's own level by H_theta dtheta / H, measured at 18 to 20
-             times the top row's thickness over 16/32/64 -- a ratio refinement
-             does not reduce. Anchored, the cubic extrapolated ten stencil widths
-             past its own nodes and the azimuthal cross term read 3.05e-3,
-             1.94e-3, 5.91e-4, order 0.65 then 1.71. Bracketed, 3.73e-3, 9.06e-4,
-             3.94e-4, 1.25e-4 over four grids. With the reconstruction replaced by
-             its analytic value the same term read 1.95e-3, 3.15e-4, 4.53e-5,
-             5.84e-6 at order 2.63, 2.80, 2.96 -- so neither stencil is the
-             difficulty, the reconstruction is, and that is recorded as an open
-             item rather than as a tolerance. */
-          int ja = a - 1;
-          if (ja + 3 > aHi) ja = aHi - 3;
-          if (ja < aLo) ja = aLo;
-          for (int m = 0; m < 4; m++){
-            const int a2 = ja + m;
-            rx4[m] = a2 > nI - 1 ? R : (a2 >= 0 ? rn[a2] : -rn[-1 - a2]);
-            ry4[m] = a2 > nI - 1 ? 0.0 : colValueAtZ(f, fam, a2, k, z, 0, 0, 1);
-          }
-          const double dSigR = polyDerivAt(rx4, ry4, 4, rn[a]);
-          for (int m = 0; m < 4; m++){
-            tx4[m] = (k + TH_NODE[m])*dth;
-            ty4[m] = colValueAtZ(f, fam, a, k + TH_NODE[m], z, 0, 0, 1);
-          }
-          const double dSigTh = polyDerivAt(tx4, ty4, 4, k*dth);
-          flux += side*proj*( dsg/hA[0]
-                            - sface*midS[0]*dSigR
-                            - (sface*midS[1]/(rn[a]*rn[a]))*dSigTh );
-        }
-
+        if (loR) flux += -lo[k*nb + c];
+        if (hiR) flux += hi[k*nb + c];
+        flux += -fT[k*nb + c];
+        flux += fT[kp*nb + c];
+        if (!sSkip(b)) flux += -fS[c];
+        if (!sSkip(b + 1)) flux += fS[c + 1];
         out[famIdx(fam, a, k, b)] = flux/(rn[a]*dra*dth*hA[0]*dsb);
       }
     }
+    double* t = lo; lo = hi; hi = t;
   }
 }
 
@@ -1808,7 +1958,6 @@ int cell3d_step(double dt){
     for (int k = 0; k < nth; k++)
       divw[ip(i, k, nz - 1)] -= rc[i]*drc[i]*dth
         *psurf[ie(i, k)]/(H[ie(i, k)]*dsf[nz]);
-  if (cell3d_pressureDiagonal()) return lastError;
   for (int c = 0; c < NP; c++) p[c] = 0.0;
   cell3d_solveP(divw, 1e-11, 400*(nr + nth + nz));
   if (lastError) return lastError;
