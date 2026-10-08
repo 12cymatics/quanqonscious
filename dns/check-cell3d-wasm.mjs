@@ -252,25 +252,37 @@ for (const contact of ['free', 'pinned']){
   S.applyL(S.p, S._div); W.applyL('p', 'div');
   bad.push(diff('applyL', S._div, W.views.div));
 
-  S.pressureDiagonal(); W.pressureDiagonal();
-  bad.push(diff('pressureDiagonal', S._pdiag, W.views.pdiag));
+  /* The preconditioner: one application of it to the divergence above, in each engine,
+     and the factor it applied -- built by this JavaScript solver on first use, and by the
+     C++ engine's own JavaScript twin and copied in. Two builds from two cells, so the
+     factors agreeing is not the copy agreeing with itself. */
+  S.applyPreconditioner(S._div, S._z); W.applyPreconditioner('div', 'cgz');
+  bad.push(diff('preconditioner factor', S._pcBand, W.views.pcband));
+  bad.push(diff('preconditioner applied', S._z, W.views.cgz));
 
   S.wFromOmega(); W.wFromOmega();
   bad.push(diff('wFromOmega', S.w, W.views.w));
 
-  ok(bad.filter(Boolean).length === 0, `seven operators, ${contact}`,
+  ok(bad.filter(Boolean).length === 0, `six operators and the preconditioner, ${contact}`,
      bad.filter(Boolean).join('; '));
 
   /* The conjugate gradient, which is where a transcription is most likely to
-     drift: a hundred and more iterations, each a full matvec, and the stopping
-     test is a comparison of one of those sums against a tolerance. The ITERATION
-     COUNT is asserted as well as the field, because two solvers that agree on the
-     answer and disagree on the count took different paths to it. */
+     drift: every iteration a full matvec and a full preconditioner solve, and the
+     stopping test a comparison of one of those sums against a tolerance. The
+     ITERATION COUNT is asserted as well as the field, because two solvers that agree
+     on the answer and disagree on the count took different paths to it.
+
+     The count must also be more than a few, or "the same count" says nothing about
+     the recurrence. That guard used to read `> 20`, which was the diagonal
+     preconditioner's territory -- it took over a hundred here. The flat-cell
+     preconditioner takes this deformed cell to 1e-12 in 8 iterations free and 10
+     pinned, measured, which is the point of it; `> 4` still requires the recurrence
+     to have run, not one preconditioner application to have been compared. */
   S.divergence(S.u, S.v, S.om, S._div); W.divergence('u', 'v', 'om', 'div');
   S.p.fill(0); W.views.p.fill(0);
   const rJ = S.solveP(S._div, 1e-12, 2000);
   const rW = W.solveP('div', 1e-12, 2000);
-  ok(S.cgIters === W.cgIters && S.cgIters > 20,
+  ok(S.cgIters === W.cgIters && S.cgIters > 4,
      `the conjugate gradient takes the same ${S.cgIters} iterations, ${contact}`,
      `${S.cgIters} against ${W.cgIters}`);
   ok(Object.is(rJ, rW), `and reaches the same residual ${rJ.toExponential(6)}`,

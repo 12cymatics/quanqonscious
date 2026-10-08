@@ -14,7 +14,7 @@
  * to C++ and compiled freestanding for wasm32. It is not a faster-but-looser mode:
  * dns/check-cell3d-wasm.mjs holds the two to IDENTICAL fields, operator by
  * operator and then over a whole drive period, so the only thing that changes is
- * the wait. Measured here, best of three: 3.0x at 10x24x8 and 2.5x at 16x24x10. There is no
+ * the wait. Measured here, best of three: 4.0x at 10x24x8 and 3.5x at 16x24x10. There is no
  * silent fallback -- if the module cannot be loaded this refuses and says so,
  * rather than running the JavaScript under the C++ engine's name and reporting a
  * time that means something else.

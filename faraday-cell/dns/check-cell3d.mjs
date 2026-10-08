@@ -200,7 +200,6 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
     S.w[S.iw(i,k,j)] = 1e-3*r();
   S.omegaFromW();
   const before = S.maxDivergence();
-  S.pressureDiagonal();
   const project = tol => {
     S.p.fill(0);
     S.divergence(S.u, S.v, S.om, S._div);
@@ -227,7 +226,7 @@ for (const [nr, nth, nz, amp] of [[8, 12, 6, 0.4], [10, 16, 8, 0.7]]){
      `${loose.toExponential(3)} then ${tight.toExponential(3)}`);
 }
 
-section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact');
+section('3. the pressure gradient is the PHYSICAL one, and the preconditioner inverts the flat cell');
 /* Two properties of the projection that nothing checked while nothing used the gradient for
  * anything but its own transpose -- and both were wrong.
  *
@@ -241,31 +240,83 @@ section('3. the pressure gradient is the PHYSICAL one, and the diagonal is exact
  * vertical component was separately short of a factor of H, its control volume having been
  * written without one.
  *
- * THE DIAGONAL IS READ BY COLOURING and the strides must match the stencil. Carrying the
- * slope transpose widens it to delta sigma = +-2 with delta i = +-1 at the same time, so the
- * eight parity classes that were right before are not right now. Compared here against the
- * diagonal read one unit vector at a time, which is slow and exact and cannot be fooled by a
- * stride that is too short.
+ * THE PRECONDITIONER IS THE FLAT CELL'S EXACT INVERSE, and the test of an inverse is what it
+ * does to the solve: on a flat surface the conjugate gradient must finish in ONE iteration,
+ * whatever the right-hand side and however tight the tolerance. A wrong weight, a wrong sign
+ * on a mode's coupling or a component left unsolved all leave a preconditioner that is still
+ * positive definite -- the solve still converges, every physical check downstream stays green
+ * -- and only the iteration count notices. (This replaced the diagonal preconditioner and the
+ * check that its colouring strides matched the stencil; the diagonal is no longer formed.)
  *
  * The top sigma row and the surface face are excluded from the gradient comparison, because
  * there the operator carries its own Dirichlet value -- zero above the surface -- which this
  * probe does not satisfy. Gate 1 checks that boundary exactly, on a constant. */
 {
-  const S = deform(new FaradayCell3D({ nr: 6, nth: 8, nz: 5, ...CELL }), 0.4);
-  const d = Float64Array.from(S.pressureDiagonal());
-  const e = new Float64Array(S.NP), q = new Float64Array(S.NP);
-  let worst = 0, scale = 0;
-  for (let c = 0; c < S.NP; c++){
-    e.fill(0); e[c] = 1;
-    S.applyL(e, q);
-    worst = Math.max(worst, Math.abs(q[c] - d[c]));
-    scale = Math.max(scale, Math.abs(q[c]));
+  const rowsOf = [];
+  for (const [nr, nth, nz] of [[6, 8, 5], [12, 24, 8]])
+    for (const contact of ['free', 'pinned']){
+      const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact });
+      const r = rnd(4242 + nr), x = new Float64Array(S.NP);
+      for (let c = 0; c < x.length; c++) x[c] = r();
+      const rhs = Float64Array.from(S.applyL(x, new Float64Array(S.NP)));
+      const z = S.applyPreconditioner(rhs, new Float64Array(S.NP));
+      let e = 0, mx = 0;
+      for (let c = 0; c < x.length; c++){ e = Math.max(e, Math.abs(z[c] - x[c])); mx = Math.max(mx, Math.abs(x[c])); }
+      S.p.fill(0); S.solveP(rhs, 1e-11, 1000); const loose = S.cgIters;
+      S.p.fill(0); S.solveP(rhs, 1e-14, 1000); const tight = S.cgIters;
+      rowsOf.push({ tag: `${nr}x${nth}x${nz} ${contact}`, loose, tight, rel: e/mx });
+    }
+  console.log('       flat cell, M L x against x: ' + rowsOf.map(o =>
+    `${o.tag} ${o.rel.toExponential(2)}`).join('; '));
+  ok(rowsOf.every(o => o.loose === 1 && o.tight === 1),
+     'on a flat surface the pressure solve takes exactly ONE iteration, at 1e-11 and at '
+     + '1e-14, on two grids and both contact lines -- which is what the inverse means',
+     rowsOf.map(o => `${o.tag}: ${o.loose} and ${o.tight}`).join('; '));
+
+  /* and on a deformed one it is not the inverse, and the solve still ends on the TRUE
+     operator's residual: formed here from applyL independently of the solver's own
+     bookkeeping, so a solve that stopped on the preconditioned residual would show. */
+  const S = deform(new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }), 0.4);
+  /* It is built on first use, from a flat twin, while this cell has its surface -- so
+     building it must leave this cell exactly as it was. Every array is compared. */
+  {
+    randomState(S, 9191, 1e-3);
+    const before = {};
+    for (const [name, a] of Object.entries(S))
+      if (a instanceof Float64Array && !name.startsWith('_pc')) before[name] = Float64Array.from(a);
+    S.buildPreconditioner();
+    const moved = Object.keys(before).filter(name => {
+      const a = S[name], b = before[name];
+      for (let x = 0; x < a.length; x++) if (!Object.is(a[x], b[x])) return true;
+      return false;
+    });
+    ok(moved.length === 0 && Object.keys(before).length > 40,
+       `building the preconditioner on a deformed, moving cell leaves every one of its `
+       + `${Object.keys(before).length} arrays exactly as it was`,
+       moved.join(', '));
+    /* and what it built is the FLAT cell's, whatever surface it was built under: the same
+       factor, to the bit, as a fresh cell of the same options builds with eta still zero */
+    const fresh = new FaradayCell3D({ nr: 10, nth: 16, nz: 8, ...CELL }).buildPreconditioner();
+    let differ = 0;
+    for (let x = 0; x < S._pcBand.length; x++) if (!Object.is(S._pcBand[x], fresh._pcBand[x])) differ++;
+    ok(differ === 0,
+       'and the factor it built under that surface is the flat cell\'s, bit for bit, as a fresh '
+       + 'cell builds it',
+       `${differ} of ${S._pcBand.length} entries differ`);
   }
-  ok(worst === 0,
-     'the coloured diagonal is exactly the diagonal read one unit vector at a time, so the '
-     + 'colour strides match the operator\'s stencil',
-     `worst difference ${worst.toExponential(3)} against entries up to `
-     + `${scale.toExponential(3)}`);
+  const r = rnd(777), rhs = new Float64Array(S.NP);
+  for (let c = 0; c < rhs.length; c++) rhs[c] = r();
+  S.p.fill(0); S.solveP(rhs, 1e-11, 1000);
+  const Lp = S.applyL(S.p, new Float64Array(S.NP));
+  let num = 0, den = 0;
+  for (let c = 0; c < rhs.length; c++){ num += (rhs[c] - Lp[c])**2; den += rhs[c]**2; }
+  const trueRes = Math.sqrt(num/den);
+  console.log(`       deformed to eta/h = 0.4: ${S.cgIters} iterations to 1e-11, true `
+    + `residual ${trueRes.toExponential(2)}`);
+  ok(trueRes < 1e-11 && S.cgIters > 1,
+     'on a deformed surface it is not the inverse, and the solve still ends on the true '
+     + 'operator\'s residual, below the tolerance',
+     `${S.cgIters} iterations, true residual ${trueRes.toExponential(3)}`);
 }
 {
   const A = 4.1e3, B = -9.7e2, C = 2.3e3, D = 1.7e3, h = CELL.h, R = CELL.R;
@@ -1150,7 +1201,6 @@ section('6f. on a divergence-free field the only energy it moves is the mesh vol
   const nr = 10, nth = 16, nz = 8;
   const S = deform(new FaradayCell3D({ nr, nth, nz, ...CELL }), 0.5);
   randomState(S, 5150, 1e-3);
-  S.pressureDiagonal();
   const residual = () => {
     const TU = new Float64Array(S.NU), TV = new Float64Array(S.NV),
           TW = new Float64Array(S.NW);
@@ -3608,7 +3658,6 @@ section('14. step() is the composition it documents, term for term');
       for (let k = 0; k < nth; k++)
         div[T.ip(i, k, nz - 1)] -= T.rc[i]*T.drc[i]*T.dth
           *ps[T.ie(i, k)]/(T.H[T.ie(i, k)]*T.dsf[nz]);
-    T.pressureDiagonal();
     T.p.fill(0);
     T.solveP(div, 1e-11, 400*(nr + nth + nz));
     T.gradient(T.p, gu, gv, gw);

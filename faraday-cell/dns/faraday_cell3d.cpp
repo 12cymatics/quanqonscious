@@ -76,8 +76,10 @@ static int   arenaUsed = 0;
    3 the free surface has reached the floor, which is the one refusal the
    JavaScript raises from refreshMetric: z = sigma*(h + eta) requires a positive
    depth everywhere, and a non-positive one means there is no single-valued
-   surface left to follow. The caller turns each of these into the same Error the
-   JavaScript throws -- this module never continues past one. */
+   surface left to follow. 5 to 7 are named where they are raised. (4 was the
+   diagonal preconditioner's, which the flat-cell one replaced; that one is built in
+   JavaScript and refuses there.) The caller turns each of these into the same Error
+   the JavaScript throws -- this module never continues past one. */
 static int lastError = 0;
 static int errI = -1, errK = -1;           // where case 3 was found
 
@@ -92,8 +94,12 @@ static double *H, *Hr, *Hth, *Hdr, *Hdth, *Ht;
 static double *Hx, *Hxr, *Hxt;
 static double *Ex, *Er, *Eth, *Edr, *Edth, *Exr, *Ext;
 static double *Tx, *Txr, *Txt, *Tr, *Tth, *Tdr, *Tdth;
-static double *gu, *gv, *gw, *gom, *pdiag, *divw;
-static double *cgr, *cgd, *cgq, *cgz, *probe, *pq;
+static double *gu, *gv, *gw, *gom, *divw;
+static double *cgr, *cgd, *cgq, *cgz;
+/* The pressure solve's preconditioner: the azimuthal Fourier basis and the per-mode band
+   Cholesky factors, both written in by JavaScript (dftc, dfts, pcband), and the two working
+   rows of an application. buildPreconditioner in the JavaScript says what it is. */
+static double *dftc, *dfts, *pcband, *pchatc, *pchats;
 static int cgIters = 0; static double cgResidual = 0.0;
 static double *lapU, *lapV, *lapW, *advU, *advV, *advW;
 static double *fsr, *fst, *fsz, *kap, *psurf;
@@ -185,12 +191,13 @@ int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
   Tr = take((nr + 1)*nth); Tth = take(NE); Tdr = take(NE); Tdth = take(NE);
 
   gu = take(NU); gv = take(NV); gw = take(NW); gom = take(NW);
-  pdiag = take(NP); divw = take(NP);
+  divw = take(NP);
   cgr = take(NP); cgd = take(NP); cgq = take(NP); cgz = take(NP);
-  /* pressureDiagonal's two working vectors. The JavaScript allocates them per
-     call; here they come out of the arena once, which changes no arithmetic
-     because both are overwritten before they are read. */
-  probe = take(NP); pq = take(NP);
+  {
+    const int M = (nth >> 1) + 1, n2 = nr*nz, W = nz + 1;
+    dftc = take(M*nth); dfts = take(M*nth);
+    pcband = take(M*n2*W); pchatc = take(M*n2); pchats = take(M*n2);
+  }
 
   lapU = take(NU); lapV = take(NV); lapW = take(NW);
   advU = take(NU); advV = take(NV); advW = take(NW);
@@ -228,41 +235,73 @@ int    cell3d_arenaUsed(){ return arenaUsed; }
    which is `rf`, and would have looked like a grid that had gone wrong. */
 double* cell3d_ptr(int which){
   switch (which){
-    case  0: return rf;    case  1: return sf;
-    case  2: return rc;    case  3: return sc;
-    case  4: return drc;   case  5: return dsc;
-    case  6: return drf;   case  7: return dsf;
+    case  0: return rf;
+    case  1: return sf;
+    case  2: return rc;
+    case  3: return sc;
+    case  4: return drc;
+    case  5: return dsc;
+    case  6: return drf;
+    case  7: return dsf;
     case  8: return rx;
-    case  9: return u;     case 10: return v;
-    case 11: return w;     case 12: return om;
-    case 13: return p;     case 14: return eta;
-    case 15: return H;     case 16: return Hr;
-    case 17: return Hth;   case 18: return Hdr;
-    case 19: return Hdth;  case 20: return Ht;
-    case 21: return Hx;    case 22: return Hxr;
+    case  9: return u;
+    case 10: return v;
+    case 11: return w;
+    case 12: return om;
+    case 13: return p;
+    case 14: return eta;
+    case 15: return H;
+    case 16: return Hr;
+    case 17: return Hth;
+    case 18: return Hdr;
+    case 19: return Hdth;
+    case 20: return Ht;
+    case 21: return Hx;
+    case 22: return Hxr;
     case 23: return Hxt;
-    case 24: return Ex;    case 25: return Er;
-    case 26: return Eth;   case 27: return Edr;
-    case 28: return Edth;  case 29: return Exr;
+    case 24: return Ex;
+    case 25: return Er;
+    case 26: return Eth;
+    case 27: return Edr;
+    case 28: return Edth;
+    case 29: return Exr;
     case 30: return Ext;
-    case 31: return Tx;    case 32: return Txr;
-    case 33: return Txt;   case 34: return Tr;
-    case 35: return Tth;   case 36: return Tdr;
+    case 31: return Tx;
+    case 32: return Txr;
+    case 33: return Txt;
+    case 34: return Tr;
+    case 35: return Tth;
+    case 36: return Tdr;
     case 37: return Tdth;
-    case 38: return gu;    case 39: return gv;
-    case 40: return gw;    case 41: return gom;
-    case 42: return pdiag; case 43: return divw;
-    case 44: return cgr;   case 45: return cgd;
-    case 46: return cgq;   case 47: return cgz;
-    case 48: return probe; case 49: return pq;
-    case 50: return lapU;  case 51: return lapV;
-    case 52: return lapW;  case 53: return advU;
-    case 54: return advV;  case 55: return advW;
-    case 56: return fsr;   case 57: return fst;
-    case 58: return fsz;   case 59: return kap;
-    case 60: return psurf;
-    case 61: return hcolP; case 62: return hcolU;
-    case 63: return hcolV; case 64: return hcolW;
+    case 38: return gu;
+    case 39: return gv;
+    case 40: return gw;
+    case 41: return gom;
+    case 42: return divw;
+    case 43: return cgr;
+    case 44: return cgd;
+    case 45: return cgq;
+    case 46: return cgz;
+    case 47: return lapU;
+    case 48: return lapV;
+    case 49: return lapW;
+    case 50: return advU;
+    case 51: return advV;
+    case 52: return advW;
+    case 53: return fsr;
+    case 54: return fst;
+    case 55: return fsz;
+    case 56: return kap;
+    case 57: return psurf;
+    case 58: return hcolP;
+    case 59: return hcolU;
+    case 60: return hcolV;
+    case 61: return hcolW;
+    case 62: return dftc;
+    case 63: return dfts;
+    case 64: return pcband;
+    case 65: return pchatc;
+    case 66: return pchats;
     default: return 0;
   }
 }
@@ -272,41 +311,73 @@ double* cell3d_ptr(int which){
    last, which is a defect no comparison of the overlapping part can see. */
 int cell3d_len(int which){
   switch (which){
-    case  0: return nr + 1;  case  1: return nz + 1;
-    case  2: return nr;      case  3: return nz;
-    case  4: return nr;      case  5: return nz;
-    case  6: return nr + 1;  case  7: return nz + 1;
+    case  0: return nr + 1;
+    case  1: return nz + 1;
+    case  2: return nr;
+    case  3: return nz;
+    case  4: return nr;
+    case  5: return nz;
+    case  6: return nr + 1;
+    case  7: return nz + 1;
     case  8: return nr + 2;
-    case  9: return NU;      case 10: return NV;
-    case 11: return NW;      case 12: return NW;
-    case 13: return NP;      case 14: return NE;
-    case 15: return NE;      case 16: return (nr + 1)*nth;
-    case 17: return NE;      case 18: return NE;
-    case 19: return NE;      case 20: return NE;
-    case 21: return NX;      case 22: return NX;
+    case  9: return NU;
+    case 10: return NV;
+    case 11: return NW;
+    case 12: return NW;
+    case 13: return NP;
+    case 14: return NE;
+    case 15: return NE;
+    case 16: return (nr + 1)*nth;
+    case 17: return NE;
+    case 18: return NE;
+    case 19: return NE;
+    case 20: return NE;
+    case 21: return NX;
+    case 22: return NX;
     case 23: return NX;
-    case 24: return NX;      case 25: return (nr + 1)*nth;
-    case 26: return NE;      case 27: return NE;
-    case 28: return NE;      case 29: return NX;
+    case 24: return NX;
+    case 25: return (nr + 1)*nth;
+    case 26: return NE;
+    case 27: return NE;
+    case 28: return NE;
+    case 29: return NX;
     case 30: return NX;
-    case 31: return NX;      case 32: return NX;
-    case 33: return NX;      case 34: return (nr + 1)*nth;
-    case 35: return NE;      case 36: return NE;
+    case 31: return NX;
+    case 32: return NX;
+    case 33: return NX;
+    case 34: return (nr + 1)*nth;
+    case 35: return NE;
+    case 36: return NE;
     case 37: return NE;
-    case 38: return NU;    case 39: return NV;
-    case 40: return NW;    case 41: return NW;
-    case 42: return NP;    case 43: return NP;
-    case 44: return NP;    case 45: return NP;
-    case 46: return NP;    case 47: return NP;
-    case 48: return NP;    case 49: return NP;
-    case 50: return NU;    case 51: return NV;
-    case 52: return NW;    case 53: return NU;
-    case 54: return NV;    case 55: return NW;
-    case 56: return NE;    case 57: return NE;
-    case 58: return NE;    case 59: return NE;
+    case 38: return NU;
+    case 39: return NV;
+    case 40: return NW;
+    case 41: return NW;
+    case 42: return NP;
+    case 43: return NP;
+    case 44: return NP;
+    case 45: return NP;
+    case 46: return NP;
+    case 47: return NU;
+    case 48: return NV;
+    case 49: return NW;
+    case 50: return NU;
+    case 51: return NV;
+    case 52: return NW;
+    case 53: return NE;
+    case 54: return NE;
+    case 55: return NE;
+    case 56: return NE;
+    case 57: return NE;
+    case 58: return NE;
+    case 59: return (nr + 1)*nth;
     case 60: return NE;
-    case 61: return NE;    case 62: return (nr + 1)*nth;
-    case 63: return NE;    case 64: return NE;
+    case 61: return NE;
+    case 62: return ((nth >> 1) + 1)*nth;
+    case 63: return ((nth >> 1) + 1)*nth;
+    case 64: return ((nth >> 1) + 1)*nr*nz*(nz + 1);
+    case 65: return ((nth >> 1) + 1)*nr*nz;
+    case 66: return ((nth >> 1) + 1)*nr*nz;
     default: return -1;
   }
 }
@@ -669,33 +740,74 @@ void cell3d_applyL(const double* q, double* out){
   cell3d_divergence(gu, gv, gom, out);
 }
 
-/* The diagonal of divergence(gradient(.)), exactly, by colouring. The strides
-   are (2, 2, 3) and that is not a margin, it is the stencil: once the gradient
-   carries the slope operator's transpose, a sigma face's pressure reaches the
-   eight r and theta faces that meet there and the reach becomes
-   di in [-1,1], dk in [-1,1], dsigma in [-2,2] including the corners. Two cells
-   of one class differ by an even di, an even dk and a multiple of three in
-   sigma, and the only such triple inside that box is the zero one. */
-int cell3d_pressureDiagonal(){
-  for (int c = 0; c < 12; c++){
-    const int pi = c & 1, pk = (c >> 1) & 1, pj = c >> 2;
-    for (int t = 0; t < NP; t++) probe[t] = 0.0;
-    for (int i = 0; i < nr; i++) if ((i & 1) == pi)
-      for (int k = 0; k < nth; k++) if ((k & 1) == pk)
-        for (int j = 0; j < nz; j++) if (j % 3 == pj)
-          probe[ip(i, k, j)] = 1.0;
-    cell3d_applyL(probe, pq);
-    for (int i = 0; i < nr; i++) if ((i & 1) == pi)
-      for (int k = 0; k < nth; k++) if ((k & 1) == pk)
-        for (int j = 0; j < nz; j++) if (j % 3 == pj)
-          pdiag[ip(i, k, j)] = pq[ip(i, k, j)];
+/* THE PRESSURE SOLVE'S PRECONDITIONER: THE FLAT CELL, INVERTED EXACTLY -- the application
+   of it, transcribed from applyPreconditioner in the JavaScript, which says what it is and
+   why, in its order down to the grouping of every sum. Flat, the operator is block circulant
+   in theta and couples a column only to itself and its two neighbours, symmetrically, so the
+   azimuthal Fourier basis diagonalises it into one real symmetric band matrix per mode, of
+   half-width nz, and -L_m has an exact band Cholesky factor.
+
+   THE FACTOR IS NOT BUILT HERE. JavaScript builds it -- buildPreconditioner, from a flat twin
+   of the cell, checking the structure the decomposition rests on -- and copies it in with
+   the grid, as it copies the grid itself, so the factorisation has one implementation. So
+   are the cos and sin tables: this module evaluates no transcendental. */
+static void applyPreconditioner(const double* r, double* z){
+  const int n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
+  for (int x = 0; x < M*n2; x++){ pchatc[x] = 0.0; pchats[x] = 0.0; }
+  for (int i = 0; i < nr; i++)
+    for (int k = 0; k < nth; k++){
+      const int rb = (i*nth + k)*nz;
+      for (int m = 0; m < M; m++){
+        const double cm = dftc[m*nth + k], sm = dfts[m*nth + k];
+        const int hb = m*n2 + i*nz;
+        for (int j = 0; j < nz; j++){
+          const double x = r[rb + j];
+          pchatc[hb + j] += x*cm;
+          pchats[hb + j] += x*sm;
+        }
+      }
+    }
+  for (int m = 0; m < M; m++){
+    const double* B = pcband + m*n2*W;
+    const int hb = m*n2;
+    const int both = !(m == 0 || 2*m == nth);
+    for (int comp = 0; comp < (both ? 2 : 1); comp++){
+      double* h = (comp == 0 ? pchatc : pchats) + hb;
+      for (int a = 0; a < n2; a++){
+        double sum = h[a];
+        for (int pp = (a - bw > 0 ? a - bw : 0); pp < a; pp++) sum -= B[a*W + (a - pp)]*h[pp];
+        h[a] = sum/B[a*W];
+      }
+      for (int a = n2 - 1; a >= 0; a--){
+        double sum = h[a];
+        const int top = n2 - 1 < a + bw ? n2 - 1 : a + bw;
+        for (int pp = a + 1; pp <= top; pp++) sum -= B[pp*W + (pp - a)]*h[pp];
+        h[a] = sum/B[a*W];
+      }
+    }
   }
-  for (int c = 0; c < NP; c++)
-    if (!(pdiag[c] < 0.0)){ lastError = 4; errI = c; errK = -1; return lastError; }
-  return lastError;
+  const double w0 = 1.0/nth, w1 = 2.0/nth;
+  for (int i = 0; i < nr; i++)
+    for (int k = 0; k < nth; k++){
+      const int rb = (i*nth + k)*nz;
+      for (int j = 0; j < nz; j++){
+        double acc = 0.0;
+        for (int m = 0; m < M; m++){
+          const int a = m*n2 + i*nz + j;
+          const double wm = (m == 0 || 2*m == nth) ? w0 : w1;
+          acc += wm*(pchatc[a]*dftc[m*nth + k] + pchats[a]*dfts[m*nth + k]);
+        }
+        z[rb + j] = -acc;
+      }
+    }
 }
 
-/* Conjugate gradients with the operator's own diagonal as preconditioner. */
+/* The same, exported so the gate can compare it with the JavaScript's on any vector. */
+void cell3d_applyPreconditioner(const double* r, double* z){ applyPreconditioner(r, z); }
+
+/* Conjugate gradients, preconditioned by the flat cell's exact inverse. It stops on the TRUE
+   operator's residual against the caller's tolerance, so the preconditioner changes how many
+   iterations that takes and not what it converges to. */
 double cell3d_solveP(const double* rhs, double tol, int maxIt){
   const int n = NP;
   cell3d_applyL(p, cgq);
@@ -703,9 +815,9 @@ double cell3d_solveP(const double* rhs, double tol, int maxIt){
   for (int i = 0; i < n; i++){ cgr[i] = rhs[i] - cgq[i]; rr += cgr[i]*cgr[i]; }
   const double rr0 = rr;
   if (rr0 == 0.0){ cgIters = 0; cgResidual = 0.0; return 0.0; }
+  applyPreconditioner(cgr, cgz);
   double rz = 0.0;
-  for (int i = 0; i < n; i++){
-    cgz[i] = cgr[i]/pdiag[i]; cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
+  for (int i = 0; i < n; i++){ cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
   int it = 0;
   for (; it < maxIt; it++){
     cell3d_applyL(cgd, cgq);
@@ -717,8 +829,9 @@ double cell3d_solveP(const double* rhs, double tol, int maxIt){
     for (int i = 0; i < n; i++){
       p[i] += alpha*cgd[i]; cgr[i] -= alpha*cgq[i]; rr2 += cgr[i]*cgr[i]; }
     if (__builtin_sqrt(rr2/rr0) < tol){ rr = rr2; it++; break; }
+    applyPreconditioner(cgr, cgz);
     double rz2 = 0.0;
-    for (int i = 0; i < n; i++){ cgz[i] = cgr[i]/pdiag[i]; rz2 += cgr[i]*cgz[i]; }
+    for (int i = 0; i < n; i++) rz2 += cgr[i]*cgz[i];
     const double beta = rz2/rz; rz = rz2; rr = rr2;
     for (int i = 0; i < n; i++) cgd[i] = cgz[i] + beta*cgd[i];
   }
@@ -1845,7 +1958,6 @@ int cell3d_step(double dt){
     for (int k = 0; k < nth; k++)
       divw[ip(i, k, nz - 1)] -= rc[i]*drc[i]*dth
         *psurf[ie(i, k)]/(H[ie(i, k)]*dsf[nz]);
-  if (cell3d_pressureDiagonal()) return lastError;
   for (int c = 0; c < NP; c++) p[c] = 0.0;
   cell3d_solveP(divw, 1e-11, 400*(nr + nth + nz));
   if (lastError) return lastError;

@@ -39,24 +39,27 @@ const CELL3D_ARRAYS = [
      them rather than only the state. A projection that agreed on the answer
      while disagreeing on an intermediate would mean one of the two had a
      cancellation the other did not, and that is worth knowing before it matters. */
-  'gu', 'gv', 'gw', 'gom', 'pdiag', 'div',
-  'cgr', 'cgd', 'cgq', 'cgz', 'probe', 'pq',
+  'gu', 'gv', 'gw', 'gom', 'div',
+  'cgr', 'cgd', 'cgq', 'cgz',
   'lapU', 'lapV', 'lapW', 'advU', 'advV', 'advW',
   'fsr', 'fst', 'fsz', 'kap', 'psurf',
   /* H at every node of each family, which refreshMetric fills and every column
      reconstruction reads. Compared like the rest, so a depth that differed between
      the two engines would be found where it is made, not three operators later. */
-  'hcolP', 'hcolU', 'hcolV', 'hcolW'
+  'hcolP', 'hcolU', 'hcolV', 'hcolW',
+  /* The pressure solve's preconditioner: the azimuthal Fourier basis, which JavaScript
+     evaluates and writes in because the module computes no transcendental, the per-mode
+     band Cholesky factors, which JavaScript builds and writes in so the factorisation has
+     one implementation, and the two working rows of an application. */
+  'dftc', 'dfts', 'pcband', 'pchatc', 'pchats'
 ];
 
 /* The JavaScript field each module array corresponds to, where the names differ.
-   Anything not listed here has the same name on both sides. `probe` and `pq` have
-   no JavaScript counterpart at all: pressureDiagonal allocates them per call
-   there, which changes no arithmetic because both are overwritten before they are
-   read, so they are mapped to null and the gate does not compare them. */
+   Anything not listed here has the same name on both sides. */
 const CELL3D_JS_NAME = {
-  gu: '_gu', gv: '_gv', gw: '_gw', gom: '_gom', pdiag: '_pdiag', div: '_div',
-  cgr: '_r', cgd: '_d', cgq: '_q', cgz: '_z', probe: null, pq: null,
+  gu: '_gu', gv: '_gv', gw: '_gw', gom: '_gom', div: '_div',
+  cgr: '_r', cgd: '_d', cgq: '_q', cgz: '_z',
+  pcband: '_pcBand', pchatc: '_pcHatC', pchats: '_pcHatS',
   lapU: '_lu', lapV: '_lv', lapW: '_lw', advU: '_au', advV: '_av', advW: '_aw',
   fsr: '_fsr', fst: '_fst', fsz: '_fsz', kap: '_kap', psurf: '_ps',
   hcolP: '_hcolP', hcolU: '_hcolU', hcolV: '_hcolV', hcolW: '_hcolW'
@@ -64,7 +67,7 @@ const CELL3D_JS_NAME = {
 
 /* The arrays JavaScript writes INTO the module: the grid, which it owns, and the
    state, which the caller sets. Everything else the module fills. */
-const CELL3D_GRID = ['rf', 'sf', 'rc', 'sc', 'drc', 'dsc', 'drf', 'dsf', 'rx'];
+const CELL3D_GRID = ['rf', 'sf', 'rc', 'sc', 'drc', 'dsc', 'drf', 'dsf', 'rx', 'dftc', 'dfts'];
 const CELL3D_STATE = ['u', 'v', 'w', 'om', 'p', 'eta', 'Ht'];
 
 const CELL3D_WASM_EXPORTS = [
@@ -72,7 +75,7 @@ const CELL3D_WASM_EXPORTS = [
   'cell3d_errorK', 'cell3d_clearError', 'cell3d_arenaUsed',
   'cell3d_refreshMetric',
   'cell3d_divergence', 'cell3d_gradient', 'cell3d_omegaOf', 'cell3d_applyL',
-  'cell3d_pressureDiagonal', 'cell3d_solveP', 'cell3d_cgIters',
+  'cell3d_applyPreconditioner', 'cell3d_solveP', 'cell3d_cgIters',
   'cell3d_cgResidual', 'cell3d_omegaFromW', 'cell3d_wFromOmega',
   'cell3d_maxDivergence',
   'cell3d_buildFamilies', 'cell3d_axisU', 'cell3d_refreshSurfaceFluxes',
@@ -198,6 +201,11 @@ class FaradayCell3DWasm {
     X.cell3d_buildFamilies();
     const built = X.cell3d_error();
     if (built) throw new Error(this.errorMessage(built));
+    /* The pressure solve's preconditioner, factored by the JavaScript solver from a flat
+       twin of this cell and copied in like the grid: one implementation of the
+       factorisation, and the module only applies it. */
+    this.js.buildPreconditioner();
+    this.views.pcband.set(this.js._pcBand);
     CELL3D_WASM_LIVE = this;
   }
 
@@ -210,11 +218,6 @@ class FaradayCell3DWasm {
       + `residual ${X.cell3d_cgResidual().toExponential(3)} after `
       + `${X.cell3d_cgIters()} iterations on a `
       + `${this.js.nr}x${this.js.nth}x${this.js.nz} grid.`;
-    if (code === 4) return 'the pressure operator has a diagonal entry of '
-      + `${this.views.pdiag[X.cell3d_errorI()]} at cell ${X.cell3d_errorI()} of `
-      + `${this.views.pdiag.length}. It is negative definite by construction, so `
-      + 'a zero or positive diagonal means a cell is decoupled from the pressure '
-      + 'field and no preconditioner can be formed from it.';
     if (code === 3){
       const i = X.cell3d_errorI(), k = X.cell3d_errorK();
       return 'the free surface has reached the floor: h + eta <= 0 at '
@@ -282,10 +285,9 @@ class FaradayCell3DWasm {
     return this.views[out];
   }
 
-  pressureDiagonal(){
-    const code = this.inst.exports.cell3d_pressureDiagonal();
-    if (code) throw new Error(this.errorMessage(code));
-    return this.views.pdiag;
+  applyPreconditioner(r = 'cgr', z = 'cgz'){
+    this.inst.exports.cell3d_applyPreconditioner(this.at(r), this.at(z));
+    return this.views[z];
   }
 
   solveP(rhs = 'div', tol = 1e-12, maxIt = 2000){

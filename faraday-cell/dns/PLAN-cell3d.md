@@ -98,6 +98,7 @@ against this and need no further decision.
 | S9b | The renderer draws this solver's surface | **done** | the page's drawn field agrees with `CELL3D.etaAtPixel` at 379 pixels to a relative 1e-6, through four resamplers and a polar-to-Cartesian rotation in the normalised radius; the deck carries the physics clock, the wall clock, their ratio and the step count; a worker built from the two `<script id="dns...">` sources, slices bounded at 120 ms of wall clock. Found a real precision defect on the way in -- `st.depthMm` does not exist on the resolved state, so `h` arrived as NaN -- and the page suite caught the standalone build still carrying a `<script src>` for the solver, twice over |
 | S10 | C++ port of the three-dimensional step | **done** | `dns/faraday_cell3d.cpp`, 1 862 lines, compiled freestanding for wasm32 by clang with no Emscripten and no libc. Bit for bit against the JavaScript, by `Object.is` on every element: the metric's 22 arrays; the projection's seven operators and the conjugate gradient's own **iteration count** and residual; `axisU`, the three surface fluxes and the vector Laplacian; the advection's six arrays, the mean curvature, the surface area, the excess area and the surface pressure; 40 steps undriven and driven on both contact branches; and **894 steps, one whole drive period at 12x24x8, all 29 arrays**. Measured: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x slower than real time to 489x. The page offers it as a third `surface` button and the deck names the module that answered, read off the worker's own frames. `dns/check-cell3d-wasm.mjs`, 55 checks. Fourteen injected defects, four of them findings about the GATE rather than the port -- below |
 | S10b | The viscous operator forms each face once, in both engines | **done** | `famLaplacian` formed all six faces of every cell, so each interior face -- and every column reconstruction it asks for -- was formed twice, once by each neighbour. Each face is now formed once and both cells read it: **562 440 reconstructions per viscous evaluation become 321 320**, and the 639 400 re-interpolations of a column's depth become a table refreshMetric fills. The viscous term is **2.2 to 2.4x** faster; a whole step **1.5 to 1.9x**, best of three: at 16x40x10 JavaScript 173.5 -> 117.6 ms and C++ 73.3 -> 40.9 ms. The r and sigma faces' shared value is the old value **bit for bit**, measured by putting the old theta face back and comparing; the theta faces and the azimuthal seam are a correction -- each was found at two roundings of one angle, one per neighbour, so the operator was not exactly conservative in theta. Every figure the 264 existing checks print is unchanged at its printed precision; the gate went from 11m42s to 6m56s, and carries 267 checks with the three below. JavaScript and C++ still agree bit for bit over a whole drive period. Six injected defects all red -- below |
+| S12b | The pressure solve preconditioned by the flat cell's exact inverse, in f64 | **done** | The diagonal preconditioner took **110 to 162 iterations a step**; this takes **7 or 8**. Flat, the pressure operator is block circulant in theta, so the azimuthal Fourier basis splits it into one real band matrix per mode, and the preconditioner is that cell's pressure equation solved directly: a Fourier analysis in theta, a band Cholesky solve per mode, a synthesis. On the actual surface it is not the inverse and does not have to be -- the solve still stops on the TRUE operator's residual at the same tolerance. Everything is double precision. On a flat cell the solve takes exactly **one** iteration, at 1e-11 and at 1e-14, which the gate asserts as its test of the inverse. Best of three, a step: **C++ 9.86 -> 5.19 ms at 10x24x8, 24.7 -> 10.4 at 16x24x10, 40.9 -> 19.8 at 16x40x10**; JavaScript 29.9 -> 20.9, 62.9 -> 36.6, 117.6 -> 66.1. Every figure the gate printed is unchanged at its printed precision except the solve's own iteration counts and two rounding-noise harmonics at 1e-22. Seven injected defects all red -- below |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | **render done; preconditioner declined, with the numbers** | The surface is shaded by a WebGL2 fragment shader (`faraday/render-gl.js`), chosen under *draw on*, the deck naming which processor drew. Held to the CPU's bytes **within one level out of 255 in every channel** -- 24 renderings each on the modal field, after a field rebuild, on the Navier-Stokes field and in the single-file build, worst difference 1, about one channel in 100 000 at that level. Main thread per frame: CPU 9.9-10.3 ms, GPU 2.1-2.3 ms on a SOFTWARE GPU, which is submission cost and not a speed measurement. The f32 preconditioner is not built: at the page's grid the CG is 159 iterations and 40% of a 77 ms step, each GPU application is a round trip whose cost on the owner's hardware is unmeasured, and it would end bit-for-bit parity between the engines -- below |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
@@ -1493,6 +1494,84 @@ gate's report printing "worst relative 0.000e+0" beside an element read as NaN, 
 37%, advection 8%. The pressure solve is the part that needs a global reduction every iteration,
 so it is the part that does not spread over cores without shared memory -- which a page opened
 from a file does not have. That is S11's problem, and this measurement is where it starts.
+
+## S12b -- the pressure solve, preconditioned by the flat cell's exact inverse
+
+**After S10b the solve was half of every step again**, and S11 could not touch it: it needs two
+global sums per iteration, and spread over threads without shared memory each sum is a round trip
+through the message queue. So the iterations had to go instead. The diagonal preconditioner took
+110 iterations a step at 10x24x8, 153 at 16x24x10 and 162 at 16x40x10.
+
+**The preconditioner is the flat cell's pressure equation, solved directly.** With a flat surface
+the metric does not depend on theta, so the operator is the same at every azimuth and couples a
+column only to itself and its two neighbours, symmetrically. The azimuthal Fourier basis then
+diagonalises it: cos(m k dtheta) and sin(m k dtheta) each see the same real symmetric (r, sigma)
+operator, L_m = C0 + 2 C1 cos(m dtheta), which couples a cell only to its radial and vertical
+neighbours. Numbered i*nz + j it is a band matrix of half-width nz, and -L_m has an exact band
+Cholesky factor. Applying the preconditioner is a Fourier analysis in theta, a band solve per
+mode and component, and a synthesis.
+
+**On the actual surface it is not the inverse, and it does not have to be.** A preconditioner
+steers the search directions. The iteration stops on the residual of the TRUE operator against
+the same tolerance as before, so the answer is the answer to that tolerance whatever the
+preconditioner. The surface's deformation costs only iterations: 7 or 8 a step in a driven run,
+14 on a random right-hand side at eta/h = 0.4. Everything, including the factorisation, is double
+precision. This is not the f32 GPU preconditioner S12 declined: it is CPU arithmetic in the same
+f64 as the physics, and it keeps the two engines bit for bit.
+
+**The matrices are read off applyL, not derived by hand.** One unit probe per (i, j), on a flat
+twin of the cell built from its own options, gives C0 and the two neighbour couplings. The probes
+also CHECK what the decomposition rests on: nothing reaches past the two neighbouring columns,
+nothing falls outside the band, and the two neighbour couplings are equal to the bit. If any of
+that fails the build refuses, since the modes would then not decouple and what was built would
+not be the inverse of anything. It is built on first use, not in the constructor, because the
+gate's operator checks build cells of 64x96x64 that never solve, where the factor would be 104 MB.
+The C++ engine does not build it at all: the loader copies the JavaScript solver's factor in,
+as it copies the grid, so the factorisation has one implementation and the module only applies it.
+
+| best of three, a step | after S10b | after this | |
+|---|---|---|---|
+| 10x24x8, C++ / JavaScript | 9.86 / 29.9 ms | 5.19 / 20.9 ms | 1.90x / 1.43x |
+| 16x24x10, C++ / JavaScript | 24.7 / 62.9 ms | 10.4 / 36.6 ms | 2.38x / 1.72x |
+| 16x40x10, C++ / JavaScript | 40.9 / 117.6 ms | 19.8 / 66.1 ms | 2.07x / 1.78x |
+| CG iterations a step | 110 / 153 / 162 | 7 / 7 / 8 | |
+| `node dns/check-cell3d.mjs` | 7m03s | 4m52s | |
+
+Taken with S10b, the C++ step is **3.6x to 3.8x** faster than it was this morning at every grid
+measured, and the JavaScript one 2.4x to 2.7x.
+
+**Gated in section 3, and every gate shown able to fail.** Four checks. On a flat cell the solve
+takes exactly ONE iteration, at 1e-11 and at 1e-14, on two grids and both contact lines: that is
+what the inverse means in practice, and no tolerance is involved. On a cell deformed to
+eta/h = 0.4 the solve ends on the true operator's residual, formed from applyL independently of
+the solver's bookkeeping. Building the factor under that surface leaves all 80 of the cell's
+arrays exactly as they were. And the factor built there is the flat cell's, bit for bit, as a
+fresh cell builds it. The C++ parity gate compares one application and the factor between the
+engines.
+
+| injected, one at a time, on a scratch worktree | red on | how loud |
+|---|---|---|
+| synthesis weight 1/nth instead of 2/nth | one iteration on a flat cell | 2 iterations |
+| a mode's neighbour coupling with the wrong sign | one iteration on a flat cell | 19 to 180 iterations |
+| the sin component left unsolved | one iteration on a flat cell | 91 to 371 iterations |
+| one neighbour coupling dropped | one iteration on a flat cell | 11 to 36 iterations |
+| the back substitution one term short | the solve | does not converge in 1000 |
+| the factor read off this cell instead of its flat twin | the build's own structure check | refused: a corner coupling outside the band |
+| the build zeroing this cell's surface first | the state is untouched | 27 arrays moved, and the deformed solve then took 1 iteration |
+
+The first four are the reason the flat-cell check exists. Each leaves a preconditioner that is
+still positive definite, so the solve still converges and every physical check downstream stays
+green. Only the iteration count notices. The C++ parity gate's iteration guard, which read
+`> 20` because the diagonal took over a hundred iterations, now reads `> 4`: measured, this
+preconditioner takes that gate's deformed cell to 1e-12 in 8 iterations free and 10 pinned.
+Writing the gate's new refusals also deleted four of the loader's existing refusal messages by
+mistake. The gate caught it at once: "the C++ module reported error 3" where it should have
+named the radius at which the layer broke.
+
+**What this changes for S11.** The explicit terms are now three quarters of a JavaScript step at
+16x40x10, and 65 to 79 per cent of a C++ one at 16x24x10 and 16x40x10, measured. They are formed
+row by row with nothing accumulated across rows. That is the
+part a pool of workers can divide without shared memory.
 
 ## S12 -- the surface drawn on the GPU, and the preconditioner that was not built
 
