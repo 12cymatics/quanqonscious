@@ -82,7 +82,9 @@ const CELL3D_WASM_EXPORTS = [
   'cell3d_viscous',
   'cell3d_advectTransport', 'cell3d_advectCurvature', 'cell3d_advect',
   'cell3d_curvature', 'cell3d_surfaceArea', 'cell3d_surfaceExcessArea',
-  'cell3d_setGravity', 'cell3d_gravity', 'cell3d_surfacePressure', 'cell3d_step'
+  'cell3d_setGravity', 'cell3d_gravity', 'cell3d_surfacePressure', 'cell3d_step',
+  'cell3d_stepBegin', 'cell3d_stepExplicit', 'cell3d_stepFinish',
+  'cell3d_viscousRows', 'cell3d_advectRows'
 ];
 
 function decodeBase64(b64){
@@ -356,6 +358,29 @@ class FaradayCell3DWasm {
       `dt = ${dt}: a finite positive time step is required.`);
     this.inst.exports.cell3d_setGravity(this.gravityNow());
     const code = this.inst.exports.cell3d_step(dt);
+    if (code) throw new Error(this.errorMessage(code));
+    this.t += dt;
+    return this;
+  }
+
+  /* step() in its three parts, for dns/cell3d-pool.js: the same calls cell3d_step makes, in
+     the same order, with the gravity set where step() sets it and the clock advanced where
+     step() advances it. */
+  stepBegin(dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    this.inst.exports.cell3d_setGravity(this.gravityNow());
+    const code = this.inst.exports.cell3d_stepBegin(dt);
+    if (code) throw new Error(this.errorMessage(code));
+    return this;
+  }
+  stepExplicit(i0 = 0, i1 = this.js.nr - 1){
+    const code = this.inst.exports.cell3d_stepExplicit(i0, i1);
+    if (code) throw new Error(this.errorMessage(code));
+    return this;
+  }
+  stepFinish(dt){
+    const code = this.inst.exports.cell3d_stepFinish(dt);
     if (code) throw new Error(this.errorMessage(code));
     this.t += dt;
     return this;

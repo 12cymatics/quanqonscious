@@ -196,6 +196,11 @@ footer b{color:var(--ink2);font-weight:500}
       </div>
     </div>
     <div class="fld">
+      <span class="lab">solver threads</span>
+      <!-- filled at load from navigator.hardwareConcurrency: see CELL3D_CORES -->
+      <div class="seg" id="thrSeg"></div>
+    </div>
+    <div class="fld">
       <span class="lab">photographed phase</span>
       <div class="seg" id="phaseSeg">
         <button data-p="1" aria-pressed="true">phase I</button>
@@ -274,6 +279,7 @@ footer b{color:var(--ink2);font-weight:500}
 <script id="dnsFloquet" src="dns/faraday-floquet.js"></script>
 <script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>
 <script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>
+<script id="dnsCell3dPool" src="dns/cell3d-pool.js"></script>
 <script id="dnsCell3dWasmBase64"></script>
 <script>
 
@@ -932,7 +938,8 @@ function paintDeck(){
        return '<b>the 3-D Navier-Stokes solver</b>'
          + (c.engine === 'cpp'
             ? ' <span class="u">· C++ (faraday_cell3d.wasm)</span>'
-            : ' <span class="u">· JavaScript</span>');
+            : ' <span class="u">· JavaScript</span>')
+         + ` <span class="u">· ${c.threads} thread${c.threads === 1 ? '' : 's'}</span>`;
      })()],
     ...(() => {
        const c = CELL3D.clocks();
@@ -1958,8 +1965,12 @@ const CELL3D = (function(){
   /* The generation this run belongs to, and the engine that actually answered.
      `ranEngine` is read back off the worker's own messages rather than copied from
      what was asked for, so the deck reports what ran and not what was requested. */
-  let gen = 0, ranEngine = null;
+  let gen = 0, ranEngine = null, ranThreads = 0;
   let etaBuf = null, htBuf = null, omegaRef = 1, haveFrame = false, peakRaw = 0;
+  /* S11: the workers that form the explicit terms' rows beside the solver's own thread,
+     and the previous run's, kept until the new run says it is ready -- the solver may
+     still be finishing a slice on them when the page asks for a new run. */
+  let helpers = [], retiring = [], lastRun = null;
 
   async function sourceOf(id){
     const el = document.getElementById(id);
@@ -2018,16 +2029,21 @@ const CELL3D = (function(){
   async function ensureWorker(){
     if (worker) return worker;
     const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
-      await sourceOf('dnsCell3dWasm'),
-      `let S = null, W = null, dt = 0, sliceMs = 120, gen = -1, engine = 'js';
-       self.onmessage = (e) => {
-         const d = e.data;
+      await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
+      `let S = null, W = null, E = null, pool = null, dt = 0, sliceMs = 120, gen = -1,
+           engine = 'js';
+       /* One command at a time, each to completion: a slice awaits the pool's workers,
+          and an init arriving meanwhile must not replace the cell under it. */
+       let chain = Promise.resolve();
+       self.onmessage = (e) => { const d = e.data; chain = chain.then(() => handle(d)); };
+       async function handle(d){
          try {
            if (d.cmd === 'init'){
              /* The C++ module's arena is static, so the previous cell has to give
                 it up before a new one can take it -- the loader refuses rather than
                 letting two states alias. */
              if (W){ W.release(); W = null; }
+             pool = null;
              gen = d.gen; engine = d.engine === 'cpp' ? 'cpp' : 'js';
              if (engine === 'cpp'){
                W = new FARADAY_CELL3D_WASM.FaradayCell3DWasm(d.opts,
@@ -2037,12 +2053,22 @@ const CELL3D = (function(){
                W = null;
                S = new FARADAY_CELL3D.FaradayCell3D(d.opts);
              }
+             E = W || S;
              for (let i = 0; i < S.nr; i++)
                for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = d.eta0[i*S.nth + k];
              S.refreshMetric();
              if (W){ W.pushState(); W.refreshMetric(); }
              dt = S.stableStep();
-             self.postMessage({ ok: true, kind: 'ready', gen, engine, dt,
+             /* S11: the explicit terms' rows over the ports the page sent, one per
+                worker it started; none means this thread forms every row. */
+             if (d.ports && d.ports.length){
+               pool = new FARADAY_CELL3D_POOL.Cell3DPool(E, d.ports.map(p => ({
+                 post: (m, t) => p.postMessage(m, t),
+                 onMessage: fn => { p.onmessage = ev => fn(ev.data); } })));
+               await pool.start(d.opts);
+             }
+             self.postMessage({ ok: true, kind: 'ready', gen, engine,
+               threads: pool ? pool.channels.length + 1 : 1, dt,
                nr: S.nr, nth: S.nth, nz: S.nz, dth: S.dth,
                rc: Array.from(S.rc), R: S.R, h: S.h });
              return;
@@ -2050,11 +2076,14 @@ const CELL3D = (function(){
            if (d.cmd === 'slice'){
              if (d.gen !== gen) return;      /* a slice for a run that has ended */
              const t0 = Date.now(); let n = 0;
-             if (W){ while (Date.now() - t0 < sliceMs){ W.step(dt); n++; } }
-             else   { while (Date.now() - t0 < sliceMs){ S.step(dt); n++; } }
+             while (Date.now() - t0 < sliceMs){
+               if (pool) await pool.step(dt); else E.step(dt);
+               n++;
+             }
              const src = W ? W.views : S;
              const eta = new Float64Array(src.eta), ht = new Float64Array(src.Ht);
              self.postMessage({ ok: true, kind: 'frame', gen, engine,
+               threads: pool ? pool.channels.length + 1 : 1,
                t: W ? W.t : S.t, steps: n,
                ms: Date.now() - t0, eta, ht, cg: W ? W.cgIters : S.cgIters },
                [eta.buffer, ht.buffer]);
@@ -2064,9 +2093,36 @@ const CELL3D = (function(){
          } catch (e2){
            self.postMessage({ ok: false, gen, error: String(e2 && e2.message || e2) });
          }
-       };`].join('\n;\n');
+       }`].join('\n;\n');
     worker = new Worker(URL.createObjectURL(new Blob([body], { type: 'text/javascript' })));
     return worker;
+  }
+
+  /* S11: one row-forming worker. The same solver sources the solver's own worker carries,
+     and dns/cell3d-pool.js's serving side on the port the page hands it. It builds its cell
+     in the engine the run names -- the C++ one from the same bytes -- and the pool holds its
+     grid to the solver's, element by element, before the first step. */
+  let helperBody = null;
+  async function startHelper(engine, wasmBytes){
+    if (!helperBody) helperBody = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
+      await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
+      `self.onmessage = (e) => {
+         const d = e.data;
+         if (d.cmd !== 'serve') return;
+         const port = d.port, engine = d.engine, bytes = d.wasmBytes;
+         FARADAY_CELL3D_POOL.cell3dPoolServe(
+           { post: (m, t) => port.postMessage(m, t),
+             onMessage: fn => { port.onmessage = ev => fn(ev.data); } },
+           o => engine === 'cpp'
+             ? new FARADAY_CELL3D_WASM.FaradayCell3DWasm(o, { bytes })
+             : new FARADAY_CELL3D.FaradayCell3D(o));
+       };`].join('\n;\n');
+    const h = new Worker(URL.createObjectURL(new Blob([helperBody], { type: 'text/javascript' })));
+    h.onerror = ev => { err = 'a solver thread failed: ' + (ev.message || 'no message');
+                        running3d = false; dirty = true; };
+    const ch = new MessageChannel();
+    h.postMessage({ cmd: 'serve', port: ch.port1, engine, wasmBytes }, [ch.port1]);
+    return { worker: h, port: ch.port2 };
   }
 
   /* The initial condition: the mode the deck says is nearest, at an amplitude small
@@ -2085,6 +2141,15 @@ const CELL3D = (function(){
     catch (e){ err = String(e && e.message || e); running3d = false; dirty = true; }
   }
   async function startInner(st){
+    /* The new generation FIRST, before anything this function awaits. The previous run's
+       handler stays installed until this one replaces it below, several awaits from here --
+       fetching sources, starting the pool's workers -- and its frames are still arriving.
+       It compares against the CURRENT generation, so from this line on it drops them. It
+       used to compare against its own, and accept them into the clocks this line has just
+       reset: the steps counted and the surface held then belonged to two runs at once. The
+       page's thread check caught it, replaying a frame that reported 43 steps and matched
+       none of them. */
+    const myGen = ++gen;
     err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
     const m = Math.max(0, st.nearestTheoryModes[0].m);
     const k = st.wavenumber;
@@ -2125,20 +2190,29 @@ const CELL3D = (function(){
        engine -- asking for the bytes on the JavaScript path would make a page served
        without the module refuse for no reason. */
     const wasmBytes = cell3dEngine === 'cpp' ? await cellWasmBytes() : null;
-    const myGen = ++gen;
-    ranEngine = null;
+    ranEngine = null; ranThreads = 0;
     const w = await ensureWorker();
+    /* S11: the threads asked for, this one included, and never more than the radial rows
+       there are to divide -- the pool refuses an idle worker rather than pretending. */
+    const want = Math.max(1, Math.min(cell3dThreads, opts.nr));
+    retiring.push(...helpers);
+    helpers = [];
+    for (let t = 1; t < want; t++) helpers.push(await startHelper(cell3dEngine, wasmBytes));
+    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine: cell3dEngine };
     w.onmessage = ev => {
       const d = ev.data;
-      if (d.gen !== undefined && d.gen !== myGen) return;   /* a previous run's slice */
+      if (d.gen !== undefined && (d.gen !== myGen || myGen !== gen)) return;   /* a previous run's */
       if (!d.ok){ err = d.error; running3d = false; dirty = true; return; }
       if (d.kind === 'ready'){
-        ranEngine = d.engine;
+        ranEngine = d.engine; ranThreads = d.threads;
+        /* the solver has left the previous run's workers behind: they can go */
+        for (const r of retiring) r.worker.terminate();
+        retiring = [];
         w.postMessage({ cmd: 'slice', gen: myGen });
         return;
       }
       if (d.kind === 'frame'){
-        ranEngine = d.engine;
+        ranEngine = d.engine; ranThreads = d.threads;
         etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
         wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
         haveFrame = true; dirty = true;
@@ -2147,8 +2221,9 @@ const CELL3D = (function(){
     };
     w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
     running3d = true;
+    const ports = helpers.map(h => h.port);
     w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
-                    engine: cell3dEngine, wasmBytes });
+                    engine: cell3dEngine, wasmBytes, ports }, ports);
   }
 
   function stop(){ running3d = false; }
@@ -2204,8 +2279,14 @@ const CELL3D = (function(){
   const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
                           live: running3d, have: haveFrame,
                           engine: ranEngine, asked: cell3dEngine,
+                          threads: ranThreads, askedThreads: cell3dThreads,
                           ratio: physT > 0 ? wall/physT : 0 });
-  return { start, stop, build, clocks, etaAtPixel,
+  /* For dns/check-page.mjs: what this run started from, and the surface its last frame
+     carried with the number of steps that produced it -- read together, so the two belong
+     to one frame. */
+  const lastFrame = () => ({ steps: stepsDone, eta: etaBuf ? Float64Array.from(etaBuf) : null });
+  return { start, stop, build, clocks, etaAtPixel, lastFrame,
+           lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
 let useSolver = false;
@@ -2213,6 +2294,25 @@ let useSolver = false;
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
 let cell3dEngine = 'js';
+/* S11: how many threads the solver's explicit terms are spread over, this page's solver
+   thread included. The answer is the same to the bit on any number -- dns/check-cell3d-pool.mjs
+   asserts it and dns/check-page.mjs checks it again here -- so this is a choice about time.
+   Offered up to the cores the browser reports, and set by default to one fewer, which leaves
+   the drawing a core. */
+const CELL3D_CORES = Math.max(1, Math.floor(navigator.hardwareConcurrency || 1));
+let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
+{
+  const counts = [...new Set([1, 2, 4, 8, CELL3D_CORES - 1, CELL3D_CORES])]
+    .filter(n => n >= 1 && n <= CELL3D_CORES).sort((a, b) => a - b);
+  $('thrSeg').innerHTML = counts.map(n =>
+    `<button data-t="${n}" aria-pressed="${n === cell3dThreads}">${n}</button>`).join('');
+  seg('thrSeg', b => {
+    const n = +b.dataset.t;
+    if (n === cell3dThreads) return;
+    cell3dThreads = n;
+    if (useSolver) CELL3D.start(state);              /* the run restarts on the new count */
+  });
+}
 
 sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage

@@ -25,6 +25,7 @@ const SUITES = [
   {"name":"dns/check-wasm-build.mjs","file":"dns/check-wasm-build.mjs","slow":false,"browser":false},
   {"name":"dns/check-cell3d.mjs","file":"dns/check-cell3d.mjs","slow":true,"browser":false},
   {"name":"dns/check-cell3d-wasm.mjs","file":"dns/check-cell3d-wasm.mjs","slow":true,"browser":false},
+  {"name":"dns/check-cell3d-pool.mjs","file":"dns/check-cell3d-pool.mjs","slow":false,"browser":false},
   {"name":"boundary/boundarykernel.test.js","file":"boundary/boundarykernel.test.js","slow":false,"browser":false},
   {"name":"fsi/check-coupled-affine.mjs","file":"fsi/check-coupled-affine.mjs","slow":false,"browser":false},
   {"name":"dns/check-page.mjs","file":"dns/check-page.mjs","slow":false,"browser":true}

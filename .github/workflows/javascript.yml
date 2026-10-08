@@ -61,6 +61,11 @@
 #
 # dns/check-wasm-build.mjs runs in the disc job, before the suite it supports.
 #
+# dns/check-cell3d-pool.mjs runs there as well, after the module it also exercises: the
+# three-dimensional step's explicit terms spread over real worker_threads, in both engines,
+# held to plain step() with Object.is over every array on one to five workers. The runner's
+# cores are what the threads run on; the speed it reports is the runner's and is not asserted.
+#
 # faraday/check-zip.mjs runs there too, for the toolchain rather than the
 # subject: it builds faraday-cell.zip, unpacks it into a temp directory and runs
 # four suites from THERE, and one of those four is check-wasm-build, which needs
@@ -207,6 +212,8 @@ jobs:
       run: node dns/check-wasm-build.mjs
     - name: The three-dimensional C++ module is the JavaScript, bit for bit
       run: node dns/check-cell3d-wasm.mjs
+    - name: The three-dimensional step over worker threads is step(), bit for bit
+      run: node dns/check-cell3d-pool.mjs
     - name: The distribution zip, unpacked elsewhere and run from there
       run: node faraday/check-zip.mjs
     - name: Linearised free-surface Navier-Stokes in the cell
