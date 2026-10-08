@@ -9,6 +9,7 @@
  *     node dns/run-cell3d.mjs
  *     node dns/run-cell3d.mjs --nr 16 --nth 32 --nz 10 --m 4 --accel 12 --periods 4
  *     node dns/run-cell3d.mjs --engine cpp
+ *     node dns/run-cell3d.mjs --engine cpp --threads 4
  *
  * `--engine cpp` runs dns/faraday_cell3d.wasm, the same discretisation transcribed
  * to C++ and compiled freestanding for wasm32. It is not a faster-but-looser mode:
@@ -18,6 +19,11 @@
  * silent fallback -- if the module cannot be loaded this refuses and says so,
  * rather than running the JavaScript under the C++ engine's name and reporting a
  * time that means something else.
+ *
+ * `--threads N` spreads each step's viscous and advective terms over N threads -- this
+ * one and N - 1 workers -- through dns/cell3d-pool.js. The answer is the same to the bit
+ * on any number of threads, which dns/check-cell3d-pool.mjs asserts; what changes is the
+ * wait, and only for the part of the step that is divided. The pressure solve is not.
  *
  * Every figure it prints is measured in the run, including the wall clock. It
  * does not estimate.
@@ -37,6 +43,7 @@ const require = createRequire(import.meta.url);
 const K = require(join(here, '..', 'faraday', 'kernel.js'));
 const { FaradayCell3D } = require(join(here, 'faraday-cell3d.js'));
 const { FaradayCell3DWasm } = require(join(here, 'faraday-cell3d-wasm.js'));
+const { spawnNodePool } = require(join(here, 'cell3d-pool-node.cjs'));
 
 /* ---- the apparatus ------------------------------------------------------- */
 /* A 24.25 mm quartz cell holding 3 mm of water at 20 C: the same constants the
@@ -49,12 +56,12 @@ const DEFAULTS = {
   m: 4, rel: 0.15, accel: 0, freq: 0,
   periods: 1, frames: 6, contact: 'free',
   rStretch: 2.2, zStretch: 2.2, width: 61,
-  engine: 'js'
+  engine: 'js', threads: 1
 };
 
 const NUMERIC = new Set(['R', 'h', 'rho', 'nu', 'gamma', 'g', 'nr', 'nth', 'nz',
                          'm', 'rel', 'accel', 'freq', 'periods', 'frames',
-                         'rStretch', 'zStretch', 'width']);
+                         'rStretch', 'zStretch', 'width', 'threads']);
 
 function parseArgs(argv){
   const o = { ...DEFAULTS };
@@ -79,6 +86,8 @@ function parseArgs(argv){
     + `or 'cpp' for the same discretisation compiled to WebAssembly. The two agree `
     + `bit for bit, which dns/check-cell3d-wasm.mjs asserts, so the choice is `
     + `about time and nothing else.`);
+  if (!(Number.isInteger(o.threads) && o.threads >= 1)) throw new Error(
+    `--threads ${o.threads}: a whole number of threads, at least one.`);
   if (o.contact !== 'free' && o.contact !== 'pinned') throw new Error(
     `--contact ${JSON.stringify(o.contact)}: the contact line is either 'free' or `
     + `'pinned'.`);
@@ -131,7 +140,7 @@ function plan(S, width){
 const mm = x => (x*1e3).toFixed(4);
 const sci = x => x.toExponential(4);
 
-function main(){
+async function main(){
   const o = parseArgs(process.argv.slice(2));
   const k = kOf(o.m, o.R);
   const omega = Math.sqrt((o.g*k + o.gamma*k*k*k/o.rho)*Math.tanh(k*o.h));
@@ -159,7 +168,9 @@ function main(){
                                    *Math.cos(o.m*(kk + 0.5)*S.dth);
   S.refreshMetric();
   if (W){ W.pushState(); W.refreshMetric(); }
-  const advance = W ? (dt => W.step(dt)) : (dt => S.step(dt));
+  const E = W || S;
+  const pool = o.threads > 1 ? await spawnNodePool(E, cellOpts, o.threads - 1, o.engine) : null;
+  const advance = pool ? (dt => pool.step(dt)) : (dt => E.step(dt));
   const sync = W ? (() => W.pullState()) : (() => S);
 
   const L = S.stepLimits();
@@ -175,7 +186,8 @@ function main(){
               + `(graded r ${o.rStretch}, sigma ${o.zStretch})`);
   console.log(`engine          ${o.engine === 'cpp'
     ? 'dns/faraday_cell3d.wasm, the C++ transcription'
-    : 'dns/faraday-cell3d.js'}`);
+    : 'dns/faraday-cell3d.js'}${pool ? `, on ${o.threads} threads (bands of radial rows `
+      + [pool.ownBand, ...pool.bands].map(b => `${b[0]}-${b[1]}`).join(', ') + ')' : ''}`);
   console.log(`mode            m = ${o.m}, k = ${k.toFixed(4)} 1/m, `
               + `f = ${(omega/(2*Math.PI)).toFixed(4)} Hz, seed ${(o.rel*100).toFixed(1)}% of h`);
   console.log(`drive           a = ${o.accel} m/s^2 at ${(omegaD/(2*Math.PI)).toFixed(4)} Hz`);
@@ -190,7 +202,7 @@ function main(){
   const wall0 = process.hrtime.bigint();
   let shown = 0;
   for (let n = 1; n <= steps; n++){
-    advance(dt);
+    await advance(dt);
     if (n % every === 0 || n === steps){
       sync();
       const wall = Number(process.hrtime.bigint() - wall0)/1e9;
@@ -213,10 +225,10 @@ function main(){
   console.log(`wall clock      ${wall.toFixed(3)} s for ${S.t.toFixed(6)} s of physics `
               + `= ${(wall/S.t).toFixed(1)}x slower than real time`);
   console.log(`per step        ${(1e3*wall/steps).toFixed(3)} ms`);
+  if (pool) await pool.close();
 }
 
-try { main(); }
-catch (e){
+main().catch(e => {
   console.error('refused: ' + (e && e.message || e));
   process.exit(1);
-}
+});

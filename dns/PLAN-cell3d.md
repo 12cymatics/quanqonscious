@@ -99,7 +99,7 @@ against this and need no further decision.
 | S10 | C++ port of the three-dimensional step | **done** | `dns/faraday_cell3d.cpp`, 1 862 lines, compiled freestanding for wasm32 by clang with no Emscripten and no libc. Bit for bit against the JavaScript, by `Object.is` on every element: the metric's 22 arrays; the projection's seven operators and the conjugate gradient's own **iteration count** and residual; `axisU`, the three surface fluxes and the vector Laplacian; the advection's six arrays, the mean curvature, the surface area, the excess area and the surface pressure; 40 steps undriven and driven on both contact branches; and **894 steps, one whole drive period at 12x24x8, all 29 arrays**. Measured: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x slower than real time to 489x. The page offers it as a third `surface` button and the deck names the module that answered, read off the worker's own frames. `dns/check-cell3d-wasm.mjs`, 55 checks. Fourteen injected defects, four of them findings about the GATE rather than the port -- below |
 | S10b | The viscous operator forms each face once, in both engines | **done** | `famLaplacian` formed all six faces of every cell, so each interior face -- and every column reconstruction it asks for -- was formed twice, once by each neighbour. Each face is now formed once and both cells read it: **562 440 reconstructions per viscous evaluation become 321 320**, and the 639 400 re-interpolations of a column's depth become a table refreshMetric fills. The viscous term is **2.2 to 2.4x** faster; a whole step **1.5 to 1.9x**, best of three: at 16x40x10 JavaScript 173.5 -> 117.6 ms and C++ 73.3 -> 40.9 ms. The r and sigma faces' shared value is the old value **bit for bit**, measured by putting the old theta face back and comparing; the theta faces and the azimuthal seam are a correction -- each was found at two roundings of one angle, one per neighbour, so the operator was not exactly conservative in theta. Every figure the 264 existing checks print is unchanged at its printed precision; the gate went from 11m42s to 6m56s, and carries 267 checks with the three below. JavaScript and C++ still agree bit for bit over a whole drive period. Six injected defects all red -- below |
 | S12b | The pressure solve preconditioned by the flat cell's exact inverse, in f64 | **done** | The diagonal preconditioner took **110 to 162 iterations a step**; this takes **7 or 8**. Flat, the pressure operator is block circulant in theta, so the azimuthal Fourier basis splits it into one real band matrix per mode, and the preconditioner is that cell's pressure equation solved directly: a Fourier analysis in theta, a band Cholesky solve per mode, a synthesis. On the actual surface it is not the inverse and does not have to be -- the solve still stops on the TRUE operator's residual at the same tolerance. Everything is double precision. On a flat cell the solve takes exactly **one** iteration, at 1e-11 and at 1e-14, which the gate asserts as its test of the inverse. Best of three, a step: **C++ 9.86 -> 5.19 ms at 10x24x8, 24.7 -> 10.4 at 16x24x10, 40.9 -> 19.8 at 16x40x10**; JavaScript 29.9 -> 20.9, 62.9 -> 36.6, 117.6 -> 66.1. Every figure the gate printed is unchanged at its printed precision except the solve's own iteration counts and two rounding-noise harmonics at 1e-22. Seven injected defects all red -- below |
-| S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
+| S11 | All eight cores | **done: the explicit terms, on any number of threads, to the bit** | Each step's viscous and advective terms are formed row by row from the state alone, so `dns/cell3d-pool.js` divides the radial rows among worker threads and the owner thread, which also forms a band, and copies them back. The answer is the same to the bit on any count: `dns/check-cell3d-pool.mjs` holds 6 driven steps on 1 to 5 workers to plain `step()` with `Object.is` over 33 arrays, both engines, both contact lines, and the page suite replays the page's own threaded run on one thread and compares again. The pressure solve stays on one thread: each iteration needs two global sums, and a page opened from a file has no shared memory. Measured on this 4-core container at 16x40x10: JavaScript 66.7 -> 44.5 ms a step on 3 threads (1.50x), C++ 22.2 -> 14.7 ms on 4 (1.51x). The page has a *solver threads* control, defaulting to one fewer than the cores the browser reports; `dns/run-cell3d.mjs` takes `--threads`. Found a race in the page on the way, below |
 | S12 | GPU render path, and the optional f32 preconditioner | **render done; preconditioner declined, with the numbers** | The surface is shaded by a WebGL2 fragment shader (`faraday/render-gl.js`), chosen under *draw on*, the deck naming which processor drew. Held to the CPU's bytes **within one level out of 255 in every channel** -- 24 renderings each on the modal field, after a field rebuild, on the Navier-Stokes field and in the single-file build, worst difference 1, about one channel in 100 000 at that level. Main thread per frame: CPU 9.9-10.3 ms, GPU 2.1-2.3 ms on a SOFTWARE GPU, which is submission cost and not a speed measurement. The f32 preconditioner is not built: at the page's grid the CG is 159 iterations and 40% of a 77 ms step, each GPU application is a round trip whose cost on the owner's hardware is unmeasured, and it would end bit-for-bit parity between the engines -- below |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
 | S13b | Ship: the README's claims, and the whole suite set from the unpack | todo | the slow suite run from the unpack too, in CI rather than by hand; `dns/check-page.mjs` from the unpack, which needs a browser on the machine doing the unpacking |
@@ -1572,6 +1572,83 @@ named the radius at which the layer broke.
 16x40x10, and 65 to 79 per cent of a C++ one at 16x24x10 and 16x40x10, measured. They are formed
 row by row with nothing accumulated across rows. That is the
 part a pool of workers can divide without shared memory.
+
+## S11 -- the explicit terms on several threads, and the answer the same on any count
+
+**What divides and what does not.** A step is now three calls in both engines -- `stepBegin`,
+`stepExplicit`, `stepFinish` -- and `step()` is exactly those three. The middle one forms the
+viscous and advective terms, and each element of those is formed from the state alone, with
+nothing accumulated across rows, so `stepExplicit(i0, i1)` forms any band of radial rows and the
+union of any partition is the whole, bit for bit. `dns/cell3d-pool.js` cuts the rows into bands,
+hands one to each worker with the state, forms the first band on the owner's own thread meanwhile,
+copies the workers' bands back and finishes the step. The pressure solve is not divided. Each
+conjugate-gradient iteration needs two global sums, and spread over threads without shared memory
+each sum is a round trip through the message queue; a page opened from a file has no
+SharedArrayBuffer, because that needs cross-origin isolation and a file has no headers to grant
+it. S12b took the solve to 7 or 8 iterations a step instead, which is what made the explicit
+terms most of a step and worth dividing.
+
+**The answer does not depend on the number of threads, and that is asserted rather than argued.**
+`dns/check-cell3d-pool.mjs` runs over real `worker_threads`:
+
+- five partitions of 11 rows, including single rows and out-of-order bands, each the whole to the
+  bit in all six output arrays, both engines, both contact lines;
+- 6 driven steps on 1, 2, 3, 4 and 5 workers, against 6 calls of `step()` from the same state,
+  by `Object.is` over 33 arrays -- what travels and everything the step derives from it, the
+  surface, its whole metric and the pressure -- in both engines and both contact lines;
+- refusals: a worker whose cell has a different grid, more bands than rows, a JavaScript owner
+  with C++ workers, and a worker that cannot form its rows, which fails the step with its own
+  reason rather than the owner forming the rows in its place.
+
+**What travels was measured, not assumed.** The first version sent every state and metric
+array, 32 of them, about 420 kB a step at 16x40x10. Each was then left out in turn: fourteen are
+load bearing -- the states part company on the first step, or a worker's step fails outright --
+and eighteen were green, because the explicit terms do not read them. Those were eta itself,
+the depth's centred slopes, eta's and the rate's extended columns, and the pressure family's
+depth table. They no longer travel, about 270 kB a step now. A comment written before that
+experiment said that leaving ANY array out would part the states. It was wrong for eighteen of
+them.
+
+**The page.** A *solver threads* control offers counts up to `navigator.hardwareConcurrency` and
+starts at one fewer, which leaves the drawing a core. The page builds the workers from blobs, as
+it already did the solver's own, and hands the solver's worker a MessagePort to each. The
+solver's worker now handles one command at a time to completion, because a slice awaits the
+pool, and an init arriving meanwhile must not replace the cell under it. `dns/check-page.mjs`
+switches to two threads and replays the run in the page on one JavaScript thread, from the same
+start, for the number of steps the frame reports, and compares the surface by `Object.is`. It
+does the same for the C++ engine, and again in the single-file build from `file://`.
+
+**It found a race that was older than S11.** The page reset the deck's clocks at the start of a
+new run and only later, several awaits on, replaced the previous run's message handler -- which
+compared frames against its OWN generation and so kept accepting them. Between the two, the
+previous run's frames were counted into the new run's steps and their surface held as its own.
+Starting the pool's workers widened that window from a few milliseconds to hundreds, and the
+replay caught it: a frame reporting 43 C++ steps matched none of them, 640 of 640 values
+different. The generation now advances before the first await and every handler compares
+against the current one. Then 53 steps matched to the bit.
+
+| measured on this 4-core container, 16x40x10, a step | 1 thread | 2 | 3 | 4 |
+|---|---|---|---|---|
+| JavaScript | 66.7 ms | 52.4 (1.27x) | 44.5 (1.50x) | 45.0 (1.48x) |
+| C++ | 22.2 ms | 15.8 (1.40x) | 15.1 (1.47x) | 14.7 (1.51x) |
+
+At 10x24x8, `dns/run-cell3d.mjs` measures JavaScript 18.8 -> 15.2 ms and C++ 5.32 -> 4.34 ms on
+three threads: 374x then 302x slower than real time, and 106x then 86x. The gain is modest
+because the undivided part is not small. In C++ at 16x40x10 the pressure solve, the surface
+pressure and the bookkeeping are about 8 ms of a 20 ms step, and moving the state to the workers
+and back costs about 2 ms. A machine with more and faster cores than this container's four
+shared ones will see more of the divided part go. **The owner asked for all eight cores to carry
+the physics; on a page opened from a file, this is the part of the physics eight cores can
+carry.** The rest would need shared memory, which the page could have only if it were served
+with cross-origin isolation headers.
+
+| injected, one at a time | red on |
+|---|---|
+| a gap between two bands | the pool against step(): every array differs, both engines |
+| the owner's own band not formed | the same |
+| Omega left out of what travels (and each of the other 13 in turn) | the same, or the worker's step fails |
+| the page passing no ports, so its threads control does nothing | the page's two-thread check: no frame on two threads |
+| the generation race, as it was | the page's C++ replay: 640 of 640 values differ |
 
 ## S12 -- the surface drawn on the GPU, and the preconditioner that was not built
 

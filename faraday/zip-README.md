@@ -56,8 +56,20 @@ Options: `nr nth nz` (grid), `m` (azimuthal mode seeded), `rel` (seed amplitude
 as a fraction of the depth), `accel` and `freq` (the shaker; with no `freq` it
 drives at twice the mode's own frequency, which is the subharmonic resonance
 Faraday waves live on), `periods`, `frames`, `contact` (`free` or `pinned`),
-`R h rho nu gamma g`, `rStretch zStretch`, `width`, and `engine` (`js` or
-`cpp`). An unknown option is refused rather than ignored.
+`R h rho nu gamma g`, `rStretch zStretch`, `width`, `engine` (`js` or
+`cpp`) and `threads`. An unknown option is refused rather than ignored.
+
+**Threads.** The page's *solver threads* control, and `--threads N` in
+`dns/run-cell3d.mjs`, spread each step's viscous and advective terms over that
+many threads, the solver's own included. The page offers up to the number of
+cores the browser reports and starts at one fewer, which leaves the drawing a
+core. The answer is the same to the bit on any number of threads:
+`dns/check-cell3d-pool.mjs` holds it to the single-threaded step with `Object.is`
+on one to five workers in both engines, and `dns/check-page.mjs` replays the
+page's own threaded run on one thread and compares again. What changes is the
+wait, and only for the part that is divided. The pressure solve stays on one
+thread: each of its iterations needs two global sums, and a page opened from a
+file has no shared memory to make those cheap.
 
 `--engine cpp` is not a faster-but-looser mode. The C++ is a transcription of the
 JavaScript — same discretisation, same flux forms, same conjugate gradient with
@@ -65,8 +77,8 @@ the same tolerance and cap, same order of operations down to the grouping of eac
 sum, and no fused multiply-add, because an FMA rounds once where JavaScript rounds
 twice. It computes no transcendental at all: the `cos` in the drive is evaluated in
 JavaScript and passed in, which is what makes bit-for-bit parity achievable rather
-than approximate. Measured on the container this was built on: **3.2× at 10 × 24 × 8
-and 2.7× at 16 × 24 × 10**, with identical fields. If the module cannot be loaded it
+than approximate. Measured on the container this was built on, best of three: **4.0× at
+10 × 24 × 8 and 3.5× at 16 × 24 × 10**, with identical fields. If the module cannot be loaded it
 refuses and says so, rather than running the JavaScript under the C++ engine's
 name and reporting a time that means something else.
 
@@ -88,9 +100,12 @@ and `CHROME=/path/to/chrome` tells it where to look.
 ## Two things to know before you file a bug
 
 **It does not run at real time, and it cannot.** On the cloud container this was
-built on, a 10 × 24 × 8 grid takes 64.3 ms per step in JavaScript and 23.5 ms in
-C++, and the step is set by the capillary limit: 1278× slower than real time for
-the first and 489× for the second. The page shows
+built on, a 10 × 24 × 8 grid takes 18.8 ms per step in JavaScript and 5.3 ms in
+C++, and the step is set by the capillary limit: 374× slower than real time for
+the first and 106× for the second, measured with `dns/run-cell3d.mjs`. On three
+threads, 15.2 and 4.3 ms: 302× and 86×. (When the solver first ran on the page
+those were 1278× and 489×; `dns/PLAN-cell3d.md` has what changed, under S10b, S12b
+and S11.) The page shows
 you the physics clock, the wall clock and their ratio rather than hiding the
 gap; `dns/run-cell3d.mjs` prints the same three numbers. Your machine will give a
 different ratio and the number it prints is measured on it, not estimated.

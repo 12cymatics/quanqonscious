@@ -947,6 +947,55 @@ async function checkGpuRender(page, label){
   await checkGpuContextRecovery(page, label);
 }
 
+/* S11 on the page: the solver's explicit terms over several threads, and the answer the same
+   to the bit as one thread's.
+   .
+   dns/check-cell3d-pool.mjs holds the pool to step() over node's worker threads. This asks the
+   page's own version of the question, through the page's own transport -- workers it builds
+   from blobs, MessagePorts it hands the solver's worker -- and in the single-file build too,
+   from file://, where a worker that could not be built would show. The check replays the run
+   in the page on ONE JavaScript thread from the same start for the same number of steps the
+   frame reports, and compares the surface element by element with Object.is. Not a tolerance:
+   any difference at all is a pool that changed the answer. */
+async function replayMatches(page){
+  return page.json(`(() => {
+    const run = CELL3D.lastRun(), f = CELL3D.lastFrame();
+    if (!run || !f.eta) return { steps: 0, differ: -1, n: 0 };
+    const S = new FARADAY_CELL3D.FaradayCell3D(run.opts);
+    for (let i = 0; i < S.nr; i++)
+      for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = run.eta0[i*S.nth + k];
+    S.refreshMetric();
+    const dt = S.stableStep();
+    for (let n = 0; n < f.steps; n++) S.step(dt);
+    let differ = 0;
+    for (let e = 0; e < S.eta.length; e++) if (!Object.is(S.eta[e], f.eta[e])) differ++;
+    return { steps: f.steps, differ, n: S.eta.length };
+  })()`);
+}
+
+async function checkSolverThreads(page, label){
+  section('the solver spread over two threads' + label);
+  const cores = await page.json('CELL3D_CORES');
+  ok(cores >= 2, 'the browser reports more than one core, so there is a second thread to use',
+     `navigator.hardwareConcurrency gives ${cores}`);
+  await page.eval('document.querySelector("#thrSeg [data-t=\'2\']").click()');
+  await page.waitFor('CELL3D.clocks().have === true && CELL3D.clocks().threads === 2', 90000,
+                     'the first frame on two threads');
+  const c = await page.json('CELL3D.clocks()');
+  ok(!c.err && c.threads === 2 && c.askedThreads === 2,
+     'the run restarts on two threads, and the count is read off the solver\'s own frames',
+     JSON.stringify({ threads: c.threads, asked: c.askedThreads, err: c.err }));
+  const r = await replayMatches(page);
+  console.log(`       ${r.steps} steps on two threads, replayed on one: ${r.differ} of ${r.n} `
+    + 'surface values differ');
+  ok(r.steps > 0 && r.differ === 0,
+     'the surface the page draws from two threads is, to the bit, the surface one JavaScript '
+     + 'thread computes from the same start in the same number of steps',
+     JSON.stringify(r));
+  const deck = await page.eval('document.getElementById("ro").textContent');
+  ok(/2 threads/.test(deck), 'and the deck says two threads', deck.slice(0, 220));
+}
+
 /* The C++ engine, on the page, drawing the same surface.
    .
    dns/check-cell3d-wasm.mjs is what holds the two engines to identical fields;
@@ -1012,6 +1061,15 @@ async function checkCppEngine(page, inlined){
   ok(/faraday_cell3d\.wasm/.test(deck),
      'and the deck names the module that ran', deck.slice(0, 220));
 
+  /* and the C++ engine's surface on this page's threads is the JavaScript engine's on one */
+  const r = await replayMatches(page);
+  console.log(`       ${r.steps} C++ steps on ${c.threads} threads, replayed in JavaScript on `
+    + `one: ${r.differ} of ${r.n} surface values differ`);
+  ok(r.steps > 0 && r.differ === 0,
+     `the C++ engine's surface on ${c.threads} threads is, to the bit, the JavaScript `
+     + 'engine\'s on one thread, from the same start in the same number of steps',
+     JSON.stringify(r));
+
   /* Back to the JavaScript engine, and the deck must follow. Switching re-inits
      the same worker, and a slice already in flight from the C++ run would
      otherwise be counted into the new one -- which is what the generation stamp on
@@ -1032,6 +1090,7 @@ try {
   const first = await checkPage(`http://127.0.0.1:${port}/cymatic.html`, 'the checkout page', false);
   await checkGpuRender(first, '');
   await checkSolverDraws(first);
+  await checkSolverThreads(first, '');
   /* and on the solver's field, whose rasters arrive from a different path */
   await first.eval('document.querySelector("#engSeg [data-e=\'gpu\']").click()');
   if (await first.json('GPU_SURFACE.ready')) await gpuParity(first, 'on the Navier-Stokes field');
@@ -1045,6 +1104,7 @@ try {
   const single = await checkPage(`file://${built}`, 'the single-file build', true);
   await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
+  await checkSolverThreads(single, ', in the single-file build, from file://');
 } finally {
   browser.close();
   srv.close();

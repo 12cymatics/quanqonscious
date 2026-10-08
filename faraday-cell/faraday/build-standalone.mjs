@@ -65,7 +65,9 @@ export const SCRIPTS = [
      whose FaradayCell3D it asks globalThis for -- a worker has no `require`, so
      the global is the whole mechanism there. */
   { tag: '<script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>',
-    path: 'dns/faraday-cell3d-wasm.js', open: '<script id="dnsCell3dWasm">' }
+    path: 'dns/faraday-cell3d-wasm.js', open: '<script id="dnsCell3dWasm">' },
+  { tag: '<script id="dnsCell3dPool" src="dns/cell3d-pool.js"></script>',
+    path: 'dns/cell3d-pool.js', open: '<script id="dnsCell3dPool">' }
 ];
 
 /* The compiled period map travels as base64 in its own tag. A single file opened

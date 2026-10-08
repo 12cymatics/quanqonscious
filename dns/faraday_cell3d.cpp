@@ -1210,15 +1210,18 @@ static double surfaceNormalStress(int i, int k){
    per viscous evaluation because all three components come from one rate-of-strain
    tensor, and forming it three times would be three chances for them to disagree
    about one surface. */
-void cell3d_refreshSurfaceFluxes(){
+/* Over pressure rows i0..i1, clamped to the cell; cell3d_refreshSurfaceFluxes is all of them. */
+static void refreshSurfaceFluxRows(int i0, int i1){
   double t3[3];
-  for (int i = 0; i < nr; i++)
+  const int iFirst = i0 < 0 ? 0 : i0, iLast = i1 > nr - 1 ? nr - 1 : i1;
+  for (int i = iFirst; i <= iLast; i++)
     for (int k = 0; k < nth; k++){
       surfaceLapFluxes(i, k, t3);
       const int e = ie(i, k);
       fsr[e] = t3[0]; fst[e] = t3[1]; fsz[e] = t3[2];
     }
 }
+void cell3d_refreshSurfaceFluxes(){ refreshSurfaceFluxRows(0, nr - 1); }
 
 /* and that flux where one family's own sigma = 1 face sits, which is not where the
    pressure cells are. u's faces are at r faces, v's at theta faces, and w's
@@ -1267,7 +1270,7 @@ static double surfaceFluxFace(int which, int a, int k){
  * entry: at r = 0 the face area is exactly zero, and inward stencils use the
  * antipodal column with the family's reflection sign. */
 static void famLaplacian(const double* f, double* out, const Fam& fam,
-                         int hasBc, int sFluxKind){
+                         int hasBc, int sFluxKind, int i0, int i1){
   const double* rn = fam.rn; const double* rb = fam.rb;
   const double* sn = fam.sn; const double* sb = fam.sb;
   const int nI = fam.nI, nJ = fam.nJ;
@@ -1332,8 +1335,12 @@ static void famLaplacian(const double* f, double* out, const Fam& fam,
     }
   };
   double* lo = fRlo; double* hi = fRhi;
-  rFaces(fam.rLo, lo);
-  for (int a = fam.rLo; a <= fam.rHi; a++){
+  /* Rows i0..i1 only: a face on the edge of the range is formed as the whole call would
+     form it, so the rows come out the same however the range is cut. */
+  const int aFirst = i0 > fam.rLo ? i0 : fam.rLo, aLast = i1 < fam.rHi ? i1 : fam.rHi;
+  if (aFirst > aLast) return;
+  rFaces(aFirst, lo);
+  for (int a = aFirst; a <= aLast; a++){
     const double dra = rb[a+1] - rb[a];
     rFaces(a + 1, hi);
     const bool loR = !rSkip(a), hiR = !rSkip(a + 1);
@@ -1454,11 +1461,14 @@ static void famLaplacian(const double* f, double* out, const Fam& fam,
 
    `hasBc` closes the three scalar operators at the walls, where no slip makes
    every boundary value zero. */
-void cell3d_viscous(int hasBc){
-  cell3d_refreshSurfaceFluxes();
-  famLaplacian(u, lapU, FAMU, hasBc, 1);
-  famLaplacian(v, lapV, FAMV, hasBc, 2);
-  famLaplacian(w, lapW, FAMW, hasBc, 3);
+/* Over radial rows i0..i1 of every family. The surface flux u's face reads comes from the
+   pressure rows either side of it, so the flux is refreshed one row below the range too.
+   cell3d_viscous is all the rows, and refreshes every surface row, as the JavaScript does. */
+void cell3d_viscousRows(int hasBc, int i0, int i1){
+  refreshSurfaceFluxRows(i0 - 1, i1);
+  famLaplacian(u, lapU, FAMU, hasBc, 1, i0, i1);
+  famLaplacian(v, lapV, FAMV, hasBc, 2, i0, i1);
+  famLaplacian(w, lapW, FAMW, hasBc, 3, i0, i1);
   if (lastError) return;
 
   /* d v / d theta at a u node, and d u / d theta at a v node, both taken at the
@@ -1466,7 +1476,9 @@ void cell3d_viscous(int hasBc){
      (rc, theta face), so on a deformed surface their sigma levels are at
      different heights, and averaging across at equal sigma carries an O(dH)
      error: order 2.00 at eta/h = 0 for both components and -0.52 at 0.4. */
-  for (int i = FAMU.rLo; i <= FAMU.rHi; i++){
+  const int uLo = i0 > FAMU.rLo ? i0 : FAMU.rLo, uHi = i1 < FAMU.rHi ? i1 : FAMU.rHi;
+  const int vLo = i0 > FAMV.rLo ? i0 : FAMV.rLo, vHi = i1 < FAMV.rHi ? i1 : FAMV.rHi;
+  for (int i = uLo; i <= uHi; i++){
     const double r = rf[i], inv = 1/(r*r);
     for (int k = 0; k < nth; k++){
       const double Hu = HatH(r, (k + 0.5)*dth);
@@ -1481,7 +1493,7 @@ void cell3d_viscous(int hasBc){
       }
     }
   }
-  for (int i = FAMV.rLo; i <= FAMV.rHi; i++){
+  for (int i = vLo; i <= vHi; i++){
     const double r = rc[i], inv = 1/(r*r);
     for (int k = 0; k < nth; k++){
       const double Hv = HatH(r, k*dth);
@@ -1559,11 +1571,18 @@ static inline double fluxS(int i, int k, int b){
  * CONTROL VOLUMES, and the averaging is what makes the net flux out of a momentum
  * cell exactly half the sum of its two neighbours' divergences, for any field
  * whatever. */
-void cell3d_advectTransport(){
+void cell3d_viscous(int hasBc){ cell3d_viscousRows(hasBc, 0, nr - 1); }
+
+/* Over radial rows i0..i1, and only those rows are cleared first: the rows outside belong
+   to whoever is forming them. Over every row this clears every array, as before. */
+void cell3d_advectTransportRows(int i0, int i1){
   const int half = nth >> 1;
-  for (int i = 0; i < NU; i++) advU[i] = 0.0;
-  for (int i = 0; i < NV; i++) advV[i] = 0.0;
-  for (int i = 0; i < NW; i++) advW[i] = 0.0;
+  const int lo0 = i0 > 0 ? i0 : 0, lo1 = i0 > 1 ? i0 : 1;
+  /* the band holding the last pressure row also owns u's rim row, which nothing forms */
+  const int hiU = i1 >= nr - 1 ? nr : i1, hiV = i1 < nr - 1 ? i1 : nr - 1;
+  for (int i = lo0*nth*nz; i < (hiU + 1)*nth*nz; i++) advU[i] = 0.0;
+  for (int i = lo0*nth*nz; i < (hiV + 1)*nth*nz; i++) advV[i] = 0.0;
+  for (int i = lo0*nth*nw; i < (hiV + 1)*nth*nw; i++) advW[i] = 0.0;
 
   /* ---- radial momentum, on the u control volumes ----------------------
      rc[i-1] .. rc[i] in r, one pressure cell in theta and in sigma. Its r faces
@@ -1571,7 +1590,7 @@ void cell3d_advectTransport(){
      fluxes through the two cell faces bracketing it; its theta and sigma faces
      each span half of each of the two cells it straddles. Only the sigma faces
      move. */
-  for (int i = 1; i < nr; i++){
+  for (int i = lo1; i <= hiV; i++){
     for (int k = 0; k < nth; k++){
       const double Hf = Hr[i*nth + kw(k)];
       for (int b = 0; b < nz; b++){
@@ -1603,7 +1622,7 @@ void cell3d_advectTransport(){
   }
 
   /* ---- azimuthal momentum, on the v control volumes --------------------- */
-  for (int i = 0; i < nr; i++){
+  for (int i = lo0; i <= hiV; i++){
     for (int k = 0; k < nth; k++){
       const double Hf = Hth[i*nth + kw(k)];
       for (int b = 0; b < nz; b++){
@@ -1642,7 +1661,7 @@ void cell3d_advectTransport(){
      the full flux at sigma = 1, which the kinematic condition makes zero. Leaving
      that node out would put a face with non-zero flux on the edge of the energy
      sum, and the identity would hold only up to the work done through it. */
-  for (int i = 0; i < nr; i++){
+  for (int i = lo0; i <= hiV; i++){
     for (int k = 0; k < nth; k++){
       const double Hc = H[ie(i, k)];
       for (int b = 1; b <= nz; b++){
@@ -1689,8 +1708,11 @@ void cell3d_advectTransport(){
  * components have a single value, and to distribute it as exact adjoints of those
  * cell-centre averages -- so the two sums are the same number twice with opposite
  * signs, cancelling in floating point to the last bit rather than to an order. */
-void cell3d_advectCurvature(){
-  for (int i = 1; i < nr; i++)
+void cell3d_advectTransport(){ cell3d_advectTransportRows(0, nr - 1); }
+
+void cell3d_advectCurvatureRows(int i0, int i1){
+  const int lo0 = i0 > 0 ? i0 : 0, lo1 = i0 > 1 ? i0 : 1, hiV = i1 < nr - 1 ? i1 : nr - 1;
+  for (int i = lo1; i <= hiV; i++)
     for (int k = 0; k < nth; k++){
       const double Hf = Hr[i*nth + kw(k)];
       for (int b = 0; b < nz; b++){
@@ -1704,7 +1726,7 @@ void cell3d_advectCurvature(){
                            / (rf[i]*drf[i]*dth*Hf*dsc[b]);
       }
     }
-  for (int i = 0; i < nr; i++)
+  for (int i = lo0; i <= hiV; i++)
     for (int k = 0; k < nth; k++){
       const double Hf = Hth[i*nth + kw(k)];
       for (int b = 0; b < nz; b++){
@@ -1721,8 +1743,10 @@ void cell3d_advectCurvature(){
       }
     }
 }
+void cell3d_advectCurvature(){ cell3d_advectCurvatureRows(0, nr - 1); }
 
 void cell3d_advect(){ cell3d_advectTransport(); cell3d_advectCurvature(); }
+void cell3d_advectRows(int i0, int i1){ cell3d_advectTransportRows(i0, i1); cell3d_advectCurvatureRows(i0, i1); }
 
 /* ---- the free surface's slopes, metric, area and curvature ------------- */
 
@@ -1907,22 +1931,29 @@ int cell3d_surfacePressure(double* out){
    The predictor carries the viscous and advective terms in full. Gravity does not
    appear in it: this pressure is the total one, and the whole of gravity's effect
    on the interior is the hydrostatic head the surface value carries. */
-int cell3d_step(double dt){
+/* step() in three parts, as in the JavaScript, so the middle one's rows can be divided among
+   workers (dns/cell3d-pool.js). cell3d_step is exactly the three in order. */
+int cell3d_stepBegin(double dt){
   if (!(dt > 0)){ lastError = 7; return lastError; }
-
   /* the surface's own state, read BEFORE anything moves: the stresses and the
      curvature belong to the surface the velocity is being advanced over */
   cell3d_omegaFromW();
   for (int i = 0; i < nr; i++)
     for (int k = 0; k < nth; k++) Ht[ie(i, k)] = om[iw(i, k, nz)];
-  if (cell3d_surfacePressure(psurf)) return lastError;
+  return cell3d_surfacePressure(psurf);
+}
 
-  /* the explicit right-hand side: viscous, with the free surface's own traction on
-     the sigma = 1 face, and advective, in the conservative grid-relative form */
-  cell3d_viscous(1);
+/* the explicit right-hand side over radial rows i0..i1: viscous, with the free surface's
+   own traction on the sigma = 1 face, and advective, in the conservative grid-relative form */
+int cell3d_stepExplicit(int i0, int i1){
+  cell3d_viscousRows(1, i0, i1);
   if (lastError) return lastError;
-  cell3d_advect();
+  cell3d_advectRows(i0, i1);
+  return lastError;
+}
 
+int cell3d_stepFinish(double dt){
+  if (!(dt > 0)){ lastError = 7; return lastError; }
   for (int i = 1; i < nr; i++)
     for (int k = 0; k < nth; k++)
       for (int j = 0; j < nz; j++){
@@ -2006,6 +2037,12 @@ int cell3d_step(double dt){
      is a different instant of the drive. */
   gEff = CELL3D_GRAVITY_UNSET;
   return lastError;
+}
+
+int cell3d_step(double dt){
+  if (cell3d_stepBegin(dt)) return lastError;
+  if (cell3d_stepExplicit(0, nr - 1)) return lastError;
+  return cell3d_stepFinish(dt);
 }
 
 }  // extern "C"

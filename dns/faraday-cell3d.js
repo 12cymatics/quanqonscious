@@ -1513,7 +1513,7 @@ class FaradayCell3D {
    * directly -- which is how the free surface is closed, because its condition is a
    * traction and a traction is a flux, not a value. The axis needs no entry: at r = 0 the face area is exactly zero, and
    * inward stencils use the antipodal column with the family's reflection sign. */
-  famLaplacian(f, out, fam, bc, sFlux){
+  famLaplacian(f, out, fam, bc, sFlux, i0, i1){
     const nth = this.nth, dth = this.dth;
     const rn = fam.rn, rb = fam.rb, sn = fam.sn, sb = fam.sb;
     const nI = rn.length, nJ = sn.length;
@@ -1732,8 +1732,14 @@ class FaradayCell3D {
     };
     let fRlo = this._fRlo, fRhi = this._fRhi;
     const fT = this._fT, fS = this._fS;
-    rFaces(fam.rLo, fRlo);
-    for (let a = fam.rLo; a <= fam.rHi; a++){
+    /* Rows i0..i1 only, when a caller asks: a face on the edge of the range is formed by
+       this call as it would be by the whole one -- the same stencil from the same state -- so
+       the rows come out the same however the range is cut. */
+    const aFirst = i0 === undefined ? fam.rLo : Math.max(fam.rLo, i0);
+    const aLast = i1 === undefined ? fam.rHi : Math.min(fam.rHi, i1);
+    if (aFirst > aLast) return out;
+    rFaces(aFirst, fRlo);
+    for (let a = aFirst; a <= aLast; a++){
       const dra = rb[a+1] - rb[a];
       rFaces(a + 1, fRhi);
       const loR = !rSkip(a), hiR = !rSkip(a + 1);
@@ -1802,9 +1808,11 @@ class FaradayCell3D {
      per viscous evaluation because all three components of `surfaceLapFluxes` come from one
      rate-of-strain tensor, and forming it three times would be three chances for them to
      disagree about one surface. */
-  refreshSurfaceFluxes(){
+  refreshSurfaceFluxes(i0, i1){
     const t3 = this._sf3;
-    for (let i = 0; i < this.nr; i++)
+    const iFirst = i0 === undefined ? 0 : Math.max(0, i0);
+    const iLast = i1 === undefined ? this.nr - 1 : Math.min(this.nr - 1, i1);
+    for (let i = iFirst; i <= iLast; i++)
       for (let k = 0; k < this.nth; k++){
         this.surfaceLapFluxes(i, k, t3);
         const e = this.ie(i, k);
@@ -1856,15 +1864,20 @@ class FaradayCell3D {
      it is the one where getting the coupling wrong cannot hide.
 
      `bcU`, `bcV`, `bcW` close the three scalar operators at the walls. */
-  viscous(outU, outV, outW, bcU, bcV, bcW){
+  viscous(outU, outV, outW, bcU, bcV, bcW, i0, i1){
     const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
-    this.refreshSurfaceFluxes();
+    /* Rows i0..i1 when given. The surface flux u's face reads comes from the pressure rows
+       either side of it, so the flux is refreshed one row below the range as well. */
+    if (i0 === undefined && i1 === undefined) this.refreshSurfaceFluxes();
+    else this.refreshSurfaceFluxes(i0 - 1, i1);
     this.famLaplacian(this.u, outU, this.FAM.u, bcU,
-      (a, k) => this.surfaceFluxFace('u', a, k));
+      (a, k) => this.surfaceFluxFace('u', a, k), i0, i1);
     this.famLaplacian(this.v, outV, this.FAM.v, bcV,
-      (a, k) => this.surfaceFluxFace('v', a, k));
+      (a, k) => this.surfaceFluxFace('v', a, k), i0, i1);
     this.famLaplacian(this.w, outW, this.FAM.w, bcW,
-      (a, k) => this.surfaceFluxFace('w', a, k));
+      (a, k) => this.surfaceFluxFace('w', a, k), i0, i1);
+    const lo = rLo => i0 === undefined ? rLo : Math.max(rLo, i0);
+    const hi = rHi => i1 === undefined ? rHi : Math.min(rHi, i1);
 
     /* d v / d theta at a u node, and d u / d theta at a v node.
      *
@@ -1876,7 +1889,7 @@ class FaradayCell3D {
      * components and -0.52 at eta/h = 0.4. Reconstructing each column at the
      * target's height removes it. */
     const FU = this.FAM.u, FV = this.FAM.v;
-    for (let i = FU.rLo; i <= FU.rHi; i++){
+    for (let i = lo(FU.rLo); i <= hi(FU.rHi); i++){
       const r = this.rf[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
         const Hu = this.HatH(r, (k + 0.5)*this.dth);
@@ -1893,7 +1906,7 @@ class FaradayCell3D {
         }
       }
     }
-    for (let i = FV.rLo; i <= FV.rHi; i++){
+    for (let i = lo(FV.rLo); i <= hi(FV.rHi); i++){
       const r = this.rc[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
         const Hv = this.HatH(r, k*this.dth);
@@ -2000,7 +2013,7 @@ class FaradayCell3D {
    * carries the grid-relative flux there, which the kinematic condition makes zero.
    * Leaving that node out would put a face with non-zero flux on the edge of the
    * energy sum, and the identity would hold only up to the work done through it. */
-  advectTransport(outU, outV, outW){
+  advectTransport(outU, outV, outW, i0, i1){
     const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
     const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf;
     const dsc = this.dsc, dsf = this.dsf;
@@ -2011,7 +2024,19 @@ class FaradayCell3D {
     const Qs = (i, k, b) => this.fluxS(i, k, b);
     const Qm = (i, k, b) => this.fluxSmesh(i, k, b);
 
-    outU.fill(0); outV.fill(0); outW.fill(0);
+    /* Rows i0..i1 when given, and then only those rows are cleared: the rows outside belong
+       to whoever is forming them. */
+    const lo = rLo => i0 === undefined ? rLo : Math.max(rLo, i0);
+    const hi = rHi => i1 === undefined ? rHi : Math.min(rHi, i1);
+    if (i0 === undefined && i1 === undefined){ outU.fill(0); outV.fill(0); outW.fill(0); }
+    else {
+      const rows = (arr, stride, a0, a1) => {
+        if (a0 <= a1) arr.fill(0, a0*nth*stride, (a1 + 1)*nth*stride);
+      };
+      /* the band holding the last pressure row also owns u's rim row, which nothing forms */
+      rows(outU, nz, lo(0), i1 >= nr - 1 ? nr : i1); rows(outV, nz, lo(0), hi(nr - 1));
+      rows(outW, nz + 1, lo(0), hi(nr - 1));
+    }
 
     /* ---- radial momentum, on the u control volumes ------------------------
        rc[i-1] .. rc[i] in r, one pressure cell in theta and in sigma. Its r faces
@@ -2019,7 +2044,7 @@ class FaradayCell3D {
        fluxes through the two cell faces bracketing it; its theta and sigma faces
        each span half of each of the two cells it straddles, so each carries the
        mean of those two cells' fluxes there. Only the sigma faces move. */
-    for (let i = 1; i < nr; i++){
+    for (let i = lo(1); i <= hi(nr - 1); i++){
       for (let k = 0; k < nth; k++){
         const Hf = this.Hr[i*nth + this.kw(k)];
         for (let b = 0; b < nz; b++){
@@ -2051,7 +2076,7 @@ class FaradayCell3D {
     }
 
     /* ---- azimuthal momentum, on the v control volumes --------------------- */
-    for (let i = 0; i < nr; i++){
+    for (let i = lo(0); i <= hi(nr - 1); i++){
       for (let k = 0; k < nth; k++){
         const Hf = this.Hth[i*nth + this.kw(k)];
         for (let b = 0; b < nz; b++){
@@ -2088,7 +2113,7 @@ class FaradayCell3D {
        half cell. There is no pressure cell at b = nz, so that half cell's
        horizontal faces carry half of cell nz-1's fluxes and nothing else; its top
        face carries the full flux at sigma = 1. */
-    for (let i = 0; i < nr; i++){
+    for (let i = lo(0); i <= hi(nr - 1); i++){
       for (let k = 0; k < nth; k++){
         const Hc = this.H[this.ie(i, k)];
         for (let b = 1; b <= nz; b++){
@@ -2158,8 +2183,10 @@ class FaradayCell3D {
    * uniform Cartesian field, which advects itself to exactly nothing: the residual is
    * second order in dtheta at a fixed radius and first order at the first cell, where
    * the radius is itself a spacing, and no interpolation removes it. */
-  advectCurvature(outU, outV){
+  advectCurvature(outU, outV, i0, i1){
     const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
+    const lo = rLo => i0 === undefined ? rLo : Math.max(rLo, i0);
+    const hi = rHi => i1 === undefined ? rHi : Math.min(rHi, i1);
     const rf = this.rf, rc = this.rc, drc = this.drc, drf = this.drf, dsc = this.dsc;
     const u = this.u, v = this.v, H = this.H;
 
@@ -2170,7 +2197,7 @@ class FaradayCell3D {
     const Gv = (i, k, b) => { const t = vcell(i, k, b); return t*t/rc[i]; };
     const Pu = (i, k, b) => ucell(i, k, b)*vcell(i, k, b)/rc[i];
 
-    for (let i = 1; i < nr; i++)
+    for (let i = lo(1); i <= hi(nr - 1); i++)
       for (let k = 0; k < nth; k++){
         const Hf = this.Hr[i*nth + this.kw(k)];
         for (let b = 0; b < nz; b++)
@@ -2178,7 +2205,7 @@ class FaradayCell3D {
             0.5*(Vcell(i-1, k, b)*Gv(i-1, k, b) + Vcell(i, k, b)*Gv(i, k, b))
             / (rf[i]*drf[i]*dth*Hf*dsc[b]);
       }
-    for (let i = 0; i < nr; i++)
+    for (let i = lo(0); i <= hi(nr - 1); i++)
       for (let k = 0; k < nth; k++){
         const Hf = this.Hth[i*nth + this.kw(k)];
         for (let b = 0; b < nz; b++)
@@ -2189,9 +2216,9 @@ class FaradayCell3D {
     return [outU, outV];
   }
 
-  advect(outU, outV, outW){
-    this.advectTransport(outU, outV, outW);
-    this.advectCurvature(outU, outV);
+  advect(outU, outV, outW, i0, i1){
+    this.advectTransport(outU, outV, outW, i0, i1);
+    this.advectCurvature(outU, outV, i0, i1);
     return [outU, outV, outW];
   }
 
@@ -2517,24 +2544,48 @@ class FaradayCell3D {
      it: this pressure is the total one, and the whole of gravity's effect on the interior is
      the hydrostatic head the surface value carries. */
   step(dt){
+    this.stepBegin(dt);
+    this.stepExplicit();
+    return this.stepFinish(dt);
+  }
+
+  /* step() IN THREE PARTS, so that the middle one can be spread over several threads
+     (dns/cell3d-pool.js) without a second copy of the first or the last. step() is
+     exactly these three in order, and the pool runs exactly these three with the middle
+     one's rows divided among its workers; neither has anything of its own. */
+
+  /* the surface's own state, read BEFORE anything moves: the stresses and the curvature
+     belong to the surface the velocity is being advanced over */
+  stepBegin(dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    const nr = this.nr, nth = this.nth, nz = this.nz;
+    this.omegaFromW();
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++) this.Ht[this.ie(i, k)] = this.om[this.iw(i, k, nz)];
+    this.surfacePressure(this._ps);
+    return this;
+  }
+
+  /* the explicit right-hand side: viscous, with the free surface's own traction on the
+     sigma = 1 face, and advective, in the conservative grid-relative form. Over radial rows
+     i0..i1 of every family when they are given, all of them when not. Each output element is
+     formed from the state alone and by the same arithmetic whichever rows are asked for --
+     nothing is accumulated across rows -- so the rows can be formed in any grouping and
+     the union is the whole, bit for bit. dns/check-cell3d-pool.mjs asserts that. */
+  stepExplicit(i0, i1){
+    this.viscous(this._lu, this._lv, this._lw, this._bcU, this._bcV, this._bcW, i0, i1);
+    this.advect(this._au, this._av, this._aw, i0, i1);
+    return this;
+  }
+
+  stepFinish(dt){
     if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
       `dt = ${dt}: a finite positive time step is required.`);
     const nr = this.nr, nth = this.nth, nz = this.nz, nu = this.nu, rho = this.rho;
     const u = this.u, v = this.v, w = this.w;
     const lu = this._lu, lv = this._lv, lw = this._lw;
     const au = this._au, av = this._av, aw = this._aw;
-
-    /* the surface's own state, read BEFORE anything moves: the stresses and the curvature
-       belong to the surface the velocity is being advanced over */
-    this.omegaFromW();
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++) this.Ht[this.ie(i, k)] = this.om[this.iw(i, k, nz)];
-    this.surfacePressure(this._ps);
-
-    /* the explicit right-hand side: viscous, with the free surface's own traction on the
-       sigma = 1 face, and advective, in the conservative grid-relative form */
-    this.viscous(lu, lv, lw, this._bcU, this._bcV, this._bcW);
-    this.advect(au, av, aw);
 
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++)
