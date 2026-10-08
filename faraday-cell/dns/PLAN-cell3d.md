@@ -97,6 +97,7 @@ against this and need no further decision.
 | S9a | The resampler: eta at an arbitrary position | **done** | `etaAt` reads the extended grid `HatH` reads, so the axis is interpolated ACROSS (antipodal row) and the rim IS the contact condition, rather than a renderer reinventing both. Exact at a cell centre to four ulp of the amplitude (5.421e-19 of 1.188e-3, and the residual is the sample position, not the interpolation), second order between centres at 1.965 then 1.919, spread 0.00e+0 over theta on the axis for an axisymmetric surface and 9.26e-23 for m = 3, and exactly the contact condition at r = R. Found a real defect in its own first version: `HatH - h` cannot return eta, because h + eta has an ulp of 4.3e-19 against elevations of 1e-9 to 1e-4 m |
 | S9b | The renderer draws this solver's surface | **done** | the page's drawn field agrees with `CELL3D.etaAtPixel` at 379 pixels to a relative 1e-6, through four resamplers and a polar-to-Cartesian rotation in the normalised radius; the deck carries the physics clock, the wall clock, their ratio and the step count; a worker built from the two `<script id="dns...">` sources, slices bounded at 120 ms of wall clock. Found a real precision defect on the way in -- `st.depthMm` does not exist on the resolved state, so `h` arrived as NaN -- and the page suite caught the standalone build still carrying a `<script src>` for the solver, twice over |
 | S10 | C++ port of the three-dimensional step | **done** | `dns/faraday_cell3d.cpp`, 1 862 lines, compiled freestanding for wasm32 by clang with no Emscripten and no libc. Bit for bit against the JavaScript, by `Object.is` on every element: the metric's 22 arrays; the projection's seven operators and the conjugate gradient's own **iteration count** and residual; `axisU`, the three surface fluxes and the vector Laplacian; the advection's six arrays, the mean curvature, the surface area, the excess area and the surface pressure; 40 steps undriven and driven on both contact branches; and **894 steps, one whole drive period at 12x24x8, all 29 arrays**. Measured: **3.2x at 10x24x8 and 2.7x at 16x24x10**, which takes the page from 1278x slower than real time to 489x. The page offers it as a third `surface` button and the deck names the module that answered, read off the worker's own frames. `dns/check-cell3d-wasm.mjs`, 55 checks. Fourteen injected defects, four of them findings about the GATE rather than the port -- below |
+| S10b | The viscous operator forms each face once, in both engines | **done** | `famLaplacian` formed all six faces of every cell, so each interior face -- and every column reconstruction it asks for -- was formed twice, once by each neighbour. Each face is now formed once and both cells read it: **562 440 reconstructions per viscous evaluation become 321 320**, and the 639 400 re-interpolations of a column's depth become a table refreshMetric fills. The viscous term is **2.2 to 2.4x** faster; a whole step **1.5 to 1.9x**, best of three: at 16x40x10 JavaScript 173.5 -> 117.6 ms and C++ 73.3 -> 40.9 ms. The r and sigma faces' shared value is the old value **bit for bit**, measured by putting the old theta face back and comparing; the theta faces and the azimuthal seam are a correction -- each was found at two roundings of one angle, one per neighbour, so the operator was not exactly conservative in theta. Every figure the 264 existing checks print is unchanged at its printed precision; the gate went from 11m42s to 6m56s, and carries 267 checks with the three below. JavaScript and C++ still agree bit for bit over a whole drive period. Six injected defects all red -- below |
 | S11 | All eight cores | todo | measured speedup against core count; identical answer on any count |
 | S12 | GPU render path, and the optional f32 preconditioner | **render done; preconditioner declined, with the numbers** | The surface is shaded by a WebGL2 fragment shader (`faraday/render-gl.js`), chosen under *draw on*, the deck naming which processor drew. Held to the CPU's bytes **within one level out of 255 in every channel** -- 24 renderings each on the modal field, after a field rebuild, on the Navier-Stokes field and in the single-file build, worst difference 1, about one channel in 100 000 at that level. Main thread per frame: CPU 9.9-10.3 ms, GPU 2.1-2.3 ms on a SOFTWARE GPU, which is submission cost and not a speed measurement. The f32 preconditioner is not built: at the page's grid the CG is 159 iterations and 40% of a 77 ms step, each GPU application is a round trip whose cost on the owner's hardware is unmeasured, and it would end bit-for-bit parity between the engines -- below |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
@@ -1415,6 +1416,83 @@ module and the JavaScript solver to element-wise identical values over a FULL DR
 on every unknown. So the flag's stated purpose cannot be demonstrated on either module
 here. Both build scripts now say so, instead of calling it load bearing.
 
+
+## S10b -- every face formed once, and the one place that changed a number
+
+**Where a step's time went, measured, not assumed.** Before S11 put the step on several cores, I
+timed each operator at the page's grid, 16x40x10, on the JavaScript engine: **viscous 58.7%,
+the pressure solve 31.7%**, advection 5.1%, everything else under 3%. The expectation had been
+that the conjugate gradient dominated, so the first thing worth knowing was that it did not.
+Inside the viscous term: **562 440 calls to `colValueAtZ` per evaluation, 29 per cell**, and
+639 400 bilinear interpolations of a column's depth for 3 x 640 distinct columns.
+
+**Half the reconstructions were repeats.** `famLaplacian` walked the cells and formed all six
+faces of each, so every interior face was formed twice, once by each cell it separates, and with
+it the four-column radial stencil or the two-column azimuthal difference or the eight-column
+sigma cross terms the face needs. Each face is now formed once and both cells read the number:
+the r faces a radial row at a time, the theta faces a column at a time, the sigma faces a
+column at a time. The cell then sums its six faces in the order it always did, with the same
+signs. And `colValueAtZ` read its column's depth by interpolating H afresh on every call; it is
+now a table per family, filled at the end of `refreshMetric`.
+
+**The r and sigma faces' shared value is the old value, bit for bit.** Not by luck: an r face at
+`rb[A]` is the upper face of cell A - 1 and the lower face of cell A, and both anchored its
+radial stencil at column A - 2, read it at the same height and weighted it by the same row; a
+sigma face is the upper face of one row and the lower face of the next, and both anchored its
+stencil at B - 2. The sign was the only difference, and IEEE arithmetic is exactly symmetric
+under negation, so `flux += -T` is the old `flux += side*T`. Measured rather than argued: with
+the old theta face and the old per-call depth put back on a scratch copy, the new operator equals
+the old one on every element of all three velocity components.
+
+**The theta faces are a correction, and so is the seam.** Cell k found its lower face at
+`theta_k - dtheta/2`; cell k - 1 found the same face at `theta_{k-1} + dtheta/2`. One angle in
+exact arithmetic, two roundings of it in floating point, and through the interpolation of H
+there and the height it sets, two face fluxes an ulp apart -- what left one cell did not quite
+arrive in the next, so the discrete Laplacian was not exactly conservative in theta. The column
+depth had the same fault at the seam: column -1 and column nth - 1 are one column, and the old
+call interpolated its depth at two angles 2 pi apart. Each theta face is now formed once, as the
+upper cell's lower face, and a column has one depth whatever index reaches it. The viscous term
+moved by at most 4.5e-16 of its largest value, in 496 of its 20 240 elements at 16x40x10; **every figure the
+264 existing checks print is unchanged at its printed precision**, and the C++ engine was changed
+identically, so the two still agree bit for bit over a whole drive period (57 checks, two new:
+the four depth tables compared directly, so a wrong depth is found where it is made).
+
+| best of three, this container | before | after | |
+|---|---|---|---|
+| viscous term, 16x40x10, JavaScript, deformed surface | 115.8 ms | 49.7 ms | 2.33x |
+| step, 16x40x10, JavaScript | 173.5 ms | 117.6 ms | 1.48x |
+| step, 16x40x10, C++ | 73.3 ms | 40.9 ms | 1.79x |
+| step, 16x24x10, JavaScript / C++ | 100.3 / 39.6 ms | 62.9 / 24.7 ms | 1.60x / 1.60x |
+| step, 10x24x8, JavaScript / C++ | 49.6 / 18.6 ms | 29.9 / 9.86 ms | 1.66x / 1.89x |
+| `node dns/check-cell3d.mjs` | 11m42s | 6m56s | |
+
+**Gated in section 10, and the gate was proven able to fail.** The per-cell operator is kept in
+the gate verbatim as `plainFamLaplacian` -- with one marked change, the theta face found where
+the upper cell finds it -- and the solver's operator is held to it with `Object.is` over
+fourteen cases: all four families, open and walled, with and without the traction closing the
+surface. Two more checks: every depth table is the interpolation at its own node, and a
+reconstruction is exactly periodic in the column index. Six defects injected on a scratch
+worktree, one at a time, each red on the check aimed at it, green on restore:
+
+| injected | red on | how loud |
+|---|---|---|
+| r-face stencil anchored at A - 1 instead of A - 2 | the per-cell reference | 686 to 784 cells per case |
+| the upper r face added even where it carries no flux | the per-cell reference | 98 cells, open cases only |
+| theta face formed at theta + dtheta/2 instead of - | the per-cell reference | 784 to 882 cells per case |
+| depth interpolated per call from the unwrapped index, as before | periodicity | 1 099 of 9 702 reconstructions |
+| every family's depth table at a cell centre, thOff ignored | the depth table | 126 of 518 nodes |
+| the surface face's exemption from the open-boundary skip dropped | the per-cell reference | 112 cells, open with traction only |
+
+The last needed a case the first version of the check did not have -- open, with the traction --
+which is why the gate runs fourteen cases rather than eleven. And the C++ engine's new depth-table
+check went red when one row of the C++ table was left unfilled; on the way it showed the parity
+gate's report printing "worst relative 0.000e+0" beside an element read as NaN, because
+`d > worst` skips a NaN. It is `!(d <= worst)` now, so a NaN sticks in the report.
+
+**What this changes for S11.** After it the step at 16x40x10 is: the pressure solve 48%, viscous
+37%, advection 8%. The pressure solve is the part that needs a global reduction every iteration,
+so it is the part that does not spread over cores without shared memory -- which a page opened
+from a file does not have. That is S11's problem, and this measurement is where it starts.
 
 ## S12 -- the surface drawn on the GPU, and the preconditioner that was not built
 

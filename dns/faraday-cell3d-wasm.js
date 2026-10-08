@@ -42,7 +42,11 @@ const CELL3D_ARRAYS = [
   'gu', 'gv', 'gw', 'gom', 'pdiag', 'div',
   'cgr', 'cgd', 'cgq', 'cgz', 'probe', 'pq',
   'lapU', 'lapV', 'lapW', 'advU', 'advV', 'advW',
-  'fsr', 'fst', 'fsz', 'kap', 'psurf'
+  'fsr', 'fst', 'fsz', 'kap', 'psurf',
+  /* H at every node of each family, which refreshMetric fills and every column
+     reconstruction reads. Compared like the rest, so a depth that differed between
+     the two engines would be found where it is made, not three operators later. */
+  'hcolP', 'hcolU', 'hcolV', 'hcolW'
 ];
 
 /* The JavaScript field each module array corresponds to, where the names differ.
@@ -54,7 +58,8 @@ const CELL3D_JS_NAME = {
   gu: '_gu', gv: '_gv', gw: '_gw', gom: '_gom', pdiag: '_pdiag', div: '_div',
   cgr: '_r', cgd: '_d', cgq: '_q', cgz: '_z', probe: null, pq: null,
   lapU: '_lu', lapV: '_lv', lapW: '_lw', advU: '_au', advV: '_av', advW: '_aw',
-  fsr: '_fsr', fst: '_fst', fsz: '_fsz', kap: '_kap', psurf: '_ps'
+  fsr: '_fsr', fst: '_fst', fsz: '_fsz', kap: '_kap', psurf: '_ps',
+  hcolP: '_hcolP', hcolU: '_hcolU', hcolV: '_hcolV', hcolW: '_hcolW'
 };
 
 /* The arrays JavaScript writes INTO the module: the grid, which it owns, and the

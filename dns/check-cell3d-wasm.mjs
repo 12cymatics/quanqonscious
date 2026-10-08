@@ -79,7 +79,10 @@ function diff(name, a, b){
       n++;
       if (first < 0) first = i;
       const d = Math.abs(a[i] - b[i])/Math.max(Number.MIN_VALUE, Math.abs(a[i]));
-      if (d > worst) worst = d;
+      /* `!(d <= worst)` and not `d > worst`, so a NaN on either side STICKS in the report
+         instead of being skipped: an element read as NaN used to print "worst relative
+         0.000e+0" beside the count that failed it, which says the opposite of the truth. */
+      if (!(d <= worst)) worst = d;
     }
   return n ? `${name}: ${n}/${a.length} elements differ, first at ${first} `
            + `(${a[first]} vs ${b[first]}), worst relative ${worst.toExponential(3)}`
@@ -218,6 +221,10 @@ for (const contact of ['free', 'pinned']){
   const bad = METRIC.map(n => diff(n, S[n], W.views[n])).filter(Boolean);
   ok(bad.length === 0, `refreshMetric: all ${METRIC.length} arrays, ${contact}`,
      bad.join('; '));
+  const HCOL = ['hcolP', 'hcolU', 'hcolV', 'hcolW'];
+  const badH = HCOL.map(n => diff(n, S[CELL3D_JS_NAME[n]], W.views[n])).filter(Boolean);
+  ok(badH.length === 0, `and H at every node of all four families, ${contact}`,
+     badH.join('; '));
   W.release();
 }
 
