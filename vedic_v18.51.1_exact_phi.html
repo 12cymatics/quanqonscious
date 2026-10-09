@@ -2110,10 +2110,11 @@ const LEAN_PROVED = Object.freeze({
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
   /* Proved in SutraWS/RenderCertificates.lean, SutraWS/DECComplex.lean,
-     SutraWS/VertexProofs.lean, SutraWS/Interpolation.lean and
-     SutraWS/WheelerSurface.lean, built by `lake build SutraWS`. tools/check_citations.mjs fails the build if any
+     SutraWS/VertexProofs.lean, SutraWS/Interpolation.lean,
+     SutraWS/WheelerSurface.lean and SutraWS/Projection.lean, built by
+     `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front'],
   /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
      `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
      an executable decision procedure -- wheelerAudit() below -- that re-decides
@@ -2199,6 +2200,14 @@ const VISUAL_CERTIFICATE = {
       holds: () => MODE_COMPARE.audit !== null && MODE_COMPARE.audit.ok &&
                    (MODE_COMPARE.active === 0 || MODE_COMPARE.traces.length === 3)
     },
+    projection: {
+      draws: 'the perspective projection of every surface point',
+      /* SutraWS/Projection.lean: the camera turns are rotations, so with the
+         camera beyond the frame's largest point every point is in front of
+         it. projectTorus counts the points that are not, every frame. */
+      theorems: ['camDepth_sq_le', 'camera_in_front', 'camDist_gt', 'frame_in_front'],
+      holds: () => PROJECTION.checked > 0 && PROJECTION.behind === 0 && PROJECTION.turn < 1e-9
+    },
     sutra: {
       draws: 'per-sutra injected displacement',
       theorems: ['unitary_measured_unitary_no_defect', 'projective_measured_projective_no_defect',
@@ -2258,16 +2267,16 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '1338994ca69bcd5a560a87054b1dad6908bd5f3114d72b4f3f6f9820e813fba0',
+  leanCorpusSha256: '3427fe2c5c0c10d5618ae9aaf965ad8c58c7d3c2a4325f227ddfc95e56d51af1',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2201,
+  leanTheorems: 2205,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2201,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
+  leanAxiomsKernelChecked: 2205,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2275,7 +2284,7 @@ const PROVENANCE = Object.freeze({
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the exact A4 state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
-  wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 enters at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The bounds say how large these terms can be, not that the surface stays in front of the camera.'
+  wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 enters at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The bounds say how large these terms can be, not how large they should look; at gain 1 they dominate the surface. The projection channel (SutraWS/Projection.lean) keeps every point in front of the camera whatever their size.'
 });
 function sourceFingerprint() {
   const scripts = document.scripts;
@@ -4984,6 +4993,11 @@ for (let i = 0; i < 16; i++) for (let j = i + 1; j < 16; j++) {
 const TESS_ROT = { xw: 0, yz: 0, xy: 0 };
 const TESS_TRAIL = Array.from({ length: 16 }, () => []);
 const CAM_DIST = 700; 
+/* Where projectTorus put the camera this frame, how many points it found
+   behind it, and how far the camera turns moved any point's norm.
+   frame_in_front says the count is zero; camDepth_sq_le rests on the turns
+   being rotations, so their norm drift is decided too. */
+const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0 };
 let ZOOM = 0.35;        
 function tessVertexToTorus(v, t) {
   let {x, y, z, w} = v;
@@ -5017,7 +5031,7 @@ function hsl2rgb(h, s, l) {
 const TORUS_R = 180, TORUS_r = 70;
 const TH_SEG = 200, PH_SEG = 100;
 const torusPoints = new Array(TH_SEG * PH_SEG);
-for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0, wOmega:0, kS:NaN };
+for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0, wOmega:0, kS:NaN, behind:true };
 let camRX = 0.82, camRY = 0, isDrag = false, lastMX = 0, lastMY = 0;
 let autoRotate = true;
 let TORUS_GEOM = null;
@@ -5078,6 +5092,7 @@ function projectTorus() {
   const cx = cw / 2, cy = ch / 2;
   const r4f = abs(VTX_DISPLAY.r4F);
   const cRY = cos(camRY), sRY = sin(camRY);
+  let maxN2 = 0, turn = 0;
   const cRX = cos(camRX), sRX = sin(camRX);
   /* The Wheeler geometry rides on the phi^3 algebra, so it needs both its own
      certificate and the golden one. */
@@ -5170,13 +5185,16 @@ function projectTorus() {
       let x = (R + r * cosP) * cosTheta;
       let y = r * sinP + yOff;
       let z = (R + r * cosP) * sinTheta;
+      const n2 = x * x + y * y + z * z;
+      if (n2 > maxN2) maxN2 = n2;
       let t1;
       t1 = x * cRY - z * sRY; z = x * sRY + z * cRY; x = t1;
       t1 = y * cRX - z * sRX; z = y * sRX + z * cRX; y = t1;
+      const dev = Math.abs(x * x + y * y + z * z - n2) / (n2 || 1);
+      if (dev > turn) turn = dev;
       const idx = i * PH_SEG + j;
-      const pScale = CAM_DIST / (CAM_DIST + z) * ZOOM;
-      torusPoints[idx].sx = cx + x * pScale;
-      torusPoints[idx].sy = cy + y * pScale;
+      torusPoints[idx].sx = x;
+      torusPoints[idx].sy = y;
       torusPoints[idx].depth = z;
       torusPoints[idx].field = fvNorm;
       torusPoints[idx].theta = theta;
@@ -5185,6 +5203,26 @@ function projectTorus() {
       torusPoints[idx].kS = kS;
     }
   }
+  /* The camera goes beyond the frame's largest point: CAM_DIST for the bare
+     torus, pushed back in proportion as the surface grows, which keeps the
+     bare torus's perspective ratio. frame_in_front: no point can then be
+     behind it, at any camera angle. */
+  const maxNorm = Math.sqrt(maxN2);
+  const D = Math.max(CAM_DIST, CAM_DIST * maxNorm / (TORUS_R + TORUS_r));
+  let behind = 0;
+  for (const p of torusPoints) {
+    const den = D + p.depth;
+    p.behind = !(den > 0);
+    if (p.behind) { behind++; continue; }
+    const pScale = D / den * ZOOM;
+    p.sx = cx + p.sx * pScale;
+    p.sy = cy + p.sy * pScale;
+  }
+  PROJECTION.D = D; PROJECTION.maxNorm = maxNorm;
+  PROJECTION.behind = behind; PROJECTION.checked = torusPoints.length;
+  PROJECTION.turn = turn;
+  CERT.projection = behind === 0 && turn < 1e-9;
+  CERT.all = Object.keys(VISUAL_CERTIFICATE.channels).every(k => CERT[k]);
 }
 /* The inertial plane is the kernel's layer k = hw - 2 = 0, where magnetism
    vanishes. The surface carries k, and its zero set passes through exactly the
@@ -5217,6 +5255,7 @@ function renderTorus() {
       const i01 = i * PH_SEG + nj;
       const p0 = torusPoints[i00], p1 = torusPoints[i10];
       const p2 = torusPoints[i11], p3 = torusPoints[i01];
+      if (p0.behind || p1.behind || p2.behind || p3.behind) continue;
       const e1x = p1.sx - p0.sx, e1y = p1.sy - p0.sy;
       const e2x = p3.sx - p0.sx, e2y = p3.sy - p0.sy;
       const nz = e1x * e2y - e1y * e2x;
