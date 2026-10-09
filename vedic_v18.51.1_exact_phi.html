@@ -2110,10 +2110,10 @@ const LEAN_PROVED = Object.freeze({
   hwCoeff: [[9,128],[7,256],[3,128],[7,512],[9,640]],
   opClasses: ['unitary','isometric','contractive','projective','dissipative','invertibleNonUnitary'],
   /* Proved in SutraWS/RenderCertificates.lean, SutraWS/DECComplex.lean,
-     SutraWS/VertexProofs.lean and SutraWS/Interpolation.lean, built by
-     `lake build SutraWS`. tools/check_citations.mjs fails the build if any
+     SutraWS/VertexProofs.lean, SutraWS/Interpolation.lean and
+     SutraWS/WheelerSurface.lean, built by `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','tau_max_num_eq','tau_max_below_removed_ceiling','tau_base_is_three_quarters','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le'],
   /* Wheeler geometry. Lean source is SutraWS/WheelerGeometry.lean, compiled by
      `lake build SutraWS` alongside Exhaustive.lean. Each statement also carries
      an executable decision procedure -- wheelerAudit() below -- that re-decides
@@ -2163,8 +2163,17 @@ const VISUAL_CERTIFICATE = {
                    PHASE_CERT.ok
     },
     wheeler: {
-      draws: 'dielectric compression, magnetic dilation, precession rotation',
-      theorems: [...LEAN_PROVED.wheelerChecked, 'real_node_reproduction'],
+      draws: 'dielectric compression, magnetic dilation, precession rotation, ' +
+             'the WHEELER surface terms and colour, and the inertial layer',
+      /* SutraWS/WheelerSurface.lean: the surface terms are bounded, and the
+         inertial plane is the kernel's k = 0 layer. WHEELER.surfaceAudit
+         decides the vortex/balance identity and the zeta powers exactly. */
+      theorems: [...LEAN_PROVED.wheelerChecked, 'real_node_reproduction',
+                 'centBal_abs_le', 'goldenVortex_eq_alpha_centBal', 'goldenVortex_abs_le',
+                 'zeta_pow', 'fieldDistortion_mem', 'etherPressure_abs_le', 'counterspace_abs_le',
+                 'inertiaEnvelope_vertex', 'inertiaEnvelope_vertex_eq_one_iff',
+                 'layer_cos_vertex_eq_one_iff', 'latitude_band_eq_one_iff',
+                 'inertial_locus_nodes', 'bilinear_abs_le'],
       holds: () => WHEELER_CHANNEL.ok
     },
     golden: {
@@ -2249,16 +2258,16 @@ function refreshSutraCertificate(active) {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '57bb4a660cb09c951a417199a9d60bd0a50dddb962e36ef04f8d8c9e328b2ce2',
+  leanCorpusSha256: '1338994ca69bcd5a560a87054b1dad6908bd5f3114d72b4f3f6f9820e813fba0',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2181,
+  leanTheorems: 2201,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean'],
-  leanAxiomsKernelChecked: 2181,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Proofs.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
+  leanAxiomsKernelChecked: 2201,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2266,7 +2275,7 @@ const PROVENANCE = Object.freeze({
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the exact A4 state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
-  wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides.'
+  wheelerScopeNote: 'The seven Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic. The kernel settles the theorem; the runtime decision is what gates the render. The correspondence between the two is by transcription and is not mechanically enforced: each Lean statement names the simulation line it was taken from, and check_citations.mjs enforces only that a cited theorem exists, not that it says what the audit decides. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 enters at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The bounds say how large these terms can be, not that the surface stays in front of the camera.'
 });
 function sourceFingerprint() {
   const scripts = document.scripts;
@@ -2663,10 +2672,8 @@ const TGCR = {
   auditOmegaRange() { return { strict: true, mutated: false }; }
 };
 const WHEELER = {
-  inertiaPlane: PI / 2,
-  inertiaOct: 2,                              
   centripetal: Quad.toFloat(Quad.mk(Q.ZERO, Q.ONE)),   
-  centrifugal: Q.fl(C.sqrt3),                          
+  centrifugal: Math.sqrt(3),                           
   counterspace: Q.fl(C.alpha),                         
   /* kenmagnetic: G_uv + Q_uv = 8*pi*phi^3*T_uv(dielectric).
      phi^3 is exact -- KX.PHI_CU = 2+sqrt(5) -- but pi is transcendental and has
@@ -2681,7 +2688,6 @@ const WHEELER = {
   _COS: null, _SIN: null, _CENT: null, _COSQ: null, _SINQ: null, _CENTQ: null, _CENTF: null, _GVF: null, _RADF: null, _INV_ALPHA: 0,
   _initExact() {
     const c2 = Quad.mk(Q.ZERO, Q.ONE);                 
-    const c3 = Quad.mk(C.sqrt3, Q.ZERO);               
     this._COS = []; this._SIN = []; this._COSQ = []; this._SINQ = []; this._CENTQ = []; this._CENTF = []; this._GVF = [];
     this._INV_ALPHA = qDisp(Q.div(Q.ONE, C.alpha));
     for (let k = 0; k < 8; k++) {
@@ -2691,28 +2697,32 @@ const WHEELER = {
       this._COS.push(Quad.toFloat(z.re));
       this._SIN.push(Quad.toFloat(z.im));              
     }
+    /* sqrt3 is not in A4. Each entry is held exactly as r + sqrt3*s with r
+       and s in A4, and sqrt3 enters at the float boundary, as pi does above.
+       It used to be the rational 97/56, a stand-in off by 5e-5. */
     this._CENT = [];
     for (let a = 0; a < 8; a++) {
       const cosA = KConsts.powZeta(a).re, row = [], rowQ = [];
       for (let b = 0; b < 8; b++) {
         const sinB = KConsts.powZeta(b).im;
-        const exact = Quad.sub(Quad.mul(c2, cosA), Quad.mul(c3, sinB));
+        const exact = { r: Quad.mul(c2, cosA), s: Quad.neg(sinB) };
         rowQ.push(exact);
-        row.push(Quad.toFloat(exact));
+        row.push(this._sqrt3Float(exact));
       }
       this._CENTQ.push(rowQ);
       this._CENT.push(row);
-      this._CENTF.push(rowQ.map(x => qDisp(a4ToQ(x))));
+      this._CENTF.push(row.slice());
     }
     for (let i = 0; i < 8; i++) {
       const row = [];
-      for (let j = 0; j < 8; j++) row.push(qDisp(a4ToQ(this.goldenVortexQ(i, j))));
+      for (let j = 0; j < 8; j++) row.push(this._sqrt3Float(this.goldenVortexQ(i, j)));
       this._GVF.push(row);
     }
     this._RADF = [];
     for (let k = 0; k < 8; k++)
       this._RADF.push(Q.fl(this.radialFactorQ(qFromFloat(this._COS[k]), Q.mk(1n, 10n))));
   },
+  _sqrt3Float(e) { return qDisp(a4ToQ(e.r)) + Math.sqrt(3) * qDisp(a4ToQ(e.s)); },
   _oct(a) { return ((Math.round(a / (PI / 4)) % 8) + 8) % 8; },
   centBalQ(theta, phi) { return this._CENTQ[this._oct(theta)][this._oct(phi)]; },
   centBal(theta, phi) { return this._CENTF[this._oct(theta)][this._oct(phi)]; },
@@ -2744,8 +2754,26 @@ const WHEELER = {
   },
   goldenVortexQ(i, j) {
     const inward = A4.mul(A4.SQRT2, this._COSQ[i]);
-    const outward = A4.scaleQ(this._SINQ[j], C.sqrt3);
-    return A4.scaleQ(A4.sub(inward, outward), C.alpha);
+    const outward = this._SINQ[j];
+    return { r: A4.scaleQ(inward, C.alpha), s: A4.scaleQ(A4.neg(outward), C.alpha) };
+  },
+  /* goldenVortex_eq_alpha_centBal and zeta_pow, decided over the exact parts
+     the two tables are built from by their two separate code paths. */
+  surfaceAudit() {
+    const problems = [];
+    const z1 = KConsts.powZeta(1);
+    if (!C4.eq(C4.mul(KConsts.powZeta(7), z1), C4.ONE)) problems.push('zeta^8 != 1');
+    for (let a = 0; a < 8; a++) {
+      const z = KConsts.powZeta(a);
+      if (!A4.eq(A4.add(A4.mul(z.re, z.re), A4.mul(z.im, z.im)), A4.ONE))
+        problems.push(`|zeta^${a}| != 1`);
+      for (let b = 0; b < 8; b++) {
+        const cb = this._CENTQ[a][b], gv = this.goldenVortexQ(a, b);
+        if (!A4.eq(gv.r, A4.scaleQ(cb.r, C.alpha)) || !A4.eq(gv.s, A4.scaleQ(cb.s, C.alpha)))
+          problems.push(`goldenVortex(${a},${b}) != alpha*centBal(${a},${b})`);
+      }
+    }
+    return { ok: problems.length === 0, problems };
   },
   goldenVortex(theta, phi, strength) {
     return this._GVF[this._oct(theta * this._phiAng + phi)][this._oct(theta + phi * this._phiAng)] * strength;
@@ -2767,16 +2795,17 @@ const WHEELER = {
     const pulsation = 1 + 0.15 * wOmega;
     return this._phi3 * rad * centBal * pulsation;
   },
-  counterspaceIntensity(theta, phi, fieldVal, wOmega) {
+  /* kS is the kernel's layer k = hw - 2 carried on the surface: the inertial
+     plane is k = 0, and distance from it is counted in Hamming layers. */
+  counterspaceIntensity(theta, phi, fieldVal, wOmega, kS) {
     const xi = this.counterspaceConj(fieldVal);
-    let d = abs(this._oct(phi) - this.inertiaOct); if (d > 4) d = 8 - d;
-    const inertiaEnvelope = 1 / (1 + d * d);
+    const inertiaEnvelope = 1 / (1 + kS * kS);
     const vortexTwist = this.goldenVortex(theta, phi, 0.3);
     return xi * inertiaEnvelope * (1 + vortexTwist * wOmega);
   },
-  fluxPhase(theta, phi, wOmega) {
+  fluxPhase(theta, phi, wOmega, kS) {
     const spiralPhase = (((theta * this._phiAng + phi) % TAU) + TAU) % TAU;
-    const inertia = this._COS[this._oct(phi - this.inertiaPlane)];
+    const inertia = Math.cos(kS * PI / 4);
     return (((spiralPhase * 3 / TAU + inertia * 0.5 + wOmega * 0.25) % 1.0) + 1) % 1.0;
   },
   etherColor(centBalance, pressure) {
@@ -4278,6 +4307,21 @@ function samplePhase(theta, phi) {
   const pj = ((phi % TAU + TAU) % TAU) / TAU * FIELD_PH;
   return FAITHFUL_RENDER.phaseGrid[(floor(ti) % FIELD_TH) * FIELD_PH + (floor(pj) % FIELD_PH)];
 }
+/* audit() reads the channels before the phase and mode certificates are decided
+   for the frame, and on a still state it does not run again, so the badge kept
+   reporting NOT FAITHFUL while every channel held. The badge follows the
+   channel status each frame instead. */
+let FAITHFUL_BADGE_KEY = '';
+function syncFaithfulBadge() {
+  const ch = VISUAL_CERTIFICATE._last;
+  if (!ch) return;
+  const st = FAITHFUL.state;
+  st.channels = ch;
+  st.ok = st.rel < 1e-9 && st.node < 1e-9 && ch.all;
+  VTX_DISPLAY.faithful = st.ok;
+  const key = Object.keys(ch).map(k => k + (ch[k] ? 1 : 0)).join('') + st.rel + ':' + st.node;
+  if (key !== FAITHFUL_BADGE_KEY) { FAITHFUL_BADGE_KEY = key; updateFaithfulBadge(); }
+}
 function updateFaithfulBadge() {
   const el = document.getElementById('faithfulBadge');
   if (!el) return;
@@ -4549,7 +4593,7 @@ const WHEELER_CHANNEL = {
   gW: new Float32Array(FIELD_TH * FIELD_PH),
   gK: new Float32Array(FIELD_TH * FIELD_PH),
   gKs: new Float32Array(FIELD_TH * FIELD_PH),
-  wMax: 0, audit: null, node: null, ok: false, geoD: 0.0625, geoM: 0.125, geoP: 0.0078125
+  wMax: 0, audit: null, surface: null, node: null, ok: false, geoD: 0.0625, geoM: 0.125, geoP: 0.0078125
 };
 function refreshWheelerChannel() {
   const C5 = WHEELER_CHANNEL, aN = FAITHFUL.aNum;
@@ -4558,7 +4602,8 @@ function refreshWheelerChannel() {
   const w = (STRICT_V5_STATE.last && STRICT_V5_STATE.last.wheeler) ||
             (params ? STRICT_V5.computeWheeler(STRICT_V5_STATE.dielectric, params) : null);
   C5.audit = STRICT_V5.wheelerAudit(STRICT_V5_STATE.dielectric, params);
-  C5.ok = C5.audit.ok && w !== null;
+  C5.surface = WHEELER.surfaceAudit();
+  C5.ok = C5.audit.ok && C5.surface.ok && w !== null;
   C5.node = null;
   const flatten = () => {
     C5.ok = false;
@@ -4569,7 +4614,6 @@ function refreshWheelerChannel() {
   };
   if (!C5.ok) { flatten(); return; }
   C5.geoD = aN(params.geoD); C5.geoM = aN(params.geoM); C5.geoP = aN(params.geoP);
-  let wm = 0;
   for (let v = 0; v < 16; v++) {
     C5.D[v] = aN(w.dielectric[v]);
     C5.M[v] = aN(w.magnetic[v]);
@@ -4579,9 +4623,7 @@ function refreshWheelerChannel() {
     const k = STRICT_V5.hw(v) - 2;
     C5.kSigned[v] = k;
     C5.magneticWeight[v] = (k * k) / (1 + k * k);
-    const a = Math.abs(C5.W[v]); if (a > wm) wm = a;
   }
-  C5.wMax = wm;
   const chans = [C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned];
   const mev = FAITHFUL.multiRealEvaluator(chans);
   const out = new Float64Array(5);
@@ -4599,6 +4641,7 @@ function refreshWheelerChannel() {
   }
   C5.node = node;
   if (!(node < 1e-9)) { flatten(); return; }
+  let wm = 0;
   for (let i = 0; i < FIELD_TH; i++) {
     const theta = (i / FIELD_TH) * TAU;
     for (let j = 0; j < FIELD_PH; j++) {
@@ -4606,8 +4649,14 @@ function refreshWheelerChannel() {
       mev(theta, (j / FIELD_PH) * TAU, out);
       C5.gD[idx] = out[0]; C5.gM[idx] = out[1]; C5.gW[idx] = out[2];
       C5.gK[idx] = out[3]; C5.gKs[idx] = out[4];
+      if (Math.abs(C5.gW[idx]) > wm) wm = Math.abs(C5.gW[idx]);
     }
   }
+  /* omega is normalised by its largest value on the grid the surface samples.
+     The vertex maximum is not enough: the interpolant overshoots it between
+     nodes (by 3.8% on the initial state). bilinear_abs_le then keeps every
+     sampled wN in [-1, 1], which the surface bounds assume. */
+  C5.wMax = wm;
 }
 function projectStrictV5ToLegacyRender() {
   /* The legacy trace projection is retained below because the DEC / LGT /
@@ -4968,7 +5017,7 @@ function hsl2rgb(h, s, l) {
 const TORUS_R = 180, TORUS_r = 70;
 const TH_SEG = 200, PH_SEG = 100;
 const torusPoints = new Array(TH_SEG * PH_SEG);
-for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0, wOmega:0 };
+for (let i = 0; i < torusPoints.length; i++) torusPoints[i] = { sx:0, sy:0, depth:0, field:0, theta:0, phi:0, wOmega:0, kS:NaN };
 let camRX = 0.82, camRY = 0, isDrag = false, lastMX = 0, lastMY = 0;
 let autoRotate = true;
 let TORUS_GEOM = null;
@@ -5047,7 +5096,7 @@ function projectTorus() {
       const sb = gidx * 12;
       const fv = fieldGrid[GEO.sIdx[sb]] * GEO.sW[sb] + fieldGrid[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
                + fieldGrid[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + fieldGrid[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
-      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wOmegaN = 0;
+      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wOmegaN = 0, kS = NaN;
       const fvNorm = fv;
       /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
       if (ampOn) {
@@ -5081,6 +5130,7 @@ function projectTorus() {
         const sKs = C5.gKs[GEO.sIdx[sb]] * GEO.sW[sb] + C5.gKs[GEO.sIdx[sb+1]] * GEO.sW[sb+1]
                   + C5.gKs[GEO.sIdx[sb+2]] * GEO.sW[sb+2] + C5.gKs[GEO.sIdx[sb+3]] * GEO.sW[sb+3];
         const aw = AMP.wheeler;
+        kS = sKs;
         /* dielectric compression -- positivity of the denominator is
            wheeler_compression_positive, so this cannot invert or blow up. */
         const compression = 1 / (1 + C5.geoD * sD);
@@ -5106,7 +5156,7 @@ function projectTorus() {
         R += WHEELER.fieldDistortion(theta, phi, wN) * aw * 3;
         const ethP = WHEELER.etherPressure(theta, phi, wN);
         r += ethP * 7.0; R += ethP * 3.0;
-        const csI = WHEELER.counterspaceIntensity(theta, phi, fvNorm, wN);
+        const csI = WHEELER.counterspaceIntensity(theta, phi, fvNorm, wN, sKs);
         r -= abs(csI) * 4.0; yOff += csI * 6.0;
         yOff += GEO.gv[gidx] * abs(sW) * wInv * 4 * vGain;
         phiShift += GEO.gv[gidx] * 0.025;
@@ -5132,11 +5182,30 @@ function projectTorus() {
       torusPoints[idx].theta = theta;
       torusPoints[idx].phi = phi;
       torusPoints[idx].wOmega = wOmegaN;
+      torusPoints[idx].kS = kS;
     }
   }
 }
+/* The inertial plane is the kernel's layer k = hw - 2 = 0, where magnetism
+   vanishes. The surface carries k, and its zero set passes through exactly the
+   six weight-two vertex nodes (inertial_locus_nodes). This is that zero set
+   across one quad, as screen segments. */
+function inertialLayerSegments(q, out) {
+  const P = [q.p0, q.p1, q.p2, q.p3], xs = [];
+  for (let e = 0; e < 4; e++) {
+    const a = P[e], b = P[(e + 1) % 4];
+    if ((a.kS < 0) !== (b.kS < 0)) {
+      const t = a.kS / (a.kS - b.kS);
+      xs.push(a.sx + t * (b.sx - a.sx), a.sy + t * (b.sy - a.sy));
+    }
+  }
+  for (let s = 0; s + 3 < xs.length; s += 4) out.push([xs[s], xs[s + 1], xs[s + 2], xs[s + 3], q.depth]);
+}
 function renderTorus() {
- 
+  /* Colour obeys the same certificates as the geometry: a term whose channel
+     is not certified right now does not colour the surface either. */
+  const CERT = VISUAL_CERTIFICATE._last || VISUAL_CERTIFICATE.status();
+  const ampOn = CERT.amplitude, wOn = CERT.wheeler && CERT.golden;
   const quads = [];
   for (let i = 0; i < TH_SEG; i++) {
     const ni = (i + 1) % TH_SEG;
@@ -5173,30 +5242,36 @@ function renderTorus() {
         p0, p1, p2, p3, depth: avgDepth, field: avgField,
         diffuse, specular, fresnel,
         theta: avgTheta, phi: avgPhi, wOmega: avgOmega,
+        kS: (p0.kS + p1.kS + p2.kS + p3.kS) * 0.25,
         nxN, nyN, nzN
       });
     }
   }
   quads.sort((a, b) => a.depth - b.depth);
+  const layerSegs = [];
   for (const q of quads) {
-    const rawField = q.field;
+    const rawField = ampOn ? q.field : 0;
     const fv = 2 * Math.atan(rawField * 2) / PI;
     const afv = abs(fv);
-    const etherP = WHEELER.etherPressure(q.theta, q.phi, q.wOmega);
-    const csIntensity = WHEELER.counterspaceIntensity(q.theta, q.phi, rawField, q.wOmega);
-    const centBal = WHEELER.centBal(q.theta, q.phi);
-    const etherNorm = etherP;
-    const csNorm = csIntensity;
-    const inertiaAngle = abs(q.phi - WHEELER.inertiaPlane);
-    const inertiaProx = exp(-inertiaAngle * inertiaAngle * 3); 
-    const fluxP = WHEELER.fluxPhase(q.theta, q.phi, q.wOmega);
-    const contourDist1 = abs(fluxP - 0.5);
-    const contourFlux = contourDist1 < 0.04 ? (1 - contourDist1 / 0.04) * 0.45 : 0;
     const isoField = abs(fv * 8 % 1.0 - 0.5);
     const contourField = isoField < 0.05 ? (1 - isoField / 0.05) * 0.30 : 0;
-    const contourEther = (abs(sin(etherNorm * PI * 4)) < 0.12 ? (1 - abs(sin(etherNorm * PI * 4)) / 0.12) * 0.25 : 0);
-    const contourCS = (abs(csNorm) < 0.08 ? (1 - abs(csNorm) / 0.08) * 0.35 : 0);
-    const contourInertia = inertiaProx > 0.75 ? (inertiaProx - 0.75) / 0.25 * 0.25 : 0;
+    let etherNorm = 0, csNorm = 0, centBal = 0, inertiaProx = 0;
+    let contourFlux = 0, contourEther = 0, contourCS = 0, contourInertia = 0;
+    if (wOn) {
+      etherNorm = WHEELER.etherPressure(q.theta, q.phi, q.wOmega);
+      csNorm = WHEELER.counterspaceIntensity(q.theta, q.phi, rawField, q.wOmega, q.kS);
+      centBal = WHEELER.centBal(q.theta, q.phi);
+      /* latitude from the inertial plane: a quarter turn per Hamming layer */
+      const lat = q.kS * PI / 4;
+      inertiaProx = exp(-lat * lat * 3);
+      const fluxP = WHEELER.fluxPhase(q.theta, q.phi, q.wOmega, q.kS);
+      const contourDist1 = abs(fluxP - 0.5);
+      contourFlux = contourDist1 < 0.04 ? (1 - contourDist1 / 0.04) * 0.45 : 0;
+      contourEther = (abs(sin(etherNorm * PI * 4)) < 0.12 ? (1 - abs(sin(etherNorm * PI * 4)) / 0.12) * 0.25 : 0);
+      contourCS = (abs(csNorm) < 0.08 ? (1 - abs(csNorm) / 0.08) * 0.35 : 0);
+      contourInertia = inertiaProx > 0.75 ? (inertiaProx - 0.75) / 0.25 * 0.25 : 0;
+      inertialLayerSegments(q, layerSegs);
+    }
     let r, g, b;
     if (fv > 0) {
       const warmEther = etherNorm * 0.6;
@@ -5291,24 +5366,20 @@ function renderTorus() {
     ctx.closePath();
     ctx.fill();
   }
-  {
-    const jEq = Math.round(PH_SEG / 4);            
-    const ring = [];
-    for (let i = 0; i <= TH_SEG; i++) ring.push(torusPoints[(i % TH_SEG) * PH_SEG + jEq]);
+  if (layerSegs.length) {
     let zmin = 1e9, zmax = -1e9;
-    for (const p of ring) { if (p.depth < zmin) zmin = p.depth; if (p.depth > zmax) zmax = p.depth; }
-    const zspan = zmax - zmin;
+    for (const g of layerSegs) { if (g[4] < zmin) zmin = g[4]; if (g[4] > zmax) zmax = g[4]; }
+    const zspan = (zmax - zmin) || 1;
     const passes = [[14, 0.16, '255,205,90'], [6, 0.38, '255,218,115'], [2, 0.95, '255,242,175']];
     for (const [lw, a0, col] of passes) {
       ctx.lineWidth = lw;
-      for (let s = 1; s < ring.length; s++) {
-        const p0 = ring[s - 1], p1 = ring[s];
-        const near = 1 - ((p1.depth - zmin) / zspan);   
+      for (const g of layerSegs) {
+        const near = 1 - ((g[4] - zmin) / zspan);
         const a = a0 * (0.35 + near * 0.65);
         ctx.strokeStyle = `rgba(${col},${sf(a, 2)})`;
         ctx.beginPath();
-        ctx.moveTo(p0.sx, p0.sy);
-        ctx.lineTo(p1.sx, p1.sy);
+        ctx.moveTo(g[0], g[1]);
+        ctx.lineTo(g[2], g[3]);
         ctx.stroke();
       }
     }
@@ -5537,6 +5608,7 @@ function frame(t) {
   cycle++;
   updateField();
   projectTorus();
+  syncFaithfulBadge();
   ctx.fillStyle = 'rgb(3,3,8)';
   ctx.fillRect(0, 0, cw, ch);
   renderTorus();

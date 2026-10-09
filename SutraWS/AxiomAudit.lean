@@ -11,6 +11,7 @@ import SutraWS.WheelerGeometry
 import SutraWS.RenderCertificates
 import SutraWS.DECComplex
 import SutraWS.Interpolation
+import SutraWS.WheelerSurface
 import Lean
 
 /-!
