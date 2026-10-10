@@ -11,6 +11,8 @@ import SutraWS.WheelerGeometry
 import SutraWS.RenderCertificates
 import SutraWS.DECComplex
 import SutraWS.Interpolation
+import SutraWS.WheelerSurface
+import SutraWS.Projection
 
 /-!
 # SutraWS — root module
