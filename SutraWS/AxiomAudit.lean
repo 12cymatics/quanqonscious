@@ -13,6 +13,11 @@ import SutraWS.DECComplex
 import SutraWS.Interpolation
 import SutraWS.WheelerSurface
 import SutraWS.Projection
+import SutraWS.StoredPrecision
+import SutraWS.ErrorBudget
+import SutraWS.NonExpansive
+import SutraWS.R4Controller
+import SutraWS.DisplayMap
 import Lean
 
 /-!
