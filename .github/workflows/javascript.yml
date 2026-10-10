@@ -94,8 +94,8 @@
 # the shader computes what the CPU computes; it is not, and is not reported as, a
 # measurement of GPU speed.
 #
-# dns/check-page.mjs is the only suite here that needs a browser, and it gets
-# one without an install: the ubuntu-latest image ships Google Chrome, and node
+# dns/check-page.mjs and tools/check_exact_phi_page.mjs are the suites here that
+# need a browser, and they share the page job. They get one without an install: the ubuntu-latest image ships Google Chrome, and node
 # 22 has a global WebSocket, so it drives it over the DevTools protocol with no
 # dependency. It exists because every suite above runs the physics while nothing
 # ran the PAGE. Wiring the Floquet panel in, a call to config() before the
@@ -104,6 +104,14 @@
 # -- a blank page, with every node suite green. The same run found that the page
 # declared no character set, so every micron and s^-1 on it decoded as
 # windows-1252. Neither is visible from node.
+#
+# tools/check_exact_phi_page.mjs exists for the same reason. The exact sutra
+# kernel of vedic_v18.51.1_exact_phi.html passed every node check while, in a
+# browser, none of the page's presets did anything: the worker never finished a
+# step, a synchronous audit froze the page for 26 seconds, and the Wheeler
+# surface terms displaced the surface by about 2000 units on a torus of radius
+# 180 while the browser silently clamped every colour channel above 255. Its node half,
+# tools/check_exact_phi_kernel.mjs, runs in the kernels job.
 #
 # dns/check-cell3d.mjs shares the DNS job rather than taking one of its own. That
 # line once read "seven seconds does not earn a runner", and this comment has now
@@ -166,6 +174,8 @@ jobs:
       run: node faraday/check-bundle.mjs
     - name: Exact coupled benchmark (residuals zero over Q)
       run: node fsi/check-coupled-affine.mjs
+    - name: Exact sutra kernel of vedic_v18.51.1_exact_phi.html (sliced out of the page)
+      run: node tools/check_exact_phi_kernel.mjs
 
   lean-citations:
     name: lean citations
@@ -229,5 +239,9 @@ jobs:
         node-version: "22"
     - name: Page loads, draws, and its Floquet panel agrees with the solver
       run: node dns/check-page.mjs
+      env:
+        CHROME: /usr/bin/google-chrome
+    - name: vedic_v18.51.1_exact_phi.html runs every control, draws, and clamps nothing
+      run: node tools/check_exact_phi_page.mjs
       env:
         CHROME: /usr/bin/google-chrome
