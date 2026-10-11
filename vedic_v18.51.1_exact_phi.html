@@ -2681,13 +2681,16 @@ const FROM_FIELD = new Float64Array(FIELD_TH * FIELD_PH), FROM_PHASE = new Float
 const DISPLAY = { started: false, t0: 0, dur: 0, tau: 1, ok: false, frames: 0, bad: 0,
                   transitions: 0, landed: 0, landedThis: true };
 /* The next state is taken only once the last has landed, so the move to it
-   starts from the last state exactly. It takes 85% of a step interval, less
-   when states are waiting, so the picture keeps pace with the kernel. */
+   starts from the last state exactly. A move must land, and be drawn, before
+   the next state is due: it takes the step interval less two frame times (the
+   frame it lands on and the frame that takes the next), measured, and never
+   less than a quarter of the interval; shorter when states are waiting, so
+   the picture keeps pace with the kernel on any display. */
 function displayBegin() {
   if (!DISPLAY.started) return;
   FROM_FIELD.set(DISPLAY_FIELD); FROM_PHASE.set(DISPLAY_PHASE);
   DISPLAY.t0 = performance.now();
-  DISPLAY.dur = 0.85 * STEP_INTERVAL_MS / (1 + KERNEL_VIEW.queue.length);
+  DISPLAY.dur = Math.max(0.25 * STEP_INTERVAL_MS, STEP_INTERVAL_MS - 2 * FRAME_DT_AVG) / (1 + KERNEL_VIEW.queue.length);
   DISPLAY.transitions++; DISPLAY.landedThis = false;
 }
 function displayAdvance(now) {
@@ -2987,8 +2990,15 @@ function postState(ms) {
          params: config ? config.params : null, r4,
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
          composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [] });
+  inFlight++;
 }
 let intervalMs = 1000 / 3;
+/* Back-pressure: the worker is never more than MAX_AHEAD states ahead of the
+   picture. The page acknowledges each state as it starts drawing it; on a
+   display too slow for the pace set, the kernel waits rather than letting the
+   queue -- and the delay between a step and its picture -- grow without end. */
+const MAX_AHEAD = 3;
+let inFlight = 0, waiting = false;
 function schedule(delay = 0) {
   if (scheduled || !running || halted || !config) return;
   scheduled = true;
@@ -2997,6 +3007,7 @@ function schedule(delay = 0) {
 function tick() {
   scheduled = false;
   if (!running || halted || !config) return;
+  if (inFlight >= MAX_AHEAD) { waiting = true; return; }
   const t0 = performance.now();
   try {
     engine = KERNEL.step(engine, config.params, config.active, config.composition);
@@ -3014,6 +3025,7 @@ self.onmessage = e => {
   const m = e.data;
   if (m.type === 'config') { config = m; halted = null; schedule(); }
   else if (m.type === 'pace') { intervalMs = m.intervalMs; }
+  else if (m.type === 'ack') { inFlight = Math.max(0, inFlight - 1); if (waiting) { waiting = false; schedule(); } }
   else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; postState(0); schedule(); }
   else if (m.type === 'run') { running = !!m.running; schedule(); }
   else if (m.type === 'export') {
@@ -3226,6 +3238,7 @@ function onKernelMessage(ev) {
 }
 /* The state the page now draws, everything on screen refers to it. */
 function applyKernelState(m) {
+    if (KERNEL_WORKER) KERNEL_WORKER.postMessage({ type: 'ack' });
     KERNEL_VIEW.state = m.state;
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
@@ -3382,7 +3395,7 @@ const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0, po
 let ZOOM = 1;
 const FRAME_FILL = 0.9, FRAME_SHARE = 0.98;
 const FRAME_LAG_MS = 1200;
-let FRAME_BODY = 0, FRAME_DT_MS = 16.667;
+let FRAME_BODY = 0, FRAME_DT_MS = 16.667, FRAME_DT_AVG = 16.667;
 /* Drawing gains: how strongly each certified channel moves the surface. They
    scale channels that hold their certificates; none can originate structure,
    and none touches the state. Every channel is drawn at the scale its formula
@@ -4207,6 +4220,7 @@ function frame(t) {
   const frameScale = frameDt / VIEW_MOTION.nominalFrameDtMs;
   lastFrameT = t;
   FRAME_DT_MS = frameDt;
+  FRAME_DT_AVG += (frameDt - FRAME_DT_AVG) * 0.1;
   const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
   if (autoRotate) {
     camRY += VIEW_MOTION.rotationYPerNominalFrame * frameScale;
