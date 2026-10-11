@@ -18,6 +18,9 @@
                         budget of the same composition without storage
      R4                 every step ends at or below T + d(T+1) + d^2, with
                         T = max(E_in, ceiling) -- dormant, braked and gated
+     step export        an exported step replays bit for bit from its file
+                        alone, in every R4 branch, and its stage flags judge
+                        the exact stage, not the stored one
      modes              the mode identities decide and pass, and the
                         comparison built from the audit's states equals a
                         fresh one
@@ -179,6 +182,64 @@ section('R4 singularity controller');
   }
   ok(seen.dormant > 0 && seen.braked > 0 && seen.gated > 0,
      `the controller was seen dormant (${seen.dormant}), braking only (${seen.braked}) and gating (${seen.gated})`);
+}
+
+section('step export');
+{
+  /* An exported step is a claim about what the kernel did, so it is held to
+     two things. The file alone replays the step bit for bit, through every R4
+     branch, from the second step on (the first would let a replay that
+     silently used the seed state or the initial dielectric pass). And each
+     stage's pass flag judges the exact stage on its stored input, with what
+     storage did reported beside it: Maya moved by storage alone must still
+     read as energy-preserving, because it is. */
+  const X = A4;
+  const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
+  const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
+  const fromA4 = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
+  const fromC4 = o => C4.mk(fromA4(o.re), fromA4(o.im));
+  const fromExact = o => ('re' in o) ? fromC4(o) : ('a' in o && 'b' in o) ? fromA4(o) : fromQ(o);
+  const tested = { dormant: 0, braked: 0, gated: 0 };
+  let storageSeen = false;
+  for (const [ids, mode, n] of [['3,9,11,25,29', 'SERIES', 4], ['1,5,9,22', 'PARALLEL', 4], ['5,7,12,22,29', 'PARALLEL', 4]]) {
+    const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
+    let eng = K.initEngine();
+    for (let s = 0; s < n; s++) {
+      eng = K.step(eng, params, active, mode);
+      if (s === 0) continue;
+      const branch = eng.last.r4.gate ? 'gated' : eng.last.r4.engaged ? 'braked' : 'dormant';
+      if (tested[branch]) continue;
+      tested[branch]++;
+      const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
+        dielectric: eng.dielectric.map(K.serializeQ), ceiling: K.serializeA4(eng.ceiling) }));
+      const L = file.last, where = `${branch} step (${mode} ${ids}, step ${s + 1})`;
+      let same = false, why = '';
+      try {
+        const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, fromExact(v)]));
+        const act = L.activeSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+        const replay = K.step({ psi: L.input.map(fromC4), dielectric: L.dielectricIn.map(fromQ), ceiling: fromA4(file.ceiling),
+                                energyLedger: null, frame: file.frame - 1, last: null }, p, act, L.composition);
+        same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
+               JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
+               JSON.stringify(K.serializeLast(replay.last)) === JSON.stringify(L);
+        if (!same) why = 'the replay differs from the file';
+      } catch (e) { why = e.message; }
+      ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
+      ok(L.stagesRun === (eng.last.r4.engaged ? 'sigma-braked' : 'uncontrolled'), `${where}: names the run its stage states come from (${L.stagesRun})`);
+      const m = L.mayaTransform, z = L.zpeLedger;
+      ok(L.mstvqPairs.every(x => x.unitarityPass && x.storedMatchesExact), `${where}: every MSTVQ pair rotation preserves its energy exactly`);
+      ok(L.tgcrSpectral.every(x => x.spectralPass && x.unitNormPass), `${where}: TGCR multiplies every Walsh mode by its unit phase exactly`);
+      ok(m.energyPass && m.storedMatchesExact, `${where}: Maya preserves the energy exactly and the stored stage is its storage`);
+      ok(z.sourceIsZero && A4.isZero(fromA4(z.netEnergyInjection)) && z.storedMatchesExact,
+         `${where}: ZPE with a zero source injects exactly zero energy`);
+      if (!A4.isZero(fromA4(m.storageEnergyChange))) storageSeen = true;
+    }
+  }
+  ok(tested.dormant && tested.braked && tested.gated, `exports were replayed from all three R4 branches (dormant ${tested.dormant}, braked ${tested.braked}, gated ${tested.gated})`);
+  ok(storageSeen, 'storage moved the Maya energy in at least one export, and the flag still judged the exact stage');
 }
 
 section('series / parallel / concurrent');

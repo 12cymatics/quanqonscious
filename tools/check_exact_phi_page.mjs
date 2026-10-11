@@ -24,6 +24,8 @@
                         browser has anything to clamp, and the curve keeps the
                         order of the values it is given
      certified          the badge reaches FAITHFUL on a preset
+     exports            the step file and the operator audit name the build
+                        that wrote them; the step carries what replays it
 
    It drives Chromium over the DevTools protocol: no dependency, no install.
    It REFUSES rather than skipping when there is no browser.
@@ -232,6 +234,31 @@ try {
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
   ok(faithful, 'the badge reaches FAITHFUL on the wormhole preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
+
+  section('exports');
+  /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
+     page would offer. Both files name the build that wrote them; the step
+     carries what replays it, and the audit says which arguments each matrix
+     belongs to. Checked inside the page: the audit is about 12 MB. */
+  await evaluate(`saveJSON = async (payload, filename) => { (window.__saved = window.__saved || []).push({ filename, json: JSON.stringify(payload, jsonReplacer) }); return 1; }`);
+  const fp = await evaluate(`SOURCE_FINGERPRINT`);
+  await evaluate(`document.getElementById('btn-export').click()`);
+  const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
+  const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
+    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'r4R' in L.params && 'appliedH' in L.params,
+             dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
+             stagesRun: L.stagesRun, mayaPass: L.mayaTransform.energyPass }; })()`) : {};
+  ok(gotStep && st.schema === 'vedic-step-export/2' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'sigma-braked'),
+     'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
+  ok(st.mayaPass === true, 'the step export judges Maya on the exact stage, and it preserves the energy');
+  await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
+  const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_operator_audit_'))`, 300000);
+  const au = gotAudit ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_operator_audit_')).json), ops = j.audit.operators;
+    return { fp: j.manifest && j.manifest.sourceFingerprint, n: ops.length,
+             args: ops.every(o => Array.isArray(o.arguments) && o.arguments.length >= 1 && o.arguments[0].n === '1' && o.arguments[0].d === '1') }; })()`) : {};
+  ok(gotAudit && au.fp === fp && au.n === 29, `the operator audit names this build (fingerprint ${au.fp}, ${au.n} operators)`);
+  ok(au.args === true, 'every audited matrix records its arguments, strength 1 first');
 
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));

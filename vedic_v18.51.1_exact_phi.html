@@ -267,7 +267,10 @@ const VERSION = Object.freeze({
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
-  stepExport:    'vedic-step-export/1',
+  /* /2: stage pass flags judge the exact stage, storage is reported beside
+     them; params, stepError, dielectricIn and stagesRun added, so a step
+     replays from its file */
+  stepExport:    'vedic-step-export/2',
   operatorAudit: 'vedic-operator-audit/2'
 });
 /* Camera motion only: how far the view turns per nominal 60 Hz frame. */
@@ -1376,7 +1379,12 @@ const KERNEL_FACTORY = () => {
     const eFinal=energy(psi);
     return {
       psi,dielectric,ceiling,energyLedger:eFinal,frame:engine.frame+1,
-      last:{input,afterS:st.afterS,afterM:st.afterM,afterT:st.afterT,afterY:st.afterY,afterZ:st.afterZ,controlled:out,
+      /* stagesRun: the stage states below are the sigma-braked run's when R4
+         engaged, the uncontrolled run's otherwise. dielectricIn is the stored
+         field the step started from; with input, params, active and mode it
+         is everything the step reads. */
+      last:{input,dielectricIn:engine.dielectric,stagesRun:r4.engaged?'sigma-braked':'uncontrolled',
+            afterS:st.afterS,afterM:st.afterM,afterT:st.afterT,afterY:st.afterY,afterZ:st.afterZ,controlled:out,
             e0:eIn,eS:energy(st.afterS),eFinal,dielectricDrift:dDrift,wheeler:W,r4,active,mode,params,
             storeBits:STORE_BITS,stepError:{delta:ledger.delta,stores:ledger.stores},complexity:complexity(psi)}
     };
@@ -1477,7 +1485,9 @@ const KERNEL_FACTORY = () => {
     const rank=rankC4(matrix),determinant=determinantC4(matrix);
     const constant=Array.from({length:16},()=>C4.ONE),constantImage=applySutra(id,constant,arg);
     const energyOnSeedBefore=energy(initState()),energyOnSeedAfter=energy(applySutra(id,initState(),arg));
-    return {id,domain:'C4^16',codomain:'C4^16',linear:true,matrix16x16:matrix,rank,nullity:16-rank,determinant,unitaryPass,complementCommutes,constantImage,energyOnSeedBefore,energyOnSeedAfter,energyPreservedOnSeed:A4.eq(energyOnSeedBefore,energyOnSeedAfter)};
+    /* arguments: the full vector audited, strength first. The matrix is the
+       operator at these arguments only, not at a run's settings. */
+    return {id,arguments:sutraArgs(id,arg),domain:'C4^16',codomain:'C4^16',linear:true,matrix16x16:matrix,rank,nullity:16-rank,determinant,unitaryPass,complementCommutes,constantImage,energyOnSeedBefore,energyOnSeedAfter,energyPreservedOnSeed:A4.eq(energyOnSeedBefore,energyOnSeedAfter)};
   };
   /* Two sutras that compile to the same 16x16 matrix are the same operator, and
      the renderer will draw them identically -- correctly, because they act
@@ -1628,26 +1638,40 @@ const KERNEL_FACTORY = () => {
       return {id,outputEnergy:energy(out),energyPreserved:A4.eq(energy(entry.state),energy(out)),mean:mean(out),complexity:complexity(out)};
     })
   }));
+  /* A stage's export reports two things that must not be confused: what the
+     formula did, judged on the exact stage applied to its stored input, and
+     what storage then did to the result. `after` is the stored stage; the
+     exact stage is recomputed from `before`. Judging a unitary stage by its
+     stored output reads it as non-unitary by the rounding (about 2^-130 of
+     the energy), which is a statement about storage, not about the formula. */
+  const storageReport = (exact,stored) => ({
+    storedMatchesExact:stored.every((z,v)=>C4.eq(z,storeC4(exact[v]))),
+    energyAfterStored:energy(stored),
+    storageEnergyChange:A4.sub(energy(stored),energy(exact))
+  });
   const mstvqPairData = (before,after,w,p) => {
     const dtQ=rationalA4(p.dt,'dt'),mQ=rationalA4(p.mstvq,'mstvq'),meanQ=Q.mul(w.magneticTraceTotal,Q.SIXTEENTH),base=A4.fromQ(Q.mul(Q.mul(dtQ,mQ),meanQ));
-    return Array.from({length:8},(_,v)=>{const u=comp(v),parameter=(v&1)?A4.neg(base):base;return {pair:[v,u],parameter,energyBefore:A4.add(C4.norm2(before[v]),C4.norm2(before[u])),energyAfter:A4.add(C4.norm2(after[v]),C4.norm2(after[u])),unitarityPass:A4.eq(A4.add(C4.norm2(before[v]),C4.norm2(before[u])),A4.add(C4.norm2(after[v]),C4.norm2(after[u])))};});
+    const exact=applyMSTVQ(before,w,p),pairE=(s,v,u)=>A4.add(C4.norm2(s[v]),C4.norm2(s[u]));
+    return Array.from({length:8},(_,v)=>{const u=comp(v),parameter=(v&1)?A4.neg(base):base;return {pair:[v,u],parameter,energyBefore:pairE(before,v,u),energyAfterExact:pairE(exact,v,u),unitarityPass:A4.eq(pairE(before,v,u),pairE(exact,v,u)),energyAfterStored:pairE(after,v,u),storedMatchesExact:C4.eq(after[v],storeC4(exact[v]))&&C4.eq(after[u],storeC4(exact[u]))};});
   };
   const tgcrSpectralData = (before,after,w,p) => {
-    const b=wht(before),a=wht(after),dtQ=rationalA4(p.dt,'dt'),tQ=rationalA4(p.tgcr,'tgcr'),meanMagQ=Q.mul(w.magneticTraceTotal,Q.SIXTEENTH);
-    return Array.from({length:16},(_,xi)=>{const shellQ=Q.mk(BigInt(hw(xi)));let scalar=Q.mul(Q.mul(Q.mul(dtQ,tQ),meanMagQ),shellQ);if(hw(xi)&1)scalar=Q.neg(scalar);const tau=A4.fromQ(scalar),phase=C4.phase(tau);return {mode:xi.toString(2).padStart(4,'0'),hammingWeight:hw(xi),amplitudeBefore:b[xi],tau,phase,amplitudeAfter:a[xi],unitNormPass:A4.eq(C4.norm2(phase),A4.ONE)};});
+    const b=wht(before),x=wht(applyTGCR(before,w,p)),a=wht(after),dtQ=rationalA4(p.dt,'dt'),tQ=rationalA4(p.tgcr,'tgcr'),meanMagQ=Q.mul(w.magneticTraceTotal,Q.SIXTEENTH);
+    return Array.from({length:16},(_,xi)=>{const shellQ=Q.mk(BigInt(hw(xi)));let scalar=Q.mul(Q.mul(Q.mul(dtQ,tQ),meanMagQ),shellQ);if(hw(xi)&1)scalar=Q.neg(scalar);const tau=A4.fromQ(scalar),phase=C4.phase(tau);return {mode:xi.toString(2).padStart(4,'0'),hammingWeight:hw(xi),amplitudeBefore:b[xi],tau,phase,amplitudeAfterExact:x[xi],spectralPass:C4.eq(x[xi],C4.mul(phase,b[xi])),amplitudeAfterStored:a[xi],unitNormPass:A4.eq(C4.norm2(phase),A4.ONE)};});
   };
   const mayaData = (before,after,w,p) => {
     const permutation=Array.from({length:16},(_,v)=>mayaPermutation(v)),inverse=Array(16);permutation.forEach((u,v)=>inverse[u]=v);
     const dtQ=rationalA4(p.dt,'dt'),mQ=rationalA4(p.maya,'maya'),meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
     const phaseParameters=Array.from({length:16},(_,v)=>{let scalar=Q.mul(Q.mul(dtQ,mQ),meanDQ);if(hw(v)&1)scalar=Q.neg(scalar);return A4.fromQ(scalar);});
-    return {matrixA_GF2:'affine18 fixed invertible map',offsetB_GF2:'embedded in affine18',permutation,inversePermutation:inverse,phaseParameters,bijectivePass:new Set(permutation).size===16,energyBefore:energy(before),energyAfter:energy(after),energyPass:A4.eq(energy(before),energy(after))};
+    const exact=applyMaya(before,w,p),energyBefore=energy(before),energyAfterExact=energy(exact);
+    return {matrixA_GF2:'affine18 fixed invertible map',offsetB_GF2:'embedded in affine18',permutation,inversePermutation:inverse,phaseParameters,bijectivePass:new Set(permutation).size===16,energyBefore,energyAfterExact,energyPass:A4.eq(energyBefore,energyAfterExact),...storageReport(exact,after)};
   };
   const zpeLedger = (before,after,w,p) => {
     const dtQ=rationalA4(p.dt,'dt'),zQ=rationalA4(p.zpe,'zpe'),meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
     const phaseOnly=phaseState(before,v=>A4.fromQ(Q.mul(Q.mul(Q.mul(dtQ,zQ),meanDQ),Q.mk(BigInt(hw(v)-2)))));
     const sourceField=Array.from({length:16},(_,v)=>hw(v)===2?C4.fromA4(A4.mul(p.dt,p.zpeSource)):C4.ZERO);
-    const energyBefore=energy(before),energyAfterPhase=energy(phaseOnly),sourceSelfEnergy=energy(sourceField),energyAfter=energy(after),sourceCrossTerm=A4.sub(A4.sub(energyAfter,energyAfterPhase),sourceSelfEnergy);
-    return {sourceIsZero:A4.isZero(p.zpeSource),phaseParameters:Array.from({length:16},(_,v)=>A4.fromQ(Q.mul(Q.mul(Q.mul(dtQ,zQ),meanDQ),Q.mk(BigInt(hw(v)-2))))),sourceField,energyBefore,energyAfterPhase,sourceCrossTerm,sourceSelfEnergy,netEnergyInjection:A4.sub(energyAfter,energyBefore)};
+    const exact=applyZPE(before,w,p);
+    const energyBefore=energy(before),energyAfterPhase=energy(phaseOnly),sourceSelfEnergy=energy(sourceField),energyAfterExact=energy(exact),sourceCrossTerm=A4.sub(A4.sub(energyAfterExact,energyAfterPhase),sourceSelfEnergy);
+    return {sourceIsZero:A4.isZero(p.zpeSource),phaseParameters:Array.from({length:16},(_,v)=>A4.fromQ(Q.mul(Q.mul(Q.mul(dtQ,zQ),meanDQ),Q.mk(BigInt(hw(v)-2))))),sourceField,energyBefore,energyAfterPhase,energyAfterExact,sourceCrossTerm,sourceSelfEnergy,netEnergyInjection:A4.sub(energyAfterExact,energyBefore),...storageReport(exact,after)};
   };
   const runSelfTests = () => {
     const tests=[];
@@ -1746,8 +1770,15 @@ const KERNEL_FACTORY = () => {
   };
  const serializeLast = last => {
     const params=last.params;
+    /* params, dielectricIn, composition, activeSutras and input are
+       everything step() reads: the file alone replays the step bit for bit.
+       stepError is the step's exact dyadic storage budget. */
     return {
       input: serializeState(last.input),
+      dielectricIn: last.dielectricIn.map(serializeQ),
+      params: serializeExact(params),
+      stepError: {delta:serializeQ(last.stepError.delta),stores:last.stepError.stores},
+      stagesRun: last.stagesRun,
       afterSutraCore: serializeState(last.afterS),
       afterMSTVQ: serializeState(last.afterM),
       afterTGCR: serializeState(last.afterT),
@@ -4201,7 +4232,7 @@ const PROOF_RUN = {
   started: 0,
   onResult(m) {
     if (m.purpose === 'download') {
-      saveJSON({ schema: SCHEMAS.operatorAudit, build: BUILD_VERSION, sutras: m.ids, audit: m.result },
+      saveJSON({ schema: SCHEMAS.operatorAudit, build: BUILD_VERSION, manifest: releaseManifest(), sutras: m.ids, audit: m.result },
                `vedic_${VERSION.slug}_operator_audit_${m.ids.length}.json`)
         .then(n => LOG.add(`operator audit exported (${Math.round(n / 1024)} KB)`, 'sys'),
               err => saveRefused('operator audit', err));
