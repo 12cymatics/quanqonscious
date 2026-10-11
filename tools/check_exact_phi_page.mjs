@@ -238,6 +238,74 @@ try {
   ok(faithful, 'the badge reaches FAITHFUL on the wormhole preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
+  section('dynamo and Maya');
+  /* The magnetism memory and Maya are shown as the kernel computed them, the
+     three new controls reach the kernel, each preset sets them as it says,
+     and the drawn field is the true field times Maya's M = observed / true. */
+  const gcdN = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; };
+  const qstr = (n, d) => { const g = gcdN(n, d) || 1; return d / g === 1 ? String(n / g) : `${n / g}/${d / g}`; };
+  const setSlider = (id, v) => evaluate(`(() => { const el = document.getElementById(${JSON.stringify(id)}); el.value = ${JSON.stringify(String(v))}; el.dispatchEvent(new Event('input')); })()`);
+  const kp = () => evaluate(`(() => { const p = KERNEL_VIEW.params; return p ? { omega: Q.toString(p.vortex), drive: Q.toString(p.zpeSource.a), chi: Q.toString(p.polarisation) } : null; })()`);
+  const appliedNow = () => waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && !KERNEL_VIEW.halted`, 30000);
+  await setSlider('amp-omega', 15); await appliedNow();
+  await setSlider('amp-drive', 6); await appliedNow();
+  await setSlider('amp-polar', 25); await appliedNow();
+  const k1 = await kp();
+  ok(k1 && k1.omega === '3/2' && k1.drive === '3/2' && k1.chi === '5/2', 'vortex omega, drive and polarisation reach the kernel as exact rationals', JSON.stringify(k1));
+  await evaluate(`document.getElementById('btn-vortex').click()`); await appliedNow();
+  const k2 = await kp();
+  ok(k2 && k2.omega === '-3/2', 'VORTEX reverses omega', JSON.stringify(k2));
+  const pdefs = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.omega, p.drive, p.chi])`);
+  let presetParams = true, which = '';
+  for (const [id, om, dr, ch] of pdefs) {
+    await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`); await appliedNow();
+    const k = await kp();
+    if (!k || k.omega !== qstr(om, 10) || k.drive !== qstr(dr, 4) || k.chi !== qstr(ch, 10)) { presetParams = false; which = id + ' ' + JSON.stringify(k); }
+  }
+  ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
+  /* the dynamo preset, long enough for the timeline to hold a history */
+  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await waitFor(`KERNEL_VIEW.hist.frame.length >= 12`, 60000);
+  const dy = await evaluate(`(() => {
+    const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
+    updateDynamoHud();
+    return { maya: s.maya, dynamo: s.dynamo, n, contiguous: H.frame.every((f, i) => i === 0 || f === H.frame[i - 1] + 1),
+             flux: document.getElementById('dyn-flux').textContent, wantFlux: fmtE(FAITHFUL.qNum(d.fluxEnergy)),
+             phaseRow: document.getElementById('maya-phase').textContent, wantPhase: FAITHFUL.qNum(d.phase).toFixed(5),
+             line: document.getElementById('dynLine').textContent, last: H.frame[n - 1], closed: d.closed };
+  })()`);
+  ok(dy.maya && dy.dynamo && dy.closed, 'the Maya and dynamo channels hold on a running preset, its flux closing on every cube', JSON.stringify(dy));
+  ok(dy.contiguous && dy.n >= 12, `the timeline holds every step of the run, in order (${dy.n})`);
+  ok(dy.flux === dy.wantFlux && dy.phaseRow.startsWith(dy.wantPhase), 'the flux and Maya rows show the kernel\'s values', `${dy.flux} vs ${dy.wantFlux}; ${dy.phaseRow} vs ${dy.wantPhase}`);
+  ok(dy.line.startsWith('step ' + dy.last + ' '), 'the line under the picture describes the step being drawn', dy.line);
+  const strip = await evaluate(`(() => {
+    const cw = W / devicePixelRatio, chh = H / devicePixelRatio;
+    ctx.clearRect(0, 0, cw, chh); drawDynamoTimeline(ctx, cw, chh);
+    const y = Math.floor((chh - 118) * devicePixelRatio), h = Math.floor(100 * devicePixelRatio);
+    const img = ctx.getImageData(0, y, Math.floor(cw * devicePixelRatio), h).data;
+    let lit = 0; for (let k = 3; k < img.length; k += 4) if (img[k] > 0) lit++;
+    return lit / (img.length / 4);
+  })()`);
+  ok(strip > 0.05, `the dynamo timeline is drawn (${(100 * strip).toFixed(1)}% of its strip painted)`);
+  /* observed = M x true: project with M as it is and with M = 1; every
+     surface point's amplitude differs by exactly the factor M */
+  const obs = await evaluate(`(() => {
+    const M = MAYA_VIEW.M;
+    projectTorus(); const a = Float64Array.from(PT.field);
+    MAYA_VIEW.M = 1; projectTorus(); const b = Float64Array.from(PT.field); MAYA_VIEW.M = M; projectTorus();
+    let worst = 0, n = 0;
+    for (let k = 0; k < a.length; k++) if (b[k] !== 0) { worst = Math.max(worst, Math.abs(a[k] / b[k] - M)); n++; }
+    return { M, worst, n };
+  })()`);
+  ok(obs.n > 1000 && obs.worst < 1e-12 && obs.M > 1, `the field is drawn at Maya's M = ${obs.M.toFixed(6)} times its true value at every point (${obs.n} points, worst ${obs.worst.toExponential(1)})`);
+  const before2 = await evaluate(`KERNEL_VIEW.state.frame`);
+  await evaluate(`document.getElementById('btn-reset').click()`);
+  /* the history after a reset is that run's alone: as many entries as steps
+     since the seed, the first at step 1 */
+  ok(await waitFor(`KERNEL_VIEW.state.frame < ${before2} && KERNEL_VIEW.hist.frame.length > 0 && KERNEL_VIEW.hist.frame[0] <= 1 &&
+                    KERNEL_VIEW.hist.frame.length <= KERNEL_VIEW.state.frame + 1`, 20000),
+     'RESET starts the timeline again with the run', await evaluate(`KERNEL_VIEW.hist.frame.length + ' entries at step ' + KERNEL_VIEW.state.frame`));
+
   section('motion');
   /* The kernel ran flat out (20 to 50 steps a second) while the page drew the
      newest state every 100 ms and replaced the surface outright, and the
@@ -322,11 +390,16 @@ try {
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'r4R' in L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             stagesRun: L.stagesRun, mayaPass: L.mayaTransform.energyPass }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/2' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+             stagesRun: L.stagesRun, magPass: L.magnetismStage.energyPass,
+             medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
+                     Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
+                     Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
+             maya: !!L.maya && 'factor' in L.maya && 'layer' in L.maya }; })()`) : {};
+  ok(gotStep && st.schema === 'vedic-step-export/3' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'sigma-braked'),
      'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
-  ok(st.mayaPass === true, 'the step export judges Maya on the exact stage, and it preserves the energy');
+  ok(st.magPass === true, 'the step export judges the magnetism stage on the exact stage, and it keeps the energy');
+  ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
   await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
   const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_operator_audit_'))`, 300000);
   const au = gotAudit ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_operator_audit_')).json), ops = j.audit.operators;

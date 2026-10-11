@@ -24,8 +24,17 @@
      modes              the mode identities decide and pass, and the
                         comparison built from the audit's states equals a
                         fresh one
-     presets            each preset that names the vertices its field settles
-                        on does settle there, run through the kernel
+     Maya               pi, e, phi and sin inside the kernel's certified
+                        enclosures (independent 600-bit arithmetic), the
+                        layer inside its bracket, the flow within its error
+                        bound of the exact Euler map
+     magnetism          induction, Faraday potential, potential and
+                        reconnections recomputed here; no flux from Faraday,
+                        flux closed on every cube, the memory bounded
+     parameters         vortex, drive and polarisation each change the run
+     presets            each preset does, over 600 steps, what its
+                        description says: flux growth, R4, where the field
+                        goes, still moving after step 300, all distinct
 
    Run: node tools/check_exact_phi_kernel.mjs
 */
@@ -151,16 +160,23 @@ section('storage budget');
   }
 }
 
-const R4_CASES = [['3,9,11,25,29', 'SERIES', 4, Q.TWO], ['1,5,9,22', 'PARALLEL', 4, Q.TWO],
-                  ['5,7,12,22,29', 'PARALLEL', 4, Q.TWO], ['2,23', 'PARALLEL', 4, Q.mk(1n, 10n)]];
+/* [sutras at 1/2, composition, steps, r, drive]. The drive is energy the
+   sigma-brake cannot slow, because it scales strengths: with S7 + S12 and a
+   drive of 4 every step from the third on reaches the gate (measured). With
+   no drive the gate is reached only on the first step from the seed now that
+   Maya no longer shuffles the state, and an export is not tested there. */
+const R4_CASES = [['3,9,11,25,29', 'SERIES', 4, Q.TWO, 0n], ['1,5,9,22', 'PARALLEL', 4, Q.TWO, 0n],
+                  ['5,7,12,22,29', 'PARALLEL', 4, Q.TWO, 0n], ['2,23', 'PARALLEL', 4, Q.mk(1n, 10n), 0n],
+                  ['7,12', 'SERIES', 4, Q.TWO, 4n]];
 
 section('R4 singularity controller');
 {
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
     gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
-    tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
-    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ZERO };
   const seen = { dormant: 0, braked: 0, gated: 0 };
   /* The gate acts only when the sigma-braked step still exceeds T. With every
      strength scaling its sutra, r = 2 makes sigma small enough that braking
@@ -169,9 +185,9 @@ section('R4 singularity controller');
      close to 1, and the parallel S2 + S23 at 1/2 reaches the gate on steps 1
      and 3. Before the strength fix the gate was reached at r = 2 only
      because S7, S12 and S2's swap ignored the brake. */
-  for (const [ids, mode, n, r] of R4_CASES) {
+  for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    const p = { ...params, r4R: r };
+    const p = { ...params, r4R: r, zpeSource: X.fromQ(Q.mk(drive)) };
     let eng = K.initEngine(), held = true, why = '';
     for (let s = 0; s < n; s++) {
       const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
@@ -189,7 +205,7 @@ section('R4 singularity controller');
       } else if (L.r4.engaged) seen.braked++;
       else seen.dormant++;
     }
-    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}: ${n} steps end at or below T + d(T+1) + d^2`, why);
+    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}, drive ${drive}: ${n} steps end at or below T + d(T+1) + d^2`, why);
   }
   ok(seen.dormant > 0 && seen.braked > 0 && seen.gated > 0,
      `the controller was seen dormant (${seen.dormant}), braking only (${seen.braked}) and gating (${seen.gated})`);
@@ -202,55 +218,70 @@ section('step export');
      branch, from the second step on (the first would let a replay that
      silently used the seed state or the initial dielectric pass). And each
      stage's pass flag judges the exact stage on its stored input, with what
-     storage did reported beside it: Maya moved by storage alone must still
-     read as energy-preserving, because it is. */
+     storage did reported beside it: the magnetism stage moved by storage
+     alone must still read as energy-preserving, because it is. The medium the
+     step read -- Maya's phase, the vector potential and the Faraday
+     potential -- is in the file too. */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
     gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
-    tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
-    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ZERO };
   const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
   const fromA4 = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
   const fromC4 = o => C4.mk(fromA4(o.re), fromA4(o.im));
   const fromExact = o => ('re' in o) ? fromC4(o) : ('a' in o && 'b' in o) ? fromA4(o) : fromQ(o);
   const tested = { dormant: 0, braked: 0, gated: 0 };
   let storageSeen = false;
-  for (const [ids, mode, n, r] of R4_CASES) {
+  for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     let eng = K.initEngine();
     for (let s = 0; s < n; s++) {
-      eng = K.step(eng, { ...params, r4R: r }, active, mode);
+      eng = K.step(eng, { ...params, r4R: r, zpeSource: X.fromQ(Q.mk(drive)) }, active, mode);
       if (s === 0) continue;
       const branch = eng.last.r4.gate ? 'gated' : eng.last.r4.engaged ? 'braked' : 'dormant';
       if (tested[branch]) continue;
       tested[branch]++;
       const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
-        dielectric: eng.dielectric.map(K.serializeQ), ceiling: K.serializeA4(eng.ceiling) }));
+        dielectric: eng.dielectric.map(K.serializeQ), ceiling: K.serializeA4(eng.ceiling),
+        mayaPhase: K.serializeQ(eng.mayaPhase), mayaErr: K.serializeQ(eng.mayaErr),
+        magA: eng.magA.map(K.serializeQ), magChi: eng.magChi.map(K.serializeQ) }));
       const L = file.last, where = `${branch} step (${mode} ${ids}, step ${s + 1})`;
       let same = false, why = '';
       try {
         const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, fromExact(v)]));
         const act = L.activeSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
         const replay = K.step({ psi: L.input.map(fromC4), dielectric: L.dielectricIn.map(fromQ), ceiling: fromA4(file.ceiling),
-                                energyLedger: null, frame: file.frame - 1, last: null }, p, act, L.composition);
+                                energyLedger: null, frame: file.frame - 1, last: null,
+                                mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
+                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition);
         same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
                JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
+               JSON.stringify(K.serializeQ(replay.mayaPhase)) === JSON.stringify(file.mayaPhase) &&
+               JSON.stringify(replay.magA.map(K.serializeQ)) === JSON.stringify(file.magA) &&
+               JSON.stringify(replay.magChi.map(K.serializeQ)) === JSON.stringify(file.magChi) &&
                JSON.stringify(K.serializeLast(replay.last)) === JSON.stringify(L);
         if (!same) why = 'the replay differs from the file';
       } catch (e) { why = e.message; }
       ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
       ok(L.stagesRun === (eng.last.r4.engaged ? 'sigma-braked' : 'uncontrolled'), `${where}: names the run its stage states come from (${L.stagesRun})`);
-      const m = L.mayaTransform, z = L.zpeLedger;
+      const m = L.magnetismStage, y = L.maya, z = L.zpeLedger;
       ok(L.mstvqPairs.every(x => x.unitarityPass && x.storedMatchesExact), `${where}: every MSTVQ pair rotation preserves its energy exactly`);
       ok(L.tgcrSpectral.every(x => x.spectralPass && x.unitNormPass), `${where}: TGCR multiplies every Walsh mode by its unit phase exactly`);
-      ok(m.energyPass && m.storedMatchesExact, `${where}: Maya preserves the energy exactly and the stored stage is its storage`);
-      ok(z.sourceIsZero && A4.isZero(fromA4(z.netEnergyInjection)) && z.storedMatchesExact,
-         `${where}: ZPE with a zero source injects exactly zero energy`);
+      ok(m.energyPass && m.storedMatchesExact, `${where}: the magnetism memory's phase turns keep the energy exactly and the stored stage is their storage`);
+      ok(L.magnetismIn.closed, `${where}: the flux it starts from closes on every cube`);
+      const fM = fromQ(y.factor);
+      ok(Q.cmp(fM, Q.mk(19n, 20n)) > 0 && Q.cmp(fM, Q.mk(21n, 20n)) < 0 && Q.cmp(fromQ(y.phaseNext), fromQ(y.phase)) > 0,
+         `${where}: Maya's factor is in (19/20, 21/20) and its phase rises`);
+      ok(z.storedMatchesExact && A4.eq(fromA4(z.energyAfterPhase), fromA4(z.energyBefore)) &&
+         (!z.sourceIsZero || A4.isZero(fromA4(z.netEnergyInjection))),
+         `${where}: ZPE's phase keeps the energy exactly${z.sourceIsZero ? ' and its zero source injects none' : '; the drive is the only injection'}`);
       if (!A4.isZero(fromA4(m.storageEnergyChange))) storageSeen = true;
     }
   }
   ok(tested.dormant && tested.braked && tested.gated, `exports were replayed from all three R4 branches (dormant ${tested.dormant}, braked ${tested.braked}, gated ${tested.gated})`);
-  ok(storageSeen, 'storage moved the Maya energy in at least one export, and the flag still judged the exact stage');
+  ok(storageSeen, 'storage moved the magnetism stage energy in at least one export, and the flag still judged the exact stage');
 }
 
 section('every strength is the strength');
@@ -376,99 +407,286 @@ section('series / parallel / concurrent');
   }
 }
 
-section('presets settle where their descriptions say');
+section('Maya coherence flow');
 {
-  /* Each of these presets says, in the page, which vertices its field settles
-     on. Run each through the kernel for 40 steps and read the smallest set of
-     vertices holding 80% of the energy, averaged over the last eight steps. The
-     definitions must also be the ones the page carries. */
-  const X = A4;
-  const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
-    tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
-    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
-  const EXPECT = {
-    'pre-bindu':       { line: "'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 5: 25, 12: 50, 28: 75 }, support: ['0000'], dormant: true },
-    'pre-star':        { line: "'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },",
-                         comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, support: ['0000', '0001', '0100', '1000'], dormant: true },
-    'pre-crown':       { line: "'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, vortex: 0 },",
-                         comp: 'SERIES', set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] },
-                         support: ['0110', '1000', '1011', '1101', '1110', '1111'], peaks: ['1011', '1110'], dormant: true },
-    'pre-square':      { line: "'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 8: 50, 16: 50, 21: 100, 29: 25 }, support: ['0000', '0001', '1000', '1001'], dormant: true },
-    'pre-equilibrium': { line: "'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },",
-                         comp: 'SERIES', set: { 7: 50, 19: 75, 22: 100 }, uniform: true },
-    'pre-cube':        { line: "'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },",
-                         comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] },
-                         support: ['1000', '1001', '1010', '1011', '1100', '1101', '1110', '1111'] },
-    'pre-octad':       { line: "'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, vortex: 0 },",
-                         comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] },
-                         support: ['0100', '0101', '0110', '0111', '1010', '1100', '1101', '1110'] }
-  };
-  /* |z|^2 of each vertex as a double, read from the exact state after scaling
-     by its largest power of two, so a decaying state stays readable */
-  const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
-  const qNum = q => { let n = q.n; if (n === 0n) return 0; const neg = n < 0n; if (neg) n = -n;
-    const sh = BigInt(Math.max(0, 64 + bl(q.d) - bl(n))); const v = Number((n << sh) / q.d) / 2 ** Number(sh); return neg ? -v : v; };
-  const probs = psi => {
-    let e = null;
-    for (const z of psi) for (const a of [z.re, z.im]) for (const q of [a.a, a.b, a.c, a.d]) if (q.n !== 0n) { const x = bl(q.n) - bl(q.d); if (e === null || x > e) e = x; }
-    const sc = q => q.n === 0n ? q : (e >= 0 ? Q.mk(q.n, q.d << BigInt(e)) : Q.mk(q.n << BigInt(-e), q.d));
-    const num = a => qNum(sc(a.a)) + qNum(sc(a.b)) * Math.SQRT2 + qNum(sc(a.c)) * Math.sqrt(5) + qNum(sc(a.d)) * Math.sqrt(10);
-    return psi.map(z => { const r = num(z.re), i = num(z.im); return r * r + i * i; });
-  };
-  for (const [id, x] of Object.entries(EXPECT)) {
-    ok(HTML.includes(x.line), `${id}: the page defines it as tested here`);
-    const active = Object.entries(x.set).map(([k, v]) => {
-      const sid = Number(k), st = Q.mk(BigInt(v), 100n);
-      return x.args && x.args[k] ? { id: sid, strength: st, args: [st, ...x.args[k].map(t => Q.parse(t))] } : { id: sid, strength: st };
-    });
-    let eng = K.initEngine(), engaged = 0;
-    const acc = new Array(16).fill(0);
-    for (let s = 0; s < 40; s++) {
-      eng = K.step(eng, params, active, x.comp);
-      if (eng.last.r4.engaged) engaged++;
-      if (s >= 32) { const p = probs(eng.psi), tot = p.reduce((a, b) => a + b, 0); p.forEach((v, i) => { acc[i] += v / tot / 8; }); }
-    }
-    if (x.dormant) ok(engaged === 0, `${id}: R4 stays dormant, as its description says`, `engaged on ${engaged} of 40 steps`);
-    if (x.uniform) {
-      /* measured: a fixed pattern 2.5e-5 from even, the same from step 20 to
-         step 160; the page claims one part in ten thousand */
-      const dev = Math.max(...acc.map(v => Math.abs(v * 16 - 1)));
-      ok(dev < 1e-4, `${id}: every vertex holds the same share of the energy to one part in ten thousand`, `largest deviation ${dev}`);
-      continue;
-    }
-    const order = [...acc.keys()].sort((a, b) => acc[b] - acc[a]);
-    if (x.peaks) {
-      const top = order.slice(0, x.peaks.length).map(v => v.toString(2).padStart(4, '0')).sort();
-      ok(top.join(',') === x.peaks.join(','), `${id}: highest at ${x.peaks.join(' and ')}`, `highest at ${top.join(' and ')}`);
-    }
-    const S = []; let c = 0;
-    for (const v of order) { S.push(v); c += acc[v]; if (c >= 0.8) break; }
-    const got = S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0'));
-    ok(got.join(',') === x.support.join(','), `${id}: settles on ${x.support.join(' ')}`, `got ${got.join(' ')}`);
+  /* Everything Maya rests on is checked against values this gate computes in
+     its own fixed-point arithmetic, not the kernel's: pi by Machin, e by its
+     series, sqrt5 by Newton, sin by its series to far more terms, and the
+     layer by bisection on that independent beta. */
+  const P = 600n, ONE = 1n << P;
+  const fx = q => (q.n << P) / q.d;                       /* rational -> fixed point, truncated */
+  const inQ = (x, br) => (fx(br[0]) <= x + 1n) && (x <= fx(br[1]) + 1n);
+  const atanInv = x => { let s = 0n, t = ONE / x, n = 1n, sg = 1n; const x2 = x * x; while (t > 0n) { s += sg * t / n; t /= x2; n += 2n; sg = -sg; } return s; };
+  const PI = 16n * atanInv(5n) - 4n * atanInv(239n);
+  let E = 0n; { let t = ONE; for (let k = 1n; t > 0n; k++) { E += t; t /= k; } }
+  const isqrt = n => { let x = 1n << BigInt((n.toString(2).length + 1) >> 1); for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; } };
+  const SQ5 = isqrt(5n << (2n * P));
+  const PHI = (ONE + SQ5) / 2n;
+  ok(inQ(PI, K.PI_BRACKET), 'pi (Machin, 600 bits) lies in the kernel\'s certified bracket');
+  ok(inQ(E, K.E_BRACKET), 'e (series, 600 bits) lies in the kernel\'s bracket');
+  ok(inQ(PHI, K.PHI_BRACKET), 'phi (Newton sqrt5, 600 bits) lies in the kernel\'s bracket');
+  const mulF = (a, b) => (a * b) >> P, divF = (a, b) => (a << P) / b;
+  const sinF = x => { let s = 0n, t = x; for (let k = 1n; t !== 0n; k += 2n) { s += t; t = -mulF(mulF(t, x), x) / ((k + 1n) * (k + 2n)); } return s; };
+  const cosF = x => { let s = 0n, t = ONE; for (let k = 0n; t !== 0n; k += 2n) { s += t; t = -mulF(mulF(t, x), x) / ((k + 1n) * (k + 2n)); } return s; };
+  /* at 6 terms the tail is what keeps the enclosure honest; at 40 it is
+     below the grid step, so both are checked */
+  let trigOk = true;
+  for (const q of ['1/16', '-3/7', '22/29', '1', '-1', '5/9']) for (const n of [6, 40]) {
+    const qq = Q.parse(q), t = K.trigEnclose(qq, n);
+    if (!inQ(sinF(fx(qq)), t.sin) || !inQ(cosF(fx(qq)), t.cos)) trigOk = false;
   }
-  /* pre-symmetry's description: uncontrolled, the set grows about twofold per
-     step, 1.2x to 3.6x, and R4 holds it at the ceiling. Measured from the seed
-     over steps 9 to 40 (the first eight are the approach): median 2.0, least
-     1.2, most 3.6. The description used to say 35x, which nothing measured. */
-  {
-    const line = "'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, vortex: 0 },";
-    ok(HTML.includes(line), 'pre-symmetry: the page defines it as tested here');
-    const act = [5, 7, 12, 22, 29].map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    const aF = x => qNum(x.a) + qNum(x.b) * Math.SQRT2 + qNum(x.c) * Math.sqrt(5) + qNum(x.d) * Math.sqrt(10);
-    let eng = K.initEngine(), engaged = 0; const r = [];
-    for (let s = 0; s < 40; s++) {
-      eng = K.step(eng, params, act, 'PARALLEL');
-      if (s >= 8) { r.push(aF(eng.last.r4.eUncontrolled) / aF(eng.last.r4.target)); if (eng.last.r4.engaged) engaged++; }
-    }
-    const sorted = r.slice().sort((a, b) => a - b), med = sorted[sorted.length >> 1];
-    ok(sorted[0] >= 1.15 && sorted[sorted.length - 1] <= 3.65 && med >= 1.5 && med <= 2.5,
-       `pre-symmetry: uncontrolled it grows about twofold per step, 1.2x to 3.6x (median ${med.toFixed(2)}, ${sorted[0].toFixed(2)} to ${sorted[sorted.length - 1].toFixed(2)})`);
-    ok(engaged === r.length, `pre-symmetry: R4 holds it on every one of those steps (${engaged}/${r.length})`);
+  ok(trigOk, 'sin and cos enclosures, at 6 terms and at 40, contain the independent 600-bit series at six rationals in [-1, 1]');
+  ok((() => { try { K.trigEnclose(Q.mk(9n, 8n), 40); return false; } catch (e) { return e instanceof RangeError; } })(),
+     'outside [-1, 1], where the enclosure is proved, it refuses');
+  const A = divF(PHI, E), B = divF(E, PI);
+  const betaF = x => mulF(A, sinF(x)) - mulF(B, mulF(mulF(x, x), x));
+  let lo = fx(Q.mk(3n, 4n)), hi = ONE;
+  for (let i = 0; i < 200; i++) { const m = (lo + hi) >> 1n; if (betaF(m) > 0n) lo = m; else hi = m; }
+  ok(fx(K.MAYA_LAYER[0]) < lo && hi < fx(K.MAYA_LAYER[1]), `the layer phi* = ${(Number(lo >> (P - 50n)) / 2 ** 50).toFixed(12)} (independent bisection) lies inside the kernel's bracket`);
+  /* the flow: 400 kernel steps of the phase against the same Euler map in
+     600-bit fixed point; the distance must be within the kernel's own bound */
+  let x = K.MAYA_PHASE0, err = Q.ZERO, xr = fx(K.MAYA_PHASE0), H = fx(K.MAYA_H), within = true, rising = true, below = true, Mok = true;
+  let worst = 0;
+  for (let s = 0; s < 400; s++) {
+    const st = K.mayaStep(x, err);
+    for (let j = 0; j < 5; j++) xr += mulF(H, betaF(xr));
+    const d = fx(st.next) - xr, bound = fx(st.err) + 2n;
+    if ((d < 0n ? -d : d) > bound) within = false;
+    worst = Math.max(worst, Number(d < 0n ? -d : d) / Number(ONE));
+    if (Q.cmp(st.next, st.phaseIn) <= 0) rising = false;
+    if (Q.cmp(st.next, K.MAYA_LAYER[1]) >= 0) below = false;
+    if (!(Q.cmp(st.M, Q.mk(19n, 20n)) > 0 && Q.cmp(st.M, Q.mk(21n, 20n)) < 0 && Q.cmp(st.M, Q.ONE) > 0)) Mok = false;
+    x = st.next; err = st.err;
   }
+  ok(within, `over 400 steps the stored phase stays within its certified error of the exact Euler map (largest gap ${worst.toExponential(1)}, bound ${K.Q.toString(err).length > 40 ? 'below 2^-100' : K.Q.toString(err)})`);
+  ok(Q.cmp(err, Q.mk(1n, 1n << 100n)) < 0, 'and that error bound is below 2^-100');
+  ok(rising && below, 'the phase rises every step and never reaches the top of the layer bracket (toward_layer)');
+  ok(Mok, 'the factor stays in (1, 21/20) while the phase rises (factor_mem, factor_gt_one_iff)');
+  /* measured: 0.5131 after 400 steps, 0.7417 after 600; the S-curve of
+     dphi = beta/100 a step from 1/16 */
+  ok(Q.cmp(x, Q.HALF) > 0 && Q.cmp(x, Q.mk(13n, 25n)) < 0, `after 400 steps the phase has flowed from 1/16 to ${(Number(fx(x) >> (P - 40n)) / 2 ** 40).toFixed(4)}, between 1/2 and 0.52`);
 }
+
+section('magnetism memory');
+{
+  /* Induction recomputed here from the definitions, independently of the
+     kernel's indexing, and compared with what the kernel stored. */
+  const X = A4;
+  const base = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ONE,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.mk(3n, 2n) };
+  const act = [3, 9, 11, 25, 29].map(id => ({ id, strength: Q.mk(1n, 2n) }));
+  const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
+  const edges = []; for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) edges.push([v, a, v | (1 << a)]);
+  const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
+  const within = (got, want) => Q.cmp(Q.abs(Q.sub(got, want)), Q.mul(Q.abs(want), Q.mk(1n, 1n << 127n))) <= 0;
+  let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true;
+  for (let s = 0; s < 60; s++) {
+    const prev = eng;
+    eng = K.step(eng, base, act, 'SERIES');
+    const L = eng.last, rIn = L.rhoIn, rOut = L.rhoOut;
+    const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
+    edges.forEach(([v, a, h], e) => {
+      const share = Q.div(Q.mul(Q.mk(8n), Q.add(rOut[v], rOut[h])), Etot);
+      const k = a >= 2 ? Q.mul(Q.mk(6n, 100n), base.vortex) : Q.mul(Q.mul(Q.mk(3n, 100n), Q.HALF), base.vortex);
+      const want = Q.add(Q.mul(Q.mk(499n, 500n), prev.magA[e]), Q.mul(Q.mul(k, cyc[(hwf(v) + a) % 4]), share));
+      if (!within(eng.magA[e], want)) inductOk = false;
+      if (Q.cmp(Q.abs(eng.magA[e]), maxA) > 0) maxA = Q.abs(eng.magA[e]);
+    });
+    for (let v = 0; v < 16; v++) if (!within(eng.magChi[v], Q.add(Q.mul(Q.mk(499n, 500n), prev.magChi[v]), Q.sub(rOut[v], rIn[v])))) chiOk = false;
+    const md = K.magData(eng.magA, eng.magChi);
+    if (!md.closed) closedOk = false;
+    if (!K.curlA(K.fullA(Array(32).fill(Q.ZERO), eng.magChi)).every(Q.isZero)) gradOk = false;
+    /* the potential each vertex sees: in along edges it heads, out along those it tails, minus (1/10) of chi's Laplacian */
+    for (let v = 0; v < 16; v++) {
+      let want = Q.ZERO;
+      for (let a = 0; a < 4; a++) { const e = edges.findIndex(([t, ax]) => ax === a && t === (v & ~(1 << a))); want = (v & (1 << a)) ? Q.add(want, eng.magA[e]) : Q.sub(want, eng.magA[e]);
+        want = Q.sub(want, Q.mul(Q.mk(1n, 10n), Q.sub(eng.magChi[v], eng.magChi[v ^ (1 << a)]))); }
+      if (!Q.eq(md.potential[v], want)) potOk = false;
+    }
+    const fl = q => Number(q.n) / Number(q.d), bv = K.bvecAt(md.flux);
+    edges.forEach(([v, , h], e) => {
+      const a = bv[v].map(fl), b = bv[h].map(fl), na = Math.hypot(...a), nb = Math.hypot(...b);
+      if (na * na <= 1e-6 || nb * nb <= 1e-6) { if (md.reconnections.includes(e)) recOk = false; return; }
+      const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
+      if (Math.abs(c + 0.7) > 1e-9 && (c < -0.7) !== md.reconnections.includes(e)) recOk = false;
+    });
+  }
+  ok(inductOk, 'A = (499/500) A + omega (6/100 | eta 3/100) m_e share_e on all 32 edges for 60 steps, recomputed here');
+  ok(chiOk, 'the Faraday potential chi = (499/500) chi + (rho_out - rho_in), recomputed here');
+  ok(gradOk, 'the Faraday part of A carries no flux on any of those steps (faraday_flux_free)');
+  ok(closedOk, 'the flux out of every one of the 8 cubes is zero on every step (flux_closed)');
+  ok(potOk, 'the potential each vertex turns by is div A - (1/10) L chi, recomputed here');
+  ok(recOk, 'reconnections are exactly the edges where cos(B_i, B_j) < -0.7 (reconnect_iff)');
+  /* retention_bound: sources are at most |omega| (6/100)(13/10) 16 per edge
+     (shares are at most 16), so |A| never exceeds 500 times that */
+  const smax = Q.mul(Q.mul(Q.abs(base.vortex), Q.mk(6n * 13n * 16n, 1000n)), Q.mk(1001n, 1000n));
+  ok(Q.cmp(maxA, Q.mul(smax, Q.mk(500n))) <= 0, `|A| stays within max |A_0|, s/(1 - r) (retention_bound): ${(Number(maxA.n) / Number(maxA.d)).toFixed(3)} <= ${(Number(smax.n) / Number(smax.d) * 500).toFixed(1)}`);
+  ok(Q.isZero(K.helicityOf(Array(32).fill(Q.ZERO), eng.magChi)), 'a potential that is all Faraday has no helicity (helicity_of_gradient)');
+  const sh = K.edgeShares(eng.last.rhoOut);
+  ok(Q.eq(sh.reduce((t, x) => Q.add(t, x), Q.ZERO), Q.mk(32n)), 'the edge shares sum to 32 (edge_share_total)');
+  ok(eng.last && JSON.parse(JSON.stringify(K.serializeLast(eng.last))).magnetismStage.energyPass, 'the magnetism stage keeps the energy exactly (phase_energy)');
+  ok((() => { try { K.edgeShares(Array(16).fill(Q.ZERO)); return false; } catch (e) { return e instanceof RangeError; } })(),
+     'a field with no energy has no shares: refused, not divided by zero');
+}
+
+section('no parameter is ignored');
+{
+  /* the vortex, the drive and the polarisation each change the run: run 8
+     steps with the parameter at a value and at another, from the same seed */
+  const X = A4;
+  const base = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ZERO };
+  const act = [3, 7, 9].map(id => ({ id, strength: Q.mk(1n, 2n) }));
+  const run = p => { let e = K.initEngine(); for (let s = 0; s < 8; s++) e = K.step(e, p, act, 'SERIES'); return e; };
+  const ref = run(base), key = e => JSON.stringify(K.serializeState(e.psi)) + JSON.stringify(e.dielectric.map(K.serializeQ));
+  ok(key(run({ ...base, vortex: Q.ONE })) !== key(ref), 'vortex omega changes the field');
+  ok(key(run({ ...base, zpeSource: X.ONE })) !== key(ref), 'the drive changes the field');
+  ok(key(run({ ...base, polarisation: Q.ZERO })) !== key(ref), 'the polarisation changes the dielectric and the field');
+  const d0 = K.evolveDielectric(K.initDielectric(), act, base, Array(16).fill(Q.ZERO));
+  const rho = K.initState().map(z => K.C4.norm2(z)).map(x => Q.add(x.a, Q.ZERO));
+  const d1 = K.evolveDielectric(K.initDielectric(), act, { ...base, polarisation: Q.mk(3n, 2n) }, rho);
+  ok(d1.every((q, v) => Q.eq(Q.sub(q, d0[v]), Q.mul(Q.mul(Q.mk(3n, 2n), rho[v]), Q.mk(1n, 8n)))),
+     'polarisation adds exactly chi rho / 8 to each vertex of the dielectric');
+  ok((() => { try { K.evolveDielectric(K.initDielectric(), act, base); return false; } catch (e) { return e instanceof RangeError; } })(),
+     'the dielectric update without the field energies is refused');
+}
+
+section('R4 gate weights');
+{
+  /* stored a_v, b_v = 1 - a_v: in [0, 1] and summing to 1 (store_mem_unit) */
+  const field = K.initDielectric();
+  let good = true;
+  for (const s4 of [Q.mk(1n, 1000n), Q.ONE, Q.mk(77n, 3n)]) for (const w of K.gateABField(field, s4))
+    if (!(Q.sign(w.a) >= 0 && Q.sign(w.b) >= 0 && Q.eq(Q.add(w.a, w.b), Q.ONE) && Q.cmp(w.a, Q.ONE) <= 0)) good = false;
+  ok(good, 'the gate weights lie in [0, 1] and sum to 1 at three scales');
+}
+
+section('presets develop over the run as their descriptions say');
+{
+  /* Each preset's description, its button title, states what it does over
+     600 steps from the seed: how much the flux grows from step 60 to step
+     600, whether R4 stays dormant or when it takes over, the vertices holding
+     80% of the energy over steps 20-40 and over steps 540-600, and -- for all
+     but SQUARE, which R4 holds -- that the field is still moving after step
+     300 (L1 at least 0.05 between the mean shares of steps 300-360 and
+     540-600). Every one is run here for 600 steps, four at a time. */
+  const EXPECT = {
+    "pre-cymatic": { line: "  'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 25, 17: 25, 27: 50, 28: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 28, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0100", "0111", "1000", "1011", "1100", "1110", "1111"], "late": ["0001", "0010", "0011", "0101", "1010", "1100", "1110"], "moving": true} },
+    "pre-bindu": { line: "  'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 216, "r4": 0, "r4first": -1, "early": ["0000", "0010", "0011", "0100", "0101", "0110", "1001", "1010", "1011", "1100"], "late": ["0011", "1010", "1011", "1110", "1111"], "moving": true} },
+    "pre-star": { line: "  'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, omega: 10, drive: 1, chi: 10 },",
+      claim: {"growth": 20, "r4": 0, "r4first": -1, "early": ["0000", "1111"], "late": ["1001", "1010", "1100"], "moving": true} },
+    "pre-crown": { line: "  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 160, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0100", "0101", "0110", "0111", "1000", "1001", "1110", "1111"], "late": ["0001", "0010", "0011", "0100", "0110", "1011", "1100", "1110"], "moving": true} },
+    "pre-square": { line: "  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 41, "r4": 368, "r4first": 208, "early": ["0000", "1111"], "late": ["0000", "1111"], "moving": false} },
+    "pre-equilibrium": { line: "  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 265, "r4": 0, "r4first": -1, "early": ["0000", "0011", "0100", "0101", "0110", "1001", "1010", "1100", "1111"], "late": ["0001", "0101", "0110", "0111", "1000", "1001", "1010", "1110"], "moving": true} },
+    "pre-cube": { line: "  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 7.1, "r4": 0, "r4first": -1, "early": ["1000", "1001", "1010", "1011", "1100"], "late": ["1100"], "moving": true} },
+    "pre-octad": { line: "  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 23, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "0101", "1000", "1010", "1111"], "late": ["0000", "0011", "0101", "0110", "1001", "1010", "1111"], "moving": true} },
+    "pre-symmetry": { line: "  'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 27, "r4": 597, "r4first": 1, "early": ["0000", "0100", "0101", "0110", "1001", "1010", "1101", "1110", "1111"], "late": ["0001", "0101", "0111", "1000", "1110"], "moving": true} },
+    "pre-wormhole": { line: "  'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 16, "r4": 0, "r4first": -1, "early": ["0001", "0010", "0011", "0100", "0101", "0110", "0111", "1001", "1011", "1101", "1111"], "late": ["0010", "0011", "0100", "0101", "1101"], "moving": true} },
+    "pre-singularity": { line: "  'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 43, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0100", "0101", "0110", "1001", "1010", "1101", "1110", "1111"], "late": ["0000", "0100", "0110", "1000", "1001", "1010", "1101", "1110", "1111"], "moving": true} },
+    "pre-magnetic": { line: "  'pre-magnetic':       { comp: 'SERIES',               set: { 3: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },",
+      claim: {"growth": 28, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "1001", "1010", "1100", "1111"], "late": ["0000", "0101", "0110", "1001", "1010", "1100"], "moving": true} },
+    "pre-cancel": { line: "  'pre-cancel':         { comp: 'SERIES',               set: { 5: 85, 7: 35, 8: 15, 9: 65, 11: 20, 22: 80, 28: 30, 29: 55 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 3.4, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0101", "0110", "0111", "1001", "1010", "1111"], "late": ["0101", "0110", "1010"], "moving": true} },
+    "pre-dynamo": { line: "  'pre-dynamo':         { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 7: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },",
+      claim: {"growth": 83, "r4": 0, "r4first": -1, "early": ["0000", "0010", "0011", "0100", "0101", "0110", "1001", "1010", "1100"], "late": ["0000", "0011", "0101", "1000", "1001", "1010", "1100", "1110"], "moving": true} },
+    "pre-reconnect": { line: "  'pre-reconnect':      { comp: 'SYMMETRIC_CONCURRENT', set: { 5: 50, 9: 50, 22: 50, 26: 50 }, omega: 10, drive: 4, chi: 10 },",
+      claim: {"growth": 42, "r4": 0, "r4first": -1, "early": ["0100", "0101", "0110", "0111", "1000", "1001", "1010", "1011", "1110", "1111"], "late": ["0011", "0101", "0110", "1001", "1010", "1100", "1101"], "moving": true} },
+    "pre-inverse-growth": { line: "  'pre-inverse-growth': { comp: 'SYMMETRIC_CONCURRENT', set: { 1: 30, 5: 70, 14: 30, 29: 70 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 5.5, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0100", "0101", "0111", "1001", "1010", "1110"], "late": ["0011", "0100", "1011"], "moving": true} },
+    "pre-all29": { line: "  'pre-all29':          { comp: 'SYMMETRIC_CONCURRENT', set: Object.fromEntries(SUTRAS.map(s => [s.id, 25])), omega: 10, drive: 4, chi: 10 }",
+      claim: {"growth": 40, "r4": 0, "r4first": -1, "early": ["0001", "0011", "0101", "0110", "1001", "1011", "1100", "1101", "1111"], "late": ["0011", "0100", "0101", "0110", "0111", "1001", "1010", "1100"], "moving": true} }
+  };
+
+  const { Worker } = await import('node:worker_threads');
+  const KSRC = HTML.slice(start, end);
+  const WORKER = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const K = new Function(workerData.src + '\\nreturn KERNEL_FACTORY();')();
+    const { Q, A4 } = K, X = A4;
+    const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
+    const qNum = q => { let n = q.n; if (n === 0n) return 0; const neg = n < 0n; if (neg) n = -n; const sh = BigInt(Math.max(0, 64 + bl(q.d) - bl(n))); const v = Number((n << sh) / q.d) / 2 ** Number(sh); return neg ? -v : v; };
+    const probs = psi => { let e = null;
+      for (const z of psi) for (const a of [z.re, z.im]) for (const q of [a.a, a.b, a.c, a.d]) if (q.n !== 0n) { const x = bl(q.n) - bl(q.d); if (e === null || x > e) e = x; }
+      const sc = q => q.n === 0n ? q : (e >= 0 ? Q.mk(q.n, q.d << BigInt(e)) : Q.mk(q.n << BigInt(-e), q.d));
+      const num = a => qNum(sc(a.a)) + qNum(sc(a.b)) * Math.SQRT2 + qNum(sc(a.c)) * Math.sqrt(5) + qNum(sc(a.d)) * Math.sqrt(10);
+      const p = psi.map(z => { const r = num(z.re), i = num(z.im); return r * r + i * i; }); const t = p.reduce((a, b) => a + b, 0); return p.map(v => v / t); };
+    const out = {};
+    for (const [id, x] of workerData.presets) {
+      const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+        gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+        tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.fromQ(Q.mk(BigInt(x.drive), 4n)),
+        r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+        polarisation: Q.mk(BigInt(x.chi), 10n), vortex: Q.mk(BigInt(x.omega), 10n) };
+      const active = Object.entries(x.set).map(([k, v]) => { const sid = Number(k), st = Q.mk(BigInt(v), 100n);
+        return x.args && x.args[k] ? { id: sid, strength: st, args: [st, ...x.args[k].map(t => Q.parse(t))] } : { id: sid, strength: st }; });
+      let eng = K.initEngine(); const H = []; let r4 = 0, r4first = -1, UB60 = 0, UB600 = 0;
+      for (let s = 0; s < 600; s++) {
+        eng = K.step(eng, params, active, x.comp);
+        H.push(probs(eng.psi));
+        if (eng.last.r4.engaged) { r4++; if (r4first < 0) r4first = s + 1; }
+        if (s + 1 === 60) UB60 = qNum(K.magData(eng.magA, eng.magChi).fluxEnergy);
+        if (s + 1 === 600) UB600 = qNum(K.magData(eng.magA, eng.magChi).fluxEnergy);
+      }
+      const avg = (a, b) => { const r = new Array(16).fill(0); for (let i = a; i < b; i++) H[i].forEach((v, k) => r[k] += v / (b - a)); return r; };
+      const supp = w => { const o = [...w.keys()].sort((a, b) => w[b] - w[a]); const S = []; let c = 0; for (const v of o) { S.push(v); c += w[v]; if (c >= 0.8) break; } return S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0')); };
+      const L1 = (a, b) => a.reduce((s, v, i) => s + Math.abs(v - b[i]), 0);
+      const late = avg(540, 600);
+      out[id] = { r4, r4first, growth: UB600 / UB60, early: supp(avg(20, 40)), late: supp(late), moving: L1(avg(300, 360), late), lateVec: late };
+    }
+    parentPort.postMessage(out);`;
+  const defs = Object.entries(EXPECT).map(([id, x]) => {
+    const m = x.line.match(/comp: '(\w+)',\s*set: (\{[^}]*\}|Object\.fromEntries\(SUTRAS[^)]*\)\)),(?: args: (\{[^}]*\]\s*\}),)? omega: (-?\d+), drive: (\d+), chi: (\d+) \}/);
+    if (!m) throw new Error(`${id}: cannot read its definition`);
+    /* ALL 29 is every sutra at 25%, written with the page's SUTRAS table */
+    const set = m[2].startsWith('Object') ? Object.fromEntries(Array.from({ length: 29 }, (_, i) => [i + 1, 25])) : Function('return ' + m[2])();
+    return [id, { comp: m[1], set, args: m[3] ? Function('return ' + m[3])() : null, omega: +m[4], drive: +m[5], chi: +m[6] }];
+  });
+  const groups = [[], [], [], []];
+  defs.forEach((d, i) => groups[i % 4].push(d));
+  const results = Object.assign({}, ...await Promise.all(groups.map(g => new Promise((res, rej) => {
+    const w = new Worker(WORKER, { eval: true, workerData: { src: KSRC, presets: g } });
+    w.once('message', res); w.once('error', rej);
+  }))));
+  const vsList = l => l.length > 1 ? l.slice(0, -1).join(', ') + ' and ' + l[l.length - 1] : l[0];
+  for (const [id, x] of Object.entries(EXPECT)) {
+    const c = x.claim, r = results[id];
+    ok(HTML.includes(x.line), `${id}: the page defines it as tested here`);
+    const tm = HTML.match(new RegExp(`id="${id}" title="([^"]*)"`)), title = tm ? tm[1].replace(/&amp;/g, '&') : '';
+    const gs = c.growth >= 10 ? `×${c.growth}` : `×${c.growth.toFixed(1)}`;
+    ok(title.includes(gs) && title.includes(vsList(c.late)) && (c.r4 === 0 ? title.includes('R4 stays dormant') : title.includes(`step ${c.r4first}`)),
+       `${id}: its description states these claims`, title);
+    ok(r.growth >= c.growth && r.growth < (c.growth >= 10 ? c.growth + 1 : c.growth + 0.1), `${id}: the flux grows ${gs} from step 60 to step 600 (${r.growth.toFixed(2)})`);
+    ok(r.r4 === c.r4 && r.r4first === c.r4first, c.r4 === 0 ? `${id}: R4 stays dormant for 600 steps` : `${id}: R4 takes over at step ${c.r4first} and engages on ${c.r4} of 600 steps`, `R4 ${r.r4} from ${r.r4first}`);
+    ok(r.early.join(' ') === c.early.join(' ') && r.late.join(' ') === c.late.join(' '),
+       `${id}: the field moves from ${c.early.length} vertices onto ${c.late.join(' ')}`, `${r.early.join(' ')} -> ${r.late.join(' ')}`);
+    if (c.moving) ok(r.moving >= 0.05, `${id}: still moving after step 300 (L1 ${r.moving.toFixed(3)})`);
+  }
+  let closest = Infinity, pair = '';
+  const ids = Object.keys(results);
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const d = results[ids[i]].lateVec.reduce((s, v, k) => s + Math.abs(v - results[ids[j]].lateVec[k]), 0);
+    if (d < closest) { closest = d; pair = ids[i] + ' and ' + ids[j]; }
+  }
+  /* measured 0.437, all29 and reconnect */
+  ok(closest >= 0.4, `every two presets end at least 0.4 apart in L1 (closest ${pair}, ${closest.toFixed(3)})`);
+}
+
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log('  ' + f); process.exit(1); }
