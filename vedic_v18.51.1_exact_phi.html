@@ -201,6 +201,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="amp-row"><span>B field</span><input type="range" min="0" max="50" value="10" id="amp-bfield"><span id="amp-bfield-v">1.0</span></div>
   </div>
   <div class="section">
+    <h5>PACE</h5>
+    <p class="note">Kernel steps per second. Every step is drawn; between two steps the surface moves smoothly from one exact state to the next, and the framing eases rather than jumps.</p>
+    <div class="amp-row"><span>Steps / s</span><input type="range" min="1" max="10" value="3" id="amp-steps"><span id="amp-steps-v">3</span></div>
+  </div>
+  <div class="section">
     <h5>DRAWING GAINS</h5>
     <p class="note">How strongly each certified channel moves the surface, at the scale its formula gives it. They change the picture, never the state.</p>
     <div class="amp-row"><span>Zoom</span><input type="range" min="10" max="600" value="100" id="amp-zoom"><span id="amp-zoom-v">1.00</span></div>
@@ -2227,7 +2232,7 @@ const LEAN_PROVED = Object.freeze({
      SutraWS/DisplayMap.lean and SutraWS/FractionalPower.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2248,7 +2253,7 @@ const LEAN_PROVED = Object.freeze({
 const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
-      draws: 'R, r, yOff and the gradient terms from |Psi|^2 of the stored state',
+      draws: 'R, r, yOff and the gradient terms from |Psi|^2 of each stored state, moving between steps in a straight line',
       /* The stored state is the formulas' result up to the step's error
          budget: storage bound per value (StoredPrecision), errors add and do
          not grow through non-expansive stages (ErrorBudget, NonExpansive).
@@ -2261,16 +2266,16 @@ const VISUAL_CERTIFICATE = {
                  'MI_mode', 'node_reproduction', 'interpolant_unique',
                  'parseval_coeffs', 'parseval_grid', 'store_err_le', 'store_err_le_stored',
                  'real_embed_abs_le', 'chain_err_le', 'parallel_err_le', 'l2_le_l1',
-                 'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem'],
+                 'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem', 'blend_zero', 'blend_one', 'blend_mem'],
       holds: () => !FAITHFUL.state.zero && FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
-                   FAITHFUL_RENDER.gridNode < 1e-9 &&
+                   FAITHFUL_RENDER.gridNode < 1e-9 && DISPLAY.ok &&
                    KERNEL_VIEW.selfTestsOk === true && KERNEL_VIEW.stepBudgetOk === true
     },
     phase: {
-      draws: 'phiShift twist from arg(Psi)',
-      theorems: ['node_reproduction', 'interpolant_unique', 'phase_at_node'],
+      draws: 'phiShift twist from arg(Psi), moving between steps in a straight line',
+      theorems: ['node_reproduction', 'interpolant_unique', 'phase_at_node', 'blend_zero', 'blend_one', 'blend_mem'],
       holds: () => !FAITHFUL.state.zero && FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
-                   FAITHFUL_RENDER.gridNode < 1e-9 && PHASE_CERT.ok
+                   FAITHFUL_RENDER.gridNode < 1e-9 && PHASE_CERT.ok && DISPLAY.ok
     },
     wheeler: {
       draws: 'dielectric compression, magnetic dilation, precession rotation, ' +
@@ -2306,7 +2311,8 @@ const VISUAL_CERTIFICATE = {
     },
     projection: {
       draws: 'the perspective projection of every surface point',
-      theorems: ['camDepth_sq_le', 'camera_in_front', 'camDist_gt', 'frame_in_front', 'ndc_depth_mem'],
+      theorems: ['camDepth_sq_le', 'camera_in_front', 'camDist_gt', 'frame_in_front', 'ndc_depth_mem',
+                 'ema_factor_mem', 'ema_pos'],
       holds: () => PROJECTION.checked > 0 && PROJECTION.behind === 0 && PROJECTION.turn < 1e-9
     },
     sutra: {
@@ -2387,16 +2393,16 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '4130db96addebdd0e463881b0b63cab03cb8e7faa4de0a2ea396e13db4831778',
+  leanCorpusSha256: '4c08a05d44f633485c0e0c5d567f5aa2123623047d5d13747ba2a5e28e8be9cf',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2294,
+  leanTheorems: 2299,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2294,
+  leanAxiomsKernelChecked: 2299,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2662,6 +2668,55 @@ const FAITHFUL_RENDER = { ev: null, co: null, proj: null, phaseGrid: new Float32
    vertex placement is defined further down the page) */
 let FIELD_NODES_CACHE;
 const fieldNodes = () => (FIELD_NODES_CACHE === undefined ? (FIELD_NODES_CACHE = FAITHFUL.gridNodes(FIELD_TH, FIELD_PH)) : FIELD_NODES_CACHE);
+/* What is drawn. Each kernel step's field is drawn exactly once its step
+   interval has passed; until then the surface moves in a straight line from
+   what was on screen to it, (1 - tau) from + tau to, tau in [0, 1]
+   (DisplayMap.lean: blend_zero, blend_one, blend_mem). Nothing is skipped and
+   nothing jumps. displayAdvance checks every cell every frame: inside the
+   segment from 'from' to 'to' (to four units in the last place, the float
+   rounding of an identity that holds exactly), and at tau = 1 the state's own
+   value, exactly. */
+const DISPLAY_FIELD = new Float64Array(FIELD_TH * FIELD_PH), DISPLAY_PHASE = new Float64Array(FIELD_TH * FIELD_PH);
+const FROM_FIELD = new Float64Array(FIELD_TH * FIELD_PH), FROM_PHASE = new Float64Array(FIELD_TH * FIELD_PH);
+const DISPLAY = { started: false, t0: 0, dur: 0, tau: 1, ok: false, frames: 0, bad: 0,
+                  transitions: 0, landed: 0, landedThis: true };
+/* The next state is taken only once the last has landed, so the move to it
+   starts from the last state exactly. It takes 85% of a step interval, less
+   when states are waiting, so the picture keeps pace with the kernel. */
+function displayBegin() {
+  if (!DISPLAY.started) return;
+  FROM_FIELD.set(DISPLAY_FIELD); FROM_PHASE.set(DISPLAY_PHASE);
+  DISPLAY.t0 = performance.now();
+  DISPLAY.dur = 0.85 * STEP_INTERVAL_MS / (1 + KERNEL_VIEW.queue.length);
+  DISPLAY.transitions++; DISPLAY.landedThis = false;
+}
+function displayAdvance(now) {
+  if (!FAITHFUL_RENDER.co) return;
+  if (!DISPLAY.started) {
+    /* the first state is drawn as it is */
+    FROM_FIELD.set(fieldGrid); FROM_PHASE.set(FAITHFUL_RENDER.phaseGrid);
+    DISPLAY.started = true; DISPLAY.t0 = now; DISPLAY.dur = 0;
+  }
+  const tau = DISPLAY.dur > 0 ? Math.min(1, Math.max(0, (now - DISPLAY.t0) / DISPLAY.dur)) : 1;
+  const ph = FAITHFUL_RENDER.phaseGrid, EPS4 = 4 * Number.EPSILON;
+  let ok = true;
+  for (let i = 0; i < FIELD_TH * FIELD_PH; i++) {
+    const a = FROM_FIELD[i], b = fieldGrid[i], v = (1 - tau) * a + tau * b;
+    const p = FROM_PHASE[i], q = ph[i], w = (1 - tau) * p + tau * q;
+    DISPLAY_FIELD[i] = v; DISPLAY_PHASE[i] = w;
+    const sa = EPS4 * Math.max(Math.abs(a), Math.abs(b)), sp = EPS4 * Math.max(Math.abs(p), Math.abs(q));
+    if (!(v >= Math.min(a, b) - sa && v <= Math.max(a, b) + sa && w >= Math.min(p, q) - sp && w <= Math.max(p, q) + sp)) ok = false;
+    if (tau === 1 && (v !== b || w !== q)) ok = false;
+  }
+  if (tau === 1 && !DISPLAY.landedThis) { DISPLAY.landed++; DISPLAY.landedThis = true; }
+  DISPLAY.tau = tau; DISPLAY.at = now; DISPLAY.ok = ok; DISPLAY.frames++;
+  if (!ok) DISPLAY.bad++;
+}
+function sampleDisplayPhase(theta, phi) {
+  const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
+  const pj = ((phi % TAU + TAU) % TAU) / TAU * FIELD_PH;
+  return DISPLAY_PHASE[(floor(ti) % FIELD_TH) * FIELD_PH + (floor(pj) % FIELD_PH)];
+}
 /* |Psi|^2 / <|Psi|^2> - 1 and arg Psi on the grid the surface samples, from the
    unique band-limited extension of the stored state. A pure function of psi,
    recomputed only when a new state arrives. A state that is exactly zero has
@@ -2898,11 +2953,18 @@ const KERNEL_VIEW = {
   r4: { engaged: false, gated: false, sigma: null, eps: null, passes: 0, meanGate: 1, meanGateOk: true, count: 0 },
   stepMs: 0, halted: null, running: true, workerError: null,
   configVersion: 0, appliedVersion: -1, appliedActive: [], appliedComposition: null,
-  /* the newest state waits here; the frame loop projects it, at most every
-     PROJECT_INTERVAL_MS, so a fast kernel never queues work on the main thread */
-  dirty: false, lastProjectAt: 0
+  /* states from the worker wait in queue, in order; the frame loop takes the
+     next one once the surface has landed exactly on the last (DISPLAY), so
+     every state is drawn and none is skipped. projected keeps the frame
+     numbers of the last 64 taken. */
+  dirty: false, lastProjectAt: 0, projected: [], queue: []
 };
-const PROJECT_INTERVAL_MS = 100;
+/* Pace. The worker takes one step every STEP_INTERVAL_MS (the steps/s
+   slider), so it never outruns the page: every state it sends is projected,
+   in order, and none is skipped. Run flat out it took 20 to 50 steps a second
+   while the page drew one state in every 100 ms, so a field that changes
+   from step to step was drawn two to five steps apart -- a strobe. */
+let STEP_INTERVAL_MS = 1000 / 3;
 const MODE_COMPARE = { key: '', pending: true, requestedAt: 0, modes: [], traces: [], energies: [], pairwise: [],
                        allDistinct: false, active: 0, audit: null };
 function workerSource(handler) {
@@ -2926,10 +2988,11 @@ function postState(ms) {
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
          composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [] });
 }
-function schedule() {
+let intervalMs = 1000 / 3;
+function schedule(delay = 0) {
   if (scheduled || !running || halted || !config) return;
   scheduled = true;
-  setTimeout(tick, 0);
+  setTimeout(tick, delay);
 }
 function tick() {
   scheduled = false;
@@ -2942,12 +3005,15 @@ function tick() {
     post({ type: 'halted', version: config.version, frame: engine.frame, reason: halted });
     return;
   }
-  postState(performance.now() - t0);
-  schedule();
+  const ms = performance.now() - t0;
+  postState(ms);
+  /* the next step starts one interval after this one began */
+  schedule(Math.max(0, intervalMs - ms));
 }
 self.onmessage = e => {
   const m = e.data;
   if (m.type === 'config') { config = m; halted = null; schedule(); }
+  else if (m.type === 'pace') { intervalMs = m.intervalMs; }
   else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; postState(0); schedule(); }
   else if (m.type === 'run') { running = !!m.running; schedule(); }
   else if (m.type === 'export') {
@@ -3059,6 +3125,7 @@ function startWorkers() {
     return false;
   }
   KERNEL_WORKER.onmessage = onKernelMessage;
+  KERNEL_WORKER.postMessage({ type: 'pace', intervalMs: STEP_INTERVAL_MS });
   AUDIT_WORKER.onmessage = onAuditMessage;
   const fail = which => ev => {
     KERNEL_VIEW.workerError = which + ': ' + (ev.message || 'failed');
@@ -3146,7 +3213,19 @@ function onAuditMessage(ev) {
 }
 function onKernelMessage(ev) {
   const m = ev.data;
-  if (m.type === 'state') {
+  /* a state arriving means the worker is stepping: not halted */
+  if (m.type === 'state') { KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m); }
+  else if (m.type === 'halted') {
+    KERNEL_VIEW.halted = m.reason;
+    LOG.add(`step ${m.frame + 1} refused -- ${m.reason.message}`, 'off');
+    updateRunBadge();
+  } else if (m.type === 'export') {
+    const w = EXPORT_WAIT.get(m.id);
+    if (w) { EXPORT_WAIT.delete(m.id); w(m); }
+  }
+}
+/* The state the page now draws, everything on screen refers to it. */
+function applyKernelState(m) {
     KERNEL_VIEW.state = m.state;
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
@@ -3154,7 +3233,6 @@ function onKernelMessage(ev) {
     KERNEL_VIEW.appliedVersion = m.version;
     /* what the worker actually ran this step: the sutras and the composition */
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedComposition = m.composition;
-    KERNEL_VIEW.halted = null;
     const r = m.r4;
     if (r) {
       const mg = r.meanGate;
@@ -3164,14 +3242,6 @@ function onKernelMessage(ev) {
                          count: KERNEL_VIEW.r4.count + (r.engaged ? 1 : 0) };
     }
     KERNEL_VIEW.dirty = true;
-  } else if (m.type === 'halted') {
-    KERNEL_VIEW.halted = m.reason;
-    LOG.add(`step ${m.frame + 1} refused -- ${m.reason.message}`, 'off');
-    updateRunBadge();
-  } else if (m.type === 'export') {
-    const w = EXPORT_WAIT.get(m.id);
-    if (w) { EXPORT_WAIT.delete(m.id); w(m); }
-  }
 }
 /* A step's error budget is a bound on its distance from the formulas with no
    storage. The picture needs it far below anything visible: here, 2^-40 of
@@ -3194,7 +3264,10 @@ function projectState() {
   FAITHFUL_RENDER.co = F.co;
   FAITHFUL_RENDER.proj = F.proj;
   KERNEL_VIEW.stepBudgetOk = !FAITHFUL.state.zero && KERNEL_VIEW.delta !== null && budgetOk(KERNEL_VIEW.delta, F.proj);
+  displayBegin();
   updateField();
+  KERNEL_VIEW.projected.push(st.frame);
+  if (KERNEL_VIEW.projected.length > 64) KERNEL_VIEW.projected.shift();
   VISUAL_CERTIFICATE.status();
   updateFaithfulBadge();
   updateSimulationHud();
@@ -3308,6 +3381,8 @@ const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0, po
    edge of the view; nothing about them is changed. */
 let ZOOM = 1;
 const FRAME_FILL = 0.9, FRAME_SHARE = 0.98;
+const FRAME_LAG_MS = 1200;
+let FRAME_BODY = 0, FRAME_DT_MS = 16.667;
 /* Drawing gains: how strongly each certified channel moves the surface. They
    scale channels that hold their certificates; none can originate structure,
    and none touches the state. Every channel is drawn at the scale its formula
@@ -3427,21 +3502,21 @@ function projectTorus() {
     for (let j = 0; j < PH_SEG; j++) {
       const phi = GEO.phi[j];
       const idx = i * PH_SEG + j, sb = idx * 12;
-      const fv = bw(fieldGrid, sb);
+      const fv = bw(DISPLAY_FIELD, sb);
       let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wN = 0, kS = 0;
       /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
       if (ampOn) {
         R += fv * AMP.field;
         r += fv * AMP.tube;
         yOff += fv * AMP.yDisp;
-        const dGth = bw(fieldGrid, sb + 4) - fv, dGph = bw(fieldGrid, sb + 8) - fv;
+        const dGth = bw(DISPLAY_FIELD, sb + 4) - fv, dGph = bw(DISPLAY_FIELD, sb + 8) - fv;
         phiShift += dGth * AMP.gradTwist * 3;
         r += abs(dGph) * AMP.gradRipple;
         R += abs(dGth) * AMP.gradBulge;
       }
       /* --- phase channel: arg(Psi) twists the tube. Same audit as amplitude:
              the evaluator returns re and im, and the node test pins both. --- */
-      if (phaseOn) phiShift += samplePhase(theta, phi) * AMP.gradTwist;
+      if (phaseOn) phiShift += sampleDisplayPhase(theta, phi) * AMP.gradTwist;
       /* --- Wheeler channels: exactGeometry's own formulas at the surface ---
              z-compression 1/(1 + geoD*D), radial dilation 1 + geoM*M/(1+z^2),
              and the Cayley rotation induced by the precession omega. */
@@ -3508,8 +3583,14 @@ function projectTorus() {
   /* screen pixels per surface unit; a surface of zero extent has nothing to frame */
   PT_NORM.sort();
   const body = Math.sqrt(PT_NORM[Math.floor(FRAME_SHARE * (N_PTS - 1))]);
-  const frame = body > 0 ? FRAME_FILL * 0.5 * Math.min(cw, ch) / body : 0;
-  PROJECTION.body = body;
+  /* The framing follows the drawn surface through a first-order lag, so a
+     change of shape eases the zoom over about FRAME_LAG_MS instead of snapping
+     it every frame: FRAME_BODY + (body - FRAME_BODY) k, k = 1 - e^{-dt/T} in
+     [0, 1) (DisplayMap.lean: ema_factor_mem, ema_pos). Re-fitting outright
+     rescaled the whole picture by up to half between two frames. */
+  FRAME_BODY = FRAME_BODY > 0 ? FRAME_BODY + (body - FRAME_BODY) * (1 - Math.exp(-FRAME_DT_MS / FRAME_LAG_MS)) : body;
+  const frame = FRAME_BODY > 0 ? FRAME_FILL * 0.5 * Math.min(cw, ch) / FRAME_BODY : 0;
+  PROJECTION.body = body; PROJECTION.frameBody = FRAME_BODY;
   let behind = 0;
   for (let k = 0; k < N_PTS; k++) {
     const den = D + PT.depth[k];
@@ -4125,6 +4206,7 @@ function frame(t) {
   const frameDt = lastFrameT ? t - lastFrameT : VIEW_MOTION.nominalFrameDtMs;
   const frameScale = frameDt / VIEW_MOTION.nominalFrameDtMs;
   lastFrameT = t;
+  FRAME_DT_MS = frameDt;
   const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
   if (autoRotate) {
     camRY += VIEW_MOTION.rotationYPerNominalFrame * frameScale;
@@ -4132,9 +4214,12 @@ function frame(t) {
   }
   /* the overlay layer starts clear each frame; the surface layer is beneath it */
   ctx.clearRect(0, 0, cw, ch);
-  if (KERNEL_VIEW.dirty && t - KERNEL_VIEW.lastProjectAt >= PROJECT_INTERVAL_MS) projectState();
+  /* the next state is taken once the surface has landed on the last one */
+  if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1)) applyKernelState(KERNEL_VIEW.queue.shift());
+  if (KERNEL_VIEW.dirty) projectState();
   /* a view with no pixels has nothing to draw into; the kernel carries on */
   if (KERNEL_VIEW.state && W > 0 && H > 0) {
+    displayAdvance(performance.now());
     projectTorus();
     syncFaithfulBadge();
     renderTorus();
@@ -4241,6 +4326,13 @@ for (const [id, dispId, fmt] of [['amp-r4r', 'amp-r4r-v', v => (v / 10).toFixed(
     pushConfig();
   });
 }
+/* Pace: steps per second. The picture only -- each step is the same step. */
+document.getElementById('amp-steps').addEventListener('input', e => {
+  const n = +e.target.value;
+  STEP_INTERVAL_MS = 1000 / n;
+  document.getElementById('amp-steps-v').textContent = String(n);
+  if (KERNEL_WORKER) KERNEL_WORKER.postMessage({ type: 'pace', intervalMs: STEP_INTERVAL_MS });
+});
 /* Drawing gains: the picture only. */
 for (const [id, setter, dispId, fmt] of [
   ['amp-zoom',    v => { ZOOM = v / 100; },            'amp-zoom-v',    v => (v / 100).toFixed(2)],
