@@ -200,7 +200,7 @@ try {
        `applied=${got} active=${s.active} comp=${s.comp} halted=${s.halted}`);
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
-  ok(presets.length === 10, `${presets.length} presets`);
+  ok(presets.length === 17, `${presets.length} presets`);
   for (const [id, comp, set] of presets) {
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
     await applied(id, { comp, active: set });

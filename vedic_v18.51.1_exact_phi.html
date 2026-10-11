@@ -169,13 +169,20 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
       <div class="grp">PARALLEL</div>
       <button type="button" id="pre-cymatic" title="PARALLEL: S9+S17+S27+S28 at 50%">〰 CYMATIC</button>
+      <button type="button" id="pre-bindu" title="PARALLEL: S2(25) S7(100) S22(75) S23(50) S26(100). The parallel sum grows every step; R4 holds it at the ceiling, and its gate gathers the field onto the single vertex 0000, about fifteen times the mean. It holds still.">• BINDU</button>
+      <button type="button" id="pre-star" title="PARALLEL: S2 and S23 at 25%. R4 holds the growth; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
+      <button type="button" id="pre-crown" title="PARALLEL: S13(100) S18(50) S26(50). R4 holds the growth; the field settles on 1111, three of its neighbours 1011, 1101, 1110, and 1000.">♔ CROWN</button>
+      <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25). No growth to hold; the field decays onto the square face 0000, 0001, 1000, 1001.">▢ SQUARE</button>
       <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about 35x per step; the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
       <div class="grp" style="color:#d4af37">SERIES</div>
+      <button type="button" id="pre-equilibrium" title="SERIES: S7(50) S19(75) S22(100). The field settles within one part in ten thousand of the same share at every vertex, and stays there, so the shape is almost entirely the Wheeler geometry.">○ EQUILIBRIUM</button>
       <button type="button" id="pre-wormhole" title="SERIES: S5,S9,S22,S23,S26,S29 at 50%">🕳 WORMHOLE</button>
       <button type="button" id="pre-singularity" title="SERIES: S1,S10,S14,S15 at 50%">⊛ SINGULAR</button>
       <button type="button" id="pre-magnetic" title="SERIES: S3,S9,S11,S25,S29 at 50%">⚡ MAGNETIC</button>
       <button type="button" id="pre-cancel" title="SERIES: S5(85) S7(35) S8(15) S9(65) S11(20) S22(80) S28(30) S29(55). The contractive sūtras S5, S22 and S29 drive the field toward zero.">⊘ CANCEL</button>
       <div class="grp" style="color:#ff6644">CONCURRENT</div>
+      <button type="button" id="pre-cube" title="CONCURRENT: S16 at 75% with divisor 17/4, and S22 at 75%. The field fills the cube cell w = 1, vertices 1000 to 1111, and empties the other half.">▣ CUBE</button>
+      <button type="button" id="pre-octad" title="CONCURRENT: S14 at 25% with decrement 11/4, S17 at 100% with proportion 23/4, and S22 at 50%. The field settles on eight vertices: 0100 to 0111, 1010, 1100, 1101 and 1110.">◇ OCTAD</button>
       <button type="button" id="pre-dynamo" title="CONCURRENT: S3,S7,S9,S11,S25,S29 at 50%">🧲 DYNAMO</button>
       <button type="button" id="pre-reconnect" title="CONCURRENT: S5,S9,S22,S26 at 50%">💥 RECONNECT</button>
       <button type="button" id="pre-inverse-growth" title="CONCURRENT: S1(30) S5(70) S14(30) S29(70)">⟲ CONTROLLED</button>
@@ -4085,6 +4092,15 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
    declared defaults, and goes out to the kernel at once. */
 const PRESETS = {
   'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 50, 17: 50, 27: 50, 28: 50 }, vortex: 0 },
+  /* Chosen by running the kernel itself: each settles the field onto a
+     different structure of the tesseract, and holds it there. */
+  'pre-bindu':          { comp: 'PARALLEL',             set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, vortex: 0 },
+  'pre-star':           { comp: 'PARALLEL',             set: { 2: 25, 23: 25 }, vortex: 0 },
+  'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },
+  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },
+  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },
+  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },
+  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, vortex: 0 },
   'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, vortex: 0 },
   'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, vortex: 0 },
   'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, vortex: 0 },
