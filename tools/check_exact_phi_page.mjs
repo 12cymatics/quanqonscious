@@ -16,10 +16,13 @@
                         PAUSE / RUN reaches the worker, and the worker runs
                         exactly the set and composition the control chose
      the surface        is drawn, every point finite and in front of the
-                        camera, a torus by construction at the default gains
-     no clamping        every colour written for the GPU is already in [0, 1]
-                        and every depth in [-1, 1], so neither the code nor the
-                        browser has anything to clamp
+                        camera
+     no clamping        the colour formula runs past 255 and each channel goes
+                        through the tone curve instead of being cut off: every
+                        colour written for the GPU is already in [0, 1] and
+                        every depth in [-1, 1], so neither the code nor the
+                        browser has anything to clamp, and the curve keeps the
+                        order of the values it is given
      certified          the badge reaches FAITHFUL on a preset
 
    It drives Chromium over the DevTools protocol: no dependency, no install.
@@ -145,10 +148,10 @@ try {
     let covered = 0;
     for (let k = 3; k < px.length; k += 4) if (px[k] > 0) covered++;
     out.covered = covered / (W * H);
-    const D = SURFACE_GL.data, nv = PROJECTION.quads * 6;
+    const D = SURFACE_GL.data, F = SURFACE_GL.FLOATS, nv = PROJECTION.quads * 6;
     let badCol = 0, badDepth = 0, badPos = 0;
     for (let v = 0; v < nv; v++) {
-      const b = v * 6;
+      const b = v * F;
       if (!(Number.isFinite(D[b]) && Number.isFinite(D[b + 1]))) badPos++;
       if (!(D[b + 2] >= -1 && D[b + 2] <= 1)) badDepth++;
       for (let c = 3; c < 6; c++) if (!(D[b + c] >= 0 && D[b + c] <= 1)) badCol++;
@@ -156,7 +159,7 @@ try {
     let badPt = 0;
     for (let k = 0; k < N_PTS; k++) if (!(Number.isFinite(PT.sx[k]) && Number.isFinite(PT.sy[k]) && Number.isFinite(PT.depth[k]))) badPt++;
     Object.assign(out, { badCol, badDepth, badPos, badPt, behind: PROJECTION.behind, turn: PROJECTION.turn,
-                         torus: PROJECTION.torusByConstruction, pole: PROJECTION.pole, nv });
+                         pole: PROJECTION.pole, nv });
     return out;
   })()`);
 
@@ -166,12 +169,25 @@ try {
   ok(f0.quads > 1000 && f0.covered > 0.02, `${f0.quads} quads cover ${(100 * f0.covered).toFixed(1)}% of the view`);
   ok(f0.badPt === 0, 'every surface point is finite', `${f0.badPt} are not`);
   ok(f0.behind === 0 && f0.turn < 1e-9, 'no point behind the camera, and the camera turns are rotations');
-  ok(f0.torus === true, 'the default gains make the surface a torus by construction (surface_is_torus)');
 
   section('no clamping');
   ok(f0.badCol === 0, `all ${f0.nv * 3} colour components written for the GPU are in [0, 1]`, `${f0.badCol} outside`);
   ok(f0.badDepth === 0, 'every depth written for the GPU is in [-1, 1]', `${f0.badDepth} outside`);
   ok(f0.badPos === 0, 'every vertex position is finite', `${f0.badPos} are not`);
+  const tc = await evaluate(`(() => {
+    let mid = true, order = true, range = true, prev = -Infinity;
+    for (let v = -3000; v <= 3000; v += 0.5) {
+      const t = tone(v);
+      if (v >= 24 && v <= 231 && t !== v) mid = false;
+      if (t < prev) order = false;
+      if (!(t >= 0 && t <= 255)) range = false;
+      prev = t;
+    }
+    return { mid, order, range, above: tone(300) > tone(260) && tone(260) > tone(240) };
+  })()`);
+  ok(tc.mid, 'the tone curve leaves the colour formula unchanged on [24, 231] (tone_mid)');
+  ok(tc.order && tc.above, 'a larger value never comes out darker, and values past 255 stay distinct (tone_mono)');
+  ok(tc.range, 'every toned value is within [0, 255] (tone_mem)');
 
   section('every control reaches the kernel');
   const applied = async (label, want) => {
@@ -184,7 +200,7 @@ try {
        `applied=${got} active=${s.active} comp=${s.comp} halted=${s.halted}`);
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
-  ok(presets.length === 10, `${presets.length} presets`);
+  ok(presets.length === 17, `${presets.length} presets`);
   for (const [id, comp, set] of presets) {
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
     await applied(id, { comp, active: set });

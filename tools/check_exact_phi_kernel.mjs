@@ -21,6 +21,8 @@
      modes              the mode identities decide and pass, and the
                         comparison built from the audit's states equals a
                         fresh one
+     presets            each preset that names the vertices its field settles
+                        on does settle there, run through the kernel
 
    Run: node tools/check_exact_phi_kernel.mjs
 */
@@ -192,6 +194,74 @@ section('series / parallel / concurrent');
                                            A4.eq(shared.energies[m], fresh.energies[m]));
       ok(same, `{${ids}}: the comparison from the audit's states equals a fresh one`);
     }
+  }
+}
+
+section('presets settle where their descriptions say');
+{
+  /* Each of these presets says, in the page, which vertices its field settles
+     on. Run each through the kernel for 40 steps and read the smallest set of
+     vertices holding 80% of the energy, averaged over the last eight steps. The
+     definitions must also be the ones the page carries. */
+  const X = A4;
+  const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
+  const EXPECT = {
+    'pre-bindu':       { line: "'pre-bindu':          { comp: 'PARALLEL',             set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, vortex: 0 },",
+                         comp: 'PARALLEL', set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, support: ['0000'] },
+    'pre-star':        { line: "'pre-star':           { comp: 'PARALLEL',             set: { 2: 25, 23: 25 }, vortex: 0 },",
+                         comp: 'PARALLEL', set: { 2: 25, 23: 25 }, support: ['0000', '0001', '0100', '1000'] },
+    'pre-crown':       { line: "'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },",
+                         comp: 'PARALLEL', set: { 13: 100, 18: 50, 26: 50 }, support: ['1000', '1011', '1101', '1110', '1111'] },
+    'pre-square':      { line: "'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },",
+                         comp: 'PARALLEL', set: { 8: 50, 16: 50, 21: 100, 29: 25 }, support: ['0000', '0001', '1000', '1001'] },
+    'pre-equilibrium': { line: "'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },",
+                         comp: 'SERIES', set: { 7: 50, 19: 75, 22: 100 }, uniform: true },
+    'pre-cube':        { line: "'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },",
+                         comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] },
+                         support: ['1000', '1001', '1010', '1011', '1100', '1101', '1110', '1111'] },
+    'pre-octad':       { line: "'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, vortex: 0 },",
+                         comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] },
+                         support: ['0100', '0101', '0110', '0111', '1010', '1100', '1101', '1110'] }
+  };
+  /* |z|^2 of each vertex as a double, read from the exact state after scaling
+     by its largest power of two, so a decaying state stays readable */
+  const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
+  const qNum = q => { let n = q.n; if (n === 0n) return 0; const neg = n < 0n; if (neg) n = -n;
+    const sh = BigInt(Math.max(0, 64 + bl(q.d) - bl(n))); const v = Number((n << sh) / q.d) / 2 ** Number(sh); return neg ? -v : v; };
+  const probs = psi => {
+    let e = null;
+    for (const z of psi) for (const a of [z.re, z.im]) for (const q of [a.a, a.b, a.c, a.d]) if (q.n !== 0n) { const x = bl(q.n) - bl(q.d); if (e === null || x > e) e = x; }
+    const sc = q => q.n === 0n ? q : (e >= 0 ? Q.mk(q.n, q.d << BigInt(e)) : Q.mk(q.n << BigInt(-e), q.d));
+    const num = a => qNum(sc(a.a)) + qNum(sc(a.b)) * Math.SQRT2 + qNum(sc(a.c)) * Math.sqrt(5) + qNum(sc(a.d)) * Math.sqrt(10);
+    return psi.map(z => { const r = num(z.re), i = num(z.im); return r * r + i * i; });
+  };
+  for (const [id, x] of Object.entries(EXPECT)) {
+    ok(HTML.includes(x.line), `${id}: the page defines it as tested here`);
+    const active = Object.entries(x.set).map(([k, v]) => {
+      const sid = Number(k), st = Q.mk(BigInt(v), 100n);
+      return x.args && x.args[k] ? { id: sid, strength: st, args: [st, ...x.args[k].map(t => Q.parse(t))] } : { id: sid, strength: st };
+    });
+    let eng = K.initEngine();
+    const acc = new Array(16).fill(0);
+    for (let s = 0; s < 40; s++) {
+      eng = K.step(eng, params, active, x.comp);
+      if (s >= 32) { const p = probs(eng.psi), tot = p.reduce((a, b) => a + b, 0); p.forEach((v, i) => { acc[i] += v / tot / 8; }); }
+    }
+    if (x.uniform) {
+      /* measured: a fixed pattern 2.5e-5 from even, the same from step 20 to
+         step 160; the page claims one part in ten thousand */
+      const dev = Math.max(...acc.map(v => Math.abs(v * 16 - 1)));
+      ok(dev < 1e-4, `${id}: every vertex holds the same share of the energy to one part in ten thousand`, `largest deviation ${dev}`);
+      continue;
+    }
+    const order = [...acc.keys()].sort((a, b) => acc[b] - acc[a]);
+    const S = []; let c = 0;
+    for (const v of order) { S.push(v); c += acc[v]; if (c >= 0.8) break; }
+    const got = S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0'));
+    ok(got.join(',') === x.support.join(','), `${id}: settles on ${x.support.join(' ')}`, `got ${got.join(' ')}`);
   }
 }
 

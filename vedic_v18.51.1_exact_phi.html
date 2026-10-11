@@ -137,7 +137,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">R4 engaged</span><span class="v" id="sim-r4count">0 steps</span></div>
     <div class="row"><span class="k">stored precision</span><span class="v" id="sim-store">128 bits</span></div>
     <div class="row"><span class="k">composition</span><span class="v" id="sim-comp">SERIES</span></div>
-    <div class="row"><span class="k">drawn scale</span><span class="v" id="sim-scale">–</span></div>
+    <div class="row"><span class="k">surface reach</span><span class="v" id="sim-scale">–</span></div>
     <div class="row"><span class="k">surface</span><span class="v" id="sim-surface">–</span></div>
   </div>
   <div class="section">
@@ -169,13 +169,20 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
       <div class="grp">PARALLEL</div>
       <button type="button" id="pre-cymatic" title="PARALLEL: S9+S17+S27+S28 at 50%">〰 CYMATIC</button>
+      <button type="button" id="pre-bindu" title="PARALLEL: S2(25) S7(100) S22(75) S23(50) S26(100). The parallel sum grows every step; R4 holds it at the ceiling, and its gate gathers the field onto the single vertex 0000, about fifteen times the mean. It holds still.">• BINDU</button>
+      <button type="button" id="pre-star" title="PARALLEL: S2 and S23 at 25%. R4 holds the growth; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
+      <button type="button" id="pre-crown" title="PARALLEL: S13(100) S18(50) S26(50). R4 holds the growth; the field settles on 1111, three of its neighbours 1011, 1101, 1110, and 1000.">♔ CROWN</button>
+      <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25). No growth to hold; the field decays onto the square face 0000, 0001, 1000, 1001.">▢ SQUARE</button>
       <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about 35x per step; the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
       <div class="grp" style="color:#d4af37">SERIES</div>
+      <button type="button" id="pre-equilibrium" title="SERIES: S7(50) S19(75) S22(100). The field settles within one part in ten thousand of the same share at every vertex, and stays there, so the shape is almost entirely the Wheeler geometry.">○ EQUILIBRIUM</button>
       <button type="button" id="pre-wormhole" title="SERIES: S5,S9,S22,S23,S26,S29 at 50%">🕳 WORMHOLE</button>
       <button type="button" id="pre-singularity" title="SERIES: S1,S10,S14,S15 at 50%">⊛ SINGULAR</button>
       <button type="button" id="pre-magnetic" title="SERIES: S3,S9,S11,S25,S29 at 50%">⚡ MAGNETIC</button>
       <button type="button" id="pre-cancel" title="SERIES: S5(85) S7(35) S8(15) S9(65) S11(20) S22(80) S28(30) S29(55). The contractive sūtras S5, S22 and S29 drive the field toward zero.">⊘ CANCEL</button>
       <div class="grp" style="color:#ff6644">CONCURRENT</div>
+      <button type="button" id="pre-cube" title="CONCURRENT: S16 at 75% with divisor 17/4, and S22 at 75%. The field fills the cube cell w = 1, vertices 1000 to 1111, and empties the other half.">▣ CUBE</button>
+      <button type="button" id="pre-octad" title="CONCURRENT: S14 at 25% with decrement 11/4, S17 at 100% with proportion 23/4, and S22 at 50%. The field settles on eight vertices: 0100 to 0111, 1010, 1100, 1101 and 1110.">◇ OCTAD</button>
       <button type="button" id="pre-dynamo" title="CONCURRENT: S3,S7,S9,S11,S25,S29 at 50%">🧲 DYNAMO</button>
       <button type="button" id="pre-reconnect" title="CONCURRENT: S5,S9,S22,S26 at 50%">💥 RECONNECT</button>
       <button type="button" id="pre-inverse-growth" title="CONCURRENT: S1(30) S5(70) S14(30) S29(70)">⟲ CONTROLLED</button>
@@ -195,8 +202,8 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>DRAWING GAINS</h5>
-    <p class="note">How far each certified group may move the surface. Each group is drawn relative to its own largest value this frame (the drawn scale above), so a gain is the most it moves anything. They change the picture, never the state.</p>
-    <div class="amp-row"><span>Zoom</span><input type="range" min="5" max="150" value="70" id="amp-zoom"><span id="amp-zoom-v">0.70</span></div>
+    <p class="note">How strongly each certified channel moves the surface, at the scale its formula gives it. They change the picture, never the state.</p>
+    <div class="amp-row"><span>Zoom</span><input type="range" min="10" max="600" value="100" id="amp-zoom"><span id="amp-zoom-v">1.00</span></div>
     <div class="amp-row"><span>Field→R</span><input type="range" min="0" max="200" value="60" id="amp-field"><span id="amp-field-v">60</span></div>
     <div class="amp-row"><span>Field→r</span><input type="range" min="0" max="100" value="35" id="amp-tube"><span id="amp-tube-v">35</span></div>
     <div class="amp-row"><span>Field→Y</span><input type="range" min="0" max="100" value="45" id="amp-ydisp"><span id="amp-ydisp-v">45</span></div>
@@ -2117,7 +2124,7 @@ const LEAN_PROVED = Object.freeze({
      SutraWS/DisplayMap.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','normalised_abs_le_one','gain_mul_normalised_abs_le','quad_avg_abs_le','lerp_mem_unit','mul_mem_unit','mix_weight_mem','half_lambert_mem','shade_mem','spec_mem','rim_mem','exp_neg_sq_mem','contour_factor_mem','pinch_mem','surface_is_torus','default_gains_torus','ndc_depth_mem'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2144,16 +2151,14 @@ const VISUAL_CERTIFICATE = {
          not grow through non-expansive stages (ErrorBudget, NonExpansive).
          Interpolation.lean then carries that state to the torus exactly; the
          1e-9 bounds the float evaluation of those exact identities. */
-      /* Drawn relative to its largest magnitude this frame, with colour built
-         from convex mixes: DisplayMap.lean keeps every displacement within its
-         gain and every colour component in [0,1], with nothing clamped. */
+      /* Drawn at the scale its formula gives it. The colour formula runs past
+         255; each channel goes through the tone curve rather than being cut
+         off, so it stays inside (0, 255) and keeps its order (DisplayMap). */
       theorems: ['cell_bijective', 'cube_edge_iff_torus_edge', 'node_theta', 'node_phi',
                  'MI_mode', 'node_reproduction', 'interpolant_unique',
                  'parseval_coeffs', 'parseval_grid', 'store_err_le', 'store_err_le_stored',
                  'real_embed_abs_le', 'chain_err_le', 'parallel_err_le', 'l2_le_l1',
-                 'normalised_abs_le_one', 'gain_mul_normalised_abs_le', 'quad_avg_abs_le',
-                 'lerp_mem_unit', 'mul_mem_unit', 'half_lambert_mem', 'shade_mem', 'spec_mem',
-                 'rim_mem', 'exp_neg_sq_mem', 'contour_factor_mem', 'surface_is_torus'],
+                 'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem'],
       holds: () => !FAITHFUL.state.zero && FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
                    FAITHFUL_RENDER.gridNode < 1e-9 &&
                    KERNEL_VIEW.selfTestsOk === true && KERNEL_VIEW.stepBudgetOk === true
@@ -2172,8 +2177,7 @@ const VISUAL_CERTIFICATE = {
                  'zeta_pow', 'fieldDistortion_mem', 'etherPressure_abs_le', 'counterspace_abs_le',
                  'inertiaEnvelope_vertex', 'inertiaEnvelope_vertex_eq_one_iff',
                  'layer_cos_vertex_eq_one_iff', 'latitude_band_eq_one_iff',
-                 'inertial_locus_nodes', 'bilinear_abs_le',
-                 'gain_mul_normalised_abs_le', 'mix_weight_mem'],
+                 'inertial_locus_nodes', 'bilinear_abs_le', 'tone_mem'],
       holds: () => WHEELER_CHANNEL.ok
     },
     golden: {
@@ -2278,16 +2282,16 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '71c114549dbedaf4d57518317448cbbe4f7e3b101d18edb9924f2c9291ff096c',
+  leanCorpusSha256: 'd9cac8d3a45cf4a5768b0f58d0bb68e23563029b32d1f838b0616ec1226bfe50',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2262,
+  leanTheorems: 2254,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2262,
+  leanAxiomsKernelChecked: 2254,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2546,8 +2550,6 @@ const fieldGrid = new Float64Array(FIELD_TH * FIELD_PH);
 let vortexGain = 0, vortexHelicity = 1;
 const FAITHFUL_RENDER = { ev: null, co: null, proj: null, phaseGrid: new Float32Array(FIELD_TH * FIELD_PH),
                           phaseWriteOk: false, phaseHash: 0, meanP: 0,
-                          /* largest |fieldGrid| this state: the amplitude group's scale */
-                          fieldScale: 0,
                           /* the grid as drawn against the sixteen vertices */
                           gridNode: Infinity,
                           re: new Float64Array(FIELD_TH * FIELD_PH), im: new Float64Array(FIELD_TH * FIELD_PH) };
@@ -2562,7 +2564,7 @@ const fieldNodes = () => (FIELD_NODES_CACHE === undefined ? (FIELD_NODES_CACHE =
 function updateField() {
   const co = FAITHFUL_RENDER.co;
   if (!co || FAITHFUL.state.zero) {
-    FAITHFUL_RENDER.phaseWriteOk = false; FAITHFUL_RENDER.fieldScale = 0; FAITHFUL_RENDER.gridNode = Infinity;
+    FAITHFUL_RENDER.phaseWriteOk = false; FAITHFUL_RENDER.gridNode = Infinity;
     refreshPhaseCertificate(); return;
   }
   const ph = FAITHFUL_RENDER.phaseGrid, gr = FAITHFUL_RENDER.re, gi = FAITHFUL_RENDER.im;
@@ -2572,16 +2574,13 @@ function updateField() {
   const inv = 1 / meanP;
   FAITHFUL_RENDER.meanP = meanP;
   FAITHFUL.gridEval(co, FIELD_TH, FIELD_PH, gr, gi);
-  let fScale = 0;
   for (let idx = 0; idx < FIELD_TH * FIELD_PH; idx++) {
     fieldGrid[idx] = (gr[idx] * gr[idx] + gi[idx] * gi[idx]) * inv - 1;
-    if (abs(fieldGrid[idx]) > fScale) fScale = abs(fieldGrid[idx]);
     const a = Math.atan2(gi[idx], gr[idx]);
     ph[idx] = a;
     /* read the cell straight back: an index regression writes elsewhere */
     if (ph[idx] !== Math.fround(a)) phaseWriteOk = false;
   }
-  FAITHFUL_RENDER.fieldScale = fScale;
   /* node_reproduction on the grid that is drawn: each vertex's cell holds that
      vertex's value. No vertex on the grid, no test -- and no pass. */
   const proj = FAITHFUL_RENDER.proj;
@@ -3196,19 +3195,19 @@ const CAM_DIST = 700;
 /* Where projectTorus put the camera this frame, how many points it found
    behind it, and how far the camera turns moved any point's norm.
    frame_in_front says the count is zero; camDepth_sq_le rests on the turns
-   being rotations, so their norm drift is decided too. The scales are the
-   largest magnitudes each drawn group reached this frame (DisplayMap.lean). */
-const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0,
-                     ampScale: 0, wheelerScale: 0, csScale: 0, viewScale: 1,
-                     pole: null, torusByConstruction: false, quads: 0 };
-/* ZOOM = 1 makes the bare torus span the shorter side of the view. */
-let ZOOM = 0.7;
-/* Drawing gains: how far each certified group may move the surface, in torus
-   units. Each group is drawn relative to its own largest magnitude this frame,
-   so a group never moves the surface further than its gain -- by construction,
-   not by clamping. None can originate structure, and none touches the state. */
-const AMP = { field: 60, tube: 35, yDisp: 45, gradTwist: 0.08, gradRipple: 8, gradBulge: 5,
-              vortex: 1.0, wheeler: 1.0, wheelerUnits: 25 };
+   being rotations, so their norm drift is decided too. */
+const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0, pole: null, quads: 0 };
+/* ZOOM = 1 frames the body of the surface: the distance from the centre that
+   FRAME_SHARE of its points lie within lands at FRAME_FILL of the half-size of
+   the view, however far the formulas carried it. Spikes beyond it run off the
+   edge of the view; nothing about them is changed. */
+let ZOOM = 1;
+const FRAME_FILL = 0.9, FRAME_SHARE = 0.98;
+/* Drawing gains: how strongly each certified channel moves the surface. They
+   scale channels that hold their certificates; none can originate structure,
+   and none touches the state. Every channel is drawn at the scale its formula
+   gives it: nothing is normalised away and nothing is clamped. */
+const AMP = { field: 60, tube: 35, yDisp: 45, gradTwist: 0.08, gradRipple: 8, gradBulge: 5, vortex: 1.0, wheeler: 1.0 };
 function tessVertexToTorus(v, t) {
   let {x, y, z, w} = v;
   const cxw = cos(TESS_ROT.xw), sxw = sin(TESS_ROT.xw);
@@ -3226,15 +3225,14 @@ function tessVertexToTorus(v, t) {
 }
 const TORUS_R = 180, TORUS_r = 70;
 const TH_SEG = 200, PH_SEG = 100, N_PTS = TH_SEG * PH_SEG;
-/* Every surface point, as columns. Pass one fills the formula values, pass
-   two the placed and projected point. */
+/* Every surface point, as columns: the field and Wheeler values its colour
+   reads, and the placed and projected point. */
 const PT = {
-  a: new Float64Array(N_PTS), ga: new Float64Array(N_PTS), gp: new Float64Array(N_PTS),
-  wN: new Float64Array(N_PTS), kS: new Float64Array(N_PTS),
-  dR: new Float64Array(N_PTS), dr: new Float64Array(N_PTS), dy: new Float64Array(N_PTS),
-  dphi: new Float64Array(N_PTS),
+  field: new Float64Array(N_PTS), wN: new Float64Array(N_PTS), kS: new Float64Array(N_PTS),
   sx: new Float64Array(N_PTS), sy: new Float64Array(N_PTS), depth: new Float64Array(N_PTS)
 };
+/* each point's squared distance from the centre, for framing */
+const PT_NORM = new Float64Array(N_PTS);
 let TORUS_GEOM = null;
 function torusGeometry() {
   if (TORUS_GEOM !== null) return TORUS_GEOM;
@@ -3277,20 +3275,12 @@ function torusGeometry() {
   TORUS_GEOM = G;
   return G;
 }
-/* surface_is_torus: with |a| <= 1, |grad| <= 2 and each Wheeler component at
-   most 1 in magnitude, these two margins positive mean the tube radius stays
-   positive and below the ring radius at every point, for any pinch in (0, 1]. */
-function torusMargins() {
-  const G = AMP.wheeler * AMP.wheelerUnits;
-  return { tube: TORUS_r - AMP.tube - G,
-           ring: TORUS_R - TORUS_r - Math.abs(AMP.field - AMP.tube) - 2 * AMP.gradRipple - 2 * G };
-}
 /* No time argument. Every point is placed by the exact state: the amplitude and
    phase of psi through FAITHFUL's band-limited extension, and the Wheeler
    dielectric / magnetic / precession channels through exactGeometry's own
    formulas and the WHEELER surface terms, lifted to the surface by the same
-   extension. Pass one evaluates every formula at every point; pass two draws
-   each group relative to the largest magnitude it reached. */
+   extension. Gains (AMP.*, vortexGain) scale certified channels; none of them
+   can originate structure. */
 function projectTorus() {
   const GEO = torusGeometry();
   const C5 = WHEELER_CHANNEL;
@@ -3303,105 +3293,95 @@ function projectTorus() {
   /* The Wheeler geometry rides on the phi^3 algebra, so it needs both its own
      certificate and the golden one. */
   let wOn = CERT.wheeler && CERT.golden;
-  /* The amplitude group is |Psi|^2/<|Psi|^2> - 1 over its largest magnitude on
-     the grid; bilinear_abs_le keeps every surface sample within that. A field
-     with no deviation anywhere has nothing to draw: its scale is 0 and the
-     group contributes 0, stated rather than divided by. */
-  const fScale = FAITHFUL_RENDER.fieldScale;
-  const aInv = (ampOn && fScale > 0) ? 1 / fScale : 0;
   /* omega identically zero (B = 0) has nothing to normalise: its modulation
      argument is 0, stated here rather than produced by dividing by zero */
   const wInv = C5.wZero ? 0 : 1 / C5.wMax;
   const vGain = abs(vortexGain) * AMP.vortex;
   const sI = GEO.sIdx, sWt = GEO.sW;
   const bw = (g, sb) => g[sI[sb]] * sWt[sb] + g[sI[sb+1]] * sWt[sb+1] + g[sI[sb+2]] * sWt[sb+2] + g[sI[sb+3]] * sWt[sb+3];
-  /* ---- pass one: every formula at every point ---- */
-  let wScale = 0, pole = null;
-  for (let i = 0; i < TH_SEG; i++) {
-    const theta = GEO.theta[i];
-    for (let j = 0; j < PH_SEG; j++) {
-      const phi = GEO.phi[j];
-      const idx = i * PH_SEG + j, sb = idx * 12;
-      const fv = fieldGrid[sI[sb]] * sWt[sb] + fieldGrid[sI[sb+1]] * sWt[sb+1]
-               + fieldGrid[sI[sb+2]] * sWt[sb+2] + fieldGrid[sI[sb+3]] * sWt[sb+3];
-      const fvNext = fieldGrid[sI[sb+4]] * sWt[sb+4] + fieldGrid[sI[sb+5]] * sWt[sb+5]
-                   + fieldGrid[sI[sb+6]] * sWt[sb+6] + fieldGrid[sI[sb+7]] * sWt[sb+7];
-      const fvUp = fieldGrid[sI[sb+8]] * sWt[sb+8] + fieldGrid[sI[sb+9]] * sWt[sb+9]
-                 + fieldGrid[sI[sb+10]] * sWt[sb+10] + fieldGrid[sI[sb+11]] * sWt[sb+11];
-      PT.a[idx] = fv * aInv;
-      PT.ga[idx] = (fvNext - fv) * aInv;
-      PT.gp[idx] = (fvUp - fv) * aInv;
-      if (!wOn) { PT.wN[idx] = 0; PT.kS[idx] = 0; continue; }
-      const sD = bw(C5.gD, sb), sM = bw(C5.gM, sb), sW = bw(C5.gW, sb), sK = bw(C5.gK, sb), sKs = bw(C5.gKs, sb);
-      /* exactGeometry's z-compression 1/(1 + geoD*D). wheeler_compression_positive
-         holds at the sixteen vertices; between them the surface carries an
-         interpolated D, and a point where 1 + geoD*D is not positive would be
-         the pole. Then the Wheeler group is withheld this frame, and says where. */
-      const den = 1 + C5.geoD * sD;
-      if (!(den > 0)) {
-        pole = { theta, phi, den };
-        wOn = false;
-        continue;
-      }
-      const compression = 1 / den;
-      const z = sKs * compression;
-      const radial = 1 + C5.geoM * sM / (1 + z * z);
-      /* the Cayley angle of tau = geoP * omega; c^2 + s^2 = 1 exactly
-         (wheeler_cayley_rotation_is_orthogonal), so this is a rotation */
-      const tau = C5.geoP * sW;
-      const cay = Math.atan2(2 * tau, 1 - tau * tau);
-      const wN = sW * wInv;
-      const gv = GEO.gv[idx], cent = GEO.cent[idx];
-      const FD = WHEELER.fieldDistortion(theta, phi, wN);
-      const EP = WHEELER.etherPressure(theta, phi, wN);
-      /* counterspace takes the field value; an uncertified field drives nothing */
-      const CS = WHEELER.counterspaceIntensity(theta, phi, ampOn ? fv : 0, wN, sKs);
-      /* The surface terms with the weights they have always been drawn with. */
-      const dR = TORUS_R * (radial - 1) + 3 * FD + 3 * EP;
-      const dr = TORUS_r * 0.5 * (compression - 1) + 11 * (1 - sK) + 7 * cent * (1 - sK) + 7 * EP - 4 * abs(CS);
-      const dy = 6 * z + 6 * CS + 4 * gv * abs(wN) * vGain;
-      PT.dR[idx] = dR; PT.dr[idx] = dr; PT.dy[idx] = dy;
-      PT.dphi[idx] = cay * (1 + vGain) + 0.025 * gv;
-      PT.wN[idx] = wN; PT.kS[idx] = sKs;
-      const m = Math.max(abs(dR), abs(dr), abs(dy));
-      if (m > wScale) wScale = m;
+  /* exactGeometry's z-compression 1/(1 + geoD*D). wheeler_compression_positive
+     holds at the sixteen vertices; between them the surface carries an
+     interpolated D, and a point where 1 + geoD*D is not positive would be the
+     pole. Decided for the whole surface before anything is placed: if there
+     is one, the Wheeler channel is withheld this frame, and says where. */
+  let pole = null;
+  if (wOn) {
+    for (let idx = 0; idx < N_PTS && pole === null; idx++) {
+      const den = 1 + C5.geoD * bw(C5.gD, idx * 12);
+      if (!(den > 0)) pole = { theta: GEO.theta[(idx / PH_SEG) | 0], phi: GEO.phi[idx % PH_SEG], den };
     }
+    if (pole !== null) { wOn = false; CERT.wheeler = false; }
   }
   PROJECTION.pole = pole;
-  if (pole !== null) { CERT.wheeler = false; wScale = 0; }
-  /* The Wheeler group is drawn so its largest displacement is its gain. A group
-     that is zero at every point has nothing to draw. */
-  const kW = (wOn && wScale > 0) ? AMP.wheeler * AMP.wheelerUnits / wScale : 0;
-  /* ---- pass two: place, turn and project ---- */
   const cRY = cos(camRY), sRY = sin(camRY);
   const cRX = cos(camRX), sRX = sin(camRX);
   let maxN2 = 0, turn = 0;
   for (let i = 0; i < TH_SEG; i++) {
-    const cosTheta = GEO.cosTheta[i], sinTheta = GEO.sinTheta[i], theta = GEO.theta[i];
+    const theta = GEO.theta[i];
+    const cosTheta = GEO.cosTheta[i], sinTheta = GEO.sinTheta[i];
     for (let j = 0; j < PH_SEG; j++) {
-      const idx = i * PH_SEG + j;
-      const a = PT.a[idx], ga = PT.ga[idx], gp = PT.gp[idx];
-      let R = TORUS_R + AMP.field * a + AMP.gradBulge * abs(ga);
-      let r = TORUS_r + AMP.tube * a + AMP.gradRipple * abs(gp);
-      let yOff = AMP.yDisp * a;
-      let phiShift = AMP.gradTwist * 3 * ga;
-      /* phase channel: arg(Psi) twists the tube */
-      if (phaseOn) phiShift += samplePhase(theta, GEO.phi[j]) * AMP.gradTwist;
-      if (kW !== 0) {
-        R += kW * PT.dR[idx];
-        r += kW * PT.dr[idx];
-        yOff += kW * PT.dy[idx];
-        phiShift += PT.dphi[idx];
+      const phi = GEO.phi[j];
+      const idx = i * PH_SEG + j, sb = idx * 12;
+      const fv = bw(fieldGrid, sb);
+      let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wN = 0, kS = 0;
+      /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
+      if (ampOn) {
+        R += fv * AMP.field;
+        r += fv * AMP.tube;
+        yOff += fv * AMP.yDisp;
+        const dGth = bw(fieldGrid, sb + 4) - fv, dGph = bw(fieldGrid, sb + 8) - fv;
+        phiShift += dGth * AMP.gradTwist * 3;
+        r += abs(dGph) * AMP.gradRipple;
+        R += abs(dGth) * AMP.gradBulge;
       }
-      /* R4 gate pinch: 1 - the mean gate, in [0, 1] by mean_gate_mem */
+      /* --- phase channel: arg(Psi) twists the tube. Same audit as amplitude:
+             the evaluator returns re and im, and the node test pins both. --- */
+      if (phaseOn) phiShift += samplePhase(theta, phi) * AMP.gradTwist;
+      /* --- Wheeler channels: exactGeometry's own formulas at the surface ---
+             z-compression 1/(1 + geoD*D), radial dilation 1 + geoM*M/(1+z^2),
+             and the Cayley rotation induced by the precession omega. */
+      if (wOn) {
+        const sD = bw(C5.gD, sb), sM = bw(C5.gM, sb), sW = bw(C5.gW, sb), sK = bw(C5.gK, sb), sKs = bw(C5.gKs, sb);
+        const aw = AMP.wheeler;
+        kS = sKs;
+        const compression = 1 / (1 + C5.geoD * sD);
+        const z = sKs * compression;
+        r *= (1 + (compression - 1) * 0.5 * aw);
+        yOff += z * 6.0 * aw;
+        /* magnetic dilation. Vanishes on the inertial plane by
+           wheeler_inertial_plane_magnetism_zero. */
+        const radial = 1 + C5.geoM * sM / (1 + z * z);
+        R *= radial;
+        r += (1 - sK) * 11.0 * aw;
+        r += GEO.cent[idx] * (1 - sK) * 7.0 * aw;
+        /* precession: the Cayley half-angle of tau = geoP * omega. c^2+s^2 = 1
+           exactly (wheeler_cayley_rotation_is_orthogonal), so this rotates. */
+        const tau = C5.geoP * sW;
+        phiShift += Math.atan2(2 * tau, 1 - tau * tau) * (1 + vGain);
+        /* omega over its largest grid value, in [-1, 1] by bilinear_abs_le:
+           the modulation argument of the WHEELER surface terms */
+        wN = sW * wInv;
+        R += WHEELER.fieldDistortion(theta, phi, wN) * aw * 3;
+        const ethP = WHEELER.etherPressure(theta, phi, wN);
+        r += ethP * 7.0; R += ethP * 3.0;
+        const csI = WHEELER.counterspaceIntensity(theta, phi, fv, wN, sKs);
+        r -= abs(csI) * 4.0; yOff += csI * 6.0;
+        yOff += GEO.gv[idx] * abs(sW) * wInv * 4 * vGain;
+        phiShift += GEO.gv[idx] * 0.025;
+      }
+      /* --- R4 gate pinch: 1 - the mean gate, in [3/5, 1] by pinch_mem --- */
       if (r4On) r *= 1 - (1 - r4f) * 0.4;
-      const effPhi = GEO.phi[j] + phiShift;
+      /* no clamp: R and r are what the channels make them. A tube that turns
+         inside out or a spindle torus is still the parametrised surface, and
+         the projection channel certifies every point of it. */
+      const effPhi = phi + phiShift;
       const cosP = cos(effPhi), sinP = sin(effPhi);
       let x = (R + r * cosP) * cosTheta;
       let y = r * sinP + yOff;
       let z = (R + r * cosP) * sinTheta;
       const n2 = x * x + y * y + z * z;
       if (n2 > maxN2) maxN2 = n2;
+      PT_NORM[idx] = n2;
       let t1;
       t1 = x * cRY - z * sRY; z = x * sRY + z * cRY; x = t1;
       t1 = y * cRX - z * sRX; z = y * sRX + z * cRX; y = t1;
@@ -3411,6 +3391,7 @@ function projectTorus() {
       const dev = n2 > 0 ? Math.abs(n2r - n2) / n2 : Math.abs(n2r);
       if (dev > turn) turn = dev;
       PT.sx[idx] = x; PT.sy[idx] = y; PT.depth[idx] = z;
+      PT.field[idx] = ampOn ? fv : 0; PT.wN[idx] = wN; PT.kS[idx] = kS;
     }
   }
   /* The camera goes beyond the frame's largest point: CAM_DIST for the bare
@@ -3419,36 +3400,37 @@ function projectTorus() {
      behind it, at any camera angle. */
   const maxNorm = Math.sqrt(maxN2);
   const D = Math.max(CAM_DIST, CAM_DIST * maxNorm / (TORUS_R + TORUS_r));
-  const viewScale = Math.min(cw, ch) / (2 * (TORUS_R + TORUS_r));
+  /* screen pixels per surface unit; a surface of zero extent has nothing to frame */
+  PT_NORM.sort();
+  const body = Math.sqrt(PT_NORM[Math.floor(FRAME_SHARE * (N_PTS - 1))]);
+  const frame = body > 0 ? FRAME_FILL * 0.5 * Math.min(cw, ch) / body : 0;
+  PROJECTION.body = body;
   let behind = 0;
   for (let k = 0; k < N_PTS; k++) {
     const den = D + PT.depth[k];
     if (!(den > 0)) { behind++; continue; }
-    const pScale = D / den * ZOOM * viewScale;
+    const pScale = D / den * ZOOM * frame;
     PT.sx[k] = cx + PT.sx[k] * pScale;
     PT.sy[k] = cy + PT.sy[k] * pScale;
   }
-  const mg = torusMargins();
   PROJECTION.D = D; PROJECTION.maxNorm = maxNorm;
-  PROJECTION.ampScale = fScale; PROJECTION.wheelerScale = wScale; PROJECTION.viewScale = viewScale;
   PROJECTION.behind = behind; PROJECTION.checked = N_PTS;
   PROJECTION.turn = turn;
-  PROJECTION.torusByConstruction = mg.tube > 0 && mg.ring > 0;
   CERT.projection = behind === 0 && turn < 1e-9;
   CERT.all = Object.keys(VISUAL_CERTIFICATE.channels).every(k => CERT[k]);
 }
 /* ---------------------------------------------------------------------------
    The surface is drawn in one WebGL call into its own layer, under the 2D
-   overlay canvas: every visible quad flat-coloured, hidden surface by the
-   depth buffer. There is no second rasteriser; if the browser gives no WebGL
-   context the surface is not drawn and the page says so, while the kernel,
-   its audits and the panels carry on.
+   overlay canvas: every visible quad flat-coloured with its seams drawn,
+   hidden surface by the depth buffer. There is no second rasteriser; if the
+   browser gives no WebGL context the surface is not drawn and the page says
+   so, while the kernel, its audits and the panels carry on.
    --------------------------------------------------------------------------- */
 const SURFACE_GL = (() => {
   const cv = document.getElementById('gl');
-  const FLOATS = 6;                               /* x, y, depth, r, g, b */
+  const FLOATS = 8;                               /* x, y, depth, r, g, b, u, v */
   const data = new Float32Array(N_PTS * 6 * FLOATS);
-  const S = { gl: null, prog: null, buf: null, aPos: -1, aCol: -1, uView: null, error: null, canvas: cv, data };
+  const S = { gl: null, prog: null, buf: null, aPos: -1, aCol: -1, aUV: -1, uView: null, error: null, canvas: cv, data, FLOATS };
   function compile(gl, type, src) {
     const sh = gl.createShader(type);
     gl.shaderSource(sh, src); gl.compileShader(sh);
@@ -3461,16 +3443,23 @@ const SURFACE_GL = (() => {
                                         preserveDrawingBuffer: false });
     if (!gl) { S.gl = null; S.error = 'this browser gave the page no WebGL context'; return false; }
     try {
+      /* the seam: within SEAM of a quad's edge (in the quad's own u, v) the
+         colour is multiplied by SEAM_SHADE, a factor in [0, 1] (mul_mem_unit),
+         which draws the mesh the surface is made of */
       const vs = compile(gl, gl.VERTEX_SHADER,
-        'attribute vec3 aPos; attribute vec3 aCol; uniform vec2 uView; varying vec3 vCol;' +
-        'void main(){ gl_Position = vec4(aPos.x / uView.x * 2.0 - 1.0, 1.0 - aPos.y / uView.y * 2.0, aPos.z, 1.0); vCol = aCol; }');
+        'attribute vec3 aPos; attribute vec3 aCol; attribute vec2 aUV; uniform vec2 uView;' +
+        'varying vec3 vCol; varying vec2 vUV;' +
+        'void main(){ gl_Position = vec4(aPos.x / uView.x * 2.0 - 1.0, 1.0 - aPos.y / uView.y * 2.0, aPos.z, 1.0);' +
+        ' vCol = aCol; vUV = aUV; }');
       const fs = compile(gl, gl.FRAGMENT_SHADER,
-        'precision mediump float; varying vec3 vCol; void main(){ gl_FragColor = vec4(vCol, 1.0); }');
+        'precision mediump float; varying vec3 vCol; varying vec2 vUV;' +
+        'void main(){ float e = min(min(vUV.x, 1.0 - vUV.x), min(vUV.y, 1.0 - vUV.y));' +
+        ' float k = e < 0.06 ? 0.78 : 1.0; gl_FragColor = vec4(vCol * k, 1.0); }');
       const p = gl.createProgram();
       gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
       S.prog = p;
-      S.aPos = gl.getAttribLocation(p, 'aPos'); S.aCol = gl.getAttribLocation(p, 'aCol');
+      S.aPos = gl.getAttribLocation(p, 'aPos'); S.aCol = gl.getAttribLocation(p, 'aCol'); S.aUV = gl.getAttribLocation(p, 'aUV');
       S.uView = gl.getUniformLocation(p, 'uView');
       S.buf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, S.buf);
@@ -3498,37 +3487,33 @@ const SURFACE_GL = (() => {
     gl.vertexAttribPointer(S.aPos, 3, gl.FLOAT, false, FLOATS * 4, 0);
     gl.enableVertexAttribArray(S.aCol);
     gl.vertexAttribPointer(S.aCol, 3, gl.FLOAT, false, FLOATS * 4, 12);
+    gl.enableVertexAttribArray(S.aUV);
+    gl.vertexAttribPointer(S.aUV, 2, gl.FLOAT, false, FLOATS * 4, 24);
     gl.drawArrays(gl.TRIANGLES, 0, nVerts);
   };
   return S;
 })();
-/* Colour is a sequence of convex mixes of palette colours in [0,1]^3 and
-   products with factors in [0,1] (DisplayMap.lean: lerp_mem_unit,
-   mul_mem_unit, half_lambert_mem, spec_mem, contour_factor_mem), so every
-   component is in [0,1] by construction and nothing is clamped -- by the code
-   or by the browser. */
-const PALETTE = {
-  node: [0.20, 0.07, 0.28], warm: [0.93, 0.60, 0.13], hot: [1.00, 0.94, 0.74],
-  cool: [0.09, 0.33, 0.86], deep: [0.55, 0.85, 1.00],
-  etherW: [1.00, 0.72, 0.30], etherC: [0.30, 0.45, 1.00],
-  centW: [0.98, 0.78, 0.36], centC: [0.42, 0.30, 0.95],
-  cs: [0.72, 0.36, 0.95], gold: [1.00, 0.84, 0.40],
-  spec: [1.00, 0.97, 0.90], rimW: [0.95, 0.70, 0.35], rimC: [0.45, 0.30, 1.00]
-};
-/* |centBal| <= sqrt2 + sqrt3 (centBal_abs_le); |etherPressure| <= phi^3 * phi^3 *
-   (sqrt2 + sqrt3) * (1 + 0.15) for |wN| <= 1 (etherPressure_abs_le with
-   rad <= phi^3 by wheeler_radial_factor_bounded_by_phi_cubed). */
-const CENT_BOUND = Math.SQRT2 + Math.sqrt(3);
-const EP_BOUND = WHEELER._phi3 * WHEELER._phi3 * CENT_BOUND * 1.15;
-/* light and half-vector, unit length */
-const LIGHT = (() => { const l = [-0.35, -0.55, 0.75], n = Math.hypot(...l); return l.map(v => v / n); })();
-const HALFV = (() => { const h = [LIGHT[0], LIGHT[1], LIGHT[2] + 1], n = Math.hypot(...h); return h.map(v => v / n); })();
+/* The colour formula, unchanged, in 0..255 units: it runs far past 255 where
+   the field and the counterspace are strong, and below 0 in deep shadow.
+   Nothing is cut off. Each channel goes through one tone curve instead,
+   identity on [TONE_LO, TONE_HI] and an exponential knee either side, so a
+   value past the top approaches white and a value below the bottom approaches
+   black without ever reaching either (DisplayMap.lean: tone_mem, tone_mono,
+   tone_mid). A larger value always comes out brighter; a clamp would have
+   made every value past 255 the same. The screen has 256 levels per channel,
+   so values more than about 93 past the top all show as full white there:
+   that is the display's resolution, not a cut-off in the formula, which
+   reaches the curve unchanged. */
+const TONE_LO = 24, TONE_HI = 231;
+function tone(v) {
+  if (v < TONE_LO) return TONE_LO * exp((v - TONE_LO) / TONE_LO);
+  if (v <= TONE_HI) return v;
+  const c = 255 - TONE_HI;
+  return TONE_HI + c * (1 - exp(-(v - TONE_HI) / c));
+}
 const QUAD = {
   i00: new Int32Array(N_PTS), i10: new Int32Array(N_PTS), i11: new Int32Array(N_PTS), i01: new Int32Array(N_PTS),
-  a: new Float64Array(N_PTS), wN: new Float64Array(N_PTS), kS: new Float64Array(N_PTS),
-  theta: new Float64Array(N_PTS), phi: new Float64Array(N_PTS),
-  nx: new Float64Array(N_PTS), ny: new Float64Array(N_PTS), nz: new Float64Array(N_PTS),
-  cs: new Float64Array(N_PTS), depth: new Float64Array(N_PTS)
+  nx: new Float64Array(N_PTS), ny: new Float64Array(N_PTS), nz: new Float64Array(N_PTS)
 };
 const SURFACE_STATUS = { drawn: false, why: '' };
 function renderTorus() {
@@ -3545,8 +3530,8 @@ function renderTorus() {
      is not certified right now does not colour the surface either. */
   const CERT = VISUAL_CERTIFICATE._last || VISUAL_CERTIFICATE.status();
   const ampOn = CERT.amplitude, wOn = CERT.wheeler && CERT.golden && PROJECTION.pole === null;
-  /* ---- visible quads and their colour inputs ---- */
-  let nq = 0, zmin = Infinity, zmax = -Infinity, csMax = 0;
+  /* ---- visible quads ---- */
+  let nq = 0, zmin = Infinity, zmax = -Infinity;
   for (let i = 0; i < TH_SEG; i++) {
     const ni = (i + 1) % TH_SEG;
     for (let j = 0; j < PH_SEG; j++) {
@@ -3564,91 +3549,126 @@ function renderTorus() {
       if (nLen === 0) continue;
       QUAD.i00[nq] = i00; QUAD.i10[nq] = i10; QUAD.i11[nq] = i11; QUAD.i01[nq] = i01;
       QUAD.nx[nq] = nx / nLen; QUAD.ny[nq] = ny / nLen; QUAD.nz[nq] = nz / nLen;
-      QUAD.a[nq] = (PT.a[i00] + PT.a[i10] + PT.a[i11] + PT.a[i01]) * 0.25;
-      QUAD.wN[nq] = (PT.wN[i00] + PT.wN[i10] + PT.wN[i11] + PT.wN[i01]) * 0.25;
-      QUAD.kS[nq] = (PT.kS[i00] + PT.kS[i10] + PT.kS[i11] + PT.kS[i01]) * 0.25;
-      QUAD.theta[nq] = ((i + 0.5) / TH_SEG) * TAU;
-      QUAD.phi[nq] = ((j + 0.5) / PH_SEG) * TAU;
       const d0 = PT.depth[i00], d1 = PT.depth[i10], d2 = PT.depth[i11], d3 = PT.depth[i01];
       if (d0 < zmin) zmin = d0; if (d0 > zmax) zmax = d0;
       if (d1 < zmin) zmin = d1; if (d1 > zmax) zmax = d1;
       if (d2 < zmin) zmin = d2; if (d2 > zmax) zmax = d2;
       if (d3 < zmin) zmin = d3; if (d3 > zmax) zmax = d3;
-      if (wOn) {
-        /* counterspace takes the field value itself, not its drawn scale */
-        const fRaw = QUAD.a[nq] * PROJECTION.ampScale;
-        const cs = WHEELER.counterspaceIntensity(QUAD.theta[nq], QUAD.phi[nq], fRaw, QUAD.wN[nq], QUAD.kS[nq]);
-        QUAD.cs[nq] = cs;
-        if (abs(cs) > csMax) csMax = abs(cs);
-      }
       nq++;
     }
   }
-  PROJECTION.csScale = csMax;
   PROJECTION.quads = nq;
   /* depth into [-0.999, 0.999]: an affine map of the frame's own depth range,
      ndc_depth_mem. Every point at one depth has nothing to order: depth 0. */
   const zspan = zmax - zmin;
   const zk = zspan > 0 ? 1.998 / zspan : 0;
-  const csInv = csMax > 0 ? 1 / csMax : 0;
-  const D = SURFACE_GL.data, P = PALETTE;
+  const D = SURFACE_GL.data, F = SURFACE_GL.FLOATS;
+  const hx = -0.35, hy = -0.55, hz = 0.75 + 1, hLen = sqrt(hx * hx + hy * hy + hz * hz);
   const layerSegs = [];
   let o = 0;
-  const c = [0, 0, 0];
-  const mix = (col, t) => { const u = 1 - t; c[0] = c[0] * u + col[0] * t; c[1] = c[1] * u + col[1] * t; c[2] = c[2] * u + col[2] * t; };
-  const scale = k => { c[0] *= k; c[1] *= k; c[2] *= k; };
   for (let q = 0; q < nq; q++) {
-    const a = ampOn ? QUAD.a[q] : 0;
-    /* base: the amplitude, diverging from the nodal colour */
-    c[0] = P.node[0]; c[1] = P.node[1]; c[2] = P.node[2];
-    if (a >= 0) { mix(P.warm, a); mix(P.hot, a * a); }
-    else { const t = -a; mix(P.cool, t); mix(P.deep, t * t); }
-    let cb = 0, e = 0, s = 0;
-    if (wOn) {
-      const th = QUAD.theta[q], ph = QUAD.phi[q], wN = QUAD.wN[q], kS = QUAD.kS[q];
-      e = WHEELER.etherPressure(th, ph, wN) / EP_BOUND;
-      cb = WHEELER.centBal(th, ph) / CENT_BOUND;
-      s = QUAD.cs[q] * csInv;
-      mix(e >= 0 ? P.etherW : P.etherC, 0.35 * abs(e));
-      mix(cb >= 0 ? P.centW : P.centC, 0.30 * abs(cb));
-      mix(P.cs, 0.30 * abs(s));
-      const lat = kS * PI / 4, ip = exp(-3 * lat * lat);
-      mix(P.gold, 0.40 * ip * ip * ip * ip);
-    }
-    /* lighting: half-Lambert, a shifted Blinn lobe and a rim, all in [0,1] */
-    const nx = QUAD.nx[q], ny = QUAD.ny[q], nz = QUAD.nz[q];
-    const dl = 0.5 + 0.5 * (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
-    scale(0.16 + 0.84 * dl * dl);
-    const sh = 0.5 + 0.5 * (nx * HALFV[0] + ny * HALFV[1] + nz * HALFV[2]);
-    const s2 = sh * sh, s4 = s2 * s2, s8 = s4 * s4, s16 = s8 * s8, s32 = s16 * s16;
-    mix(P.spec, 0.6 * s32 * s16);
-    const rim = 1 - abs(nz);
-    mix(cb >= 0 ? P.rimW : P.rimC, 0.45 * rim * rim * rim);
-    /* contour lines: each darkens by a factor in [0,1] */
-    if (ampOn) {
-      const x8 = 8 * a, dist = abs(x8 - floor(x8) - 0.5);
-      scale(1 - 0.30 * exp(-(dist / 0.03) * (dist / 0.03)));
-    }
-    if (wOn) {
-      const fl = WHEELER.fluxPhase(QUAD.theta[q], QUAD.phi[q], QUAD.wN[q], QUAD.kS[q]);
-      const df = (fl - 0.5) / 0.025;
-      scale(1 - 0.45 * exp(-df * df));
-      const de = sin(4 * PI * e) / 0.08;
-      scale(1 - 0.25 * exp(-de * de));
-      const dc = s / 0.04;
-      scale(1 - 0.35 * exp(-dc * dc));
-      const dk = QUAD.kS[q] / 0.10;
-      mix(P.gold, 0.30 * exp(-dk * dk));
-    }
-    /* two triangles, flat colour */
     const k0 = QUAD.i00[q], k1 = QUAD.i10[q], k2 = QUAD.i11[q], k3 = QUAD.i01[q];
+    const i = (k0 / PH_SEG) | 0, j = k0 % PH_SEG;
+    const theta = ((i + 0.5) / TH_SEG) * TAU, phi = ((j + 0.5) / PH_SEG) * TAU;
+    const nxN = QUAD.nx[q], nyN = QUAD.ny[q], nzN = QUAD.nz[q];
+    const diffuse = -0.35 * nxN - 0.55 * nyN + 0.75 * nzN;
+    const specDot = (nxN * hx + nyN * hy + nzN * hz) / hLen;
+    const specular = Math.pow(specDot, 32) * 0.6;
+    const fresnel = Math.pow(1 - abs(nzN), 3) * 0.5;
+    const rawField = ampOn ? (PT.field[k0] + PT.field[k1] + PT.field[k2] + PT.field[k3]) * 0.25 : 0;
+    const wOmega = (PT.wN[k0] + PT.wN[k1] + PT.wN[k2] + PT.wN[k3]) * 0.25;
+    const kS = (PT.kS[k0] + PT.kS[k1] + PT.kS[k2] + PT.kS[k3]) * 0.25;
+    const fv = 2 * Math.atan(rawField * 2) / PI;
+    const afv = abs(fv);
+    const isoField = abs(fv * 8 % 1.0 - 0.5);
+    const contourField = isoField < 0.05 ? (1 - isoField / 0.05) * 0.30 : 0;
+    let etherNorm = 0, csNorm = 0, centBal = 0, inertiaProx = 0;
+    let contourFlux = 0, contourEther = 0, contourCS = 0, contourInertia = 0;
+    if (wOn) {
+      etherNorm = WHEELER.etherPressure(theta, phi, wOmega);
+      csNorm = WHEELER.counterspaceIntensity(theta, phi, rawField, wOmega, kS);
+      centBal = WHEELER.centBal(theta, phi);
+      /* latitude from the inertial plane: a quarter turn per Hamming layer */
+      const lat = kS * PI / 4;
+      inertiaProx = exp(-lat * lat * 3);
+      const fluxP = WHEELER.fluxPhase(theta, phi, wOmega, kS);
+      const contourDist1 = abs(fluxP - 0.5);
+      contourFlux = contourDist1 < 0.04 ? (1 - contourDist1 / 0.04) * 0.45 : 0;
+      contourEther = (abs(sin(etherNorm * PI * 4)) < 0.12 ? (1 - abs(sin(etherNorm * PI * 4)) / 0.12) * 0.25 : 0);
+      contourCS = (abs(csNorm) < 0.08 ? (1 - abs(csNorm) / 0.08) * 0.35 : 0);
+      contourInertia = inertiaProx > 0.75 ? (inertiaProx - 0.75) / 0.25 * 0.25 : 0;
+      inertialLayerSegments(k0, k1, k2, k3, layerSegs);
+    }
+    let r, g, b;
+    if (fv > 0) {
+      const warmEther = etherNorm * 0.6;
+      const centWarm = centBal * 0.4;
+      const inertiaGold = inertiaProx * 0.3;
+      r = 155 + fv * 100 + warmEther * 70 + centWarm * 50 + inertiaGold * 50;
+      g = 95 + fv * 140 + warmEther * 80 + centWarm * 40 + inertiaGold * 60;
+      b = 8 + fv * 35 + abs(csNorm) * 80 + inertiaGold * 40;
+      if (afv > 0.5) {
+        const incand = (afv - 0.5) * 2.0;
+        r += incand * 70; g += incand * 80; b += incand * 50;
+      }
+    } else if (fv < -0.005) {
+      const depth = -fv;
+      const coolEther = -etherNorm * 0.5;
+      const centCool = -centBal * 0.45;
+      r = 5 + depth * 40 + coolEther * 40 + centCool * 55;
+      g = 35 + depth * 150 + coolEther * 35 + centCool * 20;
+      b = 130 + depth * 125 + abs(etherNorm) * 65 + centCool * 45;
+      if (afv > 0.5) {
+        const deep = (afv - 0.5) * 2.0;
+        r += deep * 50; g += deep * 25; b += deep * 60;
+      }
+    } else {
+      const n = 1 - afv / 0.005;
+      const nodalEther = abs(etherNorm) * 0.35;
+      r = 55 + n * 30 + nodalEther * 25;
+      g = 8 + n * 10 + nodalEther * 12;
+      b = 70 + n * 40 + abs(etherNorm) * 45 + nodalEther * 30;
+    }
+    if (centBal > 0.08) {
+      const warmth = centBal * 1.2;
+      r += warmth * 55; g += warmth * 35; b -= warmth * 20;
+    } else if (centBal < -0.08) {
+      const coolth = abs(centBal) * 1.2;
+      r += coolth * 25; g -= coolth * 10; b += coolth * 55;
+    }
+    if (inertiaProx > 0.30) {
+      const eqBand = (inertiaProx - 0.30) * 1.6;
+      r += eqBand * 120; g += eqBand * 100; b += eqBand * 45;
+    }
+    const sss = abs(csNorm) * 0.30 * (1 - diffuse);
+    r += sss * 120; g += sss * 90; b += sss * 150;
+    const light = 0.15 + 0.60 * diffuse + specular;
+    r *= light; g *= light; b *= light;
+    r += fresnel * (centBal > 0 ? 200 : 120);
+    g += fresnel * (centBal > 0 ? 160 : 60);
+    b += fresnel * (centBal > 0 ? 70 : 240);
+    if (specular > 0.12) {
+      const specBlend = (specular - 0.12) * 2.2;
+      r += specBlend * (centBal > 0 ? 220 : 160) * 0.5;
+      g += specBlend * (centBal > 0 ? 195 : 140) * 0.5;
+      b += specBlend * (centBal > 0 ? 130 : 200) * 0.5;
+    }
+    const contourDarken = 1 - (contourFlux + contourField + contourEther + contourCS);
+    r *= contourDarken; g *= contourDarken; b *= contourDarken;
+    if (contourInertia > 0) {
+      r += contourInertia * 120; g += contourInertia * 100; b += contourInertia * 30;
+    }
+    const cr = tone(r) / 255, cg = tone(g) / 255, cb = tone(b) / 255;
+    /* two triangles, flat colour, each corner with its place in the quad */
     for (let t = 0; t < 6; t++) {
       const k = t === 0 || t === 3 ? k0 : t === 1 ? k1 : t === 5 ? k3 : k2;
-      D[o++] = PT.sx[k]; D[o++] = PT.sy[k];
-      D[o++] = zk === 0 ? 0 : (PT.depth[k] - zmin) * zk - 0.999;
-      D[o++] = c[0]; D[o++] = c[1]; D[o++] = c[2];
+      D[o] = PT.sx[k]; D[o + 1] = PT.sy[k];
+      D[o + 2] = zk === 0 ? 0 : (PT.depth[k] - zmin) * zk - 0.999;
+      D[o + 3] = cr; D[o + 4] = cg; D[o + 5] = cb;
+      D[o + 6] = (k === k1 || k === k2) ? 1 : 0;
+      D[o + 7] = (k === k2 || k === k3) ? 1 : 0;
+      o += F;
     }
-    if (wOn) inertialLayerSegments(QUAD.i00[q], QUAD.i10[q], QUAD.i11[q], QUAD.i01[q], layerSegs);
   }
   SURFACE_GL.draw(nq * 6, W, H, cw, ch);
   SURFACE_STATUS.drawn = true; SURFACE_STATUS.why = '';
@@ -3901,9 +3921,9 @@ function updateDrawHud() {
   let surface;
   if (!SURFACE_STATUS.drawn) surface = 'not drawn: ' + SURFACE_STATUS.why;
   else if (PROJECTION.pole) surface = `Wheeler withheld: 1 + geoD·D = ${fmtE(PROJECTION.pole.den)} at θ ${sf(PROJECTION.pole.theta, 2)}, φ ${sf(PROJECTION.pole.phi, 2)}`;
-  else surface = (PROJECTION.torusByConstruction ? 'torus by construction' : 'gains allow self-intersection') +
-                 ` · ${PROJECTION.quads} quads`;
-  const scale = `|ψ|² dev ${fmtE(PROJECTION.ampScale)} · Wheeler ${fmtE(PROJECTION.wheelerScale)}`;
+  else surface = `${PROJECTION.quads} quads drawn`;
+  /* how far the formulas carried the surface: the bare torus reaches 250 */
+  const scale = `farthest point ${Math.round(PROJECTION.maxNorm)} (bare torus 250)`;
   const key = surface + '|' + scale;
   if (key === DRAW_HUD_KEY) return;
   DRAW_HUD_KEY = key;
@@ -4072,6 +4092,15 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
    declared defaults, and goes out to the kernel at once. */
 const PRESETS = {
   'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 50, 17: 50, 27: 50, 28: 50 }, vortex: 0 },
+  /* Chosen by running the kernel itself: each settles the field onto a
+     different structure of the tesseract, and holds it there. */
+  'pre-bindu':          { comp: 'PARALLEL',             set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, vortex: 0 },
+  'pre-star':           { comp: 'PARALLEL',             set: { 2: 25, 23: 25 }, vortex: 0 },
+  'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },
+  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },
+  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },
+  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },
+  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, vortex: 0 },
   'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, vortex: 0 },
   'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, vortex: 0 },
   'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, vortex: 0 },
@@ -4084,7 +4113,13 @@ const PRESETS = {
 };
 Object.entries(PRESETS).forEach(([id, p]) => {
   document.getElementById(id).addEventListener('click', function () {
-    SUTRAS.forEach(s => { setSutraStrengthExact(s, String(p.set[s.id] || 0)); resetSutraArgs(s); });
+    SUTRAS.forEach(s => {
+      setSutraStrengthExact(s, String(p.set[s.id] || 0));
+      resetSutraArgs(s);
+      /* a preset may set a sutra's operands too, as exact rationals; each is
+         checked against its domain and refused, never clamped */
+      if (p.args && p.args[s.id]) p.args[s.id].forEach((t, i) => { s.argQ[i] = KERNEL.checkArg(s.id, i, Q.parse(t)); });
+    });
     setComposition(p.comp);
     vortexGain = p.vortex; vortexHelicity = p.vortex >= 0 ? 1 : -1;
     syncPanel(); clearPresetHighlight(); this.classList.add('preset-active');
