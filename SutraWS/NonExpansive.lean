@@ -25,6 +25,10 @@ that is non-expansiveness, since `‖L x − L y‖ = ‖L (x − y)‖`. A tran
   the mean (Śūnyam at strength `s`), and the mean-free projection;
 * `complement_average_energy` — `(1 − h) ψ_v + h ψ_{c(v)}`, `h ∈ [0, 1]`,
   for any permutation `c` (the complement average, `h = strength / 2`).
+
+A permutation, the Walsh transform or the complement swap taken at a strength
+is its principal fractional power, also an isometry: `FractionalPower.lean`
+(`perm_frac_energy`, `wht_frac_energy`, `twist_frac_energy`).
 -/
 
 namespace SutraWS

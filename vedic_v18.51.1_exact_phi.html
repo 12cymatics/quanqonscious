@@ -169,11 +169,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
       <div class="grp">PARALLEL</div>
       <button type="button" id="pre-cymatic" title="PARALLEL: S9+S17+S27+S28 at 50%">〰 CYMATIC</button>
-      <button type="button" id="pre-bindu" title="PARALLEL: S2(25) S7(100) S22(75) S23(50) S26(100). The parallel sum grows every step; R4 holds it at the ceiling, and its gate gathers the field onto the single vertex 0000, about fifteen times the mean. It holds still.">• BINDU</button>
-      <button type="button" id="pre-star" title="PARALLEL: S2 and S23 at 25%. R4 holds the growth; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
+      <button type="button" id="pre-bindu" title="PARALLEL: S5(25) S12(50) S28(75). R4 stays dormant; the field gathers on the single vertex 0000, about fourteen times the mean, and holds still.">• BINDU</button>
+      <button type="button" id="pre-star" title="CONCURRENT: S13(100) S20(75) S22(50). R4 stays dormant; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
       <button type="button" id="pre-crown" title="PARALLEL: S13(100) S18(50) S26(50). R4 holds the growth; the field settles on 1111, three of its neighbours 1011, 1101, 1110, and 1000.">♔ CROWN</button>
       <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25). No growth to hold; the field decays onto the square face 0000, 0001, 1000, 1001.">▢ SQUARE</button>
-      <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about 35x per step; the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
+      <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about twofold per step (1.2x to 3.6x); the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
       <div class="grp" style="color:#d4af37">SERIES</div>
       <button type="button" id="pre-equilibrium" title="SERIES: S7(50) S19(75) S22(100). The field settles within one part in ten thousand of the same share at every vertex, and stays there, so the shape is almost entirely the Wheeler geometry.">○ EQUILIBRIUM</button>
       <button type="button" id="pre-wormhole" title="SERIES: S5,S9,S22,S23,S26,S29 at 50%">🕳 WORMHOLE</button>
@@ -811,6 +811,58 @@ const KERNEL_FACTORY = () => {
     return out;
   };
   const iterate = (fn,k) => v => { let u=v; for(let i=0;i<k;i++)u=fn(u); return u; };
+  /* Strength on a fixed transform. A vertex permutation, the Walsh transform
+     and the complement swap have no angle for the strength to scale, but each
+     has order dividing 4, so its eigenvalues are 1, i, -1, -i and it has a
+     principal fractional power. At strength s the sutra applies A^alpha,
+     alpha = (4/pi) arctan s: with u = cayley(s) = e^{2i arctan s} it is 1, u,
+     u^2 and conj(u) on the four eigenspaces, which is
+         U = c0 + c1 A + c2 A^2 + c3 A^3,   c_k = (1/4) sum_j phi_j (-i)^{jk},
+     phi = (1, u, u^2, conj u). Strength 0 is the identity, strength 1 is A
+     itself, and every strength between is unitary (FractionalPower.lean:
+     coeff_zero, coeff_one, coeff_autocorr, frac_energy, frac_eigen,
+     cay_eq_exp; perm_frac_energy with perm_order_four, wht_frac_energy,
+     twist_frac_energy for the three kinds of transform).
+     A^4 = 1 is checked -- on the index map for a permutation, on the state
+     otherwise -- and a transform that fails it is refused. A term whose
+     coefficient is exactly zero is exactly zero and is not formed. */
+  const C4_I = Object.freeze({re:A4.ZERO,im:A4.ONE});
+  const fracCoeffs = s => {
+    const cs=cayley(A4.fromQ(s)), u=C4.mk(cs.c,cs.s), phi=[C4.ONE,u,C4.mul(u,u),C4.conj(u)];
+    const negIpow=[C4.ONE,C4.neg(C4_I),C4.neg(C4.ONE),C4_I];
+    return [0,1,2,3].map(k=>C4.scaleQ(phi.reduce((acc,f,j)=>C4.add(acc,C4.mul(f,negIpow[(j*k)%4])),C4.ZERO),Q.QUARTER));
+  };
+  const fracPower = (psi,A,s,orderChecked=false) => {
+    const c=fracCoeffs(s);
+    const y=[psi,A(psi)];y.push(A(y[1]));y.push(A(y[2]));
+    if(!orderChecked&&!A(y[3]).every((z,v)=>C4.eq(z,psi[v])))throw new RangeError('fractional power: the transform does not have order dividing 4');
+    return combineQi(y,c);
+  };
+  /* sum_k c_k y_k for coefficients c_k in Q[i], evaluated on integers over
+     one common denominator: the same rationals the C4 sum gives, without a
+     gcd per partial product. */
+  const combineQi = (y,c) => {
+    const terms=[0,1,2,3].filter(k=>!C4.isZero(c[k]));
+    for(const k of terms)if(!A4.isRational(c[k].re)||!A4.isRational(c[k].im))throw new RangeError('fractional power: coefficient outside Q[i]');
+    let D=1n,C=1n;
+    for(const k of terms){const d=liftCommonD(y[k]);if(d!==null)D=D/gcd(D,d)*d;for(const q of [c[k].re.a,c[k].im.a])C=C/gcd(C,q.d)*q.d;}
+    const A=terms.map(k=>c[k].re.a.n*(C/c[k].re.a.d)),Bc=terms.map(k=>c[k].im.a.n*(C/c[k].im.a.d));
+    const L=q=>q.n===0n?0n:q.n*(D/q.d),DC=D*C,keys=['a','b','c','d'];
+    return y[0].map((_,v)=>{
+      const re={},im={};
+      for(const j of keys){
+        let r=0n,m=0n;
+        terms.forEach((k,t)=>{const z=y[k][v],x=L(z.re[j]),w=L(z.im[j]);r+=A[t]*x-Bc[t]*w;m+=A[t]*w+Bc[t]*x;});
+        re[j]=Q.mk(r,DC);im[j]=Q.mk(m,DC);
+      }
+      return C4.mk(A4.mk(re.a,re.b,re.c,re.d),A4.mk(im.a,im.b,im.c,im.d));
+    });
+  };
+  const permPower = (psi,fn,k,s) => {
+    const P=iterate(fn,k);
+    for(let v=0;v<16;v++)if(P(P(P(P(v))))!==v)throw new RangeError('fractional power: the permutation does not have order dividing 4');
+    return fracPower(psi,x=>permuteState(x,P),s,true);
+  };
   /* keep stores the result of each inner layer that creates new denominators
      (a phase or a rotation layer) before the next layer mixes them; the
      identity for the exact audits. */
@@ -820,17 +872,17 @@ const KERNEL_FACTORY = () => {
     const s=qToA4(strengthQ);
     switch(id){
       case 1:return phaseState(psi,v=>A4.scaleQ(s,Q.add(Q.mk(BigInt(hw(v))),a[1])));
-      case 2:return permuteState(psi,iterate(comp,argInt(a[1])));
-      case 3:return phaseState(wht(psi),v=>A4.scaleQ(s,Q.mul(Q.mk(BigInt(hw(v)+1),16n),a[1])));
+      case 2:return permPower(psi,comp,argInt(a[1]),strengthQ);
+      case 3:return phaseState(fracPower(psi,wht,strengthQ),v=>A4.scaleQ(s,Q.mul(Q.mk(BigInt(hw(v)+1),16n),a[1])));
       case 4:{const t=A4.scaleQ(s,Q.div(Q.ONE,a[1]));let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),t);return o;}
       case 5:return meanFree(psi,strengthQ);
-      case 6:return permuteState(psi,iterate(rotateBits,argInt(a[1])));
-      case 7:return permuteState(psi,iterate(bitReverse,argInt(a[1])));
+      case 6:return permPower(psi,rotateBits,argInt(a[1]),strengthQ);
+      case 7:return permPower(psi,bitReverse,argInt(a[1]),strengthQ);
       case 8:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.div(Q.mk(BigInt(v+1)),a[1]));o=rotatePairInState(o,v,comp(v),t);}return o;}
       case 9:return edgeRotation(psi,edgesN1,()=>A4.scaleQ(s,a[1]),keep);
       case 10:{const e=argInt(a[1]);return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((hw(v)+1)**e),16n)));}
       case 11:{let x=wht(psi);x=keep(phaseState(x,v=>A4.scaleQ(s,Q.mul(Q.mk(BigInt(hw(v))),a[1]))));return wht(x);}
-      case 12:return permuteState(psi,iterate(swap03,argInt(a[1])));
+      case 12:return permPower(psi,swap03,argInt(a[1]),strengthQ);
       case 13:{let o=cloneState(psi);for(let v=0;v<8;v++){const t=A4.scaleQ(s,Q.mk(1n,16n));const w=A4.mul(t,A4.fromQ(Q.add(Q.mul(a[1],Q.mk(BigInt(v))),Q.ONE)));o=rotatePairInState(o,v,comp(v),w);}return o;}
       case 14:return phaseState(psi,v=>A4.scaleQ(s,Q.mul(Q.mk((hw(v)&1)?-1n:1n),a[1])));
       case 15:{
@@ -854,15 +906,16 @@ const KERNEL_FACTORY = () => {
         let o=edgeRotation(psi,edgesN1,(u)=>A4.scaleQ(s,Q.mul(a[1],c[hw(u)])),keep);
         o=edgeRotation(o,edgesN3,(u)=>A4.scaleQ(s,c[hw(u)]),keep);return o;
       }
-      case 18:return permuteState(psi,iterate(affine18,argInt(a[1])));
+      case 18:return permPower(psi,affine18,argInt(a[1]),strengthQ);
       case 19:{let x=wht(psi);x=keep(phaseState(x,v=>A4.scaleQ(s,Q.mul(Q.mul(a[1],Q.mk(BigInt(v+1))),Q.mk(1n,224n)))));return wht(x);}
       case 20:return phaseState(psi,v=>A4.scaleQ(s,Q.div(Q.mk((v&1)?-1n:1n),a[1])));
       case 21:{const m=argInt(a[1]);return phaseState(psi,v=>A4.scaleQ(s,Q.mk(BigInt((v%m)-((m-1)>>1)),16n)));}
       case 22:return complementAverage(psi,strengthQ);
       case 23:{
-        const p=C4.phase(A4.scaleQ(s,Q.div(a[1],Q.mk(10n)))),pc=C4.conj(p),o=cloneState(psi);
-        for(let v=0;v<8;v++){const u=comp(v);o[v]=C4.mul(p,psi[u]);o[u]=C4.mul(pc,psi[v]);}
-        return o;
+        /* the twisted complement swap J (J^2 = 1) at its fractional power */
+        const p=C4.phase(A4.scaleQ(s,Q.div(a[1],Q.mk(10n)))),pc=C4.conj(p);
+        const J=x=>{const o=cloneState(x);for(let v=0;v<8;v++){const u=comp(v);o[v]=C4.mul(p,x[u]);o[u]=C4.mul(pc,x[v]);}return o;};
+        return fracPower(psi,J,strengthQ);
       }
       case 24:{
         /* Lopanasthapanabhyam, "by elimination and retention": eliminate a
@@ -874,8 +927,8 @@ const KERNEL_FACTORY = () => {
         x=keep(phaseState(x,v=>hw(v)>=retain?s:A4.ZERO));
         return wht(x);
       }
-      case 25:{const t=A4.fromQ(a[1]);let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),t);return o;}
-      case 26:{const b=1<<argInt(a[1]);return permuteState(psi,v=>v^b);}
+      case 25:{const t=A4.scaleQ(s,a[1]);let o=cloneState(psi);for(let v=0;v<8;v++)o=rotatePairInState(o,v,comp(v),t);return o;}
+      case 26:{const b=1<<argInt(a[1]);return permPower(psi,v=>v^b,1,strengthQ);}
       case 27:{const par=argInt(a[1]);let x=wht(psi);x=keep(phaseState(x,v=>(hw(v)&1)===par?s:A4.ZERO));return wht(x);}
       case 28:{let x=wht(psi);x=keep(phaseState(x,v=>A4.neg(A4.scaleQ(s,Q.mul(Q.mul(a[1],Q.mk(BigInt(v+1))),Q.mk(1n,224n))))));return wht(x);}
       case 29:return s29(psi,strengthQ);
@@ -1706,6 +1759,25 @@ const KERNEL_FACTORY = () => {
     for(const v of [A4.mk(Q.ONE,Q.ONE,Q.mk(-1n),Q.ZERO),A4.mk(Q.mk(4n),Q.ZERO,Q.ZERO,Q.mk(-1n)),A4.mk(Q.mk(2n),Q.ZERO,Q.mk(-1n),Q.ZERO),
                     A4.mk(Q.mk(-7n,3n),Q.mk(5n,2n),Q.mk(1n,9n),Q.mk(-1n,4n)),A4.mk(Q.mk(99n),Q.mk(-70n),Q.ZERO,Q.ZERO),A4.ZERO,x])
       assert("integer A4 sign agrees with A4.sign",a4SignI(liftA4s([v])[0])===A4.sign(v));
+    /* the fractional power, as FractionalPower.lean states it: strength 0 is
+       the identity and strength 1 the transform (coeff_zero, coeff_one), the
+       coefficients have the autocorrelation of a unit spectrum
+       (coeff_autocorr), and each eigenspace gets 1, u, u^2, conj u
+       (frac_eigen) -- decided exactly at several strengths */
+    {
+      const isE=(c,j)=>c.every((x,k)=>C4.eq(x,k===j?C4.ONE:C4.ZERO));
+      assert("fractional power: strength 0 is the identity",isE(fracCoeffs(Q.ZERO),0));
+      assert("fractional power: strength 1 is the transform",isE(fracCoeffs(Q.ONE),1));
+      const lam=[C4.ONE,C4_I,C4.neg(C4.ONE),C4.neg(C4_I)];
+      for(const s of [Q.mk(1n,8n),Q.mk(1n,4n),Q.HALF,Q.mk(3n,4n),Q.mk(-2n,3n)]){
+        const c=fracCoeffs(s),cs=cayley(A4.fromQ(s)),u=C4.mk(cs.c,cs.s),phi=[C4.ONE,u,C4.mul(u,u),C4.conj(u)];
+        let auto=true,eig=true;
+        for(let m=0;m<4;m++){let acc=C4.ZERO;for(let k=0;k<4;k++)acc=C4.add(acc,C4.mul(C4.conj(c[k]),c[(k+m)%4]));if(!C4.eq(acc,m===0?C4.ONE:C4.ZERO))auto=false;}
+        lam.forEach((l,j)=>{let acc=C4.ZERO,p=C4.ONE;for(let k=0;k<4;k++){acc=C4.add(acc,C4.mul(c[k],p));p=C4.mul(p,l);}if(!C4.eq(acc,phi[j]))eig=false;});
+        assert(`fractional power autocorrelation at ${Q.toString(s)}`,auto);
+        assert(`fractional power eigenvalues at ${Q.toString(s)}`,eig);
+      }
+    }
     const psi=initState();assert("WHT roundtrip",wht(wht(psi)).every((z,i)=>C4.eq(z,psi[i])));
     const s5=meanFree(psi);assert("S5 zero mean",C4.isZero(mean(s5)));assert("S5 idempotent",meanFree(s5).every((z,i)=>C4.eq(z,s5[i])));
     const s22=complementAverage(psi);assert("S22 idempotent",complementAverage(s22).every((z,i)=>C4.eq(z,s22[i])));
@@ -2151,11 +2223,11 @@ const LEAN_PROVED = Object.freeze({
      SutraWS/VertexProofs.lean, SutraWS/Interpolation.lean,
      SutraWS/WheelerSurface.lean, SutraWS/Projection.lean,
      SutraWS/StoredPrecision.lean, SutraWS/ErrorBudget.lean,
-     SutraWS/NonExpansive.lean, SutraWS/R4Controller.lean and
-     SutraWS/DisplayMap.lean, built by
+     SutraWS/NonExpansive.lean, SutraWS/R4Controller.lean,
+     SutraWS/DisplayMap.lean and SutraWS/FractionalPower.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2238,9 +2310,11 @@ const VISUAL_CERTIFICATE = {
       holds: () => PROJECTION.checked > 0 && PROJECTION.behind === 0 && PROJECTION.turn < 1e-9
     },
     sutra: {
-      draws: 'the class each active sutra operator declares, audited at its operands',
+      draws: 'the class each active sutra operator declares, audited at its operands, and each at its strength',
       theorems: ['unitary_measured_unitary_no_defect', 'projective_measured_projective_no_defect',
-                 'declared_unitary_but_rank_deficient_is_defect'],
+                 'declared_unitary_but_rank_deficient_is_defect',
+                 'coeff_zero', 'coeff_one', 'frac_energy', 'coeff_autocorr', 'frac_eigen', 'cay_eq_exp',
+                 'perm_frac_energy', 'perm_order_four', 'wht_frac_energy', 'twist_frac_energy'],
       holds: () => SUTRA_CERT.ok
     }
   },
@@ -2313,23 +2387,23 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: 'd9cac8d3a45cf4a5768b0f58d0bb68e23563029b32d1f838b0616ec1226bfe50',
+  leanCorpusSha256: '4130db96addebdd0e463881b0b63cab03cb8e7faa4de0a2ea396e13db4831778',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2254,
+  leanTheorems: 2294,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2254,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
+  leanAxiomsKernelChecked: 2294,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase, a permutation, the normalised Walsh-Hadamard transform, a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
+  storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase, a permutation, the normalised Walsh-Hadamard transform, the fractional power of a permutation, of that transform or of the complement swap at the strength (FractionalPower.lean), a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
   r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
   wheelerScopeNote: 'The Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic, on the stored dielectric field of the state being drawn. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 and pi enter at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The projection channel (SutraWS/Projection.lean) keeps every point in front of the camera whatever their size.'
@@ -4124,9 +4198,10 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
 const PRESETS = {
   'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 50, 17: 50, 27: 50, 28: 50 }, vortex: 0 },
   /* Chosen by running the kernel itself: each settles the field onto a
-     different structure of the tesseract, and holds it there. */
-  'pre-bindu':          { comp: 'PARALLEL',             set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, vortex: 0 },
-  'pre-star':           { comp: 'PARALLEL',             set: { 2: 25, 23: 25 }, vortex: 0 },
+     different structure of the tesseract, and holds it there, with R4
+     dormant -- the structure is the sutras', not the controller's. */
+  'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, vortex: 0 },
+  'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },
   'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },
   'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },
   'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },

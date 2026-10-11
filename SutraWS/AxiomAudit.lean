@@ -18,6 +18,7 @@ import SutraWS.ErrorBudget
 import SutraWS.NonExpansive
 import SutraWS.R4Controller
 import SutraWS.DisplayMap
+import SutraWS.FractionalPower
 import Lean
 
 /-!
