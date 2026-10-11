@@ -171,7 +171,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
       <button type="button" id="pre-cymatic" title="PARALLEL: S9+S17+S27+S28 at 50%">〰 CYMATIC</button>
       <button type="button" id="pre-bindu" title="PARALLEL: S5(25) S12(50) S28(75). R4 stays dormant; the field gathers on the single vertex 0000, about fourteen times the mean, and holds still.">• BINDU</button>
       <button type="button" id="pre-star" title="CONCURRENT: S13(100) S20(75) S22(50). R4 stays dormant; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
-      <button type="button" id="pre-crown" title="PARALLEL: S13(100) S18(50) S26(50). R4 holds the growth; the field settles on 1111, three of its neighbours 1011, 1101, 1110, and 1000.">♔ CROWN</button>
+      <button type="button" id="pre-crown" title="SERIES: S5(30) S7(5) S13(40, multiplier 5/2) S18(35) S19(55, multiplier 23/4) S20(90, scale 7) S22(20). R4 stays dormant; the field settles on the crown 1000, 1011, 1101, 1110, 1111 and 0110, highest at 1011 and 1110.">♔ CROWN</button>
       <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25). No growth to hold; the field decays onto the square face 0000, 0001, 1000, 1001.">▢ SQUARE</button>
       <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about twofold per step (1.2x to 3.6x); the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
       <div class="grp" style="color:#d4af37">SERIES</div>
@@ -4202,7 +4202,7 @@ const PRESETS = {
      dormant -- the structure is the sutras', not the controller's. */
   'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, vortex: 0 },
   'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },
-  'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },
+  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, vortex: 0 },
   'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },
   'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },
   'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },

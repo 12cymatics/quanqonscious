@@ -309,6 +309,26 @@ section('every strength is the strength');
   ok(fullBad.length === 0 && full > 100, `at strength 1 the nine are exactly the formulas they had (${full} cases)`, `differ at S${u(fullBad)}`);
   ok(ignores.length === 0, 'no sutra gives the same result at strength 1/2 as at strength 1', `S${u(ignores)}`);
   ok(notUnit.length === 0, `every sutra but the contractions S5, S22, S29 preserves the energy exactly at 1/4, 1/2, 3/4 (${unitCases} cases)`, `S${u(notUnit)}`);
+  /* the operands are arguments too: for every sutra and every operand, some
+     other value in its domain (quarter grid) gives a different result at
+     strength 1/2. S19 ignoring its multiplier or S20 its scale passed every
+     other check here, so this one is what holds them. */
+  const ignoredOps = []; let opCount = 0;
+  for (let id = 1; id <= 29; id++) {
+    const spec = K.SUTRA_ARG_SPEC[id] || [];
+    spec.forEach((x, i) => {
+      opCount++;
+      const base = K.applySutra(id, seedS, [Q.HALF, ...spec.map(y => y.def)]);
+      let moves = false;
+      for (let q = Math.ceil(x.lo * 4); q <= Math.floor(x.hi * 4) && !moves; q++) {
+        const v = spec.map(y => y.def); v[i] = Q.mk(BigInt(q), 4n);
+        let o; try { o = K.applySutra(id, seedS, [Q.HALF, ...v]); } catch (e) { continue; }
+        if (!same(o, base)) moves = true;
+      }
+      if (!moves) ignoredOps.push(`S${id}.${x.name}`);
+    });
+  }
+  ok(ignoredOps.length === 0 && opCount >= 27, `no sutra ignores an operand: each of the ${opCount} has a value that changes the result`, ignoredOps.join(' '));
   /* the principal fractional power, checked on eigenvectors: for a cycle
      v0 -> P v0 -> ... of the permutation, y = sum_m mu^-m e_{P^m v0} with
      mu^L = 1 is an eigenvector of x -> x o P^-1 with eigenvalue mu, and the
@@ -372,8 +392,9 @@ section('presets settle where their descriptions say');
                          comp: 'PARALLEL', set: { 5: 25, 12: 50, 28: 75 }, support: ['0000'], dormant: true },
     'pre-star':        { line: "'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },",
                          comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, support: ['0000', '0001', '0100', '1000'], dormant: true },
-    'pre-crown':       { line: "'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 13: 100, 18: 50, 26: 50 }, support: ['1000', '1011', '1101', '1110', '1111'] },
+    'pre-crown':       { line: "'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, vortex: 0 },",
+                         comp: 'SERIES', set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] },
+                         support: ['0110', '1000', '1011', '1101', '1110', '1111'], peaks: ['1011', '1110'], dormant: true },
     'pre-square':      { line: "'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },",
                          comp: 'PARALLEL', set: { 8: 50, 16: 50, 21: 100, 29: 25 }, support: ['0000', '0001', '1000', '1001'], dormant: true },
     'pre-equilibrium': { line: "'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },",
@@ -419,6 +440,10 @@ section('presets settle where their descriptions say');
       continue;
     }
     const order = [...acc.keys()].sort((a, b) => acc[b] - acc[a]);
+    if (x.peaks) {
+      const top = order.slice(0, x.peaks.length).map(v => v.toString(2).padStart(4, '0')).sort();
+      ok(top.join(',') === x.peaks.join(','), `${id}: highest at ${x.peaks.join(' and ')}`, `highest at ${top.join(' and ')}`);
+    }
     const S = []; let c = 0;
     for (const v of order) { S.push(v); c += acc[v]; if (c >= 0.8) break; }
     const got = S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0'));
