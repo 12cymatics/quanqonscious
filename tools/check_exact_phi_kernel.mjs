@@ -151,6 +151,9 @@ section('storage budget');
   }
 }
 
+const R4_CASES = [['3,9,11,25,29', 'SERIES', 4, Q.TWO], ['1,5,9,22', 'PARALLEL', 4, Q.TWO],
+                  ['5,7,12,22,29', 'PARALLEL', 4, Q.TWO], ['2,23', 'PARALLEL', 4, Q.mk(1n, 10n)]];
+
 section('R4 singularity controller');
 {
   const X = A4;
@@ -159,13 +162,21 @@ section('R4 singularity controller');
     tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
   const seen = { dormant: 0, braked: 0, gated: 0 };
-  for (const [ids, mode, n] of [['3,9,11,25,29', 'SERIES', 4], ['1,5,9,22', 'PARALLEL', 4], ['5,7,12,22,29', 'PARALLEL', 4]]) {
+  /* The gate acts only when the sigma-braked step still exceeds T. With every
+     strength scaling its sutra, r = 2 makes sigma small enough that braking
+     alone always suffices on these sets (measured: no gated step in 4 steps of
+     any of the first three). At r = 1/10, the R4 slider's minimum, sigma is
+     close to 1, and the parallel S2 + S23 at 1/2 reaches the gate on steps 1
+     and 3. Before the strength fix the gate was reached at r = 2 only
+     because S7, S12 and S2's swap ignored the brake. */
+  for (const [ids, mode, n, r] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
+    const p = { ...params, r4R: r };
     let eng = K.initEngine(), held = true, why = '';
     for (let s = 0; s < n; s++) {
       const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
       const T = A4.cmp(eIn, ceiling) > 0 ? eIn : ceiling;
-      eng = K.step(eng, params, active, mode);
+      eng = K.step(eng, p, active, mode);
       const L = eng.last, d = L.stepError.delta;
       const bound = A4.add(T, A4.add(A4.scaleQ(T, d), A4.fromQ(Q.add(d, Q.mul(d, d)))));
       const eOut = K.energy(eng.psi);
@@ -178,7 +189,7 @@ section('R4 singularity controller');
       } else if (L.r4.engaged) seen.braked++;
       else seen.dormant++;
     }
-    ok(held, `${mode} ${ids}: ${n} steps end at or below T + d(T+1) + d^2`, why);
+    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}: ${n} steps end at or below T + d(T+1) + d^2`, why);
   }
   ok(seen.dormant > 0 && seen.braked > 0 && seen.gated > 0,
      `the controller was seen dormant (${seen.dormant}), braking only (${seen.braked}) and gating (${seen.gated})`);
@@ -204,11 +215,11 @@ section('step export');
   const fromExact = o => ('re' in o) ? fromC4(o) : ('a' in o && 'b' in o) ? fromA4(o) : fromQ(o);
   const tested = { dormant: 0, braked: 0, gated: 0 };
   let storageSeen = false;
-  for (const [ids, mode, n] of [['3,9,11,25,29', 'SERIES', 4], ['1,5,9,22', 'PARALLEL', 4], ['5,7,12,22,29', 'PARALLEL', 4]]) {
+  for (const [ids, mode, n, r] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     let eng = K.initEngine();
     for (let s = 0; s < n; s++) {
-      eng = K.step(eng, params, active, mode);
+      eng = K.step(eng, { ...params, r4R: r }, active, mode);
       if (s === 0) continue;
       const branch = eng.last.r4.gate ? 'gated' : eng.last.r4.engaged ? 'braked' : 'dormant';
       if (tested[branch]) continue;
@@ -242,6 +253,113 @@ section('step export');
   ok(storageSeen, 'storage moved the Maya energy in at least one export, and the flag still judged the exact stage');
 }
 
+section('every strength is the strength');
+{
+  /* Strength 0 is the identity for all 29 sutras -- the v18 guarantee
+     (SutraWS/Contracts.lean, identity_preserved) -- and strength 1 is the
+     formula each sutra had: nine of them used to ignore their strength (S2,
+     S6, S7, S12, S18, S25, S26 entirely, S3's transform and S23's swap), so the
+     R4 brake could not slow them. The full-strength formulas of those nine
+     are written out here, not taken from the kernel. */
+  const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
+  const cayQ = t => { const t2 = Q.mul(t, t), d = Q.add(Q.ONE, t2); return C4.mk(A4.fromQ(Q.div(Q.sub(Q.ONE, t2), d)), A4.fromQ(Q.div(Q.mul(Q.TWO, t), d))); };
+  const scaleC = (z, c) => C4.mul(c, z);
+  const permOut = (x, P) => { const o = new Array(16); for (let v = 0; v < 16; v++) o[P(v)] = x[v]; return o; };
+  const iter = (f, k) => v => { for (let i = 0; i < k; i++) v = f(v); return v; };
+  const comp = v => v ^ 15, rot = v => ((v << 1) & 15) | ((v >> 3) & 1);
+  const rev = v => ((v & 1) << 3) | ((v & 2) << 1) | ((v & 4) >> 1) | ((v & 8) >> 3);
+  const sw03 = v => ((v & 1) << 3) | (v & 6) | ((v & 8) >> 3);
+  const aff = v => { const b = i => (v >> i) & 1; return (b(0) ^ b(1)) | ((b(1) ^ b(2)) << 1) | ((b(2) ^ b(3)) << 2) | (b(3) << 3); };
+  const whtG = x => Array.from({ length: 16 }, (_, u) => { let acc = C4.ZERO; for (let v = 0; v < 16; v++) acc = (hwf(u & v) & 1) ? C4.sub(acc, x[v]) : C4.add(acc, x[v]); return C4.scaleQ(acc, Q.mk(1n, 4n)); });
+  const FULL = {
+    2: (x, a) => permOut(x, iter(comp, Number(a[0].n))),
+    3: (x, a) => whtG(x).map((z, v) => scaleC(z, cayQ(Q.mul(Q.mk(BigInt(hwf(v) + 1), 16n), a[0])))),
+    6: (x, a) => permOut(x, iter(rot, Number(a[0].n))),
+    7: (x, a) => permOut(x, iter(rev, Number(a[0].n))),
+    12: (x, a) => permOut(x, iter(sw03, Number(a[0].n))),
+    18: (x, a) => permOut(x, iter(aff, Number(a[0].n))),
+    23: (x, a) => { const p = cayQ(Q.div(a[0], Q.mk(10n))), pc = C4.conj(p), o = x.slice(); for (let v = 0; v < 8; v++) { o[v] = C4.mul(p, x[comp(v)]); o[comp(v)] = C4.mul(pc, x[v]); } return o; },
+    25: (x, a) => { const cs = cayQ(a[0]), c = cs.re, s = cs.im, o = x.slice(); for (let v = 0; v < 8; v++) { const u = comp(v); o[v] = C4.add(C4.scaleA4(x[v], c), C4.scaleA4(x[u], s)); o[u] = C4.add(C4.scaleA4(x[v], A4.neg(s)), C4.scaleA4(x[u], c)); } return o; },
+    26: (x, a) => permOut(x, v => v ^ (1 << Number(a[0].n)))
+  };
+  const seedS = K.initState();
+  const states = [seedS, whtG(seedS), seedS.map((z, v) => C4.scaleQ(z, Q.mk(BigInt(v + 3), 7n)))];
+  const same = (a, b) => a.every((z, v) => C4.eq(z, b[v]));
+  const opVecs = id => {
+    const spec = K.SUTRA_ARG_SPEC[id] || [], vecs = [spec.map(x => x.def)];
+    spec.forEach((x, i) => { for (let k = Math.ceil(x.lo); k <= Math.floor(x.hi); k++) { const v = spec.map(y => y.def); v[i] = Q.mk(BigInt(k)); vecs.push(v); } });
+    return vecs;
+  };
+  let notId = [], cases0 = 0, full = 0, fullBad = [], ignores = [], notUnit = [], unitCases = 0;
+  for (let id = 1; id <= 29; id++) {
+    for (const ops of opVecs(id)) for (const st of states) {
+      let out0; try { out0 = K.applySutra(id, st, [Q.ZERO, ...ops]); } catch (e) { continue; }
+      cases0++;
+      if (!same(out0, st)) notId.push(id);
+      if (FULL[id]) { full++; if (!same(K.applySutra(id, st, [Q.ONE, ...ops]), FULL[id](st, ops))) fullBad.push(id); }
+      if (![5, 22, 29].includes(id)) for (const s of [Q.mk(1n, 4n), Q.HALF, Q.mk(3n, 4n)]) {
+        unitCases++;
+        if (!A4.eq(K.energy(K.applySutra(id, st, [s, ...ops])), K.energy(st))) notUnit.push(id);
+      }
+    }
+    if (same(K.applySutra(id, seedS, Q.HALF), K.applySutra(id, seedS, Q.ONE))) ignores.push(id);
+  }
+  const u = a => [...new Set(a)].join(' ');
+  ok(notId.length === 0 && cases0 > 1000, `every sutra is the identity at strength 0 (${cases0} sutra/operand/state cases)`, `not at S${u(notId)}`);
+  ok(fullBad.length === 0 && full > 100, `at strength 1 the nine are exactly the formulas they had (${full} cases)`, `differ at S${u(fullBad)}`);
+  ok(ignores.length === 0, 'no sutra gives the same result at strength 1/2 as at strength 1', `S${u(ignores)}`);
+  ok(notUnit.length === 0, `every sutra but the contractions S5, S22, S29 preserves the energy exactly at 1/4, 1/2, 3/4 (${unitCases} cases)`, `S${u(notUnit)}`);
+  /* the operands are arguments too: for every sutra and every operand, some
+     other value in its domain (quarter grid) gives a different result at
+     strength 1/2. S19 ignoring its multiplier or S20 its scale passed every
+     other check here, so this one is what holds them. */
+  const ignoredOps = []; let opCount = 0;
+  for (let id = 1; id <= 29; id++) {
+    const spec = K.SUTRA_ARG_SPEC[id] || [];
+    spec.forEach((x, i) => {
+      opCount++;
+      const base = K.applySutra(id, seedS, [Q.HALF, ...spec.map(y => y.def)]);
+      let moves = false;
+      for (let q = Math.ceil(x.lo * 4); q <= Math.floor(x.hi * 4) && !moves; q++) {
+        const v = spec.map(y => y.def); v[i] = Q.mk(BigInt(q), 4n);
+        let o; try { o = K.applySutra(id, seedS, [Q.HALF, ...v]); } catch (e) { continue; }
+        if (!same(o, base)) moves = true;
+      }
+      if (!moves) ignoredOps.push(`S${id}.${x.name}`);
+    });
+  }
+  ok(ignoredOps.length === 0 && opCount >= 27, `no sutra ignores an operand: each of the ${opCount} has a value that changes the result`, ignoredOps.join(' '));
+  /* the principal fractional power, checked on eigenvectors: for a cycle
+     v0 -> P v0 -> ... of the permutation, y = sum_m mu^-m e_{P^m v0} with
+     mu^L = 1 is an eigenvector of x -> x o P^-1 with eigenvalue mu, and the
+     sutra at strength s must multiply it by 1, u, u^2 or conj(u) for
+     mu = 1, i, -1, -i, with u = cayley(s) computed here */
+  const I = C4.mk(A4.ZERO, A4.ONE), mus = [C4.ONE, I, C4.neg(C4.ONE), C4.neg(I)];
+  let eigBad = [], eigCases = 0;
+  for (const [id, P, ops] of [[2, comp, [Q.ONE]], [6, rot, [Q.ONE]], [6, iter(rot, 3), [Q.mk(3n)]], [7, rev, [Q.ONE]], [12, sw03, [Q.ONE]],
+                              [18, aff, [Q.ONE]], [18, iter(aff, 2), [Q.TWO]], [26, v => v ^ 4, [Q.TWO]]]) {
+    for (const s of [Q.mk(1n, 4n), Q.mk(3n, 5n), Q.mk(9n, 10n)]) {
+      const uu = cayQ(s), phi = [C4.ONE, uu, C4.mul(uu, uu), C4.conj(uu)];
+      const seen = new Set();
+      for (let v0 = 0; v0 < 16; v0++) {
+        if (seen.has(v0)) continue;
+        const cyc = [v0]; for (let w = P(v0); w !== v0; w = P(w)) cyc.push(w);
+        cyc.forEach(w => seen.add(w));
+        mus.forEach((mu, j) => {
+          let muL = C4.ONE; for (let m = 0; m < cyc.length; m++) muL = C4.mul(muL, mu);
+          if (!C4.eq(muL, C4.ONE)) return;
+          const y = Array.from({ length: 16 }, () => C4.ZERO); let w = C4.ONE;
+          const muInv = C4.conj(mu);
+          cyc.forEach(v => { y[v] = w; w = C4.mul(w, muInv); });
+          eigCases++;
+          if (!same(K.applySutra(id, y, [s, ...ops]), y.map(z => C4.mul(phi[j], z)))) eigBad.push(`S${id}`);
+        });
+      }
+    }
+  }
+  ok(eigBad.length === 0 && eigCases > 100, `the permutation sutras act as the principal fractional power on every cycle eigenvector (${eigCases} cases)`, u(eigBad));
+}
+
 section('series / parallel / concurrent');
 {
   const seedState = K.initState();
@@ -270,14 +388,15 @@ section('presets settle where their descriptions say');
     tgcr: X.fromQ(Q.mk(1n, 256n)), maya: X.fromQ(Q.mk(1n, 512n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)) };
   const EXPECT = {
-    'pre-bindu':       { line: "'pre-bindu':          { comp: 'PARALLEL',             set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 2: 25, 7: 100, 22: 75, 23: 50, 26: 100 }, support: ['0000'] },
-    'pre-star':        { line: "'pre-star':           { comp: 'PARALLEL',             set: { 2: 25, 23: 25 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 2: 25, 23: 25 }, support: ['0000', '0001', '0100', '1000'] },
-    'pre-crown':       { line: "'pre-crown':          { comp: 'PARALLEL',             set: { 13: 100, 18: 50, 26: 50 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 13: 100, 18: 50, 26: 50 }, support: ['1000', '1011', '1101', '1110', '1111'] },
+    'pre-bindu':       { line: "'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, vortex: 0 },",
+                         comp: 'PARALLEL', set: { 5: 25, 12: 50, 28: 75 }, support: ['0000'], dormant: true },
+    'pre-star':        { line: "'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },",
+                         comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, support: ['0000', '0001', '0100', '1000'], dormant: true },
+    'pre-crown':       { line: "'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, vortex: 0 },",
+                         comp: 'SERIES', set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] },
+                         support: ['0110', '1000', '1011', '1101', '1110', '1111'], peaks: ['1011', '1110'], dormant: true },
     'pre-square':      { line: "'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },",
-                         comp: 'PARALLEL', set: { 8: 50, 16: 50, 21: 100, 29: 25 }, support: ['0000', '0001', '1000', '1001'] },
+                         comp: 'PARALLEL', set: { 8: 50, 16: 50, 21: 100, 29: 25 }, support: ['0000', '0001', '1000', '1001'], dormant: true },
     'pre-equilibrium': { line: "'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },",
                          comp: 'SERIES', set: { 7: 50, 19: 75, 22: 100 }, uniform: true },
     'pre-cube':        { line: "'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },",
@@ -305,12 +424,14 @@ section('presets settle where their descriptions say');
       const sid = Number(k), st = Q.mk(BigInt(v), 100n);
       return x.args && x.args[k] ? { id: sid, strength: st, args: [st, ...x.args[k].map(t => Q.parse(t))] } : { id: sid, strength: st };
     });
-    let eng = K.initEngine();
+    let eng = K.initEngine(), engaged = 0;
     const acc = new Array(16).fill(0);
     for (let s = 0; s < 40; s++) {
       eng = K.step(eng, params, active, x.comp);
+      if (eng.last.r4.engaged) engaged++;
       if (s >= 32) { const p = probs(eng.psi), tot = p.reduce((a, b) => a + b, 0); p.forEach((v, i) => { acc[i] += v / tot / 8; }); }
     }
+    if (x.dormant) ok(engaged === 0, `${id}: R4 stays dormant, as its description says`, `engaged on ${engaged} of 40 steps`);
     if (x.uniform) {
       /* measured: a fixed pattern 2.5e-5 from even, the same from step 20 to
          step 160; the page claims one part in ten thousand */
@@ -319,10 +440,33 @@ section('presets settle where their descriptions say');
       continue;
     }
     const order = [...acc.keys()].sort((a, b) => acc[b] - acc[a]);
+    if (x.peaks) {
+      const top = order.slice(0, x.peaks.length).map(v => v.toString(2).padStart(4, '0')).sort();
+      ok(top.join(',') === x.peaks.join(','), `${id}: highest at ${x.peaks.join(' and ')}`, `highest at ${top.join(' and ')}`);
+    }
     const S = []; let c = 0;
     for (const v of order) { S.push(v); c += acc[v]; if (c >= 0.8) break; }
     const got = S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0'));
     ok(got.join(',') === x.support.join(','), `${id}: settles on ${x.support.join(' ')}`, `got ${got.join(' ')}`);
+  }
+  /* pre-symmetry's description: uncontrolled, the set grows about twofold per
+     step, 1.2x to 3.6x, and R4 holds it at the ceiling. Measured from the seed
+     over steps 9 to 40 (the first eight are the approach): median 2.0, least
+     1.2, most 3.6. The description used to say 35x, which nothing measured. */
+  {
+    const line = "'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, vortex: 0 },";
+    ok(HTML.includes(line), 'pre-symmetry: the page defines it as tested here');
+    const act = [5, 7, 12, 22, 29].map(id => ({ id, strength: Q.mk(1n, 2n) }));
+    const aF = x => qNum(x.a) + qNum(x.b) * Math.SQRT2 + qNum(x.c) * Math.sqrt(5) + qNum(x.d) * Math.sqrt(10);
+    let eng = K.initEngine(), engaged = 0; const r = [];
+    for (let s = 0; s < 40; s++) {
+      eng = K.step(eng, params, act, 'PARALLEL');
+      if (s >= 8) { r.push(aF(eng.last.r4.eUncontrolled) / aF(eng.last.r4.target)); if (eng.last.r4.engaged) engaged++; }
+    }
+    const sorted = r.slice().sort((a, b) => a - b), med = sorted[sorted.length >> 1];
+    ok(sorted[0] >= 1.15 && sorted[sorted.length - 1] <= 3.65 && med >= 1.5 && med <= 2.5,
+       `pre-symmetry: uncontrolled it grows about twofold per step, 1.2x to 3.6x (median ${med.toFixed(2)}, ${sorted[0].toFixed(2)} to ${sorted[sorted.length - 1].toFixed(2)})`);
+    ok(engaged === r.length, `pre-symmetry: R4 holds it on every one of those steps (${engaged}/${r.length})`);
   }
 }
 
