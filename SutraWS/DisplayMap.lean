@@ -1,5 +1,6 @@
 import Mathlib.Tactic
 import Mathlib.Analysis.SpecialFunctions.Exp
+import Mathlib.Analysis.SpecialFunctions.Log.Basic
 
 /-!
 # The display map
@@ -162,6 +163,24 @@ theorem ema_pos {f b k : ℝ} (hf : 0 < f) (hb : 0 < b) (h0 : 0 ≤ k) (h1 : k �
     nlinarith [mul_nonneg (sub_nonneg.mpr h1) hf.le]
   · subst hk
     simpa using hf
+
+/-- `plot_mem`: a timeline places a value between the lowest and highest it has
+shown at `(v − lo) / (hi − lo) ∈ [0, 1]`. -/
+theorem plot_mem {v lo hi : ℝ} (h0 : lo ≤ v) (h1 : v ≤ hi) (hs : lo < hi) :
+    0 ≤ (v - lo) / (hi - lo) ∧ (v - lo) / (hi - lo) ≤ 1 := by
+  have hd : 0 < hi - lo := by linarith
+  constructor
+  · exact div_nonneg (by linarith) hd.le
+  · rw [div_le_one hd]; linarith
+
+/-- `plot_mono`: the timeline keeps the order of the values it plots. -/
+theorem plot_mono {v w lo hi : ℝ} (hs : lo < hi) (hvw : v ≤ w) :
+    (v - lo) / (hi - lo) ≤ (w - lo) / (hi - lo) :=
+  div_le_div_of_nonneg_right (by linarith) (by linarith)
+
+/-- `plot_log_mono`: energies are plotted on a log scale, which keeps their order. -/
+theorem plot_log_mono {x y : ℝ} (hx : 0 < x) (hxy : x ≤ y) : Real.log x ≤ Real.log y :=
+  Real.log_le_log hx hxy
 
 end DisplayMap
 end SutraWS

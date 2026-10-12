@@ -105,6 +105,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   max-width:min(96%, calc(100% - 96px));overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .run-badge.engaged{color:#ffb347;border-color:#6a4a1a}
 .run-badge.halted{color:#E4572E;border-color:#7a2f1a;background:rgba(60,14,6,.92);white-space:normal;max-width:min(560px, calc(100% - 96px))}
+.dyn-line{position:absolute;left:50%;bottom:132px;transform:translateX(-50%);z-index:40;pointer-events:none;
+  padding:3px 10px;border:1px solid #1e2a36;background:rgba(8,12,16,.82);color:#9fb3c2;
+  font:8px/1.45 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;white-space:nowrap;
+  max-width:min(96%, calc(100% - 96px));overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.dyn-line.withheld{color:#E4572E;border-color:#7a2f1a}
 @media (prefers-reduced-motion: reduce){#left,#right,.panel-toggle{transition:none}}
 </style>
 </head>
@@ -124,6 +129,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div id="runBadge" class="run-badge">starting the kernel worker</div>
   <canvas id="gl"></canvas>
   <canvas id="c"></canvas>
+  <div id="dynLine" class="dyn-line">waiting for the first step</div>
 </div>
 <button class="panel-toggle open" id="toggle-right" aria-label="Controls">◧</button>
 <div id="right">
@@ -149,7 +155,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-reset" type="button" title="Reseed the state and the dielectric field; the R4 ceiling becomes the seed's energy again">RESET</button>
     <button id="btn-all" type="button">ALL ON</button>
     <button id="btn-none" type="button">ALL OFF</button>
-    <button id="btn-vortex" type="button" title="Drawing gain on the Cayley precession twist; it does not change the state">VORTEX</button>
+    <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
     <button id="btn-proof" type="button" title="Exact proof run on the audit worker: operatorAudit for all 29 sutras (16x16 matrices over K, unitarity, complement commutation, rank, determinant) plus corpusAudit over every test state. Results go to the EVENT LOG.">PROOF</button>
     <button id="btn-export" type="button" title="Export the exact state and every stage of the last step as JSON">EXPORT STEP</button>
     <button id="btn-exact-operator-audit" type="button" title="Exact CQuad basis, rank, determinant, unitarity, complement and corpus audit data for all 29 sutras, as JSON">AUDIT 29 EXACT</button>
@@ -165,28 +171,28 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PRESETS</h5>
-    <p class="note">Each preset sets the active sūtras, their strengths and the composition. It takes effect on the next step.</p>
+    <p class="note">Each preset sets the active sūtras, their strengths, the composition, the vortex ω, the drive and the polarisation. It takes effect on the next step. In every one the flux builds through the whole run, and in all but SQUARE, which R4 holds, it keeps reshaping the field for hundreds of steps. Hover for what each does, measured over 600 steps.</p>
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
       <div class="grp">PARALLEL</div>
-      <button type="button" id="pre-cymatic" title="PARALLEL: S9+S17+S27+S28 at 50%">〰 CYMATIC</button>
-      <button type="button" id="pre-bindu" title="PARALLEL: S5(25) S12(50) S28(75). R4 stays dormant; the field gathers on the single vertex 0000, about fourteen times the mean, and holds still.">• BINDU</button>
-      <button type="button" id="pre-star" title="CONCURRENT: S13(100) S20(75) S22(50). R4 stays dormant; the field settles on vertex 0000 and its three neighbours 0001, 0100 and 1000.">✶ STAR</button>
-      <button type="button" id="pre-crown" title="SERIES: S5(30) S7(5) S13(40, multiplier 5/2) S18(35) S19(55, multiplier 23/4) S20(90, scale 7) S22(20). R4 stays dormant; the field settles on the crown 1000, 1011, 1101, 1110, 1111 and 0110, highest at 1011 and 1110.">♔ CROWN</button>
-      <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25). No growth to hold; the field decays onto the square face 0000, 0001, 1000, 1001.">▢ SQUARE</button>
-      <button type="button" id="pre-symmetry" title="PARALLEL: S5+S7+S12+S22+S29 at 50%. Uncontrolled, this set grows about twofold per step (1.2x to 3.6x); the R4 controller holds it at the ceiling.">⟡ SYMMETRY</button>
+      <button type="button" id="pre-cymatic" title="PARALLEL: S9(25) S17(25) S27(50) S28(50) · vortex ω 1. Over 600 steps the flux builds ×28 and the field moves from 10 vertices onto 0001, 0010, 0011, 0101, 1010, 1100 and 1110. R4 stays dormant.">〰 CYMATIC</button>
+      <button type="button" id="pre-bindu" title="PARALLEL: S5(25) S12(50) S28(75) · vortex ω 1. Over 600 steps the flux builds ×216 and the field moves from 10 vertices onto 0011, 1010, 1011, 1110 and 1111. R4 stays dormant.">• BINDU</button>
+      <button type="button" id="pre-star" title="CONCURRENT: S13(100) S20(75) S22(50) · vortex ω 1, drive 0.25. It starts on the antipodal pair 0000 and 1111; the drive slowly builds the inertial layer and by step 600 the field has moved onto 1001, 1010 and 1100, the flux ×20. R4 stays dormant.">✶ STAR</button>
+      <button type="button" id="pre-crown" title="SERIES: S5(30) S7(5) S13(40, multiplier 5/2) S18(35) S19(55, multiplier 23/4) S20(90, scale 7) S22(20) · vortex ω 1. Over 600 steps the flux builds ×160 and the field moves from 10 vertices onto 0001, 0010, 0011, 0100, 0110, 1011, 1100 and 1110. R4 stays dormant.">♔ CROWN</button>
+      <button type="button" id="pre-square" title="PARALLEL: S8(50) S16(50) S21(100) S29(25) · vortex ω 1. The field sits on 0000 and 1111 and grows slowly; at step 208 it reaches the ceiling and R4 holds it there for the rest of the run, while the flux builds ×41 by step 600.">▢ SQUARE</button>
+      <button type="button" id="pre-symmetry" title="PARALLEL: S5(50) S7(50) S12(50) S22(50) S29(50) · vortex ω 1. Uncontrolled this set grows every step; R4 holds it at the ceiling from step 1, and under the building flux (×27 by step 600) the field keeps moving, onto 0001, 0101, 0111, 1000 and 1110.">⟡ SYMMETRY</button>
       <div class="grp" style="color:#d4af37">SERIES</div>
-      <button type="button" id="pre-equilibrium" title="SERIES: S7(50) S19(75) S22(100). The field settles within one part in ten thousand of the same share at every vertex, and stays there, so the shape is almost entirely the Wheeler geometry.">○ EQUILIBRIUM</button>
-      <button type="button" id="pre-wormhole" title="SERIES: S5,S9,S22,S23,S26,S29 at 50%">🕳 WORMHOLE</button>
-      <button type="button" id="pre-singularity" title="SERIES: S1,S10,S14,S15 at 50%">⊛ SINGULAR</button>
-      <button type="button" id="pre-magnetic" title="SERIES: S3,S9,S11,S25,S29 at 50%">⚡ MAGNETIC</button>
-      <button type="button" id="pre-cancel" title="SERIES: S5(85) S7(35) S8(15) S9(65) S11(20) S22(80) S28(30) S29(55). The contractive sūtras S5, S22 and S29 drive the field toward zero.">⊘ CANCEL</button>
+      <button type="button" id="pre-equilibrium" title="SERIES: S7(50) S19(75) S22(100) · vortex ω 1. Over 600 steps the flux builds ×265 and the field moves from 9 vertices onto 0001, 0101, 0110, 0111, 1000, 1001, 1010 and 1110. R4 stays dormant.">○ EQUILIBRIUM</button>
+      <button type="button" id="pre-wormhole" title="SERIES: S5(50) S9(50) S22(50) S23(50) S26(50) S29(50) · vortex ω 1. Over 600 steps the flux builds ×16 and the field moves from 11 vertices onto 0010, 0011, 0100, 0101 and 1101. R4 stays dormant.">🕳 WORMHOLE</button>
+      <button type="button" id="pre-singularity" title="SERIES: S1(50) S10(50) S14(50) S15(50) · vortex ω 1. Over 600 steps the flux builds ×43 and the field moves from 10 vertices onto 0000, 0100, 0110, 1000, 1001, 1010, 1101, 1110 and 1111. R4 stays dormant.">⊛ SINGULAR</button>
+      <button type="button" id="pre-magnetic" title="SERIES: S3(50) S9(50) S11(50) S25(50) S29(50) · vortex ω 1, drive 1. Over 600 steps the flux builds ×28 and the field moves from 7 vertices onto 0000, 0101, 0110, 1001, 1010 and 1100. R4 stays dormant.">⚡ MAGNETIC</button>
+      <button type="button" id="pre-cancel" title="SERIES: S5(85) S7(35) S8(15) S9(65) S11(20) S22(80) S28(30) S29(55) · vortex ω 1. Over 600 steps the flux builds ×3.4 and the field moves from 9 vertices onto 0101, 0110 and 1010. R4 stays dormant.">⊘ CANCEL</button>
       <div class="grp" style="color:#ff6644">CONCURRENT</div>
-      <button type="button" id="pre-cube" title="CONCURRENT: S16 at 75% with divisor 17/4, and S22 at 75%. The field fills the cube cell w = 1, vertices 1000 to 1111, and empties the other half.">▣ CUBE</button>
-      <button type="button" id="pre-octad" title="CONCURRENT: S14 at 25% with decrement 11/4, S17 at 100% with proportion 23/4, and S22 at 50%. The field settles on eight vertices: 0100 to 0111, 1010, 1100, 1101 and 1110.">◇ OCTAD</button>
-      <button type="button" id="pre-dynamo" title="CONCURRENT: S3,S7,S9,S11,S25,S29 at 50%">🧲 DYNAMO</button>
-      <button type="button" id="pre-reconnect" title="CONCURRENT: S5,S9,S22,S26 at 50%">💥 RECONNECT</button>
-      <button type="button" id="pre-inverse-growth" title="CONCURRENT: S1(30) S5(70) S14(30) S29(70)">⟲ CONTROLLED</button>
-      <button type="button" id="pre-all29" title="CONCURRENT: all 29 sūtras at 25%">✦ ALL 29</button>
+      <button type="button" id="pre-cube" title="CONCURRENT: S16(75, divisor 17/4) S22(75) · vortex ω 1. Over 600 steps the flux builds ×7.1 and the field moves from 1000, 1001, 1010, 1011 and 1100 onto 1100. R4 stays dormant.">▣ CUBE</button>
+      <button type="button" id="pre-octad" title="CONCURRENT: S14(25, decrement 11/4) S17(100, proportion 23/4) S22(50) · vortex ω 1. Over 600 steps the flux builds ×23 and the field moves from 7 vertices onto 0000, 0011, 0101, 0110, 1001, 1010 and 1111. R4 stays dormant.">◇ OCTAD</button>
+      <button type="button" id="pre-dynamo" title="CONCURRENT: S3(50) S7(50) S9(50) S11(50) S25(50) S29(50) · vortex ω 1, drive 1. Over 600 steps the flux builds ×83 and the field moves from 9 vertices onto 0000, 0011, 0101, 1000, 1001, 1010, 1100 and 1110. R4 stays dormant.">🧲 DYNAMO</button>
+      <button type="button" id="pre-reconnect" title="CONCURRENT: S5(50) S9(50) S22(50) S26(50) · vortex ω 1, drive 1. Over 600 steps the flux builds ×42 and the field moves from 10 vertices onto 0011, 0101, 0110, 1001, 1010, 1100 and 1101. R4 stays dormant.">💥 RECONNECT</button>
+      <button type="button" id="pre-inverse-growth" title="CONCURRENT: S1(30) S5(70) S14(30) S29(70) · vortex ω 1. Over 600 steps the flux builds ×5.5 and the field moves from 9 vertices onto 0011, 0100 and 1011. R4 stays dormant.">⟲ CONTROLLED</button>
+      <button type="button" id="pre-all29" title="CONCURRENT: all 29 sūtras at 25% · vortex ω 1, drive 1. Over 600 steps the flux builds ×40 and the field moves from 9 vertices onto 0011, 0100, 0101, 0110, 0111, 1001, 1010 and 1100. R4 stays dormant.">✦ ALL 29</button>
     </div>
   </div>
   <div class="section">
@@ -199,6 +205,24 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <p class="note">Kernel parameters: they change the step itself.</p>
     <div class="amp-row"><span>dielectric s</span><input type="range" min="1" max="50" value="10" id="amp-dielectric"><span id="amp-dielectric-v">1.0</span></div>
     <div class="amp-row"><span>B field</span><input type="range" min="0" max="50" value="10" id="amp-bfield"><span id="amp-bfield-v">1.0</span></div>
+  </div>
+  <div class="section">
+    <h5>DYNAMO · MAGNETISM MEMORY</h5>
+    <p class="note">The vector potential on the 32 edges remembers the field. Each step it keeps 499/500 of itself and gains Faraday induction from the change in the field's energy, plus the TGCR vortex ω steered along each edge by that edge's share of the field's energy. Its flux B = d¹A builds on the 24 faces and turns the field's phases by dt·(∇·A + mean B²). The drive feeds the inertial layer; polarisation χ lets the field's energy shape the dielectric.</p>
+    <div class="amp-row"><span>vortex ω</span><input type="range" min="-60" max="60" value="0" id="amp-omega"><span id="amp-omega-v">0.0</span></div>
+    <div class="amp-row"><span>drive</span><input type="range" min="0" max="40" value="0" id="amp-drive"><span id="amp-drive-v">0.00</span></div>
+    <div class="amp-row"><span>polarise χ</span><input type="range" min="0" max="30" value="10" id="amp-polar"><span id="amp-polar-v">1.0</span></div>
+    <div class="row"><span class="k">flux ½ΣB²</span><span class="v" id="dyn-flux">–</span></div>
+    <div class="row"><span class="k">helicity</span><span class="v" id="dyn-helicity">–</span></div>
+    <div class="row"><span class="k">reconnections</span><span class="v" id="dyn-recon">–</span></div>
+  </div>
+  <div class="section">
+    <h5>MAYA · COHERENCE FLOW</h5>
+    <p class="note">v18.24's Maya: dφ/dμ = β/μ, β = (φ_g/e)·sin φ − (e/π)·φ³, five Euler sub-steps of 1/500 a step from φ₀ = 1/16. The phase flows onto the one stable coherence layer φ* and settles there. M = observed / true scales the field where it is drawn, never the field itself; on the layer M = 1.</p>
+    <div class="row"><span class="k">phase φ</span><span class="v" id="maya-phase">–</span></div>
+    <div class="row"><span class="k">β(φ)</span><span class="v" id="maya-beta">–</span></div>
+    <div class="row"><span class="k">layer φ*</span><span class="v" id="maya-layer">–</span></div>
+    <div class="row"><span class="k">M shown/true</span><span class="v" id="maya-M">–</span></div>
   </div>
   <div class="section">
     <h5>PACE</h5>
@@ -275,7 +299,7 @@ const SCHEMAS = Object.freeze({
   /* /2: stage pass flags judge the exact stage, storage is reported beside
      them; params, stepError, dielectricIn and stagesRun added, so a step
      replays from its file */
-  stepExport:    'vedic-step-export/2',
+  stepExport:    'vedic-step-export/3',
   operatorAudit: 'vedic-operator-audit/2'
 });
 /* Camera motion only: how far the view turns per nominal 60 Hz frame. */
@@ -975,7 +999,11 @@ const KERNEL_FACTORY = () => {
     const k=hw(v)-2;
     return Q.div(Q.ONE,Q.add(Q.ONE,Q.mk(BigInt(k*k))));
   });
-  const evolveDielectric = (field,active,p) => {
+  /* The dielectric relaxes toward its neighbours and its plane source, and the
+     field polarises it: + chi rho_v / 8, rho_v the field's energy density
+     (polarised_nonneg, polarised_le). */
+  const evolveDielectric = (field,active,p,rho) => {
+    if(!Array.isArray(rho)||rho.length!==16)throw new RangeError('evolveDielectric: the field energy densities rho are required');
     const load=Q.div(activeLoad(active),Q.mk(435n));
     const sourceGain=Q.add(Q.ONE,load);
     return field.map((d,v)=>{
@@ -985,7 +1013,7 @@ const KERNEL_FACTORY = () => {
       const neighborMean=Q.mul(neighborSum,Q.QUARTER);
       const k=hw(v)-2;
       const planeSource=Q.mul(sourceGain,Q.div(Q.ONE,Q.add(Q.ONE,Q.mk(BigInt(k*k)))));
-      return Q.add(Q.add(Q.mul(d,Q.HALF),Q.mul(pairMean,Q.QUARTER)),Q.add(Q.mul(neighborMean,Q.mk(1n,8n)),Q.mul(planeSource,Q.mk(1n,8n))));
+      return Q.add(Q.add(Q.add(Q.mul(d,Q.HALF),Q.mul(pairMean,Q.QUARTER)),Q.add(Q.mul(neighborMean,Q.mk(1n,8n)),Q.mul(planeSource,Q.mk(1n,8n)))),Q.mul(Q.mul(p.polarisation,rho[v]),Q.mk(1n,8n)));
     });
   };
   const dielectricDrift = (a,b) => a.reduce((s,x,i)=>{const d=Q.sub(b[i],x);return Q.add(s,Q.mul(d,d));},Q.ZERO);
@@ -1084,17 +1112,6 @@ const KERNEL_FACTORY = () => {
     }
     return out;
   };
-  const mayaPermutation = affine18;
-  const applyMaya = (psi,w,p) => {
-    const perm=permuteState(psi,mayaPermutation);
-    const dtQ=rationalA4(p.dt,"dt"),mQ=rationalA4(p.maya,"maya");
-    const meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
-    return phaseState(perm,v=>{
-      let scalar=Q.mul(Q.mul(dtQ,mQ),meanDQ);
-      if(hw(v)&1)scalar=Q.neg(scalar);
-      return A4.fromQ(scalar);
-    });
-  };
   const applyZPE = (psi,w,p) => {
     const dtQ=rationalA4(p.dt,"dt"),zQ=rationalA4(p.zpe,"zpe");
     const meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
@@ -1103,6 +1120,244 @@ const KERNEL_FACTORY = () => {
     const src=C4.fromA4(A4.mul(p.dt,p.zpeSource));
     return phaseState(psi,v=>A4.fromQ(Q.mul(Q.mul(Q.mul(dtQ,zQ),meanDQ),Q.mk(BigInt(hw(v)-2)))))
       .map((z,v)=>hw(v)===2?C4.add(z,src):z);
+  };
+  /* ---------- Certified rational enclosures (SutraWS/MayaFlow.lean) ----------
+     e, pi, sqrt5 and sin are not in Q(sqrt2, sqrt5)[i]. Where the Maya flow
+     needs them they are enclosed between rationals, and the enclosure is
+     what is proved: Taylor tails from Complex.exp_bound (sin_enclose,
+     cos_enclose, e_enclose), pi bracketed by the sign of cos q - sin q
+     (pi_gt_of_sin_lt_cos, pi_lt_of_cos_lt_sin), integer square roots
+     (sqrt_lower, sqrt_upper), interval products (mul_mem_hull, div_mem_pos)
+     and outward rounding onto the 2^-ENC_BITS grid (floor_grid_le,
+     le_floor_grid_succ, le_ceil_grid). Nothing here is a float. */
+  const ENC_BITS = 160;
+  const isqrtN = n => {
+    if (n < 0n) throw new RangeError('isqrt of a negative integer');
+    if (n < 2n) return n;
+    let x = 1n << BigInt((bitLength(n) + 1) >> 1);
+    for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; }
+  };
+  /* s / 2^k <= sqrt m < (s+1) / 2^k with s = isqrt(m 4^k), both inequalities checked */
+  const sqrtBracketQ = (m, k) => {
+    const N = BigInt(m) << BigInt(2 * k), s = isqrtN(N);
+    if (s * s > N || (s + 1n) * (s + 1n) <= N) throw new Error('isqrt bracket failed');
+    return [Q.mk(s, 1n << BigInt(k)), Q.mk(s + 1n, 1n << BigInt(k))];
+  };
+  const floorDiv = (x, y) => { const z = x / y; return (x % y !== 0n && (x < 0n) !== (y < 0n)) ? z - 1n : z; };
+  const floorGrid = (q, k = ENC_BITS) => Q.mk(floorDiv(q.n << BigInt(k), q.d), 1n << BigInt(k));
+  const ceilGrid = (q, k = ENC_BITS) => Q.neg(floorGrid(Q.neg(q), k));
+  const qMin = (a, b) => (Q.cmp(a, b) <= 0 ? a : b), qMax = (a, b) => (Q.cmp(a, b) >= 0 ? a : b);
+  /* mul_mem_hull: the product of two intervals, any signs */
+  const iMul = (a, b) => { const p = [Q.mul(a[0], b[0]), Q.mul(a[0], b[1]), Q.mul(a[1], b[0]), Q.mul(a[1], b[1])];
+    return [qMin(qMin(p[0], p[1]), qMin(p[2], p[3])), qMax(qMax(p[0], p[1]), qMax(p[2], p[3]))]; };
+  const iRound = (a, k = ENC_BITS) => [floorGrid(a[0], k), ceilGrid(a[1], k)];
+  /* the real value of a + b sqrt2 + c sqrt5 + d sqrt10, enclosed */
+  const ROOT_BRACKETS = [sqrtBracketQ(2, ENC_BITS + 8), sqrtBracketQ(5, ENC_BITS + 8), sqrtBracketQ(10, ENC_BITS + 8)];
+  const a4Enclose = x => {
+    let lo = x.a, hi = x.a;
+    [[x.b, ROOT_BRACKETS[0]], [x.c, ROOT_BRACKETS[1]], [x.d, ROOT_BRACKETS[2]]].forEach(([c, r]) => {
+      const p = iMul([c, c], r); lo = Q.add(lo, p[0]); hi = Q.add(hi, p[1]);
+    });
+    return iRound([lo, hi]);
+  };
+  const factorialN = n => { let f = 1n; for (let i = 2n; i <= BigInt(n); i++) f *= i; return f; };
+  /* Re and Im of sum_{m<n} (i q)^m / m! (cosSum, sinSum), summed exactly over
+     the common denominator d^(n-1) (n-1)!, placed on the grid outward, and
+     widened by the tail |q|^n (n+1)/(n! n) rounded up (tail, le_ceil_grid). */
+  const trigEnclose = (q, n) => {
+    if (Q.cmp(Q.abs(q), Q.ONE) > 0) throw new RangeError('trig enclosure needs |q| <= 1');
+    const p = q.n, d = q.d, K = BigInt(ENC_BITS);
+    const dpow = [1n]; for (let m = 1; m < n; m++) dpow.push(dpow[m - 1] * d);
+    const P = [1n]; for (let m = 1; m < n; m++) P.push(P[m - 1] * p);
+    let F = 1n, re = 0n, im = 0n;
+    for (let m = n - 1; m >= 0; m--) {
+      const t = P[m] * dpow[n - 1 - m] * F, r = m % 4;
+      if (r === 0) re += t; else if (r === 1) im += t; else if (r === 2) re -= t; else im -= t;
+      F *= BigInt(m);
+    }
+    const D = dpow[n - 1] * factorialN(n - 1), G = 1n << K;
+    const ap = p < 0n ? -p : p, Rd = d ** BigInt(n) * factorialN(n) * BigInt(n);
+    const R = ((ap ** BigInt(n) * BigInt(n + 1)) << K) / Rd + 1n;
+    const enc = N => { const f = floorDiv(N << K, D); return [Q.mk(f - R, G), Q.mk(f + 1n + R, G)]; };
+    return { cos: enc(re), sin: enc(im) };
+  };
+  /* e: the partial sums of 1/m! and their tail (e_enclose) */
+  const E_BRACKET = (() => {
+    const n = 48; let s = Q.ZERO, f = 1n;
+    for (let m = 0; m < n; m++) { if (m > 1) f *= BigInt(m); s = Q.add(s, Q.mk(1n, f)); }
+    const R = Q.mk(BigInt(n + 1), factorialN(n) * BigInt(n));
+    return iRound([Q.sub(s, R), Q.add(s, R)]);
+  })();
+  /* pi: a dyadic bracket [lo, hi], certified here. sin(lo/4) < cos(lo/4)
+     puts lo below pi (pi_gt_of_sin_lt_cos); cos(hi/4) < sin(hi/4) puts hi
+     above it (pi_lt_of_cos_lt_sin). The numerator is a candidate; nothing is
+     trusted until both signs are decided from the enclosures. */
+  const PI_BRACKET = (() => {
+    const k = 137n, N = 547342635041262974904156351058877841049928n;
+    const lo = Q.mk(N - 1n, 1n << k), hi = Q.mk(N + 2n, 1n << k);
+    const tl = trigEnclose(Q.mul(lo, Q.QUARTER), 44), th = trigEnclose(Q.mul(hi, Q.QUARTER), 44);
+    if (!(Q.cmp(tl.sin[1], tl.cos[0]) < 0)) throw new Error('pi lower bound not certified');
+    if (!(Q.cmp(th.cos[1], th.sin[0]) < 0)) throw new Error('pi upper bound not certified');
+    return [lo, hi];
+  })();
+  const PHI_BRACKET = iRound([Q.mul(Q.add(Q.ONE, ROOT_BRACKETS[1][0]), Q.HALF), Q.mul(Q.add(Q.ONE, ROOT_BRACKETS[1][1]), Q.HALF)]);
+  /* ---------- Maya: the coherence-layer flow (v18.24 section 7) ----------
+       beta(phi) = (phi_g/e) sin phi - (e/pi) phi^3,   d phi / d mu = beta / mu,
+     stepped as v18.24 stepped it: d(log mu) = 1/100 a step, five Euler
+     sub-steps of 1/500. The factor M = 1 + beta/(20(1+|beta|)) is what Maya
+     applies to the field (v18.24's modulationFactor). The phase flows from
+     phi_0 onto the one stable coherence layer phi* (layer, toward_layer);
+     there beta = 0 and M = 1 (factor_eq_one_iff). */
+  const MAYA_A = iRound([Q.div(PHI_BRACKET[0], E_BRACKET[1]), Q.div(PHI_BRACKET[1], E_BRACKET[0])]);
+  const MAYA_B = iRound([Q.div(E_BRACKET[0], PI_BRACKET[1]), Q.div(E_BRACKET[1], PI_BRACKET[0])]);
+  const MAYA_PHASE0 = Q.mk(1n, 16n);
+  const MAYA_SUBSTEPS = 5, MAYA_H = Q.mk(1n, 500n);
+  /* beta_mem: beta from the enclosures of a, b and sin phi */
+  const mayaBetaEnclose = x => {
+    const s = iRound(trigEnclose(x, 40).sin), x3 = Q.mul(Q.mul(x, x), x);
+    const as = iMul(MAYA_A, s), bx = iMul(MAYA_B, [x3, x3]);
+    return iRound([Q.sub(as[0], bx[1]), Q.sub(as[1], bx[0])]);
+  };
+  const mayaFactorOf = beta => Q.add(Q.ONE, Q.div(beta, Q.mul(Q.mk(20n), Q.add(Q.ONE, Q.abs(beta)))));
+  /* (a + 3b), rounded up: the Lipschitz constant of beta on [-1, 1] (beta_lipschitz) */
+  const MAYA_LIP = Q.add(MAYA_A[1], Q.mul(Q.mk(3n), MAYA_B[1]));
+  /* One kernel step of the flow. The factor this step applies comes from beta
+     at the stored phase; then the five sub-steps move the phase. err bounds
+     the distance from the exact Euler map's phase, sub-step by sub-step:
+     err' = (1 + h(a+3b)) err + h w + |r| (euler_err), rounded up. */
+  const mayaStep = (x, err) => {
+    let xs = x, e = err, first = null;
+    for (let j = 0; j < MAYA_SUBSTEPS; j++) {
+      if (Q.cmp(Q.abs(xs), Q.ONE) > 0) throw new RangeError(`Maya phase ${Q.toString(xs)} left [-1, 1], where its enclosures are proved`);
+      const be = mayaBetaEnclose(xs);
+      const mid = storeQ(Q.mul(Q.add(be[0], be[1]), Q.HALF));
+      const w = Q.sub(be[1], be[0]);
+      if (first === null) first = { phase: xs, beta: mid, betaEnclosure: be, w };
+      const raw = Q.add(xs, Q.mul(MAYA_H, mid));
+      const next = raw.n === 0n ? raw : storeQ(raw);
+      e = ceilGrid(Q.add(Q.add(Q.mul(Q.add(Q.ONE, Q.mul(MAYA_H, MAYA_LIP)), e), Q.mul(MAYA_H, w)), Q.abs(Q.sub(next, raw))), 256);
+      xs = next;
+    }
+    const Mraw = mayaFactorOf(first.beta), M = storeQ(Mraw);
+    /* |M - M_exact| <= w/20 (factor_lipschitz) plus the factor's own storage */
+    const epsM = Q.add(Q.div(first.w, Q.mk(20n)), Q.abs(Q.sub(M, Mraw)));
+    return { phaseIn: x, errIn: err, next: xs, err: e, beta: first.beta, betaEnclosure: first.betaEnclosure,
+             betaWidth: first.w, M, epsM };
+  };
+  /* The stable layer, bracketed: the largest grid point in [3/4, 1] where
+     beta's enclosure is still positive and the next where it is negative.
+     layer then gives exactly one root phi* between them. */
+  const MAYA_LAYER = (() => {
+    let lo = Q.mk(3n, 4n), hi = Q.ONE;
+    const pos = x => mayaBetaEnclose(x)[0].n > 0n, neg = x => mayaBetaEnclose(x)[1].n < 0n;
+    if (!pos(lo) || !neg(hi)) throw new Error('Maya layer: beta does not change sign on [3/4, 1]');
+    for (let i = 0; i < 24; i++) {
+      const mid = Q.mul(Q.add(lo, hi), Q.HALF);
+      if (pos(mid)) lo = mid; else if (neg(mid)) hi = mid; else break;
+    }
+    return [lo, hi];
+  })();
+  /* ---------- Magnetism memory on the tesseract (SutraWS/Magnetism.lean) ----------
+     v18.24 section 4b, exact: the vector potential on the 32 edges, B = d1 A on
+     the 24 faces. Each step A keeps 499/500 of itself and gains
+       Faraday   -(1/10) d0(rho_out - rho_in)          (no flux: faraday_flux_free)
+       vortex    omega (6/100 toroidal | eta 3/100 poloidal) m_e s_e
+     m_e the phi-cycle [1, 13/10, 1, 7/10][(hw + axis) mod 4] and s_e the edge's
+     share 8 (rho_t + rho_h) / E of the field's energy (edge_share_total: the
+     shares sum to 32, so steering moves the injection and keeps its total).
+     The Faraday part is kept as a vertex potential chi, A_F = -(1/10) d0 chi, so
+     its zero flux is exact. The field's phase at v then turns by
+       dt (div A + p_B),  p_B the mean squared flux of the six faces at v. */
+  const MAG_EDGES = [];
+  for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) MAG_EDGES.push([v, a, v | (1 << a)]);
+  const edgeIndexOf = (v, a) => MAG_EDGES.findIndex(e => e[0] === v && e[1] === a);
+  const EDGE_AT = Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].map(a => edgeIndexOf(v & ~(1 << a), a)));
+  const MAG_PAIRS = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+  const MAG_FACES = [];
+  MAG_PAIRS.forEach(([a, b], p) => { for (let v = 0; v < 16; v++) if (!(v & ((1 << a) | (1 << b)))) MAG_FACES.push({ p, a, b, base: v,
+    edges: [[edgeIndexOf(v, a), 1], [edgeIndexOf(v ^ (1 << a), b), 1], [edgeIndexOf(v ^ (1 << b), a), -1], [edgeIndexOf(v, b), -1]] }); });
+  const FACES_AT = Array.from({ length: 16 }, (_, v) => MAG_FACES.map((f, i) => [f, i]).filter(([f]) => (v & ~((1 << f.a) | (1 << f.b))) === f.base).map(([, i]) => i));
+  const FACES_ON_EDGE = MAG_EDGES.map(([v, a]) => MAG_FACES.map((f, i) => [f, i]).filter(([f]) => (f.a === a || f.b === a) && f.base === (v & ~((1 << f.a) | (1 << f.b)))).map(([, i]) => i));
+  const HODGE = [[0, 0, 1], [0, -1, 0], [0, -1, 1], [1, 0, 0], [1, 0, -1], [-1, 1, 0]].map((r, p) => r.map(c => (p === 2 || p === 4 || p === 5) ? Q.mk(BigInt(c), 2n) : Q.mk(BigInt(c))));
+  const PHI_CYCLE = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
+  const MAG_RETAIN = Q.mk(499n, 500n), MAG_FARADAY = Q.mk(1n, 10n), MAG_TOROIDAL = Q.mk(6n, 100n), MAG_POLOIDAL = Q.mk(3n, 100n), TGCR_ETA = Q.HALF;
+  const storeOrZero = x => x.n === 0n ? x : storeQ(x);
+  /* B = d1 A, the Stokes circulation of each face */
+  const curlA = A => MAG_FACES.map(f => f.edges.reduce((s, [e, sg]) => sg > 0 ? Q.add(s, A[e]) : Q.sub(s, A[e]), Q.ZERO));
+  /* d0^T A at each vertex: in along the edges it heads, out along those it tails */
+  const divA = A => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => (v & (1 << a)) ? Q.add(s, A[EDGE_AT[v][a]]) : Q.sub(s, A[EDGE_AT[v][a]]), Q.ZERO));
+  const laplacianV = chi => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => Q.add(s, Q.sub(chi[v], chi[v ^ (1 << a)])), Q.ZERO));
+  /* the whole potential, Faraday part included: A_F = -(1/10) d0 chi */
+  const fullA = (A, chi) => MAG_EDGES.map(([v, , h], e) => Q.sub(A[e], Q.mul(MAG_FARADAY, Q.sub(chi[h], chi[v]))));
+  const pressureAt = B => Array.from({ length: 16 }, (_, v) => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], B[i])), Q.ZERO), Q.mk(1n, 6n)));
+  /* the potential each vertex sees: div A_V - (1/10) L chi, L the graph Laplacian (d0^T d0) */
+  const potentialAt = (A, chi) => { const d = divA(A), L = laplacianV(chi); return d.map((x, v) => Q.sub(x, Q.mul(MAG_FARADAY, L[v]))); };
+  const magPhases = (A, chi, p) => {
+    const dtQ = rationalA4(p.dt, 'dt'), Phi = potentialAt(A, chi), pB = pressureAt(curlA(A));
+    return Phi.map((x, v) => Q.mul(dtQ, Q.add(x, pB[v])));
+  };
+  /* a phase turn at each vertex: an exact rotation (phase_energy) */
+  const applyMAG = (psi, t) => psi.map((z, v) => C4.mul(C4.phase(A4.fromQ(t[v])), z));
+  /* the field's energy density at each vertex as a stored rational, from the
+     enclosure of its real value */
+  const rhoHat = psi => psi.map(z => { const e = a4Enclose(C4.norm2(z)); return storeOrZero(Q.mul(Q.add(e[0], e[1]), Q.HALF)); });
+  const edgeShares = rho => {
+    const E = rho.reduce((s, x) => Q.add(s, x), Q.ZERO);
+    if (E.n === 0n) throw new RangeError('magnetism: a field with no energy has no edge shares to steer the vortex');
+    return MAG_EDGES.map(([v, , h]) => Q.div(Q.mul(Q.mk(8n), Q.add(rho[v], rho[h])), E));
+  };
+  const magInduct = (A, chi, rhoIn, rhoOut, p) => {
+    const share = edgeShares(rhoOut);
+    const chiNext = chi.map((c, v) => storeOrZero(Q.add(Q.mul(MAG_RETAIN, c), Q.sub(rhoOut[v], rhoIn[v]))));
+    const ANext = MAG_EDGES.map(([v, a], e) => {
+      const m = PHI_CYCLE[(hw(v) + a) % 4];
+      const base = a >= 2 ? Q.mul(Q.mul(p.vortex, MAG_TOROIDAL), m) : Q.mul(Q.mul(Q.mul(p.vortex, TGCR_ETA), MAG_POLOIDAL), m);
+      return storeOrZero(Q.add(Q.mul(MAG_RETAIN, A[e]), Q.mul(base, share[e])));
+    });
+    return { A: ANext, chi: chiNext, share };
+  };
+  /* helicity sum_e A_e (1/3) sum_{faces on e} B_f over the whole potential; a
+     gradient carries none (helicity_of_gradient) */
+  const helicityOf = (A, chi) => { const B = curlA(A), AF = fullA(A, chi);
+    return MAG_EDGES.reduce((s, _, e) => Q.add(s, Q.mul(AF[e], Q.mul(FACES_ON_EDGE[e].reduce((t, i) => Q.add(t, B[i]), Q.ZERO), Q.mk(1n, 3n)))), Q.ZERO); };
+  /* v18.24's Hodge vector at each vertex and its reconnection test,
+     cos(B_i, B_j) < -0.7 on an edge, decided without square roots (reconnect_iff) */
+  const bvecAt = B => Array.from({ length: 16 }, (_, v) => [0, 1, 2].map(k => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], HODGE[MAG_FACES[i].p][k])), Q.ZERO), Q.mk(1n, 6n))));
+  const RECONNECT_FLOOR = Q.mk(1n, 1000000n);
+  const reconnectionsOf = A => {
+    const bv = bvecAt(curlA(A)), n2 = u => u.reduce((s, c) => Q.add(s, Q.mul(c, c)), Q.ZERO), out = [];
+    MAG_EDGES.forEach(([v, , h], e) => {
+      const a = bv[v], b = bv[h], na = n2(a), nb = n2(b);
+      if (Q.cmp(na, RECONNECT_FLOOR) <= 0 || Q.cmp(nb, RECONNECT_FLOOR) <= 0) return;
+      const dot = a.reduce((s, c, k) => Q.add(s, Q.mul(c, b[k])), Q.ZERO);
+      if (dot.n < 0n && Q.cmp(Q.mul(dot, dot), Q.mul(Q.mk(49n, 100n), Q.mul(na, nb))) > 0) out.push(e);
+    });
+    return out;
+  };
+  /* d2 B over the 8 cubes, with the six signed faces of DEC.d2: zero for every
+     B = d1 A (flux_closed). Decided on the flux that is shown. */
+  const faceAt = (a, b, base) => MAG_FACES.findIndex(f => f.a === a && f.b === b && f.base === base);
+  const MAG_CUBES = [];
+  [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]].forEach(([a, b, q]) => { for (let i = 0; i < 16; i++) if (!(i & ((1 << a) | (1 << b) | (1 << q))))
+    MAG_CUBES.push([[faceAt(a, b, i), -1], [faceAt(a, b, i ^ (1 << q)), 1], [faceAt(a, q, i), 1], [faceAt(a, q, i ^ (1 << b)), -1], [faceAt(b, q, i), -1], [faceAt(b, q, i ^ (1 << a)), 1]]); });
+  const cubeFluxes = B => MAG_CUBES.map(c => c.reduce((s, [f, sg]) => sg > 0 ? Q.add(s, B[f]) : Q.sub(s, B[f]), Q.ZERO));
+  const magData = (A, chi) => {
+    const B = curlA(A), pB = pressureAt(B), cubes = cubeFluxes(B);
+    return { flux: B, potential: potentialAt(A, chi), pressure: pB, cubeFlux: cubes, closed: MAG_CUBES.length === 8 && cubes.every(Q.isZero),
+             fluxEnergy: Q.mul(B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO), Q.HALF),
+             helicity: helicityOf(A, chi), reconnections: reconnectionsOf(A) };
+  };
+  /* what Maya shows at a phase: beta's enclosure and the factor
+     M = observed / true from its stored midpoint (factor_mem) */
+  const mayaObserve = x => {
+    const be = mayaBetaEnclose(x), beta = storeQ(Q.mul(Q.add(be[0], be[1]), Q.HALF));
+    return { phase: x, beta, betaEnclosure: be, M: storeQ(mayaFactorOf(beta)) };
+  };
+  /* sqrt of a nonnegative rational, rounded up onto the grid (sqrt_upper) */
+  const sqrtUpperQ = (q, k = ENC_BITS) => {
+    if (q.n < 0n) throw new RangeError('sqrt of a negative rational');
+    const N = floorDiv(q.n << BigInt(2 * k), q.d) + 1n, s = isqrtN(N);
+    return Q.mk(s + 1n, 1n << BigInt(k));
   };
   const activeLoad = active => active.reduce((s,x)=>Q.add(s,x.strength),Q.ZERO);
   const r4Scale = (field,active,fieldDrift) => {
@@ -1125,7 +1380,11 @@ const KERNEL_FACTORY = () => {
      [0,1] for eps in [0,1] (gate_factor_mem). */
   const gateABField = (field,s4) => {
     if (Q.sign(s4) <= 0) throw new RangeError('R4 gate: s4 must be positive');
-    const raw=field.map(q=>{const q2=Q.mul(q,q),q4=Q.mul(q2,q2),den=Q.add(s4,q4);return {a:Q.div(s4,den),b:Q.div(q4,den)};});
+    /* a_v is stored like every value the step produces and b_v = 1 - a_v,
+       so both stay in [0,1] and sum to 1 (store_mem_unit) and the gate's
+       certificate below is exact on the weights it uses. Unstored, a_v
+       carried 2400-bit fractions and one gated step took seconds. */
+    const raw=field.map(q=>{const q2=Q.mul(q,q),q4=Q.mul(q2,q2),den=Q.add(s4,q4),a=storeQ(Q.div(s4,den));return {a,b:Q.sub(Q.ONE,a)};});
     return raw.map((x,v)=>{const u=comp(v);return {a:Q.mul(Q.add(x.a,raw[u].a),Q.HALF),b:Q.mul(Q.add(x.b,raw[u].b),Q.HALF)};});
   };
   /* Gated energy as a polynomial in eps, exactly:
@@ -1348,18 +1607,23 @@ const KERNEL_FACTORY = () => {
      (NonExpansive.lean), so the step's distance from the same formulas
      evaluated without any storage is at most the sum of the storage budgets
      (ErrorBudget.lean, chain_err_le, parallel_err_le). */
-  const stagesFrom = (input,act,mode,W,params,keep) => {
+  /* ctx carries what the medium gives every run of the stages alike: the
+     magnetism memory's phase turns. Maya does not act on the state: its
+     factor is the ratio of what is observed to what is (v18.24: M =
+     observed / true), applied where the field is shown. */
+  const stagesFrom = (input,act,mode,W,params,keep,ctx) => {
     const afterS=applySutraCore(input,act,mode,keep);
-    const afterM=keep(applyMSTVQ(afterS,W,params));
+    const afterG=keep(applyMAG(afterS,ctx.magT));
+    const afterM=keep(applyMSTVQ(afterG,W,params));
     const afterT=keep(applyTGCR(afterM,W,params));
-    const afterY=keep(applyMaya(afterT,W,params));
-    const afterZ=keep(applyZPE(afterY,W,params));
-    return {afterS,afterM,afterT,afterY,afterZ};
+    const afterZ=keep(applyZPE(afterT,W,params));
+    return {afterS,afterG,afterM,afterT,afterZ};
   };
   const initEngine = () => {
     const psi=initState();
     const e=energy(psi);
-    return {psi,dielectric:initDielectric(),ceiling:e,energyLedger:e,frame:0,last:null};
+    return {psi,dielectric:initDielectric(),ceiling:e,energyLedger:e,frame:0,last:null,
+            mayaPhase:MAYA_PHASE0,mayaErr:Q.ZERO,magA:Array(32).fill(Q.ZERO),magChi:Array(16).fill(Q.ZERO)};
   };
   /* for messages only -- never fed back into the state */
   /* for messages only -- never fed back into the state */
@@ -1387,14 +1651,17 @@ const KERNEL_FACTORY = () => {
      not contain the singularity, and no uncontrolled state is returned. */
   const step = (engine,params,active,mode) => {
     const input=engine.psi;
-    const dielectricNext=evolveDielectric(engine.dielectric,active,params);
+    const rhoIn=rhoHat(input);
+    const dielectricNext=evolveDielectric(engine.dielectric,active,params,rhoIn);
+    const maya=mayaStep(engine.mayaPhase,engine.mayaErr);
+    const ctx={magT:magPhases(engine.magA,engine.magChi,params)};
     const dDrift=dielectricDrift(engine.dielectric,dielectricNext);
     const W=computeWheeler(dielectricNext,params);
     const eIn=energy(input);
     const ceiling=engine.ceiling;
     const T=A4.cmp(eIn,ceiling)>0?eIn:ceiling;
     const run={uncontrolled:makeKeep(),braked:null};
-    let st=stagesFrom(input,active,mode,W,params,run.uncontrolled.keep);
+    let st=stagesFrom(input,active,mode,W,params,run.uncontrolled.keep,ctx);
     let ledger=run.uncontrolled.ledger;
     const eUncontrolled=energy(st.afterZ);
     const TU=storageAllowance(T,ledger.delta);
@@ -1405,7 +1672,7 @@ const KERNEL_FACTORY = () => {
       r4.lambda=qTraceLambda(input);
       r4.sigma=storeQ(r4ReinforcedOf(r4.lambda,params.r4R));
       run.braked=makeKeep();
-      st=stagesFrom(input,scaleActiveByR4(active,r4.sigma),mode,W,params,run.braked.keep);
+      st=stagesFrom(input,scaleActiveByR4(active,r4.sigma),mode,W,params,run.braked.keep,ctx);
       ledger=run.braked.ledger;
       out=st.afterZ;
       r4.eBraked=energy(out);
@@ -1435,14 +1702,19 @@ const KERNEL_FACTORY = () => {
     const psi=out;
     const dielectric=dielectricNext.map(storeQ);
     const eFinal=energy(psi);
+    const rhoOut=rhoHat(psi);
+    const mag=magInduct(engine.magA,engine.magChi,rhoIn,rhoOut,params);
     return {
       psi,dielectric,ceiling,energyLedger:eFinal,frame:engine.frame+1,
+      mayaPhase:maya.next,mayaErr:maya.err,magA:mag.A,magChi:mag.chi,
       /* stagesRun: the stage states below are the sigma-braked run's when R4
          engaged, the uncontrolled run's otherwise. dielectricIn is the stored
          field the step started from; with input, params, active and mode it
          is everything the step reads. */
       last:{input,dielectricIn:engine.dielectric,stagesRun:r4.engaged?'sigma-braked':'uncontrolled',
-            afterS:st.afterS,afterM:st.afterM,afterT:st.afterT,afterY:st.afterY,afterZ:st.afterZ,controlled:out,
+            mayaPhaseIn:engine.mayaPhase,mayaErrIn:engine.mayaErr,magAIn:engine.magA,magChiIn:engine.magChi,
+            maya,ctx,rhoIn,rhoOut,edgeShares:mag.share,
+            afterS:st.afterS,afterG:st.afterG,afterM:st.afterM,afterT:st.afterT,afterZ:st.afterZ,controlled:out,
             e0:eIn,eS:energy(st.afterS),eFinal,dielectricDrift:dDrift,wheeler:W,r4,active,mode,params,
             storeBits:STORE_BITS,stepError:{delta:ledger.delta,stores:ledger.stores},complexity:complexity(psi)}
     };
@@ -1716,12 +1988,17 @@ const KERNEL_FACTORY = () => {
     const b=wht(before),x=wht(applyTGCR(before,w,p)),a=wht(after),dtQ=rationalA4(p.dt,'dt'),tQ=rationalA4(p.tgcr,'tgcr'),meanMagQ=Q.mul(w.magneticTraceTotal,Q.SIXTEENTH);
     return Array.from({length:16},(_,xi)=>{const shellQ=Q.mk(BigInt(hw(xi)));let scalar=Q.mul(Q.mul(Q.mul(dtQ,tQ),meanMagQ),shellQ);if(hw(xi)&1)scalar=Q.neg(scalar);const tau=A4.fromQ(scalar),phase=C4.phase(tau);return {mode:xi.toString(2).padStart(4,'0'),hammingWeight:hw(xi),amplitudeBefore:b[xi],tau,phase,amplitudeAfterExact:x[xi],spectralPass:C4.eq(x[xi],C4.mul(phase,b[xi])),amplitudeAfterStored:a[xi],unitNormPass:A4.eq(C4.norm2(phase),A4.ONE)};});
   };
-  const mayaData = (before,after,w,p) => {
-    const permutation=Array.from({length:16},(_,v)=>mayaPermutation(v)),inverse=Array(16);permutation.forEach((u,v)=>inverse[u]=v);
-    const dtQ=rationalA4(p.dt,'dt'),mQ=rationalA4(p.maya,'maya'),meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
-    const phaseParameters=Array.from({length:16},(_,v)=>{let scalar=Q.mul(Q.mul(dtQ,mQ),meanDQ);if(hw(v)&1)scalar=Q.neg(scalar);return A4.fromQ(scalar);});
-    const exact=applyMaya(before,w,p),energyBefore=energy(before),energyAfterExact=energy(exact);
-    return {matrixA_GF2:'affine18 fixed invertible map',offsetB_GF2:'embedded in affine18',permutation,inversePermutation:inverse,phaseParameters,bijectivePass:new Set(permutation).size===16,energyBefore,energyAfterExact,energyPass:A4.eq(energyBefore,energyAfterExact),...storageReport(exact,after)};
+  /* Maya in one step: the phase it read and its error bound, beta's
+     enclosure, the factor (observed / true), the phase after the five
+     sub-steps, and the layer it is flowing onto. */
+  const mayaData = maya => ({phase:maya.phaseIn,phaseError:maya.errIn,phaseNext:maya.next,phaseNextError:maya.err,
+    beta:maya.beta,betaEnclosure:maya.betaEnclosure,betaWidth:maya.betaWidth,factor:maya.M,factorBound:maya.epsM,
+    layer:MAYA_LAYER,a:MAYA_A,b:MAYA_B,e:E_BRACKET,pi:PI_BRACKET,substeps:MAYA_SUBSTEPS,h:MAYA_H});
+  /* The magnetism memory's stage: unit phases, so the exact stage keeps the
+     energy exactly (phase_energy); storage is reported beside it. */
+  const magStageData = (before,after,t) => {
+    const exact=applyMAG(before,t),energyBefore=energy(before),energyAfterExact=energy(exact);
+    return {phaseTurns:t,energyBefore,energyAfterExact,energyPass:A4.eq(energyBefore,energyAfterExact),...storageReport(exact,after)};
   };
   const zpeLedger = (before,after,w,p) => {
     const dtQ=rationalA4(p.dt,'dt'),zQ=rationalA4(p.zpe,'zpe'),meanDQ=Q.mul(w.dielectricTraceTotal,Q.SIXTEENTH);
@@ -1801,7 +2078,7 @@ const KERNEL_FACTORY = () => {
       assert("store idempotent "+Q.toString(q).slice(0,24),Q.eq(storeQ(r),r));
     }
     assert("store keeps zero",Q.isZero(storeQ(Q.ZERO)));
-    const p={dt:A4.fromQ(Q.mk(1n,64n)),dielectricScale:A4.fromQ(Q.mk(1n,8n)),coherence:Q.mk(1n,4n),gammaW:A4.fromQ(Q.mk(424923n,10000n)),appliedH:A4.fromQ(Q.mk(1n,64n)),mstvq:A4.fromQ(Q.mk(1n,128n)),tgcr:A4.fromQ(Q.mk(1n,256n)),maya:A4.fromQ(Q.mk(1n,512n)),zpe:A4.fromQ(Q.mk(1n,512n)),zpeSource:A4.ZERO,r4R:Q.TWO,geoD:A4.fromQ(Q.mk(1n,16n)),geoM:A4.fromQ(Q.mk(1n,8n)),geoP:A4.fromQ(Q.mk(1n,128n))};
+    const p={dt:A4.fromQ(Q.mk(1n,64n)),dielectricScale:A4.fromQ(Q.mk(1n,8n)),coherence:Q.mk(1n,4n),gammaW:A4.fromQ(Q.mk(424923n,10000n)),appliedH:A4.fromQ(Q.mk(1n,64n)),mstvq:A4.fromQ(Q.mk(1n,128n)),tgcr:A4.fromQ(Q.mk(1n,256n)),zpe:A4.fromQ(Q.mk(1n,512n)),zpeSource:A4.ZERO,r4R:Q.TWO,geoD:A4.fromQ(Q.mk(1n,16n)),geoM:A4.fromQ(Q.mk(1n,8n)),geoP:A4.fromQ(Q.mk(1n,128n)),polarisation:Q.ONE,vortex:Q.ONE};
     const dfield=initDielectric();const w=computeWheeler(dfield,p);for(let v=0;v<16;v++)if(hw(v)===2)assert(`Wheeler inertial-plane M=0 v${v}`,A4.isZero(w.magnetic[v]));
     /* R4 controller: dormant on a step that does not raise the energy ... */
     const quiet=step(initEngine(),p,[{id:3,strength:Q.ONE}],"SERIES");
@@ -1815,12 +2092,46 @@ const KERNEL_FACTORY = () => {
     assert("R4 sigma in [0,1]",Q.sign(loud.last.r4.sigma)>=0&&Q.cmp(loud.last.r4.sigma,Q.ONE)<=0);
     /* the step's error ledger bounds its distance from the same stages run
        without any storage: recompute them exactly and measure */
-    const exactRun=stagesFrom(quiet.last.input,quiet.last.active,"SERIES",quiet.last.wheeler,p,x=>x);
+    const exactRun=stagesFrom(quiet.last.input,quiet.last.active,"SERIES",quiet.last.wheeler,p,x=>x,quiet.last.ctx);
     let dist=Q.ZERO;
     exactRun.afterZ.forEach((z,v)=>{const c=quiet.psi[v];
       for(const [a,b] of [[z.re,c.re],[z.im,c.im]])['a','b','c','d'].forEach((k,i)=>{
         dist=Q.add(dist,Q.mul(Q.abs(Q.sub(a[k],b[k])),Q.mk(RAD_UB_256[i],256n)));});});
     assert("step error within its ledger",Q.cmp(dist,quiet.last.stepError.delta)<=0&&Q.sign(dist)>0);
+    /* Maya's enclosures and the hypotheses of its theorems, decided
+       (SutraWS/MayaFlow.lean) */
+    assert("pi bracket certified, width <= 2^-135",Q.cmp(Q.sub(PI_BRACKET[1],PI_BRACKET[0]),Q.mk(1n,1n<<135n))<=0);
+    assert("e bracket width <= 2^-150",Q.cmp(Q.sub(E_BRACKET[1],E_BRACKET[0]),Q.mk(1n,1n<<150n))<=0);
+    assert("phi/e in [59/100, 3/5] (layer)",Q.cmp(MAYA_A[0],Q.mk(59n,100n))>=0&&Q.cmp(MAYA_A[1],Q.mk(3n,5n))<=0);
+    assert("e/pi in [86/100, 87/100] (layer)",Q.cmp(MAYA_B[0],Q.mk(86n,100n))>=0&&Q.cmp(MAYA_B[1],Q.mk(87n,100n))<=0);
+    assert("h (a + 3b) <= 1 (euler_mono)",Q.cmp(Q.mul(MAYA_H,MAYA_LIP),Q.ONE)<=0);
+    assert("layer bracketed in [3/4, 1] to 2^-20 with beta changing sign",
+      Q.cmp(MAYA_LAYER[0],Q.mk(3n,4n))>=0&&Q.cmp(MAYA_LAYER[1],Q.ONE)<=0&&
+      Q.cmp(Q.sub(MAYA_LAYER[1],MAYA_LAYER[0]),Q.mk(1n,1n<<20n))<=0&&
+      mayaBetaEnclose(MAYA_LAYER[0])[0].n>0n&&mayaBetaEnclose(MAYA_LAYER[1])[1].n<0n);
+    assert("phi_0 below the layer (toward_layer)",Q.sign(MAYA_PHASE0)>0&&Q.cmp(MAYA_PHASE0,MAYA_LAYER[0])<0);
+    {const ms=mayaStep(MAYA_PHASE0,Q.ZERO);
+     assert("Maya factor in (19/20, 21/20), above 1 below the layer (factor_mem, factor_gt_one_iff)",
+       Q.cmp(ms.M,Q.mk(19n,20n))>0&&Q.cmp(ms.M,Q.mk(21n,20n))<0&&Q.cmp(ms.M,Q.ONE)>0);
+     assert("one Maya step raises the phase and stays below the layer",Q.cmp(ms.next,MAYA_PHASE0)>0&&Q.cmp(ms.next,MAYA_LAYER[0])<0);}
+    {const fl=q=>Number(q.n)/Number(q.d),t=trigEnclose(Q.mk(3n,7n),30);
+     assert("sin, cos enclosures contain the double values (a check of the integer sums)",
+       fl(t.sin[0])<=Math.sin(3/7)+1e-15&&Math.sin(3/7)-1e-15<=fl(t.sin[1])&&
+       fl(t.cos[0])<=Math.cos(3/7)+1e-15&&Math.cos(3/7)-1e-15<=fl(t.cos[1]));}
+    /* the magnetism's identities on the runtime's own indexing (Magnetism.lean) */
+    {const chi=Array.from({length:16},(_,v)=>Q.mk(BigInt(v*v-7*v+3),BigInt(v+1))),Z32=Array(32).fill(Q.ZERO);
+     assert("Faraday potential has no flux (faraday_flux_free)",curlA(fullA(Z32,chi)).every(Q.isZero));
+     const rho=chi.map(Q.abs),sh=edgeShares(rho);
+     assert("edge shares sum to 32 (edge_share_total)",Q.eq(sh.reduce((a,b)=>Q.add(a,b),Q.ZERO),Q.mk(32n)));
+     const A=MAG_EDGES.map((_,e)=>Q.mk(BigInt((e*e*5)%23-11),BigInt(e%5+1)));
+     const fluxSum=MAG_PAIRS.map((_,p)=>MAG_FACES.filter(f=>f.p===p));
+     assert("flux out of every cube is zero (flux_closed)",magData(A,chi).closed);
+     assert("faces and edges are those of the tesseract",MAG_EDGES.length===32&&MAG_FACES.length===24&&FACES_AT.every(f=>f.length===6)&&FACES_ON_EDGE.every(f=>f.length===3)&&fluxSum.every(f=>f.length===4));
+     const recon=reconnectionsOf(A),bv=bvecAt(curlA(A)),fl=q=>Number(q.n)/Number(q.d);
+     assert("reconnection test agrees with the cosine on this potential (reconnect_iff)",MAG_EDGES.every(([v,,h],e)=>{
+       const a=bv[v].map(fl),b=bv[h].map(fl),na=Math.hypot(...a),nb=Math.hypot(...b);
+       if(na*na<=1e-6||nb*nb<=1e-6)return !recon.includes(e);
+       const c=(a[0]*b[0]+a[1]*b[1]+a[2]*b[2])/(na*nb);return Math.abs(c+0.7)<1e-9||(c<-0.7)===recon.includes(e);}));}
     return tests;
   };
   const qTraceProjection = psi => psi.map(z => z.re.a);
@@ -1853,13 +2164,17 @@ const KERNEL_FACTORY = () => {
     return {
       input: serializeState(last.input),
       dielectricIn: last.dielectricIn.map(serializeQ),
+      mayaPhaseIn: serializeQ(last.mayaPhaseIn),
+      mayaErrIn: serializeQ(last.mayaErrIn),
+      magAIn: last.magAIn.map(serializeQ),
+      magChiIn: last.magChiIn.map(serializeQ),
       params: serializeExact(params),
       stepError: {delta:serializeQ(last.stepError.delta),stores:last.stepError.stores},
       stagesRun: last.stagesRun,
       afterSutraCore: serializeState(last.afterS),
+      afterMagnetism: serializeState(last.afterG),
       afterMSTVQ: serializeState(last.afterM),
       afterTGCR: serializeState(last.afterT),
-      afterMaya: serializeState(last.afterY),
       afterZPE: serializeState(last.afterZ),
       afterR4: serializeState(last.controlled),
       energyBefore: serializeA4(last.e0),
@@ -1870,17 +2185,21 @@ const KERNEL_FACTORY = () => {
       wheeler: serializeExact(last.wheeler),
       geometry: serializeExact(exactGeometry(last.controlled,last.wheeler,params)),
       sectorDecomposition: serializeExact(sectorDecomposition(last.controlled)),
-      mstvqPairs: serializeExact(mstvqPairData(last.afterS,last.afterM,last.wheeler,params)),
+      mstvqPairs: serializeExact(mstvqPairData(last.afterG,last.afterM,last.wheeler,params)),
       tgcrSpectral: serializeExact(tgcrSpectralData(last.afterM,last.afterT,last.wheeler,params)),
-      mayaTransform: serializeExact(mayaData(last.afterT,last.afterY,last.wheeler,params)),
-      zpeLedger: serializeExact(zpeLedger(last.afterY,last.afterZ,last.wheeler,params)),
+      maya: serializeExact(mayaData(last.maya)),
+      magnetismIn: serializeExact(magData(last.magAIn,last.magChiIn)),
+      magnetismStage: serializeExact(magStageData(last.afterS,last.afterG,last.ctx.magT)),
+      fieldEnergyDensity: {in:last.rhoIn.map(serializeQ),out:last.rhoOut.map(serializeQ)},
+      edgeShares: last.edgeShares.map(serializeQ),
+      zpeLedger: serializeExact(zpeLedger(last.afterT,last.afterZ,last.wheeler,params)),
       composition: last.mode,
       activeSutras: last.active.map(x => ({id:x.id,strength:serializeQ(x.strength),args:x.args?x.args.map(serializeQ):null})),
       storeBits: last.storeBits,
       complexity: last.complexity
     };
   };
-  return Object.freeze({Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,initEngine,step,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,scaleActiveByR4,hwCoefficients,storeQ,storeC4,storeBudget,STORE_BITS,R4Uncontained,gateABField,r4Scale,r4GateEnergyPoly,evalGatePoly,certifyGateCeiling,R4_GATE_GRID_BITS,cayley});
+  return Object.freeze({magStageData,mayaObserve,cubeFluxes,mayaStep,mayaBetaEnclose,mayaFactorOf,MAYA_A,MAYA_B,MAYA_LAYER,MAYA_PHASE0,MAYA_H,MAYA_SUBSTEPS,MAYA_LIP,PI_BRACKET,E_BRACKET,PHI_BRACKET,trigEnclose,a4Enclose,sqrtUpperQ,rhoHat,edgeShares,curlA,divA,fullA,potentialAt,pressureAt,helicityOf,reconnectionsOf,bvecAt,magData,magPhases,MAG_EDGES,MAG_FACES,Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,initEngine,step,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,scaleActiveByR4,hwCoefficients,storeQ,storeC4,storeBudget,STORE_BITS,R4Uncontained,gateABField,r4Scale,r4GateEnergyPoly,evalGatePoly,certifyGateCeiling,R4_GATE_GRID_BITS,cayley});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2229,10 +2548,11 @@ const LEAN_PROVED = Object.freeze({
      SutraWS/WheelerSurface.lean, SutraWS/Projection.lean,
      SutraWS/StoredPrecision.lean, SutraWS/ErrorBudget.lean,
      SutraWS/NonExpansive.lean, SutraWS/R4Controller.lean,
-     SutraWS/DisplayMap.lean and SutraWS/FractionalPower.lean, built by
+     SutraWS/DisplayMap.lean, SutraWS/FractionalPower.lean, SutraWS/MayaFlow.lean
+     and SutraWS/Magnetism.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2266,9 +2586,11 @@ const VISUAL_CERTIFICATE = {
                  'MI_mode', 'node_reproduction', 'interpolant_unique',
                  'parseval_coeffs', 'parseval_grid', 'store_err_le', 'store_err_le_stored',
                  'real_embed_abs_le', 'chain_err_le', 'parallel_err_le', 'l2_le_l1',
-                 'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem', 'blend_zero', 'blend_one', 'blend_mem'],
+                 'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem', 'blend_zero', 'blend_one', 'blend_mem',
+                 'factor_mem', 'observe_order'],
+      /* drawn at Maya's M = observed / true times its value, so it needs Maya's certificate too */
       holds: () => !FAITHFUL.state.zero && FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
-                   FAITHFUL_RENDER.gridNode < 1e-9 && DISPLAY.ok &&
+                   FAITHFUL_RENDER.gridNode < 1e-9 && DISPLAY.ok && MAYA_VIEW.ok &&
                    KERNEL_VIEW.selfTestsOk === true && KERNEL_VIEW.stepBudgetOk === true
     },
     phase: {
@@ -2285,7 +2607,8 @@ const VISUAL_CERTIFICATE = {
                  'zeta_pow', 'fieldDistortion_mem', 'etherPressure_abs_le', 'counterspace_abs_le',
                  'inertiaEnvelope_vertex', 'inertiaEnvelope_vertex_eq_one_iff',
                  'layer_cos_vertex_eq_one_iff', 'latitude_band_eq_one_iff',
-                 'inertial_locus_nodes', 'bilinear_abs_le', 'tone_mem'],
+                 'inertial_locus_nodes', 'bilinear_abs_le', 'tone_mem',
+                 'polarised_nonneg', 'polarised_le'],
       holds: () => WHEELER_CHANNEL.ok
     },
     golden: {
@@ -2300,7 +2623,7 @@ const VISUAL_CERTIFICATE = {
          g_v is 1 and nothing is pinched. */
       theorems: ['gate_weights_nonneg', 'gate_weights_sum', 'pair_avg_weights', 'gate_factor_mem',
                  'mean_gate_mem', 'controlled_le', 'controlled_dormant', 'r4_reinforced_mem_unit_interval',
-                 'pinch_mem'],
+                 'pinch_mem', 'store_mem_unit'],
       holds: () => KERNEL_VIEW.r4.meanGateOk === true
     },
     modes: {
@@ -2314,6 +2637,16 @@ const VISUAL_CERTIFICATE = {
       theorems: ['camDepth_sq_le', 'camera_in_front', 'camDist_gt', 'frame_in_front', 'ndc_depth_mem',
                  'ema_factor_mem', 'ema_pos'],
       holds: () => PROJECTION.checked > 0 && PROJECTION.behind === 0 && PROJECTION.turn < 1e-9
+    },
+    maya: {
+      draws: 'the Maya rows, the phase and its layer on the timeline, and M = observed / true on the drawn field',
+      theorems: ['sin_enclose', 'cos_enclose', 'e_enclose', 'pi_gt_of_sin_lt_cos', 'pi_lt_of_cos_lt_sin', 'sqrt_lower', 'sqrt_upper', 'mul_mem_hull', 'div_mem_pos', 'floor_grid_le', 'le_floor_grid_succ', 'le_ceil_grid', 'beta_mem', 'beta_lipschitz', 'euler_err', 'euler_mono', 'beta_pos_small', 'beta_strict_anti', 'layer', 'toward_layer', 'layer_attracts_above', 'factor_mem', 'factor_eq_one_iff', 'factor_gt_one_iff', 'factor_lipschitz', 'observe_order'],
+      holds: () => MAYA_VIEW.ok
+    },
+    dynamo: {
+      draws: 'the dynamo timeline (energy, flux, helicity, reconnections, R4) and the magnetism rows',
+      theorems: ['faraday_flux_free', 'flux_closed', 'helicity_of_gradient', 'retention_bound', 'pressure_nonneg', 'reconnect_iff', 'edge_share_total', 'polarised_nonneg', 'polarised_le', 'plot_mem', 'plot_mono', 'plot_log_mono', 'phase_energy'],
+      holds: () => DYNAMO_VIEW.ok
     },
     sutra: {
       draws: 'the class each active sutra operator declares, audited at its operands, and each at its strength',
@@ -2393,24 +2726,26 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '4c08a05d44f633485c0e0c5d567f5aa2123623047d5d13747ba2a5e28e8be9cf',
+  leanCorpusSha256: 'f9ab465671409fb0b2326327b2481307207abee2b2d5296eee375f75955b0202',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2299,
+  leanTheorems: 2349,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2299,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
+  leanAxiomsKernelChecked: 2349,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase, a permutation, the normalised Walsh-Hadamard transform, the fractional power of a permutation, of that transform or of the complement swap at the strength (FractionalPower.lean), a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
-  r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
+  storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase (the magnetism memory turns among them), a permutation, the normalised Walsh-Hadamard transform, the fractional power of a permutation, of that transform or of the complement swap at the strength (FractionalPower.lean), a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
+  mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
+  dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound), and phase turns dt(div A + mean B^2) on the field, which are unit phases (phase_energy). The field energy densities it and the dielectric polarisation read are the real values of |psi_v|^2 enclosed and stored at 128 bits (SutraWS/Magnetism.lean).',
+  r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field (a_v stored at 128 bits, b_v = 1 - a_v, store_mem_unit) with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
   wheelerScopeNote: 'The Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic, on the stored dielectric field of the state being drawn. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 and pi enter at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The projection channel (SutraWS/Projection.lean) keeps every point in front of the camera whatever their size.'
 });
@@ -2917,12 +3252,16 @@ function exactSliderQ(id, divisor) {
   return Q.mk(BigInt(el.value), divisor);
 }
 /* The kernel's parameters. dielectric s and B come from their sliders, r from
-   the R4 slider; every one is an exact rational. */
+   the R4 slider, the vortex omega, the drive and the polarisation chi from
+   theirs; every one is an exact rational. */
 function kernelParams() {
   const ampD = exactSliderQ('amp-dielectric', 10n);
   const ampB = exactSliderQ('amp-bfield', 10n);
   const r4R = exactSliderQ('amp-r4r', 10n);
   if (r4R.n === 0n) throw new RangeError('R4 radius r = 0 leaves sigma undefined');
+  const omega = exactSliderQ('amp-omega', 10n);
+  const drive = exactSliderQ('amp-drive', 4n);
+  const chi = exactSliderQ('amp-polar', 10n);
   return Object.freeze({
     dt: A4.fromQ(Q.mk(1n, 64n)),
     dielectricScale: A4.fromQ(Q.mul(ampD, Q.mk(1n, 8n))),
@@ -2931,9 +3270,10 @@ function kernelParams() {
     appliedH: A4.fromQ(Q.mul(ampB, Q.mk(1n, 64n))),
     mstvq: A4.fromQ(Q.mk(1n, 128n)),
     tgcr: A4.fromQ(Q.mk(1n, 256n)),
-    maya: A4.fromQ(Q.mk(1n, 512n)),
     zpe: A4.fromQ(Q.mk(1n, 512n)),
-    zpeSource: A4.ZERO,
+    zpeSource: A4.fromQ(drive),
+    polarisation: chi,
+    vortex: omega,
     r4R,
     geoD: A4.fromQ(Q.mk(1n, 16n)),
     geoM: A4.fromQ(Q.mk(1n, 8n)),
@@ -2954,6 +3294,10 @@ const KERNEL_VIEW = {
   selfTestsOk: null, selfTestCount: 0, selfTestError: '',
   stepBudgetOk: false, delta: null, stores: 0,
   r4: { engaged: false, gated: false, sigma: null, eps: null, passes: 0, meanGate: 1, meanGateOk: true, count: 0 },
+  /* the magnetism memory and Maya as they stand after the step drawn, and the
+     run so far, one entry per step, for the dynamo timeline */
+  dyn: null,
+  hist: { frame: [], E: [], UB: [], H: [], recon: [], phase: [], M: [], r4: [] },
   stepMs: 0, halted: null, running: true, workerError: null,
   configVersion: 0, appliedVersion: -1, appliedActive: [], appliedComposition: null,
   /* states from the worker wait in queue, in order; the frame loop takes the
@@ -2989,8 +3333,18 @@ function postState(ms) {
                   energyLedger: engine.energyLedger, frame: engine.frame },
          params: config ? config.params : null, r4,
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
-         composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [] });
+         composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [],
+         dyn: dynamoOf(engine) });
   inFlight++;
+}
+/* What the display shows of the medium: the magnetism memory's flux,
+   helicity, reconnections and cube fluxes (flux_closed decided on them), and
+   Maya at the current phase. */
+function dynamoOf(e) {
+  const md = KERNEL.magData(e.magA, e.magChi), mo = KERNEL.mayaObserve(e.mayaPhase);
+  return { fluxEnergy: md.fluxEnergy, helicity: md.helicity, reconnections: md.reconnections, flux: md.flux,
+           closed: md.closed, phase: e.mayaPhase, phaseErr: e.mayaErr, beta: mo.beta, betaEnclosure: mo.betaEnclosure,
+           M: mo.M, layer: KERNEL.MAYA_LAYER };
 }
 let intervalMs = 1000 / 3;
 /* Back-pressure: the worker is never more than MAX_AHEAD states ahead of the
@@ -3032,7 +3386,9 @@ self.onmessage = e => {
     if (!engine.last) { post({ type: 'export', id: m.id, error: 'no step has run yet' }); return; }
     try { post({ type: 'export', id: m.id, payload: { frame: engine.frame, last: KERNEL.serializeLast(engine.last),
                  psi: KERNEL.serializeState(engine.psi), dielectric: engine.dielectric.map(KERNEL.serializeQ),
-                 ceiling: KERNEL.serializeA4(engine.ceiling) } }); }
+                 ceiling: KERNEL.serializeA4(engine.ceiling),
+                 mayaPhase: KERNEL.serializeQ(engine.mayaPhase), mayaErr: KERNEL.serializeQ(engine.mayaErr),
+                 magA: engine.magA.map(KERNEL.serializeQ), magChi: engine.magChi.map(KERNEL.serializeQ) } }); }
     catch (err) { post({ type: 'export', id: m.id, error: String(err.message || err) }); }
   }
 };
@@ -3152,13 +3508,22 @@ function startWorkers() {
 /* The configuration the next step runs with: active sutras with every operand,
    the composition, the kernel parameters. Sent whenever any of them changes. */
 let LAST_CONFIG_KEY = '';
+function exactParamsKey(params) {
+  const q = x => x.n + '/' + x.d;
+  return Object.keys(params).sort().map(k => {
+    const x = params[k];
+    return k + '=' + ('a' in x && 'd' in x && typeof x.a === 'object' ? [x.a, x.b, x.c, x.d].map(q).join(':') : q(x));
+  }).join(';');
+}
 function pushConfig(reason) {
   if (!KERNEL_WORKER) return;
   let params;
   try { params = kernelParams(); }
   catch (err) { LOG.add('parameters refused: ' + err.message, 'off'); return; }
   const active = activeSutras();
-  const key = activeKey(active) + '|' + COMPOSITION + '|' + ['amp-dielectric', 'amp-bfield', 'amp-r4r'].map(id => document.getElementById(id).value).join(',');
+  /* the key is every exact parameter the kernel receives, so no parameter
+     can change without the kernel hearing of it */
+  const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
   if (key === LAST_CONFIG_KEY && reason !== 'force') return;
   LAST_CONFIG_KEY = key;
   KERNEL_VIEW.configVersion++;
@@ -3254,7 +3619,33 @@ function applyKernelState(m) {
                          meanGateOk: Q.sign(mg) >= 0 && Q.cmp(mg, Q.ONE) <= 0,
                          count: KERNEL_VIEW.r4.count + (r.engaged ? 1 : 0) };
     }
+    if (m.dyn) recordDynamo(m.state.frame, m.dyn, r ? r.engaged : false, m.state.energyLedger);
     KERNEL_VIEW.dirty = true;
+}
+/* Maya as drawn: M = observed / true, certified while the self-tests hold,
+   the phase is inside [-1, 1] where its enclosures are proved, and M is
+   strictly between 19/20 and 21/20 (factor_mem). */
+const MAYA_VIEW = { M: 1, ok: false, why: 'no step yet' };
+/* The dynamo display holds while the flux shown closes on every cube
+   (flux_closed) and every quantity it plots is a finite double. */
+const DYNAMO_VIEW = { ok: false, why: 'no step yet' };
+function recordDynamo(frame, d, engaged, energy) {
+  const H = KERNEL_VIEW.hist;
+  /* a reset starts a new run: its history starts again */
+  if (H.frame.length && frame <= H.frame[H.frame.length - 1]) for (const k of Object.keys(H)) H[k].length = 0;
+  const num = FAITHFUL.qNum, E = FAITHFUL.aNum(energy);
+  const row = { frame, E, UB: num(d.fluxEnergy), H: num(d.helicity), recon: d.reconnections.length,
+                phase: num(d.phase), M: num(d.M), r4: engaged ? 1 : 0 };
+  for (const k of Object.keys(H)) H[k].push(row[k]);
+  KERNEL_VIEW.dyn = d;
+  const Mok = Q.cmp(d.M, Q.mk(19n, 20n)) > 0 && Q.cmp(d.M, Q.mk(21n, 20n)) < 0;
+  const phaseOk = Q.cmp(Q.abs(d.phase), Q.ONE) <= 0;
+  MAYA_VIEW.M = row.M;
+  MAYA_VIEW.ok = KERNEL_VIEW.selfTestsOk === true && Mok && phaseOk && Number.isFinite(row.M);
+  MAYA_VIEW.why = MAYA_VIEW.ok ? '' : !Mok ? 'M outside (19/20, 21/20)' : !phaseOk ? 'phase outside [-1, 1]' : 'self-tests have not passed';
+  const finite = [row.E, row.UB, row.H, row.phase].every(Number.isFinite);
+  DYNAMO_VIEW.ok = KERNEL_VIEW.selfTestsOk === true && d.closed === true && finite;
+  DYNAMO_VIEW.why = DYNAMO_VIEW.ok ? '' : d.closed !== true ? 'flux does not close on every cube' : !finite ? 'a plotted value is not finite' : 'self-tests have not passed';
 }
 /* A step's error budget is a bound on its distance from the formulas with no
    storage. The picture needs it far below anything visible: here, 2^-40 of
@@ -3490,6 +3881,7 @@ function projectTorus() {
      argument is 0, stated here rather than produced by dividing by zero */
   const wInv = C5.wZero ? 0 : 1 / C5.wMax;
   const vGain = abs(vortexGain) * AMP.vortex;
+  const mayaM = MAYA_VIEW.M;
   const sI = GEO.sIdx, sWt = GEO.sW;
   const bw = (g, sb) => g[sI[sb]] * sWt[sb] + g[sI[sb+1]] * sWt[sb+1] + g[sI[sb+2]] * sWt[sb+2] + g[sI[sb+3]] * sWt[sb+3];
   /* exactGeometry's z-compression 1/(1 + geoD*D). wheeler_compression_positive
@@ -3515,14 +3907,16 @@ function projectTorus() {
     for (let j = 0; j < PH_SEG; j++) {
       const phi = GEO.phi[j];
       const idx = i * PH_SEG + j, sb = idx * 12;
-      const fv = bw(DISPLAY_FIELD, sb);
+      /* Maya's M = observed / true: the field is drawn at M times its value
+         (observe_order: same order and sign, factor_mem: M in (19/20, 21/20)) */
+      const fv = bw(DISPLAY_FIELD, sb) * mayaM;
       let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wN = 0, kS = 0;
       /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
       if (ampOn) {
         R += fv * AMP.field;
         r += fv * AMP.tube;
         yOff += fv * AMP.yDisp;
-        const dGth = bw(DISPLAY_FIELD, sb + 4) - fv, dGph = bw(DISPLAY_FIELD, sb + 8) - fv;
+        const dGth = bw(DISPLAY_FIELD, sb + 4) * mayaM - fv, dGph = bw(DISPLAY_FIELD, sb + 8) * mayaM - fv;
         phiShift += dGth * AMP.gradTwist * 3;
         r += abs(dGph) * AMP.gradRipple;
         R += abs(dGth) * AMP.gradBulge;
@@ -4112,7 +4506,100 @@ function updateSimulationHud() {
   set('sim-r4count', KERNEL_VIEW.r4.count + (KERNEL_VIEW.r4.count === 1 ? ' step' : ' steps'));
   set('sim-store', `${KERNEL.STORE_BITS} bits · step error ≤ ${KERNEL_VIEW.delta ? qShort(KERNEL_VIEW.delta) : '–'}`);
   set('sim-comp', COMPOSITION_LABEL[COMPOSITION]);
+  updateDynamoHud();
   updateRunBadge();
+}
+/* The magnetism and Maya rows, and one line saying what this step did. Each
+   number is the kernel's exact value, written as a decimal. Withheld, with
+   the reason, while its certificate does not hold. */
+function updateDynamoHud() {
+  const d = KERNEL_VIEW.dyn, H = KERNEL_VIEW.hist;
+  if (!d) return;
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const n = H.frame.length, num = FAITHFUL.qNum;
+  const line = document.getElementById('dynLine');
+  if (DYNAMO_VIEW.ok) {
+    set('dyn-flux', fmtE(H.UB[n - 1]));
+    set('dyn-helicity', fmtE(H.H[n - 1]));
+    let total = 0; for (let i = 0; i < n; i++) total += H.recon[i];
+    set('dyn-recon', `${H.recon[n - 1]} now · ${total} in the run`);
+  } else { set('dyn-flux', 'withheld'); set('dyn-helicity', DYNAMO_VIEW.why); set('dyn-recon', '–'); }
+  const lo = num(d.layer[0]), hi = num(d.layer[1]), ph = num(d.phase), M = num(d.M);
+  if (MAYA_VIEW.ok) {
+    set('maya-phase', `${ph.toFixed(5)} ± ${fmtE(num(d.phaseErr))}`);
+    set('maya-beta', `${num(d.beta).toExponential(4)} ± ${fmtE(num(Q.sub(d.betaEnclosure[1], d.betaEnclosure[0])) / 2)}`);
+    set('maya-layer', `in (${lo.toFixed(8)}, ${hi.toFixed(8)})`);
+    set('maya-M', M.toFixed(6));
+  } else { set('maya-phase', 'withheld'); set('maya-beta', MAYA_VIEW.why); set('maya-layer', '–'); set('maya-M', '–'); }
+  if (!line) return;
+  if (!DYNAMO_VIEW.ok || !MAYA_VIEW.ok) {
+    line.className = 'dyn-line withheld';
+    line.textContent = 'dynamo line withheld: ' + (DYNAMO_VIEW.why || MAYA_VIEW.why);
+    return;
+  }
+  line.className = 'dyn-line';
+  const pct = (a, b) => (b !== 0 ? ((a - b) / Math.abs(b) * 100) : 0);
+  const k = Math.max(0, n - 31);
+  const fluxTrend = n > 1 ? `${pct(H.UB[n - 1], H.UB[k]) >= 0 ? '+' : ''}${pct(H.UB[n - 1], H.UB[k]).toFixed(1)}% over ${n - 1 - k} steps` : 'first step';
+  const where = ph < lo ? 'flowing up onto the layer' : ph > hi ? 'flowing down onto the layer' : 'on the layer';
+  line.textContent = `step ${H.frame[n - 1]} · flux ${fmtE(H.UB[n - 1])} (${fluxTrend}) · helicity ${fmtE(H.H[n - 1])} · ` +
+    `${H.recon[n - 1]} reconnection${H.recon[n - 1] === 1 ? '' : 's'} · Maya φ ${ph.toFixed(4)} ${where}, field shown ×${M.toFixed(4)} · ` +
+    `R4 ${H.r4[n - 1] ? 'engaged' : 'dormant'}`;
+}
+/* The dynamo timeline: the whole run, one column per step (several per pixel
+   once the run is longer than the strip), each trace placed between the least
+   and greatest value it has shown (plot_mem, plot_mono), energies on a log
+   scale (plot_log_mono). R4 steps are marked above, reconnections below.
+   Drawn only while the dynamo and Maya certificates hold. */
+function drawDynamoTimeline(ctx, cw, ch) {
+  const H = KERNEL_VIEW.hist, n = H.frame.length;
+  if (n < 2 || !VISUAL_CERTIFICATE._last || !VISUAL_CERTIFICATE._last.dynamo || !VISUAL_CERTIFICATE._last.maya) return;
+  /* to the right of the vertex bars (drawVertexBars), left of the panel */
+  const rightOpen = !document.getElementById('right').classList.contains('collapsed');
+  const leftOpen = !document.getElementById('left').classList.contains('collapsed');
+  const barW = Math.max(4, Math.min(14, (cw * 0.4) / 18)), barsRight = (leftOpen ? 230 : 10) + (barW + 1) * 16 + 8;
+  const x0 = barsRight + 18, w = Math.max(120, cw - x0 - 12 - (rightOpen ? 240 : 0)), y0 = ch - 124, h = 112;
+  ctx.fillStyle = '#05070dcc'; ctx.fillRect(x0 - 6, y0 - 8, w + 12, h + 14);
+  ctx.strokeStyle = '#1e2a36'; ctx.strokeRect(x0 - 6, y0 - 8, w + 12, h + 14);
+  const lanes = [
+    { key: 'E', label: 'field energy (log)', color: '#6FD3C7', log: true },
+    { key: 'UB', label: 'flux ½ΣB² (log)', color: '#d4af37', log: true },
+    { key: 'H', label: 'helicity', color: '#c77dff', log: false },
+    { key: 'phase', label: 'Maya φ → layer', color: '#4a90d9', log: false, layer: true }
+  ];
+  const laneH = (h - 10) / lanes.length;
+  const xAt = i => x0 + (n === 1 ? 0 : i / (n - 1) * w);
+  ctx.font = '7px monospace';
+  lanes.forEach((L, li) => {
+    const top = y0 + li * laneH, bot = top + laneH - 3;
+    const vals = H[L.key].map(v => (L.log ? (v > 0 ? Math.log10(v) : NaN) : v));
+    let lo = Infinity, hi = -Infinity;
+    for (const v of vals) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    if (L.layer) { lo = Math.min(lo, 0); hi = Math.max(hi, FAITHFUL.qNum(KERNEL_VIEW.dyn.layer[1])); }
+    ctx.fillStyle = '#4a5a6a'; ctx.fillText(L.label, x0, top + 7);
+    if (!(hi > lo)) { ctx.fillStyle = '#4a5a6a'; ctx.fillText('constant', x0 + 110, top + 7); return; }
+    const yAt = v => bot - (v - lo) / (hi - lo) * (bot - top - 9);
+    if (L.layer) {
+      const ly = yAt(FAITHFUL.qNum(KERNEL_VIEW.dyn.layer[0]));
+      ctx.strokeStyle = '#4a90d955'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x0, ly); ctx.lineTo(x0 + w, ly); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = L.color; ctx.lineWidth = 1.2; ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(vals[i])) { started = false; continue; }
+      const x = xAt(i), y = yAt(vals[i]);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = L.color; ctx.fillText(L.log ? fmtE(Math.pow(10, vals[n - 1])) : (L.key === 'phase' ? vals[n - 1].toFixed(4) : fmtE(vals[n - 1])), x0 + w - 44, top + 7);
+  });
+  const tickY = y0 + h - 8;
+  for (let i = 0; i < n; i++) {
+    if (H.r4[i]) { ctx.fillStyle = '#ffb347'; ctx.fillRect(xAt(i), y0 - 6, 1, 4); }
+    if (H.recon[i]) { ctx.fillStyle = '#44ddaa'; ctx.fillRect(xAt(i), tickY, 1, Math.min(6, 1 + H.recon[i])); }
+  }
+  ctx.fillStyle = '#4a5a6a'; ctx.fillText(`step ${H.frame[0]}`, x0, y0 + h + 4);
+  ctx.fillText(`step ${H.frame[n - 1]}   ▮ R4  ▮ reconnections`, x0 + w - 150, y0 + h + 4);
 }
 /* What the frame drew and at what scale: written only when it changes. */
 let DRAW_HUD_KEY = '';
@@ -4137,9 +4624,12 @@ function updateFormulaDisplay(active) {
   let p;
   try { p = kernelParams(); } catch (err) { el.textContent = 'parameters refused: ' + err.message; return; }
   el.innerHTML =
-    `<b style="color:#d4af37">Ψ ← store ∘ R4 ∘ ZPE ∘ Maya ∘ TGCR ∘ MSTVQ ∘ ${COMPOSITION_LABEL[COMPOSITION]}</b>[${escHtml(list || 'no sūtra active')}](Ψ)<br>` +
-    `dielectric q ← evolve(q), then Wheeler: D = 2φ·s·q, M = D·k²/(1+k²)·B, ω = γ_W·M<br>` +
+    `<b style="color:#d4af37">Ψ ← store ∘ R4 ∘ ZPE ∘ TGCR ∘ MSTVQ ∘ MAG ∘ ${COMPOSITION_LABEL[COMPOSITION]}</b>[${escHtml(list || 'no sūtra active')}](Ψ)<br>` +
+    `dielectric q ← evolve(q) + χ·|Ψ|²/8, then Wheeler: D = 2φ·s·q, M = D·k²/(1+k²)·B, ω = γ_W·M<br>` +
+    `MAG: Ψ_v ← e^{iθ_v}Ψ_v, tan(θ_v/2) = dt·(∇·A + mean B²); then A ← (499/500)A − (1/10)d⁰Δ|Ψ|² + ω·vortex·share<br>` +
+    `Maya: φ ← φ + β(φ)/500 five times, β = (φ_g/e) sin φ − (e/π) φ³; drawn field × M = 1 + β/(20(1+|β|))<br>` +
     `s = ${escHtml(Q.toString(p.dielectricScale.a))} · B = ${escHtml(Q.toString(p.appliedH.a))} · γ_W = ${escHtml(Q.toString(p.gammaW.a))} · dt = ${escHtml(Q.toString(p.dt.a))} · R4 r = ${escHtml(Q.toString(p.r4R))}<br>` +
+    `ω = ${escHtml(Q.toString(p.vortex))} · drive = ${escHtml(Q.toString(p.zpeSource.a))} · χ = ${escHtml(Q.toString(p.polarisation))}<br>` +
     `every operator, inner layer and stage exact, then stored to ${KERNEL.STORE_BITS} bits`;
 }
 function renderModeIdentities() {
@@ -4240,6 +4730,7 @@ function frame(t) {
     updateDrawHud();
     drawModeComparison(ctx, cw, ch);
     drawVertexBars(ctx, cw, ch);
+    drawDynamoTimeline(ctx, cw, ch);
   }
   SUTRA_GRAPH_INSPECTOR.requestUpdate(activeSutrasCanonical());
   LOG.render();
@@ -4281,12 +4772,21 @@ document.getElementById('btn-all').addEventListener('click', () => {
 document.getElementById('btn-none').addEventListener('click', () => {
   SUTRAS.forEach(s => setSutraStrengthExact(s, '0'));
   syncPanel(); clearPresetHighlight();
-  pushConfig('ALL OFF — no sūtra active; the Wheeler, MSTVQ, TGCR, Maya and ZPE stages still run');
+  pushConfig('ALL OFF — no sūtra active; the magnetism memory, Wheeler, MSTVQ, TGCR and ZPE stages and the Maya flow still run');
 });
+/* The TGCR vortex omega: a kernel parameter (the magnetism memory's
+   induction) and the drawn precession twist, as v18.24's vortexOmega was. */
+function setOmegaSlider(tenths) {
+  const el = document.getElementById('amp-omega');
+  if (!Number.isInteger(tenths) || tenths < +el.min || tenths > +el.max) throw new RangeError(`vortex omega ${tenths / 10} is outside the slider's range`);
+  el.value = String(tenths);
+  vortexGain = tenths / 10; vortexHelicity = tenths >= 0 ? 1 : -1;
+  document.getElementById('amp-omega-v').textContent = (tenths / 10).toFixed(1);
+}
 document.getElementById('btn-vortex').addEventListener('click', () => {
-  vortexHelicity *= -1;
-  vortexGain += 3.0 * vortexHelicity;
-  LOG.add(`vortex drawing gain → ${vortexGain.toFixed(1)}`, 'sys');
+  const cur = +document.getElementById('amp-omega').value;
+  setOmegaSlider(cur === 0 ? 30 : -cur);
+  pushConfig(`vortex ω → ${(-cur === 0 ? 3 : -cur / 10).toFixed(1)}`);
 });
 document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener('click', () => {
   setComposition(b.dataset.comp); clearPresetHighlight();
@@ -4295,26 +4795,29 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
 /* A preset sets the composition and the strengths, operands back to their
    declared defaults, and goes out to the kernel at once. */
 const PRESETS = {
-  'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 50, 17: 50, 27: 50, 28: 50 }, vortex: 0 },
-  /* Chosen by running the kernel itself: each settles the field onto a
-     different structure of the tesseract, and holds it there, with R4
-     dormant -- the structure is the sutras', not the controller's. */
-  'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, vortex: 0 },
-  'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, vortex: 0 },
-  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, vortex: 0 },
-  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, vortex: 0 },
-  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, vortex: 0 },
-  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, vortex: 0 },
-  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, vortex: 0 },
-  'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, vortex: 0 },
-  'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, vortex: 0 },
-  'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, vortex: 0 },
-  'pre-magnetic':       { comp: 'SERIES',               set: { 3: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, vortex: 1.5 },
-  'pre-cancel':         { comp: 'SERIES',               set: { 5: 85, 7: 35, 8: 15, 9: 65, 11: 20, 22: 80, 28: 30, 29: 55 }, vortex: 0 },
-  'pre-dynamo':         { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 7: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, vortex: 1.0 },
-  'pre-reconnect':      { comp: 'SYMMETRIC_CONCURRENT', set: { 5: 50, 9: 50, 22: 50, 26: 50 }, vortex: 0.5 },
-  'pre-inverse-growth': { comp: 'SYMMETRIC_CONCURRENT', set: { 1: 30, 5: 70, 14: 30, 29: 70 }, vortex: 0 },
-  'pre-all29':          { comp: 'SYMMETRIC_CONCURRENT', set: Object.fromEntries(SUTRAS.map(s => [s.id, 25])), vortex: 0.5 }
+  /* Every preset turns the TGCR vortex (omega 1), so the magnetism memory
+     builds flux through the run and keeps reshaping the field. The four
+     dynamo presets also drive the inertial layer (drive 1), which keeps
+     their field alive; the others are left to their sutras so their
+     shapes stay their own. omega, drive and chi are in slider units
+     (tenths, quarters, tenths). */
+  'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 25, 17: 25, 27: 50, 28: 50 }, omega: 10, drive: 0, chi: 10 },
+  'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, omega: 10, drive: 0, chi: 10 },
+  'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, omega: 10, drive: 1, chi: 10 },
+  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, omega: 10, drive: 0, chi: 10 },
+  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, omega: 10, drive: 0, chi: 10 },
+  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, omega: 10, drive: 0, chi: 10 },
+  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, omega: 10, drive: 0, chi: 10 },
+  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, omega: 10, drive: 0, chi: 10 },
+  'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },
+  'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },
+  'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, omega: 10, drive: 0, chi: 10 },
+  'pre-magnetic':       { comp: 'SERIES',               set: { 3: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },
+  'pre-cancel':         { comp: 'SERIES',               set: { 5: 85, 7: 35, 8: 15, 9: 65, 11: 20, 22: 80, 28: 30, 29: 55 }, omega: 10, drive: 0, chi: 10 },
+  'pre-dynamo':         { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 7: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },
+  'pre-reconnect':      { comp: 'SYMMETRIC_CONCURRENT', set: { 5: 50, 9: 50, 22: 50, 26: 50 }, omega: 10, drive: 4, chi: 10 },
+  'pre-inverse-growth': { comp: 'SYMMETRIC_CONCURRENT', set: { 1: 30, 5: 70, 14: 30, 29: 70 }, omega: 10, drive: 0, chi: 10 },
+  'pre-all29':          { comp: 'SYMMETRIC_CONCURRENT', set: Object.fromEntries(SUTRAS.map(s => [s.id, 25])), omega: 10, drive: 4, chi: 10 }
 };
 Object.entries(PRESETS).forEach(([id, p]) => {
   document.getElementById(id).addEventListener('click', function () {
@@ -4326,7 +4829,12 @@ Object.entries(PRESETS).forEach(([id, p]) => {
       if (p.args && p.args[s.id]) p.args[s.id].forEach((t, i) => { s.argQ[i] = KERNEL.checkArg(s.id, i, Q.parse(t)); });
     });
     setComposition(p.comp);
-    vortexGain = p.vortex; vortexHelicity = p.vortex >= 0 ? 1 : -1;
+    setOmegaSlider(p.omega);
+    for (const [sid, v, fmt] of [['amp-drive', p.drive, x => (x / 4).toFixed(2)], ['amp-polar', p.chi, x => (x / 10).toFixed(1)]]) {
+      const el = document.getElementById(sid);
+      if (!Number.isInteger(v) || v < +el.min || v > +el.max) throw new RangeError(`preset ${id}: ${sid} ${v} is outside the slider's range`);
+      el.value = String(v); document.getElementById(sid + '-v').textContent = fmt(v);
+    }
     syncPanel(); clearPresetHighlight(); this.classList.add('preset-active');
     pushConfig(`PRESET ${this.textContent.trim()} → ${COMPOSITION_LABEL[p.comp]} [${Object.keys(p.set).map(i => 'S' + i).join(' ')}]`);
   });
@@ -4334,12 +4842,18 @@ Object.entries(PRESETS).forEach(([id, p]) => {
 /* Kernel parameters: exact rationals from integer slider positions. */
 for (const [id, dispId, fmt] of [['amp-r4r', 'amp-r4r-v', v => (v / 10).toFixed(1)],
                                  ['amp-dielectric', 'amp-dielectric-v', v => (v / 10).toFixed(1)],
-                                 ['amp-bfield', 'amp-bfield-v', v => (v / 10).toFixed(1)]]) {
+                                 ['amp-bfield', 'amp-bfield-v', v => (v / 10).toFixed(1)],
+                                 ['amp-drive', 'amp-drive-v', v => (v / 4).toFixed(2)],
+                                 ['amp-polar', 'amp-polar-v', v => (v / 10).toFixed(1)]]) {
   document.getElementById(id).addEventListener('input', e => {
     document.getElementById(dispId).textContent = fmt(+e.target.value);
     pushConfig();
   });
 }
+document.getElementById('amp-omega').addEventListener('input', e => {
+  setOmegaSlider(+e.target.value);
+  pushConfig();
+});
 /* Pace: steps per second. The picture only -- each step is the same step. */
 document.getElementById('amp-steps').addEventListener('input', e => {
   const n = +e.target.value;

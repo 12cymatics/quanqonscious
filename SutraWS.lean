@@ -19,6 +19,8 @@ import SutraWS.NonExpansive
 import SutraWS.R4Controller
 import SutraWS.DisplayMap
 import SutraWS.FractionalPower
+import SutraWS.MayaFlow
+import SutraWS.Magnetism
 
 /-!
 # SutraWS — root module
