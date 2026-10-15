@@ -27,6 +27,23 @@ One workflow gates this package: `.github/workflows/submit-pypi.yml`.
 If a step is added to the workflow and not to this list, the list is wrong and
 nothing here will say so. Read the workflow when the two disagree.
 
+### The `formal-comparator` job
+
+A separate job in the same workflow checks the formal statements under
+`formal/`, as rule C1 of `CODEX_OPENAI_MATH.md` (repository root) requires:
+
+1. **Installs Lean v4.34.1**, read from `formal/lean-toolchain` — openai/math's
+   pin, not this package's v4.10.0.
+2. **Builds comparator, lean4export and landrun** at the commits pinned in the
+   job's `env`, compiling the two Lean tools against that same Lean.
+3. **Fetches Mathlib's prebuilt files** (`lake exe cache get`). It builds
+   nothing of `formal/` itself first: Comparator's trust argument assumes the
+   checker has not already compiled the solution it is judging.
+4. **Runs Comparator on every `formal/ComparatorChallenges/*.json`**, and fails
+   if that glob matches nothing rather than passing vacuously.
+
+What the formal results do and do not cover is in `formal/docs/VedicResiduals.md`.
+
 `.github/workflows/python-app.yml` also exists. It targets the **parent**
 repository, not this package: `main` only, CUDA + CuPy, and a bare `pytest` at
 the repository root.

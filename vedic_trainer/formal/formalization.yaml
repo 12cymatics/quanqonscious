@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mathlib-initiative/formalization.yaml/main/schema/formalization.schema.json
+# Catalogue of formalized results, per rule C4 of CODEX_OPENAI_MATH.md (repository
+# root), mirroring openai/math @ 1581d4cb lean/formalization.yaml. Paths are
+# relative to this directory.
+version: "v0.4"
+
+project:
+  name: "vedic_trainer formal statements"
+  description: >-
+    Comparator-checked statements about the exact-rational kernel and auxiliary
+    losses of vedic_trainer, transcribed from its Python into Lean.
+  license: "Apache-2.0"
+
+sources:
+  # The "papers" here are the Python modules the trusted definitions transcribe.
+  - title: "vedic_trainer exact kernel: z2_primitives, conservation_exact, audit_filter, wht"
+    id: ../vedic/kernel/
+    type: software
+
+  - title: "vedic_trainer auxiliary losses: L_dual and the L_cons mass term"
+    id: ../vedic/training/losses.py
+    type: software
+
+related_formalizations:
+  - id: https://github.com/leanprover-community/mathlib4
+    relationship: builds-on
+
+status:
+  scope: "Partial progress. See docs/VedicResiduals.md for what is and is not covered."
+  main_results:
+    - comparator_config: ComparatorChallenges/VedicResiduals.json
+      declaration: VedicFormal.auditClosed_indep
+      file: VedicFormal/Residuals.lean
+
+    - comparator_config: ComparatorChallenges/VedicResiduals.json
+      declaration: VedicFormal.lDual_eq_fourier_weight
+      file: VedicFormal/Residuals.lean
+
+    - comparator_config: ComparatorChallenges/VedicResiduals.json
+      declaration: VedicFormal.dMass_eq_zero
+      file: VedicFormal/Residuals.lean
+
+automation:
+  methods:
+    - method: agent
+
+review:
+  # No human has yet compared VedicFormal/Defs.lean against the Python it
+  # transcribes, which is the one step Comparator cannot do.
+  status: unchecked

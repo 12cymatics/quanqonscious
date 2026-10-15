@@ -228,3 +228,78 @@ jobs:
 
       - name: All 16 sutras, in all execution modes
         run: pytest tests/test_primarysutra_modes.py -q
+
+  # CODEX_OPENAI_MATH.md, rule C1: a formal result is a statement checked
+  # against a proof by Comparator, not a proof that merely compiles. This job
+  # is that check for every challenge under vedic_trainer/formal/.
+  #
+  # Every version is a pin, and each pin is openai/math's (rule C7): Lean
+  # v4.34.1 from vedic_trainer/formal/lean-toolchain, Mathlib d13f23b from
+  # its lake-manifest.json, and the three tools at the commits below, built
+  # against that same Lean (lean4export has to match the Lean that wrote the
+  # .olean files it reads).
+  #
+  # Nothing builds the solution before Comparator runs: Comparator's trust
+  # argument assumes the checker has not already compiled the file it is
+  # judging. `lake exe cache get` fetches only Mathlib's prebuilt files.
+  formal-comparator:
+    name: formal-comparator
+    runs-on: ubuntu-latest
+    env:
+      COMPARATOR_REV: d03acab154d269c06e60e4de7e4cc85deebff94b
+      LEAN4EXPORT_REV: 076e8e57707e813375e8f9da8bf989799ace9680
+      LANDRUN_REV: 811cfff51ceaf3d9843708aa6d22e9b84ccac8b4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean 4 (version pinned by vedic_trainer/formal/lean-toolchain)
+        run: |
+          set -eu
+          TOOLCHAIN="$(cat vedic_trainer/formal/lean-toolchain)"
+          echo "Installing $TOOLCHAIN"
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain "$TOOLCHAIN"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Build comparator, lean4export and landrun at the pinned commits
+        run: |
+          set -eu
+          T="$RUNNER_TEMP/tools"; mkdir -p "$T"
+          TOOLCHAIN="$(cat vedic_trainer/formal/lean-toolchain)"
+          for spec in "leanprover/comparator:$COMPARATOR_REV" "leanprover/lean4export:$LEAN4EXPORT_REV" "Zouuup/landrun:$LANDRUN_REV"; do
+            repo="${spec%%:*}"; rev="${spec##*:}"; name="$(basename "$repo")"
+            git clone --quiet "https://github.com/$repo.git" "$T/$name"
+            git -C "$T/$name" checkout --quiet "$rev"
+          done
+          for name in comparator lean4export; do
+            echo "$TOOLCHAIN" > "$T/$name/lean-toolchain"
+            (cd "$T/$name" && lake build)
+          done
+          (cd "$T/landrun" && go build -o landrun ./cmd/landrun)
+          echo "$T/landrun" >> "$GITHUB_PATH"
+          echo "$T/lean4export/.lake/build/bin" >> "$GITHUB_PATH"
+          echo "COMPARATOR=$T/comparator/.lake/build/bin/comparator" >> "$GITHUB_ENV"
+
+      - name: Fetch Mathlib's prebuilt files
+        working-directory: vedic_trainer/formal
+        run: lake exe cache get
+
+      - name: Comparator, every challenge
+        working-directory: vedic_trainer/formal
+        run: |
+          set -eu
+          shopt -s nullglob
+          configs=(ComparatorChallenges/*.json)
+          if [ "${#configs[@]}" -eq 0 ]; then
+            echo "no Comparator challenges found; the glob or the directory is wrong"
+            exit 1
+          fi
+          for cfg in "${configs[@]}"; do
+            echo "::group::$cfg"
+            lake env "$COMPARATOR" "$cfg"
+            echo "::endgroup::"
+          done

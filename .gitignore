@@ -12,7 +12,12 @@ vedic_benchmark
 .lake/
 
 # built binaries
-vedic
+# `vedic` is ANCHORED: the Makefile writes that binary at the root. It used to be
+# ignored by bare name, which matches at any depth -- including the package
+# directory vedic_trainer/vedic/, so every NEW file added under that package was
+# silently ignored and never reached CI (edits to tracked files still staged,
+# which is why nobody noticed).
+/vedic
 vedic_pde_tool
 vedic_capability_profile
 

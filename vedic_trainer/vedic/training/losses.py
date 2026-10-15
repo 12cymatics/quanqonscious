@@ -187,9 +187,23 @@ def L_curv(psi: Tensor, hessian: HessianModule) -> Tensor:
 def L_dual(psi: Tensor, wht_axis: Tensor, s5: S5, s11: S11) -> Tensor:
     """Mismatch between (S5∘S11) Ψ and its WHT-axis reconstruction.
 
-    On the image of S5∘S11, Ψ should lie in span{𝟙, h₀, h₁, h₂, h₃} where
-    {h_k} are the four single-axis Walsh rows. We compute the rank-5
-    reconstruction and penalise the L² residual.
+    With f = S11(S5 Ψ), reconstruct f from its mean and its four single-axis
+    Walsh coefficients — the orthogonal projection onto span{𝟙, h₀, h₁, h₂,
+    h₃}, which is exactly the Walsh–Fourier degree ≤ 1 subspace of Z₂⁴ — and
+    penalise the squared residual. By Parseval that residual is
+
+        L_dual(Ψ) = 16 · Σ_{|S| ≥ 2} f̂(S)²,
+
+    sixteen times the Fourier weight of f above degree one. Both facts are
+    Comparator-checked theorems (``lDual_eq_fourier_weight`` and
+    ``lDual_not_identically_zero`` in ``formal/VedicFormal/Residuals.lean``;
+    scope in ``formal/docs/VedicResiduals.md``).
+
+    **Corrected.** This docstring used to say that "on the image of S5∘S11,
+    Ψ should lie in span{𝟙, h₀, h₁, h₂, h₃}". That is false: the residual is
+    non-zero, for instance at the indicator of vertex 3, so the image of
+    S11∘S5 is not inside that span, and this term is a genuine penalty
+    pushing f toward degree ≤ 1 rather than a check of an identity.
 
     The two divisions by 16 here are **projection coefficients, not
     normalisations**. The Walsh rows and 𝟙 are pairwise orthogonal with

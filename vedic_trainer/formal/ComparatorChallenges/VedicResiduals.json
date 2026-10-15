@@ -1,0 +1,22 @@
+{
+  "challenge_module": "ComparatorChallenges.VedicResiduals",
+  "solution_module": "VedicFormal.Residuals",
+  "theorem_names": [
+    "VedicFormal.complement_val",
+    "VedicFormal.r2_eq_zero",
+    "VedicFormal.r3_eq_zero",
+    "VedicFormal.r4_eq_zero",
+    "VedicFormal.auditClosed_iff",
+    "VedicFormal.auditClosed_indep",
+    "VedicFormal.dMass_eq_zero",
+    "VedicFormal.lDual_eq_fourier_weight",
+    "VedicFormal.lDual_not_identically_zero"
+  ],
+  "definition_names": [],
+  "enable_nanoda": false,
+  "permitted_axioms": [
+    "propext",
+    "Quot.sound",
+    "Classical.choice"
+  ]
+}
