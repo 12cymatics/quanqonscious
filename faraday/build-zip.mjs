@@ -201,15 +201,19 @@ const results = [];
 for (const s of run){
   process.stdout.write(\`=== \${s.name}\${s.slow ? '   (slow -- minutes)' : ''}\\n\`);
   const t0 = Date.now();
+  /* The buffer is set rather than left at node's 1 MB: a suite whose output outgrew that
+     would be killed mid-run and reported as a failure of the suite. */
   const r = spawnSync(process.execPath, [join(HERE, s.file)],
-                      { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+                      { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
+                        maxBuffer: 256*1024*1024 });
   const secs = (Date.now() - t0)/1000;
   const out = (r.stdout || '') + (r.stderr || '');
-  const tail = out.trimEnd().split('\\n').slice(-3).join('\\n');
   const okRun = r.status === 0;
-  console.log(tail);
+  /* A pass is summarised by its last lines. A failure is printed whole: CI runs this from
+     an unpack, and the last three lines of a failed suite are its count, not its reason. */
+  if (okRun) console.log(out.trimEnd().split('\\n').slice(-3).join('\\n'));
+  else console.log(out.trimEnd() + (r.error ? \`\\n(\${r.error.message})\` : ''));
   console.log(\`--- \${s.name}: \${okRun ? 'PASS' : 'FAIL'} in \${secs.toFixed(1)} s\\n\`);
-  if (!okRun && !tail) console.log(out);
   results.push({ name: s.name, ok: okRun, secs });
 }
 

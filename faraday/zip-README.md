@@ -110,6 +110,14 @@ you the physics clock, the wall clock and their ratio rather than hiding the
 gap; `dns/run-cell3d.mjs` prints the same three numbers. Your machine will give a
 different ratio and the number it prints is measured on it, not estimated.
 
+**The page's own grids are far larger than that, by design.** The page sizes its grid
+for the mode it seeds, to the 1% contract below, and at the default operating point that
+is 40 × 210 × 12 with a time step of 0.54 µs. Measured with `dns/run-cell3d.mjs`: 316 ms a
+step in C++ and 971 ms in JavaScript, 188 and 553 ms on three threads -- about 590 000×
+slower than real time in C++, so one drive period is about an hour. The fixed grid it used
+to run instead was about eighty times quicker and misstated the surface's restoring force
+by 4.65%.
+
 **The physics is in double precision on the CPU, and stays there.** No GPU on an
 Intel Mac has a double-precision type — Metal has no `double`, so WGSL has no
 `f64` — so the GPU is used for *drawing*, where single precision is correct
@@ -155,9 +163,14 @@ agreements:
 - **No comparison against any other published code or benchmark.** Both solvers
   here were written by the same author, so their agreement rules out arithmetic
   slips and rules out nothing about a shared misconception.
-- **The grids are coarse** — 16 × 24 × 10 to 32 × 48 × 20. At `nth = 16` the
-  m = 5 mode reads 32.6% low, which is the grid and not the physics, and the
-  honest remedy is more cells.
+- **One mode is resolved to 1%, not every mode.** The page sizes its grid for the
+  mode it seeds: the surface operator within 1% on that mode, measured with this
+  solver's own operator, and two cells in every Stokes layer, refusing with the
+  numbers where no grid of at most 250 000 cells holds. Other modes on the same grid
+  carry their own error, larger for finer patterns, and the terminal runner runs
+  whatever grid it is given. The convergence studies in the suites run from
+  16 × 24 × 10 to 32 × 48 × 20; at `nth = 16` the m = 5 mode reads 32.6% low there,
+  which is the grid and not the physics.
 - **The surface is single-valued and the solver refuses when the layer breaks.**
   No jets, no droplet pinch-off, no air entrainment, no overturning. A real cell
   driven hard does all four.

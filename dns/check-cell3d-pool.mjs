@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -32,10 +33,20 @@ function ok(cond, label, detail){
   if (cond){ pass++; console.log('  ok   ' + label); }
   else { failures.push(label + (detail ? '  -- ' + detail : '')); console.log('  FAIL ' + label + (detail ? '  -- ' + detail : '')); }
 }
+/* A refusal that never arrives is a failure too, and the one that matters most for a worker
+   that has died: so each wait is bounded, and a promise still pending at the bound is reported
+   as exactly that rather than hanging the gate. */
+const PENDING = Symbol('pending');
 async function rejects(label, fn, fragment){
-  let msg = null;
-  try { await fn(); } catch (e){ msg = String(e && e.message || e); }
-  ok(msg !== null && msg.includes(fragment), label, msg === null ? 'it did not refuse' : msg);
+  let msg = null, timer;
+  try {
+    const r = await Promise.race([fn(), new Promise(res => { timer = setTimeout(res, 20000, PENDING); })]);
+    if (r === PENDING) msg = PENDING;
+  } catch (e){ msg = String(e && e.message || e); }
+  finally { clearTimeout(timer); }
+  ok(typeof msg === 'string' && msg.includes(fragment), label,
+     msg === PENDING ? 'still pending after 20 s: it will never settle'
+       : msg === null ? 'it did not refuse' : msg);
 }
 const section = t => console.log('\n' + t);
 
@@ -176,10 +187,86 @@ section('3. what the pool refuses rather than answering');
   const pool = await spawnNodePool(S, opts, 1, 'js');
   await rejects('a worker that cannot form its rows fails the step with its own reason, '
     + 'and the owner does not form them in its place',
-    () => pool.request(pool.channels[0], { kind: 'explicit', state: new Float64Array(5),
-                                           a0: 4, a1: 7 }),
+    () => pool.request(0, { kind: 'explicit', state: new Float64Array(5), a0: 4, a1: 7 }),
     'were built for different grids');
   await pool.close();
+}
+
+/* ---- 3b. a worker that dies, and threads left behind ------------------------------ */
+section('3b. a worker that dies fails the step; a refused pool leaves no thread behind');
+{
+  const opts = { nr: 10, nth: 16, nz: 6, ...CELL, accel: 9, omegaD: 160 };
+  /* Between steps: the worker is gone before the step asks it anything. */
+  {
+    const S = make('js', opts), dt = S.stableStep();
+    const pool = await spawnNodePool(S, opts, 2, 'js');
+    await pool.step(dt);
+    await pool.workers[1].terminate();
+    await rejects('a step asked of a pool whose worker has exited refuses, naming the worker, '
+      + 'rather than awaiting an answer that cannot come',
+      () => pool.step(dt), 'pool worker 1 exited');
+    await rejects('and the pool refuses every step after it: the state is half a step on',
+      () => pool.step(dt), 'an earlier step failed part way');
+    await pool.close();
+  }
+  /* During a step: the request is already outstanding when the worker goes. */
+  {
+    const S = make('js', opts), dt = S.stableStep();
+    const pool = await spawnNodePool(S, opts, 2, 'js');
+    await pool.step(dt);
+    const stepping = pool.step(dt);
+    const gone = pool.workers[0].terminate();
+    await rejects('a worker that exits with the step\'s request outstanding fails that step '
+      + 'with the reason', () => stepping, 'pool worker 0 exited');
+    await gone;
+    await pool.close();
+  }
+  /* A refused pool must not keep the process alive: run each refusal in a fresh node and
+     require it to exit on its own. A leaked worker shows as the process outliving the limit. */
+  const lone = (what, body) => {
+    const src = `
+      const { FaradayCell3D } = require(${JSON.stringify(join(here, 'faraday-cell3d.js'))});
+      const { spawnNodePool } = require(${JSON.stringify(join(here, 'cell3d-pool-node.cjs'))});
+      const CELL = ${JSON.stringify(CELL)};
+      (async () => { ${body} })().then(m => console.log(m), e => console.log('threw: ' + e.message));`;
+    const t0 = performance.now();
+    const r = spawnSync(process.execPath, ['-e', src], { timeout: 20000, encoding: 'utf8' });
+    const secs = (performance.now() - t0)/1000;
+    ok(r.status === 0 && r.signal === null && /^refused: /.test(r.stdout.trim()),
+       `${what}: refused, and the process exits on its own (${secs.toFixed(1)} s) rather `
+       + 'than being held open by a worker nobody can reach',
+       JSON.stringify({ status: r.status, signal: r.signal, out: r.stdout.trim().slice(0, 160),
+                        err: r.stderr.trim().slice(0, 160) }));
+  };
+  lone('four workers for a four-row cell -- five bands, counting the owner\'s',
+    `const o = { nr: 4, nth: 12, nz: 6, ...CELL }, S = new FaradayCell3D(o);
+     try { await spawnNodePool(S, o, 4, 'js'); return 'started'; }
+     catch (e){ return 'refused: ' + e.message; }`);
+  lone('workers whose cell is not the owner\'s, refused only after they started',
+    `const o = { nr: 8, nth: 12, nz: 6, ...CELL }, S = new FaradayCell3D(o);
+     try { await spawnNodePool(S, { ...o, R: o.R*1.01 }, 2, 'js'); return 'started'; }
+     catch (e){ return 'refused: ' + e.message; }`);
+}
+
+/* ---- 3c. steps asked for before the last one settled ------------------------------- */
+section('3c. steps asked for together are that many steps, in order');
+for (const engine of ['js', 'cpp']){
+  const opts = { nr: 10, nth: 16, nz: 6, ...CELL, accel: 9, omegaD: 160, contact: 'free' };
+  const A = make(engine, opts), VA = cell3dPoolView(A);
+  const dt = VA.js.stableStep();
+  for (let n = 0; n < 3; n++) A.step(dt);
+  const plain = snapshot(VA);
+  done(A);
+  const B = make(engine, opts), VB = cell3dPoolView(B);
+  const pool = await spawnNodePool(B, opts, 2, engine);
+  try { await Promise.all([pool.step(dt), pool.step(dt), pool.step(dt)]); }
+  finally { await pool.close(); }
+  const bad = differing(plain, VB);
+  ok(bad.length === 0,
+     `${engine === 'cpp' ? 'C++' : 'JavaScript'}: three steps asked for at once, none awaited `
+     + `before the next, leave every one of ${ARRAYS.length} arrays exactly where three calls `
+     + 'of step() leave them', bad.join('; '));
+  done(B);
 }
 
 /* ---- 4. what it buys --------------------------------------------------------- */

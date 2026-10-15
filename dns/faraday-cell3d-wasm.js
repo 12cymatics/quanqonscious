@@ -51,7 +51,7 @@ const CELL3D_ARRAYS = [
      evaluates and writes in because the module computes no transcendental, the per-mode
      band Cholesky factors, which JavaScript builds and writes in so the factorisation has
      one implementation, and the two working rows of an application. */
-  'dftc', 'dfts', 'pcband', 'pchatc', 'pchats'
+  'twc', 'tws', 'pcband', 'pchatc', 'pchats'
 ];
 
 /* The JavaScript field each module array corresponds to, where the names differ.
@@ -67,7 +67,7 @@ const CELL3D_JS_NAME = {
 
 /* The arrays JavaScript writes INTO the module: the grid, which it owns, and the
    state, which the caller sets. Everything else the module fills. */
-const CELL3D_GRID = ['rf', 'sf', 'rc', 'sc', 'drc', 'dsc', 'drf', 'dsf', 'rx', 'dftc', 'dfts'];
+const CELL3D_GRID = ['rf', 'sf', 'rc', 'sc', 'drc', 'dsc', 'drf', 'dsf', 'rx', 'twc', 'tws'];
 const CELL3D_STATE = ['u', 'v', 'w', 'om', 'p', 'eta', 'Ht'];
 
 const CELL3D_WASM_EXPORTS = [
@@ -391,13 +391,27 @@ class FaradayCell3DWasm {
      with its tanh, the energy split, the divergence report -- reads the real
      field. One pass over about a megabyte, against a step that costs tens of
      milliseconds, so the renderer steps in C++ and pulls once a frame. */
+  /* Copy every one of the module's arrays out onto the JavaScript solver, and the clock.
+     EVERY one, or none: an array the JavaScript solver lacks, or holds at another length,
+     is refused before anything is copied. This used to copy only the arrays whose lengths
+     happened to agree and pass over the rest without a word, which would have left the
+     JavaScript solver part this step's state and part an older one's, and every accessor
+     the renderer calls on it -- etaAt, the energy split -- reading the mixture. */
   pullState(){
+    const pairs = [];
     for (const name of CELL3D_ARRAYS){
       const js = CELL3D_JS_NAME[name] === undefined ? name : CELL3D_JS_NAME[name];
-      if (js === null) continue;
-      const dst = this.js[js];
-      if (dst && dst.length === this.views[name].length) dst.set(this.views[name]);
+      const dst = this.js[js], src = this.views[name];
+      if (!(dst instanceof Float64Array)) throw new Error(
+        `pullState: the module's ${name} has nowhere to go -- the JavaScript solver has no `
+        + `array ${js}. The two were built from different sources; nothing was copied.`);
+      if (dst.length !== src.length) throw new Error(
+        `pullState: the module's ${name} holds ${src.length} values and the JavaScript `
+        + `solver's ${js} holds ${dst.length}. They were built for different grids or from `
+        + 'different sources; nothing was copied.');
+      pairs.push([dst, src]);
     }
+    for (const [dst, src] of pairs) dst.set(src);
     this.js.t = this.t;
     return this;
   }

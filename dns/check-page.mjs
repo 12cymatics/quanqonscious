@@ -572,6 +572,42 @@ async function checkSolverDraws(page){
      'and it advanced the physics clock, so the solver is integrating and not idling',
      `${c.stepsDone} steps, t = ${c.physT}`);
 
+  /* THE GRID IS THE ONE THE SEEDED MODE NEEDS. The page's controls are read back and the
+     whole chain is run again HERE, in node, from the kernel: the operating point resolved,
+     the nearest mode taken with its OWN wavenumber -- or, pinned, the zero of J_m nearest its
+     scale -- and sized by suggestCell3DGrid. The page ran its solver on exactly that grid.
+     This is what fails if the page sizes from anything else: the drive's wavenumber, which
+     is what it used to pass, gives no grid at all at this point. */
+  {
+    const K = require(join(REPO, 'faraday', 'kernel.js'));
+    const C3 = require(join(REPO, 'dns', 'faraday-cell3d.js'));
+    const ctl = await page.json('({ cellKey, freq, amp, temp, depth, rim, tSec: simT, '
+      + 'tfeSec: tfeOf() })');
+    const st = K.resolvePatternState({ cellKey: ctl.cellKey, f: ctl.freq, amplitudeMv: ctl.amp,
+      tempC: ctl.temp, depthMm: ctl.depth, rim: ctl.rim, tSec: ctl.tSec, tfeSec: ctl.tfeSec,
+      driveR: 0 });
+    const mode = st.nearestTheoryModes[0], R = st.cellDiameterMm*5e-4;
+    const pinned = ctl.rim === 'pinned';
+    const kTest = pinned ? K.jZeroNear(mode.m, mode.k*R)/R : mode.k;
+    const want = C3.suggestCell3DGrid({ m: mode.m, k: kTest, R, h: ctl.depth*1e-3,
+      rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma, g: 9.80665,
+      accel: st.accelAssumed, contact: pinned ? 'pinned' : 'free',
+      omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*ctl.freq,
+      besselJ: K.besselJ });
+    const run = await page.json('(() => { const r = CELL3D.lastRun(); return r && r.opts; })()');
+    const same = !want.unreachable && run && run.nr === want.nr && run.nth === want.nth
+      && run.nz === want.nz && run.rStretch === want.rStretch && run.zStretch === want.zStretch;
+    console.log(`       sized for m = ${mode.m}, kR = ${(kTest*R).toFixed(3)}: `
+      + `${want.nr} x ${want.nth} x ${want.nz}, surface operator `
+      + `${(want.err*100).toFixed(2)}%, thinnest Stokes layer ${want.thinnest.toFixed(2)} cells`);
+    ok(same && want.err <= 0.01 && want.thinnest >= 2
+       && c.grid.err === want.err && c.grid.thinnest === want.thinnest,
+       'the solver runs on the grid the nearest mode needs, recomputed here from the page\'s '
+       + 'controls: within 1% on the surface operator and two cells in every Stokes layer',
+       JSON.stringify({ run, want: { nr: want.nr, nth: want.nth, nz: want.nz,
+         rStretch: want.rStretch, zStretch: want.zStretch, err: want.err }, grid: c.grid }));
+  }
+
   /* force one build with the solver on, then compare the raster against the vessel */
   await page.eval('recompute()');
   const cmp = await page.json(`(() => {
@@ -615,6 +651,9 @@ async function checkSolverDraws(page){
   ok(/JavaScript/.test(deck),
      'the deck names the engine that answered, not the one that was asked for',
      deck.slice(0, 200));
+  ok(/sized for\s*m \d+, kR [\d.]+.*surface operator [\d.]+%.*Stokes layer/.test(deck),
+     'and it states what the grid was sized to: the mode, its surface-operator error and '
+     + 'its thinnest Stokes layer', deck.slice(0, 400));
 
   await page.shot(join(tmpdir(), 'check-page-solver.png'));
 }
@@ -996,6 +1035,107 @@ async function checkSolverThreads(page, label){
   ok(/2 threads/.test(deck), 'and the deck says two threads', deck.slice(0, 220));
 }
 
+/* Several runs asked for before the first has started, and a solver thread that dies.
+   .
+   A thread count or an engine chosen while a run is still fetching its sources or starting its
+   workers asks for a new run in the middle of the old one's start. Before this was checked, the
+   overtaken start carried on: it pushed its workers into the newer start's list and posted its
+   own init after the newer one's, and the page sat at "solver starting" for good. Three starts
+   in one breath must end in ONE run, with exactly that run's workers alive -- counted from
+   every worker the page made and every one it ended, so a worker no list holds any more still
+   shows -- and that run's surface the one-thread replay's to the bit. */
+async function checkStartRace(page){
+  section('three runs asked for at once');
+  await page.eval('(CELL3D.start(state), CELL3D.start(state), CELL3D.start(state), 0)');
+  await page.waitFor('CELL3D.clocks().have === true || !!CELL3D.clocks().err', 90000,
+                     'a frame, or an error, after three starts');
+  const c = await page.json('CELL3D.clocks()');
+  const t = await page.json('(() => { const t = CELL3D.threadWorkers(); '
+    + 'return { live: t.live, retiring: t.retiring, made: t.made, ended: t.ended }; })()');
+  ok(!c.err && c.have && c.threads === c.askedThreads && c.threads >= 2,
+     'three starts asked for in one breath end in one running run, on the threads asked for',
+     JSON.stringify({ err: c.err, have: c.have, threads: c.threads, asked: c.askedThreads }));
+  ok(t.live === c.threads - 1 && t.retiring === 0 && t.made - t.ended === t.live,
+     'and exactly that run\'s row-forming workers are alive: every other one the page made, '
+     + 'the overtaken starts\' included, has been ended', JSON.stringify(t));
+  const r = await replayMatches(page);
+  ok(r.steps > 0 && r.differ === 0,
+     'and its surface is, to the bit, the one-thread replay\'s', JSON.stringify(r));
+
+  /* The order that hung the page. Starts that wait the same make the same progress, and
+     finish in the order they were asked; the one that does damage is a SLOW start overtaken
+     by a fast one -- a two-thread start still building its worker when one thread is chosen,
+     which builds none. The fast start posts its init first, and an overtaken start that
+     carried on would post its own after it, re-initialising the solver to a generation the
+     page has left. */
+  await page.eval(`(CELL3D.start(state),
+                    document.querySelector("#thrSeg [data-t='1']").click(), 0)`);
+  await page.waitFor('CELL3D.clocks().have === true || !!CELL3D.clocks().err', 90000,
+                     'a frame, or an error, after a two-thread start overtaken by a one-thread one');
+  const c1 = await page.json('CELL3D.clocks()');
+  const t1 = await page.json('(() => { const t = CELL3D.threadWorkers(); '
+    + 'return { live: t.live, retiring: t.retiring, made: t.made, ended: t.ended }; })()');
+  ok(!c1.err && c1.have && c1.threads === 1 && c1.askedThreads === 1
+     && t1.live === 0 && t1.made === t1.ended,
+     'a two-thread start overtaken by a one-thread start ends in the one-thread run, with no '
+     + 'row-forming worker left alive', JSON.stringify({ err: c1.err, have: c1.have,
+       threads: c1.threads, asked: c1.askedThreads, ...t1 }));
+  await page.eval(`document.querySelector("#thrSeg [data-t='2']").click()`);
+  await page.waitFor('CELL3D.clocks().have === true && CELL3D.clocks().threads === 2', 90000,
+                     'the run back on two threads');
+}
+
+/* A solver thread that dies mid-run. The page cannot kill one by fault, so it does what a
+   fault does, in the order a fault does it. First the worker is ended -- it will never answer
+   again -- and the check waits until the solver has stopped advancing: its step is now waiting
+   on a thread that is gone, which is the state the page has to get out of. Only then is the
+   browser's error event for that worker raised, as it is raised for a worker that throws
+   outside its handler or cannot load its script. The waiting step must then fail with the
+   reason, which the solver can only say if the page told its pool; without that, the step
+   waits for good, and so does every command queued behind it -- the restart below included.
+   (Raising the event at the moment of the kill instead lets the page stop asking for slices
+   before the solver begins another step, and then there is no waiting step to rescue: that
+   version of this check passed or failed by timing.) */
+async function checkThreadDeath(page){
+  section('a solver thread that dies mid-run');
+  /* "Stopped" means quiet for three seconds AND for three of the run's own steps, so that a
+     grid whose step is slow is not mistaken for a hung one. */
+  const quiet = Math.max(3000, 3*(await page.json('CELL3D.clocks().perStep')));
+  await page.eval(`(() => { globalThis.__lostThread = CELL3D.threadWorkers().workers[0];
+    __lostThread.terminate(); return 0; })()`);
+  let last = -1, still = 0, waited = 0;
+  while (still < quiet && waited < 120000){
+    const n = await page.json('CELL3D.clocks().stepsDone');
+    if (n === last) still += 500; else { still = 0; last = n; }
+    await new Promise(r => setTimeout(r, 500)); waited += 500;
+  }
+  const hung = await page.json('CELL3D.clocks()');
+  console.log(`       thread ended; the solver stopped at ${last} steps and stayed there `
+    + `${(still/1000).toFixed(1)} s, against ${(quiet/1000).toFixed(1)} s required`);
+  ok(still >= quiet && !hung.err,
+     'with one thread ended and nothing yet said, the solver stops advancing: its step is '
+     + 'waiting on the thread that is gone', JSON.stringify({ still, err: hung.err }));
+  await page.eval(`(__lostThread.dispatchEvent(new ErrorEvent('error',
+    { message: 'ended by dns/check-page.mjs' })), 0)`);
+  await page.waitFor('/pool worker 0/.test(String(CELL3D.clocks().err))', 30000,
+                     "the solver's own report of the thread it lost");
+  const c = await page.json('CELL3D.clocks()');
+  ok(/pool worker 0 failed: ended by dns\/check-page\.mjs/.test(String(c.err)) && !c.live,
+     'once the browser reports it, the waiting step fails, the solver says which thread and '
+     + 'why, and the run stops rather than drawing a surface one thread short',
+     JSON.stringify({ err: c.err, live: c.live }));
+  await page.eval('(CELL3D.start(state), 0)');
+  await page.waitFor('CELL3D.clocks().have === true || !!CELL3D.clocks().err', 90000,
+                     'a frame after restarting');
+  const back = await page.json('CELL3D.clocks()');
+  const t = await page.json('(() => { const t = CELL3D.threadWorkers(); '
+    + 'return { live: t.live, retiring: t.retiring, made: t.made, ended: t.ended }; })()');
+  ok(!back.err && back.have && back.threads >= 2 && t.made - t.ended === t.live,
+     'and a new run starts on fresh threads: nothing queued behind the failed step is left '
+     + 'waiting on it, and the dead thread has been ended', JSON.stringify({ err: back.err,
+       have: back.have, threads: back.threads, ...t }));
+}
+
 /* The C++ engine, on the page, drawing the same surface.
    .
    dns/check-cell3d-wasm.mjs is what holds the two engines to identical fields;
@@ -1091,6 +1231,8 @@ try {
   await checkGpuRender(first, '');
   await checkSolverDraws(first);
   await checkSolverThreads(first, '');
+  await checkStartRace(first);
+  await checkThreadDeath(first);
   /* and on the solver's field, whose rasters arrive from a different path */
   await first.eval('document.querySelector("#engSeg [data-e=\'gpu\']").click()');
   if (await first.json('GPU_SURFACE.ready')) await gpuParity(first, 'on the Navier-Stokes field');

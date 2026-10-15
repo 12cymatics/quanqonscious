@@ -229,6 +229,37 @@ jobs:
     - name: Linearised free-surface Navier-Stokes in the cell
       run: node dns/check-disc.mjs
 
+  # S13b. faraday-cell.zip is what a reader downloads, and the suites above run on the
+  # checkout. faraday/check-zip.mjs unpacks a fresh build and runs the FAST suites from it,
+  # because a gate nobody can afford to run by hand stops being run; the slow two and the
+  # browser one were left to "the project's own CI on the checkout" -- which is not the
+  # unpack. This job is the rest of that: the COMMITTED zip, the one on the download link,
+  # unpacked outside the checkout and every suite in it run from there by its own runner,
+  # the slow ones and the browser one included. check-bundle.mjs in the kernels job is
+  # what holds that committed zip to what the sources build today.
+  unpacked:
+    name: faraday-cell.zip, unpacked, every suite
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: WebAssembly toolchain
+      run: sudo apt-get update && sudo apt-get install -y clang lld
+    - name: Unpack the committed zip outside the checkout
+      run: |
+        dest="$RUNNER_TEMP/unpacked"
+        mkdir -p "$dest"
+        unzip -q faraday-cell.zip -d "$dest"
+        test -f "$dest/faraday-cell/run-checks.mjs"
+        echo "UNPACKED=$dest/faraday-cell" >> "$GITHUB_ENV"
+    - name: Every suite, from the unpack, by the unpack's own runner
+      working-directory: ${{ env.UNPACKED }}
+      run: node run-checks.mjs
+      env:
+        CHROME: /usr/bin/google-chrome
+
   page:
     name: cymatic.html in a browser
     runs-on: ubuntu-latest

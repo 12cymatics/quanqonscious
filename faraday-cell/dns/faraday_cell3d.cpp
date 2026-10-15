@@ -96,10 +96,13 @@ static double *Ex, *Er, *Eth, *Edr, *Edth, *Exr, *Ext;
 static double *Tx, *Txr, *Txt, *Tr, *Tth, *Tdr, *Tdth;
 static double *gu, *gv, *gw, *gom, *divw;
 static double *cgr, *cgd, *cgq, *cgz;
-/* The pressure solve's preconditioner: the azimuthal Fourier basis and the per-mode band
-   Cholesky factors, both written in by JavaScript (dftc, dfts, pcband), and the two working
-   rows of an application. buildPreconditioner in the JavaScript says what it is. */
-static double *dftc, *dfts, *pcband, *pchatc, *pchats;
+/* The pressure solve's preconditioner: the azimuthal transform's twiddles and the per-mode
+   band Cholesky factors, both written in by JavaScript (twc, tws, pcband), the two working
+   rows of an application, and the transform's own buffers and radices. buildPreconditioner
+   in the JavaScript says what it is, and cell3dFft there how the transform is formed. */
+static double *twc, *tws, *pcband, *pchatc, *pchats;
+static double *pcxr, *pcxi, *pcyr, *pcyi, *pcar, *pcai;
+static int fftFac[64]; static int nFac = 0;
 static int cgIters = 0; static double cgResidual = 0.0;
 static double *lapU, *lapV, *lapW, *advU, *advV, *advW;
 static double *fsr, *fst, *fsz, *kap, *psurf;
@@ -194,9 +197,18 @@ int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
   divw = take(NP);
   cgr = take(NP); cgd = take(NP); cgq = take(NP); cgz = take(NP);
   {
-    const int M = (nth >> 1) + 1, n2 = nr*nz, W = nz + 1;
-    dftc = take(M*nth); dfts = take(M*nth);
+    const int M = (nth >> 1) + 1, n2 = nr*nz, W = nz + 1, L = nth >> 1;
+    twc = take(nth); tws = take(nth);
     pcband = take(M*n2*W); pchatc = take(M*n2); pchats = take(M*n2);
+    pcxr = take(L*nz); pcxi = take(L*nz); pcyr = take(L*nz); pcyi = take(L*nz);
+    pcar = take(nz); pcai = take(nz);
+    /* the radices of L, in the order the transform takes them: the JavaScript's
+       cell3dFftFactors, integer arithmetic only */
+    nFac = 0;
+    int n = L;
+    while (n % 4 == 0){ fftFac[nFac++] = 4; n /= 4; }
+    while (n % 2 == 0){ fftFac[nFac++] = 2; n /= 2; }
+    for (int pr = 3; n > 1; pr += 2) while (n % pr == 0){ fftFac[nFac++] = pr; n /= pr; }
   }
 
   lapU = take(NU); lapV = take(NV); lapW = take(NW);
@@ -297,8 +309,8 @@ double* cell3d_ptr(int which){
     case 59: return hcolU;
     case 60: return hcolV;
     case 61: return hcolW;
-    case 62: return dftc;
-    case 63: return dfts;
+    case 62: return twc;
+    case 63: return tws;
     case 64: return pcband;
     case 65: return pchatc;
     case 66: return pchats;
@@ -373,8 +385,8 @@ int cell3d_len(int which){
     case 59: return (nr + 1)*nth;
     case 60: return NE;
     case 61: return NE;
-    case 62: return ((nth >> 1) + 1)*nth;
-    case 63: return ((nth >> 1) + 1)*nth;
+    case 62: return nth;
+    case 63: return nth;
     case 64: return ((nth >> 1) + 1)*nr*nz*(nz + 1);
     case 65: return ((nth >> 1) + 1)*nr*nz;
     case 66: return ((nth >> 1) + 1)*nr*nz;
@@ -751,22 +763,116 @@ void cell3d_applyL(const double* q, double* out){
    of the cell, checking the structure the decomposition rests on -- and copies it in with
    the grid, as it copies the grid itself, so the factorisation has one implementation. So
    are the cos and sin tables: this module evaluates no transcendental. */
-static void applyPreconditioner(const double* r, double* z){
-  const int n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
-  for (int x = 0; x < M*n2; x++){ pchatc[x] = 0.0; pchats[x] = 0.0; }
-  for (int i = 0; i < nr; i++)
-    for (int k = 0; k < nth; k++){
-      const int rb = (i*nth + k)*nz;
-      for (int m = 0; m < M; m++){
-        const double cm = dftc[m*nth + k], sm = dfts[m*nth + k];
-        const int hb = m*n2 + i*nz;
-        for (int j = 0; j < nz; j++){
-          const double x = r[rb + j];
-          pchatc[hb + j] += x*cm;
-          pchats[hb + j] += x*sm;
+/* Complex FFT of length L on nb lines at once: the JavaScript's cell3dFft, transcribed in its
+   order down to the grouping of every sum. Element e of line b at e*nb + b; sign -1 forward,
+   +1 inverse, unscaled. It alternates between the x and y buffers and leaves in *outR and
+   *outI the pair that holds the result. */
+static void cell3dFft(double* xr, double* xi, double* yr, double* yi, int L, int nb, int sign,
+                      double** outR, double** outI){
+  const double* C = twc; const double* S = tws;
+  double* ar = pcar; double* ai = pcai;
+  int n = L, s = 1;
+  for (int f = 0; f < nFac; f++){
+    const int p = fftFac[f], m = n/p, step = L/n, ist = s*m*nb, ost = s*nb, sub = L/p;
+    for (int pp = 0; pp < m; pp++)
+      for (int q = 0; q < s; q++){
+        const int ib = (q + s*pp)*nb, ob = (q + s*p*pp)*nb;
+        if (p == 2){
+          const int tix = 2*pp*step;
+          const double wr = C[tix], wi = sign*S[tix];
+          for (int b = 0; b < nb; b++){
+            const double a0r = xr[ib + b], a0i = xi[ib + b];
+            const double a1r = xr[ib + ist + b], a1i = xi[ib + ist + b];
+            yr[ob + b] = a0r + a1r; yi[ob + b] = a0i + a1i;
+            const double dr = a0r - a1r, di = a0i - a1i;
+            if (pp == 0){ yr[ob + ost + b] = dr; yi[ob + ost + b] = di; }
+            else { yr[ob + ost + b] = dr*wr - di*wi; yi[ob + ost + b] = dr*wi + di*wr; }
+          }
+        } else if (p == 4){
+          const int t1 = 2*pp*step, t2 = 4*pp*step, t3 = 6*pp*step;
+          const double w1r = C[t1], w1i = sign*S[t1], w2r = C[t2], w2i = sign*S[t2];
+          const double w3r = C[t3], w3i = sign*S[t3];
+          for (int b = 0; b < nb; b++){
+            const double a0r = xr[ib + b], a0i = xi[ib + b];
+            const double a1r = xr[ib + ist + b], a1i = xi[ib + ist + b];
+            const double a2r = xr[ib + 2*ist + b], a2i = xi[ib + 2*ist + b];
+            const double a3r = xr[ib + 3*ist + b], a3i = xi[ib + 3*ist + b];
+            const double s0r = a0r + a2r, s0i = a0i + a2i, d0r = a0r - a2r, d0i = a0i - a2i;
+            const double s1r = a1r + a3r, s1i = a1i + a3i, d1r = a1r - a3r, d1i = a1i - a3i;
+            const double qr = sign < 0 ? d1i : -d1i, qi = sign < 0 ? -d1r : d1r;
+            const double y1r = d0r + qr, y1i = d0i + qi;
+            const double y2r = s0r - s1r, y2i = s0i - s1i;
+            const double y3r = d0r - qr, y3i = d0i - qi;
+            yr[ob + b] = s0r + s1r; yi[ob + b] = s0i + s1i;
+            if (pp == 0){
+              yr[ob + ost + b] = y1r; yi[ob + ost + b] = y1i;
+              yr[ob + 2*ost + b] = y2r; yi[ob + 2*ost + b] = y2i;
+              yr[ob + 3*ost + b] = y3r; yi[ob + 3*ost + b] = y3i;
+            } else {
+              yr[ob + ost + b] = y1r*w1r - y1i*w1i; yi[ob + ost + b] = y1r*w1i + y1i*w1r;
+              yr[ob + 2*ost + b] = y2r*w2r - y2i*w2i; yi[ob + 2*ost + b] = y2r*w2i + y2i*w2r;
+              yr[ob + 3*ost + b] = y3r*w3r - y3i*w3i; yi[ob + 3*ost + b] = y3r*w3i + y3i*w3r;
+            }
+          }
+        } else {
+          for (int t = 0; t < p; t++){
+            for (int b = 0; b < nb; b++){ ar[b] = xr[ib + b]; ai[b] = xi[ib + b]; }
+            for (int r = 1; r < p; r++){
+              const int tix = 2*sub*((r*t) % p), rb = ib + r*ist;
+              const double wr = C[tix], wi = sign*S[tix];
+              for (int b = 0; b < nb; b++){
+                const double xr1 = xr[rb + b], xi1 = xi[rb + b];
+                ar[b] += xr1*wr - xi1*wi; ai[b] += xr1*wi + xi1*wr;
+              }
+            }
+            const int o = ob + t*ost;
+            if (pp == 0 || t == 0)
+              for (int b = 0; b < nb; b++){ yr[o + b] = ar[b]; yi[o + b] = ai[b]; }
+            else {
+              const int tix = 2*pp*t*step;
+              const double wr = C[tix], wi = sign*S[tix];
+              for (int b = 0; b < nb; b++){
+                yr[o + b] = ar[b]*wr - ai[b]*wi; yi[o + b] = ar[b]*wi + ai[b]*wr;
+              }
+            }
+          }
         }
       }
+    n = m; s *= p;
+    double* tr = xr; xr = yr; yr = tr;
+    tr = xi; xi = yi; yi = tr;
+  }
+  *outR = xr; *outI = xi;
+}
+
+static void applyPreconditioner(const double* r, double* z){
+  const int n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1, L = nth >> 1;
+  const double* C = twc; const double* Sn = tws;
+  double* xr = pcxr; double* xi = pcxi; double* yr = pcyr; double* yi = pcyi;
+  double *Zr, *Zi;
+  for (int i = 0; i < nr; i++){
+    const int rb = i*nth*nz;
+    for (int n = 0; n < L; n++)
+      for (int j = 0; j < nz; j++){
+        xr[n*nz + j] = r[rb + 2*n*nz + j];
+        xi[n*nz + j] = r[rb + (2*n + 1)*nz + j];
+      }
+    cell3dFft(xr, xi, yr, yi, L, nz, -1, &Zr, &Zi);
+    for (int m = 0; m <= L; m++){
+      const int a = m == L ? 0 : m, b = m == 0 ? 0 : L - m;
+      const double c = C[m], sn = Sn[m];
+      const int hb = m*n2 + i*nz;
+      const int real = m == 0 || m == L;
+      for (int j = 0; j < nz; j++){
+        const double z1r = Zr[a*nz + j], z1i = Zi[a*nz + j];
+        const double z2r = Zr[b*nz + j], z2i = Zi[b*nz + j];
+        const double er = (z1r + z2r)/2.0, ei = (z1i - z2i)/2.0;
+        const double orr = (z1i + z2i)/2.0, oi = (z2r - z1r)/2.0;
+        pchatc[hb + j] = er + (orr*c + oi*sn);
+        pchats[hb + j] = real ? 0.0 : -(ei + (oi*c - orr*sn));
+      }
     }
+  }
   for (int m = 0; m < M; m++){
     const double* B = pcband + m*n2*W;
     const int hb = m*n2;
@@ -786,20 +892,28 @@ static void applyPreconditioner(const double* r, double* z){
       }
     }
   }
-  const double w0 = 1.0/nth, w1 = 2.0/nth;
-  for (int i = 0; i < nr; i++)
-    for (int k = 0; k < nth; k++){
-      const int rb = (i*nth + k)*nz;
+  for (int i = 0; i < nr; i++){
+    for (int m = 0; m < L; m++){
+      const int b = L - m, h1 = m*n2 + i*nz, h2 = b*n2 + i*nz;
+      const double c = C[m], sn = Sn[m];
       for (int j = 0; j < nz; j++){
-        double acc = 0.0;
-        for (int m = 0; m < M; m++){
-          const int a = m*n2 + i*nz + j;
-          const double wm = (m == 0 || 2*m == nth) ? w0 : w1;
-          acc += wm*(pchatc[a]*dftc[m*nth + k] + pchats[a]*dfts[m*nth + k]);
-        }
-        z[rb + j] = -acc;
+        const double x1r = pchatc[h1 + j], x1i = m == 0 ? 0.0 : -pchats[h1 + j];
+        const double x2r = pchatc[h2 + j], x2i = b == L ? 0.0 : -pchats[h2 + j];
+        const double er = (x1r + x2r)/2.0, ei = (x1i - x2i)/2.0;
+        const double dr = (x1r - x2r)/2.0, di = (x1i + x2i)/2.0;
+        const double orr = dr*c - di*sn, oi = dr*sn + di*c;
+        xr[m*nz + j] = er - oi;
+        xi[m*nz + j] = ei + orr;
       }
     }
+    cell3dFft(xr, xi, yr, yi, L, nz, 1, &Zr, &Zi);
+    const int rb = i*nth*nz;
+    for (int n = 0; n < L; n++)
+      for (int j = 0; j < nz; j++){
+        z[rb + 2*n*nz + j] = -(Zr[n*nz + j]/L);
+        z[rb + (2*n + 1)*nz + j] = -(Zi[n*nz + j]/L);
+      }
+  }
 }
 
 /* The same, exported so the gate can compare it with the JavaScript's on any vector. */
