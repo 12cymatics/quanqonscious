@@ -84,6 +84,7 @@ LAYERS: dict[str, list[str]] = {
     "Trainer mechanics": ["vedic/training/tests/test_vedic_trainer.py"],
     "Training arguments": ["vedic/training/tests/test_hf_args.py"],
     "Calibrated configs": ["vedic/training/tests/test_calibration_configs.py"],
+    "Decision rules": ["vedic/eval/tests/test_decision.py"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

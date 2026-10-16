@@ -93,8 +93,8 @@ text.
 | Canonical 29     | yes         | 438 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 197 tests              |
-| Script validity  | yes         | 46 tests               |
+| External sidecar | yes         | 200 tests              |
+| Script validity  | yes         | 66 tests               |
 | Withdrawn numbers | yes        | 28 tests               |
 | Upstream agreement | yes       | 33 tests               |
 | Documented paths | yes         | 122 tests               |
@@ -111,6 +111,7 @@ text.
 | Trainer mechanics | yes        | 10 tests               |
 | Training arguments | yes       | 44 tests               |
 | Calibrated configs | yes       | 13 tests               |
+| Decision rules   | yes         | 11 tests               |
 | Memory           | yes         | covered by trainer     |
 | Fixtures         | committed   | bit-exact gate, all 29 |
 
@@ -129,7 +130,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2697 tests are collected and 2697 pass. **Nothing is skipped**, here or in
+2731 tests are collected and 2731 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
