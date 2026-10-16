@@ -1,0 +1,16 @@
+{
+  "challenge_module": "ComparatorChallenges.VedicLCons",
+  "solution_module": "VedicFormal.LCons",
+  "theorem_names": [
+    "VedicFormal.lConsRow_closed_form",
+    "VedicFormal.lConsRow_shift",
+    "VedicFormal.lConsRow_eq_zero_iff"
+  ],
+  "definition_names": [],
+  "enable_nanoda": false,
+  "permitted_axioms": [
+    "propext",
+    "Quot.sound",
+    "Classical.choice"
+  ]
+}

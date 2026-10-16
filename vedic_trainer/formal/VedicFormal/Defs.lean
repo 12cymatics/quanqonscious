@@ -87,6 +87,33 @@ def auditClosed (ψ : Psi) (t : ℤ) : Prop :=
 `Σ_v (S29 Ψ)_v − Σ_v Ψ_v`. -/
 def dMass (ψ : Psi) : ℚ := (∑ v, s29 ψ v) - ∑ v, ψ v
 
+/-- `training/losses.py` `L_cons` for one example, before the batch mean
+(`.mean()` over the batch is not transcribed). Line for line, the Python is
+
+    out = s29(psi)
+    sym, anti = s7(psi)
+    sym_o, anti_o = s7(out)
+    e_sym = (sym * sym).sum(dim=-1)        # and e_anti, e_sym_o, e_anti_o
+    d_sym = e_sym_o - e_sym
+    d_anti = e_anti_o - e_anti
+    return (d_sym * d_sym + d_anti * d_anti).mean()
+
+with `S29()` at its canonical weight 1/2 and `S7()` at its default full mask,
+i.e. `s29`, `sym` and `anti` above. Each energy sums over all sixteen
+vertices. The torch `S7` divides by `2.0` where `sym`/`anti` multiply by
+`1/2`; over ℚ these are equal. The transcription is deliberately not
+simplified: `lConsRow_closed_form` is what simplifies it, and that is a
+checked theorem, not part of what is trusted here. -/
+def lConsRow (ψ : Psi) : ℚ :=
+  let out := s29 ψ
+  let e_sym := ∑ v, sym ψ v * sym ψ v
+  let e_anti := ∑ v, anti ψ v * anti ψ v
+  let e_sym_o := ∑ v, sym out v * sym out v
+  let e_anti_o := ∑ v, anti out v * anti out v
+  let d_sym := e_sym_o - e_sym
+  let d_anti := e_anti_o - e_anti
+  d_sym * d_sym + d_anti * d_anti
+
 /-- Row `k` of `wht.WHT_AXIS_Q`: `(−1)^{bit k v}`. -/
 def axisRow (k : Fin 4) (v : Fin 16) : ℚ := (-1) ^ bit k v
 
