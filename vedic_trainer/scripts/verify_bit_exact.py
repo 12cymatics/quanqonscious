@@ -14,9 +14,16 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
-from vedic.kernel import conservation_exact as ce
-from vedic.kernel import z2_primitives as se
-from vedic.kernel.q import Q16
+
+# Run as `python scripts/<name>.py` from a checkout, the script directory --
+# not the repository root -- is what Python puts on sys.path, so `vedic`
+# would not import without PYTHONPATH. train_lora.py runs verify_bit_exact
+# as a subprocess, so that failure stopped every training run outside CI.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from vedic.kernel import conservation_exact as ce  # noqa: E402
+from vedic.kernel import z2_primitives as se  # noqa: E402
+from vedic.kernel.q import Q16  # noqa: E402
 
 
 REPO = Path(__file__).resolve().parents[1]
