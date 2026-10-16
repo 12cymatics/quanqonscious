@@ -73,8 +73,9 @@ sample):
    now proved for every Ψ ∈ ℚ¹⁶.
 8. Adding the same constant to every vertex leaves it unchanged
    (`lConsRow_shift`).
-9. It is zero exactly when Ψ is constant (`lConsRow_eq_zero_iff`): the
-   kernel of the penalty is span{𝟙}, the fixed points of S29.
+9. It is zero exactly when Ψ is constant (`lConsRow_eq_zero_iff`). That the
+   constant states are also the fixed points of S29 is true but is not a
+   theorem here.
 
 ## Outside this scope
 
@@ -86,8 +87,11 @@ sample):
   difference a reader will see is resolved over ℚ, not by proof: the torch
   `S7` divides by `2.0` where `sym` and `anti` multiply by `1/2`. As
   evidence, not proof, the Python `L_cons` in float64 (exact on dyadic
-  inputs) equalled Lean's evaluation of `lConsRow` exactly on two states,
-  giving 60455961/4096 and 2953244025/16777216.
+  inputs) equalled Lean's evaluation of `lConsRow` exactly on the state
+  Ψ_v = ((3v² + 5v) mod 11) − 5, giving 60455961/4096. An independent
+  Fraction evaluation of the closed form gives the same value. A second state
+  was checked when this was written, but its input was not recorded, so its
+  value is not quoted.
 - **The training path is not covered.** The losses that actually train run
   in float32 torch (`vedic/kernel/sutras_torch.py`,
   `vedic/training/losses.py`). They are tied to the exact kernel only by
@@ -96,8 +100,10 @@ sample):
 - `L_chi`, `L_curv`, the batch mean of every term (each result here is per
   example), and the weighted sum in `total_loss` are not formalized. In
   particular the overlap the `L_cons` docstring states — its antisymmetric
-  half `(9/16)·‖A‖⁴` is the square of the per-example `L_chi` — is not a
-  theorem here, because `L_chi` has no Lean definition.
+  half `(9/16)·‖A‖⁴` is 9/16 times the square of the per-example `L_chi`,
+  which is ‖A‖² — is not a theorem here, because `L_chi` has no Lean
+  definition. (That docstring first called it "the square of the
+  per-example L_χ", dropping the factor 9/16; it is corrected.)
 - S11 and S29 are covered only at their canonical weights.
 - The 29 canonical sutras in `vedic/kernel/sutras_canonical.py` are not in
   scope.

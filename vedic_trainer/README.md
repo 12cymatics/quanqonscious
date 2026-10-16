@@ -97,7 +97,7 @@ text.
 | Script validity  | yes         | 66 tests               |
 | Withdrawn numbers | yes        | 28 tests               |
 | Upstream agreement | yes       | 33 tests               |
-| Documented paths | yes         | 122 tests               |
+| Documented paths | yes         | 124 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 31 tests               |
@@ -130,7 +130,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2731 tests are collected and 2731 pass. **Nothing is skipped**, here or in
+2733 tests are collected and 2733 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is

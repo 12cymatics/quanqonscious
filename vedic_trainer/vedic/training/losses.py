@@ -127,8 +127,10 @@ def L_cons(psi: Tensor) -> Tensor:
 
     pinned in ``vedic/training/tests/test_losses.py``. It is a **quartic
     penalty on the non-constant part of Ψ**, zero exactly when Ψ is constant.
-    Its antisymmetric half is (9/16)·‖A‖⁴, the square of the per-example
-    L_χ, so the two terms overlap.
+    Its antisymmetric half is (9/16)·‖A‖⁴, which is 9/16 times the square of
+    the per-example L_χ (= ‖A‖²), so the two terms overlap. (This first read
+    "the square of the per-example L_χ", dropping the 9/16; corrected after
+    an adversarial review of the Lean transcription.)
 
     **Corrected.** This docstring used to say the penalised quantities "are
     genuinely conserved by S29". Only one of them is: mass is preserved for
