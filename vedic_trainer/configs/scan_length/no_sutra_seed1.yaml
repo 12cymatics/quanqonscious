@@ -1,0 +1,43 @@
+# SCAN length split, control arm, seed 1. Pre-registered in
+# PREREGISTRATION_SCAN_LENGTH.md; every field here is part of the registration.
+# The treatment arm's config, full_seed1.yaml, is generated from this file by
+# scripts/calibrate_aux_weights.py and differs only in loss_weights and
+# output_dir.
+seed: 1
+output_dir: checkpoints/scan_length/no_sutra_seed1
+base_model: HuggingFaceTB/SmolLM2-135M-Instruct
+base_model_revision: 12fd25f77366fa6b3b4b768ec3050bf629380bac
+device: cpu
+dtype: fp32
+num_threads: 2
+num_train_epochs: 1.0
+gradient_accumulation_steps: 4
+logging_steps: 10
+eval_steps: 100
+save_steps: 500
+
+lora:
+  r: 16
+  lora_alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  lora_dropout: 0.05
+
+loss_weights:
+  alpha_chi: 0.0
+  beta_cons: 0.0
+  gamma_curv: 0.0
+  delta_dual: 0.0
+
+optim:
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  max_grad_norm: 1.0
+
+data:
+  train_path: data/scan_length/train.jsonl
+  eval_path: data/scan_length/monitor.jsonl
+  max_seq_length: 512
+  train_batch_size: 4
+  eval_batch_size: 8

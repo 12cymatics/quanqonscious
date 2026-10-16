@@ -24,10 +24,16 @@ from pathlib import Path
 import torch
 import yaml
 
-from vedic.kernel.hessian import HessianModule
-from vedic.kernel.sutras_torch import S5, S7, S11
-from vedic.kernel.wht import wht_axis_torch
-from vedic.training.losses import L_chi, L_cons, L_curv, L_dual
+
+# Run as `python scripts/<name>.py` from a checkout, the script directory --
+# not the repository root -- is what Python puts on sys.path, so `vedic`
+# would not import without PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from vedic.kernel.hessian import HessianModule  # noqa: E402
+from vedic.kernel.sutras_torch import S5, S7, S11  # noqa: E402
+from vedic.kernel.wht import wht_axis_torch  # noqa: E402
+from vedic.training.losses import L_chi, L_cons, L_curv, L_dual  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 

@@ -7,8 +7,19 @@ Conventions:
 
 Every operator that has a fixed permutation index pre-computes a ``LongTensor``
 buffer at module init so the forward path is pure tensor advanced indexing
-(no Python loops over the 16 vertices). Bit-exactness against ``z2_primitives``
-is verified by ``tests/test_bit_exact.py``.
+(no Python loops over the 16 vertices).
+
+**Not verified bit-exact.** This said "Bit-exactness against ``z2_primitives``
+is verified by ``tests/test_bit_exact.py``". No such file exists; it was
+deleted, and nothing compares these modules' forward outputs with the exact
+kernel. ``scripts/verify_bit_exact.py`` checks the ℚ kernel against committed
+fixtures, and ``test_torch_buffers.py`` checks index and mask buffers. The
+pre-flight audit measured, on integer inputs, that S5, S7 and S29 return the
+correctly rounded exact value in float32 and float64, and that S11 does not:
+its ``shell_M`` buffer holds float32 approximations of 1/|shell| (fl32(1/6)
+for the middle shell), so it is off by up to about 2.5e-6 on such inputs.
+The module documents float32 input; a default-constructed S11 rejects
+float64 input, because its buffer is float32 (``S11().double()`` runs).
 """
 from __future__ import annotations
 

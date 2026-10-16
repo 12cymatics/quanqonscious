@@ -216,6 +216,65 @@ def test_l_cons_takes_no_trace_counter() -> None:
     assert list(inspect.signature(L_cons).parameters) == ["psi"]
 
 
+def test_torch_s29_is_the_exact_s29() -> None:
+    """The torch S29 that L_cons uses, row by row against the exact kernel.
+
+    Nothing compared them: the ℚ tests exercise ``z2_primitives`` only, and
+    L_cons cannot see every defect of S29 (see the test below). On these
+    quarter-valued rows every output is dyadic, so float64 holds it exactly
+    and the comparison is equality.
+    """
+    from vedic.kernel.sutras_torch import S29
+    from vedic.kernel.z2_primitives import s29_mean_drive
+    psi = torch.tensor([[float(x) for x in row] for row in ROWS_Q], dtype=torch.float64)
+    for row, got in zip(ROWS_Q, S29()(psi).tolist()):
+        assert [Fraction(x) for x in got] == list(s29_mean_drive(row)), row
+
+
+def _l_cons_closed_form(row: tuple[Fraction, ...]) -> Fraction:
+    """(9/16)(‖S − mean·𝟙‖⁴ + ‖A‖⁴), computed over ℚ, independently of the
+    torch code: S and A are the halves of Ψ ± Ψ∘complement, and the
+    complement of v is v XOR 15."""
+    mean = sum(row) / NUM_VERTICES
+    bar = [row[v ^ FULL_MASK] for v in range(NUM_VERTICES)]
+    sym = [(row[v] + bar[v]) / 2 for v in range(NUM_VERTICES)]
+    anti = [(row[v] - bar[v]) / 2 for v in range(NUM_VERTICES)]
+    s2 = sum((x - mean) ** 2 for x in sym)
+    a2 = sum(x * x for x in anti)
+    return Fraction(9, 16) * (s2 * s2 + a2 * a2)
+
+
+def test_l_cons_is_the_quartic_non_constancy_penalty() -> None:
+    """L_cons equals its closed form exactly, over the whole batch.
+
+    Run in float64: the fourth powers of these quarter-valued rows have
+    16-bit denominators and do not fit float32's mantissa, while every
+    intermediate fits float64's, so the comparison is an equality. The
+    reference is Fraction arithmetic on the closed form, not the torch code.
+    """
+    psi = torch.tensor([[float(x) for x in row] for row in ROWS_Q],
+                       dtype=torch.float64)
+    expected = sum(_l_cons_closed_form(r) for r in ROWS_Q) / len(ROWS_Q)
+    assert Fraction(float(expected)) == expected, "reference not representable"
+    assert Fraction(float(L_cons(psi))) == expected
+
+
+def test_l_cons_ignores_the_constant_part_of_psi() -> None:
+    """The closed form sees only Ψ − mean(Ψ)·𝟙, so adding a constant to every
+    component must leave L_cons exactly unchanged.
+
+    What this does *not* catch: an S29 whose output mean is −mean(Ψ) instead
+    of mean(Ψ). L_cons reads S29 only through ‖S‖² and ‖A‖², where that mean
+    enters squared, so the sign is invisible here (found by regeneration
+    testing; an earlier version of this docstring claimed otherwise).
+    ``test_torch_s29_is_the_exact_s29`` checks S29 itself."""
+    psi = torch.tensor([[float(x) for x in row] for row in ROWS_Q],
+                       dtype=torch.float64)
+    shifted = psi + 3.0
+    assert float(L_cons(shifted)) == float(L_cons(psi))
+    assert float(L_cons(psi)) != 0.0, "vacuous: L_cons is zero on these rows"
+
+
 # ------------------------------------------------------------ total_loss
 
 

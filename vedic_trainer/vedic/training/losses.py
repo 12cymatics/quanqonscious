@@ -1,7 +1,7 @@
 """Four sutra-derived auxiliary losses applied to the Tesseract memory.
 
     L_χ    : contradiction (S7 antisymmetric energy)
-    L_cons : conservation (drift of mass, ‖S‖² and ‖A‖² under S29)
+    L_cons : drift of ‖S‖² and ‖A‖² under S29 — a quartic non-constancy penalty
     L_curv : curvature   (energy ⟨Ψ, g_ab Ψ⟩ at Ψ)
     L_dual : dual-basis  ((S5∘S11) Ψ vs WHT-axis reconstruction)
 
@@ -95,7 +95,7 @@ def L_chi(psi: Tensor, s7: S7) -> Tensor:
 
 
 def L_cons(psi: Tensor) -> Tensor:
-    """Conservation penalty: drift of the conserved quantities under S29.
+    """Drift of ‖S‖² and ‖A‖² under S29: a quartic non-constancy penalty.
 
     **Why this is not Σ Rᵢ².** The four specified residuals cannot serve as a
     loss, and the earlier implementation that summed them was a constant:
@@ -110,25 +110,45 @@ def L_cons(psi: Tensor) -> Tensor:
       parts of an involution are orthogonal. An identity constrains nothing,
       so its gradient is identically zero.
 
-    A conservation *loss* needs a residual that is zero only on a subspace.
-    The quantities R1..R4 name are genuinely conserved by S29, so we penalise
-    the drift of those quantities when the operator is applied — which is
-    non-zero exactly when Ψ leaves the conserved subspace:
+    What it penalises instead is the drift of ‖S‖² and ‖A‖² (the energies
+    of the S7 symmetric and antisymmetric parts) when S29 is applied:
 
-        L_cons = (Δmass)² + (Δ‖S‖²)² + (Δ‖A‖²)²,   Δq = q(S29 Ψ) − q(Ψ)
+        L_cons = mean_b [ (Δ‖S‖²)² + (Δ‖A‖²)² ],   Δq = q(S29 Ψ) − q(Ψ)
 
-    averaged over the batch. The mean is the reduction from per-example
-    residuals to one scalar — the standard definition of a batch loss — and
-    not a normalisation: no example's value depends on which others share
-    its batch. It is a function of Ψ alone; the R1 step counter is not an
-    input here.
+    The mean is the reduction from per-example residuals to one scalar, not a
+    normalisation: no example's value depends on which others share its
+    batch.
+
+    **What this is, exactly.** S29 Ψ = Ψ/2 + mean(Ψ)·𝟙/2: it keeps the
+    constant part of Ψ and halves the rest. So Δ‖S‖² = −¾‖S − mean(Ψ)·𝟙‖² and
+    Δ‖A‖² = −¾‖A‖², and per example
+
+        (Δ‖S‖²)² + (Δ‖A‖²)² = (9/16)·(‖S − mean(Ψ)·𝟙‖⁴ + ‖A‖⁴),
+
+    pinned in ``vedic/training/tests/test_losses.py``. It is a **quartic
+    penalty on the non-constant part of Ψ**, zero exactly when Ψ is constant.
+    Its antisymmetric half is (9/16)·‖A‖⁴, which is 9/16 times the square of
+    the per-example L_χ (= ‖A‖²), so the two terms overlap. (This first read
+    "the square of the per-example L_χ", dropping the 9/16; corrected after
+    an adversarial review of the Lean transcription.)
+
+    **Corrected.** This docstring used to say the penalised quantities "are
+    genuinely conserved by S29". Only one of them is: mass is preserved for
+    every Ψ, while ‖S‖² and ‖A‖² shrink under S29 for every non-constant Ψ.
+    Its other sentence, that the drift is "non-zero exactly when Ψ leaves the
+    conserved subspace", does hold, with that subspace being the constant
+    vectors span{𝟙}, the fixed points of S29: the closed form above vanishes
+    exactly there. The mass term (Δ mass)² it also summed was identically
+    zero over ℚ, because S29 preserves the mean; in float32 it was rounding
+    noise (|Δ mass| up to about 3.8e-6, measured) with a gradient of exactly
+    zero. It has been removed. That changes no value over ℚ and only rounding
+    noise in float32; ``dMass_eq_zero`` in ``formal/VedicFormal/Residuals.lean``
+    is the Comparator-checked statement. The name "conservation" is kept for
+    continuity with the configs and logs, not as a description.
     """
     s29 = S29().to(psi.device)
     s7 = S7().to(psi.device)
     out = s29(psi)
-
-    mass = psi.sum(dim=-1)
-    mass_out = out.sum(dim=-1)
 
     sym, anti = s7(psi)
     sym_o, anti_o = s7(out)
@@ -137,10 +157,9 @@ def L_cons(psi: Tensor) -> Tensor:
     e_sym_o = (sym_o * sym_o).sum(dim=-1)
     e_anti_o = (anti_o * anti_o).sum(dim=-1)
 
-    d_mass = mass_out - mass
     d_sym = e_sym_o - e_sym
     d_anti = e_anti_o - e_anti
-    return (d_mass * d_mass + d_sym * d_sym + d_anti * d_anti).mean()
+    return (d_sym * d_sym + d_anti * d_anti).mean()
 
 
 # ---------- L_curv : curvature spike ---------------------------------
@@ -187,9 +206,23 @@ def L_curv(psi: Tensor, hessian: HessianModule) -> Tensor:
 def L_dual(psi: Tensor, wht_axis: Tensor, s5: S5, s11: S11) -> Tensor:
     """Mismatch between (S5∘S11) Ψ and its WHT-axis reconstruction.
 
-    On the image of S5∘S11, Ψ should lie in span{𝟙, h₀, h₁, h₂, h₃} where
-    {h_k} are the four single-axis Walsh rows. We compute the rank-5
-    reconstruction and penalise the L² residual.
+    With f = S11(S5 Ψ), reconstruct f from its mean and its four single-axis
+    Walsh coefficients — the orthogonal projection onto span{𝟙, h₀, h₁, h₂,
+    h₃}, which is exactly the Walsh–Fourier degree ≤ 1 subspace of Z₂⁴ — and
+    penalise the squared residual. By Parseval that residual is
+
+        L_dual(Ψ) = 16 · Σ_{|S| ≥ 2} f̂(S)²,
+
+    sixteen times the Fourier weight of f above degree one. Both facts are
+    Comparator-checked theorems (``lDual_eq_fourier_weight`` and
+    ``lDual_not_identically_zero`` in ``formal/VedicFormal/Residuals.lean``;
+    scope in ``formal/docs/VedicResiduals.md``).
+
+    **Corrected.** This docstring used to say that "on the image of S5∘S11,
+    Ψ should lie in span{𝟙, h₀, h₁, h₂, h₃}". That is false: the residual is
+    non-zero, for instance at the indicator of vertex 3, so the image of
+    S11∘S5 is not inside that span, and this term is a genuine penalty
+    pushing f toward degree ≤ 1 rather than a check of an identity.
 
     The two divisions by 16 here are **projection coefficients, not
     normalisations**. The Walsh rows and 𝟙 are pairwise orthogonal with

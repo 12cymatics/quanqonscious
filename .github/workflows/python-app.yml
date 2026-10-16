@@ -69,6 +69,15 @@ jobs:
         pip install numpy scipy sympy mpmath matplotlib pandas Pillow pydantic pyyaml
         pip install --index-url https://download.pytorch.org/whl/cpu torch
         pip install cirq-core cudaq
+        # vedic_trainer's training and evaluation stack, at the exact pins in
+        # vedic_trainer/requirements.txt. Bare `pytest` here collects that
+        # package's tests, and its trainer, scorer and held-out tests import
+        # transformers, peft and datasets at module level. Without these the
+        # job fails at collection; guarding those imports instead would let
+        # the training path go untested again, which is how its crashes went
+        # unseen. torch and numpy are left to the lines above.
+        pip install transformers==5.19.0 tokenizers==0.23.3 huggingface-hub==2.2.0 \
+                    safetensors==0.8.0 peft==0.21.2 datasets==5.1.0 accelerate==1.15.0
     # 63 of these tests are vedic_trainer/vedic/external/tests/test_lean_props.py,
     # which compile rendered identities with the real `lean` binary and fail with
     # FileNotFoundError without it. They are not skippable and they do not need

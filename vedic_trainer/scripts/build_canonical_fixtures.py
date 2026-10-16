@@ -36,8 +36,15 @@ import random
 from fractions import Fraction
 from pathlib import Path
 
-from vedic.kernel import sutras_canonical as K
-from vedic.kernel.q import Q16
+import sys
+
+# Run as `python scripts/<name>.py` from a checkout, the script directory --
+# not the repository root -- is what Python puts on sys.path, so `vedic`
+# would not import without PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from vedic.kernel import sutras_canonical as K  # noqa: E402
+from vedic.kernel.q import Q16  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 STRENGTHS = (0, 50, 100)

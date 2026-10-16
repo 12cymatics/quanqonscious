@@ -3,10 +3,10 @@
 Why this exists
 ---------------
 `runs/eval_*.json` carry SCAN and COGS blocks recording `n_total` of 30 and
-20, against real splits of 3,920–21,000. Those came from
+20, against real splits of 3,000–21,000. Those came from
 `--scan-subset 30 --cogs-subset 20` on a script that no longer exists, and
 they were quoted in ABLATION_RESULTS.md and the README under a heading
-asserting what the benchmark can and cannot do — 0.1–0.7% of the data,
+asserting what the benchmark can and cannot do — 0.1–0.8% of the data,
 presented as the data.
 
 `scripts/eval_benchmarks.py` replaced that script and opens by saying "There
@@ -28,17 +28,22 @@ from pathlib import Path
 
 import pytest
 
+from vedic.eval.cogs import COGS_SPLIT_SIZE
+from vedic.eval.scan_data import SCAN_FILES
+
 REPO = Path(__file__).resolve().parents[3]
 DOCS = ("ABLATION_RESULTS.md", "README.md")
 
-# Real split sizes for the benchmarks this package names, from the canonical
-# releases. A run whose n_total is below its split size is a subset run.
+# Real split sizes for the benchmarks this package names. A run whose n_total
+# is below its split size is a subset run. SCAN's come from the vendored files'
+# pins (checked against the files in test_scan_data.py), COGS's from the
+# loader's own count check. They used to be typed in here, and addprim_jump
+# read 3,920 against a real 7,706, so a run covering under half that split
+# would have passed as complete.
 FULL_SPLIT_SIZE = {
-    ("scan", "simple"): 4182,
-    ("scan", "length"): 3920,
-    ("scan", "addprim_jump"): 3920,
-    ("cogs", "test"): 3000,
-    ("cogs", "gen"): 21000,
+    **{("scan", split): f.n_examples
+       for (split, part), f in SCAN_FILES.items() if part == "test"},
+    **{("cogs", split): n for split, n in COGS_SPLIT_SIZE.items()},
 }
 
 
@@ -61,6 +66,14 @@ def _benchmark_blocks() -> list[tuple[str, str, str, dict]]:
 
 
 BLOCKS = _benchmark_blocks()
+
+
+def test_the_split_sizes_are_the_published_ones():
+    assert FULL_SPLIT_SIZE == {
+        ("scan", "simple"): 4182, ("scan", "length"): 3920,
+        ("scan", "addprim_jump"): 7706,
+        ("cogs", "test"): 3000, ("cogs", "gen"): 21000,
+    }
 
 
 def test_there_are_benchmark_records_to_check():
@@ -203,7 +216,7 @@ def test_no_document_states_a_benchmark_score_in_prose():
     ("SCAN accuracy of 0 for the base model.", True),
     ("They were exact-match scores over 30 SCAN and 20 COGS examples.", False),
     ("SCAN and COGS are unmeasured for this package.", False),
-    ("Running SCAN means roughly 36,000 greedy decodes.", False),
+    ("Running SCAN and COGS means 39,808 greedy decodes.", False),
     ("The SCAN length split runs to 3,920 records.", False),
 ])
 def test_the_prose_detector_separates_a_result_from_a_sample_size(

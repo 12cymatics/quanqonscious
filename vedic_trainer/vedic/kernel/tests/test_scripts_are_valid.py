@@ -115,3 +115,54 @@ def test_referenced_scripts_exist(path: Path):
         f"{path.name} invokes scripts that do not exist: {missing}. Either "
         f"they were deleted without updating this driver, or the name is a "
         f"typo — both make the driver dead on arrival.")
+
+
+# ------------------------------------------------- runnable without PYTHONPATH
+
+_INSERT = "sys.path.insert(0, str(Path(__file__).resolve().parents[1]))"
+
+
+def _imports_vedic_at(tree: ast.Module) -> int | None:
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "vedic":
+            return node.lineno
+        if isinstance(node, ast.Import) and any(a.name.split(".")[0] == "vedic" for a in node.names):
+            return node.lineno
+    return None
+
+
+@pytest.mark.parametrize("path", SCRIPTS, ids=[p.name for p in SCRIPTS])
+def test_a_script_that_imports_vedic_puts_the_repository_on_its_path(path):
+    """Run as ``python scripts/<name>.py``, Python puts scripts/ on sys.path,
+    not the repository root, so ``import vedic`` fails without PYTHONPATH.
+    Four scripts lacked the insert -- among them verify_bit_exact.py, which
+    train_lora.py runs as a mandatory gate, so training could not start
+    outside an environment that happened to set PYTHONPATH."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    first = _imports_vedic_at(tree)
+    if first is None:
+        return
+    root = "Path(__file__).resolve().parents[1]"
+    # Names bound to the repository root, so `sys.path.insert(0, str(REPO))`
+    # counts when REPO is that path.
+    roots = {t.id for n in tree.body if isinstance(n, ast.Assign) and ast.unparse(n.value) == root
+             for t in n.targets if isinstance(t, ast.Name)}
+    accepted = {_INSERT} | {f"sys.path.insert(0, str({name}))" for name in roots}
+    inserts = [n.lineno for n in tree.body
+               if isinstance(n, ast.Expr) and ast.unparse(n) in accepted]
+    assert inserts and min(inserts) < first, (
+        f"{path.name} imports vedic at line {first} without first running {_INSERT}")
+
+
+def test_the_gate_train_lora_runs_works_without_pythonpath(tmp_path):
+    """The real invocation: train_lora.py's subprocess call, from another
+    directory, with PYTHONPATH removed from the environment."""
+    import os
+    import subprocess
+    import sys
+    repo = Path(__file__).resolve().parents[3]
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    r = subprocess.run([sys.executable, str(repo / "scripts" / "verify_bit_exact.py")],
+                       cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "bit-exact" in r.stdout
