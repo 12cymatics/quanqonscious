@@ -947,6 +947,11 @@ function paintDeck(){
        return [
          ['  grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} `
             + `<span class="u">= ${c.grid.nr*c.grid.nth*c.grid.nz} cells</span>`],
+         /* what the grid was sized to, measured: suggestCell3DGrid's contract */
+         ['  sized for', `m ${c.grid.m}, kR ${c.grid.kR.toFixed(2)} <span class="u">· surface `
+            + `operator ${(c.grid.err*100).toFixed(2)}% · ${c.grid.thinnest.toFixed(1)} cells in `
+            + `the thinnest Stokes layer · ${Math.round(c.grid.stepsPerPeriod)} steps a `
+            + `drive period</span>`],
          ['  physics clock', `<b>${(c.physT*1e3).toFixed(2)}</b> <span class="u">ms</span>`],
          ['  wall clock', `${c.wall.toFixed(1)} <span class="u">s</span>`],
          ['  ratio', `<b>${c.ratio.toFixed(0)}×</b> <span class="u">slower than real time`
@@ -1971,6 +1976,10 @@ const CELL3D = (function(){
      and the previous run's, kept until the new run says it is ready -- the solver may
      still be finishing a slice on them when the page asks for a new run. */
   let helpers = [], retiring = [], lastRun = null;
+  /* Every row-forming worker made and every one ended, so that a worker no list holds any
+     more -- one an overtaken start made -- is still counted until it is ended. */
+  let helpersMade = 0, helpersEnded = 0;
+  const endHelper = h => { h.worker.terminate(); helpersEnded++; };
 
   async function sourceOf(id){
     const el = document.getElementById(id);
@@ -2026,8 +2035,16 @@ const CELL3D = (function(){
      otherwise post its frame into the new run and be counted as part of it -- the
      clocks would read as though the new engine had done the old one's work. The
      page ignores anything stamped with a generation it has moved past. */
-  async function ensureWorker(){
-    if (worker) return worker;
+  /* ONE solver worker, however many starts ask for it at once. Two starts that both found
+     no worker would each build one across these awaits, and the one the page kept would not
+     be the one the other start had initialised. The promise is what is kept, and dropped if
+     building fails, so the next start asks again rather than inheriting the failure. */
+  let workerP = null;
+  function ensureWorker(){
+    if (!workerP) workerP = buildWorker().catch(e => { workerP = null; throw e; });
+    return workerP;
+  }
+  async function buildWorker(){
     const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
       await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
       `let S = null, W = null, E = null, pool = null, dt = 0, sliceMs = 120, gen = -1,
@@ -2035,7 +2052,23 @@ const CELL3D = (function(){
        /* One command at a time, each to completion: a slice awaits the pool's workers,
           and an init arriving meanwhile must not replace the cell under it. */
        let chain = Promise.resolve();
-       self.onmessage = (e) => { const d = e.data; chain = chain.then(() => handle(d)); };
+       /* A helper the page saw die, by generation. It is NOT a command: it goes straight to
+          the pool, because the command it must reach is the one the chain is stuck awaiting
+          -- a step waiting on a thread that is gone. One that arrives before its run's init
+          has built the pool is kept, and the pool is told as soon as it exists. */
+       const helperFailed = new Map();
+       self.onmessage = (e) => {
+         const d = e.data;
+         if (d.cmd === 'helperFailed'){
+           if (pool && d.gen === gen) pool.fail(d.index, d.reason);
+           else if (d.gen > gen){
+             if (!helperFailed.has(d.gen)) helperFailed.set(d.gen, []);
+             helperFailed.get(d.gen).push(d);
+           }
+           return;
+         }
+         chain = chain.then(() => handle(d));
+       };
        async function handle(d){
          try {
            if (d.cmd === 'init'){
@@ -2064,7 +2097,11 @@ const CELL3D = (function(){
              if (d.ports && d.ports.length){
                pool = new FARADAY_CELL3D_POOL.Cell3DPool(E, d.ports.map(p => ({
                  post: (m, t) => p.postMessage(m, t),
-                 onMessage: fn => { p.onmessage = ev => fn(ev.data); } })));
+                 onMessage: fn => { p.onmessage = ev => fn(ev.data); },
+                 onFailure: fn => { p.onmessageerror = () =>
+                   fn('sent a message that could not be read.'); } })));
+               for (const f of helperFailed.get(gen) || []) pool.fail(f.index, f.reason);
+               for (const g of [...helperFailed.keys()]) if (g <= gen) helperFailed.delete(g);
                await pool.start(d.opts);
              }
              self.postMessage({ ok: true, kind: 'ready', gen, engine,
@@ -2103,7 +2140,7 @@ const CELL3D = (function(){
      in the engine the run names -- the C++ one from the same bytes -- and the pool holds its
      grid to the solver's, element by element, before the first step. */
   let helperBody = null;
-  async function startHelper(engine, wasmBytes){
+  async function startHelper(engine, wasmBytes, myGen, index){
     if (!helperBody) helperBody = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
       await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
       `self.onmessage = (e) => {
@@ -2118,96 +2155,166 @@ const CELL3D = (function(){
              : new FARADAY_CELL3D.FaradayCell3D(o));
        };`].join('\n;\n');
     const h = new Worker(URL.createObjectURL(new Blob([helperBody], { type: 'text/javascript' })));
-    h.onerror = ev => { err = 'a solver thread failed: ' + (ev.message || 'no message');
-                        running3d = false; dirty = true; };
+    helpersMade++;
+    /* A helper that dies never answers the step waiting on it. The solver's worker is told,
+       so its pool fails that step with this reason -- otherwise the step, and every command
+       queued behind it, would wait for good. A helper of a run already replaced is nobody's
+       concern: its pool is gone. */
+    h.onerror = ev => {
+      if (myGen !== gen) return;
+      const reason = 'failed: ' + (ev.message || 'the browser gave no message');
+      if (worker) worker.postMessage({ cmd: 'helperFailed', gen: myGen, index, reason });
+      err = 'solver thread ' + (index + 1) + ' ' + reason;
+      running3d = false; dirty = true;
+    };
     const ch = new MessageChannel();
     h.postMessage({ cmd: 'serve', port: ch.port1, engine, wasmBytes }, [ch.port1]);
     return { worker: h, port: ch.port2 };
   }
 
   /* The initial condition: the mode the deck says is nearest, at an amplitude small
-     enough to be linear. Under a drive it grows on its own; that is the point. */
-  function seed(S, m, k){
+     enough to be linear. Under a drive it grows on its own; that is the point.
+     `profile(r)` is that mode's own radial shape -- J_m at the mode's own wavenumber on a
+     free contact line, and on a pinned one the kernel's superposition of free-basis
+     Bessel functions, which is what the deck names and draws. It used to be J_m at the
+     DRIVE's wavenumber whatever the mode, which is neither. */
+  function seed(S, m, profile){
     const AMP = 1e-7, out = new Float64Array(S.nr*S.nth);
-    for (let i = 0; i < S.nr; i++)
-      for (let j = 0; j < S.nth; j++)
-        out[i*S.nth + j] = AMP*FARADAY_KERNEL.besselJ(m, k*S.rc[i])
-                               *Math.cos(m*(j + 0.5)*S.dth);
+    for (let i = 0; i < S.nr; i++){
+      const P = profile(S.rc[i]);
+      for (let j = 0; j < S.nth; j++) out[i*S.nth + j] = AMP*P*Math.cos(m*(j + 0.5)*S.dth);
+    }
     return out;
+  }
+  function modeProfile(mode, R){
+    const m = mode.m;
+    if (!mode.pinned) return r => FARADAY_KERNEL.besselJ(m, mode.k*r);
+    const z = mode.pinnedZeros, a = mode.pinned.coefficients;
+    return r => {
+      let v = 0;
+      for (let n = 0; n < z.length; n++) v += a[n]*FARADAY_KERNEL.besselJ(m, z[n]*r/R);
+      return v;
+    };
   }
 
   async function start(st){
-    try { await startInner(st); }
-    catch (e){ err = String(e && e.message || e); running3d = false; dirty = true; }
-  }
-  async function startInner(st){
-    /* The new generation FIRST, before anything this function awaits. The previous run's
-       handler stays installed until this one replaces it below, several awaits from here --
-       fetching sources, starting the pool's workers -- and its frames are still arriving.
-       It compares against the CURRENT generation, so from this line on it drops them. It
-       used to compare against its own, and accept them into the clocks this line has just
-       reset: the steps counted and the surface held then belonged to two runs at once. The
-       page's thread check caught it, replaying a frame that reported 43 steps and matched
-       none of them. */
+    /* The new generation FIRST, before anything awaited. The previous run's handler stays
+       installed until this run replaces it, several awaits from here -- fetching sources,
+       starting the pool's workers -- and its frames are still arriving. It compares against
+       the CURRENT generation, so from this line on it drops them. It used to compare against
+       its own, and accept them into the clocks this run has just reset: the steps counted and
+       the surface held then belonged to two runs at once. The page's thread check caught it,
+       replaying a frame that reported 43 steps and matched none of them. */
     const myGen = ++gen;
+    try { await startInner(st, myGen); }
+    catch (e){
+      /* A start that a newer one has replaced has nothing left to report to: the page is
+         showing the newer run, and this error belongs to a run nobody is waiting for. */
+      if (myGen === gen){ err = String(e && e.message || e); running3d = false; dirty = true; }
+    }
+  }
+  async function startInner(st, myGen){
     err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
-    const m = Math.max(0, st.nearestTheoryModes[0].m);
-    const k = st.wavenumber;
+    const mode = st.nearestTheoryModes[0];
+    if (!mode) throw new Error('the kernel found no theory mode at this operating point, so '
+      + 'there is no mode to seed the solver with or to size its grid for.');
+    const m = mode.m;
     omegaRef = 2*Math.PI*st.responseHz || 1;
-    /* The grid: enough azimuthal cells for this m at eight per wavelength, and the
-       radial and vertical counts the two-dimensional solver's own resolution logic
-       picks for the same mode. nth is forced even -- the solver refuses an odd
-       count, since the top azimuthal mode would lose its conjugate. */
-    const nth = Math.max(16, 2*Math.ceil(4*Math.max(1, m)));
-    /* nr and nz from the two-dimensional solver's own resolution logic for this mode --
-       the same suggestGrid the Floquet panel uses -- rather than numbers chosen here.
-       It sizes for the surface operator's error and for cells inside the Stokes layers,
-       which is what sets the damping. If it cannot place the mode at all it returns
-       unreachable, and then the grid below is the floor the solver itself accepts. */
-    let nrS = 16, nzS = 10;
-    try {
-      const g = FARADAY_DISC.suggestGrid({
-        m: Math.max(2, m), k, R: st.cellDiameterMm*5e-4, h: depth*1e-3,
-        rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma,
-        contact: rim === 'pinned' ? 'pinned' : 'free',
-        omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*freq,
-        profile: r => FARADAY_KERNEL.besselJ(Math.max(2, m), k*r) });
-      if (!g.unreachable && g.nr && g.nz){ nrS = g.nr; nzS = g.nz; }
-    } catch { /* suggestGrid refuses some operating points; the floor above stands */ }
-    const opts = { nr: nrS, nth, nz: nzS,
+    const R = st.cellDiameterMm*5e-4, h = depth*1e-3, pinned = rim === 'pinned';
+    const water = { rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma };
+    /* THE GRID IS SIZED FOR THE SEEDED MODE, BY THIS SOLVER'S OWN OPERATOR, to the contract
+       the Floquet panel holds its grids to: the surface operator within 1% on the mode, and
+       at least two cells in every Stokes layer; the cheapest grid that meets both
+       (suggestCell3DGrid in dns/faraday-cell3d.js says how it is measured). Where no grid
+       the page can hold meets it, the run is refused with the numbers.
+
+       It used to be sized by the two-dimensional solver's suggestGrid, handed the drive's
+       wavenumber with the mode's order -- a profile that does not meet the wall -- so it
+       found no grid at 69 of 72 operating points measured, and a `catch {}` around it put
+       a fixed 16 x 8m x 10 grid in its place without a word. Measured with this solver's
+       own operator, that grid misstated the restoring force on the modes it ran by 4-17%.
+
+       The test function is a Laplacian eigenfunction of the cell: on a free contact line
+       the mode itself, J_m(k r); on a pinned one J_m at the zero of J_m nearest the pinned
+       mode's own scale, since the pinned mode is a superposition rather than an
+       eigenfunction, and the question is whether the grid carries a wave of that scale with
+       the surface held at zero on the wall. */
+    const kTest = pinned ? FARADAY_KERNEL.jZeroNear(m, mode.k*R)/R : mode.k;
+    if (!(kTest > 0)) throw new Error(`no zero of J_${m} near the pinned mode's scale `
+      + `kR = ${(mode.k*R).toFixed(3)} to size the grid with.`);
+    const size = FARADAY_CELL3D.suggestCell3DGrid({
+      m, k: kTest, R, h, ...water, g: 9.80665, accel: st.accelAssumed,
+      contact: pinned ? 'pinned' : 'free',
+      omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*freq,
+      besselJ: FARADAY_KERNEL.besselJ });
+    if (size.unreachable){
+      const c = size.closest;
+      throw new Error(
+        `no grid of at most ${size.maxCells.toLocaleString()} cells carries this mode to `
+        + `the contract the solver is held to. m = ${m}, kR = ${(kTest*R).toFixed(2)}`
+        + (c ? `; the closest, ${c.nr} radial x ${c.nth} azimuthal`
+             + (c.nz ? ` x ${c.nz} vertical` : '') + `, gets the surface operator to `
+             + `${(c.err*100).toFixed(2)}% against ${(size.errTol*100).toFixed(0)}%`
+             + (c.surfaceOk && !c.layersOk ? ` with ${c.thinnest.toFixed(2)} cells in its `
+                + `thinnest Stokes layer against ${size.layerCells}` : '') : '')
+        + `. Refusing rather than running a grid that misstates the restoring force or `
+        + `the damping. ${size.maxCells.toLocaleString()} cells is what the C++ engine's `
+        + `arena holds, and both engines are held to it so that they run the same grid.`);
+    }
+    const opts = { nr: size.nr, nth: size.nth, nz: size.nz,
+                   rStretch: size.rStretch, zStretch: size.zStretch,
                    /* `depth` is the page's own slider in mm; the resolved state carries
                       cellDiameterMm but not the depth, which cost one NaN refusal to find */
-                   R: st.cellDiameterMm*5e-4, h: depth*1e-3,
-                   rho: st.water.rho, nu: st.water.mu/st.water.rho,
-                   gamma: st.water.sigma, g: 9.80665,
+                   R, h, ...water, g: 9.80665,
                    accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
-                   contact: rim === 'pinned' ? 'pinned' : 'free' };
+                   contact: pinned ? 'pinned' : 'free' };
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
-    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz };
-    const eta0 = seed(vessel, m, k);
+    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R,
+             err: size.err, thinnest: size.thinnest, stepsPerPeriod: size.stepsPerPeriod };
+    const eta0 = seed(vessel, m, modeProfile(mode, R));
     /* Fetched on the page rather than in the worker: a worker has no `require` and
        the single-file build's base64 lives in a tag the page owns. Only for the C++
        engine -- asking for the bytes on the JavaScript path would make a page served
        without the module refuse for no reason. */
-    const wasmBytes = cell3dEngine === 'cpp' ? await cellWasmBytes() : null;
-    ranEngine = null; ranThreads = 0;
+    /* EVERY AWAIT BELOW CAN BE OVERTAKEN. Another start -- a thread count or an engine
+       chosen while this one is still fetching or starting workers -- takes the next
+       generation, and from then on this start must change nothing the page shares. It used
+       to carry on: it pushed its workers into the newer start's list, installed a handler
+       that drops every message, and posted its own init after the newer one's, so the
+       solver re-initialised to a generation the page had already left and the page sat at
+       "solver starting" for good. So the workers this start makes are its own until it has
+       won, and after each await it checks, and if it has been overtaken it ends them and
+       leaves. */
+    const engine = cell3dEngine, threads = cell3dThreads;
+    const wasmBytes = engine === 'cpp' ? await cellWasmBytes() : null;
+    if (myGen !== gen) return;
     const w = await ensureWorker();
+    if (myGen !== gen) return;
     /* S11: the threads asked for, this one included, and never more than the radial rows
        there are to divide -- the pool refuses an idle worker rather than pretending. */
-    const want = Math.max(1, Math.min(cell3dThreads, opts.nr));
+    const want = Math.max(1, Math.min(threads, opts.nr));
+    const mine = [];
+    for (let t = 1; t < want; t++){
+      mine.push(await startHelper(engine, wasmBytes, myGen, t - 1));
+      if (myGen !== gen){ for (const h of mine) endHelper(h); return; }
+    }
+    /* Won. The previous run's workers retire -- the solver may still be finishing a slice
+       on them -- and this run's become the page's. */
     retiring.push(...helpers);
-    helpers = [];
-    for (let t = 1; t < want; t++) helpers.push(await startHelper(cell3dEngine, wasmBytes));
-    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine: cell3dEngine };
+    helpers = mine;
+    ranEngine = null; ranThreads = 0;
+    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine };
     w.onmessage = ev => {
       const d = ev.data;
       if (d.gen !== undefined && (d.gen !== myGen || myGen !== gen)) return;   /* a previous run's */
+      /* Anything stamped with this run's generation means the solver has begun this run's
+         init, and dropped the previous run's pool on the way in: those workers can go now,
+         whether this run then starts or fails. */
+      for (const r of retiring) endHelper(r);
+      retiring = [];
       if (!d.ok){ err = d.error; running3d = false; dirty = true; return; }
       if (d.kind === 'ready'){
         ranEngine = d.engine; ranThreads = d.threads;
-        /* the solver has left the previous run's workers behind: they can go */
-        for (const r of retiring) r.worker.terminate();
-        retiring = [];
         w.postMessage({ cmd: 'slice', gen: myGen });
         return;
       }
@@ -2223,7 +2330,7 @@ const CELL3D = (function(){
     running3d = true;
     const ports = helpers.map(h => h.port);
     w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
-                    engine: cell3dEngine, wasmBytes, ports }, ports);
+                    engine, wasmBytes, ports }, ports);
   }
 
   function stop(){ running3d = false; }
@@ -2285,7 +2392,12 @@ const CELL3D = (function(){
      carried with the number of steps that produced it -- read together, so the two belong
      to one frame. */
   const lastFrame = () => ({ steps: stepsDone, eta: etaBuf ? Float64Array.from(etaBuf) : null });
-  return { start, stop, build, clocks, etaAtPixel, lastFrame,
+  /* For dns/check-page.mjs: the row-forming workers alive -- this run's, and the previous
+     run's still waiting to retire -- and this run's, to make one of them fail. */
+  const threadWorkers = () => ({ live: helpers.length, retiring: retiring.length,
+                                 made: helpersMade, ended: helpersEnded,
+                                 workers: helpers.map(h => h.worker) });
+  return { start, stop, build, clocks, etaAtPixel, lastFrame, threadWorkers,
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();

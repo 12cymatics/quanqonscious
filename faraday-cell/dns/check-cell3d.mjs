@@ -253,7 +253,14 @@ section('3. the pressure gradient is the PHYSICAL one, and the preconditioner in
  * probe does not satisfy. Gate 1 checks that boundary exactly, on a constant. */
 {
   const rowsOf = [];
-  for (const [nr, nth, nz] of [[6, 8, 5], [12, 24, 8]])
+  /* The azimuthal transform is a mixed-radix FFT (cell3dFft), so the grids are chosen to
+     use every radix in every position it can take: nth/2 = 4 (radix 4 alone), 5 and 7 (an
+     odd prime alone), 6 (2 then 3), 8 (4 then 2), 9 (3 then 3), 12 (4 then 3), 20 (4 then
+     5), 48 (4, 4 then 3) and 104 (4, 2 then 13). A wrong twiddle in any one of those stages
+     leaves a preconditioner that is still positive definite and a solve that still
+     converges, so only the iteration count here would notice. */
+  for (const [nr, nth, nz] of [[6, 8, 5], [12, 24, 8], [5, 10, 4], [4, 14, 4], [5, 12, 4],
+                               [6, 16, 5], [4, 18, 4], [6, 40, 5], [4, 96, 4], [4, 208, 4]])
     for (const contact of ['free', 'pinned']){
       const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact });
       const r = rnd(4242 + nr), x = new Float64Array(S.NP);
@@ -270,7 +277,8 @@ section('3. the pressure gradient is the PHYSICAL one, and the preconditioner in
     `${o.tag} ${o.rel.toExponential(2)}`).join('; '));
   ok(rowsOf.every(o => o.loose === 1 && o.tight === 1),
      'on a flat surface the pressure solve takes exactly ONE iteration, at 1e-11 and at '
-     + '1e-14, on two grids and both contact lines -- which is what the inverse means',
+     + `1e-14, on ${rowsOf.length/2} grids that use every radix of the transform and both `
+     + 'contact lines -- which is what the inverse means',
      rowsOf.map(o => `${o.tag}: ${o.loose} and ${o.tight}`).join('; '));
 
   /* and on a deformed one it is not the inverse, and the solve still ends on the TRUE
@@ -4311,6 +4319,106 @@ throws('a surface deep enough to touch the floor is refused, naming the depth',
        () => { const S = new FaradayCell3D({ nr: 8, nth: 12, nz: 6, ...CELL });
                S.eta[S.ie(3, 4)] = -CELL.h; return S.refreshMetric(); },
        'reached the floor');
+
+/* ---- 18. the grid a mode needs, held to the direct measurement ---------------- */
+section('18. the grid suggestCell3DGrid chooses, held to the direct measurement');
+/* suggestCell3DGrid measures the surface operator by separation -- the solver's curvature on
+   the axisymmetric profile, plus the exact eigenvalue of the periodic second difference -- so
+   that one small probe cell serves every azimuthal count. What it returns is held here to the
+   question it answers, asked directly: the chosen grid is BUILT, the full curvature is applied
+   to J_m(k r) cos(m theta) on it, and the result is within the tolerance; the transform-
+   friendly azimuthal count below the chosen one, built and measured the same way, is not --
+   so the choice is the smallest that holds. The Stokes layer counts are read off the built
+   grid's own cells and must be the numbers returned, and so must the time step: the built,
+   flat cell's stableStep(), to the bit. The modes are the page's: free modes at their own
+   wavenumber, the zero of J'_m over R, and pinned ones at the zero of J_m nearest the pinned
+   mode's scale, from mpmath (faraday/reference.json). */
+{
+  const K = require(join(ROOT, 'faraday', 'kernel.js'));
+  const REF = JSON.parse(require('node:fs').readFileSync(join(ROOT, 'faraday', 'reference.json'), 'utf8'));
+  const jp = (m, s) => REF.jpZeros.find(x => x.m === m).zeros[s - 1];
+  const jz = (m, s) => REF.jZeros.find(x => x.m === m).zeros[s - 1];
+  const omegaD = 2*Math.PI*111, omegaR = omegaD/2;
+  const cases = [
+    { tag: 'm = 12 free (the page default\'s mode)', m: 12, k: 13.878843069697275/CELL.R, contact: 'free' },
+    { tag: 'm = 5 free, third radial', m: 5, k: 13.987188630140299/CELL.R, contact: 'free' },
+    { tag: 'm = 0 free', m: 0, k: jp(0, 3)/CELL.R, contact: 'free' },
+    { tag: 'm = 1 free', m: 1, k: jp(1, 4)/CELL.R, contact: 'free' },
+    { tag: 'm = 1 pinned', m: 1, k: jz(1, 4)/CELL.R, contact: 'pinned' },
+    { tag: 'm = 5 pinned', m: 5, k: jz(5, 2)/CELL.R, contact: 'pinned' }];
+  const friendlyBelow = nth => {
+    for (let n = nth - 2; n >= 16; n -= 2){
+      let q = n >> 1;
+      for (const p of [2, 3, 5, 7]) while (q % p === 0) q /= p;
+      if (q === 1) return n;
+    }
+    return null;
+  };
+  const direct = (c, nr, nth, nz, rStretch, zStretch) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: c.contact, rStretch, zStretch,
+                                  accel: 9, omegaD });
+    const amp = 1e-12*CELL.R;
+    for (let i = 0; i < nr; i++){
+      const v = amp*K.besselJ(c.m, c.k*S.rc[i]);
+      for (let q = 0; q < nth; q++) S.eta[S.ie(i, q)] = v*Math.cos(c.m*(q + 0.5)*S.dth);
+    }
+    const kap = S.curvature(new Float64Array(nr*nth));
+    let num = 0, den = 0;
+    for (let i = 0; i < nr; i++)
+      for (let q = 0; q < nth; q++){
+        const e = S.ie(i, q), w = S.rc[i]*S.drc[i], want = -c.k*c.k*S.eta[e];
+        num += (kap[e] - want)*(kap[e] - want)*w;
+        den += want*want*w;
+      }
+    return { err: Math.sqrt(num/den), S };
+  };
+  const rows = [];
+  for (const c of cases){
+    const g = C.suggestCell3DGrid({ m: c.m, k: c.k, ...CELL, accel: 9, contact: c.contact,
+                                    omegaResponse: omegaR, omegaDrive: omegaD,
+                                    besselJ: K.besselJ });
+    if (g.unreachable){ rows.push({ c, bad: ['unreachable'] }); continue; }
+    const bad = [];
+    const d = direct(c, g.nr, g.nth, g.nz, g.rStretch, g.zStretch);
+    if (!(d.err <= g.errTol)) bad.push(`built at ${g.nr}x${g.nth}x${g.nz} it measures ${d.err}`);
+    const below = friendlyBelow(g.nth);
+    let dBelow = null;
+    if (below !== null){
+      dBelow = direct(c, g.nr, below, 4, g.rStretch, g.zStretch).err;
+      if (!(dBelow > g.errTol)) bad.push(`nth = ${below} already measures ${dBelow}`);
+    }
+    const S = d.S, delta = Math.sqrt(2*CELL.nu/omegaR);
+    const layers = { floor: delta/(S.h*S.dsc[0]), surface: delta/(S.h*S.dsc[g.nz - 1]),
+                     rim: delta/S.drc[g.nr - 1] };
+    for (const key of ['floor', 'surface', 'rim'])
+      if (!Object.is(layers[key], g.layers[key]) || !(layers[key] >= 2))
+        bad.push(`${key} layer ${layers[key]} built against ${g.layers[key]} returned`);
+    S.eta.fill(0); S.refreshMetric();
+    const dt = S.stableStep();
+    if (!Object.is(dt, g.dt)) bad.push(`stableStep ${dt} built against ${g.dt} returned`);
+    if (!(g.cells <= C.CELL3D_MAX_CELLS)) bad.push(`${g.cells} cells, past the cap`);
+    rows.push({ c, g, d: d.err, below, dBelow, bad });
+  }
+  for (const r of rows) if (r.g) console.log(`       ${r.c.tag}: ${r.g.nr}x${r.g.nth}x${r.g.nz}, `
+    + `rStretch ${r.g.rStretch}, zStretch ${r.g.zStretch}; built, ${(r.d*100).toFixed(3)}% `
+    + (r.below === null ? '(16 is the floor)' : `against ${(r.dBelow*100).toFixed(3)}% at nth ${r.below}`)
+    + `; thinnest layer ${r.g.thinnest.toFixed(2)} cells; ${Math.round(r.g.stepsPerPeriod)} steps a period`);
+  ok(rows.every(r => r.bad.length === 0),
+     `on ${cases.length} modes, free and pinned, m = 0 to 12: the chosen grid, built in full, is `
+     + 'within 1% under the full curvature, the azimuthal count below it is not, and its layer '
+     + 'counts and time step are the ones returned, to the bit',
+     rows.filter(r => r.bad.length).map(r => `${r.c.tag}: ${r.bad.join('; ')}`).join(' | '));
+
+  /* and where nothing within the cap holds, it says so with what it tried */
+  const tight = C.suggestCell3DGrid({ ...cases[0], ...CELL, accel: 9, omegaResponse: omegaR,
+                                      omegaDrive: omegaD, besselJ: K.besselJ, maxCells: 20000 });
+  ok(tight.unreachable === true && tight.closest && tight.tried.length > 0
+     && tight.closest.err > tight.errTol,
+     'with room for only 20 000 cells the m = 12 mode is unreachable, and it returns what it '
+     + 'tried and the closest grid rather than a grid that misses',
+     JSON.stringify({ unreachable: tight.unreachable, closest: tight.closest && {
+       nr: tight.closest.nr, nth: tight.closest.nth, err: tight.closest.err } }));
+}
 
 console.log('\n' + '-'.repeat(66));
 if (failures.length){

@@ -295,6 +295,34 @@ for (const contact of ['free', 'pinned']){
   W.release();
 }
 
+/* The preconditioner's azimuthal transform is a mixed-radix FFT, and the grid above uses
+   only two of its radices. Every radix in every position it can take -- the grids
+   dns/check-cell3d.mjs holds to the flat cell's exact inverse -- applied in both engines to
+   one random vector and compared element by element. */
+{
+  const grids = [[6, 8, 5], [5, 10, 4], [4, 14, 4], [5, 12, 4], [6, 16, 5], [4, 18, 4],
+                 [12, 24, 8], [6, 40, 5], [4, 96, 4], [4, 208, 4]];
+  const bad = [];
+  let seed = 9001;
+  for (const [nr, nth, nz] of grids){
+    const W = new FaradayCell3DWasm({ nr, nth, nz, ...CELL, contact: 'free' });
+    const r = W.views.cgr;
+    for (let c = 0; c < r.length; c++){ seed = (seed*16807) % 2147483647; r[c] = seed/2147483647 - 0.5; }
+    const z = W.js.applyPreconditioner(Float64Array.from(r), new Float64Array(r.length));
+    W.applyPreconditioner('cgr', 'cgz');
+    const d = diff(`${nr}x${nth}x${nz}`, z, W.views.cgz);
+    if (d) bad.push(d);
+    const t = diff(`${nr}x${nth}x${nz} twiddles`, W.js.twc, W.views.twc)
+           || diff(`${nr}x${nth}x${nz} twiddles`, W.js.tws, W.views.tws);
+    if (t) bad.push(t);
+    W.release();
+  }
+  ok(bad.length === 0,
+     `the preconditioner applied on ${grids.length} grids that use every radix of its `
+     + 'transform, nth/2 = 4, 5, 6, 7, 8, 9, 12, 20, 48 and 104: the same in both engines, '
+     + 'element by element', bad.join('; '));
+}
+
 /* ---- 5. the viscous operator ----------------------------------------- */
 section('5. the viscous operator and the surface traction');
 for (const contact of ['free', 'pinned']){
@@ -398,6 +426,30 @@ section('8. a full drive period at a renderer-sized grid');
      `${JSON.stringify(eJ)} against ${JSON.stringify(eW)}`);
   ok(Object.is(S.t, W.js.t), 'pullState carries the clock across too',
      `${S.t} against ${W.js.t}`);
+  /* and it copies all of it or none: an array whose length disagrees is refused before a
+     single value moves, rather than passed over while the rest are copied */
+  {
+    const keep = W.js._pcHatC, before = Float64Array.from(W.js.u);
+    W.js.u.fill(0);
+    W.js._pcHatC = new Float64Array(keep.length - 1);
+    let msg = null;
+    try { W.pullState(); } catch (e){ msg = e.message; }
+    const untouched = W.js.u.every(x => x === 0);
+    W.js._pcHatC = keep;
+    W.js.u.set(before);
+    ok(msg !== null && /pchatc holds \d+ values and the JavaScript solver's _pcHatC holds/.test(msg)
+       && untouched,
+       'pullState refuses a module array whose JavaScript counterpart has another length, '
+       + 'naming both, and copies nothing -- u, which would have copied first, is untouched',
+       msg === null ? 'it did not refuse' : `${msg}; u untouched: ${untouched}`);
+    const lu = W.js._lu;
+    delete W.js._lu;
+    msg = null;
+    try { W.pullState(); } catch (e){ msg = e.message; }
+    W.js._lu = lu;
+    ok(msg !== null && /lapU has nowhere to go -- the JavaScript solver has no array _lu/.test(msg),
+       'and one with no JavaScript counterpart at all', msg === null ? 'it did not refuse' : msg);
+  }
   /* The resampler is deliberately NOT ported -- the renderer is JavaScript and it
      runs once per pixel per frame, not once per step -- so after a pull the
      JavaScript surface accessors must read the C++ field. */
@@ -440,6 +492,38 @@ section('9. the freshly built module against the committed one');
 }
 
 /* ---- 10. the refusals ------------------------------------------------ */
+/* The page sizes its grid with suggestCell3DGrid, which refuses past CELL3D_MAX_CELLS and says
+   that is what this module's arena holds at the deepest vertical count it searches -- so that
+   both engines accept every grid it returns. That is a claim about this module, and it is
+   asserted here: the largest grid the sizing can return at its deepest nz -- 48 x 162 x 32,
+   248 832 cells, nth/2 = 81 = 3^4 -- is laid out in this module's arena without error, its
+   families and bracket tables included. Laid out directly rather than through the loader,
+   which would also factor the preconditioner on a flat twin of a quarter-million-cell grid. */
+{
+  const C3 = C;
+  const nzMax = Math.max(...C3.CELL3D_SIZE_NZ), nr = 48, nth = 162;
+  const cells = nr*nth*nzMax;
+  const X = WM.instantiateCell3dWasm().exports;
+  const S = new C3.FaradayCell3D({ nr, nth, nz: nzMax, ...CELL });
+  const err = X.cell3d_init(nr, nth, nzMax, 0, S.R, S.h, S.rho, S.nu, S.gamma, S.g, S.dth);
+  let built = -1;
+  if (err === 0){
+    for (const name of WM.CELL3D_GRID){
+      const key = CELL3D_ARRAYS.indexOf(name);
+      new Float64Array(X.memory.buffer, X.cell3d_ptr(key), X.cell3d_len(key)).set(S[name]);
+    }
+    X.cell3d_buildFamilies();
+    built = X.cell3d_error();
+  }
+  console.log(`       ${nr} x ${nth} x ${nzMax} = ${cells} cells: ${X.cell3d_arenaUsed()} doubles `
+    + 'of the arena');
+  ok(cells <= C3.CELL3D_MAX_CELLS && C3.CELL3D_MAX_CELLS - cells < nr*2*nzMax && err === 0
+     && built === 0,
+     `the largest grid the sizing can return at its deepest nz, ${cells} cells, fits this `
+     + 'module\'s arena with its families built -- so the cap the page refuses at is one both '
+     + 'engines honour', JSON.stringify({ cells, cap: C3.CELL3D_MAX_CELLS, err, built }));
+}
+
 section('10. the refusals');
 {
   const opts = { nr: 8, nth: 12, nz: 6, ...CELL, contact: 'free' };

@@ -14,11 +14,12 @@
  * standalone page and compares it, reads the README and requires every path it
  * names to resolve, runs the terminal runner, and runs the fast suites.
  *
- * The slow suite (dns/check-cell3d.mjs, minutes) is NOT run here -- it is run by
- * the project's own CI on the checkout, and running it again from the unpack would
- * make this gate unrunnable by hand. What IS asserted is that it travels, that it
- * is in the unpack's runner, and that the runner's --fast flag is the only thing
- * that leaves it out.
+ * The slow suites and the browser one are NOT run here, because running them would
+ * make this gate unrunnable by hand. They ARE run from an unpack: CI's `unpacked` job
+ * (.github/workflows/javascript.yml) unzips the committed faraday-cell.zip outside the
+ * checkout and runs every suite in it with the unpack's own run-checks.mjs. What is
+ * asserted here is that they travel, that they are in the unpack's runner, and that the
+ * runner's --fast flag is the only thing that leaves the slow ones out.
  */
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync, readdirSync,

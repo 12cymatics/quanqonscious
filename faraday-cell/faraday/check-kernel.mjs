@@ -192,10 +192,56 @@ for (const { m, zeros } of REF.jpZeros){
   ok(Math.abs(K.besselJp(142, z)) < 1e-9, 'and it really is a zero',
      `J' = ${K.besselJp(142, z).toExponential(3)}`);
 }
+/* Started exactly ON a zero. J' evaluates to exactly 0.0 at the doubles nearest j'_{2,1} and
+   j'_{5,1} (and J at the double nearest j_{0,1}), and a product with an exact zero is never
+   negative: the finders walked straight past the root they started on and returned the next
+   one -- jpZeroNear(2, j'_{2,1}) gave j'_{2,2} = 6.706, and jpZerosNearN for a target 0.15
+   above j'_{2,1}, whose sweeps both step onto that double, left it out of the three nearest
+   altogether. */
+for (const [m, which] of [[2, 0], [5, 0]]){
+  const z0 = REF.jpZeros.find(x => x.m === m).zeros[which];
+  ok(K.besselJp(m, z0) === 0, `J'_${m} is exactly zero at the double ${z0}, so this is the case`,
+     `J' = ${K.besselJp(m, z0)}`);
+  rel(K.jpZeroNear(m, z0), z0, 9, `jpZeroNear(${m}) started on j'_{${m},${which + 1}} returns it`);
+  const near = K.jpZerosNearN(m, z0 + 0.15, 3);
+  ok(near.some(v => Math.abs(v - z0) < 1e-9),
+     `jpZerosNearN(${m}, j'_{${m},${which + 1}} + 0.15, 3) includes the root its sweeps step onto`,
+     `got ${near.map(v => v.toFixed(6)).join(', ')}`);
+}
+{
+  const z0 = REF.jZeros.find(x => x.m === 0).zeros[0];
+  ok(K.besselJ(0, z0) === 0, `J_0 is exactly zero at the double ${z0}, so this is the case`,
+     `J = ${K.besselJ(0, z0)}`);
+  rel(K.jZeroNear(0, z0), z0, 9, 'jZeroNear(0) started on j_{0,1} returns it');
+}
 for (const [m, t] of [[37,40],[0,10],[150,183],[5,25]]){
   const z = K.jpZeroNear(m, t);
   ok(z !== null && Math.abs(K.besselJp(m, z)) < 1e-9,
      `jpZeroNear(${m}, ${t}) returns a true zero`, `got ${z}`);
+}
+
+/* The zeros of J_m itself, which a pinned wall's waves are built on: jZeroNear against
+   mpmath.besseljzero (faraday/reference.json, "jZeros", 30 digits), asked from each zero,
+   and from a third of the way to each neighbour so the walk has to find it, and from 0.4
+   past the last so it has to walk back. And each returned value really is a zero. */
+for (const { m, zeros } of REF.jZeros){
+  for (let s = 0; s < zeros.length; s++){
+    const targets = [zeros[s]];
+    if (s > 0) targets.push(zeros[s] - (zeros[s] - zeros[s-1])/3);
+    if (s < zeros.length - 1) targets.push(zeros[s] + (zeros[s+1] - zeros[s])/3);
+    for (const t of targets){
+      const z = K.jZeroNear(m, t);
+      rel(z, zeros[s], 9, `jZeroNear(${m}, ${t.toFixed(3)}) is j_{${m},${s+1}}`);
+    }
+  }
+  const z = K.jZeroNear(m, zeros[0] - 0.4);
+  ok(z !== null && Math.abs(K.besselJ(m, z)) < 1e-9 && Math.abs(z - zeros[0]) < 1e-8,
+     `jZeroNear(${m}) from below the first zero walks up to j_{${m},1}`,
+     `got ${z}, J = ${z === null ? 'n/a' : K.besselJ(m, z).toExponential(3)}`);
+  for (const zz of zeros)
+    ok(Math.abs(K.besselJ(m, K.jZeroNear(m, zz))) < 1e-9,
+       `J_${m} vanishes at jZeroNear's ${zz.toFixed(6)}`,
+       `J = ${K.besselJ(m, K.jZeroNear(m, zz)).toExponential(3)}`);
 }
 
 /* ── 2b. radial index ───────────────────────────────────────────────────── */
@@ -1706,7 +1752,7 @@ section('18. the viscous domain miss is not an exception');
   ok(K.viscousFreeSurfaceReOrNull(0.3) === null, 'W = 0.3 is outside the domain');
 }
 
-const EXPECTED_ASSERTIONS = 2839;
+const EXPECTED_ASSERTIONS = 3031;
 if (pass !== EXPECTED_ASSERTIONS)
   failures.push(`assertion count is ${pass}, expected ${EXPECTED_ASSERTIONS}`
     + ` — ${pass < EXPECTED_ASSERTIONS ? 'assertions stopped running' : 'new checks were added'}`);

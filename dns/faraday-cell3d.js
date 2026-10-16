@@ -126,6 +126,276 @@ const GRADE = (function(){
     + 'before this file, or require it under node.');
 })();
 
+/* THE PRECONDITIONER'S AZIMUTHAL TRANSFORM: A MIXED-RADIX FFT.
+
+   The flat-cell preconditioner (applyPreconditioner, below) goes to the azimuthal Fourier
+   basis and back once per application, and it used to do it by the direct sums -- every one
+   of the nth/2 + 1 modes against every one of the nth columns, nth^2 products a line. This is
+   the same transform by the fast route, and it is the same transform: the same sums,
+   regrouped, in double precision, from the same cos and sin of j dtheta that the direct sums
+   read. What changes is the rounding of the last bit, which a preconditioner is free to
+   change -- it steers the search directions and the solve stops on the TRUE operator's
+   residual -- and dns/check-cell3d.mjs holds the result to the flat cell's exact inverse all
+   the same: one iteration, at 1e-11 and at 1e-14, on grids chosen so that every radix below
+   is used in every position it can take.
+
+   The real transform of length N = nth is formed from a complex one of length L = N/2 on the
+   even and odd columns packed as real and imaginary parts, split and recombined with one
+   twiddle -- the standard real-FFT identity, and the reason N must be even, which the cell
+   already requires. The complex transform is Stockham's self-sorting decimation in frequency,
+   so no index is ever bit-reversed: radix 4 while 4 divides, then 2, then each odd prime as a
+   radix of its own, which nth = 8m makes the common case. Every sum runs in a fixed order,
+   the same in dns/faraday_cell3d.cpp, so the two engines agree to the bit. */
+
+/* The radices of L, in the order the transform takes them. */
+function cell3dFftFactors(L){
+  const f = [];
+  let n = L;
+  while (n % 4 === 0){ f.push(4); n /= 4; }
+  while (n % 2 === 0){ f.push(2); n /= 2; }
+  for (let p = 3; n > 1; p += 2) while (n % p === 0){ f.push(p); n /= p; }
+  return f;
+}
+
+/* Complex FFT of length L on nb lines at once, element e of line b at e*nb + b; sign -1 is
+   the forward transform, e^{-i}, and +1 the inverse, unscaled. x and y are the two buffers it
+   alternates between, and the pair holding the result is returned. ar and ai hold nb values
+   each, an odd radix's running sums. The twiddle e^{-2 pi i t/L} is cos and sin of
+   (2t) dtheta, read from the cell's tables C and S of j dtheta, j = 0 .. N - 1. */
+function cell3dFft(xr, xi, yr, yi, L, nb, fac, C, S, sign, ar, ai){
+  let n = L, s = 1;
+  for (let f = 0; f < fac.length; f++){
+    const p = fac[f], m = n/p, step = L/n, ist = s*m*nb, ost = s*nb, sub = L/p;
+    for (let pp = 0; pp < m; pp++)
+      for (let q = 0; q < s; q++){
+        const ib = (q + s*pp)*nb, ob = (q + s*p*pp)*nb;
+        if (p === 2){
+          const tix = 2*pp*step, wr = C[tix], wi = sign*S[tix];
+          for (let b = 0; b < nb; b++){
+            const a0r = xr[ib + b], a0i = xi[ib + b];
+            const a1r = xr[ib + ist + b], a1i = xi[ib + ist + b];
+            yr[ob + b] = a0r + a1r; yi[ob + b] = a0i + a1i;
+            const dr = a0r - a1r, di = a0i - a1i;
+            if (pp === 0){ yr[ob + ost + b] = dr; yi[ob + ost + b] = di; }
+            else { yr[ob + ost + b] = dr*wr - di*wi; yi[ob + ost + b] = dr*wi + di*wr; }
+          }
+        } else if (p === 4){
+          const t1 = 2*pp*step, t2 = 4*pp*step, t3 = 6*pp*step;
+          const w1r = C[t1], w1i = sign*S[t1], w2r = C[t2], w2i = sign*S[t2];
+          const w3r = C[t3], w3i = sign*S[t3];
+          for (let b = 0; b < nb; b++){
+            const a0r = xr[ib + b], a0i = xi[ib + b];
+            const a1r = xr[ib + ist + b], a1i = xi[ib + ist + b];
+            const a2r = xr[ib + 2*ist + b], a2i = xi[ib + 2*ist + b];
+            const a3r = xr[ib + 3*ist + b], a3i = xi[ib + 3*ist + b];
+            const s0r = a0r + a2r, s0i = a0i + a2i, d0r = a0r - a2r, d0i = a0i - a2i;
+            const s1r = a1r + a3r, s1i = a1i + a3i, d1r = a1r - a3r, d1i = a1i - a3i;
+            /* (a1 - a3) times the quarter turn: -i forward, +i inverse */
+            const qr = sign < 0 ? d1i : -d1i, qi = sign < 0 ? -d1r : d1r;
+            const y1r = d0r + qr, y1i = d0i + qi;
+            const y2r = s0r - s1r, y2i = s0i - s1i;
+            const y3r = d0r - qr, y3i = d0i - qi;
+            yr[ob + b] = s0r + s1r; yi[ob + b] = s0i + s1i;
+            if (pp === 0){
+              yr[ob + ost + b] = y1r; yi[ob + ost + b] = y1i;
+              yr[ob + 2*ost + b] = y2r; yi[ob + 2*ost + b] = y2i;
+              yr[ob + 3*ost + b] = y3r; yi[ob + 3*ost + b] = y3i;
+            } else {
+              yr[ob + ost + b] = y1r*w1r - y1i*w1i; yi[ob + ost + b] = y1r*w1i + y1i*w1r;
+              yr[ob + 2*ost + b] = y2r*w2r - y2i*w2i; yi[ob + 2*ost + b] = y2r*w2i + y2i*w2r;
+              yr[ob + 3*ost + b] = y3r*w3r - y3i*w3i; yi[ob + 3*ost + b] = y3r*w3i + y3i*w3r;
+            }
+          }
+        } else {
+          for (let t = 0; t < p; t++){
+            for (let b = 0; b < nb; b++){ ar[b] = xr[ib + b]; ai[b] = xi[ib + b]; }
+            for (let r = 1; r < p; r++){
+              const tix = 2*sub*((r*t) % p), wr = C[tix], wi = sign*S[tix], rb = ib + r*ist;
+              for (let b = 0; b < nb; b++){
+                const xr1 = xr[rb + b], xi1 = xi[rb + b];
+                ar[b] += xr1*wr - xi1*wi; ai[b] += xr1*wi + xi1*wr;
+              }
+            }
+            const o = ob + t*ost;
+            if (pp === 0 || t === 0)
+              for (let b = 0; b < nb; b++){ yr[o + b] = ar[b]; yi[o + b] = ai[b]; }
+            else {
+              const tix = 2*pp*t*step, wr = C[tix], wi = sign*S[tix];
+              for (let b = 0; b < nb; b++){
+                yr[o + b] = ar[b]*wr - ai[b]*wi; yi[o + b] = ar[b]*wi + ai[b]*wr;
+              }
+            }
+          }
+        }
+      }
+    n = m; s *= p;
+    let tr = xr; xr = yr; yr = tr;
+    tr = xi; xi = yi; yi = tr;
+  }
+  return [xr, xi];
+}
+
+/* The step limits that depend on the grid and the depth alone -- capillary, viscous and
+   gravity -- from the smallest radial and vertical cells, the shallowest column, the innermost
+   radius and the azimuthal count. stepLimits takes them from here, and so does the grid
+   sizing below, which is what lets it say what time step a grid it has not built will run at:
+   the same expressions on the same numbers, so the same double. */
+function cell3dGridLimits(drMin, dzMin, Hmin, rc0, nth, dth, g, accel, gamma, rho, nu){
+  const kr2 = 4/(drMin*drMin), kz2 = 4/(dzMin*dzMin);
+  const mMax = nth >> 1, ka2 = (mMax*mMax)/(rc0*rc0);
+  const kSurf2 = kr2 + ka2, kSurf = Math.sqrt(kSurf2);
+  const gEff = g + Math.abs(accel);
+  const omegaSurf = Math.sqrt((gEff*kSurf + gamma*kSurf2*kSurf/rho)*Math.tanh(kSurf*Hmin));
+  return { capillary: 2/omegaSurf, viscous: 2/(nu*(kr2 + kz2 + ka2)),
+           gravity: Math.min(drMin, rc0*dth)/Math.sqrt(gEff*Hmin), kr2, kz2, ka2 };
+}
+
+/* THE GRID A MODE NEEDS, MEASURED WITH THIS SOLVER'S OWN OPERATOR.
+
+   The same contract the Floquet panel holds its two-dimensional grids to: the discrete surface
+   operator reproduces the exact one on the mode to `errTol` (1%), and every Stokes layer --
+   floor, free surface, rim -- holds at least `layerCells` (2) cells, at the response frequency.
+   A grid that misses the first misstates the capillary restoring force, and so the mode's
+   frequency; one that misses the second has its damping set by truncation error rather than
+   by the viscosity. Of the grids that meet both, the cheapest: cells times steps per drive
+   period, each at the time step that grid will actually run at.
+
+   WHY THIS SOLVER AND NOT THE TWO-DIMENSIONAL ONE. The page used to size this solver's grid
+   with dns/faraday-disc.js's suggestGrid, which knows nothing of the azimuthal direction --
+   it is exact in theta -- and measured that way a grid with eight cells per azimuthal
+   wavelength looks fine. Measured here it is 4.65% off at the page's default mode, nearly all
+   of it azimuthal. And the call had been failing: it was handed the drive's wavenumber with
+   the nearest mode's order, a profile that does not satisfy the wall condition, so it found
+   no grid at 69 of 72 operating points, and a silent catch put a fixed 16 x 8m x 10 grid in
+   its place. That grid is 4-17% off on the modes it ran.
+
+   THE TEST FUNCTION is a Laplacian eigenfunction of this cell, J_m(k r) cos(m theta), whose
+   exact image under the surface operator is -k^2 times itself. The caller picks k: for a free
+   contact line, the mode's own wavenumber, a zero of J'_m over R; for a pinned one, the zero of
+   J_m itself nearest the pinned mode's scale -- the pinned mode is a superposition, not an
+   eigenfunction of the Laplacian, so the question asked of a pinned grid is whether it
+   carries a wave of that scale with the surface held at zero on the wall.
+
+   HOW IT IS MEASURED. The operator separates on that function: its radial part is this
+   solver's own curvature applied to the axisymmetric profile J_m(k r) -- at an amplitude small
+   enough that 1 + |grad eta|^2 rounds to exactly 1, so what is applied is exactly the linear
+   operator -- and its azimuthal part is the periodic second difference the curvature applies
+   to cos(m theta), whose eigenvalue is exactly 2(1 - cos(m dtheta))/dtheta^2. So one small
+   probe cell per radial grid serves every azimuthal count. dns/check-cell3d.mjs holds the
+   result to the direct measurement: the chosen grid, built in full, with the full curvature
+   applied to J_m(k r) cos(m theta), is within errTol, and the azimuthal count below it is not.
+
+   The azimuthal count is the smallest even nth >= 16 that holds whose half has no prime
+   factor above 7, so the preconditioner's transform stays fast (cell3dFft); more cells never
+   cost accuracy. `maxCells` (250 000) is what the C++ engine's arena holds at the deepest
+   vertical count searched, so both engines accept every grid this returns -- the gate builds
+   the C++ engine at that size. Where no grid within it holds, this returns `unreachable` with
+   every grid it tried and the closest, and the caller refuses with those numbers. */
+const CELL3D_SIZE_NR = [24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256];
+const CELL3D_SIZE_NZ = [12, 16, 20, 24, 32];
+const CELL3D_SIZE_ZSTRETCH = [2.2, 3.0, 3.8];
+const CELL3D_MAX_CELLS = 250000;
+
+function cell3dTransformFriendly(nth){
+  let n = nth >> 1;
+  for (const p of [2, 3, 5, 7]) while (n % p === 0) n /= p;
+  return n === 1;
+}
+
+function suggestCell3DGrid(o){
+  const m = o.m;
+  if (!(Number.isInteger(m) && m >= 0)) throw new RangeError(
+    `suggestCell3DGrid: m = ${m} is not a non-negative azimuthal order.`);
+  const k = requireFinitePositive(o.k, 'k'), R = requireFinitePositive(o.R, 'R');
+  const h = requireFinitePositive(o.h, 'h'), rho = requireFinitePositive(o.rho, 'rho');
+  const nu = requireFinitePositive(o.nu, 'nu'), gamma = requireFinitePositive(o.gamma, 'gamma');
+  const g = o.g === undefined ? CELL3D_G0 : requireFinitePositive(o.g, 'g');
+  const accel = o.accel === undefined ? 0 : requireFinite(o.accel, 'accel');
+  const omegaResponse = requireFinitePositive(o.omegaResponse, 'omegaResponse');
+  const omegaDrive = requireFinitePositive(o.omegaDrive, 'omegaDrive');
+  const contact = o.contact === undefined ? 'free' : o.contact;
+  if (typeof o.besselJ !== 'function') throw new TypeError(
+    'suggestCell3DGrid: besselJ(m, x) is the caller\'s -- the Bessel functions live in '
+    + 'faraday/kernel.js, which this solver does not depend on.');
+  const errTol = o.errTol === undefined ? 1e-2 : requireFinitePositive(o.errTol, 'errTol');
+  const layerCells = o.layerCells === undefined ? 2
+    : requireFinitePositive(o.layerCells, 'layerCells');
+  const maxCells = o.maxCells === undefined ? CELL3D_MAX_CELLS : o.maxCells;
+  const delta = Math.sqrt(2*nu/omegaResponse), period = 2*Math.PI/omegaDrive;
+  const zMin = CELL3D_SIZE_NZ[0];
+  const tried = [];
+  let best = null, closest = null;
+  for (const nr of CELL3D_SIZE_NR){
+    if (nr*16*zMin > maxCells) break;
+    /* the radial grading as the two-dimensional sizing chooses it: milder as the mode's
+       radial wavelength shrinks, because the interior carries the wave */
+    const perLambdaUniform = (2*Math.PI/k)/(R/nr);
+    const rStretch = perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8;
+    const P = new FaradayCell3D({ nr, nth: 8, nz: 4, R, h, rho, nu, gamma, g, contact,
+                                  rStretch, zStretch: 2.2 });
+    /* small enough that every slope squared is below the rounding of 1 */
+    const amp = 1e-12*R;
+    for (let i = 0; i < nr; i++){
+      const v = amp*o.besselJ(m, k*P.rc[i]);
+      for (let q = 0; q < 8; q++) P.eta[P.ie(i, q)] = v;
+    }
+    const radial = P.curvature(new Float64Array(nr*8));
+    const errAt = nth => {
+      const dth = 2*Math.PI/nth;
+      const lam = m === 0 ? 0 : 2*(1 - Math.cos(m*dth))/(dth*dth);
+      let num = 0, den = 0;
+      for (let i = 0; i < nr; i++){
+        const e = P.ie(i, 0), w = P.rc[i]*P.drc[i];
+        const got = radial[e] - lam*P.eta[e]/(P.rc[i]*P.rc[i]), want = -k*k*P.eta[e];
+        num += (got - want)*(got - want)*w;
+        den += want*want*w;
+      }
+      return Math.sqrt(num/den);
+    };
+    let nth = null, err = Infinity, lastErr = Infinity, lastNth = null;
+    for (let n = 16; nr*n*zMin <= maxCells; n += 2){
+      if (!cell3dTransformFriendly(n)) continue;
+      const e = errAt(n);
+      lastErr = e; lastNth = n;
+      if (e <= errTol){ nth = n; err = e; break; }
+    }
+    if (nth === null){
+      const rec = { nr, nth: lastNth, rStretch, err: lastErr, surfaceOk: false };
+      tried.push(rec);
+      if (!closest || rec.err < closest.err) closest = rec;
+      continue;
+    }
+    let drMin = Infinity;
+    for (let i = 0; i < nr; i++) drMin = Math.min(drMin, P.drc[i]);
+    for (const nz of CELL3D_SIZE_NZ){
+      if (nr*nth*nz > maxCells) break;
+      for (const zStretch of CELL3D_SIZE_ZSTRETCH){
+        /* the vertical grid exactly as the solver's constructor makes it */
+        const sf = GRADE.gradeBothEnds(nz, 1, zStretch), dsc = new Float64Array(nz);
+        for (let j = 0; j < nz; j++) dsc[j] = sf[j+1] - sf[j];
+        let dzMin = Infinity;
+        for (let j = 0; j < nz; j++) dzMin = Math.min(dzMin, h*dsc[j]);
+        const layers = { floor: delta/(h*dsc[0]), surface: delta/(h*dsc[nz-1]),
+                         rim: delta/P.drc[nr-1] };
+        const thinnest = Math.min(layers.floor, layers.surface, layers.rim);
+        const L = cell3dGridLimits(drMin, dzMin, h, P.rc[0], nth, 2*Math.PI/nth, g, accel,
+                                   gamma, rho, nu);
+        const dt = 0.4*Math.min(L.capillary, L.viscous, L.gravity);
+        const cells = nr*nth*nz, stepsPerPeriod = period/dt;
+        const rec = { nr, nth, nz, rStretch, zStretch, err, layers, thinnest,
+                      layersOk: thinnest >= layerCells, surfaceOk: true, dt, cells,
+                      stepsPerPeriod, work: cells*stepsPerPeriod };
+        tried.push(rec);
+        if (rec.layersOk && (!best || rec.work < best.work)) best = rec;
+        if (!closest || !closest.surfaceOk || (!closest.layersOk && thinnest > closest.thinnest))
+          closest = rec;
+      }
+    }
+  }
+  if (best) return Object.assign({}, best, { errTol, layerCells, maxCells, delta, tried });
+  return { unreachable: true, errTol, layerCells, maxCells, delta, closest, tried };
+}
+
 class FaradayCell3D {
   constructor(o){
     /* kept so buildPreconditioner can build this cell's flat twin from exactly these */
@@ -250,26 +520,40 @@ class FaradayCell3D {
     this._gom = new Float64Array(NW);
 
     /* The pressure solve's preconditioner: the flat cell's operator, inverted exactly. Its
-       azimuthal Fourier basis, cos and sin of m k dtheta for m = 0..nth/2 -- the only
+       azimuthal transform's twiddles, cos and sin of j dtheta for j = 0 .. nth - 1 -- the only
        transcendentals it needs, evaluated here once, and handed to the C++ engine rather than
        evaluated there -- and per mode the band Cholesky factor of the (r, sigma) operator,
-       with its two working rows. buildPreconditioner says what it is and why. */
+       with its two working rows and the transform's. buildPreconditioner says what it is and
+       why, and cell3dFft above how the transform is formed. */
     {
-      const M = (nth >> 1) + 1, n2 = nr*nz;
-      this.dftc = new Float64Array(M*nth);
-      this.dfts = new Float64Array(M*nth);
-      for (let m = 0; m < M; m++)
-        for (let k = 0; k < nth; k++){
-          /* the angle reduced in integers first, so m k dtheta is never formed past 2 pi */
-          const ang = ((m*k) % nth)*this.dth;
-          this.dftc[m*nth + k] = Math.cos(ang);
-          /* sin for m = 0 and m = nth/2 is the zero vector -- sin(0) and sin(k pi) -- and is
-             stored as exactly that, rather than as sin(k pi) evaluated to 1e-16 */
-          this.dfts[m*nth + k] = (m === 0 || 2*m === nth) ? 0 : Math.sin(ang);
-        }
+      const M = (nth >> 1) + 1, n2 = nr*nz, L = nth >> 1;
+      this.twc = new Float64Array(nth);
+      this.tws = new Float64Array(nth);
+      for (let j = 0; j <= L; j++){
+        this.twc[j] = Math.cos(j*this.dth);
+        this.tws[j] = Math.sin(j*this.dth);
+      }
+      /* Where the value is exact, it is stored exactly rather than as the cos or sin of a
+         rounded angle: sin 0 and sin pi are zero, cos pi is -1, and at a quarter turn cos is
+         zero and sin one -- Math.cos of the double nearest pi/2 is 6e-17. The second half
+         is the first mirrored, so cos is exactly even and sin exactly odd about pi. */
+      this.twc[0] = 1; this.tws[0] = 0;
+      this.twc[L] = -1; this.tws[L] = 0;
+      if (nth % 4 === 0){ this.twc[nth >> 2] = 0; this.tws[nth >> 2] = 1; }
+      for (let j = L + 1; j < nth; j++){
+        this.twc[j] = this.twc[nth - j];
+        this.tws[j] = -this.tws[nth - j];
+      }
+      this._pcFactors = cell3dFftFactors(L);
       this._pcBand = new Float64Array(M*n2*(nz + 1));
       this._pcHatC = new Float64Array(M*n2);
       this._pcHatS = new Float64Array(M*n2);
+      this._pcXr = new Float64Array(L*nz);
+      this._pcXi = new Float64Array(L*nz);
+      this._pcYr = new Float64Array(L*nz);
+      this._pcYi = new Float64Array(L*nz);
+      this._pcAr = new Float64Array(nz);
+      this._pcAi = new Float64Array(nz);
       this._pcReady = false;
     }
 
@@ -881,9 +1165,9 @@ class FaradayCell3D {
     }
     /* per mode: -(C0 + (C+ + C-) cos(m dtheta)), symmetrised, then its band Cholesky factor,
        in place, row by row: L(a, a-d) at B[a*W + d], the diagonal at d = 0 */
-    const B = this._pcBand, C = this.dftc;
+    const B = this._pcBand;
     for (let m = 0; m < M; m++){
-      const cs = C[m*nth + 1], base = m*n2*W;
+      const cs = this.twc[m], base = m*n2*W;
       for (let a = 0; a < n2; a++)
         for (let d = 0; d <= bw && d <= a; d++){
           const lo = -(c0[a*W + d] + (cP[a*W + d] + cM[a*W + d])*cs);
@@ -912,29 +1196,46 @@ class FaradayCell3D {
   }
 
   /* z = the flat cell's inverse applied to r: Fourier analysis in theta, a band solve per
-     mode and component, synthesis. Every sum runs in a fixed order -- k ascending, then the
-     band left to right, then m ascending -- so the same r gives the same z to the bit, in
-     either engine. The flat operator is negative definite, so z is the negation of what the
-     positive definite factor returns. */
+     mode and component, synthesis. The analysis gives, for each (r, sigma) line and each mode
+     m = 0 .. nth/2, hc = sum over k of x_k cos(m k dtheta) and hs = the same with sin -- the
+     real and negated imaginary parts of the line's DFT -- by cell3dFft over each radial row's
+     nz lines at once; the synthesis is the inverse, x_k = sum over m of w_m (hc cos + hs sin)
+     with w = 1/nth at m = 0 and nth/2 and 2/nth between. Every sum runs in a fixed order, so
+     the same r gives the same z to the bit in either engine. The flat operator is negative
+     definite, so z is the negation of what the positive definite factor returns. */
   applyPreconditioner(r, z){
     if (!this._pcReady) this.buildPreconditioner();
     const nr = this.nr, nth = this.nth, nz = this.nz;
-    const n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1;
-    const C = this.dftc, Sn = this.dfts, B = this._pcBand;
+    const n2 = nr*nz, bw = nz, W = bw + 1, M = (nth >> 1) + 1, L = nth >> 1;
+    const C = this.twc, Sn = this.tws, B = this._pcBand, fac = this._pcFactors;
     const hc = this._pcHatC, hs = this._pcHatS;
-    hc.fill(0); hs.fill(0);
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++){
-        const rb = (i*nth + k)*nz;
-        for (let m = 0; m < M; m++){
-          const cm = C[m*nth + k], sm = Sn[m*nth + k], hb = m*n2 + i*nz;
-          for (let j = 0; j < nz; j++){
-            const x = r[rb + j];
-            hc[hb + j] += x*cm;
-            hs[hb + j] += x*sm;
-          }
+    const xr = this._pcXr, xi = this._pcXi, yr = this._pcYr, yi = this._pcYi;
+    const ar = this._pcAr, ai = this._pcAi;
+    for (let i = 0; i < nr; i++){
+      /* the row's even columns as real parts and its odd ones as imaginary */
+      const rb = i*nth*nz;
+      for (let n = 0; n < L; n++)
+        for (let j = 0; j < nz; j++){
+          xr[n*nz + j] = r[rb + 2*n*nz + j];
+          xi[n*nz + j] = r[rb + (2*n + 1)*nz + j];
+        }
+      const [Zr, Zi] = cell3dFft(xr, xi, yr, yi, L, nz, fac, C, Sn, -1, ar, ai);
+      /* split into the even columns' transform E and the odd ones' O, and recombine:
+         X_m = E_m + e^{-i m dtheta} O_m, with Z_L read as Z_0 */
+      for (let m = 0; m <= L; m++){
+        const a = m === L ? 0 : m, b = m === 0 ? 0 : L - m;
+        const c = C[m], sn = Sn[m], hb = m*n2 + i*nz;
+        const real = m === 0 || m === L;
+        for (let j = 0; j < nz; j++){
+          const z1r = Zr[a*nz + j], z1i = Zi[a*nz + j], z2r = Zr[b*nz + j], z2i = Zi[b*nz + j];
+          const er = (z1r + z2r)/2, ei = (z1i - z2i)/2;
+          const or = (z1i + z2i)/2, oi = (z2r - z1r)/2;
+          hc[hb + j] = er + (or*c + oi*sn);
+          /* zero by definition at m = 0 and nth/2, where sin(m k dtheta) is the zero vector */
+          hs[hb + j] = real ? 0 : -(ei + (oi*c - or*sn));
         }
       }
+    }
     for (let m = 0; m < M; m++){
       const base = m*n2*W, hb = m*n2;
       const both = !(m === 0 || 2*m === nth);
@@ -952,20 +1253,29 @@ class FaradayCell3D {
         }
       }
     }
-    const w0 = 1/nth, w1 = 2/nth;
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++){
-        const rb = (i*nth + k)*nz;
+    for (let i = 0; i < nr; i++){
+      /* X_m = hc - i hs; the even columns' transform E = (X_m + conj X_{L-m})/2 and the odd
+         ones' O = (X_m - conj X_{L-m}) e^{+i m dtheta}/2, packed as Z = E + i O */
+      for (let m = 0; m < L; m++){
+        const b = L - m, c = C[m], sn = Sn[m], h1 = m*n2 + i*nz, h2 = b*n2 + i*nz;
         for (let j = 0; j < nz; j++){
-          let acc = 0;
-          for (let m = 0; m < M; m++){
-            const a = m*n2 + i*nz + j;
-            const wm = (m === 0 || 2*m === nth) ? w0 : w1;
-            acc += wm*(hc[a]*C[m*nth + k] + hs[a]*Sn[m*nth + k]);
-          }
-          z[rb + j] = -acc;
+          const x1r = hc[h1 + j], x1i = m === 0 ? 0 : -hs[h1 + j];
+          const x2r = hc[h2 + j], x2i = b === L ? 0 : -hs[h2 + j];
+          const er = (x1r + x2r)/2, ei = (x1i - x2i)/2;
+          const dr = (x1r - x2r)/2, di = (x1i + x2i)/2;
+          const or = dr*c - di*sn, oi = dr*sn + di*c;
+          xr[m*nz + j] = er - oi;
+          xi[m*nz + j] = ei + or;
         }
       }
+      const [Zr, Zi] = cell3dFft(xr, xi, yr, yi, L, nz, fac, C, Sn, 1, ar, ai);
+      const rb = i*nth*nz;
+      for (let n = 0; n < L; n++)
+        for (let j = 0; j < nz; j++){
+          z[rb + 2*n*nz + j] = -(Zr[n*nz + j]/L);
+          z[rb + (2*n + 1)*nz + j] = -(Zi[n*nz + j]/L);
+        }
+    }
     return z;
   }
 
@@ -2710,12 +3020,8 @@ class FaradayCell3D {
         Hmin = Math.min(Hmin, H);
         for (let j = 0; j < nz; j++) dzMin = Math.min(dzMin, H*this.dsc[j]);
       }
-    const kr2 = 4/(drMin*drMin), kz2 = 4/(dzMin*dzMin);
-    const mMax = nth >> 1, ka2 = (mMax*mMax)/(this.rc[0]*this.rc[0]);
-    const kSurf2 = kr2 + ka2, kSurf = Math.sqrt(kSurf2);
-    const gEff = this.g + Math.abs(this.accel);
-    const omegaSurf = Math.sqrt((gEff*kSurf + this.gamma*kSurf2*kSurf/this.rho)
-                                *Math.tanh(kSurf*Hmin));
+    const L = cell3dGridLimits(drMin, dzMin, Hmin, this.rc[0], nth, this.dth, this.g,
+                               this.accel, this.gamma, this.rho, this.nu);
 
     let adv = 0;
     for (let i = 0; i < nr; i++)
@@ -2732,12 +3038,11 @@ class FaradayCell3D {
                             + ww/(H*this.dsc[j]));
         }
       }
-    return { capillary: 2/omegaSurf,
-             viscous: 2/(this.nu*(kr2 + kz2 + ka2)),
+    return { capillary: L.capillary, viscous: L.viscous,
              advective: adv > 0 ? 1/adv : Infinity,
-             gravity: Math.min(drMin, this.rc[0]*this.dth)/Math.sqrt(gEff*Hmin),
-             kRadial: Math.sqrt(kr2), kVertical: Math.sqrt(kz2),
-             kAzimuthal: Math.sqrt(ka2) };
+             gravity: L.gravity,
+             kRadial: Math.sqrt(L.kr2), kVertical: Math.sqrt(L.kz2),
+             kAzimuthal: Math.sqrt(L.ka2) };
   }
 
   stableStep(safety){
@@ -2847,6 +3152,9 @@ class FaradayCell3D {
 
 /* polyDerivAt and TH_NODE are exported for dns/check-cell3d.mjs, whose reference form of
    famLaplacian must differentiate with exactly these to be held to it bit for bit. */
-const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D, polyDerivAt, TH_NODE };
+const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D, polyDerivAt, TH_NODE, cell3dFft,
+                         cell3dFftFactors, cell3dGridLimits, suggestCell3DGrid,
+                         CELL3D_MAX_CELLS, CELL3D_SIZE_NR, CELL3D_SIZE_NZ,
+                         CELL3D_SIZE_ZSTRETCH };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_CELL3D;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_CELL3D = FARADAY_CELL3D;

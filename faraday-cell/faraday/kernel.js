@@ -81,6 +81,10 @@ function jpZeroNear(m, xStar){
   const step = 0.3;
   const seek = dir => {
     let x = Math.max(floorX, xStar), f = besselJp(m, x);
+    /* The start can BE the zero -- J' evaluates to exactly 0 at the double nearest
+       j'_{2,1} -- and a product with an exact zero is never negative, so without this the
+       walk stepped past it to the next root: jpZeroNear(2, j'_{2,1}) returned j'_{2,2}. */
+    if (f === 0) return x;
     for (let i = 0; i < 400; i++){
       const nx = x + dir*step;
       if (nx <= floorX) return null;
@@ -91,6 +95,42 @@ function jpZeroNear(m, xStar){
         for (let k = 0; k < 80; k++){
           const mid = (p + q)/2;
           if (besselJp(m, p)*besselJp(m, mid) <= 0) q = mid; else p = mid;
+        }
+        return (p + q)/2;
+      }
+      x = nx; f = nf;
+    }
+    return null;
+  };
+  const up = seek(1), down = seek(-1);
+  if (up == null) return down;
+  if (down == null) return up;
+  return Math.abs(up - xStar) <= Math.abs(down - xStar) ? up : down;
+}
+
+/* The zero of J_m itself nearest xStar -- jpZeroNear's walk and bisection on J instead of J'.
+   A pinned contact line holds the surface at zero on the wall, so the waves that live on a
+   pinned surface are built on these where a free one's are built on the zeros of J'. The
+   three-dimensional solver's grid sizing (dns/faraday-cell3d.js, suggestCell3DGrid) asks
+   whether a grid carries J_m(j r/R) for the j nearest the pinned mode's own scale. */
+function jZeroNear(m, xStar){
+  const floorX = Math.max(0.02, m - 2);
+  const step = 0.3;
+  const seek = dir => {
+    let x = Math.max(floorX, xStar), f = besselJ(m, x);
+    /* the start can be the zero itself, as in jpZeroNear: J_0 is exactly 0 at the double
+       nearest j_{0,1} */
+    if (f === 0) return x;
+    for (let i = 0; i < 400; i++){
+      const nx = x + dir*step;
+      if (nx <= floorX) return null;
+      const nf = besselJ(m, nx);
+      if (nf === 0) return nx;
+      if (f*nf < 0){
+        let p = Math.min(x, nx), q = Math.max(x, nx);
+        for (let k = 0; k < 80; k++){
+          const mid = (p + q)/2;
+          if (besselJ(m, p)*besselJ(m, mid) <= 0) q = mid; else p = mid;
         }
         return (p + q)/2;
       }
@@ -124,23 +164,29 @@ function radialIndexOf(m, z){
 function jpZerosNearN(m, xStar, count){
   const floorX = Math.max(0.02, m - 2), step = 0.3, found = [];
   const x0 = Math.max(floorX, xStar);
+  const add = r => { if (!found.some(v => Math.abs(v - r) < 1e-9)) found.push(r); };
   const bisect = (a, b) => {
     for (let k = 0; k < 70; k++){ const mid = (a+b)/2;
       if (besselJp(m, a)*besselJp(m, mid) <= 0) b = mid; else a = mid; }
-    const r = (a+b)/2;
-
-    if (!found.some(v => Math.abs(v - r) < 1e-9)) found.push(r);
+    add((a+b)/2);
   };
 
+  /* A sample can land exactly ON a zero -- J' is exactly 0 at the double nearest j'_{2,1},
+     and both sweeps for a target 0.15 above it step onto that double -- and a product with
+     an exact zero is never negative. Such a sample is taken as the zero it is. Without
+     that, jpZerosNearN(2, j'_{2,1} + 0.15, 3) missed the nearest root altogether and
+     returned j'_{2,2}, j'_{2,3} and j'_{2,4}. */
   const sweep = dir => {
     let x = x0 - dir*step/2;
     if (x < floorX) x = floorX;
     let f = besselJp(m, x), got = 0;
+    if (f === 0){ add(x); got++; }
     for (let i = 0; i < 900 && got < count + 1; i++){
       const nx = x + dir*step;
       if (nx <= floorX) return;
       const nf = besselJp(m, nx);
-      if (f*nf < 0){ bisect(Math.min(x, nx), Math.max(x, nx)); got++; }
+      if (nf === 0){ add(nx); got++; }
+      else if (f*nf < 0){ bisect(Math.min(x, nx), Math.max(x, nx)); got++; }
       x = nx; f = nf;
     }
   };
@@ -1135,6 +1181,7 @@ const FARADAY_KERNEL = {
   besselJp,
   besselPair,
   jpZeroNear,
+  jZeroNear,
   radialIndexOf,
   jpZerosNearN,
   radialProfile,

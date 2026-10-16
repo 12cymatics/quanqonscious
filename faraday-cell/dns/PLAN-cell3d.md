@@ -100,9 +100,12 @@ against this and need no further decision.
 | S10b | The viscous operator forms each face once, in both engines | **done** | `famLaplacian` formed all six faces of every cell, so each interior face -- and every column reconstruction it asks for -- was formed twice, once by each neighbour. Each face is now formed once and both cells read it: **562 440 reconstructions per viscous evaluation become 321 320**, and the 639 400 re-interpolations of a column's depth become a table refreshMetric fills. The viscous term is **2.2 to 2.4x** faster; a whole step **1.5 to 1.9x**, best of three: at 16x40x10 JavaScript 173.5 -> 117.6 ms and C++ 73.3 -> 40.9 ms. The r and sigma faces' shared value is the old value **bit for bit**, measured by putting the old theta face back and comparing; the theta faces and the azimuthal seam are a correction -- each was found at two roundings of one angle, one per neighbour, so the operator was not exactly conservative in theta. Every figure the 264 existing checks print is unchanged at its printed precision; the gate went from 11m42s to 6m56s, and carries 267 checks with the three below. JavaScript and C++ still agree bit for bit over a whole drive period. Six injected defects all red -- below |
 | S12b | The pressure solve preconditioned by the flat cell's exact inverse, in f64 | **done** | The diagonal preconditioner took **110 to 162 iterations a step**; this takes **7 or 8**. Flat, the pressure operator is block circulant in theta, so the azimuthal Fourier basis splits it into one real band matrix per mode, and the preconditioner is that cell's pressure equation solved directly: a Fourier analysis in theta, a band Cholesky solve per mode, a synthesis. On the actual surface it is not the inverse and does not have to be -- the solve still stops on the TRUE operator's residual at the same tolerance. Everything is double precision. On a flat cell the solve takes exactly **one** iteration, at 1e-11 and at 1e-14, which the gate asserts as its test of the inverse. Best of three, a step: **C++ 9.86 -> 5.19 ms at 10x24x8, 24.7 -> 10.4 at 16x24x10, 40.9 -> 19.8 at 16x40x10**; JavaScript 29.9 -> 20.9, 62.9 -> 36.6, 117.6 -> 66.1. Every figure the gate printed is unchanged at its printed precision except the solve's own iteration counts and two rounding-noise harmonics at 1e-22. Seven injected defects all red -- below |
 | S11 | All eight cores | **done: the explicit terms, on any number of threads, to the bit** | Each step's viscous and advective terms are formed row by row from the state alone, so `dns/cell3d-pool.js` divides the radial rows among worker threads and the owner thread, which also forms a band, and copies them back. The answer is the same to the bit on any count: `dns/check-cell3d-pool.mjs` holds 6 driven steps on 1 to 5 workers to plain `step()` with `Object.is` over 33 arrays, both engines, both contact lines, and the page suite replays the page's own threaded run on one thread and compares again. The pressure solve stays on one thread: each iteration needs two global sums, and a page opened from a file has no shared memory. Measured on this 4-core container at 16x40x10: JavaScript 66.7 -> 44.5 ms a step on 3 threads (1.50x), C++ 22.2 -> 14.7 ms on 4 (1.51x). The page has a *solver threads* control, defaulting to one fewer than the cores the browser reports; `dns/run-cell3d.mjs` takes `--threads`. Found a race in the page on the way, below |
+| S11b | The pool's failure paths, from a review of the merged S11 | **done** | four defects a review named, each reproduced first: overlapping `pool.step()` calls corrupted 160 of 160 surface values (steps now queue); a dead worker left the step pending for good (the transport reports the death and the pool fails its requests with the reason; the page forwards a helper's death to the solver's pool); a refused pool left its threads running (refused before any starts, and every later failure ends them); and a page start overtaken by a faster one hung at "solver starting" (every await checked, a start's workers its own until it wins). Pool gate 12 -> 19 checks, page gate 442; seven injections red -- below |
+| S12c | The preconditioner's azimuthal transform as an FFT | **done** | the direct nth^2 sums replaced by a mixed-radix Stockham FFT on the half-length complex transform, the same in both engines to the bit; the flat cell still solves in one iteration at 1e-14 on ten grids using every radix. A step at 40x96x12: JavaScript 419 -> 314 ms, C++ 150 -> 113; at 16x40x10 48.1 -> 41.2 and 16.2 -> 14.7; no change at 10x24x8. Six injections red -- below |
+| S9c | The page's grid sized by this solver, to the Floquet panel's 1% contract | **done** | the page's sizing call had never worked -- the drive's wavenumber with the mode's order, no grid at 69 of 72 points, a silent `catch {}` substituting 16 x 8m x 10, which this solver's own curvature measures at 4.65% off on the default mode and up to 17.1% elsewhere. `suggestCell3DGrid` now sizes it by this solver's operator: within 1% on the seeded mode, two cells in every Stokes layer, cheapest by cells x steps, refusing beyond 250 000 cells. Default 40 x 210 x 12 at 0.99%. Found and fixed an exact-zero miss in the kernel's Bessel root finders on the way -- below |
 | S12 | GPU render path, and the optional f32 preconditioner | **render done; preconditioner declined, with the numbers** | The surface is shaded by a WebGL2 fragment shader (`faraday/render-gl.js`), chosen under *draw on*, the deck naming which processor drew. Held to the CPU's bytes **within one level out of 255 in every channel** -- 24 renderings each on the modal field, after a field rebuild, on the Navier-Stokes field and in the single-file build, worst difference 1, about one channel in 100 000 at that level. Main thread per frame: CPU 9.9-10.3 ms, GPU 2.1-2.3 ms on a SOFTWARE GPU, which is submission cost and not a speed measurement. The f32 preconditioner is not built: at the page's grid the CG is 159 iterations and 40% of a 77 ms step, each GPU application is a round trip whose cost on the owner's hardware is unmeasured, and it would end bit-for-bit parity between the engines -- below |
 | S13a | The zip, the terminal runner, and the gate that unpacks it | **done** | `faraday/build-zip.mjs` writes `faraday-cell.zip`: 34 files, 516 KB, 31 from the checkout plus a generated README, the single-file page and a generated suite runner. `faraday/check-zip.mjs` (49 checks, 9 s) builds one, unpacks it into a temp directory and runs four suites from THERE -- 10 + 5 + 36 + 102, counts asserted, because a suite that collects nothing also exits zero. Seven injected defects all red, restored green, listed below. `dns/run-cell3d.mjs` runs the solver with no browser at all: ASCII plan view through `etaAt`, energy split, divergence, and the clocks. **This row used to claim a zip already existed and already passed from a fresh unpack**, which was false; it does now |
-| S13b | Ship: the README's claims, and the whole suite set from the unpack | todo | the slow suite run from the unpack too, in CI rather than by hand; `dns/check-page.mjs` from the unpack, which needs a browser on the machine doing the unpacking |
+| S13b | Ship: the README's claims, and the whole suite set from the unpack | **done** | CI's `unpacked` job unzips the COMMITTED `faraday-cell.zip` -- the one on the download link -- outside the checkout and runs every suite in it with the unpack's own `run-checks.mjs`: the two slow ones and the browser one included, which `faraday/check-zip.mjs` leaves out so that it stays runnable by hand. The runner now prints a failed suite's whole output rather than its last three lines, which are its count and not its reason, and no longer runs under node's 1 MB output buffer, past which a long suite would have been killed and reported as failing |
 
 ## What S5 found, in the order it was found
 
@@ -1649,6 +1652,161 @@ with cross-origin isolation headers.
 | Omega left out of what travels (and each of the other 13 in turn) | the same, or the worker's step fails |
 | the page passing no ports, so its threads control does nothing | the page's two-thread check: no frame on two threads |
 | the generation race, as it was | the page's C++ replay: 640 of 640 values differ |
+
+## S11b -- the pool's failure paths, from a review of the merged S11
+
+A review of the merged S11 (PR #145) named four defects. Each was reproduced before anything
+was changed, and each was real:
+
+- **Two overlapping `pool.step()` calls corrupted the state.** The second call's `stepBegin`
+  rewrote the arrays the first was still assembling, both promises resolved, and 160 of 160
+  surface values differed from two sequential steps. Steps now queue: any number of calls,
+  overlapping or not, are that many steps in the order asked.
+- **A worker that died left the step waiting for good.** Node's transport listened only for
+  messages, so a terminated worker's request was a promise that never settled; measured, the
+  step was still pending after the bound. The transport now reports `error`, `exit` and
+  `messageerror`, and the pool fails every request outstanding on that worker -- and every one
+  asked of it afterwards -- with the reason. A step that fails leaves the pool refusing every
+  later step, because the owner's state is then half a step on. On the page, a helper's death
+  is seen by the PAGE, not by the solver's worker that is waiting on it, so the page forwards it
+  outside the worker's command chain -- the command it must reach is the one the chain is stuck
+  in.
+- **A refused pool left its threads running.** Four workers for a four-row cell were spawned and
+  only then refused (five bands, counting the owner's), outside any cleanup, so a caller that
+  caught the refusal was left with a process that would not exit. The count is now refused
+  before any worker starts, and from the first one started every failure ends them all.
+- **On the page, a start overtaken by a faster one hung the page.** A two-thread start still
+  building its worker when one thread was chosen carried on after the one-thread start had
+  finished: it pushed its worker into the newer start's list and posted its init last, so the
+  solver re-initialised to a generation the page had already left and the page sat at "solver
+  starting" for good. Every await in a start is now followed by a check, a start's workers are
+  its own until it has won, and the page counts every worker it makes and every one it ends so
+  that a worker no list holds any more still shows. The solver's worker is now made once
+  however many starts ask for it at once.
+
+`dns/check-cell3d-pool.mjs` went from 12 checks to 19, and `dns/check-page.mjs` to 442, with
+the waits bounded so that a refusal that never arrives is reported rather than hanging the gate.
+
+| injected, one at a time, on a disposable copy | red on |
+|---|---|
+| steps not queued | three steps asked for at once: every array differs, both engines |
+| node's transport reporting no death | the three dead-worker checks: still pending after 20 s |
+| no refusal after a failed step | the pool refuses every later step |
+| neither the early band check nor the cleanup | both leaked-thread checks: the process killed at 20 s |
+| no cleanup when start refuses after spawning | the leaked-thread check for a different grid |
+| the page's overtaken start carrying on | a two-thread start overtaken by a one-thread one: no frame in 90 s |
+| the page not forwarding a helper's death | the solver never reports the thread it lost |
+
+The early band check alone, with the cleanup in place, stayed green: the cleanup covers it.
+Both were removed together to show the leaked-thread check can see the leak at all. And the
+first version of the page's death check raised the error event at the moment of the kill,
+which sometimes let the page stop asking for slices before the solver started another step --
+then there was no waiting step to rescue and the check passed or failed by timing. It now kills
+the thread, waits until the solver has stopped advancing for three seconds, and only then
+raises the event.
+
+## S12c -- the preconditioner's transform as an FFT
+
+`applyPreconditioner` went to the azimuthal Fourier basis and back by the direct sums: every
+one of the nth/2 + 1 modes against every one of the nth columns, nth^2 products a line, twice
+an application, nine applications a step. It is now a mixed-radix FFT (`cell3dFft`): the real
+transform of each (r, sigma) line as a complex transform of half the length on the even and odd
+columns, Stockham's self-sorting decimation in frequency on each radial row's nz lines at once,
+radix 4 while 4 divides, then 2, then each odd prime as a radix of its own. The twiddles are
+the cos and sin of j dtheta, computed in JavaScript once and handed to the C++, with the exact
+values stored where the value is exact (cos of a quarter turn is 0, not 6e-17). The C++ is a
+transcription in the same order and agrees to the bit on every grid tried. It is the same
+transform regrouped, so it changes the preconditioner's last bit and nothing else: the flat cell
+still solves in exactly one iteration at 1e-14, now asserted on ten grids chosen so that every
+radix is used in every position it can take (nth/2 = 4, 5, 6, 7, 8, 9, 12, 20, 48 and 104).
+
+Measured, best of three on this container:
+
+| | preconditioner, JavaScript | C++ | a step, JavaScript | C++ |
+|---|---|---|---|---|
+| 10x24x8 | 0.290 -> 0.099 ms | 0.099 -> 0.079 | 13.9 -> 13.5 | 4.72 -> 4.96 |
+| 16x24x10 | 0.429 -> 0.216 | 0.197 -> 0.160 | 27.6 -> 26.9 | 9.37 -> 7.49 |
+| 16x40x10 | 1.062 -> 0.399 | 0.430 -> 0.362 | 48.1 -> 41.2 | 16.2 -> 14.7 |
+| 40x96x12 | 14.39 -> 3.18 | 6.39 -> 2.34 | 419 -> 314 | 150 -> 113 |
+
+At 10x24x8 the step does not move: the transform was a small part of it, and the C++ figure's
+change is within run-to-run spread. The gain is where nth is large, which S9c below makes the
+page's common case.
+
+| injected, one at a time, on a disposable copy | red on |
+|---|---|
+| radix 2's twiddle conjugated | the pressure solve stops converging (gate 2 refuses) |
+| an odd radix's inner twiddle off by one | the same |
+| radix 4's third outer twiddle wrong | the same |
+| the real split's sign wrong | the same |
+| the C++ odd radix's sum regrouped | 470 of 576 elements differ; the every-radix parity check |
+| the C++ real split regrouped | 442 of 576 differ; the every-radix parity check |
+
+## S9c -- the page's grid, sized by this solver to the Floquet panel's contract
+
+**The page never sized this solver's grid.** It called the two-dimensional solver's
+`suggestGrid` with the nearest mode's order but the DRIVE's wavenumber, so the profile did not
+meet the wall condition; measured over 72 operating points, that found no grid at 69 of them,
+and a `catch {}` around the call put a fixed 16 x 8m x 10 grid in its place without a word. For
+pinned contact lines it could not have worked even with the right wavenumber -- the pinned mode
+is a superposition, not an eigenfunction of the Laplacian -- and for m = 1 the two-dimensional
+solver refuses outright. And suggestGrid is exact in theta, so it could not see the error this
+solver's eight azimuthal cells per wavelength make. Measured with this solver's own curvature,
+the fixed grid misstated the surface operator by **4.65% on the page's default mode** (m = 12),
+4.57% at m = 3, 4.16% at m = 2, and **14.6% and 17.1%** on two m = 1 modes. The Floquet panel
+refuses anything worse than 1%.
+
+**Now `suggestCell3DGrid` sizes it, with this solver's own operator**, to the panel's contract:
+the surface operator within 1% on the seeded mode and two cells in every Stokes layer, the
+cheapest grid by cells times steps per drive period, refusing with the numbers beyond 250 000
+cells -- what the C++ arena holds at the deepest vertical count searched, so both engines run the
+same grid. The test function is J_m(k r) cos(m theta): the mode itself on a free contact line,
+and on a pinned one J_m at the zero of J_m nearest the pinned mode's scale. The operator
+separates on it, so one small probe cell per radial grid gives the radial part through the
+solver's own `curvature`, and the azimuthal part is the exact eigenvalue of the periodic second
+difference; `dns/check-cell3d.mjs` section 18 then BUILDS the chosen grid and measures it
+directly. The owner chose this over keeping the fast grid and stating its error. The estimate
+put to them was about fifty times slower at the default; measured with `dns/run-cell3d.mjs`
+on one thread it is about eighty -- a step **45.2 -> 316 ms in C++ and 147 -> 971 ms in
+JavaScript**, and the time step 6.3 -> 0.54 microseconds, so **7 158x -> 590 540x** and
+**23 231x -> 1 814 401x** slower than real time. On three threads 188 and 553 ms a step. One
+drive period at the default is now about an hour of wall clock in C++. The estimate was cells
+times steps from the search, 77x; the rest is the cost per cell, which rose with nth and nz.
+
+| mode | the old fixed grid | sized now |
+|---|---|---|
+| m = 12, free (the default) | 16 x 96 x 10: 4.65%, 1 427 steps a period | 40 x 210 x 12: 0.99%, 2.19 cells, 16 830 steps |
+| m = 5, free, third radial | 16 x 40 x 10 | 48 x 90 x 12: 0.94%, 6 914 steps |
+| m = 1, free | 16 x 16 x 10 | 64 x 16 x 12: 0.92%, 3 114 steps |
+| m = 1, pinned | 16 x 16 x 10: 14.6% | 80 x 16 x 12: 0.77%, 4 390 steps |
+| m = 5, pinned | 16 x 40 x 10 | 40 x 90 x 12: 0.95%, 5 250 steps |
+
+The run is also seeded with the mode the deck names -- J_m at the mode's own wavenumber, or the
+kernel's pinned superposition -- rather than J_m at the drive's wavenumber, and the deck states
+what the grid was sized to: the mode, its measured surface-operator error, its thinnest Stokes
+layer and its steps per drive period. `dns/check-page.mjs` recomputes the whole chain in node
+from the page's controls and requires the page's run to be on exactly that grid.
+
+**Two root-finder defects turned up on the way.** The pinned test needs the zeros of J_m itself,
+so `jZeroNear` was added to `faraday/kernel.js` and gated against mpmath -- and its first gate
+failed: J_0 evaluates to exactly 0.0 at the double nearest j_{0,1}, a product with an exact zero
+is never negative, and the finder walked past the root it started on. `jpZeroNear` had the same
+flaw, and so did `jpZerosNearN`, the root finder the renderer calls: J'_2 is exactly 0.0 at the
+double nearest j'_{2,1}, both of its sweeps for a target 0.15 above it step onto that double, and
+it returned j'_{2,2}, j'_{2,3} and j'_{2,4} as the three roots nearest a target whose nearest
+root is j'_{2,1}. A sample that is exactly zero is now taken as the zero it is; the kernel gate
+has 3031 assertions, 192 of them new.
+
+| injected, one at a time, on a disposable copy | red on |
+|---|---|
+| no azimuthal eigenvalue | five of six modes unreachable |
+| the floor layer read from the second cell | every layer count disagrees with the built grid |
+| the time step at the azimuthal count below | every stableStep disagrees with the built grid |
+| the first count below 0.8% taken instead of 1% | the count below already measures under 1% |
+| the finders' exact-zero handling removed | five exact-zero checks, and j_{0,1} itself |
+
+Removing the gravity limit from the sizing's time step stayed green: it does not bind on any of
+these grids, so the time step is the same double without it.
 
 ## S12 -- the surface drawn on the GPU, and the preconditioner that was not built
 

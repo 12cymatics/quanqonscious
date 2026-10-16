@@ -39,11 +39,23 @@
 
    A worker that fails is not routed around. The step refuses with the worker's own error,
    and there is no fallback to forming the rows on the owner's thread, which would be the
-   single-threaded step under the pool's name.
+   single-threaded step under the pool's name. A worker that DIES -- exits, or raises
+   outside its own handler -- fails every request outstanding on it and every one asked of it
+   afterwards, with the reason, through fail() below: a request to a worker that will never
+   answer used to be a promise that never settled, and a step awaiting it hung for good.
+   And a step that fails leaves the pool refusing every later one. The owner's state is then
+   half a step on -- begun, its own rows formed, never finished -- and stepping on from it
+   would be an answer to no question anyone asked.
+
+   ONE STEP AT A TIME. step() is asynchronous, and a second call made before the first
+   settles used to run straight into it: its stepBegin rewrote the state the first was still
+   assembling, both promises resolved, and every surface value was wrong. Calls now queue, so
+   any number of them, overlapping or not, are that many steps in the order they were asked.
 
    Transport is the caller's: a channel is { post(message, transfer), onMessage(fn) }, which a
    browser Worker, a MessagePort and a node worker_threads Worker can each be wrapped as in two
-   lines. The worker's side is cell3dPoolServe below. */
+   lines, with an optional onFailure(fn) through which the transport reports the worker's
+   death. The worker's side is cell3dPoolServe below. */
 
 /* The arrays stepExplicit reads, by their names on the JavaScript solver -- each one shown
    load bearing by leaving it out. */
@@ -189,8 +201,17 @@ class Cell3DPool {
     this.pending = new Map();
     this.nextId = 1;
     this.ready = false;
+    /* why each worker can no longer answer, or null while it can */
+    this.dead = channels.map(() => null);
+    /* why the pool refuses to step, once a step has failed part way */
+    this.broken = null;
+    /* the last step asked for, settled or not: the next one waits on it */
+    this.tail = Promise.resolve();
     this.lastWaitMs = 0; this.lastWorkMs = []; this.lastUnpackMs = [];
-    for (const ch of channels) ch.onMessage(msg => this.receive(msg));
+    channels.forEach((ch, w) => {
+      ch.onMessage(msg => this.receive(msg));
+      if (ch.onFailure) ch.onFailure(reason => this.fail(w, reason));
+    });
   }
 
   receive(msg){
@@ -201,18 +222,34 @@ class Cell3DPool {
     else p.resolve(msg);
   }
 
-  request(ch, msg, transfer){
+  /* Worker `w` can no longer answer. Everything outstanding on it fails now with `reason`,
+     and so does everything asked of it from here on. The first reason is the one kept: a
+     node worker that raises then also exits, and the raise is what happened. */
+  fail(w, reason){
+    if (this.dead[w] === null) this.dead[w] = String(reason);
+    for (const [id, p] of this.pending)
+      if (p.w === w){
+        this.pending.delete(id);
+        p.reject(new Error(`pool worker ${w} ${this.dead[w]}`));
+      }
+  }
+
+  request(w, msg, transfer){
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      ch.post({ ...msg, id }, transfer);
+      if (this.dead[w] !== null){
+        reject(new Error(`pool worker ${w} ${this.dead[w]}`));
+        return;
+      }
+      this.pending.set(id, { resolve, reject, w });
+      this.channels[w].post({ ...msg, id }, transfer);
     });
   }
 
   /* Build each worker's cell and hold its grid to the owner's, element by element. */
   async start(options){
-    const replies = await Promise.all(this.channels.map(ch =>
-      this.request(ch, { kind: 'init', options })));
+    const replies = await Promise.all(this.channels.map((ch, w) =>
+      this.request(w, { kind: 'init', options })));
     for (let w = 0; w < replies.length; w++)
       for (const name of CELL3D_POOL_GRID){
         const arr = replies[w].grid[name], mine = this.V.arr(name);
@@ -227,31 +264,52 @@ class Cell3DPool {
     return this;
   }
 
+  /* One step, after every step asked for before it. The returned promise is this step's own
+     outcome; the queue only orders, so a failure reaches the caller that asked for it and
+     the steps behind it then meet `broken`. */
+  step(dt){
+    const run = this.tail.then(() => this.stepNow(dt));
+    this.tail = run.then(() => {}, () => {});
+    return run;
+  }
+
   /* One step: begin and finish here, the explicit rows on the workers. */
-  async step(dt){
+  async stepNow(dt){
     if (!this.ready) throw new Error('the pool was asked to step before start() finished.');
-    const E = this.E, V = this.V;
-    E.stepBegin(dt);
-    const state = cell3dPack(V, CELL3D_POOL_STATE);
-    const t0 = cell3dClock();
-    const asked = Promise.all(this.channels.map((ch, w) =>
-      this.request(ch, { kind: 'explicit', state, a0: this.bands[w][0], a1: this.bands[w][1] })));
-    E.stepExplicit(this.ownBand[0], this.ownBand[1]);
-    this.lastOwnMs = cell3dClock() - t0;
-    const replies = await asked;
-    this.lastWaitMs = cell3dClock() - t0;
-    this.lastWorkMs = replies.map(r => r.workMs);
-    this.lastUnpackMs = replies.map(r => r.unpackMs);
-    for (const r of replies)
-      CELL3D_POOL_OUT.forEach(([name, fam], j) => {
-        const [lo, hi] = cell3dRowRun(V.js, fam, r.a0, r.a1);
-        if (r.runs[j].length !== hi - lo) throw new Error(
-          `pool rows ${r.a0}..${r.a1} of ${name} came back with ${r.runs[j].length} values `
-          + `where ${hi - lo} were asked for.`);
-        V.arr(name).set(r.runs[j], lo);
-      });
-    E.stepFinish(dt);
-    return E;
+    if (this.broken) throw new Error('the pool refuses to step on: an earlier step failed '
+      + 'part way, leaving the state neither before nor after it (' + this.broken + ').');
+    try {
+      const E = this.E, V = this.V;
+      E.stepBegin(dt);
+      const state = cell3dPack(V, CELL3D_POOL_STATE);
+      const t0 = cell3dClock();
+      const asked = Promise.all(this.channels.map((ch, w) =>
+        this.request(w, { kind: 'explicit', state, a0: this.bands[w][0], a1: this.bands[w][1] })));
+      /* If the owner's own band throws, `asked` is never awaited, and a worker's rejection
+         would then be an unhandled one -- which ends a node process outright. This gives it
+         a handler without consuming it: `await asked` below still throws it, and when the
+         owner's band throws first, that error is the one the step reports. */
+      asked.catch(() => {});
+      E.stepExplicit(this.ownBand[0], this.ownBand[1]);
+      this.lastOwnMs = cell3dClock() - t0;
+      const replies = await asked;
+      this.lastWaitMs = cell3dClock() - t0;
+      this.lastWorkMs = replies.map(r => r.workMs);
+      this.lastUnpackMs = replies.map(r => r.unpackMs);
+      for (const r of replies)
+        CELL3D_POOL_OUT.forEach(([name, fam], j) => {
+          const [lo, hi] = cell3dRowRun(V.js, fam, r.a0, r.a1);
+          if (r.runs[j].length !== hi - lo) throw new Error(
+            `pool rows ${r.a0}..${r.a1} of ${name} came back with ${r.runs[j].length} values `
+            + `where ${hi - lo} were asked for.`);
+          V.arr(name).set(r.runs[j], lo);
+        });
+      E.stepFinish(dt);
+      return E;
+    } catch (e){
+      this.broken = String(e && e.message || e);
+      throw e;
+    }
   }
 }
 
