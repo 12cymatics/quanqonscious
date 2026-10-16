@@ -17,7 +17,7 @@ sources:
     id: ../vedic/kernel/
     type: software
 
-  - title: "vedic_trainer auxiliary losses: L_dual and the L_cons mass term"
+  - title: "vedic_trainer auxiliary losses: L_dual, L_cons per example, and the former L_cons mass term"
     id: ../vedic/training/losses.py
     type: software
 
@@ -39,6 +39,18 @@ status:
     - comparator_config: ComparatorChallenges/VedicResiduals.json
       declaration: VedicFormal.dMass_eq_zero
       file: VedicFormal/Residuals.lean
+
+    - comparator_config: ComparatorChallenges/VedicLCons.json
+      declaration: VedicFormal.lConsRow_closed_form
+      file: VedicFormal/LCons.lean
+
+    - comparator_config: ComparatorChallenges/VedicLCons.json
+      declaration: VedicFormal.lConsRow_shift
+      file: VedicFormal/LCons.lean
+
+    - comparator_config: ComparatorChallenges/VedicLCons.json
+      declaration: VedicFormal.lConsRow_eq_zero_iff
+      file: VedicFormal/LCons.lean
 
 automation:
   methods:

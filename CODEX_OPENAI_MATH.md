@@ -128,3 +128,4 @@ and carries incompatibilities as explicit patch files.
 | Result | Challenge | Scope note |
 | --- | --- | --- |
 | Residuals and auxiliary losses behind vedic_trainer's experiment | `vedic_trainer/formal/ComparatorChallenges/VedicResiduals.json` | `vedic_trainer/formal/docs/VedicResiduals.md` |
+| Closed form, shift invariance and zero set of the per-example `L_cons` | `vedic_trainer/formal/ComparatorChallenges/VedicLCons.json` | `vedic_trainer/formal/docs/VedicResiduals.md` |
