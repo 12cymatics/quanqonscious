@@ -1,0 +1,68 @@
+{
+  "rule": {
+    "fraction": 0.1,
+    "records": 64,
+    "batch": 8,
+    "gradients_of": "LoRA parameters",
+    "mode": "eval (no dropout)"
+  },
+  "control_config": "configs/scan_length/no_sutra_seed2.yaml",
+  "control_config_sha256": "ffa34fe0433ed17302db212fdc99e3ad1d988a03d0e58c0ea112f20323104cf1",
+  "train_sha256": "0c6f7628058cc2207881373d7d20494a5005111cb255ab4f6678bcf82308a8cb",
+  "measured": {
+    "L_CE": {
+      "value": 3.9717575013637543,
+      "grad_norm_lora": 1.4908128176939406,
+      "grad_norm_projection": 0.0
+    },
+    "L_chi": {
+      "value": 14.454525709152222,
+      "grad_norm_lora": 16.938124425778295,
+      "grad_norm_projection": 318.38840818038057
+    },
+    "L_cons": {
+      "value": 324.6768379211426,
+      "grad_norm_lora": 682.5350901478338,
+      "grad_norm_projection": 9462.046901584574
+    },
+    "L_curv": {
+      "value": 899.4379425048828,
+      "grad_norm_lora": 1129.0227479779635,
+      "grad_norm_projection": 16146.45453875924
+    },
+    "L_dual": {
+      "value": 20.490440368652344,
+      "grad_norm_lora": 22.83375744133163,
+      "grad_norm_projection": 357.20049694606035
+    }
+  },
+  "weights": {
+    "alpha_chi": 0.008801522413101762,
+    "beta_cons": 0.00021842288245884,
+    "gamma_curv": 0.00013204453323583862,
+    "delta_dual": 0.006528985960915062
+  },
+  "psi_rms": 1.438721242730616,
+  "environment": {
+    "python": "3.11.17",
+    "platform": "Linux-6.18.44-fc-v139-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "torch_num_threads": 2,
+    "torch_parallel_info": "ATen/Parallel:\n\tat::get_num_threads() : 2\n\tat::get_num_interop_threads() : 4\nOpenMP 201511 (a.k.a. OpenMP 4.5)\n\tomp_get_max_threads() : 2\nIntel(R) oneAPI Math Kernel Library Version 2024.2-Product Build 20240605 for Intel(R) 64 architecture applications\n\tmkl_get_max_threads() : 2\nIntel(R) MKL-DNN v3.12.0 (Git Hash 80afa71049cd69a3df32adcccb623b12cd7baa22)\nstd::thread::hardware_concurrency() : 4\nEnvironment variables:\n\tOMP_NUM_THREADS : [not set]\n\tMKL_NUM_THREADS : [not set]\nATen parallel backend: OpenMP\n",
+    "libraries": {
+      "torch": "2.14.1+cpu",
+      "transformers": "5.19.0",
+      "peft": "0.21.2",
+      "datasets": "5.1.0",
+      "accelerate": "1.15.0",
+      "tokenizers": "0.23.3",
+      "safetensors": "0.8.0",
+      "numpy": "2.4.6",
+      "pydantic": "2.14.1"
+    },
+    "code": {
+      "commit": "178639c6d3d38d92773cad2b46dd555d66df88cf",
+      "tracked_files_modified": false
+    }
+  }
+}
