@@ -1,8 +1,21 @@
-torch>=2.2
-numpy>=1.26
-transformers>=4.40
-peft>=0.10
-datasets>=2.18
-accelerate>=0.30
-pydantic>=2.6
-pyyaml>=6.0
+# Exact pins: the versions the SCAN experiment was run under, and the versions
+# CI installs (.github/workflows/submit-pypi.yml). They used to be floors only
+# (transformers>=4.40 and so on), so a fresh install resolved to transformers
+# 5.19 (5.20 by the time it was re-checked), and every release from 5.2 on has
+# dropped TrainingArguments' `warmup_ratio`, so scripts/train_lora.py crashed
+# before its first optimizer step.
+#
+# torch: on a machine without a GPU, install it from the CPU index first,
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
+# A local build label (2.14.1+cpu) satisfies the pin below.
+torch==2.14.1
+numpy==2.4.6
+transformers==5.19.0
+tokenizers==0.23.3
+huggingface-hub==2.2.0
+safetensors==0.8.0
+peft==0.21.2
+datasets==5.1.0
+accelerate==1.15.0
+pydantic==2.14.1
+pyyaml==6.0.1

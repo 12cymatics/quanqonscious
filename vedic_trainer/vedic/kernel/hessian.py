@@ -13,8 +13,18 @@ positive-semidefinite block, and the total Hessian is
             = K_S3 + Mᵀ_S5 M_S5 + Mᵀ_S9 M_S9 + Mᵀ_S11 M_S11
 
 This is the exact `g_ab` invoked by L_curv. Because every contributing
-operator is linear, g_ab is independent of Ψ — but L_curv still uses Ψ to
-form ⟨Ψ, g Ψ⟩ when computing the maximum eigenvalue / Rayleigh quotient.
+operator is linear, g_ab is independent of Ψ. L_curv is the quadratic form
+itself, mean_b ⟨Ψ, g_ab Ψ⟩: there is no eigensolve and no Rayleigh quotient.
+(This docstring said L_curv computed "the maximum eigenvalue / Rayleigh
+quotient"; both were removed from losses.py, and the sentence outlived them.)
+
+g_ab is **positive definite**: every pivot of its exact LDLᵀ factorisation
+over ℚ is positive (``vedic/kernel/tests/test_hessian_definite.py``), and its
+eigenvalues run from 73/16 = 4.5625 to about 69.5625. So ⟨Ψ, g_ab Ψ⟩ > 0 for
+every Ψ ≠ 0, and the only minimiser of L_curv is Ψ = 0: the term can always
+be lowered by shrinking Ψ, and flattening Ψ's direction gains at most the
+ratio of those two eigenvalues, about 15.2.
+
 We expose ``hessian_exact`` (Fraction tuple-of-tuples) and
 ``HessianModule`` (torch buffer).
 """

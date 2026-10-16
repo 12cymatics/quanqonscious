@@ -1,8 +1,10 @@
 seed: 42
 output_dir: checkpoints/qwen_2.5_1.5b_full
 base_model: Qwen/Qwen2.5-1.5B-Instruct
+base_model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
 device: mps
 dtype: bf16
+num_threads: 4
 num_train_epochs: 1.0
 gradient_accumulation_steps: 4
 logging_steps: 10
@@ -26,6 +28,7 @@ optim:
   weight_decay: 0.01
   warmup_ratio: 0.03
   lr_scheduler_type: cosine
+  max_grad_norm: 1.0
 
 data:
   train_path: data/train.jsonl

@@ -24,6 +24,18 @@ the footprint, and every example in every batch is scored whole. Batches are
 formed in corpus order and padded to the longest member, so a corpus with
 very uneven lengths pays in padding — which costs time, not correctness, and
 is the right trade against dropping tokens from the measurement.
+
+The mean is over scored tokens, exactly
+---------------------------------------
+A causal LM predicts token t+1 from tokens up to t, so the first token of
+every example is never a target. This used to take the model's per-batch mean
+loss and weight it by ``(labels != -100).sum()``, which counts that first
+token: each batch was weighted by n_scored + batch_size. The result was not
+the token-mean cross-entropy, it moved with ``--batch-size`` (measured on
+SmolLM2: +0.0020 at batch 1, +0.00005 at batch 8, against a per-example
+reference), and ``n_tokens`` overstated the scored count by exactly the
+number of examples. The negative log-likelihood is now summed per token from
+the logits over the shifted labels and divided by the shifted count.
 """
 from __future__ import annotations
 
@@ -31,6 +43,7 @@ import argparse, json, math, sys, time
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from datasets import load_dataset
 from peft import PeftModel
 from torch.utils.data import DataLoader
@@ -38,6 +51,8 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           DataCollatorForLanguageModeling)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from vedic.provenance import environment, sha256_file  # noqa: E402
 
 
 def heldout_loss(model, tok, path: Path, device: str, bs: int = 8):
@@ -75,10 +90,16 @@ def heldout_loss(model, tok, path: Path, device: str, bs: int = 8):
     with torch.no_grad():
         for b in dl:
             b = {k: v.to(device) for k, v in b.items()}
-            out = model(**b)
-            n = int((b["labels"] != -100).sum())
-            tot += float(out.loss) * n
-            ntok += n
+            logits = model(input_ids=b["input_ids"],
+                           attention_mask=b["attention_mask"]).logits
+            # Position t predicts token t+1: drop the last logit and the first
+            # label, which no position predicts.
+            targets = b["labels"][:, 1:]
+            nll = F.cross_entropy(
+                logits[:, :-1, :].reshape(-1, logits.size(-1)).float(),
+                targets.reshape(-1), ignore_index=-100, reduction="none")
+            tot += float(nll.double().sum())
+            ntok += int((targets != -100).sum())
     if ntok == 0:
         raise ValueError(f"{path} produced no scored tokens")
     if n_examples == 0:
@@ -102,12 +123,26 @@ def perplexity(ce: float) -> float:
     return math.exp(ce)
 
 
+def _adapter_hashes(adapter: Path | None) -> dict[str, str] | None:
+    """SHA-256 of every file in the adapter directory, so the record names
+    the exact weights it measured rather than a path that can be overwritten."""
+    if adapter is None:
+        return None
+    return {p.name: sha256_file(p) for p in sorted(adapter.iterdir()) if p.is_file()}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--base-model", required=True)
+    ap.add_argument("--revision", required=True,
+                    help="full Hub commit of --base-model; a model id alone "
+                         "names whatever the repository holds today")
     ap.add_argument("--adapter", type=Path, default=None,
                     help="omit to evaluate the untuned base model")
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--num-threads", type=int, required=True,
+                    help="torch intra-op threads; float reductions depend on it, "
+                         "so it is set and recorded rather than inherited")
     ap.add_argument("--heldout", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--batch-size", type=int, default=8,
@@ -116,11 +151,13 @@ def main() -> int:
     # There is deliberately no --max-len. A token cap decides what the
     # headline number covers, and a default cap decides it silently.
     a = ap.parse_args()
+    torch.set_num_threads(a.num_threads)
 
-    tok = AutoTokenizer.from_pretrained(a.base_model)
+    tok = AutoTokenizer.from_pretrained(a.base_model, revision=a.revision)
     if tok.pad_token_id is None:
         tok.pad_token = tok.eos_token
-    model = AutoModelForCausalLM.from_pretrained(a.base_model, torch_dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(a.base_model, revision=a.revision,
+                                                 dtype=torch.float32)
     tag = "base"
     if a.adapter is not None:
         model = PeftModel.from_pretrained(model, str(a.adapter))
@@ -132,7 +169,10 @@ def main() -> int:
         model, tok, a.heldout, a.device, bs=a.batch_size)
     # n_examples and max_tokens_seen describe the corpus that was scored in
     # full; they are not a cap and nothing was dropped to satisfy them.
-    payload = {"model": a.base_model, "adapter": tag,
+    payload = {"model": a.base_model, "revision": a.revision, "adapter": tag,
+               "adapter_sha256": _adapter_hashes(a.adapter),
+               "heldout_sha256": sha256_file(a.heldout),
+               "environment": environment(),
                "heldout": {"ce_loss": loss, "ppl": perplexity(loss),
                            "n_tokens": ntok,
                            "n_examples": n_examples,

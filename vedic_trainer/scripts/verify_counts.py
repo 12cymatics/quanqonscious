@@ -77,6 +77,12 @@ LAYERS: dict[str, list[str]] = {
     "Gates reject": ["vedic/kernel/tests/test_gates_reject.py"],
     "Aux checkpoint": ["vedic/training/tests/test_aux_checkpoint.py"],
     "Auxiliary losses": ["vedic/training/tests/test_losses.py"],
+    "Hessian definiteness": ["vedic/kernel/tests/test_hessian_definite.py"],
+    "SCAN data + format": ["vedic/eval/tests/test_scan_data.py"],
+    "First-line scoring": ["vedic/eval/tests/test_first_line.py"],
+    "Held-out CE": ["vedic/eval/tests/test_heldout_ce.py"],
+    "Trainer mechanics": ["vedic/training/tests/test_vedic_trainer.py"],
+    "Training arguments": ["vedic/training/tests/test_hf_args.py"],
 }
 
 _COLLECTED = re.compile(r"(\d+) tests? collected")

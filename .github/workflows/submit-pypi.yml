@@ -29,11 +29,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      # The training and evaluation stack, at the exact pins in
+      # vedic_trainer/requirements.txt. CI used to install only the exact-Q
+      # kernel's dependencies, so the HF-integration layer -- train_lora.py,
+      # VedicTrainer, the SCAN/COGS loaders and the eval scripts -- was never
+      # imported here: train_lora.py crashed on transformers 5's
+      # TrainingArguments, the trainer never zeroed the projection's gradient,
+      # and the SCAN loader could not load SCAN, all with this job green.
+      # torch comes from the CPU index first so the pin does not pull a CUDA
+      # build; its local label (+cpu) satisfies requirements.txt's ==2.14.1.
       - name: Install build + runtime tooling
         run: |
           python -m pip install --upgrade pip
-          pip install build pytest pydantic pyyaml numpy
-          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install build pytest==9.1.1
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
+          pip install -r vedic_trainer/requirements.txt
 
       # Lean 4 is a hard requirement of this package's test suite, not an
       # optional extra. The Lean mirror is the one independent cross-check of
@@ -77,6 +87,10 @@ jobs:
           PYTHONPATH: .
         run: python scripts/verify_bit_exact.py
 
+      # Some tests read the SmolLM2 tokenizer at the revision the experiment
+      # configs pin, from the HF Hub. That is a download, not a substitute: the
+      # prompt/record prefix property and the generation budget are properties
+      # of that tokenizer, and a run that cannot reach it fails.
       - name: vedic_trainer full test suite
         working-directory: vedic_trainer
         env:

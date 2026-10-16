@@ -13,7 +13,10 @@ authors = [{ name = "QuanQonscious" }]
 dependencies = [
     "torch>=2.2",
     "numpy>=1.26",
-    "transformers>=4.40",
+    # The code is written against the transformers 5 API (`dtype=`, a float
+    # `warmup_steps` read as a ratio, `loss_is_scaled_for_ga`). Exact pins for
+    # reproduction are in requirements.txt.
+    "transformers>=5.19,<6",
     "peft>=0.10",
     "datasets>=2.18",
     "accelerate>=0.30",
@@ -50,6 +53,11 @@ dev = ["pytest>=8", "mypy>=1.10", "ruff>=0.4"]
 
 [tool.setuptools.packages.find]
 include = ["vedic*"]
+
+# The vendored SCAN task files and their licence. Without this the wheel ships
+# scan_data.py and none of the data it reads.
+[tool.setuptools.package-data]
+"vedic.eval" = ["data/scan/*.gz", "data/scan/LICENSE"]
 
 [tool.mypy]
 python_version = "3.10"

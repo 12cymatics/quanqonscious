@@ -1,9 +1,18 @@
 # CI
 
-One workflow gates this package: `.github/workflows/submit-pypi.yml`.
+Two workflows run this package's tests: `.github/workflows/submit-pypi.yml`,
+described here, and `.github/workflows/python-app.yml`, whose bare `pytest` at
+the repository root collects them too (see the end of this page).
 
 ## What it runs
 
+0. **Installs the training stack** at the exact pins in `requirements.txt`
+   (torch from the CPU wheel index). It used to install only the exact-ℚ
+   kernel's dependencies, so the HF-integration layer (`scripts/train_lora.py`,
+   `vedic/training/trainer.py`, the SCAN and COGS loaders, the eval scripts)
+   was never imported in CI, and the trainer could not start under the
+   transformers a fresh install resolved to while this job stayed green. Some tests read the
+   SmolLM2 tokenizer at the pinned revision from the HF Hub.
 1. **Installs Lean 4** at the version pinned by `vedic_trainer/lean-toolchain`,
    and verifies `lean --version` matches that pin. Lean is a hard requirement
    of the suite, not an optional extra: the Lean mirror is the one independent
@@ -44,9 +53,14 @@ A separate job in the same workflow checks the formal statements under
 
 What the formal results do and do not cover is in `formal/docs/VedicResiduals.md`.
 
-`.github/workflows/python-app.yml` also exists. It targets the **parent**
-repository, not this package: `main` only, CUDA + CuPy, and a bare `pytest` at
-the repository root.
+`.github/workflows/python-app.yml` also gates this package, which this page
+used to deny ("One workflow gates this package"; "It targets the **parent**
+repository"). It runs a bare `pytest` at the repository root on pushes to the
+default branch and on every pull request, with CPU torch, and that run
+collects this package's tests too, the Lean-mirror tests among them. It
+therefore installs the same pinned training stack. This paragraph also said
+"`main` only, CUDA + CuPy"; the repository has no `main` branch, and the CUDA
+toolkit step was removed from that workflow.
 
 ## The `submit-pypi-override` status, and why it is gone
 

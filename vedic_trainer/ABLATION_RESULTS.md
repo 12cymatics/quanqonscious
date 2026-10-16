@@ -108,7 +108,7 @@ pipeline reappears without this withdrawal being revisited.
 
 **The SCAN and COGS figures that were here have also been withdrawn**, and
 for a different reason. They were exact-match scores over 30 SCAN and 20 COGS
-examples per split, against real splits of 3,920–21,000 — that is 0.1–0.7% of
+examples per split, against real splits of 3,000–21,000 — that is 0.1–0.8% of
 the benchmark, presented as the benchmark.
 
 They were produced by `--scan-subset 30 --cogs-subset 20` flags on a script
@@ -118,7 +118,8 @@ truncated benchmark is not the benchmark, and a flag that shortens it is how
 a partial result gets reported as a complete one."*
 
 **SCAN and COGS are unmeasured for this package.** Running them means the
-full splits — roughly 36,000 greedy decodes — via
+full splits — 39,808 greedy decodes (SCAN 4,182 + 3,920 + 7,706; COGS
+3,000 + 21,000) — via
 `scripts/eval_benchmarks.py`, which has no flag to shorten it. The raw
 records remain in `runs/eval_*.json` and are honest about what was executed:
 each carries `"n_total": 30` or `"n_total": 20`. They are a record of a

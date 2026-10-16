@@ -45,7 +45,8 @@ package exposes:
   16-vertex Boolean cube.
 - Four sutra-derived auxiliary losses applied during LoRA fine-tuning:
   - `L_χ`    — contradiction (S7 antisymmetric energy, ‖A(Ψ)‖²)
-  - `L_cons` — conservation (drift of mass, ‖S‖² and ‖A‖² under S29)
+  - `L_cons` — drift of ‖S‖² and ‖A‖² under S29; exactly
+    (9/16)(‖S − mean·𝟙‖⁴ + ‖A‖⁴), a quartic penalty on Ψ's non-constant part
   - `L_curv` — curvature (the quadratic form ⟨Ψ, g_ab Ψ⟩ at Ψ)
   - `L_dual` — dual-basis coherence ((S5∘S11) Ψ vs WHT axes)
 
@@ -57,14 +58,19 @@ package exposes:
   burying it. The two divisions by 16 left in `L_dual` are
   orthogonal-projection coefficients onto basis vectors of norm squared 16,
   not normalisations.
-- SCAN / COGS evaluators.
+- SCAN / COGS evaluators. SCAN's six task files ship with the package,
+  gzip-compressed with their BSD licence and SHA-256-pinned
+  (`vedic/eval/scan_data.py`), because the HF Hub's `scan` is a loading script
+  that `datasets` >= 4 cannot run.
 
-**No training data ships with this package, and none is generated.** A
-synthetic corpus used to: 5,120 records expanded by template from 512 seed
-sentences, with Ψ produced by a hand-written text encoder. It was a stand-in
-for real data and it has been removed, along with the figures measured on it
-— see `ABLATION_RESULTS.md`. Point `data.train_path` and `data.eval_path` at
-your own JSONL, one object per line with a `text` field:
+**The one real corpus is SCAN, built from the vendored files.**
+`python scripts/build_scan_corpus.py --split length --output-dir data/scan_length`
+writes the train, test and monitor JSONL the experiment uses, byte-identically
+every time. A synthetic corpus used to ship instead: 5,120 records expanded by
+template from 512 seed sentences, with Ψ produced by a hand-written text
+encoder. It has been removed, along with the figures measured on it; see
+`ABLATION_RESULTS.md`. Any other corpus is JSONL, one object per line with a
+`text` field:
 
 ```json
 {"text": "the sentence to train on"}
@@ -87,28 +93,33 @@ text.
 | Canonical 29     | yes         | 438 tests              |
 | Blueprint gates  | yes         | 35 tests               |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 182 tests              |
-| Script validity  | yes         | 40 tests               |
-| Withdrawn numbers | yes        | 27 tests               |
+| External sidecar | yes         | 196 tests              |
+| Script validity  | yes         | 46 tests               |
+| Withdrawn numbers | yes        | 28 tests               |
 | Upstream agreement | yes       | 33 tests               |
-| Documented paths | yes         | 95 tests               |
+| Documented paths | yes         | 122 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
-| Benchmark honesty | yes        | 30 tests               |
+| Benchmark honesty | yes        | 31 tests               |
 | Gates reject     | yes         | 43 tests               |
 | Aux checkpoint   | yes         | 7 tests                |
-| Auxiliary losses | yes         | 15 tests               |
+| Auxiliary losses | yes         | 18 tests               |
+| Hessian definiteness | yes     | 4 tests                |
+| SCAN data + format | yes       | 13 tests               |
+| First-line scoring | yes       | 29 tests               |
+| Held-out CE      | yes         | 4 tests                |
+| Trainer mechanics | yes        | 10 tests               |
+| Training arguments | yes       | 38 tests               |
 | Memory           | yes         | covered by trainer     |
-| Training         | yes         | requires HF + LoRA     |
-| Eval             | yes         | requires SCAN/COGS     |
 | Fixtures         | committed   | bit-exact gate, all 29 |
 
 Counts above are not hand-maintained. `scripts/verify_counts.py --check`
 measures the suite and exits 1 if this table disagrees, because these numbers
 were previously wrong: they had been read off wrapped `pytest -q` dots, and
 `-q` prints no summary line, so the real figure was never on screen. CI runs
-that gate on every push — it cannot run inside the suite, because it runs
-pytest and a test calling it would recurse.
+that gate on pushes to the default branch, on `v*` tags and on every pull
+request. It cannot run inside the suite, because it runs pytest and a test
+calling it would recurse.
 
 **Documented paths** doubled (39 → 84) when the gate stopped reading a
 hand-written list of two documents and started reading every Markdown file
@@ -117,7 +128,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2527 tests are collected and 2527 pass. **Nothing is skipped**, here or in
+2677 tests are collected and 2677 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
@@ -129,10 +140,17 @@ There are no skips left to explain. The Lean mirror's tests used to carry
 `skipif` guards on a toolchain being present, which meant the one independent
 cross-check of the exact-ℚ kernel reported green in CI while never compiling
 anything; the guards are gone and CI installs the compiler, pinned by
-`vedic_trainer/lean-toolchain`. The training pipeline has also been run end
-to end on 4 CPU cores in fp32, so CPU is a supported path for the full
-experiment and not only for the gates — though the figures that run produced
-are withdrawn, for reasons `ABLATION_RESULTS.md` sets out.
+`vedic_trainer/lean-toolchain`.
+
+This paragraph used to add that "the training pipeline has also been run end
+to end on 4 CPU cores in fp32". On the stack a fresh install resolved to,
+that was false: transformers 5 removed `TrainingArguments(warmup_ratio=...)`,
+and `train_lora.py` died with a TypeError before its first optimizer step.
+Nothing caught it, because CI did not install transformers. CI now installs
+the training stack at the exact pins in `requirements.txt`, and
+`vedic/training/tests/test_hf_args.py` builds the arguments every CPU config
+resolves to. The SCAN experiment in `PREREGISTRATION_SCAN_LENGTH.md` is the
+end-to-end run.
 
 ## Quick reference
 
@@ -150,24 +168,31 @@ python scripts/probe_aux_gradients.py
 python scripts/run_composition.py
 python scripts/run_composition.py --mode CONCURRENT --show-waves
 
-# LoRA fine-tune (Mac Pro / MPS); bring your own corpus, see above
-python scripts/train_lora.py --config configs/ablations/cpu_full.yaml
+# The SCAN length corpus, from the vendored files
+python scripts/build_scan_corpus.py --split length --output-dir data/scan_length
 
-# Evaluate
-# Held-out cross-entropy (fast; this is the discriminating measure)
+# Treatment weights from the pre-registered rule (writes full_seed0.yaml)
+python scripts/calibrate_aux_weights.py --control configs/scan_length/no_sutra_seed0.yaml
+
+# LoRA fine-tune
+python scripts/train_lora.py --config configs/scan_length/no_sutra_seed0.yaml
+
+# Held-out cross-entropy over every scored token of the test split
 python scripts/eval_heldout.py \
     --base-model HuggingFaceTB/SmolLM2-135M-Instruct \
-    --adapter checkpoints/cpu_full \
-    --device cpu \
-    --heldout data/eval.jsonl \
-    --output runs/full_eval.json
+    --revision 12fd25f77366fa6b3b4b768ec3050bf629380bac \
+    --adapter checkpoints/scan_length/no_sutra_seed0 \
+    --heldout data/scan_length/test.jsonl \
+    --batch-size 8 --num-threads 2 \
+    --output runs/scan_length/heldout_no_sutra_seed0.json
 
-# SCAN / COGS exact-match (slow: greedy decoding)
-python scripts/eval_benchmarks.py \
+# Exact match on whole splits (greedy; one benchmark per run)
+python scripts/eval_benchmarks.py --benchmark scan --split length \
     --base-model HuggingFaceTB/SmolLM2-135M-Instruct \
-    --adapter checkpoints/cpu_full \
-    --device cpu \
-    --output runs/full_bench.json
+    --revision 12fd25f77366fa6b3b4b768ec3050bf629380bac \
+    --adapter checkpoints/scan_length/no_sutra_seed0 \
+    --num-threads 2 \
+    --output runs/scan_length/em_no_sutra_seed0.json
 
 # Do the documents still match the suite?
 python scripts/verify_counts.py --check
@@ -175,7 +200,12 @@ python scripts/verify_counts.py --check
 
 ## Hardware target
 
-- Mac Pro 2019 16" with 32 GB unified memory (Apple Silicon MPS).
+- A 16-inch MacBook Pro (2019) with 32 GB of RAM. This line used to read
+  "Mac Pro 2019 16" with 32 GB unified memory (Apple Silicon MPS)", which
+  describes no machine: the 2019 16-inch MacBook Pro and the 2019 Mac Pro are
+  both Intel, with discrete AMD GPUs and no unified memory. PyTorch's MPS
+  backend does support AMD GPUs on Intel Macs, but nothing here has been
+  measured on one.
 - Llama-3.2-1B-Instruct or Qwen2.5-1.5B-Instruct as the intended base
   model. The runs that were executed used
   `HuggingFaceTB/SmolLM2-135M-Instruct`, because Llama-3.2 is gated; their
@@ -183,9 +213,15 @@ python scripts/verify_counts.py --check
   been reproduced on Llama.
 - LoRA rank-16 on q/k/v/o projection matrices.
 
-CPU runs the whole pipeline, slowly: roughly five minutes per LoRA arm and
-ten seconds per held-out evaluation at this model size. Full SCAN/COGS
-generation is the one part that is impractical on CPU (~36k greedy decodes).
+CPU runs the whole pipeline. This used to say it took "roughly five minutes
+per LoRA arm and ten seconds per held-out evaluation at this model size". Those
+figures were measured on the withdrawn synthetic corpus, whose examples were
+at most 14 tokens. On SCAN's length split one epoch is 1,062 optimizer steps
+over 1.2 M training tokens, and the held-out set is 0.66 M tokens. The
+pre-flight audit measured 18–25 s per step on a contended 4-core machine,
+which is hours per arm, not minutes. SCAN and COGS together are 39,808 greedy
+decodes, and decoding stops once a verdict is decided
+(`vedic/eval/first_line.py`).
 
 ## Falsification criteria — and the verdict
 
@@ -196,14 +232,17 @@ so each one carries a result rather than an expectation.
 by ≥ 2% absolute on SCAN length-split exact-match.**
 
 *Unmeasured.* This was previously recorded as "met, but vacuously" on the
-strength of 30 SCAN and 20 COGS examples per split — 0.1–0.7% of splits that
-run to 3,920–21,000. Those figures came from `--scan-subset`/`--cogs-subset`
+strength of 30 SCAN and 20 COGS examples per split — 0.1–0.8% of splits that
+run to 3,000–21,000. Those figures came from `--scan-subset`/`--cogs-subset`
 flags on a script that no longer exists, and have been **withdrawn**; see
 `ABLATION_RESULTS.md`. A subset that small cannot establish the criterion in
 either direction, so nothing is claimed for it.
 
-Measuring it means the full splits through `scripts/eval_benchmarks.py`,
-which has no flag to shorten the work: roughly 36,000 greedy decodes.
+Measuring it means the full split through `scripts/eval_benchmarks.py`,
+which has no flag to shorten the work. That measurement is now
+pre-registered at this package's scale: `PREREGISTRATION_SCAN_LENGTH.md`
+instantiates this criterion on SmolLM2, three seeds per arm, with the
+auxiliary weights set by a stated rule.
 
 Note also that this criterion names `configs/ablations/full.yaml`, a config targeting a gated
 base model that **was never run**. Every executed result uses the `cpu_*` and
