@@ -32,8 +32,10 @@
      motion             the kernel is paced, every step is drawn, the surface
                         moves to each state over its step interval and the
                         framing eases: no strobe, no jump
-     framing            on a fresh page the frame does not turn round with
-                        the field: zooming out fast and back in slowly
+     framing            the page's framing step, fed a size that swings, does
+                        not move back once out; on a fresh page every frame
+                        keeps the law: still in the band, toward the size
+                        and never past it outside it
      exports            the step file and the operator audit name the build
                         that wrote them; the step carries what replays it
 
@@ -524,7 +526,7 @@ try {
     for (let g = 0; g < C.NR * C.NS; g += 7) pick.push(g);
     return { cert: VISUAL_CERTIFICATE.status().fields, ok: F.ok, why: F.why, drawWhy: F.drawWhy, drawn: F.drawn, nOv: OV.n, nPl: PLANE.nV, badOv,
              frame: KERNEL_VIEW.state.frame, curFrame: C.frame, reqFrame: rq && rq.frame,
-             rows: ['fld-current', 'fld-charge', 'fld-lines'].map(id => document.getElementById(id).textContent),
+             rows: ['fld-current', 'fld-charge', 'fld-lines', 'fld-mforce', 'fld-eforce'].map(id => document.getElementById(id).textContent),
              J: src.current.map(num), Qc: src.charge.map(num), kirchhoff: src.kirchhoff, neutral: src.neutral,
              at, edges: KERNEL.MAG_EDGES.map(([v, , h]) => [v, h]),
              req: { nodes: Array.from(rq.nodes), paths: Array.from(rq.paths), J: Array.from(rq.J), Q: Array.from(rq.Q), R: rq.R, nseg: rq.nseg },
@@ -532,6 +534,8 @@ try {
                                         C.planeS[g * 3], C.planeS[g * 3 + 1], C.planeS[g * 3 + 2]]),
              bPts: Array.from(C.bPts), bOff: Array.from(C.bOff), ePts: Array.from(C.ePts), eOff: Array.from(C.eOff),
              arrows: Array.from(C.arrows), arrowPts: Array.from(C.arrowPts), singular: C.singular,
+             mForce: Array.from(C.mForce), eForce: Array.from(C.eForce), eNet: C.eNet, eSum: C.eSum, mSingular: C.mSingular, eSingular: C.eSingular,
+             forcePts: Array.from(C.forcePts), forceInfo: Array.from(C.forceInfo),
              /* each stored energy's place in its range, as the plane is coloured */
              places: (() => { const lo = C.planeRange, V = C.planeVal; let out = 0, n = 0;
                for (let g = 0; g < C.NR * C.NS; g++) { if (!V[g * 3 + 2]) continue;
@@ -625,6 +629,71 @@ try {
     if (!(t >= 0 && t <= 1) || P[q + 1] !== 0 || P[q + 4] !== 0) arrowsOk = false;
   }
   ok(arrowsOk && nA > 50 && worstA < 1e-4, `each of the ${nA} arrows on the plane points along S's part in the plane there, sized within its range (plot_mem; worst ${worstA.toExponential(1)} of |E||B|)`);
+  /* the forces on the construct: each recomputed here, the magnetic one by
+     integrating Biot-Savart numerically over every other piece (a piece's
+     own field is zero on its own line, axis_integrand_zero), the electric one
+     by Coulomb over the other charges */
+  const pieces = [];
+  for (let e = 0; e < 32; e++) { const I = fd.req.J[e]; if (I === 0) continue;
+    for (let k = 0; k < fd.req.nseg; k++) { const o = (e * NS1 + k) * 3, a = [PP[o], PP[o + 1], PP[o + 2]], c = [PP[o + 3], PP[o + 4], PP[o + 5]];
+      const L = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]); if (L > 0) pieces.push({ e, k, I, a, c, L }); } }
+  const Brest = (x, y, z, skip) => {
+    let bx = 0, by = 0, bz = 0;
+    for (const P of pieces) { if (P === skip) continue;
+      const [ax, ay, az] = P.a, dx = P.c[0] - ax, dy = P.c[1] - ay, dz = P.c[2] - az, L2 = P.L * P.L;
+      const tt = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / L2));
+      const dmin = Math.hypot(x - ax - tt * dx, y - ay - tt * dy, z - az - tt * dz), M = Math.min(20000, 4 + Math.ceil(24 * P.L / dmin));
+      for (let m = 0; m < M; m++) for (const [xi, w] of GL) {
+        const t = (m + (xi + 1) / 2) / M, rx = x - ax - t * dx, ry = y - ay - t * dy, rz = z - az - t * dz, r2 = rx * rx + ry * ry + rz * rz;
+        const f = P.I * w / 2 / M / (r2 * Math.sqrt(r2));
+        bx += f * (dy * rz - dz * ry); by += f * (dz * rx - dx * rz); bz += f * (dx * ry - dy * rx);
+      } }
+    return [bx, by, bz];
+  };
+  let worstM = 0, worstPerp = 0, unmatched = 0;
+  const MF = fd.mForce, nM = MF.length / 6;
+  for (let k = 0; k < MF.length; k += 6) {
+    const mid = [MF[k], MF[k + 1], MF[k + 2]], f = [MF[k + 3], MF[k + 4], MF[k + 5]];
+    const P = pieces.find(P => Math.hypot((P.a[0] + P.c[0]) / 2 - mid[0], (P.a[1] + P.c[1]) / 2 - mid[1], (P.a[2] + P.c[2]) / 2 - mid[2]) <= 1e-9 * fd.req.R);
+    if (!P) { unmatched++; continue; }
+    const u = [(P.c[0] - P.a[0]) / P.L, (P.c[1] - P.a[1]) / P.L, (P.c[2] - P.a[2]) / P.L], B = Brest(mid[0], mid[1], mid[2], P), g = crs(u, B).map(x => P.I * x);
+    worstM = Math.max(worstM, Math.hypot(f[0] - g[0], f[1] - g[1], f[2] - g[2]) / (Math.abs(P.I) * nrm(B)));
+    worstPerp = Math.max(worstPerp, Math.abs(dot(f, u)) / (nrm(f) || 1), Math.abs(dot(f, B)) / ((nrm(f) * nrm(B)) || 1));
+  }
+  ok(nM + fd.mSingular === pieces.length && nM > 50 && unmatched === 0,
+     `there is a magnetic force on the middle of each of the ${pieces.length} pieces carrying current (${nM}, and ${fd.mSingular} whose middle lies on another piece)`);
+  ok(worstM < 1e-4, `each is I u x B with B Biot-Savart's from every other piece, integrated here (axis_integrand_zero; worst ${worstM.toExponential(1)} of |I||B|)`);
+  ok(worstPerp < 1e-9, `each is across both its current and the field (lorentz_perp; worst ${worstPerp.toExponential(1)})`);
+  const EF = fd.eForce, nE = EF.length / 6, charged = fd.req.Q.filter(q => q !== 0).length;
+  let worstE2 = 0;
+  const gNet = [0, 0, 0];
+  let gSum = 0;
+  for (let k = 0; k < EF.length; k += 6) {
+    const v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].find(v => fd.req.nodes[v * 3] === EF[k] && fd.req.nodes[v * 3 + 1] === EF[k + 1] && fd.req.nodes[v * 3 + 2] === EF[k + 2] && fd.req.Q[v] !== 0);
+    if (v === undefined) { unmatched++; continue; }
+    const g = [0, 0, 0];
+    for (let w = 0; w < 16; w++) { if (w === v || fd.req.Q[w] === 0) continue;
+      const d = [0, 1, 2].map(c => fd.req.nodes[v * 3 + c] - fd.req.nodes[w * 3 + c]), r = nrm(d);
+      for (let c = 0; c < 3; c++) g[c] += fd.req.Q[v] * fd.req.Q[w] * d[c] / (r * r * r); }
+    worstE2 = Math.max(worstE2, Math.hypot(EF[k + 3] - g[0], EF[k + 4] - g[1], EF[k + 5] - g[2]) / (nrm(g) || 1));
+    for (let c = 0; c < 3; c++) gNet[c] += g[c]; gSum += nrm(g);
+  }
+  ok(nE + fd.eSingular === charged && unmatched === 0, `there is an electric force on each of the ${charged} charges (${nE}, and ${fd.eSingular} sharing a point with another)`);
+  ok(worstE2 < 1e-9, `each is q E with E Coulomb's from the other charges, summed here (worst ${worstE2.toExponential(1)})`);
+  ok(nrm(fd.eNet) <= 1e-12 * fd.eSum && nrm(gNet) <= 1e-12 * gSum,
+     `the electric forces on the charges sum to zero (coulomb_newton3; net ${(nrm(fd.eNet) / fd.eSum).toExponential(1)} of their sum, ${(nrm(gNet) / gSum).toExponential(1)} here)`);
+  /* each arrow from where its force acts, along it */
+  const FP_ = fd.forcePts, FI_ = fd.forceInfo, recs = [];
+  for (let k = 0; k < MF.length; k += 6) if (Math.hypot(MF[k + 3], MF[k + 4], MF[k + 5]) > 0) recs.push([MF.slice(k, k + 6), 0]);
+  for (let k = 0; k < EF.length; k += 6) if (Math.hypot(EF[k + 3], EF[k + 4], EF[k + 5]) > 0) recs.push([EF.slice(k, k + 6), 1]);
+  let arrowsAt = recs.length === FI_.length / 2, worstDir = 0;
+  recs.forEach(([r, kind], i) => {
+    const o = i * 6, t = FI_[i * 2], d = [FP_[o + 3] - FP_[o], FP_[o + 4] - FP_[o + 1], FP_[o + 5] - FP_[o + 2]];
+    if (FI_[i * 2 + 1] !== kind || !(t >= 0 && t <= 1) || Math.hypot(FP_[o] - r[0], FP_[o + 1] - r[1], FP_[o + 2] - r[2]) > 1e-6 * fd.req.R) arrowsAt = false;
+    worstDir = Math.max(worstDir, 1 - dot(d, r.slice(3)) / (nrm(d) * nrm(r.slice(3))));
+  });
+  ok(arrowsAt && worstDir < 1e-6 && fd.drawn.forces === recs.length, `each of the ${recs.length} force arrows starts where its force acts and points along it, sized within its kind's range (plot_mem; worst 1 - cos ${worstDir.toExponential(1)}; ${fd.drawn.forces} drawn)`);
+  ok(fd.rows[3].startsWith(`${nM} pieces`) && fd.rows[4].startsWith(`${nE} charges`), 'the rows count the forces', fd.rows.slice(3).join(' | '));
   console.log(`       (the gate's own fields took ${((Date.now() - tl0) / 1000).toFixed(1)} s)`);
   /* the toggle, and nothing drawn without the certificate */
   await evaluate(`document.getElementById('btn-fields').click()`);
@@ -760,34 +829,56 @@ try {
   ok(au.args === true, 'every audited matrix records its arguments, strength 1 first');
 
   section('framing');
-  /* The framing must not breathe. It now zooms out within FRAME_OUT_MS when
-     the surface grows past it, back in over FRAME_IN_MS once the surface is
-     inside FRAME_HOLD of it, and holds still between (frame_hold). A turn is
-     counted once the frame has moved back by 1% of its size from where it
-     last turned: less is not seen, and counting every reversal counts the
-     jitter of a frame that has settled. Measured on a page just loaded, over
-     8 s each of CYMATIC, CROWN and OCTAD in turn, 6 s after each is picked,
-     three runs each: one lag of 1.2 s both ways 8, 8 and 10 turns; two lags
-     and no hold 2, 4 and 6 (OCTAD alone up to 5); with the hold 1, 3 and 3.
-     Late in this gate, after the pace has been driven to 10 steps a second
-     and back, the count rose with what the page had just been put through,
-     not with the framing, so it is measured on a fresh page. (The frame's
-     spread is no measure either: settling after a preset it drifts one way,
-     8% on CYMATIC against 5.8% with one lag.) */
+  /* The framing must not breathe. It zooms out within FRAME_OUT_MS when the
+     surface grows past it, back in over FRAME_IN_MS once the surface is
+     inside FRAME_HOLD of it, and holds still between (frame_hold).
+
+     This section used to count the frame's turns over 8 s each of CYMATIC,
+     CROWN and OCTAD and require at most 0.2 a second. That expectation was
+     wrong: the count follows what the field does in the window, not the
+     framing. Measured with the framing unchanged, the same gate read 0.08,
+     0.25 and 0.25 on three runs: in the two it failed, CROWN was caught at
+     steps 60 to 84, where the surface's size jumps from about 1860 to 3155
+     and back, and a frame that keeps it in view has to follow it out and
+     in. Counting turns of the frame against turns of the size did not
+     separate the framings either (with the hold 1/18 to 3/11, two lags and
+     no hold 3/17 to 5/17, one lag 4/14 to 8/18). So the property is held
+     where it can be decided: the page's own framing step, fed a size that
+     swings, must not move back once out; and on a real run, every frame
+     must keep the law, holding while the size is in the band. */
+  const fs = await evaluate(`(() => {
+    const run = step => { let F = 1000; const s = [];
+      for (let i = 0; i < 300; i++) { const b = 1000 * (1 + 0.06 * Math.sin(2 * Math.PI * i * 100 / 3000)); F = step(F, b, 100); s.push(F); }
+      let back = 0; for (let i = 31; i < s.length; i++) if (s[i] < s[i - 1]) back++;
+      return { back, lo: Math.min(...s.slice(30)), hi: Math.max(...s.slice(30)) }; };
+    return { page: run(frameStep), oneLag: run((F, b, dt) => F + (b - F) * (1 - Math.exp(-dt / 1200))) };
+  })()`);
+  ok(fs.page.back === 0 && fs.oneLag.back > 50,
+     `fed a size swinging 6% either way every 3 s, the frame once out never moves back (frame_hold; one lag of 1.2 s moves back in ${fs.oneLag.back} of 269 steps)`, JSON.stringify(fs));
   await cmd('Page.navigate', { url: PAGE });
   ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
-  let turns = 0, turnSecs = 0;
+  let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
   for (const id of ['pre-cymatic', 'pre-crown', 'pre-octad']) {
     await evaluate(`document.getElementById('${id}').click()`);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
-      const t0 = performance.now(), s = [];
+      const t0 = performance.now(), s = [], b = [];
       function tick() {
-        s.push(PROJECTION.frameBody);
+        s.push(PROJECTION.frameBody); b.push(PROJECTION.body);
         if (performance.now() - t0 < 8000) requestAnimationFrame(tick);
         else {
-          /* a turn once the frame has come back 1% of its size from its last extreme */
+          /* each frame keeps the law: in the band it holds; past the frame it
+             moves out toward the size, not past it; inside the band it moves in
+             toward the size, not past it */
+          let broken = [];
+          for (let i = 1; i < s.length; i++) {
+            const F = s[i - 1], G = s[i], B = b[i];
+            const holds = B >= FRAME_HOLD * F && B <= F ? G === F
+                        : B > F ? G >= F && G <= B * (1 + 1e-12)
+                        : G <= F && G >= B * (1 - 1e-12);
+            if (!holds && broken.length < 3) broken.push({ i, F, G, B });
+          }
           let n = 0, dir = 0, ext = s[0];
           for (let i = 1; i < s.length; i++) {
             const v = s[i];
@@ -795,14 +886,17 @@ try {
             else { if (v < ext) ext = v; else if (v - ext > 0.01 * ext) { n++; dir = 1; ext = v; } }
             if (dir === 0 && v !== s[0]) dir = v > s[0] ? 1 : -1;
           }
-          res({ rev: n, secs: (performance.now() - t0) / 1000 });
+          res({ frames: s.length - 1, broken, rev: n, secs: (performance.now() - t0) / 1000 });
         }
       }
       requestAnimationFrame(tick);
     })`, true);
+    lawFrames += br.frames; lawBroken.push(...br.broken.map(x => ({ id, ...x })));
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
-  ok(turns / turnSecs <= 0.2, `the framing does not breathe: it turns round ${(turns / turnSecs).toFixed(2)} times a second over ${turnSecs.toFixed(0)} s of CYMATIC, CROWN and OCTAD (${turnsBy.join(', ')}; frame_hold)`);
+  ok(lawBroken.length === 0 && lawFrames > 100,
+     `on a fresh page every one of ${lawFrames} frames over CYMATIC, CROWN and OCTAD keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     JSON.stringify(lawBroken));
 
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));

@@ -224,10 +224,12 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>FIELDS AROUND THE CONSTRUCT</h5>
-    <p class="note">The construct's magnetism and its dielectric act on the space around it. Each edge carries the lattice current J = (d¹)ᵀB, the flux of the three faces round it (Ampère on the hypercube), and the current is conserved at every vertex. Each vertex carries the charge of the dielectric field, its graph Laplacian (Gauss), and the charges sum to zero. Placed where the surface puts them, they give the magnetic field by Biot–Savart (<span style="color:#5cb8ff">blue lines</span>) and the electric field by Coulomb (<span style="color:#ff8f2e">orange lines</span>). Across the equatorial plane, the glow is the energy density, its hue blue where the magnetic energy stands higher in its own range and orange where the electric does, and the <span style="color:#fff0a8">arrows</span> are the energy flow S = E×B: where the dielectric's field and the magnetism exchange energy. Each field is drawn against its own range; the direction of S does not depend on the units.</p>
+    <p class="note">The construct's magnetism and its dielectric act on the space around it. Each edge carries the lattice current J = (d¹)ᵀB, the flux of the three faces round it (Ampère on the hypercube), and the current is conserved at every vertex. Each vertex carries the charge of the dielectric field, its graph Laplacian (Gauss), and the charges sum to zero. Placed where the surface puts them, they give the magnetic field by Biot–Savart (<span style="color:#5cb8ff">blue lines</span>) and the electric field by Coulomb (<span style="color:#ff8f2e">orange lines</span>). Across the equatorial plane, the glow is the energy density, its hue blue where the magnetic energy stands higher in its own range and orange where the electric does, and the <span style="color:#fff0a8">arrows</span> are the energy flow S = E×B: where the dielectric's field and the magnetism exchange energy. The <span style="color:#73ffd1">aqua arrows</span> are the magnetic force I u × B on the middle of each piece of current, from the rest of the construct, always across the current and the field; the <span style="color:#ff61a0">rose arrows</span> the electric force on each charge from the others, which cancel in sum. Each field and force is drawn against its own range; the directions do not depend on the units.</p>
     <div class="row"><span class="k">lattice current</span><span class="v" id="fld-current">–</span></div>
     <div class="row"><span class="k">dielectric charge</span><span class="v" id="fld-charge">–</span></div>
     <div class="row"><span class="k">field lines</span><span class="v" id="fld-lines">–</span></div>
+    <div class="row"><span class="k">force on the currents</span><span class="v" id="fld-mforce">–</span></div>
+    <div class="row"><span class="k">force on the charges</span><span class="v" id="fld-eforce">–</span></div>
   </div>
   <div class="section">
     <h5>MAYA · COHERENCE FLOW</h5>
@@ -2674,7 +2676,7 @@ const LEAN_PROVED = Object.freeze({
      and SutraWS/Magnetism.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid','cell_centre','surface_grid','glyph_mem','lowKnee_pos','highKnee_lt','highKnee_le','highKnee_mono','toneRGB_mem','toneRGB_ratio','toneRGB_grey','bary_mem','frame_out_in','frame_hold','edges_are_edges','incidence_dd','d0_rows','kirchhoff','charge_neutral','charge_laplacian','segPrim_hasDeriv','segment_field_integral','poynting_orth','poynting_le_energy','rk4_step_le','share_mem','mix_mem','level_mem','ndc_depth_lift_mem'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid','cell_centre','surface_grid','glyph_mem','lowKnee_pos','highKnee_lt','highKnee_le','highKnee_mono','toneRGB_mem','toneRGB_ratio','toneRGB_grey','bary_mem','frame_out_in','frame_hold','edges_are_edges','incidence_dd','d0_rows','kirchhoff','charge_neutral','charge_laplacian','segPrim_hasDeriv','segment_field_integral','poynting_orth','poynting_le_energy','rk4_step_le','share_mem','mix_mem','level_mem','ndc_depth_lift_mem','lorentz_perp','axis_integrand_zero','coulomb_newton3'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2779,10 +2781,11 @@ const VISUAL_CERTIFICATE = {
       holds: () => LATTICE_VIEW.ok
     },
     fields: {
-      draws: 'the fields around the construct: the magnetic and electric field lines, the energy densities on the equatorial plane and the energy flow S = E x B across it',
+      draws: 'the fields around the construct: the magnetic and electric field lines, the energy densities on the equatorial plane and the energy flow S = E x B across it, and the forces on the currents and the charges',
       theorems: ['edges_are_edges', 'incidence_dd', 'd0_rows', 'kirchhoff', 'charge_neutral', 'charge_laplacian',
                  'segPrim_hasDeriv', 'segment_field_integral', 'poynting_orth', 'poynting_le_energy', 'rk4_step_le',
-                 'plot_mem', 'plot_log_mono', 'share_mem', 'mix_mem', 'level_mem', 'camera_in_front', 'ndc_depth_lift_mem'],
+                 'plot_mem', 'plot_log_mono', 'share_mem', 'mix_mem', 'level_mem', 'camera_in_front', 'ndc_depth_lift_mem',
+                 'lorentz_perp', 'axis_integrand_zero', 'coulomb_newton3'],
       holds: () => FIELDS.ok && DYNAMO_VIEW.ok
     },
     sutra: {
@@ -2863,16 +2866,16 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: 'd1094a936d812b0a03aeefec78ec1b23d3775726d6f54f02fdd7b37acdc5f095',
+  leanCorpusSha256: '8613986679ad55bae247fa85c2247c3ac3f339d62a3907e3c46974e7bda3aa2b',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2390,
+  leanTheorems: 2394,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FieldsAround.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2390,
+  leanAxiomsKernelChecked: 2394,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2881,7 +2884,7 @@ const PROVENANCE = Object.freeze({
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
   storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase (the magnetism memory turns among them), a permutation, the normalised Walsh-Hadamard transform, the fractional power of a permutation, of that transform or of the complement swap at the strength (FractionalPower.lean), a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
-  fieldsScopeNote: 'SutraWS/FieldsAround.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral; E by Coulomb from the 16 charges; S = E x B (poynting_orth, poynting_le_energy). Field lines are traced by steps of h along the unit field, four evaluations a step (rk4_step_le), a step kept only where the field at its middle runs within 11 degrees of it. On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem); the part of S in the plane is drawn as arrows sized and lit by |S| on its own log range (level_mem). Not modelled: no physical constant ties the dielectric unit to the current unit, so each field is drawn against its own range, and only the direction of S is unit-free; the float evaluation in space; currents idealised as lines along the drawn edges.',
+  fieldsScopeNote: 'SutraWS/FieldsAround.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral; E by Coulomb from the 16 charges; S = E x B (poynting_orth, poynting_le_energy). Field lines are traced by steps of h along the unit field, four evaluations a step (rk4_step_le), a step kept only where the field at its middle runs within 11 degrees of it. On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem); the part of S in the plane is drawn as arrows sized and lit by |S| on its own log range (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0), so the two exchange energy (S) but do not push one another; no physical constant ties the dielectric unit to the current unit, so each field is drawn against its own range, and only the direction of S is unit-free; the float evaluation in space; currents idealised as lines along the drawn edges.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound), and phase turns dt(div A + mean B^2) on the field, which are unit phases (phase_energy). The field energy densities it and the dielectric polarisation read are the real values of |psi_v|^2 enclosed and stored at 128 bits (SutraWS/Magnetism.lean).',
   r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field (a_v stored at 128 bits, b_v = 1 - a_v, store_mem_unit) with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
@@ -3936,7 +3939,10 @@ function refreshWheelerChannel(dielectric, params) {
         its path on the surface, each piece in the closed form of
         segment_field_integral;
      E  by Coulomb's law from the 16 charges;
-     S = E x B, the energy flow (poynting_orth, poynting_le_energy).
+     S = E x B, the energy flow (poynting_orth, poynting_le_energy);
+     the forces on the construct: I u x B on the middle of each piece of
+       current, from the rest of the construct, and q E on each charge, from
+       the other charges.
    It traces field lines by steps of h along the unit field direction, four
    evaluations a step (rk4_step_le: a step moves at most h), keeping a step
    only where the field at its middle runs within 11 degrees of it, and
@@ -4113,12 +4119,75 @@ function fieldWorkerMain() {
       arrows.push(sx / sp, 0, sz / sp, t);
       arrowPts.push(x - sx / sp * len / 2, 0, z - sz / sp * len / 2, x + sx / sp * len / 2, 0, z + sz / sp * len / 2);
     }
+    /* the forces on the construct. On each straight piece carrying current,
+       at its middle, f = I u x B with B from every other piece: a piece puts
+       no field anywhere on its own line (axis_integrand_zero), and f is
+       across both the current and B (lorentz_perp). On each charge,
+       F = q E with E from every other charge; the sixteen sum to zero
+       (coulomb_newton3). A middle on another piece, or two charges at one
+       point, has no force: it is counted and left out. */
+    function Brest(x, y, z, skip, out) {
+      let bx = 0, by = 0, bz = 0;
+      for (let q = 0; q < NSG; q += 8) {
+        if (q === skip) continue;
+        const ax = SGA[q], ay = SGA[q + 1], az = SGA[q + 2], ux = SGA[q + 3], uy = SGA[q + 4], uz = SGA[q + 5], L = SGA[q + 6], I = SGA[q + 7];
+        const rx = x - ax, ry = y - ay, rz = z - az, sa = rx * ux + ry * uy + rz * uz;
+        const px = rx - sa * ux, py = ry - sa * uy, pz = rz - sa * uz, d2 = px * px + py * py + pz * pz;
+        if (d2 <= EPS * EPS) { if (sa >= 0 && sa <= L) return false; continue; }
+        const sb = sa - L, k1 = sa / Math.sqrt(sa * sa + d2) - sb / Math.sqrt(sb * sb + d2), f = I * k1 / d2;
+        bx += f * (uy * pz - uz * py); by += f * (uz * px - ux * pz); bz += f * (ux * py - uy * px);
+      }
+      out[0] = bx; out[1] = by; out[2] = bz; return true;
+    }
+    const mForce = [], eForce = [];
+    let mSingular = 0, eSingular = 0;
+    for (let q = 0; q < NSG; q += 8) {
+      const ax = SGA[q], ay = SGA[q + 1], az = SGA[q + 2], ux = SGA[q + 3], uy = SGA[q + 4], uz = SGA[q + 5], L = SGA[q + 6], I = SGA[q + 7];
+      const mx = ax + ux * L / 2, my = ay + uy * L / 2, mz = az + uz * L / 2;
+      if (!Brest(mx, my, mz, q, bb)) { mSingular++; continue; }
+      mForce.push(mx, my, mz, I * (uy * bb[2] - uz * bb[1]), I * (uz * bb[0] - ux * bb[2]), I * (ux * bb[1] - uy * bb[0]));
+    }
+    const net = [0, 0, 0];
+    let sumF = 0;
+    for (let v = 0; v < 16; v++) {
+      const qv = QV[v]; if (qv === 0) continue;
+      const x = NODES[v * 3], y = NODES[v * 3 + 1], z = NODES[v * 3 + 2];
+      let ex = 0, ey = 0, ez = 0, ok = true;
+      for (let w = 0; w < 16; w++) {
+        const qw = QV[w]; if (w === v || qw === 0) continue;
+        const dx = x - NODES[w * 3], dy = y - NODES[w * 3 + 1], dz = z - NODES[w * 3 + 2], r2 = dx * dx + dy * dy + dz * dz;
+        if (r2 <= EPS * EPS) { ok = false; break; }
+        const f = qw / (r2 * Math.sqrt(r2));
+        ex += f * dx; ey += f * dy; ez += f * dz;
+      }
+      if (!ok) { eSingular++; continue; }
+      const F = [qv * ex, qv * ey, qv * ez];
+      eForce.push(x, y, z, F[0], F[1], F[2]);
+      net[0] += F[0]; net[1] += F[1]; net[2] += F[2]; sumF += Math.hypot(F[0], F[1], F[2]);
+    }
+    /* each force an arrow from where it acts, along it, its length and light
+       its size on the log scale of its own kind's range (plot_mem, level_mem) */
+    const forcePts = [], forceInfo = [];
+    for (const [list, kind] of [[mForce, 0], [eForce, 1]]) {
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k < list.length; k += 6) { const f = Math.hypot(list[k + 3], list[k + 4], list[k + 5]); if (f > 0) { const L = Math.log(f); if (L < lo) lo = L; if (L > hi) hi = L; } }
+      for (let k = 0; k < list.length; k += 6) {
+        const f = Math.hypot(list[k + 3], list[k + 4], list[k + 5]);
+        if (!(f > 0)) continue;
+        const t = hi > lo ? (Math.log(f) - lo) / (hi - lo) : 1, len = R * (kind === 0 ? 0.035 + 0.065 * t : 0.06 + 0.10 * t);
+        forcePts.push(list[k], list[k + 1], list[k + 2], list[k] + list[k + 3] / f * len, list[k + 1] + list[k + 4] / f * len, list[k + 2] + list[k + 5] / f * len);
+        forceInfo.push(t, kind);
+      }
+    }
     const B = pack(bLines), E = pack(eLines);
     const out = { id: m.id, frame: m.frame, ms: Date.now() - t0, NR, NS, plane, planeVal: val, planeS: S, planeRange: [eLo, eHi, bLo, bHi],
                   bPts: B.pts, bOff: B.off, bRange: B.range, ePts: E.pts, eOff: E.off, eRange: E.range,
                   arrows: new Float32Array(arrows), arrowPts: new Float32Array(arrowPts), sRange: [sLo, sHi], rejected, singular,
-                  finite: [B.pts, E.pts, val, S].every(a => a.every(Number.isFinite)) };
-    self.postMessage(out, [out.plane.buffer, out.planeVal.buffer, out.planeS.buffer, out.bPts.buffer, out.bOff.buffer, out.ePts.buffer, out.eOff.buffer, out.arrows.buffer, out.arrowPts.buffer]);
+                  mForce: Float64Array.from(mForce), eForce: Float64Array.from(eForce), eNet: net, eSum: sumF, mSingular, eSingular,
+                  forcePts: new Float32Array(forcePts), forceInfo: new Float32Array(forceInfo),
+                  finite: [B.pts, E.pts, val, S, mForce, eForce].every(a => a.every(Number.isFinite)) };
+    self.postMessage(out, [out.plane.buffer, out.planeVal.buffer, out.planeS.buffer, out.bPts.buffer, out.bOff.buffer, out.ePts.buffer, out.eOff.buffer, out.arrows.buffer, out.arrowPts.buffer,
+                           out.mForce.buffer, out.eForce.buffer, out.forcePts.buffer, out.forceInfo.buffer]);
   };
 }
 const FIELDS = { worker: null, busy: false, pending: false, cur: null, prev: null, t0: 0, FADE_MS: 250, show: true,
@@ -4186,6 +4255,14 @@ const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0, po
 let ZOOM = 1;
 const FRAME_FILL = 0.9, FRAME_SHARE = 0.98;
 const FRAME_OUT_MS = 600, FRAME_IN_MS = 10000, FRAME_HOLD = 0.85;
+/* one framing update from frame F toward the surface's size `body` over dtMs
+   (frame_hold): out fast past it, in slowly once inside FRAME_HOLD of it,
+   still between */
+function frameStep(F, body, dtMs) {
+  const k = F <= 0 ? 1 : body > F ? 1 - Math.exp(-dtMs / FRAME_OUT_MS)
+          : body < FRAME_HOLD * F ? 1 - Math.exp(-dtMs / FRAME_IN_MS) : 0;
+  return F + (body - F) * k;
+}
 let FRAME_BODY = 0, FRAME_DT_MS = 16.667, FRAME_DT_AVG = 16.667;
 /* Drawing gains: how strongly each certified channel moves the surface. They
    scale channels that hold their certificates; none can originate structure,
@@ -4413,12 +4490,12 @@ function projectTorus() {
      of 1.2 s both ways a field whose extent rose and fell from step to step
      made the whole picture breathe; with two lags and no hold, every peak
      past the frame was followed by a creep back in, and on OCTAD the frame
-     still turned up to 5 times in 8 s. Measured on a fresh page over 8 s each
-     of CYMATIC, CROWN and OCTAD, counting turns of at least 1% of the frame:
-     8 to 10 with one lag, 2 to 6 with two, 1 to 3 with the hold. */
-  const k = FRAME_BODY <= 0 ? 1 : body > FRAME_BODY ? 1 - Math.exp(-FRAME_DT_MS / FRAME_OUT_MS)
-          : body < FRAME_HOLD * FRAME_BODY ? 1 - Math.exp(-FRAME_DT_MS / FRAME_IN_MS) : 0;
-  FRAME_BODY = FRAME_BODY + (body - FRAME_BODY) * k;
+     still turned up to 5 times in 8 s. Fed a size swinging 6% either way
+     every 3 s, the frame with the hold, once out, never moves back; with one
+     lag or with two and no hold it follows every swing. (Over a stretch of a
+     real run the count of turns says less: where the surface's size truly
+     jumps, the frame has to follow it out and back, whichever framing.) */
+  FRAME_BODY = frameStep(FRAME_BODY, body, FRAME_DT_MS);
   const frame = FRAME_BODY > 0 ? FRAME_FILL * 0.5 * Math.min(cw, ch) / FRAME_BODY : 0;
   /* the camera, kept for whatever else is placed in the same space */
   PROJECTION.cam = { cRY, sRY, cRX, sRX, D, scale: ZOOM * frame, cx, cy };
@@ -5038,12 +5115,16 @@ function drawLattice(cw, ch, CERT) {
        sized and lit by |S| on its own log range (plot_mem, level_mem)
      B's field lines in blue, E's in orange, brighter where the field is
        stronger (log scale against the line set's own range)
+     the forces on the construct, as arrows from where they act: aqua the
+       magnetic force on the middle of each piece of current, rose the
+       electric force on each charge, each sized on its own kind's log range
    Every point the worker returned lies inside the ball the surface was
    inside when it was computed; each frame every point is checked in front of
    the camera, and if one is not the fields are withheld this frame and say
    so.
    --------------------------------------------------------------------------- */
-const FIELD_COL = { b: [0.36, 0.72, 1.0], e: [1.0, 0.56, 0.18], s: [1.0, 0.94, 0.66], planeB: [0.14, 0.42, 1.0], planeE: [1.0, 0.42, 0.08] };
+const FIELD_COL = { b: [0.36, 0.72, 1.0], e: [1.0, 0.56, 0.18], s: [1.0, 0.94, 0.66], planeB: [0.14, 0.42, 1.0], planeE: [1.0, 0.42, 0.08],
+                    fm: [0.45, 1.0, 0.82], fe: [1.0, 0.38, 0.62] };
 const FP = { sets: [], n: 0, behind: 0 };
 function project3(cam, x, y, z, out, o) {
   const x1 = x * cam.cRY - z * cam.sRY, z1 = x * cam.sRY + z * cam.cRY;
@@ -5064,7 +5145,7 @@ function fieldsProject() {
   if (F.prev && fade < 1) sets.push([F.prev, 1 - fade]);
   let zmin = Infinity, zmax = -Infinity, behind = 0, n = 0;
   for (const [set, w] of sets) {
-    const pts = [set.bPts, set.ePts, set.plane, set.arrowPts], stride = [4, 4, 4, 3];
+    const pts = [set.bPts, set.ePts, set.plane, set.arrowPts, set.forcePts], stride = [4, 4, 4, 3, 3];
     const proj = set.proj || (set.proj = pts.map((a, q) => new Float64Array((a.length / stride[q]) * 3)));
     pts.forEach((a, q) => {
       for (let i = 0, o = 0; i < a.length; i += stride[q], o += 3) {
@@ -5072,7 +5153,7 @@ function fieldsProject() {
         const z = proj[q][o + 2]; if (z < zmin) zmin = z; if (z > zmax) zmax = z; n++;
       }
     });
-    FP.sets.push({ set, w, b: proj[0], e: proj[1], p: proj[2], a: proj[3] });
+    FP.sets.push({ set, w, b: proj[0], e: proj[1], p: proj[2], a: proj[3], f: proj[4] });
   }
   FP.behind = behind;
   if (behind > 0) { FP.sets = []; F.drawWhy = `${behind} field points would be behind the camera: withheld this frame`; return { n: 0 }; }
@@ -5085,7 +5166,7 @@ function fieldsProject() {
 const PLANE = { d: new Float32Array(7 * 2 * 9216), i: new Uint16Array(6 * 2 * 9216), map: new Int32Array(0), nV: 0, nI: 0 };
 function fieldsDraw() {
   const F = FIELDS;
-  F.drawn = { lines: 0, arrows: 0, plane: 0 };
+  F.drawn = { lines: 0, arrows: 0, plane: 0, forces: 0 };
   PLANE.nV = 0; PLANE.nI = 0;
   for (const S of FP.sets) {
     const set = S.set, w = S.w;
@@ -5136,6 +5217,20 @@ function fieldsDraw() {
         ovV(x1 + uy * hs * 0.7, y1 - ux * hs * 0.7, z, FIELD_COL.s, (0.55 + 0.45 * t) * w);
         F.drawn.arrows++;
       }
+    }
+    /* the forces on the construct: on the currents aqua, on the charges rose */
+    const FI = set.forceInfo, FQ = S.f;
+    for (let k = 0; k < FI.length; k += 2) {
+      const t = FI[k], col = FI[k + 1] === 0 ? FIELD_COL.fm : FIELD_COL.fe, o = k / 2 * 6;
+      const x0 = FQ[o], y0 = FQ[o + 1], x1 = FQ[o + 3], y1 = FQ[o + 4], L = Math.hypot(x1 - x0, y1 - y0);
+      if (!(L > 0)) continue;
+      const heavy = FI[k + 1] === 1 ? 1.4 : 1;
+      ovSegXYZ(x0, y0, FQ[o + 2], x1, y1, FQ[o + 5], (1.6 + 1.6 * t) * heavy, col, (0.6 + 0.4 * t) * w, 0);
+      const ux = (x1 - x0) / L, uy = (y1 - y0) / L, hs = (4 + 4 * t) * heavy, z = zf(FQ[o + 5]);
+      ovV(x1 + ux * hs, y1 + uy * hs, z, col, (0.7 + 0.3 * t) * w);
+      ovV(x1 - uy * hs * 0.7, y1 + ux * hs * 0.7, z, col, (0.7 + 0.3 * t) * w);
+      ovV(x1 + uy * hs * 0.7, y1 - ux * hs * 0.7, z, col, (0.7 + 0.3 * t) * w);
+      F.drawn.forces++;
     }
     /* the field lines */
     for (const [pts, offs, proj, colour] of [[set.bPts, set.bOff, S.b, FIELD_COL.b], [set.ePts, set.eOff, S.e, FIELD_COL.e]]) {
@@ -5387,7 +5482,12 @@ function updateDynamoHud() {
     set('fld-current', `largest |J| ${fmtE(jm)} · conserved at all 16 vertices`);
     set('fld-charge', `${qp} positive, ${qn} negative · they sum to 0`);
     set('fld-lines', `${FC.bOff.length - 1} magnetic, ${FC.eOff.length - 1} electric (step ${FC.frame}, ${FC.ms} ms)`);
-  } else { set('fld-current', 'withheld'); set('fld-charge', FIELDS.why); set('fld-lines', '–'); }
+    let fm = 0, fe = 0;
+    for (let k = 0; k < FC.mForce.length; k += 6) fm = Math.max(fm, Math.hypot(FC.mForce[k + 3], FC.mForce[k + 4], FC.mForce[k + 5]));
+    for (let k = 0; k < FC.eForce.length; k += 6) fe = Math.max(fe, Math.hypot(FC.eForce[k + 3], FC.eForce[k + 4], FC.eForce[k + 5]));
+    set('fld-mforce', `${FC.mForce.length / 6} pieces · largest ${fmtE(fm)}`);
+    set('fld-eforce', `${FC.eForce.length / 6} charges · largest ${fmtE(fe)} · net ${fmtE(Math.hypot(...FC.eNet) / (FC.eSum || 1))} of their sum`);
+  } else { set('fld-current', 'withheld'); set('fld-charge', FIELDS.why); set('fld-lines', '–'); set('fld-mforce', '–'); set('fld-eforce', '–'); }
   const lo = num(d.layer[0]), hi = num(d.layer[1]), ph = num(d.phase), M = num(d.M);
   if (MAYA_VIEW.ok) {
     set('maya-phase', `${ph.toFixed(5)} ± ${fmtE(num(d.phaseErr))}`);
