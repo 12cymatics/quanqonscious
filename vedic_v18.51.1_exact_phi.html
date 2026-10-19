@@ -55,7 +55,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 .ctrls button:hover{border-color:#d4af37;color:#d4af37}
 .ctrls button:disabled{opacity:.45;cursor:default}
 #preset-ctrls button{font-size:7.5px;padding:3px 5px;line-height:1.2}
-#preset-ctrls button.preset-active,#comp-ctrls button.active{border-color:#d4af37;color:#d4af37;background:#14142a}
+#btn-lattice.active,#preset-ctrls button.preset-active,#comp-ctrls button.active{border-color:#d4af37;color:#d4af37;background:#14142a}
 .grp{color:#4a90d9;font-size:7px;width:100%;border-bottom:1px solid #1a1a3a;padding-bottom:2px;margin:4px 0 2px}
 .amp-row{display:flex;align-items:center;gap:4px;padding:2px 0;font-size:7px;color:#666}
 .amp-row span:first-child{width:52px;flex-shrink:0;text-align:right}
@@ -156,6 +156,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-all" type="button">ALL ON</button>
     <button id="btn-none" type="button">ALL OFF</button>
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
+    <button id="btn-lattice" type="button" title="Draw the hypercube on the surface itself: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its vertices and its reconnections. The flux map shows the same values flat.">LATTICE OFF</button>
     <button id="btn-proof" type="button" title="Exact proof run on the audit worker: operatorAudit for all 29 sutras (16x16 matrices over K, unitarity, complement commutation, rank, determinant) plus corpusAudit over every test state. Results go to the EVENT LOG.">PROOF</button>
     <button id="btn-export" type="button" title="Export the exact state and every stage of the last step as JSON">EXPORT STEP</button>
     <button id="btn-exact-operator-audit" type="button" title="Exact CQuad basis, rank, determinant, unitarity, complement and corpus audit data for all 29 sutras, as JSON">AUDIT 29 EXACT</button>
@@ -215,6 +216,10 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">flux ½ΣB²</span><span class="v" id="dyn-flux">–</span></div>
     <div class="row"><span class="k">helicity</span><span class="v" id="dyn-helicity">–</span></div>
     <div class="row"><span class="k">reconnections</span><span class="v" id="dyn-recon">–</span></div>
+    <div class="row"><span class="k">through the hole</span><span class="v" id="dyn-hole">–</span></div>
+    <div class="row"><span class="k">along the tube</span><span class="v" id="dyn-tube">–</span></div>
+    <div class="row"><span class="k">strip balances</span><span class="v" id="dyn-strips">–</span></div>
+    <p class="note" id="lattice-legend">FLUX MAP (left of the picture): the torus cut open, θ to the right and φ up. On it the hypercube is a 4×4 lattice: its 16 vertices are the white dots, sized by |ψ|². Each line is the potential A on one of its 32 edges, <span style="color:#ffc238">amber</span> flowing towards +θ or +φ, <span style="color:#38dbff">cyan</span> against, the arrow its way, the width its strength. Each row of edges is a loop once round the torus: the band along it and the value at its right are the flux through the hole there. Each column is a loop once round the tube, its flux on top. The arc in each square is the flux through that cell, <span style="color:#ff57a8">rose</span> turning counter-clockwise in (θ, φ), <span style="color:#5cff85">green</span> clockwise. Pink bursts are reconnections. From one loop to the next, the flux steps by exactly the flux through the four cells between them: the strip balances, marked =. LATTICE draws the same on the surface.</p>
   </div>
   <div class="section">
     <h5>MAYA · COHERENCE FLOW</h5>
@@ -1341,11 +1346,70 @@ const KERNEL_FACTORY = () => {
   [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]].forEach(([a, b, q]) => { for (let i = 0; i < 16; i++) if (!(i & ((1 << a) | (1 << b) | (1 << q))))
     MAG_CUBES.push([[faceAt(a, b, i), -1], [faceAt(a, b, i ^ (1 << q)), 1], [faceAt(a, q, i), 1], [faceAt(a, q, i ^ (1 << b)), -1], [faceAt(b, q, i), -1], [faceAt(b, q, i ^ (1 << a)), 1]]); });
   const cubeFluxes = B => MAG_CUBES.map(c => c.reduce((s, [f, sg]) => sg > 0 ? Q.add(s, B[f]) : Q.sub(s, B[f]), Q.ZERO));
+  /* The engine on the torus the page draws. tessVertexToTorus puts vertex k at
+     ring position (ringTheta k, ringPhi k) of a 4x4 lattice (node_theta,
+     node_phi); every edge is one quarter turn along one ring (edge_step); the
+     faces through axes 0 and 3 are loops once round the torus (hole_loop),
+     those through 1 and 2 loops once round the tube (tube_loop), and the other
+     sixteen are its cells, each lattice cell once (cell_corners, cells_tile).
+     A cell's orientation is the signed area of its Stokes loop in (theta, phi)
+     (cell_orient_area). Every cube is a strip between two loops (cube_strip),
+     so the flux through the hole steps from one loop to the next by exactly
+     the flux through the four cells between them (hole_flux_step_y/z), and
+     likewise along the tube (tube_flux_step_x/w). TorusLattice.lean. */
+  const GRAY_RING = [0, 1, 3, 2];
+  const ringThetaOf = k => GRAY_RING[(((k >> 3) & 1) << 1) | (k & 1)];
+  const ringPhiOf = k => GRAY_RING[(((k >> 2) & 1) << 1) | ((k >> 1) & 1)];
+  const isThetaAxis = a => a === 0 || a === 3;
+  const quarter = (from, to) => (to - from + 4) % 4 === 1 ? 1 : (from - to + 4) % 4 === 1 ? -1 : 0;
+  const TORUS_EDGES = MAG_EDGES.map(([v, a, h]) => {
+    const theta = isThetaAxis(a);
+    return { theta, from: [ringThetaOf(v), ringPhiOf(v)], to: [ringThetaOf(h), ringPhiOf(h)],
+             dir: theta ? quarter(ringThetaOf(v), ringThetaOf(h)) : quarter(ringPhiOf(v), ringPhiOf(h)) };
+  });
+  const lowerRing = (s, t) => (t - s + 4) % 4 === 1 ? s : t;
+  const TORUS_FACES = MAG_FACES.map(f => {
+    const v = f.base, corners = [v, v ^ (1 << f.a), v ^ (1 << f.a) ^ (1 << f.b), v ^ (1 << f.b)];
+    if (f.a === 0 && f.b === 3) return { kind: 'hole', ring: ringPhiOf(v), orient: 1, corners };
+    if (f.a === 1 && f.b === 2) return { kind: 'tube', ring: ringThetaOf(v), orient: 1, corners };
+    const tA = isThetaAxis(f.a) ? f.a : f.b, pA = isThetaAxis(f.a) ? f.b : f.a;
+    const d1 = TORUS_EDGES[edgeIndexOf(v, f.a)].dir, d2 = TORUS_EDGES[edgeIndexOf(v ^ (1 << f.a), f.b)].dir;
+    return { kind: 'cell', corners, orient: isThetaAxis(f.a) ? d1 * d2 : -(d1 * d2),
+             cell: [lowerRing(ringThetaOf(v), ringThetaOf(v ^ (1 << tA))), lowerRing(ringPhiOf(v), ringPhiOf(v ^ (1 << pA)))] };
+  });
+  const HOLE_AT = [0, 1, 2, 3].map(s => TORUS_FACES.findIndex(t => t.kind === 'hole' && t.ring === s));
+  const TUBE_AT = [0, 1, 2, 3].map(r => TORUS_FACES.findIndex(t => t.kind === 'tube' && t.ring === r));
+  const CELL_AT = [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(s => TORUS_FACES.findIndex(t => t.kind === 'cell' && t.cell[0] === r && t.cell[1] === s)));
+  /* each cube's six signed faces (DEC.d2) read as a strip: sg_hi (B_hi - B_lo)
+     = -sum sg_c B_c, since the two loops carry opposite signs */
+  const TORUS_STRIPS = MAG_CUBES.map(cube => {
+    const loops = cube.filter(([f]) => TORUS_FACES[f].kind !== 'cell'), cells = cube.filter(([f]) => TORUS_FACES[f].kind === 'cell');
+    const [[f0, s0], [f1, s1]] = loops;
+    const up = (TORUS_FACES[f1].ring - TORUS_FACES[f0].ring + 4) % 4 === 1;
+    const [lo, hi] = up ? [[f0, s0], [f1, s1]] : [[f1, s1], [f0, s0]];
+    return { kind: TORUS_FACES[f0].kind, lo: lo[0], hi: hi[0], from: TORUS_FACES[lo[0]].ring,
+             opposite: s0 === -s1, cells: cells.map(([f, sg]) => [f, -hi[1] * sg]) };
+  });
+  /* what the page draws of the engine: the flux through the hole at each of
+     the four loops, along the tube at each of the four, each cell's
+     circulation counter-clockwise in (theta, phi), the potential's flow along
+     each edge towards +theta or +phi, and the eight strip balances, decided */
+  const torusData = (A, chi, B = curlA(A)) => {
+    const AF = fullA(A, chi);
+    const strips = TORUS_STRIPS.map(st => {
+      const dB = Q.sub(B[st.hi], B[st.lo]), S = st.cells.reduce((s, [f, w]) => w > 0 ? Q.add(s, B[f]) : Q.sub(s, B[f]), Q.ZERO);
+      return { kind: st.kind, from: st.from, dB, S, ok: st.opposite && Q.eq(dB, S) };
+    });
+    return { hole: HOLE_AT.map(f => B[f]), tube: TUBE_AT.map(f => B[f]),
+             cells: CELL_AT.map(row => row.map(f => TORUS_FACES[f].orient > 0 ? B[f] : Q.neg(B[f]))),
+             flow: AF.map((x, e) => TORUS_EDGES[e].dir > 0 ? x : Q.neg(x)),
+             strips, balanced: strips.length === 8 && strips.every(s => s.ok) };
+  };
   const magData = (A, chi) => {
     const B = curlA(A), pB = pressureAt(B), cubes = cubeFluxes(B);
     return { flux: B, potential: potentialAt(A, chi), pressure: pB, cubeFlux: cubes, closed: MAG_CUBES.length === 8 && cubes.every(Q.isZero),
              fluxEnergy: Q.mul(B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO), Q.HALF),
-             helicity: helicityOf(A, chi), reconnections: reconnectionsOf(A) };
+             helicity: helicityOf(A, chi), reconnections: reconnectionsOf(A), torus: torusData(A, chi, B) };
   };
   /* what Maya shows at a phase: beta's enclosure and the factor
      M = observed / true from its stored midpoint (factor_mem) */
@@ -2132,6 +2196,31 @@ const KERNEL_FACTORY = () => {
        const a=bv[v].map(fl),b=bv[h].map(fl),na=Math.hypot(...a),nb=Math.hypot(...b);
        if(na*na<=1e-6||nb*nb<=1e-6)return !recon.includes(e);
        const c=(a[0]*b[0]+a[1]*b[1]+a[2]*b[2])/(na*nb);return Math.abs(c+0.7)<1e-9||(c<-0.7)===recon.includes(e);}));}
+    /* the engine on the torus (TorusLattice.lean) */
+    {const kinds=k=>TORUS_FACES.filter(t=>t.kind===k);
+     const cellKeys=kinds('cell').map(t=>t.cell[0]*4+t.cell[1]);
+     assert("the 24 faces are 4 loops through the hole, 4 round the tube and the 16 cells, each once (hole_loop, tube_loop, cells_tile)",
+       kinds('hole').length===4&&kinds('tube').length===4&&new Set(cellKeys).size===16&&
+       new Set(kinds('hole').map(t=>t.ring)).size===4&&new Set(kinds('tube').map(t=>t.ring)).size===4&&
+       HOLE_AT.every(f=>f>=0)&&TUBE_AT.every(f=>f>=0)&&CELL_AT.every(r=>r.every(f=>f>=0)));
+     assert("every edge is one quarter turn along one ring (edge_step)",TORUS_EDGES.every(t=>{
+       const [r0,s0]=t.from,[r1,s1]=t.to;
+       return (t.dir===1||t.dir===-1)&&(t.theta?(s0===s1&&(r1-r0-t.dir+8)%4===0):(r0===r1&&(s1-s0-t.dir+8)%4===0));}));
+     assert("a loop's Stokes order runs once round its ring forwards (hole_loop, tube_loop)",TORUS_FACES.every(t=>
+       t.kind==='hole'?t.corners.map(ringThetaOf).join()==='0,1,2,3'&&t.corners.every(k=>ringPhiOf(k)===t.ring):
+       t.kind==='tube'?t.corners.map(ringPhiOf).join()==='0,1,2,3'&&t.corners.every(k=>ringThetaOf(k)===t.ring):true));
+     assert("a cell's corners are its lattice cell's corners and its orientation is its loop's signed area (cell_corners, cell_orient_area)",
+       kinds('cell').every(t=>{const [r,s]=t.cell,pos=t.corners.map(k=>[ringThetaOf(k),ringPhiOf(k)]);
+         const unw=pos.map(([a,b])=>[(a-r+4)%4,(b-s+4)%4]);
+         if(new Set(unw.map(([a,b])=>a*2+b)).size!==4||!unw.every(([a,b])=>a<=1&&b<=1))return false;
+         let area=0;for(let k=0;k<4;k++){const [x0,y0]=unw[k],[x1,y1]=unw[(k+1)%4];area+=x0*y1-x1*y0;}
+         return area===2*t.orient;}));
+     const chi=Array.from({length:16},(_,v)=>Q.mk(BigInt(3*v-20),7n)),A=MAG_EDGES.map((_,e)=>Q.mk(BigInt((e*e*7)%29-13),BigInt(e%3+2)));
+     const td=torusData(A,chi);
+     assert("every cube is a strip and each step of flux round the torus is the flux of the cells between (cube_strip, hole_flux_step_y/z, tube_flux_step_x/w)",
+       td.balanced&&TORUS_STRIPS.filter(t=>t.kind==='hole').length===4&&TORUS_STRIPS.filter(t=>t.kind==='tube').length===4&&
+       TORUS_STRIPS.every(t=>t.cells.length===4&&new Set(t.cells.map(([f])=>t.kind==='hole'?TORUS_FACES[f].cell[0]:TORUS_FACES[f].cell[1])).size===4&&
+         t.cells.every(([f])=>(t.kind==='hole'?TORUS_FACES[f].cell[1]:TORUS_FACES[f].cell[0])===t.from)));}
     return tests;
   };
   const qTraceProjection = psi => psi.map(z => z.re.a);
@@ -2199,7 +2288,7 @@ const KERNEL_FACTORY = () => {
       complexity: last.complexity
     };
   };
-  return Object.freeze({magStageData,mayaObserve,cubeFluxes,mayaStep,mayaBetaEnclose,mayaFactorOf,MAYA_A,MAYA_B,MAYA_LAYER,MAYA_PHASE0,MAYA_H,MAYA_SUBSTEPS,MAYA_LIP,PI_BRACKET,E_BRACKET,PHI_BRACKET,trigEnclose,a4Enclose,sqrtUpperQ,rhoHat,edgeShares,curlA,divA,fullA,potentialAt,pressureAt,helicityOf,reconnectionsOf,bvecAt,magData,magPhases,MAG_EDGES,MAG_FACES,Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,initEngine,step,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,scaleActiveByR4,hwCoefficients,storeQ,storeC4,storeBudget,STORE_BITS,R4Uncontained,gateABField,r4Scale,r4GateEnergyPoly,evalGatePoly,certifyGateCeiling,R4_GATE_GRID_BITS,cayley});
+  return Object.freeze({torusData,TORUS_EDGES,TORUS_FACES,TORUS_STRIPS,ringThetaOf,ringPhiOf,magStageData,mayaObserve,cubeFluxes,mayaStep,mayaBetaEnclose,mayaFactorOf,MAYA_A,MAYA_B,MAYA_LAYER,MAYA_PHASE0,MAYA_H,MAYA_SUBSTEPS,MAYA_LIP,PI_BRACKET,E_BRACKET,PHI_BRACKET,trigEnclose,a4Enclose,sqrtUpperQ,rhoHat,edgeShares,curlA,divA,fullA,potentialAt,pressureAt,helicityOf,reconnectionsOf,bvecAt,magData,magPhases,MAG_EDGES,MAG_FACES,Q,A4,C4,hw,comp,edgesN1,edgesN3,energy,traceEnergy,mean,wht,qTraceLambda,r4ReinforcedOf,meanFree,complementAverage,s29,sectorDecomposition,applySutra,applySutraCore,operatorAudit,operatorDistinctness,modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,testCorpus,corpusAudit,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mstvqPairData,tgcrSpectralData,mayaData,zpeLedger,exactGeometry,initState,initEngine,step,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceProjection,complexity,scaleActiveByR4,hwCoefficients,storeQ,storeC4,storeBudget,STORE_BITS,R4Uncontained,gateABField,r4Scale,r4GateEnergyPoly,evalGatePoly,certifyGateCeiling,R4_GATE_GRID_BITS,cayley});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2552,7 +2641,7 @@ const LEAN_PROVED = Object.freeze({
      and SutraWS/Magnetism.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid_theta','node_grid_phi','cell_centre_theta','cell_centre_phi','glyph_mem'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2648,6 +2737,14 @@ const VISUAL_CERTIFICATE = {
       theorems: ['faraday_flux_free', 'flux_closed', 'helicity_of_gradient', 'retention_bound', 'pressure_nonneg', 'reconnect_iff', 'edge_share_total', 'polarised_nonneg', 'polarised_le', 'plot_mem', 'plot_mono', 'plot_log_mono', 'phase_energy'],
       holds: () => DYNAMO_VIEW.ok
     },
+    lattice: {
+      draws: 'the hypercube on the torus: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its 16 vertices and its reconnections',
+      theorems: ['cube_edge_iff_torus_edge', 'node_theta', 'node_phi', 'edge_step', 'hole_loop', 'tube_loop', 'cell_corners',
+                 'cell_count', 'cells_tile', 'cell_orient_area', 'cube_strip', 'hole_flux_step_y', 'hole_flux_step_z',
+                 'tube_flux_step_x', 'tube_flux_step_w', 'node_grid_theta', 'node_grid_phi', 'cell_centre_theta',
+                 'cell_centre_phi', 'glyph_mem', 'flux_closed', 'reconnect_iff', 'blend_mem', 'ndc_depth_mem'],
+      holds: () => LATTICE_VIEW.ok
+    },
     sutra: {
       draws: 'the class each active sutra operator declares, audited at its operands, and each at its strength',
       theorems: ['unitary_measured_unitary_no_defect', 'projective_measured_projective_no_defect',
@@ -2726,16 +2823,16 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: 'f9ab465671409fb0b2326327b2481307207abee2b2d5296eee375f75955b0202',
+  leanCorpusSha256: '318c1367fa55cb95d78a8ccde529ec59c087cd12860472bec6951d84f87cb2a7',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2349,
+  leanTheorems: 2366,
   leanSorryCount: 0,
-  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2349,
+  leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
+  leanAxiomsKernelChecked: 2366,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2744,6 +2841,7 @@ const PROVENANCE = Object.freeze({
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
   storageScopeNote: 'One formula, one mode. Every operator, inner rotation or phase layer, and stage of a step is evaluated in exact rationals over Q(sqrt2, sqrt5)[i] from stored values, and its result stored to 128 significant bits before the next acts (StoredPrecision.lean, store_err_le). Each of them is a rotation, a unit phase (the magnetism memory turns among them), a permutation, the normalised Walsh-Hadamard transform, the fractional power of a permutation, of that transform or of the complement swap at the strength (FractionalPower.lean), a contraction toward the mean or the complement, a translation, or an R4 gate factor in [0,1], all non-expansive (NonExpansive.lean), so the storage errors add and never grow (ErrorBudget.lean, chain_err_le, parallel_err_le). The step reports that sum, an exact dyadic bound on its distance from the same formulas evaluated with no storage. The correspondence between those Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
+  latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With 200 x 104 surface samples every vertex and cell centre is a sample (node_grid_theta, node_grid_phi, cell_centre_theta, cell_centre_phi). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound), and phase turns dt(div A + mean B^2) on the field, which are unit phases (phase_energy). The field energy densities it and the dielectric polarisation read are the real values of |psi_v|^2 enclosed and stored at 128 bits (SutraWS/Magnetism.lean).',
   r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field (a_v stored at 128 bits, b_v = 1 - a_v, store_mem_unit) with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -3343,7 +3441,7 @@ function postState(ms) {
 function dynamoOf(e) {
   const md = KERNEL.magData(e.magA, e.magChi), mo = KERNEL.mayaObserve(e.mayaPhase);
   return { fluxEnergy: md.fluxEnergy, helicity: md.helicity, reconnections: md.reconnections, flux: md.flux,
-           closed: md.closed, phase: e.mayaPhase, phaseErr: e.mayaErr, beta: mo.beta, betaEnclosure: mo.betaEnclosure,
+           closed: md.closed, torus: md.torus, phase: e.mayaPhase, phaseErr: e.mayaErr, beta: mo.beta, betaEnclosure: mo.betaEnclosure,
            M: mo.M, layer: KERNEL.MAYA_LAYER };
 }
 let intervalMs = 1000 / 3;
@@ -3619,7 +3717,7 @@ function applyKernelState(m) {
                          meanGateOk: Q.sign(mg) >= 0 && Q.cmp(mg, Q.ONE) <= 0,
                          count: KERNEL_VIEW.r4.count + (r.engaged ? 1 : 0) };
     }
-    if (m.dyn) recordDynamo(m.state.frame, m.dyn, r ? r.engaged : false, m.state.energyLedger);
+    if (m.dyn) recordDynamo(m.state.frame, m.dyn, r ? r.engaged : false, m.state.energyLedger, FAITHFUL.project(m.state.psi).prob);
     KERNEL_VIEW.dirty = true;
 }
 /* Maya as drawn: M = observed / true, certified while the self-tests hold,
@@ -3629,7 +3727,15 @@ const MAYA_VIEW = { M: 1, ok: false, why: 'no step yet' };
 /* The dynamo display holds while the flux shown closes on every cube
    (flux_closed) and every quantity it plots is a finite double. */
 const DYNAMO_VIEW = { ok: false, why: 'no step yet' };
-function recordDynamo(frame, d, engaged, energy) {
+/* The engine as drawn on the torus: the potential's flow along each edge
+   towards +theta or +phi, each cell's circulation (counter-clockwise in
+   (theta, phi) positive), the flux through the hole at each of its four loops
+   and along the tube at each of its four, the reconnecting edges and |psi|^2
+   at the vertices; 'from' is what was drawn before this state. It holds while
+   the dynamo display holds and the kernel has decided all eight strip
+   balances exactly (cube_strip, hole_flux_step_y/z, tube_flux_step_x/w). */
+const LATTICE_VIEW = { ok: false, why: 'no step yet', from: null, to: null, recon: [], frame: -1, balanced: false, strips: 0 };
+function recordDynamo(frame, d, engaged, energy, prob) {
   const H = KERNEL_VIEW.hist;
   /* a reset starts a new run: its history starts again */
   if (H.frame.length && frame <= H.frame[H.frame.length - 1]) for (const k of Object.keys(H)) H[k].length = 0;
@@ -3646,6 +3752,20 @@ function recordDynamo(frame, d, engaged, energy) {
   const finite = [row.E, row.UB, row.H, row.phase].every(Number.isFinite);
   DYNAMO_VIEW.ok = KERNEL_VIEW.selfTestsOk === true && d.closed === true && finite;
   DYNAMO_VIEW.why = DYNAMO_VIEW.ok ? '' : d.closed !== true ? 'flux does not close on every cube' : !finite ? 'a plotted value is not finite' : 'self-tests have not passed';
+  const T = d.torus, LV = LATTICE_VIEW;
+  const to = { flow: T.flow.map(num), cells: T.cells.flat().map(num), hole: T.hole.map(num), tube: T.tube.map(num),
+               prob: Array.from(prob) };
+  /* a new run, or the first state, is drawn as it is; otherwise from what was drawn */
+  LV.from = LV.to && frame > LV.frame ? LV.to : to;
+  LV.to = to; LV.frame = frame; LV.recon = d.reconnections.slice();
+  LV.strips = T.strips.filter(x => x.ok).length;
+  /* each strip's balance, by the loop it starts from: between loops s and s + 1 */
+  LV.stripOk = { hole: [false, false, false, false], tube: [false, false, false, false] };
+  for (const x of T.strips) LV.stripOk[x.kind][x.from] = x.ok === true;
+  LV.balanced = T.balanced === true && LV.strips === 8;
+  const latFinite = [...to.flow, ...to.cells, ...to.hole, ...to.tube, ...to.prob].every(Number.isFinite);
+  LV.ok = DYNAMO_VIEW.ok && LV.balanced && latFinite;
+  LV.why = LV.ok ? '' : !DYNAMO_VIEW.ok ? DYNAMO_VIEW.why : !LV.balanced ? `${8 - LV.strips} of the 8 strip balances fail` : 'a drawn value is not finite';
 }
 /* A step's error budget is a bound on its distance from the formulas with no
    storage. The picture needs it far below anything visible: here, 2^-40 of
@@ -3808,7 +3928,11 @@ function tessVertexToTorus(v, t) {
   return { theta, phi, w };
 }
 const TORUS_R = 180, TORUS_r = 70;
-const TH_SEG = 200, PH_SEG = 100, N_PTS = TH_SEG * PH_SEG;
+/* 200 x 104 samples: with both a multiple of 8, every vertex of the
+   hypercube and every cell centre between them is a sample point
+   (node_grid_theta, node_grid_phi, cell_centre_theta, cell_centre_phi), so
+   the engine drawn on the surface lies on the surface as drawn. */
+const TH_SEG = 200, PH_SEG = 104, N_PTS = TH_SEG * PH_SEG;
 /* Every surface point, as columns: the field and Wheeler values its colour
    reads, and the placed and projected point. */
 const PT = {
@@ -4057,6 +4181,23 @@ const SURFACE_GL = (() => {
       S.buf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, S.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.byteLength, gl.DYNAMIC_DRAW);
+      /* the overlay: flat-coloured translucent triangles, depth-tested
+         against the surface and not writing depth, so the surface hides what
+         is behind it and the glyphs do not hide one another */
+      const ovs = compile(gl, gl.VERTEX_SHADER,
+        'attribute vec3 aPos; attribute vec4 aCol; uniform vec2 uView; varying vec4 vCol;' +
+        'void main(){ gl_Position = vec4(aPos.x / uView.x * 2.0 - 1.0, 1.0 - aPos.y / uView.y * 2.0, aPos.z, 1.0);' +
+        ' vCol = aCol; }');
+      const ovf = compile(gl, gl.FRAGMENT_SHADER,
+        'precision mediump float; varying vec4 vCol;' +
+        'void main(){ gl_FragColor = vec4(vCol.rgb * vCol.a, vCol.a); }');
+      const op = gl.createProgram();
+      gl.attachShader(op, ovs); gl.attachShader(op, ovf); gl.linkProgram(op);
+      if (!gl.getProgramParameter(op, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(op));
+      S.ovProg = op;
+      S.ovPos = gl.getAttribLocation(op, 'aPos'); S.ovCol = gl.getAttribLocation(op, 'aCol');
+      S.ovView = gl.getUniformLocation(op, 'uView');
+      S.ovBuf = gl.createBuffer();
     } catch (e) { S.gl = null; S.error = String(e.message || e); return false; }
     S.gl = gl;
     return true;
@@ -4083,6 +4224,24 @@ const SURFACE_GL = (() => {
     gl.enableVertexAttribArray(S.aUV);
     gl.vertexAttribPointer(S.aUV, 2, gl.FLOAT, false, FLOATS * 4, 24);
     gl.drawArrays(gl.TRIANGLES, 0, nVerts);
+    gl.disableVertexAttribArray(S.aPos); gl.disableVertexAttribArray(S.aCol); gl.disableVertexAttribArray(S.aUV);
+  };
+  /* nVerts overlay vertices of ov (x, y, depth, r, g, b, a), after draw */
+  S.drawOverlay = (ov, nVerts, cssW, cssH) => {
+    const gl = S.gl;
+    gl.useProgram(S.ovProg);
+    gl.uniform2f(S.ovView, cssW, cssH);
+    gl.bindBuffer(gl.ARRAY_BUFFER, S.ovBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, ov.subarray(0, nVerts * 7), gl.STREAM_DRAW);
+    gl.enableVertexAttribArray(S.ovPos);
+    gl.vertexAttribPointer(S.ovPos, 3, gl.FLOAT, false, 28, 0);
+    gl.enableVertexAttribArray(S.ovCol);
+    gl.vertexAttribPointer(S.ovCol, 4, gl.FLOAT, false, 28, 12);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthFunc(gl.LEQUAL); gl.depthMask(false);
+    gl.drawArrays(gl.TRIANGLES, 0, nVerts);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.depthFunc(gl.LESS);
+    gl.disableVertexAttribArray(S.ovPos); gl.disableVertexAttribArray(S.ovCol);
   };
   return S;
 })();
@@ -4265,6 +4424,7 @@ function renderTorus() {
   }
   SURFACE_GL.draw(nq * 6, W, H, cw, ch);
   SURFACE_STATUS.drawn = true; SURFACE_STATUS.why = '';
+  drawLattice(zmin, zk, cw, ch, CERT);
   if (layerSegs.length) {
     let lmin = Infinity, lmax = -Infinity;
     for (const g of layerSegs) { if (g[4] < lmin) lmin = g[4]; if (g[4] > lmax) lmax = g[4]; }
@@ -4302,6 +4462,184 @@ function inertialLayerSegments(i00, i10, i11, i01, out) {
     }
   }
   for (let s = 0; s + 3 < xs.length; s += 4) out.push([xs[s], xs[s + 1], xs[s + 2], xs[s + 3], dsum * 0.25]);
+}
+
+/* ---------------------------------------------------------------------------
+   The magnetism engine on the torus (TorusLattice.lean). The sixteen vertices
+   are surface samples (25 + 50 r, 13 + 26 s) (node_grid_theta, node_grid_phi)
+   and the 4-cube's edges are the lattice's edges (cube_edge_iff_torus_edge,
+   edge_step), so every glyph runs along the drawn surface's own sample lines,
+   and the depth buffer hides it where the surface hides it.
+     edges   the potential's flow along each of the 32 edges: amber towards
+             +theta or +phi, cyan against, the arrow its way, the width its size
+     loops   the flux through the hole at each of its four loops (hole_loop)
+             and along the tube at each of its four (tube_loop): a halo round
+             the loop, amber circulating towards +theta (+phi), cyan against
+     cells   each of the sixteen cells' circulation (cells_tile,
+             cell_orient_area): a loop inside the cell, rose counter-clockwise
+             in (theta, phi), green clockwise, with its arrows
+     nodes   the sixteen vertices, sized by |psi|^2
+     bursts  the reconnecting edges (reconnect_iff)
+   Each size is w0 + w1 |x| / max |x| over its kind (glyph_mem), and the values
+   move with the surface between states, (1 - tau) from + tau to (blend_mem).
+   A kind with nothing in it yet (all zero) has no scale and draws at w0.
+   --------------------------------------------------------------------------- */
+/* the lattice on the surface is off until asked for: where the formulas
+   deform the surface strongly it is drawn faithfully but reads poorly, and the
+   flux map shows the same values flat */
+const LATTICE_SHOW = { on: false };
+const LATTICE_COL = { pos: [1.0, 0.76, 0.22], neg: [0.22, 0.86, 1.0], ccw: [1.0, 0.34, 0.66], cw: [0.36, 1.0, 0.52],
+                      node: [1.0, 1.0, 1.0], burst: [1.0, 0.42, 0.95] };
+const LATTICE_DRAWN = { frame: -1, verts: 0, nEdges: 0, nLoops: 0, nCells: 0, nNodes: 0, nBursts: 0, why: 'not drawn yet',
+                        ready: false, surfaceWhy: '', tau: 1, mFlow: 0, mCell: 0, mLoop: 0, mProb: 0,
+                        flow: new Float64Array(32), cells: new Float64Array(16), hole: new Float64Array(4), tube: new Float64Array(4),
+                        prob: new Float64Array(16), edgeFrom: new Int8Array(32),
+                        edgeSign: new Int8Array(32), cellSign: new Int8Array(16), loopSign: new Int8Array(8) };
+const LAT_TH = r => 25 + 50 * r, LAT_PH = s => 13 + 26 * s;
+const latIdx = (i, j) => (((i % TH_SEG) + TH_SEG) % TH_SEG) * PH_SEG + (((j % PH_SEG) + PH_SEG) % PH_SEG);
+const OV = { d: new Float32Array(7 * 6 * 8192), n: 0, zmin: 0, zk: 0 };
+const LAT_BIAS = 0.004;
+function ovZ(k) { return (OV.zk === 0 ? 0 : (PT.depth[k] - OV.zmin) * OV.zk - 0.999) - LAT_BIAS; }
+function ovV(x, y, z, c, a) {
+  if (OV.n * 7 + 7 > OV.d.length) { const g = new Float32Array(OV.d.length * 2); g.set(OV.d); OV.d = g; }
+  const o = OV.n * 7;
+  OV.d[o] = x; OV.d[o + 1] = y; OV.d[o + 2] = z; OV.d[o + 3] = c[0]; OV.d[o + 4] = c[1]; OV.d[o + 5] = c[2]; OV.d[o + 6] = a;
+  OV.n++;
+}
+/* a ribbon w px wide from sample k0 to sample k1 */
+function ovSeg(k0, k1, w, c, a) {
+  const x0 = PT.sx[k0], y0 = PT.sy[k0], x1 = PT.sx[k1], y1 = PT.sy[k1];
+  const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+  if (!(L > 0)) return;
+  const nx = -dy / L * w * 0.5, ny = dx / L * w * 0.5, z0 = ovZ(k0), z1 = ovZ(k1);
+  ovV(x0 + nx, y0 + ny, z0, c, a); ovV(x0 - nx, y0 - ny, z0, c, a); ovV(x1 + nx, y1 + ny, z1, c, a);
+  ovV(x1 + nx, y1 + ny, z1, c, a); ovV(x0 - nx, y0 - ny, z0, c, a); ovV(x1 - nx, y1 - ny, z1, c, a);
+}
+function ovPath(path, w, c, a) { for (let k = 0; k + 1 < path.length; k++) ovSeg(path[k], path[k + 1], w, c, a); }
+/* an arrowhead at path[k], pointing along the path */
+function ovArrow(path, k, size, c, a) {
+  const kp = path[Math.max(0, k - 2)], kn = path[Math.min(path.length - 1, k + 2)], km = path[k];
+  const dx = PT.sx[kn] - PT.sx[kp], dy = PT.sy[kn] - PT.sy[kp], L = Math.hypot(dx, dy);
+  if (!(L > 0)) return;
+  const ux = dx / L, uy = dy / L, x = PT.sx[km], y = PT.sy[km], z = ovZ(km);
+  ovV(x + ux * size, y + uy * size, z, c, a);
+  ovV(x - ux * size * 0.6 - uy * size * 0.7, y - uy * size * 0.6 + ux * size * 0.7, z, c, a);
+  ovV(x - ux * size * 0.6 + uy * size * 0.7, y - uy * size * 0.6 - ux * size * 0.7, z, c, a);
+}
+function ovDisc(k, R, c, a) {
+  const x = PT.sx[k], y = PT.sy[k], z = ovZ(k), N = 14;
+  for (let t = 0; t < N; t++) {
+    const a0 = t / N * TAU, a1 = (t + 1) / N * TAU;
+    ovV(x, y, z, c, a); ovV(x + R * cos(a0), y + R * sin(a0), z, c, a); ovV(x + R * cos(a1), y + R * sin(a1), z, c, a);
+  }
+}
+function ovBurst(k, R, c, a) {
+  const x = PT.sx[k], y = PT.sy[k], z = ovZ(k);
+  for (let t = 0; t < 8; t++) {
+    const th = t / 8 * TAU, w = 0.16;
+    ovV(x, y, z, c, a);
+    ovV(x + R * cos(th - w), y + R * sin(th - w), z, c, a * 0.2);
+    ovV(x + R * 1.5 * cos(th), y + R * 1.5 * sin(th), z, c, 0);
+    ovV(x, y, z, c, a);
+    ovV(x + R * 1.5 * cos(th), y + R * 1.5 * sin(th), z, c, 0);
+    ovV(x + R * cos(th + w), y + R * sin(th + w), z, c, a * 0.2);
+  }
+}
+/* a path of samples, from ring position to ring position, stepping dir */
+function latLine(theta, r0, s0, dir) {
+  const out = [];
+  if (theta) for (let k = 0; k <= 50; k++) out.push(latIdx(LAT_TH(r0) + dir * k, LAT_PH(s0)));
+  else for (let k = 0; k <= 26; k++) out.push(latIdx(LAT_TH(r0), LAT_PH(s0) + dir * k));
+  return out;
+}
+/* the loop inside cell (r, s): counter-clockwise in (theta, phi) for ccw */
+function latCell(r, s, ccw) {
+  const ic = 50 * (r + 1), jc = 26 * (s + 1), hi = 15, hj = 8, out = [];
+  for (let i = ic - hi; i < ic + hi; i++) out.push(latIdx(i, jc - hj));
+  for (let j = jc - hj; j < jc + hj; j++) out.push(latIdx(ic + hi, j));
+  for (let i = ic + hi; i > ic - hi; i--) out.push(latIdx(i, jc + hj));
+  for (let j = jc + hj; j >= jc - hj; j--) out.push(latIdx(ic - hi, j));
+  return ccw ? out : out.reverse();
+}
+/* The values drawn this frame, on the surface and on the flux map alike:
+   (1 - tau) from + tau to (blend_mem), with each kind's largest |x| for its
+   glyph sizes (glyph_mem). Withheld, with the reason, while the lattice
+   certificate does not hold. */
+function latticeBlend(CERT) {
+  const D = LATTICE_DRAWN, L = LATTICE_VIEW;
+  D.ready = false;
+  if (!CERT.lattice || !L.to) { D.why = L.why || 'the lattice certificate does not hold'; return false; }
+  const tau = DISPLAY.started ? DISPLAY.tau : 1, blend = (a, b) => (1 - tau) * a + tau * b;
+  const F = L.from, T = L.to;
+  for (let e = 0; e < 32; e++) D.flow[e] = blend(F.flow[e], T.flow[e]);
+  for (let c = 0; c < 16; c++) D.cells[c] = blend(F.cells[c], T.cells[c]);
+  for (let r = 0; r < 4; r++) { D.hole[r] = blend(F.hole[r], T.hole[r]); D.tube[r] = blend(F.tube[r], T.tube[r]); }
+  for (let k = 0; k < 16; k++) D.prob[k] = blend(F.prob[k], T.prob[k]);
+  const maxAbs = a => { let m = 0; for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > m) m = Math.abs(a[i]); return m; };
+  D.mFlow = maxAbs(D.flow); D.mCell = maxAbs(D.cells); D.mLoop = Math.max(maxAbs(D.hole), maxAbs(D.tube)); D.mProb = maxAbs(D.prob);
+  for (let e = 0; e < 32; e++) D.edgeSign[e] = Math.sign(D.flow[e]);
+  for (let c = 0; c < 16; c++) D.cellSign[c] = Math.sign(D.cells[c]);
+  for (let r = 0; r < 4; r++) { D.loopSign[r] = Math.sign(D.hole[r]); D.loopSign[4 + r] = Math.sign(D.tube[r]); }
+  D.tau = tau; D.frame = L.frame; D.ready = true; D.why = '';
+  return true;
+}
+const latRatio = (x, m) => m > 0 ? Math.abs(x) / m : 0;
+function drawLattice(zmin, zk, cw, ch, CERT) {
+  const D = LATTICE_DRAWN, L = LATTICE_VIEW, KT = KERNEL;
+  D.verts = 0; D.nEdges = 0; D.nLoops = 0; D.nCells = 0; D.nNodes = 0; D.nBursts = 0;
+  if (!latticeBlend(CERT)) return;
+  if (!LATTICE_SHOW.on) { D.surfaceWhy = 'hidden'; return; }
+  D.surfaceWhy = '';
+  OV.n = 0; OV.zmin = zmin; OV.zk = zk;
+  /* loops first, as wide faint halos under everything else */
+  for (let q = 0; q < 8; q++) {
+    const hole = q < 4, r = q % 4, B = hole ? D.hole[r] : D.tube[r], t = latRatio(B, D.mLoop);
+    const path = [], sg = B < 0 ? -1 : 1;
+    if (hole) for (let i = 0; i <= TH_SEG; i++) path.push(latIdx(i * sg, LAT_PH(r)));
+    else for (let j = 0; j <= PH_SEG; j++) path.push(latIdx(LAT_TH(r), j * sg));
+    const c = B >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg;
+    ovPath(path, 3 + 10 * t, c, 0.05 + 0.20 * t);
+    if (t > 0) { const n = hole ? 8 : 4, step = Math.floor(path.length / n);
+      for (let k = step >> 1; k < path.length - 2; k += step) ovArrow(path, k, 4 + 6 * t, c, 0.25 + 0.45 * t); }
+    D.nLoops++;
+  }
+  /* the cells' circulations */
+  for (let r = 0; r < 4; r++) for (let s = 0; s < 4; s++) {
+    const v = D.cells[r * 4 + s], t = latRatio(v, D.mCell);
+    const path = latCell(r, s, v >= 0), c = v >= 0 ? LATTICE_COL.ccw : LATTICE_COL.cw;
+    ovPath(path, 0.8 + 2.4 * t, c, 0.20 + 0.60 * t);
+    if (t > 0) { const q = path.length / 4; for (let k = 0; k < 4; k++) ovArrow(path, Math.floor(q * k + q / 2), 2.5 + 5 * t, c, 0.35 + 0.55 * t); }
+    D.nCells++;
+  }
+  /* the potential along the edges, drawn the way it flows */
+  for (let e = 0; e < 32; e++) {
+    const te = KT.TORUS_EDGES[e], f = D.flow[e], t = latRatio(f, D.mFlow);
+    const along = (f >= 0) === (te.dir > 0);
+    const path = along ? latLine(te.theta, te.from[0], te.from[1], te.dir) : latLine(te.theta, te.to[0], te.to[1], -te.dir);
+    /* the vertex the drawn edge leaves from */
+    D.edgeFrom[e] = along ? KT.MAG_EDGES[e][0] : KT.MAG_EDGES[e][2];
+    const c = f >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg;
+    ovPath(path, 0.8 + 2.4 * t, c, 0.40 + 0.50 * t);
+    if (t > 0) ovArrow(path, Math.floor(path.length / 2), 3.5 + 6 * t, c, 0.5 + 0.5 * t);
+    D.nEdges++;
+  }
+  /* reconnections */
+  for (const e of L.recon) {
+    const te = KT.TORUS_EDGES[e], path = latLine(te.theta, te.from[0], te.from[1], te.dir);
+    ovPath(path, 3.5, LATTICE_COL.node, 0.8);
+    ovBurst(path[Math.floor(path.length / 2)], 11, LATTICE_COL.burst, 0.85);
+    D.nBursts++;
+  }
+  /* the vertices */
+  for (let k = 0; k < 16; k++) {
+    const t = latRatio(D.prob[k], D.mProb);
+    const node = latIdx(LAT_TH(KT.ringThetaOf(k)), LAT_PH(KT.ringPhiOf(k)));
+    ovDisc(node, 2.2 + 4 * t, [0.08, 0.06, 0.12], 0.85);
+    ovDisc(node, 1.4 + 3.2 * t, LATTICE_COL.node, 0.95);
+    D.nNodes++;
+  }
+  SURFACE_GL.drawOverlay(OV.d, OV.n, cw, ch);
+  D.verts = OV.n;
 }
 
 const LOAD_T0 = performance.now();
@@ -4524,6 +4862,14 @@ function updateDynamoHud() {
     let total = 0; for (let i = 0; i < n; i++) total += H.recon[i];
     set('dyn-recon', `${H.recon[n - 1]} now · ${total} in the run`);
   } else { set('dyn-flux', 'withheld'); set('dyn-helicity', DYNAMO_VIEW.why); set('dyn-recon', '–'); }
+  const LV = LATTICE_VIEW;
+  if (LV.ok) {
+    const sg = v => { const a = Math.abs(v), t = a === 0 ? '0' : (a >= 1e4 || a < 1e-2) ? a.toExponential(2) : a.toPrecision(3);
+                      return (v >= 0 ? '+' : '\u2212') + t; };
+    set('dyn-hole', LV.to.hole.map(sg).join('  '));
+    set('dyn-tube', LV.to.tube.map(sg).join('  '));
+    set('dyn-strips', `${LV.strips} of 8 hold exactly`);
+  } else { set('dyn-hole', 'withheld'); set('dyn-tube', LV.why); set('dyn-strips', `${LV.strips} of 8`); }
   const lo = num(d.layer[0]), hi = num(d.layer[1]), ph = num(d.phase), M = num(d.M);
   if (MAYA_VIEW.ok) {
     set('maya-phase', `${ph.toFixed(5)} ± ${fmtE(num(d.phaseErr))}`);
@@ -4600,6 +4946,119 @@ function drawDynamoTimeline(ctx, cw, ch) {
   }
   ctx.fillStyle = '#4a5a6a'; ctx.fillText(`step ${H.frame[0]}`, x0, y0 + h + 4);
   ctx.fillText(`step ${H.frame[n - 1]}   ▮ R4  ▮ reconnections`, x0 + w - 150, y0 + h + 4);
+}
+/* The flux map: the torus cut open along its seams into the 4x4 lattice the
+   hypercube is on it (TorusLattice.lean), theta to the right and phi up, the
+   fifth column and row the first again. Each dot is a vertex, sized by
+   |psi|^2; each segment an edge (edge_step) with the potential's flow along it,
+   amber towards +theta or +phi and cyan against; each square a cell
+   (cells_tile) with its circulation, counter-clockwise in (theta, phi) drawn
+   counter-clockwise here, phi being up (cell_orient_area). Each row of edges is
+   a loop through the hole (hole_loop), its flux at the right; each column a
+   loop round the tube (tube_loop), its flux at the top. Between two rows the
+   hole flux steps by the flux of the four cells between them
+   (hole_flux_step_y/z), and between two columns the tube flux likewise
+   (tube_flux_step_x/w): the mark between two values says the kernel decided
+   that balance exactly this step. The same blended values as the surface. */
+/* what was drawn, glyph by glyph: each arrow's screen direction and each arc's
+   turning sense, as the drawing used them */
+const FLUX_MAP = { drawn: false, x: 0, y: 0, cell: 0, why: '', glyphs: null };
+function drawFluxMap(ctx, cw, ch) {
+  FLUX_MAP.drawn = false;
+  const CERT = VISUAL_CERTIFICATE._last;
+  if (!CERT || !latticeBlend(CERT)) { FLUX_MAP.why = LATTICE_DRAWN.why; return; }
+  const D = LATTICE_DRAWN, LV = LATTICE_VIEW, KT = KERNEL, col = c => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
+  const leftOpen = !document.getElementById('left').classList.contains('collapsed');
+  const cell = 44, gx = (leftOpen ? 230 : 10) + 22, gy = Math.max(80, ch - 150 - 4 * cell - 48);
+  const X = r => gx + r * cell, Y = s => gy + (4 - s) * cell;
+  FLUX_MAP.x = gx; FLUX_MAP.y = gy; FLUX_MAP.cell = cell;
+  const G = { hole: [], tube: [], cells: [], edges: [] };
+  ctx.save();
+  ctx.fillStyle = '#05070dd9'; ctx.fillRect(gx - 20, gy - 44, 4 * cell + 96, 4 * cell + 80);
+  ctx.strokeStyle = '#1e2a36'; ctx.strokeRect(gx - 20, gy - 44, 4 * cell + 96, 4 * cell + 80);
+  ctx.font = '8px monospace'; ctx.fillStyle = '#8a9aaa';
+  ctx.fillText(`FLUX MAP · the torus cut open · step ${LV.frame}`, gx - 14, gy - 33);
+  ctx.font = '7px monospace'; ctx.fillStyle = '#5a6a7a';
+  ctx.fillText('θ →', X(4) - 14, Y(0) + 13); ctx.fillText('φ ↑', gx - 17, gy + 6);
+  const arrowHead = (x, y, ux, uy, L) => {
+    ctx.beginPath(); ctx.moveTo(x + ux * L, y + uy * L);
+    ctx.lineTo(x - ux * L * 0.6 - uy * L * 0.7, y - uy * L * 0.6 + ux * L * 0.7);
+    ctx.lineTo(x - ux * L * 0.6 + uy * L * 0.7, y - uy * L * 0.6 - ux * L * 0.7); ctx.closePath(); ctx.fill();
+  };
+  /* loops: a faint band along each row and column, and its flux in the margin */
+  for (let s = 0; s < 4; s++) {
+    const B = D.hole[s], t = latRatio(B, D.mLoop), c = col(B >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg);
+    ctx.globalAlpha = 0.08 + 0.22 * t; ctx.strokeStyle = c; ctx.lineWidth = 2 + 9 * t;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(s)); ctx.lineTo(X(4), Y(s)); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillStyle = c; ctx.lineWidth = 1;
+    const bx = X(4) + 8, bl = 4 + 22 * t, dir = B >= 0 ? 1 : -1;
+    G.hole[s] = dir;
+    ctx.fillRect(bx + (dir > 0 ? 0 : 4), Y(s) - 1, bl, 2); arrowHead(dir > 0 ? bx + bl + 2 : bx + 2, Y(s), dir, 0, 4);
+    ctx.font = '6px monospace'; ctx.fillText((B >= 0 ? '+' : '−') + Math.abs(B).toPrecision(2), bx + 32, Y(s) + 2);
+  }
+  for (let r = 0; r < 4; r++) {
+    const B = D.tube[r], t = latRatio(B, D.mLoop), c = col(B >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg);
+    ctx.globalAlpha = 0.08 + 0.22 * t; ctx.strokeStyle = c; ctx.lineWidth = 2 + 9 * t;
+    ctx.beginPath(); ctx.moveTo(X(r), Y(0)); ctx.lineTo(X(r), Y(4)); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillStyle = c; ctx.lineWidth = 1;
+    const by = Y(4) - 6, bl = 2 + 8 * t, dir = B >= 0 ? -1 : 1;
+    G.tube[r] = dir;
+    ctx.fillRect(X(r) - 1, dir < 0 ? by - bl : by - 10, 2, bl); arrowHead(X(r), dir < 0 ? by - bl - 2 : by - 10 + bl + 2, 0, dir, 3.5);
+    ctx.font = '6px monospace'; ctx.textAlign = 'center';
+    ctx.fillText((B >= 0 ? '+' : '\u2212') + Math.abs(B).toPrecision(2), X(r), by - 16);
+    ctx.textAlign = 'left';
+  }
+  /* the strip balances, decided by the kernel: a mark between two loops */
+  ctx.font = '7px monospace';
+  for (let s = 0; s < 4; s++) { ctx.fillStyle = LV.stripOk.hole[s] ? '#5cff85' : '#E4572E'; ctx.fillText(LV.stripOk.hole[s] ? '=' : '≠', X(4) + 1, (Y(s) + Y(s + 1)) / 2 + 3); }
+  for (let r = 0; r < 4; r++) { ctx.fillStyle = LV.stripOk.tube[r] ? '#5cff85' : '#E4572E'; ctx.fillText(LV.stripOk.tube[r] ? '=' : '≠', (X(r) + X(r + 1)) / 2 - 2, Y(4) - 2); }
+  /* cells: an arc turning the way the cell's flux circulates */
+  for (let r = 0; r < 4; r++) for (let s = 0; s < 4; s++) {
+    const v = D.cells[r * 4 + s], t = latRatio(v, D.mCell), c = col(v >= 0 ? LATTICE_COL.ccw : LATTICE_COL.cw);
+    const cx = X(r) + cell / 2, cy = Y(s) - cell / 2, R = 3 + 12 * t, a0 = -0.6, sweep = 4.9;
+    ctx.globalAlpha = 0.35 + 0.65 * t; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 0.8 + 2 * t;
+    /* counter-clockwise in (theta, phi) is anticlockwise on screen, phi being up */
+    const ccw = v >= 0, a1 = ccw ? a0 - sweep : a0 + sweep;
+    G.cells[r * 4 + s] = ccw;
+    ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1, ccw); ctx.stroke();
+    const tx = ccw ? Math.sin(a1) : -Math.sin(a1), ty = ccw ? -Math.cos(a1) : Math.cos(a1);
+    if (t > 0) arrowHead(cx + R * Math.cos(a1), cy + R * Math.sin(a1), tx, ty, 2.5 + 3 * t);
+    ctx.globalAlpha = 1;
+  }
+  /* edges, the flow along each */
+  for (let e = 0; e < 32; e++) {
+    const te = KT.TORUS_EDGES[e], f = D.flow[e], t = latRatio(f, D.mFlow), c = col(f >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg);
+    let x0, y0, x1, y1;
+    if (te.theta) { const l = (te.to[0] - te.from[0] + 4) % 4 === 1 ? te.from[0] : te.to[0]; x0 = X(l); x1 = X(l + 1); y0 = y1 = Y(te.from[1]); }
+    else { const l = (te.to[1] - te.from[1] + 4) % 4 === 1 ? te.from[1] : te.to[1]; y0 = Y(l); y1 = Y(l + 1); x0 = x1 = X(te.from[0]); }
+    ctx.globalAlpha = 0.45 + 0.55 * t; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 0.7 + 2.3 * t;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    /* towards +theta is right, towards +phi is up */
+    const sg = f >= 0 ? 1 : -1, ux = te.theta ? sg : 0, uy = te.theta ? 0 : -sg;
+    G.edges[e] = [ux, uy];
+    if (t > 0) arrowHead((x0 + x1) / 2, (y0 + y1) / 2, ux, uy, 2.5 + 3.5 * t);
+    ctx.globalAlpha = 1;
+    if (LV.recon.includes(e)) {
+      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+      ctx.strokeStyle = col(LATTICE_COL.burst); ctx.lineWidth = 1.2;
+      for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.beginPath(); ctx.moveTo(mx + 3 * Math.cos(a), my + 3 * Math.sin(a)); ctx.lineTo(mx + 8 * Math.cos(a), my + 8 * Math.sin(a)); ctx.stroke(); }
+    }
+  }
+  /* vertices, the fifth row and column faint: they are the first again */
+  for (let k = 0; k < 16; k++) {
+    const r = KT.ringThetaOf(k), s = KT.ringPhiOf(k), t = latRatio(D.prob[k], D.mProb), R = 1.5 + 3.5 * t;
+    for (const [dr, ds, a] of [[0, 0, 1], [4, 0, 0.3], [0, 4, 0.3], [4, 4, 0.3]]) {
+      if ((dr && r !== 0) || (ds && s !== 0)) continue;
+      ctx.globalAlpha = a; ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(X(r + dr), Y(s + ds), R, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = '6px monospace'; ctx.fillStyle = '#5a6a7a';
+  ctx.fillText('rows: flux through the hole · columns: along the tube', gx - 14, Y(0) + 22);
+  ctx.fillText('= flux steps by exactly the cells between (decided)', gx - 14, Y(0) + 30);
+  ctx.restore();
+  FLUX_MAP.drawn = true; FLUX_MAP.why = ''; FLUX_MAP.glyphs = G;
 }
 /* What the frame drew and at what scale: written only when it changes. */
 let DRAW_HUD_KEY = '';
@@ -4731,6 +5190,7 @@ function frame(t) {
     drawModeComparison(ctx, cw, ch);
     drawVertexBars(ctx, cw, ch);
     drawDynamoTimeline(ctx, cw, ch);
+    drawFluxMap(ctx, cw, ch);
   }
   SUTRA_GRAPH_INSPECTOR.requestUpdate(activeSutrasCanonical());
   LOG.render();
@@ -4783,6 +5243,11 @@ function setOmegaSlider(tenths) {
   vortexGain = tenths / 10; vortexHelicity = tenths >= 0 ? 1 : -1;
   document.getElementById('amp-omega-v').textContent = (tenths / 10).toFixed(1);
 }
+document.getElementById('btn-lattice').addEventListener('click', e => {
+  LATTICE_SHOW.on = !LATTICE_SHOW.on;
+  e.currentTarget.textContent = LATTICE_SHOW.on ? 'LATTICE ON' : 'LATTICE OFF';
+  e.currentTarget.classList.toggle('active', LATTICE_SHOW.on);
+});
 document.getElementById('btn-vortex').addEventListener('click', () => {
   const cur = +document.getElementById('amp-omega').value;
   setOmegaSlider(cur === 0 ? 30 : -cur);

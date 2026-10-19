@@ -21,6 +21,7 @@ import SutraWS.DisplayMap
 import SutraWS.FractionalPower
 import SutraWS.MayaFlow
 import SutraWS.Magnetism
+import SutraWS.TorusLattice
 
 /-!
 # SutraWS — root module
