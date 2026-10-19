@@ -27,7 +27,12 @@ straight piece by straight piece, and each vertex carries its charge:
   perpendicular to both fields and never exceeds the energy density
   `½(|E|² + |B|²)` (with the unit of each field its own);
 * `rk4_step_le` — a field line is traced by steps of `h` along unit field
-  directions, so a step never moves more than `h`.
+  directions, so a step never moves more than `h`;
+* `lorentz_perp`, `axis_integrand_zero` — the magnetic force on each piece's
+  current, `I u × B`, is perpendicular to the current and to the field, and a
+  straight piece puts no field on its own line, so the force on its middle is
+  the rest of the construct's;
+* `coulomb_newton3` — the Coulomb forces between the charges sum to zero.
 
 The page evaluates the fields in space in IEEE doubles; the lattice current
 and charge, and the two conservation laws, are decided exactly in the kernel.
@@ -218,6 +223,43 @@ the arrows' and lines' widths and opacities. -/
 theorem level_mem {t w₀ w₁ : ℝ} (h0 : 0 ≤ t) (h1 : t ≤ 1) (hw : 0 ≤ w₁) :
     w₀ ≤ w₀ + w₁ * t ∧ w₀ + w₁ * t ≤ w₀ + w₁ :=
   ⟨by nlinarith, by nlinarith⟩
+
+/-! ## The forces on the construct -/
+
+/-- **`lorentz_perp`**: the magnetic force on a current `I` along `u`,
+`I u × B`, is perpendicular to the current and to the field. -/
+theorem lorentz_perp (I ux uy uz bx by_ bz : ℝ) :
+    let f := cross (I * ux) (I * uy) (I * uz) bx by_ bz
+    ux * f.1 + uy * f.2.1 + uz * f.2.2 = 0 ∧ bx * f.1 + by_ * f.2.1 + bz * f.2.2 = 0 := by
+  simp only [cross]; constructor <;> ring
+
+/-- **`axis_integrand_zero`**: at a point `a + l u` on the line of a straight
+piece, the element at `a + t u` contributes `u × (x − s) = 0`. A piece puts no
+field anywhere on its own line, so the force on its middle is from the rest of
+the construct alone. -/
+theorem axis_integrand_zero (ax ay az ux uy uz l t : ℝ) :
+    cross ux uy uz ((ax + l * ux) - (ax + t * ux)) ((ay + l * uy) - (ay + t * uy))
+      ((az + l * uz) - (az + t * uz)) = (0, 0, 0) := by
+  simp only [cross, Prod.mk.injEq]; refine ⟨?_, ?_, ?_⟩ <;> ring
+
+/-- A double sum of an antisymmetric term vanishes. -/
+theorem antisymm_sum_zero {n : ℕ} (f : Fin n → Fin n → ℝ) (h : ∀ v w, f v w = -f w v) :
+    ∑ v, ∑ w, f v w = 0 := by
+  have h1 : ∑ v, ∑ w, f v w = ∑ w, ∑ v, f v w := Finset.sum_comm
+  have h2 : ∑ w, ∑ v, f v w = -∑ w, ∑ v, f w v := by
+    rw [← Finset.sum_neg_distrib]
+    refine Finset.sum_congr rfl (fun w _ => ?_)
+    rw [← Finset.sum_neg_distrib]
+    exact Finset.sum_congr rfl (fun v _ => h v w)
+  linarith
+
+/-- **`coulomb_newton3`**: the Coulomb forces between the sixteen charges sum
+to zero, in each coordinate `c`, for any distance `r` that is symmetric (the
+Euclidean one is): each pair pushes the two charges equally and oppositely. The
+`w = v` term is `0` since `c v - c v = 0`. -/
+theorem coulomb_newton3 (q c : Fin 16 → ℝ) (r : Fin 16 → Fin 16 → ℝ) (hr : ∀ v w, r v w = r w v) :
+    ∑ v, ∑ w, q v * q w * (c v - c w) / r v w ^ 3 = 0 :=
+  antisymm_sum_zero _ (fun v w => by rw [hr v w]; ring)
 
 end Fields
 end SutraWS
