@@ -24,9 +24,16 @@
                         browser has anything to clamp, and the curve keeps the
                         order of the values it is given
      certified          the badge reaches FAITHFUL on a preset
+     the torus          the flux map and the lattice on the surface show the
+                        worker's exact A and chi as the gate reads them
+     the fields         B by Biot-Savart integrated numerically here, E by
+                        Coulomb, S = E x B, at the plane's samples; every step
+                        of every field line along its field within 11 degrees
      motion             the kernel is paced, every step is drawn, the surface
                         moves to each state over its step interval and the
                         framing eases: no strobe, no jump
+     framing            on a fresh page the frame does not turn round with
+                        the field: zooming out fast and back in slowly
      exports            the step file and the operator audit name the build
                         that wrote them; the step carries what replays it
 
@@ -153,14 +160,23 @@ try {
     let covered = 0;
     for (let k = 3; k < px.length; k += 4) if (px[k] > 0) covered++;
     out.covered = covered / (W * H);
-    const D = SURFACE_GL.data, F = SURFACE_GL.FLOATS, nv = PROJECTION.quads * 6;
-    let badCol = 0, badDepth = 0, badPos = 0;
-    for (let v = 0; v < nv; v++) {
+    /* the surface is indexed: each visible quad is two triangles of the
+       vertex grid, so what the GPU draws is every vertex the indices name */
+    const D = SURFACE_GL.data, F = SURFACE_GL.FLOATS, IX = SURFACE_GL.index, nIdx = SURFACE_GL.nIdx, NVX = D.length / F;
+    const used = new Uint8Array(NVX);
+    let badIdx = 0;
+    for (let i = 0; i < nIdx; i++) { const v = IX[i]; if (v < NVX) used[v] = 1; else badIdx++; }
+    let badCol = 0, badDepth = 0, badPos = 0, nv = 0, white = 0;
+    for (let v = 0; v < NVX; v++) {
+      if (!used[v]) continue;
+      nv++;
       const b = v * F;
       if (!(Number.isFinite(D[b]) && Number.isFinite(D[b + 1]))) badPos++;
       if (!(D[b + 2] >= -1 && D[b + 2] <= 1)) badDepth++;
       for (let c = 3; c < 6; c++) if (!(D[b + c] >= 0 && D[b + c] <= 1)) badCol++;
+      if (D[b + 3] > 0.85 && D[b + 4] > 0.85 && D[b + 5] > 0.85) white++;
     }
+    out.nIdx = nIdx; out.badIdx = badIdx; out.white = nv ? white / nv : 0;
     let badPt = 0;
     for (let k = 0; k < N_PTS; k++) if (!(Number.isFinite(PT.sx[k]) && Number.isFinite(PT.sy[k]) && Number.isFinite(PT.depth[k]))) badPt++;
     Object.assign(out, { badCol, badDepth, badPos, badPt, behind: PROJECTION.behind, turn: PROJECTION.turn,
@@ -174,10 +190,18 @@ try {
   ok(f0.quads > 1000 && f0.covered > 0.02, `${f0.quads} quads cover ${(100 * f0.covered).toFixed(1)}% of the view`);
   ok(f0.badPt === 0, 'every surface point is finite', `${f0.badPt} are not`);
   ok(f0.behind === 0 && f0.turn < 1e-9, 'no point behind the camera, and the camera turns are rotations');
+  ok(f0.nIdx === f0.quads * 6 && f0.badIdx === 0, `each of the ${f0.quads} visible quads is two triangles of the vertex grid, every index inside it`,
+     `${f0.nIdx} indices, ${f0.badIdx} outside`);
 
   section('no clamping');
   ok(f0.badCol === 0, `all ${f0.nv * 3} colour components written for the GPU are in [0, 1]`, `${f0.badCol} outside`);
   ok(f0.badDepth === 0, 'every depth written for the GPU is in [-1, 1]', `${f0.badDepth} outside`);
+  /* the map onto [DEPTH_LO, DEPTH_LO + DEPTH_SPAN] leaves room below for the
+     lift that puts glyphs in front of the surface: mapped onto
+     [-0.999, 0.999], the nearest lifted glyph was at -1.003 and was clipped */
+  const dm = await evaluate(`({ lo: DEPTH_LO, span: DEPTH_SPAN, lift: LAT_BIAS })`);
+  ok(dm.lo - dm.lift >= -1 && dm.lo + dm.span <= 1 && dm.lift >= 0 && dm.lift <= 0.004 && dm.span > 0,
+     `the depth map leaves room for the glyph lift: [${dm.lo}, ${(dm.lo + dm.span).toFixed(3)}] less ${dm.lift} stays in [-1, 1] (ndc_depth_lift_mem)`);
   ok(f0.badPos === 0, 'every vertex position is finite', `${f0.badPos} are not`);
   const tc = await evaluate(`(() => {
     let mid = true, order = true, range = true, prev = -Infinity;
@@ -193,6 +217,40 @@ try {
   ok(tc.mid, 'the tone curve leaves the colour formula unchanged on [24, 231] (tone_mid)');
   ok(tc.order && tc.above, 'a larger value never comes out darker, and values past 255 stay distinct (tone_mono)');
   ok(tc.range, 'every toned value is within [0, 255] (tone_mem)');
+  /* A colour is toned with its hue kept. The gate's own low knee,
+     24 e^((v - 24)/24) below 24 and v above, from DisplayMap.lean; the
+     ratios of the three channels after toning must be the ratios of their low
+     knees, and a grey must come out as tone itself. Through tone channel by
+     channel (what this replaced) a bright colour's channels all reach the
+     high knee together and it goes white. */
+  const hk = await evaluate(`(() => {
+    const lk = v => v < 24 ? 24 * Math.exp((v - 24) / 24) : v, out = new Float64Array(3);
+    let range = true, ratio = 0, grey = 0, n = 0, bright = true;
+    for (let r = -400; r <= 3000; r += 85) for (let g = -400; g <= 3000; g += 97) for (let b = -400; b <= 3000; b += 113) {
+      toneRGB(r, g, b, out); n++;
+      if (!(out[0] > 0 && out[0] <= 1 && out[1] > 0 && out[1] <= 1 && out[2] > 0 && out[2] <= 1)) range = false;
+      const L = [lk(r), lk(g), lk(b)];
+      for (const [i, j] of [[0, 1], [1, 2], [0, 2]]) ratio = Math.max(ratio, Math.abs(out[i] / out[j] / (L[i] / L[j]) - 1));
+    }
+    for (let v = -400; v <= 3000; v += 7) { toneRGB(v, v, v, out); const t = tone(v) / 255; grey = Math.max(grey, ...[0, 1, 2].map(c => Math.abs(out[c] / t - 1))); }
+    /* a brighter colour of the same hue is never darker, and past 255 still brighter */
+    const a = new Float64Array(3), c = new Float64Array(3);
+    for (let s = 1; s < 40; s++) { toneRGB(300 * s / 10, 120 * s / 10, 40 * s / 10, a); toneRGB(300 * (s + 1) / 10, 120 * (s + 1) / 10, 40 * (s + 1) / 10, c); if (!(c[0] >= a[0])) bright = false; }
+    toneRGB(2400, 960, 320, a);
+    return { n, range, ratio, grey, bright, hot: Array.from(a) };
+  })()`);
+  /* (0, 1) in the reals; in doubles the high knee reaches 255 itself once
+     24 e^(-(m - 231)/24) is below half an ulp of 255 (m from 1068, measured),
+     so 1 is reached and must be allowed -- and nothing above it. This check
+     first found toneRGB(3000, 3000, 3000) = 1.0000000000000002: one ulp past
+     1, for 4.4% of bright colours, hidden from the surface check above by the
+     conversion to 32-bit floats. */
+  ok(hk.range, `every toned colour is in (0, 1] in each channel, 1 only where the knee rounds to 255 (toneRGB_mem, ${hk.n} colours)`);
+  ok(hk.ratio < 1e-12, 'toning keeps the ratios of the channels\' low knees: the hue is kept (toneRGB_ratio)', `worst ${hk.ratio.toExponential(2)}`);
+  ok(hk.grey < 1e-12, 'a grey is toned as tone itself (toneRGB_grey)', `worst ${hk.grey.toExponential(2)}`);
+  /* never darker (highKnee_mono is <=): in doubles two values past ~1100
+     both round to 255, so strictly brighter cannot be required */
+  ok(hk.bright && hk.hot[2] < 0.5 * hk.hot[0], 'a brighter colour of one hue is never darker, and far past 255 an orange is still orange, not white (highKnee_mono)', JSON.stringify(hk.hot));
 
   section('every control reaches the kernel');
   const applied = async (label, want) => {
@@ -206,13 +264,19 @@ try {
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
   ok(presets.length === 17, `${presets.length} presets`);
+  const whites = [];
   for (const [id, comp, set] of presets) {
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
     await applied(id, { comp, active: set });
     const fr = await frame();
     ok(fr.drawn && fr.badCol === 0 && fr.badDepth === 0 && fr.badPt === 0 && fr.behind === 0,
        `${id}: drawn, finite, nothing to clamp`, JSON.stringify({ drawn: fr.drawn, why: fr.why, badCol: fr.badCol, badDepth: fr.badDepth, badPt: fr.badPt }));
+    whites.push([id, fr.white]);
   }
+  /* Toned channel by channel, 42 to 50% of the drawn surface had all three
+     channels above 0.85 (measured on six presets). */
+  const worstWhite = whites.reduce((m, w) => w[1] > m[1] ? w : m, ['', 0]);
+  ok(worstWhite[1] < 0.05, `on no preset is more than 5% of the drawn surface near white (worst ${worstWhite[0]}, ${(100 * worstWhite[1]).toFixed(2)}%)`);
   for (const comp of ['PARALLEL', 'SERIES', 'SYMMETRIC_CONCURRENT']) {
     await evaluate(`document.querySelector('#comp-ctrls button[data-comp="${comp}"]').click()`);
     await applied(`composition ${comp}`, { comp });
@@ -426,6 +490,173 @@ try {
   ok(!wh.map && wh.verts === 0 && !wh.ready && wh.why === 'withheld by the gate', 'without its certificate neither the flux map nor the lattice is drawn, and the reason is kept', JSON.stringify(wh));
   await evaluate(`document.getElementById('btn-run').click()`);
 
+  section('the fields around the construct');
+  /* The magnetic and electric fields of the construct's sources, and the
+     energy flow between them (FieldsAround.lean). Paused on one landed state
+     of the dynamo preset, the gate takes what the page asked the field worker
+     (sources, their places, the radius) and what it answered, and recomputes
+     the answer independently: B by integrating Biot-Savart numerically along
+     each straight piece (Gauss-Legendre, panels finer the nearer the point),
+     not by the worker's closed form; E by Coulomb; S = E x B. */
+  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await waitFor(`KERNEL_VIEW.state.frame >= 15`, 60000);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await sleep(1500);
+  await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
+  const fieldsLanded = await waitFor(`FIELDS.cur && !FIELDS.busy && FIELDS.cur.frame === KERNEL_VIEW.state.frame && performance.now() - FIELDS.t0 > FIELDS.FADE_MS`, 30000);
+  const fd = await evaluate(`(() => {
+    VISUAL_CERTIFICATE.status(); updateDynamoHud(); projectTorus(); renderTorus();
+    const F = FIELDS, C = F.cur, rq = C.req, src = KERNEL_VIEW.dyn.sources, num = FAITHFUL.qNum;
+    let badOv = 0;
+    for (let v = 0; v < OV.n; v++) { const o = v * 7, d = OV.d;
+      if (!(Number.isFinite(d[o]) && Number.isFinite(d[o + 1]) && d[o + 2] >= -1 && d[o + 2] <= 1)) badOv++;
+      for (let c = 3; c < 7; c++) if (!(d[o + c] >= 0 && d[o + c] <= 1)) badOv++; }
+    for (let v = 0; v < PLANE.nV; v++) { const o = v * 7, d = PLANE.d;
+      if (!(Number.isFinite(d[o]) && Number.isFinite(d[o + 1]) && d[o + 2] >= -1 && d[o + 2] <= 1)) badOv++;
+      for (let c = 3; c < 7; c++) if (!(d[o + c] >= 0 && d[o + c] <= 1)) badOv++; }
+    for (let i = 0; i < PLANE.nI; i++) if (!(PLANE.i[i] < PLANE.nV)) badOv++;
+    /* where the surface puts each vertex, read from tessVertexToTorus's angles */
+    const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
+    const at = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0);
+      const i = TH_SEG / 8 + TH_SEG / 4 * quarter(t.theta), j = PH_SEG / 8 + PH_SEG / 4 * quarter(t.phi), idx = i * PH_SEG + j;
+      return [PT.wx[idx], PT.wy[idx], PT.wz[idx]]; });
+    const pick = [];
+    for (let g = 0; g < C.NR * C.NS; g += 7) pick.push(g);
+    return { cert: VISUAL_CERTIFICATE.status().fields, ok: F.ok, why: F.why, drawWhy: F.drawWhy, drawn: F.drawn, nOv: OV.n, nPl: PLANE.nV, badOv,
+             frame: KERNEL_VIEW.state.frame, curFrame: C.frame, reqFrame: rq && rq.frame,
+             rows: ['fld-current', 'fld-charge', 'fld-lines'].map(id => document.getElementById(id).textContent),
+             J: src.current.map(num), Qc: src.charge.map(num), kirchhoff: src.kirchhoff, neutral: src.neutral,
+             at, edges: KERNEL.MAG_EDGES.map(([v, , h]) => [v, h]),
+             req: { nodes: Array.from(rq.nodes), paths: Array.from(rq.paths), J: Array.from(rq.J), Q: Array.from(rq.Q), R: rq.R, nseg: rq.nseg },
+             pick, plane: pick.map(g => [C.plane[g * 4], C.plane[g * 4 + 1], C.plane[g * 4 + 2], C.planeVal[g * 3], C.planeVal[g * 3 + 1], C.planeVal[g * 3 + 2],
+                                        C.planeS[g * 3], C.planeS[g * 3 + 1], C.planeS[g * 3 + 2]]),
+             bPts: Array.from(C.bPts), bOff: Array.from(C.bOff), ePts: Array.from(C.ePts), eOff: Array.from(C.eOff),
+             arrows: Array.from(C.arrows), arrowPts: Array.from(C.arrowPts), singular: C.singular,
+             /* each stored energy's place in its range, as the plane is coloured */
+             places: (() => { const lo = C.planeRange, V = C.planeVal; let out = 0, n = 0;
+               for (let g = 0; g < C.NR * C.NS; g++) { if (!V[g * 3 + 2]) continue;
+                 for (const k of [0, 2]) { const u = V[g * 3 + k / 2]; if (!(u > 0)) continue; n++;
+                   const t = (Math.log(u) - lo[k]) / (lo[k + 1] - lo[k]); if (!(t >= 0 && t <= 1)) out++; } }
+               return { out, n }; })() };
+  })()`);
+  ok(fieldsLanded && fd.curFrame === fd.frame && fd.reqFrame === fd.frame, `the fields drawn are those of the state on the screen (step ${fd.frame})`);
+  ok(fd.cert && fd.ok && fd.kirchhoff && fd.neutral, 'the fields channel holds: the kernel decided both conservation laws on the sources', fd.why);
+  ok(fd.drawn && fd.drawn.lines > 10 && fd.drawn.arrows > 50 && fd.drawn.plane > 1000,
+     `the fields are drawn: ${fd.drawn && fd.drawn.lines} field lines, ${fd.drawn && fd.drawn.arrows} energy-flow arrows, ${fd.drawn && fd.drawn.plane} plane cells`, fd.drawWhy);
+  ok(fd.badOv === 0, `every overlay and plane vertex written for the GPU is finite, its depth in [-1, 1] and its colour and opacity in [0, 1], every plane index a vertex (${fd.nOv} + ${fd.nPl}; mix_mem, level_mem)`, `${fd.badOv} outside`);
+  ok(fd.places.out === 0 && fd.places.n > 1000, `every stored energy on the plane is inside its own range: its place is in [0, 1] (plot_mem; ${fd.places.n} values)`, `${fd.places.out} outside`);
+  const sameArr = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  ok(sameArr(fd.req.J, fd.J) && sameArr(fd.req.Q, fd.Qc), 'the worker was given the kernel\'s current on every edge and charge at every vertex');
+  const pos = fd.Qc.filter(q => q > 0).length, neg = fd.Qc.filter(q => q < 0).length;
+  ok(fd.rows[1] === `${pos} positive, ${neg} negative · they sum to 0` && fd.rows[0].endsWith('conserved at all 16 vertices'),
+     'the rows show the kernel\'s sources', fd.rows.join(' | '));
+  ok(fd.at.every((p, k) => p.every((x, c) => x === fd.req.nodes[k * 3 + c])), 'each charge sits where the surface puts its vertex');
+  const NS1 = fd.req.nseg + 1, PP = fd.req.paths;
+  ok(fd.edges.every(([v, h], e) => [0, 1, 2].every(c => PP[(e * NS1) * 3 + c] === fd.req.nodes[v * 3 + c] && PP[(e * NS1 + fd.req.nseg) * 3 + c] === fd.req.nodes[h * 3 + c])),
+     'each edge\'s current runs along the surface from the vertex it leaves to the one it enters, the way J counts it');
+  /* the gate's own fields */
+  const GL = [[-0.8611363115940526, 0.34785484513745385], [-0.3399810435848563, 0.6521451548625461], [0.3399810435848563, 0.6521451548625461], [0.8611363115940526, 0.34785484513745385]];
+  const Bq = (x, y, z) => {
+    let bx = 0, by = 0, bz = 0;
+    for (let e = 0; e < 32; e++) { const I = fd.req.J[e]; if (I === 0) continue;
+      for (let k = 0; k < fd.req.nseg; k++) {
+        const o = (e * NS1 + k) * 3, ax = PP[o], ay = PP[o + 1], az = PP[o + 2], dx = PP[o + 3] - ax, dy = PP[o + 4] - ay, dz = PP[o + 5] - az;
+        const L2 = dx * dx + dy * dy + dz * dz; if (!(L2 > 0)) continue;
+        const tt = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / L2));
+        const dmin = Math.hypot(x - ax - tt * dx, y - ay - tt * dy, z - az - tt * dz), M = Math.min(20000, 4 + Math.ceil(24 * Math.sqrt(L2) / dmin));
+        for (let m = 0; m < M; m++) for (const [xi, w] of GL) {
+          const t = (m + (xi + 1) / 2) / M, rx = x - ax - t * dx, ry = y - ay - t * dy, rz = z - az - t * dz, r2 = rx * rx + ry * ry + rz * rz;
+          const f = I * w / 2 / M / (r2 * Math.sqrt(r2));
+          bx += f * (dy * rz - dz * ry); by += f * (dz * rx - dx * rz); bz += f * (dx * ry - dy * rx);
+        }
+      } }
+    return [bx, by, bz];
+  };
+  const Eq = (x, y, z) => { let ex = 0, ey = 0, ez = 0;
+    for (let v = 0; v < 16; v++) { const q = fd.req.Q[v], dx = x - fd.req.nodes[v * 3], dy = y - fd.req.nodes[v * 3 + 1], dz = z - fd.req.nodes[v * 3 + 2], r2 = dx * dx + dy * dy + dz * dz;
+      const f = q / (r2 * Math.sqrt(r2)); ex += f * dx; ey += f * dy; ez += f * dz; }
+    return [ex, ey, ez]; };
+  const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], nrm = a => Math.sqrt(dot(a, a));
+  let worstB = 0, worstE = 0, worstS = 0, worstOrth = 0, nPlane = 0, onPlane = true;
+  for (const [x, y, z, uE, uB, has, sx, sy, sz] of fd.plane) {
+    if (y !== 0 || Math.hypot(x, z) > fd.req.R * (1 + 1e-6)) onPlane = false;
+    if (!has) continue;
+    nPlane++;
+    const B = Bq(x, y, z), E = Eq(x, y, z), S = crs(E, B);
+    worstB = Math.max(worstB, Math.abs(uB / (dot(B, B) / 2) - 1));
+    worstE = Math.max(worstE, Math.abs(uE / (dot(E, E) / 2) - 1));
+    worstS = Math.max(worstS, Math.hypot(sx - S[0], sy - S[1], sz - S[2]) / (nrm(E) * nrm(B)));
+    worstOrth = Math.max(worstOrth, Math.abs(dot([sx, sy, sz], E)) / (nrm([sx, sy, sz]) * nrm(E) || 1), Math.abs(dot([sx, sy, sz], B)) / (nrm([sx, sy, sz]) * nrm(B) || 1));
+  }
+  ok(onPlane && nPlane > 1000, `the plane samples lie on the equatorial plane inside the ball (${nPlane} checked, ${fd.singular} on a source)`);
+  ok(worstB < 1e-4, `the magnetic energy density at every sample is Biot-Savart integrated numerically (segment_field_integral; worst ${worstB.toExponential(1)})`);
+  ok(worstE < 1e-4, `the electric energy density at every sample is Coulomb's (worst ${worstE.toExponential(1)})`);
+  ok(worstS < 1e-4 && worstOrth < 1e-4, `the energy flow at every sample is E x B, perpendicular to both (poynting_orth; worst ${worstS.toExponential(1)}, ${worstOrth.toExponential(1)})`);
+  /* every drawn step of every field line runs along the field at its middle */
+  const lineCheck = (pts, off, field) => {
+    let worst = 1, flips = 0, outside = 0, steps = 0, lines = 0;
+    const cos11 = Math.cos(11.01 * Math.PI / 180);
+    for (let L = 0; L + 1 < off.length; L++) {
+      let sign = 0; lines++;
+      for (let i = off[L]; i < off[L + 1]; i++) if (Math.hypot(pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]) > fd.req.R * (1 + 1e-6)) outside++;
+      for (let i = off[L]; i + 1 < off[L + 1]; i++) {
+        const a = [pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]], b = [pts[i * 4 + 4], pts[i * 4 + 5], pts[i * 4 + 6]];
+        const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], f = field((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+        const c = dot(d, f) / (nrm(d) * nrm(f)); steps++;
+        if (Math.abs(c) < worst) worst = Math.abs(c);
+        const sg = Math.sign(c); if (sign && sg !== sign) flips++; if (!sign) sign = sg;
+      }
+    }
+    return { ok: worst >= cos11 && flips === 0 && outside === 0, worst: Math.acos(Math.min(1, worst)) * 180 / Math.PI, flips, outside, steps, lines };
+  };
+  const tl0 = Date.now(), lb = lineCheck(fd.bPts, fd.bOff, Bq), le = lineCheck(fd.ePts, fd.eOff, Eq);
+  ok(lb.ok && lb.steps > 200, `every step of all ${lb.lines} magnetic lines runs along B within 11 degrees, one way along each line, inside the ball (${lb.steps} steps, widest ${lb.worst.toFixed(2)} degrees; rk4_step_le)`, JSON.stringify(lb));
+  ok(le.ok && le.steps > 200, `every step of all ${le.lines} electric lines runs along E within 11 degrees, one way along each line, inside the ball (${le.steps} steps, widest ${le.worst.toFixed(2)} degrees)`, JSON.stringify(le));
+  ok(fd.rows[2].startsWith(`${lb.lines} magnetic, ${le.lines} electric`), 'the row counts the lines drawn', fd.rows[2]);
+  let arrowsOk = true, nA = 0, worstA = 0;
+  for (let k = 0; k < fd.arrows.length; k += 4) {
+    const q = k / 4 * 6, P = fd.arrowPts, x = (P[q] + P[q + 3]) / 2, z = (P[q + 2] + P[q + 5]) / 2, t = fd.arrows[k + 3];
+    /* to the accuracy S itself has here: the arrow's direction times the
+       in-plane |S| reproduces the in-plane S within 1e-4 of |E||B| (where S
+       is nearly vertical its in-plane direction is ill-conditioned) */
+    const E = Eq(x, 0, z), B = Bq(x, 0, z), S = crs(E, B), sp = Math.hypot(S[0], S[2]);
+    worstA = Math.max(worstA, Math.hypot(fd.arrows[k] * sp - S[0], fd.arrows[k + 2] * sp - S[2]) / (nrm(E) * nrm(B))); nA++;
+    if (!(t >= 0 && t <= 1) || P[q + 1] !== 0 || P[q + 4] !== 0) arrowsOk = false;
+  }
+  ok(arrowsOk && nA > 50 && worstA < 1e-4, `each of the ${nA} arrows on the plane points along S's part in the plane there, sized within its range (plot_mem; worst ${worstA.toExponential(1)} of |E||B|)`);
+  console.log(`       (the gate's own fields took ${((Date.now() - tl0) / 1000).toFixed(1)} s)`);
+  /* the toggle, and nothing drawn without the certificate */
+  await evaluate(`document.getElementById('btn-fields').click()`);
+  const off = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
+  await evaluate(`document.getElementById('btn-fields').click()`);
+  /* shown again, nothing is drawn until the fields of the state on the
+     screen have been computed afresh */
+  const blank = await evaluate(`(() => { projectTorus(); renderTorus(); return FIELDS.drawn.lines + FIELDS.drawn.arrows + FIELDS.drawn.plane; })()`);
+  const back = await waitFor(`FIELDS.cur && FIELDS.cur.frame === KERNEL_VIEW.state.frame && !FIELDS.busy`, 20000);
+  const on = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
+  ok(!off.show && off.label === 'FIELDS OFF' && off.drawn.lines + off.drawn.arrows + off.drawn.plane === 0 &&
+     blank === 0 && back && on.show && on.label === 'FIELDS ON' && on.drawn.lines > 0,
+     'FIELDS takes the fields off and puts fresh ones back', JSON.stringify({ off, blank, back, on }));
+  await evaluate(`FIELDS.ok = false; FIELDS.why = 'withheld by the gate'`);
+  await sleep(600);
+  const fw = await evaluate(`(() => { const cert = VISUAL_CERTIFICATE.status().fields; updateDynamoHud(); projectTorus(); renderTorus(); return { cert, drawn: FIELDS.drawn,
+    rows: ['fld-current', 'fld-charge'].map(id => document.getElementById(id).textContent) }; })()`);
+  await evaluate(`FIELDS.ok = true; FIELDS.why = ''`);
+  ok(!fw.cert && fw.drawn.lines + fw.drawn.arrows + fw.drawn.plane === 0 && fw.rows[0] === 'withheld' && fw.rows[1] === 'withheld by the gate',
+     'without its certificate nothing of the fields is drawn, and the reason is shown', JSON.stringify(fw));
+  await evaluate(`document.getElementById('btn-run').click()`);
+  /* running, and the fields off: states land and nothing is computed for them */
+  await waitFor(`FIELDS.cur && FIELDS.cur.frame > ${fd.frame}`, 20000);
+  await evaluate(`document.getElementById('btn-fields').click()`);
+  const q0 = await evaluate(`({ sent: FIELDS.sent, frame: KERNEL_VIEW.state.frame })`);
+  const landed = await waitFor(`KERNEL_VIEW.state.frame >= ${q0.frame + 4} && DISPLAY.tau === 1`, 20000);
+  const q1 = await evaluate(`({ sent: FIELDS.sent, frame: KERNEL_VIEW.state.frame })`);
+  await evaluate(`document.getElementById('btn-fields').click()`);
+  const resumed = await waitFor(`FIELDS.cur && FIELDS.cur.frame >= ${q1.frame}`, 20000);
+  ok(landed && q1.sent === q0.sent && resumed, `with the fields off nothing is computed: ${q1.frame - q0.frame} states landed and no field was asked for; on again, they are computed for the state on the screen`,
+     JSON.stringify({ q0, q1, resumed }));
+
   section('motion');
   /* The kernel ran flat out (20 to 50 steps a second) while the page drew the
      newest state every 100 ms and replaced the surface outright, and the
@@ -527,6 +758,51 @@ try {
              args: ops.every(o => Array.isArray(o.arguments) && o.arguments.length >= 1 && o.arguments[0].n === '1' && o.arguments[0].d === '1') }; })()`) : {};
   ok(gotAudit && au.fp === fp && au.n === 29, `the operator audit names this build (fingerprint ${au.fp}, ${au.n} operators)`);
   ok(au.args === true, 'every audited matrix records its arguments, strength 1 first');
+
+  section('framing');
+  /* The framing must not breathe. It now zooms out within FRAME_OUT_MS when
+     the surface grows past it, back in over FRAME_IN_MS once the surface is
+     inside FRAME_HOLD of it, and holds still between (frame_hold). A turn is
+     counted once the frame has moved back by 1% of its size from where it
+     last turned: less is not seen, and counting every reversal counts the
+     jitter of a frame that has settled. Measured on a page just loaded, over
+     8 s each of CYMATIC, CROWN and OCTAD in turn, 6 s after each is picked,
+     three runs each: one lag of 1.2 s both ways 8, 8 and 10 turns; two lags
+     and no hold 2, 4 and 6 (OCTAD alone up to 5); with the hold 1, 3 and 3.
+     Late in this gate, after the pace has been driven to 10 steps a second
+     and back, the count rose with what the page had just been put through,
+     not with the framing, so it is measured on a fresh page. (The frame's
+     spread is no measure either: settling after a preset it drifts one way,
+     8% on CYMATIC against 5.8% with one lag.) */
+  await cmd('Page.navigate', { url: PAGE });
+  ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
+  let turns = 0, turnSecs = 0;
+  const turnsBy = [];
+  for (const id of ['pre-cymatic', 'pre-crown', 'pre-octad']) {
+    await evaluate(`document.getElementById('${id}').click()`);
+    await sleep(6000);
+    const br = await evaluate(`new Promise(res => {
+      const t0 = performance.now(), s = [];
+      function tick() {
+        s.push(PROJECTION.frameBody);
+        if (performance.now() - t0 < 8000) requestAnimationFrame(tick);
+        else {
+          /* a turn once the frame has come back 1% of its size from its last extreme */
+          let n = 0, dir = 0, ext = s[0];
+          for (let i = 1; i < s.length; i++) {
+            const v = s[i];
+            if (dir >= 0) { if (v > ext) ext = v; else if (ext - v > 0.01 * ext) { if (dir > 0) n++; dir = -1; ext = v; } }
+            else { if (v < ext) ext = v; else if (v - ext > 0.01 * ext) { n++; dir = 1; ext = v; } }
+            if (dir === 0 && v !== s[0]) dir = v > s[0] ? 1 : -1;
+          }
+          res({ rev: n, secs: (performance.now() - t0) / 1000 });
+        }
+      }
+      requestAnimationFrame(tick);
+    })`, true);
+    turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
+  }
+  ok(turns / turnSecs <= 0.2, `the framing does not breathe: it turns round ${(turns / turnSecs).toFixed(2)} times a second over ${turnSecs.toFixed(0)} s of CYMATIC, CROWN and OCTAD (${turnsBy.join(', ')}; frame_hold)`);
 
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));
