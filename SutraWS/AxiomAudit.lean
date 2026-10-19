@@ -22,6 +22,7 @@ import SutraWS.FractionalPower
 import SutraWS.MayaFlow
 import SutraWS.Magnetism
 import SutraWS.TorusLattice
+import SutraWS.FieldsAround
 import Lean
 
 /-!

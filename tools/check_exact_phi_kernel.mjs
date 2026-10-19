@@ -31,6 +31,12 @@
      magnetism          induction, Faraday potential, potential and
                         reconnections recomputed here; no flux from Faraday,
                         flux closed on every cube, the memory bounded
+     torus              vertex places from tessVertexToTorus's angles, each
+                        face's circulation by walking its corners; the strip
+                        laws
+     sources            the current by walking each face's boundary, its
+                        conservation at every vertex, the charge as the
+                        dielectric less its neighbours, its neutrality
      parameters         vortex, drive and polarisation each change the run
      presets            each preset does, over 600 steps, what its
                         description says: flux growth, R4, where the field
@@ -617,6 +623,70 @@ section('the engine on the torus');
   ok(runAgree && runLaws && nonzero, 'on 40 steps of the dynamo preset the torus fluxes are the gate\'s, every balance holds, and the loops and cells carry flux');
 }
 
+section('the sources of the fields around the construct');
+{
+  /* The current J = (d1)^T B and the charge rho = (d0)^T d0 q are recomputed
+     here from the 4-cube itself: the gate walks each square's corners
+     base -> +a -> +a+b -> +b to find which edges its boundary runs along and
+     which way, with no edge or face table of the kernel's; the neighbours of a
+     vertex are the four that differ from it in one bit. Only which square a
+     face index names (its base and two axes) is read from the kernel. */
+  const edgeAt = (u, w) => { const a = Math.log2(u ^ w); return K.MAG_EDGES.findIndex(([v, b]) => v === Math.min(u, w) && b === a); };
+  const walkJ = B => {
+    const J = new Array(32).fill(Q.ZERO);
+    K.MAG_FACES.forEach((f, i) => {
+      const v = f.base, cs = [v, v ^ (1 << f.a), v ^ (1 << f.a) ^ (1 << f.b), v ^ (1 << f.b)];
+      for (let k = 0; k < 4; k++) { const u = cs[k], w = cs[(k + 1) % 4], e = edgeAt(u, w);
+        J[e] = u < w ? Q.add(J[e], B[i]) : Q.sub(J[e], B[i]); }
+    });
+    return J;
+  };
+  /* net current into each vertex, from J alone */
+  const inflow = J => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((t, a) => {
+    const w = v ^ (1 << a), e = edgeAt(v, w);
+    return w < v ? Q.add(t, J[e]) : Q.sub(t, J[e]); }, Q.ZERO));
+  const lap = q => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((t, a) => Q.add(t, Q.sub(q[v], q[v ^ (1 << a)])), Q.ZERO));
+  const eqv = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
+  let jSame = true, kirch = true, rSame = true, neutral = true, flags = true, where = '';
+  for (let trial = 0; trial < 40; trial++) {
+    const B = Array.from({ length: 24 }, (_, f) => Q.mk(BigInt(((f + 5) * (trial + 3) * 7907) % 1999 - 999), BigInt(1 + ((f + trial) % 7))));
+    const q = Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 2) * (trial + 11) * 6151) % 401 - 200), BigInt(1 + ((v * trial) % 6))));
+    const J = K.currentOf(B);
+    if (!eqv(J, walkJ(B))) { jSame = false; where = 'trial ' + trial; }
+    /* these fluxes are not the curl of anything: conservation is d1 d0 = 0,
+       not a property of the potential */
+    if (!inflow(J).every(Q.isZero)) kirch = false;
+    const rho = K.laplacianV(q);
+    if (!eqv(rho, lap(q))) rSame = false;
+    if (!Q.isZero(rho.reduce((t, x) => Q.add(t, x), Q.ZERO))) neutral = false;
+    /* the kernel's flags on a potential whose curl is this trial's */
+    const A = K.MAG_EDGES.map((_, e) => Q.mk(BigInt(((e + 1) * (trial + 5) * 3571) % 801 - 400), BigInt(1 + e % 4)));
+    const sd = K.sourcesData(A, q);
+    if (!(sd.kirchhoff === true && sd.neutral === true && eqv(sd.current, walkJ(K.curlA(A))) && eqv(sd.charge, lap(q)))) flags = false;
+  }
+  ok(jSame, 'the lattice current is the sum, over the faces round each edge, of their flux the way their boundary runs (J = (d1)^T B), on 40 fluxes', where);
+  ok(kirch, 'as much current flows into every vertex as out of it, for any flux (kirchhoff, recomputed from J alone)');
+  ok(rSame, 'each vertex\'s charge is the dielectric there less its four neighbours\', summed (rho = (d0)^T d0 q, charge_laplacian), on 40 dielectrics');
+  ok(neutral, 'the charges sum to zero (charge_neutral, recomputed)');
+  ok(flags, 'sourcesData gives exactly these, and decides both laws true, on 40 potentials and dielectrics');
+  /* and on a run: the dynamo preset's sources are the gate's and not empty */
+  const X = A4;
+  const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ONE,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ONE };
+  const act = [3, 7, 9, 11, 25, 29].map(id => ({ id, strength: Q.HALF }));
+  let eng = K.initEngine(), runOk = true, live = 0;
+  for (let s = 0; s < 30; s++) {
+    eng = K.step(eng, params, act, 'SYMMETRIC_CONCURRENT');
+    const sd = K.sourcesData(eng.magA, eng.dielectric);
+    if (!(sd.kirchhoff && sd.neutral && eqv(sd.current, walkJ(K.curlA(eng.magA))) && eqv(sd.charge, lap(eng.dielectric)) && inflow(sd.current).every(Q.isZero))) runOk = false;
+    if (sd.current.some(x => !Q.isZero(x)) && sd.charge.some(x => !Q.isZero(x))) live++;
+  }
+  ok(runOk && live === 30, `on 30 steps of the dynamo preset the sources are the gate's, both laws hold, and current and charge are both present (${live}/30 steps)`);
+}
+
 section('no parameter is ignored');
 {
   /* the vortex, the drive and the polarisation each change the run: run 8
@@ -662,36 +732,36 @@ section('presets develop over the run as their descriptions say');
      300 (L1 at least 0.05 between the mean shares of steps 300-360 and
      540-600). Every one is run here for 600 steps, four at a time. */
   const EXPECT = {
-    "pre-cymatic": { line: "  'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 25, 17: 25, 27: 50, 28: 50 }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 28, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0100", "0111", "1000", "1011", "1100", "1110", "1111"], "late": ["0001", "0010", "0011", "0101", "1010", "1100", "1110"], "moving": true} },
+    "pre-cymatic": { line: "  'pre-cymatic':        { comp: 'PARALLEL',             set: { 9: 12, 17: 25, 27: 50, 28: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 27, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0100", "0111", "1000", "1011", "1100", "1110", "1111"], "late": ["0000", "0001", "0011", "0100", "0101", "0110", "0111", "1000", "1001", "1010", "1100"], "moving": true} },
     "pre-bindu": { line: "  'pre-bindu':          { comp: 'PARALLEL',             set: { 5: 25, 12: 50, 28: 75 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 216, "r4": 0, "r4first": -1, "early": ["0000", "0010", "0011", "0100", "0101", "0110", "1001", "1010", "1011", "1100"], "late": ["0011", "1010", "1011", "1110", "1111"], "moving": true} },
     "pre-star": { line: "  'pre-star':           { comp: 'SYMMETRIC_CONCURRENT', set: { 13: 100, 20: 75, 22: 50 }, omega: 10, drive: 1, chi: 10 },",
       claim: {"growth": 20, "r4": 0, "r4first": -1, "early": ["0000", "1111"], "late": ["1001", "1010", "1100"], "moving": true} },
-    "pre-crown": { line: "  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 40, 18: 35, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 160, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0100", "0101", "0110", "0111", "1000", "1001", "1110", "1111"], "late": ["0001", "0010", "0011", "0100", "0110", "1011", "1100", "1110"], "moving": true} },
+    "pre-crown": { line: "  'pre-crown':          { comp: 'SERIES',               set: { 5: 30, 7: 5, 13: 20, 18: 6, 19: 55, 20: 90, 22: 20 }, args: { 13: ['5/2'], 19: ['23/4'], 20: ['7'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 138, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "0011", "0101", "0110", "0111", "1001", "1110", "1111"], "late": ["0001", "0010", "0011", "0101", "1010", "1101", "1110", "1111"], "moving": true} },
     "pre-square": { line: "  'pre-square':         { comp: 'PARALLEL',             set: { 8: 50, 16: 50, 21: 100, 29: 25 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 41, "r4": 368, "r4first": 208, "early": ["0000", "1111"], "late": ["0000", "1111"], "moving": false} },
     "pre-equilibrium": { line: "  'pre-equilibrium':    { comp: 'SERIES',               set: { 7: 50, 19: 75, 22: 100 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 265, "r4": 0, "r4first": -1, "early": ["0000", "0011", "0100", "0101", "0110", "1001", "1010", "1100", "1111"], "late": ["0001", "0101", "0110", "0111", "1000", "1001", "1010", "1110"], "moving": true} },
-    "pre-cube": { line: "  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 75, 22: 75 }, args: { 16: ['17/4'] }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 7.1, "r4": 0, "r4first": -1, "early": ["1000", "1001", "1010", "1011", "1100"], "late": ["1100"], "moving": true} },
-    "pre-octad": { line: "  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 25, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 23, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "0101", "1000", "1010", "1111"], "late": ["0000", "0011", "0101", "0110", "1001", "1010", "1111"], "moving": true} },
+    "pre-cube": { line: "  'pre-cube':           { comp: 'SYMMETRIC_CONCURRENT', set: { 16: 25, 22: 75 }, args: { 16: ['17/4'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 238, "r4": 0, "r4first": -1, "early": ["0000", "0101", "0111", "1000", "1010", "1011", "1110", "1111"], "late": ["0111", "1000"], "moving": false} },
+    "pre-octad": { line: "  'pre-octad':          { comp: 'SYMMETRIC_CONCURRENT', set: { 14: 6, 17: 100, 22: 50 }, args: { 14: ['11/4'], 17: ['23/4'] }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 33, "r4": 0, "r4first": -1, "early": ["0101", "0110", "1001", "1010"], "late": ["0011", "0101", "0110", "1001", "1010"], "moving": true} },
     "pre-symmetry": { line: "  'pre-symmetry':       { comp: 'PARALLEL',             set: { 5: 50, 7: 50, 12: 50, 22: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 27, "r4": 597, "r4first": 1, "early": ["0000", "0100", "0101", "0110", "1001", "1010", "1101", "1110", "1111"], "late": ["0001", "0101", "0111", "1000", "1110"], "moving": true} },
-    "pre-wormhole": { line: "  'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 50, 29: 50 }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 16, "r4": 0, "r4first": -1, "early": ["0001", "0010", "0011", "0100", "0101", "0110", "0111", "1001", "1011", "1101", "1111"], "late": ["0010", "0011", "0100", "0101", "1101"], "moving": true} },
-    "pre-singularity": { line: "  'pre-singularity':    { comp: 'SERIES',               set: { 1: 50, 10: 50, 14: 50, 15: 50 }, omega: 10, drive: 0, chi: 10 },",
-      claim: {"growth": 43, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0100", "0101", "0110", "1001", "1010", "1101", "1110", "1111"], "late": ["0000", "0100", "0110", "1000", "1001", "1010", "1101", "1110", "1111"], "moving": true} },
+    "pre-wormhole": { line: "  'pre-wormhole':       { comp: 'SERIES',               set: { 5: 50, 9: 50, 22: 50, 23: 50, 26: 12, 29: 50 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 23, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "0011", "0100", "0101", "0110", "0111", "1000", "1010", "1011"], "late": ["0000", "0001", "0010", "0011", "0110", "1101"], "moving": true} },
+    "pre-singularity": { line: "  'pre-singularity':    { comp: 'SERIES',               set: { 1: 2, 10: 2, 14: 50, 15: 12 }, omega: 10, drive: 0, chi: 10 },",
+      claim: {"growth": 59, "r4": 0, "r4first": -1, "early": ["0000", "0101", "0110", "1001", "1010", "1011", "1101", "1110", "1111"], "late": ["0000", "0010", "0110", "0111", "1001", "1010", "1110", "1111"], "moving": true} },
     "pre-magnetic": { line: "  'pre-magnetic':       { comp: 'SERIES',               set: { 3: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },",
       claim: {"growth": 28, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0010", "1001", "1010", "1100", "1111"], "late": ["0000", "0101", "0110", "1001", "1010", "1100"], "moving": true} },
     "pre-cancel": { line: "  'pre-cancel':         { comp: 'SERIES',               set: { 5: 85, 7: 35, 8: 15, 9: 65, 11: 20, 22: 80, 28: 30, 29: 55 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 3.4, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0101", "0110", "0111", "1001", "1010", "1111"], "late": ["0101", "0110", "1010"], "moving": true} },
     "pre-dynamo": { line: "  'pre-dynamo':         { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 7: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 10, drive: 4, chi: 10 },",
       claim: {"growth": 83, "r4": 0, "r4first": -1, "early": ["0000", "0010", "0011", "0100", "0101", "0110", "1001", "1010", "1100"], "late": ["0000", "0011", "0101", "1000", "1001", "1010", "1100", "1110"], "moving": true} },
-    "pre-reconnect": { line: "  'pre-reconnect':      { comp: 'SYMMETRIC_CONCURRENT', set: { 5: 50, 9: 50, 22: 50, 26: 50 }, omega: 10, drive: 4, chi: 10 },",
-      claim: {"growth": 42, "r4": 0, "r4first": -1, "early": ["0100", "0101", "0110", "0111", "1000", "1001", "1010", "1011", "1110", "1111"], "late": ["0011", "0101", "0110", "1001", "1010", "1100", "1101"], "moving": true} },
+    "pre-reconnect": { line: "  'pre-reconnect':      { comp: 'SYMMETRIC_CONCURRENT', set: { 5: 50, 9: 50, 22: 50, 26: 12 }, omega: 10, drive: 4, chi: 10 },",
+      claim: {"growth": 56, "r4": 0, "r4first": -1, "early": ["0011", "0100", "0101", "0110", "0111", "1000", "1001", "1010", "1011", "1110", "1111"], "late": ["0011", "0101", "0110", "1001", "1010", "1100"], "moving": true} },
     "pre-inverse-growth": { line: "  'pre-inverse-growth': { comp: 'SYMMETRIC_CONCURRENT', set: { 1: 30, 5: 70, 14: 30, 29: 70 }, omega: 10, drive: 0, chi: 10 },",
       claim: {"growth": 5.5, "r4": 0, "r4first": -1, "early": ["0000", "0001", "0011", "0100", "0101", "0111", "1001", "1010", "1110"], "late": ["0011", "0100", "1011"], "moving": true} },
     "pre-all29": { line: "  'pre-all29':          { comp: 'SYMMETRIC_CONCURRENT', set: Object.fromEntries(SUTRAS.map(s => [s.id, 25])), omega: 10, drive: 4, chi: 10 }",
@@ -732,7 +802,14 @@ section('presets develop over the run as their descriptions say');
       const supp = w => { const o = [...w.keys()].sort((a, b) => w[b] - w[a]); const S = []; let c = 0; for (const v of o) { S.push(v); c += w[v]; if (c >= 0.8) break; } return S.sort((a, b) => a - b).map(v => v.toString(2).padStart(4, '0')); };
       const L1 = (a, b) => a.reduce((s, v, i) => s + Math.abs(v - b[i]), 0);
       const late = avg(540, 600);
-      out[id] = { r4, r4first, growth: UB600 / UB60, early: supp(avg(20, 40)), late: supp(late), moving: L1(avg(300, 360), late), lateVec: late };
+      /* the largest share of a step's change that the next step undoes:
+         min(|d_i|, |d_i+1|) times -cos(d_i, d_i+1), over steps 30 to 600 */
+      const L2 = v => Math.sqrt(v.reduce((a, b) => a + b * b, 0));
+      let swing = 0, swingAt = -1;
+      for (let i = 29; i + 2 < 600; i++) { const d1 = H[i + 1].map((v, k) => v - H[i][k]), d2 = H[i + 2].map((v, k) => v - H[i + 1][k]);
+        const n1 = L2(d1), n2 = L2(d2); if (n1 > 0 && n2 > 0) { const c = d1.reduce((t, v, k) => t + v * d2[k], 0) / (n1 * n2);
+          if (c < 0 && -c * Math.min(n1, n2) > swing) { swing = -c * Math.min(n1, n2); swingAt = i + 3; } } }
+      out[id] = { r4, r4first, growth: UB600 / UB60, early: supp(avg(20, 40)), late: supp(late), moving: L1(avg(300, 360), late), lateVec: late, swing, swingAt };
     }
     parentPort.postMessage(out);`;
   const defs = Object.entries(EXPECT).map(([id, x]) => {
@@ -761,6 +838,10 @@ section('presets develop over the run as their descriptions say');
     ok(r.early.join(' ') === c.early.join(' ') && r.late.join(' ') === c.late.join(' '),
        `${id}: the field moves from ${c.early.length} vertices onto ${c.late.join(' ')}`, `${r.early.join(' ')} -> ${r.late.join(' ')}`);
     if (c.moving) ok(r.moving >= 0.05, `${id}: still moving after step 300 (L1 ${r.moving.toFixed(3)})`);
+    /* measured: before the retune six presets undid 15-28% of the field every
+       other step (S26, S17, S18, S15 turning it 90-180 degrees a step); after,
+       the largest anywhere is 1.4% */
+    ok(r.swing < 0.02, `${id}: no step undoes the last by more than 2% of the field (largest ${(100 * r.swing).toFixed(2)}%${r.swingAt > 0 ? ' at step ' + r.swingAt : ''})`);
   }
   let closest = Infinity, pair = '';
   const ids = Object.keys(results);

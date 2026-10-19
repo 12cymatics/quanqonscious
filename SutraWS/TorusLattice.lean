@@ -32,9 +32,9 @@ what the page needs to draw them there.
   `tube_flux_step_w` — so (from `d² ∘ d¹ = 0`) the flux through the hole
   changes from one loop to the next by exactly the net flux through the four
   cells between them, and likewise along the tube.
-* `node_grid_theta`, `node_grid_phi`, `cell_centre_theta`, `cell_centre_phi` —
-  with 200 × 104 surface samples, every vertex is a sample point and every cell
-  centre is one, so what is drawn lies on the drawn surface.
+* `node_grid`, `cell_centre`, `surface_grid` — with 304 × 152 surface samples
+  (any multiple of 8 each way) every vertex and every cell centre is a sample
+  point, so what is drawn lies on the drawn surface.
 * `glyph_mem` — each glyph's size `w₀ + w₁ |x| / m` stays in `[w₀, w₀ + w₁]`.
 -/
 
@@ -234,29 +234,30 @@ theorem tube_flux_step_w (A : Fin 4 → Vertex → ℚ) (i : Vertex) :
 
 /-! ### On the drawn surface
 
-`TH_SEG = 200`, `PH_SEG = 104`: sample `i` of a ring is at angle `i · 2π/N`. -/
+The surface has `N_θ × N_φ` samples, sample `i` of a ring at angle `i · 2π/N`.
+When `N` is a multiple of 8, every vertex and every cell centre is a sample. -/
 
-/-- **`node_grid_theta`**: vertex `k`'s `θ` (`node_theta`) is sample `25 + 50·r`. -/
-theorem node_grid_theta (r : ℕ) :
-    ((25 + 50 * r : ℕ) : ℝ) * (2 * Real.pi / 200) = Real.pi / 4 + (r : ℝ) * (Real.pi / 2) := by
-  push_cast; ring
+/-- **`node_grid`**: vertex `k`'s angle `π/4 + r·π/2` (`node_theta`, `node_phi`)
+is sample `N/8 + (N/4)·r`. -/
+theorem node_grid (N r : ℕ) (h8 : 8 ∣ N) (hN : 0 < N) :
+    ((N / 8 + N / 4 * r : ℕ) : ℝ) * (2 * Real.pi / N) = Real.pi / 4 + (r : ℝ) * (Real.pi / 2) := by
+  obtain ⟨k, rfl⟩ := h8
+  have hk : (0 : ℝ) < k := by exact_mod_cast (by omega : 0 < k)
+  have e1 : 8 * k / 8 = k := by omega
+  have e2 : 8 * k / 4 = 2 * k := by omega
+  rw [e1, e2]; push_cast; field_simp; ring
 
-/-- **`node_grid_phi`**: vertex `k`'s `φ` (`node_phi`) is sample `13 + 26·s`. -/
-theorem node_grid_phi (s : ℕ) :
-    ((13 + 26 * s : ℕ) : ℝ) * (2 * Real.pi / 104) = Real.pi / 4 + (s : ℝ) * (Real.pi / 2) := by
-  push_cast; ring
-
-/-- **`cell_centre_theta`**: sample `50·(r+1)` is midway between nodes `r` and `r+1`. -/
-theorem cell_centre_theta (r : ℕ) :
-    ((50 * (r + 1) : ℕ) : ℝ) * (2 * Real.pi / 200) =
+/-- **`cell_centre`**: sample `(N/4)·(r+1)` is midway between vertices `r` and `r+1`. -/
+theorem cell_centre (N r : ℕ) (h8 : 8 ∣ N) (hN : 0 < N) :
+    ((N / 4 * (r + 1) : ℕ) : ℝ) * (2 * Real.pi / N) =
       ((Real.pi / 4 + (r : ℝ) * (Real.pi / 2)) + (Real.pi / 4 + ((r : ℝ) + 1) * (Real.pi / 2))) / 2 := by
-  push_cast; ring
+  obtain ⟨k, rfl⟩ := h8
+  have hk : (0 : ℝ) < k := by exact_mod_cast (by omega : 0 < k)
+  have e2 : 8 * k / 4 = 2 * k := by omega
+  rw [e2]; push_cast; field_simp; ring
 
-/-- **`cell_centre_phi`**: sample `26·(s+1)` is midway between nodes `s` and `s+1`. -/
-theorem cell_centre_phi (s : ℕ) :
-    ((26 * (s + 1) : ℕ) : ℝ) * (2 * Real.pi / 104) =
-      ((Real.pi / 4 + (s : ℝ) * (Real.pi / 2)) + (Real.pi / 4 + ((s : ℝ) + 1) * (Real.pi / 2))) / 2 := by
-  push_cast; ring
+/-- **`surface_grid`**: the page's 304 × 152 samples are multiples of 8. -/
+theorem surface_grid : 8 ∣ 304 ∧ 8 ∣ 152 := by decide
 
 /-- **`glyph_mem`**: a glyph sized `w₀ + w₁ |x| / m`, with `m` the largest `|x|`
 among what is drawn, stays in `[w₀, w₀ + w₁]`; `|x| / m` itself is in `[0, 1]`. -/
