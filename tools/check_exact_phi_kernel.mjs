@@ -532,6 +532,91 @@ section('magnetism memory');
      'a field with no energy has no shares: refused, not divided by zero');
 }
 
+section('the engine on the torus');
+{
+  /* Where each vertex is on the drawn torus is read here from
+     tessVertexToTorus's own angles, theta = atan2(w, x) + pi and
+     phi = atan2(z, y) + pi with x, y, z, w the bits as -1/+1, not from the
+     kernel's Gray table. Every circulation is recomputed by walking a face's
+     corners and summing A along each side, with no face or cube table. */
+  const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
+  const sgnb = (k, b) => ((k >> b) & 1) ? 1 : -1;
+  const at = k => [quarter(Math.atan2(sgnb(k, 3), sgnb(k, 0)) + Math.PI), quarter(Math.atan2(sgnb(k, 2), sgnb(k, 1)) + Math.PI)];
+  const P = Array.from({ length: 16 }, (_, k) => at(k));
+  ok(P.every(([r, s], k) => K.ringThetaOf(k) === r && K.ringPhiOf(k) === s) && new Set(P.map(([r, s]) => r * 4 + s)).size === 16,
+     'every vertex sits at the lattice position tessVertexToTorus\'s angles give it, each position once');
+  const step4 = (a, b) => (b - a + 4) % 4 === 1 ? 1 : (a - b + 4) % 4 === 1 ? -1 : 0;
+  /* A on the oriented side u -> w of the cube, from the potential on its edges */
+  const edgeOf = (u, w) => { const a = Math.log2(u ^ w), base = Math.min(u, w); return [K.MAG_EDGES.findIndex(([v, b]) => v === base && b === a), u < w ? 1 : -1]; };
+  const side = (A, u, w) => { const [e, sg] = edgeOf(u, w); return sg > 0 ? A[e] : Q.neg(A[e]); };
+  const circ = (A, cs) => cs.reduce((t, u, k) => Q.add(t, side(A, u, cs[(k + 1) % 4])), Q.ZERO);
+  /* the 24 squares of the 4-cube, each as its four corners in a loop */
+  const squares = [];
+  for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) for (let v = 0; v < 16; v++) if (!(v & ((1 << a) | (1 << b))))
+    squares.push([v, v ^ (1 << a), v ^ (1 << a) ^ (1 << b), v ^ (1 << b)]);
+  const classify = cs => {
+    const th = cs.map(k => P[k][0]), ph = cs.map(k => P[k][1]);
+    if (ph.every(x => x === ph[0]) && new Set(th).size === 4) return { kind: 'hole', ring: ph[0], dir: step4(th[0], th[1]) };
+    if (th.every(x => x === th[0]) && new Set(ph).size === 4) return { kind: 'tube', ring: th[0], dir: step4(ph[0], ph[1]) };
+    /* a cell: unwrap the corners around the first and take the loop's signed area */
+    const u = cs.map(k => [(P[k][0] - th[0] + 5) % 4 - 1, (P[k][1] - ph[0] + 5) % 4 - 1]);
+    let area = 0; for (let k = 0; k < 4; k++) area += u[k][0] * u[(k + 1) % 4][1] - u[(k + 1) % 4][0] * u[k][1];
+    const lo = (xs) => { const m = [...new Set(xs)]; return (m[1] - m[0] + 4) % 4 === 1 ? m[0] : m[1]; };
+    return { kind: 'cell', r: lo(th), s: lo(ph), orient: Math.sign(area), unit: Math.abs(area) === 2 };
+  };
+  const C = squares.map(classify);
+  ok(C.filter(c => c.kind === 'hole').length === 4 && C.filter(c => c.kind === 'tube').length === 4 &&
+     new Set(C.filter(c => c.kind === 'cell' && c.unit).map(c => c.r * 4 + c.s)).size === 16,
+     'the 24 squares are 4 loops round the torus, 4 round the tube and the 16 unit cells, each once (hole_loop, tube_loop, cells_tile)');
+  /* the gate's own reading of a potential on the torus */
+  const read = (A, chi) => {
+    const AF = K.MAG_EDGES.map(([v, , h], e) => Q.sub(A[e], Q.mul(Q.mk(1n, 10n), Q.sub(chi[h], chi[v]))));
+    const hole = [], tube = [], cells = [[], [], [], []];
+    squares.forEach((cs, i) => { const c = C[i], x = circ(A, cs);
+      if (c.kind === 'hole') hole[c.ring] = c.dir > 0 ? x : Q.neg(x);
+      else if (c.kind === 'tube') tube[c.ring] = c.dir > 0 ? x : Q.neg(x);
+      else cells[c.r][c.s] = c.orient > 0 ? x : Q.neg(x); });
+    const flow = K.MAG_EDGES.map(([v, a, h], e) => {
+      const d = (a === 0 || a === 3) ? step4(P[v][0], P[h][0]) : step4(P[v][1], P[h][1]);
+      return d > 0 ? AF[e] : Q.neg(AF[e]); });
+    return { hole, tube, cells, flow };
+  };
+  const same = (a, b) => a.length === b.length && a.every((x, i) => Array.isArray(x) ? same(x, b[i]) : Q.eq(x, b[i]));
+  const lawsHold = g => [0, 1, 2, 3].every(s =>
+      Q.eq(Q.sub(g.hole[(s + 1) % 4], g.hole[s]), Q.neg([0, 1, 2, 3].reduce((t, r) => Q.add(t, g.cells[r][s]), Q.ZERO)))) &&
+    [0, 1, 2, 3].every(r =>
+      Q.eq(Q.sub(g.tube[(r + 1) % 4], g.tube[r]), [0, 1, 2, 3].reduce((t, s) => Q.add(t, g.cells[r][s]), Q.ZERO)));
+  let agree = true, laws = true, balanced = true, where = '';
+  for (let trial = 0; trial < 40; trial++) {
+    const A = K.MAG_EDGES.map((_, e) => Q.mk(BigInt(((e + 3) * (trial + 7) * 7919) % 2001 - 1000), BigInt(1 + ((e * trial) % 9))));
+    const chi = Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 1) * (trial + 2) * 104729) % 301 - 150), BigInt(1 + v % 5)));
+    const g = read(A, chi), t = K.torusData(A, chi);
+    if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow))) { agree = false; where = 'trial ' + trial; }
+    if (!lawsHold(g)) laws = false;
+    if (!t.balanced) balanced = false;
+  }
+  ok(agree, 'the kernel\'s hole, tube and cell fluxes and its edge flows are the gate\'s own circulations on 40 potentials', where);
+  ok(laws, 'from one loop to the next the flux steps by exactly the circulation of the cells between (hole_flux_step_y/z, tube_flux_step_x/w)');
+  ok(balanced, 'the kernel decides all eight strip balances on each of them (cube_strip)');
+  /* and on a run: the dynamo preset, every step */
+  const X = A4;
+  const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
+    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ONE,
+    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ONE };
+  const act = [3, 7, 9, 11, 25, 29].map(id => ({ id, strength: Q.HALF }));
+  let eng = K.initEngine(), runAgree = true, runLaws = true, nonzero = false;
+  for (let s = 0; s < 40; s++) {
+    eng = K.step(eng, params, act, 'SYMMETRIC_CONCURRENT');
+    const g = read(eng.magA, eng.magChi), t = K.magData(eng.magA, eng.magChi).torus;
+    if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow) && t.balanced)) runAgree = false;
+    if (!lawsHold(g)) runLaws = false;
+    if (g.hole.some(x => !Q.isZero(x)) && g.cells.some(r => r.some(x => !Q.isZero(x)))) nonzero = true;
+  }
+  ok(runAgree && runLaws && nonzero, 'on 40 steps of the dynamo preset the torus fluxes are the gate\'s, every balance holds, and the loops and cells carry flux');
+}
+
 section('no parameter is ignored');
 {
   /* the vortex, the drive and the polarisation each change the run: run 8

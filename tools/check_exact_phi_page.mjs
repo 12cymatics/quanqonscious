@@ -306,6 +306,126 @@ try {
                     KERNEL_VIEW.hist.frame.length <= KERNEL_VIEW.state.frame + 1`, 20000),
      'RESET starts the timeline again with the run', await evaluate(`KERNEL_VIEW.hist.frame.length + ' entries at step ' + KERNEL_VIEW.state.frame`));
 
+  section('the engine on the torus');
+  /* The flux map and the lattice on the surface draw the magnetism memory
+     where it is on the torus (TorusLattice.lean). Paused, the picture rests on
+     one state; the worker's exact A and chi for that state are fetched and the
+     gate reads them on the torus itself: positions from tessVertexToTorus's
+     angles, circulations by walking each face's corners. */
+  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await waitFor(`KERNEL_VIEW.state.frame >= 20`, 60000);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await sleep(1500);
+  await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
+  await sleep(400);
+  const tor = await evaluate(`new Promise(res => {
+    const id = 1e9 + Math.floor(Math.random() * 1e6);
+    EXPORT_WAIT.set(id, m => {
+      const P = m.payload, q = x => Q.mk(BigInt(x.n), BigInt(x.d)), A = P.magA.map(q), chi = P.magChi.map(q);
+      const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
+      const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
+      const step4 = (a, b) => (b - a + 4) % 4 === 1 ? 1 : -1;
+      const side = (u, w) => { const a = Math.log2(u ^ w), base = Math.min(u, w), e = KERNEL.MAG_EDGES.findIndex(([v, b]) => v === base && b === a);
+                               return u < w ? A[e] : Q.neg(A[e]); };
+      const hole = [], tube = [], cells = [];
+      for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) for (let v = 0; v < 16; v++) if (!(v & ((1 << a) | (1 << b)))) {
+        const cs = [v, v ^ (1 << a), v ^ (1 << a) ^ (1 << b), v ^ (1 << b)];
+        const x = cs.reduce((t, u, k) => Q.add(t, side(u, cs[(k + 1) % 4])), Q.ZERO);
+        const th = cs.map(k => pos[k][0]), ph = cs.map(k => pos[k][1]);
+        if (ph.every(z => z === ph[0])) hole[ph[0]] = step4(th[0], th[1]) > 0 ? x : Q.neg(x);
+        else if (th.every(z => z === th[0])) tube[th[0]] = step4(ph[0], ph[1]) > 0 ? x : Q.neg(x);
+        else {
+          const u = cs.map(k => [(pos[k][0] - th[0] + 5) % 4 - 1, (pos[k][1] - ph[0] + 5) % 4 - 1]);
+          let area = 0; for (let k = 0; k < 4; k++) area += u[k][0] * u[(k + 1) % 4][1] - u[(k + 1) % 4][0] * u[k][1];
+          const lo = xs => { const m = [...new Set(xs)]; return (m[1] - m[0] + 4) % 4 === 1 ? m[0] : m[1]; };
+          cells[lo(th) * 4 + lo(ph)] = area > 0 ? x : Q.neg(x);
+        }
+      }
+      const flow = KERNEL.MAG_EDGES.map(([v, a, h], e) => {
+        const af = Q.sub(A[e], Q.mul(Q.mk(1n, 10n), Q.sub(chi[h], chi[v])));
+        const d = (a === 0 || a === 3) ? step4(pos[v][0], pos[h][0]) : step4(pos[v][1], pos[h][1]);
+        return d > 0 ? af : Q.neg(af); });
+      const num = FAITHFUL.qNum, LV = LATTICE_VIEW, D = LATTICE_DRAWN;
+      const eqv = (xs, ys) => xs.length === ys.length && xs.every((x, i) => num(x) === ys[i]);
+      /* the surface sample each vertex is drawn at is where tessVertexToTorus puts it */
+      const G = torusGeometry(), wrap = t => ((t % TAU) + TAU) % TAU;
+      const nodeOk = Array.from({ length: 16 }, (_, k) => {
+        const t = tessVertexToTorus(TESS_V[k], 0), i = LAT_TH(KERNEL.ringThetaOf(k)), j = LAT_PH(KERNEL.ringPhiOf(k));
+        return Math.abs(wrap(G.theta[i] - t.theta + 1e-9) - 1e-9) < 1e-12 && Math.abs(wrap(G.phi[j] - t.phi + 1e-9) - 1e-9) < 1e-12; });
+      res({ frame: P.frame, shown: LV.frame, ok: LV.ok, holeOk: eqv(hole, LV.to.hole), tubeOk: eqv(tube, LV.to.tube),
+            cellOk: eqv(cells, LV.to.cells), flowOk: eqv(flow, LV.to.flow), nodes: nodeOk.every(Boolean),
+            rest: D.tau === 1 && [...D.hole].every((x, i) => x === LV.to.hole[i]) && [...D.cells].every((x, i) => x === LV.to.cells[i]) &&
+                  [...D.flow].every((x, i) => x === LV.to.flow[i]),
+            hole: LV.to.hole, tube: LV.to.tube, strips: LV.strips, anyFlux: LV.to.hole.some(x => x !== 0) && LV.to.cells.some(x => x !== 0) });
+    });
+    KERNEL_WORKER.postMessage({ type: 'export', id });
+  })`, true);
+  ok(tor.frame === tor.shown && tor.ok && tor.strips === 8, `paused, the picture shows the worker's state (step ${tor.frame}) and all 8 strip balances hold`, JSON.stringify({ f: tor.frame, s: tor.shown, ok: tor.ok, strips: tor.strips }));
+  ok(tor.nodes, 'every vertex is drawn at the surface sample where tessVertexToTorus puts it (node_grid_theta, node_grid_phi)');
+  ok(tor.holeOk && tor.tubeOk && tor.anyFlux, 'the flux shown through the hole and along the tube is the circulation of the state\'s A round each loop, read here from its corners');
+  ok(tor.cellOk, 'each cell\'s flux is shown turning the way the state\'s A circulates round it (cell_orient_area)');
+  ok(tor.flowOk, 'each edge\'s flow is the state\'s whole potential along it, signed towards +theta or +phi');
+  ok(tor.rest, 'at rest the drawn values are the state\'s exactly (blend_one)');
+  /* the flux map is painted, and each loop's bar has the colour of its sign */
+  const fm = await evaluate(`new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const dpr = devicePixelRatio, F = FLUX_MAP, c = F.cell, X = r => F.x + r * c, Y = s => F.y + (4 - s) * c;
+    const px = (x, y) => Array.from(ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data);
+    const amber = p => p[3] > 0 && p[0] > p[2] + 60, cyan = p => p[3] > 0 && p[2] > p[0] + 60;
+    const H = LATTICE_DRAWN.hole, T = LATTICE_DRAWN.tube;
+    const holeCol = [0, 1, 2, 3].every(s => (H[s] >= 0 ? amber : cyan)(px(X(4) + 14, Y(s))));
+    const by = Y(4) - 6;
+    const tubeCol = [0, 1, 2, 3].every(r => (T[r] >= 0 ? amber : cyan)(px(X(r), T[r] >= 0 ? by - 1 : by - 9)));
+    const img = ctx.getImageData(Math.round((F.x - 20) * dpr), Math.round((F.y - 44) * dpr), Math.round((4 * c + 96) * dpr), Math.round((4 * c + 80) * dpr)).data;
+    /* glyph pixels, not the panel's dark background: measured 11% on the dynamo preset */
+    let lit = 0; for (let k = 0; k < img.length; k += 4) if (Math.max(img[k], img[k + 1], img[k + 2]) > 90) lit++;
+    /* the arrows and arcs as drawn, against the gate's own reading of which
+       way each points: an edge is along theta when its ends differ in
+       tessVertexToTorus's theta, and +theta is right, +phi up */
+    const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
+    const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
+    const Gl = F.glyphs, Dd = LATTICE_DRAWN;
+    const glyphs = [0, 1, 2, 3].every(s => Gl.hole[s] === (H[s] >= 0 ? 1 : -1) && Gl.tube[s] === (T[s] >= 0 ? -1 : 1)) &&
+      Gl.cells.length === 16 && Gl.cells.every((ccw, c) => ccw === (Dd.cells[c] >= 0)) &&
+      KERNEL.MAG_EDGES.every(([v, , h], e) => { const th = pos[v][0] !== pos[h][0], f = Dd.flow[e];
+        const want = th ? [f >= 0 ? 1 : -1, 0] : [0, f >= 0 ? -1 : 1];
+        return Gl.edges[e][0] === want[0] && Gl.edges[e][1] === want[1]; });
+    res({ drawn: F.drawn, holeCol, tubeCol, glyphs, lit: lit / (img.length / 4),
+          rows: [document.getElementById('dyn-hole').textContent, document.getElementById('dyn-strips').textContent] });
+  })))`, true);
+  ok(fm.drawn && fm.lit > 0.04, `the flux map's glyphs are drawn (${(100 * fm.lit).toFixed(1)}% of its panel bright)`);
+  ok(fm.holeCol && fm.tubeCol, 'each loop\'s bar on the flux map is amber for flux circulating towards +theta (+phi) and cyan against');
+  ok(fm.glyphs, 'every arrow on the flux map points the way its flux flows, +theta right and +phi up, and every cell\'s arc turns the way its flux circulates');
+  ok(fm.rows[1] === '8 of 8 hold exactly' && fm.rows[0].split(/\s+/).length === 4, 'the panel rows show the four loop fluxes and the balances', JSON.stringify(fm.rows));
+  /* the lattice on the surface: off until asked, then every glyph is drawn */
+  const lat0 = await evaluate(`({ on: LATTICE_SHOW.on, verts: LATTICE_DRAWN.verts, why: LATTICE_DRAWN.surfaceWhy })`);
+  await evaluate(`document.getElementById('btn-lattice').click()`);
+  await sleep(300);
+  const lat1 = await evaluate(`(() => {
+    const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
+    const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
+    const D = LATTICE_DRAWN;
+    /* each edge is drawn leaving the vertex its flow leaves: a step of +1 round
+       its ring from there when the flow is towards +theta or +phi */
+    const leaves = KERNEL.MAG_EDGES.every(([v, , h], e) => { const u = D.edgeFrom[e], w = u === v ? h : v, k = pos[u][0] !== pos[w][0] ? 0 : 1;
+      return (u === v || u === h) && (((pos[w][k] - pos[u][k] + 4) % 4 === 1) === (D.flow[e] >= 0)); });
+    return { on: LATTICE_SHOW.on, verts: D.verts, e: D.nEdges, c: D.nCells, l: D.nLoops, n: D.nNodes, leaves,
+             label: document.getElementById('btn-lattice').textContent }; })()`);
+  ok(!lat0.on && lat0.verts === 0 && lat0.why === 'hidden', 'the lattice on the surface is off until asked for');
+  ok(lat1.on && lat1.verts > 1000 && lat1.e === 32 && lat1.c === 16 && lat1.l === 8 && lat1.n === 16 && lat1.label === 'LATTICE ON',
+     'LATTICE draws all 32 edges, 16 cells, 8 loops and 16 vertices on the surface', JSON.stringify(lat1));
+  ok(lat1.leaves, 'on the surface each edge is drawn from the vertex its flow leaves');
+  await evaluate(`document.getElementById('btn-lattice').click()`);
+  await sleep(300);
+  ok(await evaluate(`!LATTICE_SHOW.on && LATTICE_DRAWN.verts === 0`), 'and clicked again, takes it off');
+  /* withheld when its certificate does not hold */
+  await evaluate(`document.getElementById('btn-lattice').click()`);
+  await evaluate(`LATTICE_VIEW.ok = false; LATTICE_VIEW.why = 'withheld by the gate'`);
+  await sleep(300);
+  const wh = await evaluate(`({ map: FLUX_MAP.drawn, verts: LATTICE_DRAWN.verts, ready: LATTICE_DRAWN.ready, why: FLUX_MAP.why })`);
+  await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''; document.getElementById('btn-lattice').click()`);
+  ok(!wh.map && wh.verts === 0 && !wh.ready && wh.why === 'withheld by the gate', 'without its certificate neither the flux map nor the lattice is drawn, and the reason is kept', JSON.stringify(wh));
+  await evaluate(`document.getElementById('btn-run').click()`);
+
   section('motion');
   /* The kernel ran flat out (20 to 50 steps a second) while the page drew the
      newest state every 100 ms and replaced the surface outright, and the
