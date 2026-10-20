@@ -138,6 +138,10 @@ try {
     }
     return false;
   };
+  const presetFromSeed = async id => {
+    await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
+    return waitFor(`KERNEL_VIEW.state && KERNEL_VIEW.state.frame <= 2 && !KERNEL_VIEW.halted`, 30000);
+  };
   await cmd('Runtime.enable');
   await cmd('Page.enable');
   await cmd('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -306,7 +310,7 @@ try {
   ok(await waitFor(`KERNEL_VIEW.state.frame > ${paused}`, 20000), 'RUN resumes it');
 
   section('certified');
-  await evaluate(`document.getElementById('pre-dynamo').click()`);
+  await presetFromSeed('pre-dynamo');
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
   ok(faithful, 'the badge reaches FAITHFUL on the dynamo preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
@@ -337,7 +341,7 @@ try {
   }
   ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
   /* the dynamo preset, long enough for the timeline to hold a history */
-  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await presetFromSeed('pre-dynamo'); await appliedNow();
   await waitFor(`KERNEL_VIEW.hist.frame.length >= 12`, 60000);
   const dy = await evaluate(`(() => {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
@@ -385,7 +389,7 @@ try {
      one state; the worker's exact A and chi for that state are fetched and the
      gate reads them on the torus itself: positions from tessVertexToTorus's
      angles, circulations by walking each face's corners. */
-  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await presetFromSeed('pre-dynamo'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 20`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -533,7 +537,7 @@ try {
      the answer independently: B by integrating Biot-Savart numerically along
      each straight piece (Gauss-Legendre, panels finer the nearer the point),
      not by the worker's closed form; E by Coulomb; S = E x B. */
-  await evaluate(`document.getElementById('pre-dynamo').click()`); await appliedNow();
+  await presetFromSeed('pre-dynamo'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 15`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -592,22 +596,30 @@ try {
   ok(fd.edges.every(([v, h], e) => [0, 1, 2].every(c => PP[(e * NS1) * 3 + c] === fd.req.nodes[v * 3 + c] && PP[(e * NS1 + fd.req.nseg) * 3 + c] === fd.req.nodes[h * 3 + c])),
      'each edge\'s current runs along the surface from the vertex it leaves to the one it enters, the way J counts it');
   /* the gate's own fields */
-  const GL = [[-0.8611363115940526, 0.34785484513745385], [-0.3399810435848563, 0.6521451548625461], [0.3399810435848563, 0.6521451548625461], [0.8611363115940526, 0.34785484513745385]];
+  const GL8 = [[-0.9602898564975363, 0.1012285362903763], [-0.7966664774136267, 0.2223810344533745], [-0.5255324099163290, 0.3137066458778873], [-0.1834346424956498, 0.3626837833783620],
+               [0.1834346424956498, 0.3626837833783620], [0.5255324099163290, 0.3137066458778873], [0.7966664774136267, 0.2223810344533745], [0.9602898564975363, 0.1012285362903763]];
+  const segQuad = (I, ax, ay, az, dx, dy, dz, x, y, z, acc) => {
+    const L2 = dx * dx + dy * dy + dz * dz, L = Math.sqrt(L2);
+    const ts = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / L2));
+    const s = Math.hypot(x - ax - ts * dx, y - ay - ts * dy, z - az - ts * dz) / L;
+    const br = [0, 1];
+    if (ts > 0 && ts < 1) br.push(ts);
+    for (const side of [1, -1]) { let w = s / 8; for (let t = ts + side * w; t > 0 && t < 1; w *= 1.5, t = ts + side * w) br.push(t); }
+    br.sort((p, q) => p - q);
+    for (let i = 0; i + 1 < br.length; i++) { const t0 = br[i], h = br[i + 1] - t0; if (!(h > 0)) continue;
+      for (const [xi, w] of GL8) { const t = t0 + (xi + 1) / 2 * h, rx = x - ax - t * dx, ry = y - ay - t * dy, rz = z - az - t * dz, r2 = rx * rx + ry * ry + rz * rz;
+        const f = I * w * h / 2 / (r2 * Math.sqrt(r2));
+        acc[0] += f * (dy * rz - dz * ry); acc[1] += f * (dz * rx - dx * rz); acc[2] += f * (dx * ry - dy * rx); } }
+  };
   const Bq = (x, y, z) => {
-    let bx = 0, by = 0, bz = 0;
+    const acc = [0, 0, 0];
     for (let e = 0; e < 32; e++) { const I = fd.req.J[e]; if (I === 0) continue;
       for (let k = 0; k < fd.req.nseg; k++) {
         const o = (e * NS1 + k) * 3, ax = PP[o], ay = PP[o + 1], az = PP[o + 2], dx = PP[o + 3] - ax, dy = PP[o + 4] - ay, dz = PP[o + 5] - az;
-        const L2 = dx * dx + dy * dy + dz * dz; if (!(L2 > 0)) continue;
-        const tt = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / L2));
-        const dmin = Math.hypot(x - ax - tt * dx, y - ay - tt * dy, z - az - tt * dz), M = Math.min(20000, 4 + Math.ceil(24 * Math.sqrt(L2) / dmin));
-        for (let m = 0; m < M; m++) for (const [xi, w] of GL) {
-          const t = (m + (xi + 1) / 2) / M, rx = x - ax - t * dx, ry = y - ay - t * dy, rz = z - az - t * dz, r2 = rx * rx + ry * ry + rz * rz;
-          const f = I * w / 2 / M / (r2 * Math.sqrt(r2));
-          bx += f * (dy * rz - dz * ry); by += f * (dz * rx - dx * rz); bz += f * (dx * ry - dy * rx);
-        }
+        if (!(dx * dx + dy * dy + dz * dz > 0)) continue;
+        segQuad(I, ax, ay, az, dx, dy, dz, x, y, z, acc);
       } }
-    return [bx, by, bz];
+    return acc;
   };
   const Eq = (x, y, z) => { let ex = 0, ey = 0, ez = 0;
     for (let v = 0; v < 16; v++) { const q = fd.req.Q[v], dx = x - fd.req.nodes[v * 3], dy = y - fd.req.nodes[v * 3 + 1], dz = z - fd.req.nodes[v * 3 + 2], r2 = dx * dx + dy * dy + dz * dz;
@@ -698,17 +710,10 @@ try {
     for (let k = 0; k < fd.req.nseg; k++) { const o = (e * NS1 + k) * 3, a = [PP[o], PP[o + 1], PP[o + 2]], c = [PP[o + 3], PP[o + 4], PP[o + 5]];
       const L = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]); if (L > 0) pieces.push({ e, k, I, a, c, L }); } }
   const Brest = (x, y, z, skip) => {
-    let bx = 0, by = 0, bz = 0;
+    const acc = [0, 0, 0];
     for (const P of pieces) { if (P === skip) continue;
-      const [ax, ay, az] = P.a, dx = P.c[0] - ax, dy = P.c[1] - ay, dz = P.c[2] - az, L2 = P.L * P.L;
-      const tt = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / L2));
-      const dmin = Math.hypot(x - ax - tt * dx, y - ay - tt * dy, z - az - tt * dz), M = Math.min(20000, 4 + Math.ceil(24 * P.L / dmin));
-      for (let m = 0; m < M; m++) for (const [xi, w] of GL) {
-        const t = (m + (xi + 1) / 2) / M, rx = x - ax - t * dx, ry = y - ay - t * dy, rz = z - az - t * dz, r2 = rx * rx + ry * ry + rz * rz;
-        const f = P.I * w / 2 / M / (r2 * Math.sqrt(r2));
-        bx += f * (dy * rz - dz * ry); by += f * (dz * rx - dx * rz); bz += f * (dx * ry - dy * rx);
-      } }
-    return [bx, by, bz];
+      segQuad(P.I, P.a[0], P.a[1], P.a[2], P.c[0] - P.a[0], P.c[1] - P.a[1], P.c[2] - P.a[2], x, y, z, acc); }
+    return acc;
   };
   let worstM = 0, worstPerp = 0, unmatched = 0;
   const MF = fd.mForce, nM = MF.length / 6;
@@ -795,7 +800,7 @@ try {
      is paced, every step is drawn in order, the surface moves to each new
      state over the step interval, and the framing eases. Held here on
      pre-singularity, whose field changes most from step to step. */
-  await evaluate(`document.getElementById('pre-dynamo').click()`);
+  await presetFromSeed('pre-dynamo');
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
@@ -940,7 +945,7 @@ try {
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
   for (const id of ['pre-dynamo', 'pre-mixer', 'pre-capacitor']) {
-    await evaluate(`document.getElementById('${id}').click()`);
+    await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
       const t0 = performance.now(), s = [], b = [];
@@ -975,7 +980,7 @@ try {
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
   ok(lawBroken.length === 0 && lawFrames > 100,
-     `on a fresh page every one of ${lawFrames} frames over CYMATIC, CROWN and OCTAD keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     `on a fresh page every one of ${lawFrames} frames over DYNAMO, MIXER and CAPACITOR keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
   section('errors');

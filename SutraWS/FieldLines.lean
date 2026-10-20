@@ -44,4 +44,29 @@ theorem right_hand_nonneg (a1 a2 a3 r1 r2 r3 : ℝ) :
     0 ≤ (a1 ^ 2 + a2 ^ 2 + a3 ^ 2) * (r1 ^ 2 + r2 ^ 2 + r3 ^ 2) - (a1 * r1 + a2 * r2 + a3 * r3) ^ 2 := by
   nlinarith [sq_nonneg (a1 * r2 - a2 * r1), sq_nonneg (a2 * r3 - a3 * r2), sq_nonneg (a1 * r3 - a3 * r1)]
 
+theorem seg_kernel_stable {d a b : ℝ} (hd : 0 < d) (hab : 0 < a * b) :
+    (a / Real.sqrt (a ^ 2 + d ^ 2) - b / Real.sqrt (b ^ 2 + d ^ 2)) / d ^ 2
+      = (a - b) * (a + b) / (Real.sqrt (a ^ 2 + d ^ 2) * Real.sqrt (b ^ 2 + d ^ 2) *
+          (a * Real.sqrt (b ^ 2 + d ^ 2) + b * Real.sqrt (a ^ 2 + d ^ 2))) := by
+  have hA0 : 0 < a ^ 2 + d ^ 2 := by positivity
+  have hB0 : 0 < b ^ 2 + d ^ 2 := by positivity
+  set A := Real.sqrt (a ^ 2 + d ^ 2)
+  set B := Real.sqrt (b ^ 2 + d ^ 2)
+  have hA : 0 < A := Real.sqrt_pos.mpr hA0
+  have hB : 0 < B := Real.sqrt_pos.mpr hB0
+  have hA2 : A ^ 2 = a ^ 2 + d ^ 2 := Real.sq_sqrt hA0.le
+  have hB2 : B ^ 2 = b ^ 2 + d ^ 2 := Real.sq_sqrt hB0.le
+  have hD : a * B + b * A ≠ 0 := by
+    rcases lt_or_gt_of_ne (show a ≠ 0 by rintro rfl; simp at hab) with ha | ha
+    · have hb : b < 0 := by nlinarith
+      exact (by nlinarith : a * B + b * A < 0).ne
+    · have hb : 0 < b := by nlinarith
+      exact (by nlinarith : 0 < a * B + b * A).ne'
+  have hd2 : d ^ 2 ≠ 0 := by positivity
+  have hden : A * B * (a * B + b * A) ≠ 0 := mul_ne_zero (mul_ne_zero hA.ne' hB.ne') hD
+  rw [div_eq_div_iff hd2 hden]
+  have e : a / A - b / B = (a * B - b * A) / (A * B) := by field_simp; ring
+  rw [e, div_mul_eq_mul_div, div_eq_iff (mul_ne_zero hA.ne' hB.ne')]
+  linear_combination (A * B) * (a ^ 2 * hB2 - b ^ 2 * hA2)
+
 end SutraWS.FieldLines
