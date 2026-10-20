@@ -3121,7 +3121,8 @@ function displayBegin() {
   if (!DISPLAY.started) return;
   FROM_FIELD.set(DISPLAY_FIELD); FROM_PHASE.set(DISPLAY_PHASE);
   DISPLAY.t0 = performance.now();
-  DISPLAY.dur = Math.max(0.25 * STEP_INTERVAL_MS, STEP_INTERVAL_MS - 2 * FRAME_DT_AVG) / (1 + KERNEL_VIEW.queue.length);
+  DISPLAY.waiting = KERNEL_VIEW.queue.length;
+  DISPLAY.dur = Math.max(0.25 * STEP_INTERVAL_MS, STEP_INTERVAL_MS - 2 * FRAME_DT_AVG) / (1 + DISPLAY.waiting);
   DISPLAY.transitions++; DISPLAY.landedThis = false;
 }
 function displayAdvance(now) {
@@ -4020,6 +4021,11 @@ function fieldWorkerMain() {
       const f = traceDir(field, sx, sy, sz, 1, maxLen, h0, null);
       if (f.end === 'closed' || f.pts.length < 4) return { pts: f.pts, ends: [f.end], len: f.len, seed: 0 };
       const b = traceDir(field, sx, sy, sz, -1, maxLen, h0, null);
+      if (b.end === 'closed') {
+        const loop = [];
+        for (let i = b.pts.length - 4; i >= 0; i -= 4) loop.push(b.pts[i], b.pts[i + 1], b.pts[i + 2], b.pts[i + 3]);
+        return { pts: loop, ends: ['closed'], len: b.len, seed: 0 };
+      }
       const back = [];
       for (let i = b.pts.length - 4; i >= 4; i -= 4) back.push(b.pts[i], b.pts[i + 1], b.pts[i + 2], b.pts[i + 3]);
       return { pts: back.concat(f.pts), ends: [b.end, f.end], len: f.len + b.len, seed: back.length / 4 };

@@ -806,7 +806,7 @@ try {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
     const tr0 = DISPLAY.transitions, la0 = DISPLAY.landed;
     let prev = Float64Array.from(DISPLAY_FIELD), prevAt = DISPLAY.at, prevT0 = DISPLAY.t0, prevBody = PROJECTION.frameBody;
-    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, minDur = Infinity, maxQueue = 0;
+    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, minDur = Infinity, maxQueue = 0, shortMove = 0;
     function tick() {
       const now = performance.now();
       let jump = 0, span = 0;
@@ -820,14 +820,14 @@ try {
         worstShare = Math.max(worstShare, jump / span - (DISPLAY.at - prevAt) / DISPLAY.dur);
       if (DISPLAY.tau > 0 && DISPLAY.tau < 1) interior++;
       maxQueue = Math.max(maxQueue, KERNEL_VIEW.queue.length);
-      if (DISPLAY.dur > 0) minDur = Math.min(minDur, DISPLAY.dur);
+      if (DISPLAY.dur > 0) { minDur = Math.min(minDur, DISPLAY.dur); if (DISPLAY.dur < 0.25 * STEP_INTERVAL_MS / (1 + DISPLAY.waiting) * (1 - 1e-12)) shortMove++; }
       if (prevBody > 0) worstZoom = Math.max(worstZoom, Math.abs(PROJECTION.frameBody - prevBody) / prevBody);
       prev = Float64Array.from(DISPLAY_FIELD); prevAt = DISPLAY.at; prevT0 = DISPLAY.t0; prevBody = PROJECTION.frameBody; frames++;
       if (now - t0 < 4000) requestAnimationFrame(tick);
       else {
         const pr = KERNEL_VIEW.projected.slice(-8), gaps = pr.slice(1).filter((f, i) => f - pr[i] !== 1).length;
         res({ sps: (KERNEL_VIEW.state.frame - f0) / ((now - t0) / 1000), set: 1000 / STEP_INTERVAL_MS, gaps, projected: pr.join(' '),
-              bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, minDur, interval: STEP_INTERVAL_MS, maxQueue,
+              bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, minDur, shortMove, interval: STEP_INTERVAL_MS, maxQueue,
               transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis });
       }
     }
@@ -843,8 +843,8 @@ try {
      `every move lands exactly on its state before the next begins (${mo.landed} of ${mo.transitions})`);
   ok(mo.bad === 0 && mo.checked > 10, `every frame draws a point on the segment between two exact states, and each state exactly at its end (${mo.checked} frames)`);
   ok(mo.worstShare <= 0.01, `within a move, each frame draws the share of a step's change that its share of the move's time calls for (worst excess ${mo.worstShare.toFixed(4)})`);
-  ok(mo.minDur >= 0.25 * mo.interval && mo.interior >= 0.3 * mo.frames,
-     `each move takes time: at least a quarter of a step interval, and ${mo.interior} of ${mo.frames} frames are drawn mid-move`);
+  ok(mo.shortMove === 0 && mo.minDur > 0 && mo.interior >= 0.3 * mo.frames,
+     `each move takes time: at least a quarter of a step interval, shared among the states waiting when it began (shortest ${mo.minDur.toFixed(1)} ms of ${mo.interval} ms, at most ${mo.maxQueue} waiting), and ${mo.interior} of ${mo.frames} frames are drawn mid-move`, JSON.stringify({ shortMove: mo.shortMove }));
   ok(mo.worstZoom <= 0.1, `the framing eases: never more than 10% between frames (worst ${(100 * mo.worstZoom).toFixed(2)}%)`);
   /* At 10 steps a second a slow display (this headless one draws under ten
      frames a second) cannot land every state in time. The kernel must wait
