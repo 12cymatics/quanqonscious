@@ -23,6 +23,9 @@ import SutraWS.MayaFlow
 import SutraWS.Magnetism
 import SutraWS.TorusLattice
 import SutraWS.FieldsAround
+import SutraWS.VedicFormulas
+import SutraWS.FluxSurface
+import SutraWS.FieldLines
 import Lean
 
 /-!
