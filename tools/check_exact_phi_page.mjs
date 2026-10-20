@@ -265,7 +265,9 @@ try {
        `applied=${got} active=${s.active} comp=${s.comp} halted=${s.halted}`);
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
-  ok(presets.length === 17, `${presets.length} presets`);
+  ok(presets.length === 12, `${presets.length} presets`);
+  const titles = await evaluate(`Object.keys(PRESETS).map(id => [id, document.getElementById(id).title === presetTitle(PRESETS[id]), PRESETS[id].claims.every(c => document.getElementById(id).title.includes(c.text))])`);
+  ok(titles.every(([, a, b]) => a && b), 'each preset button\'s title is built from its definition and states every claim the kernel gate checks', JSON.stringify(titles.filter(([, a, b]) => !(a && b))));
   const whites = [];
   for (const [id, comp, set] of presets) {
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
@@ -286,7 +288,12 @@ try {
   await evaluate(`document.getElementById('btn-none').click()`);
   await applied('ALL OFF', { active: '' });
   await evaluate(`document.getElementById('btn-all').click()`);
-  await applied('ALL ON', { active: Array.from({ length: 29 }, (_, i) => i + 1).join(',') });
+  const allOn = await waitFor(`KERNEL_VIEW.halted && KERNEL_VIEW.halted.name === 'R4Uncontained'`, 30000);
+  const ao = await evaluate(`({ active: activeSutras().map(a => a.id).join(','), halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message })`);
+  ok(allOn && ao.active === Array.from({ length: 29 }, (_, i) => i + 1).join(',') && /^R4 could not contain this step: .*S\d+/.test(ao.halted || ''),
+     'ALL ON: all 29 at 50% go to the worker, and R4 refuses the step and names the formula that took it past containment', JSON.stringify(ao));
+  await evaluate(`document.getElementById('pre-damper').click()`);
+  await applied('a preset after the refusal starts again from the seed', { comp: 'SERIES', active: '9,11,29' });
   const before = await evaluate(`KERNEL_VIEW.state.frame`);
   await evaluate(`document.getElementById('btn-reset').click()`);
   ok(await waitFor(`KERNEL_VIEW.state.frame < ${before}`, 20000), 'RESET starts the run again from the seed');
@@ -299,9 +306,9 @@ try {
   ok(await waitFor(`KERNEL_VIEW.state.frame > ${paused}`, 20000), 'RUN resumes it');
 
   section('certified');
-  await evaluate(`document.getElementById('pre-wormhole').click()`);
+  await evaluate(`document.getElementById('pre-dynamo').click()`);
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
-  ok(faithful, 'the badge reaches FAITHFUL on the wormhole preset',
+  ok(faithful, 'the badge reaches FAITHFUL on the dynamo preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
   section('dynamo and Maya');
@@ -490,6 +497,32 @@ try {
   const wh = await evaluate(`({ map: FLUX_MAP.drawn, verts: LATTICE_DRAWN.verts, ready: LATTICE_DRAWN.ready, why: FLUX_MAP.why })`);
   await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''; document.getElementById('btn-lattice').click()`);
   ok(!wh.map && wh.verts === 0 && !wh.ready && wh.why === 'withheld by the gate', 'without its certificate neither the flux map nor the lattice is drawn, and the reason is kept', JSON.stringify(wh));
+  const fx = await evaluate(`(() => {
+    VISUAL_CERTIFICATE.status(); projectTorus();
+    const F = FLUX_SHAPE, D = LATTICE_DRAWN, G = torusGeometry(), T4 = TH_SEG / 4, P4 = PH_SEG / 4, T8 = TH_SEG / 8, P8 = PH_SEG / 8;
+    const mod4 = k => ((k % 4) + 4) % 4;
+    const at = (k, span) => { const b = Math.floor(k / span); return [mod4(b), mod4(b + 1), (k - b * span) / span]; };
+    let worst = 0, n = 0, maxAbs = 0;
+    for (let i = 0; i < TH_SEG; i += 7) for (let j = 0; j < PH_SEG; j += 5) {
+      const [r0, r1, ft] = at(i - T4, T4), [s0, s1, fp] = at(j - P4, P4), c = D.cells, m = D.mCell;
+      const want = m > 0 ? ((1 - ft) * (1 - fp) * c[r0 * 4 + s0] + ft * (1 - fp) * c[r1 * 4 + s0] + (1 - ft) * fp * c[r0 * 4 + s1] + ft * fp * c[r1 * 4 + s1]) / m : 0;
+      worst = Math.max(worst, Math.abs(F.cell[i * PH_SEG + j] - want)); n++;
+    }
+    for (let j = 0; j < PH_SEG; j++) { const [a, b, f] = at(j - P8, P4); worst = Math.max(worst, Math.abs(F.hole[j] - (D.mLoop > 0 ? ((1 - f) * D.hole[a] + f * D.hole[b]) / D.mLoop : 0))); }
+    for (let i = 0; i < TH_SEG; i++) { const [a, b, f] = at(i - T8, T4); worst = Math.max(worst, Math.abs(F.tube[i] - (D.mLoop > 0 ? ((1 - f) * D.tube[a] + f * D.tube[b]) / D.mLoop : 0))); }
+    for (const a of [F.cell, F.hole, F.tube]) for (let k = 0; k < a.length; k++) maxAbs = Math.max(maxAbs, Math.abs(a[k]));
+    const with1 = Float64Array.from(PT.wx), save = { ...AMP };
+    AMP.fluxBulge = 0; AMP.fluxRing = 0; AMP.fluxTwist = 0; projectTorus();
+    let moved = 0; for (let k = 0; k < N_PTS; k++) if (PT.wx[k] !== with1[k]) moved++;
+    Object.assign(AMP, save); projectTorus();
+    const lv = LATTICE_VIEW.ok; LATTICE_VIEW.ok = false; const cert = VISUAL_CERTIFICATE.status().flux; projectTorus(); const off = { ok: FLUX_SHAPE.ok, why: FLUX_SHAPE.why };
+    LATTICE_VIEW.ok = lv; VISUAL_CERTIFICATE.status(); projectTorus();
+    return { ok: F.ok, node: F.node, worst, n, maxAbs, moved, nPts: N_PTS, cert, off, mCell: D.mCell, mLoop: D.mLoop, row: document.getElementById('dyn-shape').textContent };
+  })()`);
+  ok(fx.ok && fx.node === 0 && fx.worst < 1e-12 && fx.n > 1000, `the surface's flux shape is the bilinear share of the 16 cell fluxes and the linear share of the 8 loop fluxes, recomputed here at ${fx.n} cell samples and every loop sample, and reproduces each cell and loop at its own place (bilinear_node, lerp_node; worst ${fx.worst.toExponential(1)})`, JSON.stringify(fx));
+  ok(fx.maxAbs <= 1 && fx.mCell > 0 && fx.mLoop > 0, `every share lies in [-1, 1] (cell_share_bilinear_le, loop_share_lerp_le; largest ${fx.maxAbs.toFixed(6)})`);
+  ok(fx.moved > fx.nPts / 2, `the flux moves the surface: with its three gains at zero, ${fx.moved} of ${fx.nPts} points are placed elsewhere`);
+  ok(!fx.cert && !fx.off.ok, 'without the lattice certificate the flux does not shape the surface', JSON.stringify(fx.off));
   await evaluate(`document.getElementById('btn-run').click()`);
 
   section('the fields around the construct');
@@ -532,7 +565,7 @@ try {
              req: { nodes: Array.from(rq.nodes), paths: Array.from(rq.paths), J: Array.from(rq.J), Q: Array.from(rq.Q), R: rq.R, nseg: rq.nseg },
              pick, plane: pick.map(g => [C.plane[g * 4], C.plane[g * 4 + 1], C.plane[g * 4 + 2], C.planeVal[g * 3], C.planeVal[g * 3 + 1], C.planeVal[g * 3 + 2],
                                         C.planeS[g * 3], C.planeS[g * 3 + 1], C.planeS[g * 3 + 2]]),
-             bPts: Array.from(C.bPts), bOff: Array.from(C.bOff), ePts: Array.from(C.ePts), eOff: Array.from(C.eOff),
+             bPts: Array.from(C.bPts), bOff: Array.from(C.bOff), ePts: Array.from(C.ePts), eOff: Array.from(C.eOff), bEnds: C.bEnds, eEnds: C.eEnds, h: C.h,
              arrows: Array.from(C.arrows), arrowPts: Array.from(C.arrowPts), singular: C.singular,
              mForce: Array.from(C.mForce), eForce: Array.from(C.eForce), eNet: C.eNet, eSum: C.eSum, mSingular: C.mSingular, eSingular: C.eSingular,
              forcePts: Array.from(C.forcePts), forceInfo: Array.from(C.forceInfo),
@@ -597,26 +630,53 @@ try {
   ok(worstB < 1e-4, `the magnetic energy density at every sample is Biot-Savart integrated numerically (segment_field_integral; worst ${worstB.toExponential(1)})`);
   ok(worstE < 1e-4, `the electric energy density at every sample is Coulomb's (worst ${worstE.toExponential(1)})`);
   ok(worstS < 1e-4 && worstOrth < 1e-4, `the energy flow at every sample is E x B, perpendicular to both (poynting_orth; worst ${worstS.toExponential(1)}, ${worstOrth.toExponential(1)})`);
-  /* every drawn step of every field line runs along the field at its middle */
   const lineCheck = (pts, off, field) => {
-    let worst = 1, flips = 0, outside = 0, steps = 0, lines = 0;
+    let worst = 1, against = 0, outside = 0, steps = 0, lines = 0;
     const cos11 = Math.cos(11.01 * Math.PI / 180);
     for (let L = 0; L + 1 < off.length; L++) {
-      let sign = 0; lines++;
+      lines++;
       for (let i = off[L]; i < off[L + 1]; i++) if (Math.hypot(pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]) > fd.req.R * (1 + 1e-6)) outside++;
       for (let i = off[L]; i + 1 < off[L + 1]; i++) {
         const a = [pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]], b = [pts[i * 4 + 4], pts[i * 4 + 5], pts[i * 4 + 6]];
         const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], f = field((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
         const c = dot(d, f) / (nrm(d) * nrm(f)); steps++;
-        if (Math.abs(c) < worst) worst = Math.abs(c);
-        const sg = Math.sign(c); if (sign && sg !== sign) flips++; if (!sign) sign = sg;
+        if (c < worst) worst = c;
+        if (!(c > 0)) against++;
       }
     }
-    return { ok: worst >= cos11 && flips === 0 && outside === 0, worst: Math.acos(Math.min(1, worst)) * 180 / Math.PI, flips, outside, steps, lines };
+    return { ok: worst >= cos11 && against === 0 && outside === 0, worst: Math.acos(Math.max(-1, Math.min(1, worst))) * 180 / Math.PI, against, outside, steps, lines };
   };
   const tl0 = Date.now(), lb = lineCheck(fd.bPts, fd.bOff, Bq), le = lineCheck(fd.ePts, fd.eOff, Eq);
-  ok(lb.ok && lb.steps > 200, `every step of all ${lb.lines} magnetic lines runs along B within 11 degrees, one way along each line, inside the ball (${lb.steps} steps, widest ${lb.worst.toFixed(2)} degrees; rk4_step_le)`, JSON.stringify(lb));
-  ok(le.ok && le.steps > 200, `every step of all ${le.lines} electric lines runs along E within 11 degrees, one way along each line, inside the ball (${le.steps} steps, widest ${le.worst.toFixed(2)} degrees)`, JSON.stringify(le));
+  ok(lb.ok && lb.steps > 200, `every step of all ${lb.lines} magnetic lines runs along +B within 11 degrees, so each line and its marks point the way B does, B being Biot-Savart's integrated here, every element of which turns about its current by the right-hand rule, inside the ball (${lb.steps} steps, widest ${lb.worst.toFixed(2)} degrees; rk4_step_le, element_right_hand, right_hand_nonneg)`, JSON.stringify(lb));
+  ok(le.ok && le.steps > 200, `every step of all ${le.lines} electric lines runs along +E within 11 degrees, inside the ball (${le.steps} steps, widest ${le.worst.toFixed(2)} degrees)`, JSON.stringify(le));
+  const segDist = (Pc, p) => { const d = [Pc.c[0] - Pc.a[0], Pc.c[1] - Pc.a[1], Pc.c[2] - Pc.a[2]], L2 = dot(d, d);
+    const t = Math.max(0, Math.min(1, ((p[0] - Pc.a[0]) * d[0] + (p[1] - Pc.a[1]) * d[1] + (p[2] - Pc.a[2]) * d[2]) / L2));
+    return { dist: Math.hypot(p[0] - Pc.a[0] - t * d[0], p[1] - Pc.a[1] - t * d[1], p[2] - Pc.a[2] - t * d[2]), foot: [Pc.a[0] + t * d[0], Pc.a[1] + t * d[1], Pc.a[2] + t * d[2]] }; };
+  const pcs = [];
+  for (let e = 0; e < 32; e++) { const I = fd.req.J[e]; if (I === 0) continue;
+    for (let k = 0; k < fd.req.nseg; k++) { const o = (e * NS1 + k) * 3, a = [PP[o], PP[o + 1], PP[o + 2]], c = [PP[o + 3], PP[o + 4], PP[o + 5]];
+      const L = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]); if (L > 0) pcs.push({ I, a, c, L }); } }
+  const bPt = i => [fd.bPts[i * 4], fd.bPts[i * 4 + 1], fd.bPts[i * 4 + 2]];
+  const nearWire = p => Math.min(...pcs.map(Pc => segDist(Pc, p).dist));
+  const ends = { closed: 0, outside: 0, length: 0, wire: 0 }, bad = [];
+  let wireMax = 0;
+  fd.bEnds.forEach((b, L) => {
+    const s = fd.bOff[L], e = fd.bOff[L + 1] - 1, P0 = bPt(s), P1 = bPt(e);
+    if (b.ends[0] === 'closed') {
+      if (b.ends.length === 1 && P0.every((x, c) => x === P1[c])) ends.closed++; else bad.push(`line ${L} closed but its ends differ`);
+      return;
+    }
+    if (b.ends.length !== 2) { bad.push(`line ${L} has ${b.ends.length} ends`); return; }
+    b.ends.forEach((end, k) => {
+      const P = k === 0 ? P0 : P1;
+      if (end === 'outside' && nrm(P) >= fd.req.R - 1.0001 * fd.h) ends.outside++;
+      else if (end === 'length' && b.len >= 7 * fd.req.R) ends.length++;
+      else if ((end === 'singular' || end === 'stiff') && nearWire(P) <= fd.h) { ends.wire++; wireMax = Math.max(wireMax, nearWire(P) / fd.h); }
+      else bad.push(`line ${L} (${b.kind}) ends '${end}' at ${nrm(P).toFixed(1)} from the centre, ${nearWire(P).toFixed(3)} from the nearest current`);
+    });
+  });
+  ok(fd.bEnds.length === lb.lines && bad.length === 0 && ends.closed + ends.outside > 0,
+     `no magnetic line starts or stops in empty space: of ${lb.lines}, ${ends.closed} close on themselves, and of the open ones' ends ${ends.outside} leave the ball, ${ends.length} run out the length budget and ${ends.wire} stop on a current-carrying piece, within ${wireMax.toFixed(2)} of a step (element_div_free)`, bad.slice(0, 4).join('; '));
   ok(fd.rows[2].startsWith(`${lb.lines} magnetic, ${le.lines} electric`), 'the row counts the lines drawn', fd.rows[2]);
   let arrowsOk = true, nA = 0, worstA = 0;
   for (let k = 0; k < fd.arrows.length; k += 4) {
@@ -735,7 +795,7 @@ try {
      is paced, every step is drawn in order, the surface moves to each new
      state over the step interval, and the framing eases. Held here on
      pre-singularity, whose field changes most from step to step. */
-  await evaluate(`document.getElementById('pre-singularity').click()`);
+  await evaluate(`document.getElementById('pre-dynamo').click()`);
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
@@ -808,25 +868,45 @@ try {
   await evaluate(`document.getElementById('btn-export').click()`);
   const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
+    const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
+    const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
+    let magKeeps = null, rotKeeps = null;
+    try {
+      const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
+      const B0 = st(L.afterMSTVQCoupling), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
+      const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
+      const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
+      const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
+      magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
+      rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
+    } catch (e) { magKeeps = 'unreadable: ' + e.message; }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'r4R' in L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             stagesRun: L.stagesRun, magPass: L.magnetismStage.energyPass,
+             stagesRun: L.stagesRun, magKeeps, rotKeeps,
+             lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
+             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
-             maya: !!L.maya && 'factor' in L.maya && 'layer' in L.maya }; })()`) : {};
+             maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
   ok(gotStep && st.schema === 'vedic-step-export/3' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'sigma-braked'),
      'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
-  ok(st.magPass === true, 'the step export judges the magnetism stage on the exact stage, and it keeps the energy');
+  ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
+  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
   await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
-  const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_operator_audit_'))`, 300000);
-  const au = gotAudit ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_operator_audit_')).json), ops = j.audit.operators;
-    return { fp: j.manifest && j.manifest.sourceFingerprint, n: ops.length,
-             args: ops.every(o => Array.isArray(o.arguments) && o.arguments.length >= 1 && o.arguments[0].n === '1' && o.arguments[0].d === '1') }; })()`) : {};
-  ok(gotAudit && au.fp === fp && au.n === 29, `the operator audit names this build (fingerprint ${au.fp}, ${au.n} operators)`);
-  ok(au.args === true, 'every audited matrix records its arguments, strength 1 first');
+  const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_formula_audit_'))`, 300000);
+  const au = gotAudit ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_formula_audit_')).json), F = j.audit.formulas, C = j.audit.corpus;
+    const spec = KERNEL.SUTRA_ARG_SPEC;
+    let decided = 0, failed = [], refused = 0;
+    for (const c of C) for (const r of c.sutras) { if (r.refused) { refused++; continue; } if (r.ok !== true) failed.push('S' + r.id + ' on corpus ' + c.corpus); decided += r.claims.length; }
+    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, n: F.length,
+             args: F.every(f => Array.isArray(f.arguments) && f.arguments.length === spec[f.id].length && f.arguments.every((a, i) => a.name === spec[f.id][i].name)),
+             corpora: C.length, decided, failed, refused }; })()`) : {};
+  ok(gotAudit && au.schema === 'vedic-operator-audit/2' && au.fp === fp && au.n === 29, `the formula audit names this build (fingerprint ${au.fp}) and covers the 29 formulas`);
+  ok(au.args === true, 'it lists each formula\'s operands by name, as the kernel declares them');
+  ok(au.corpora > 0 && au.decided > 0 && au.failed.length === 0, `on ${au.corpora} test states every statement decided holds (${au.decided} decided, ${au.refused} refused)`, (au.failed || []).slice(0, 4).join('; '));
 
   section('framing');
   /* The framing must not breathe. It zooms out within FRAME_OUT_MS when the
@@ -859,7 +939,7 @@ try {
   ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-cymatic', 'pre-crown', 'pre-octad']) {
+  for (const id of ['pre-dynamo', 'pre-mixer', 'pre-capacitor']) {
     await evaluate(`document.getElementById('${id}').click()`);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
