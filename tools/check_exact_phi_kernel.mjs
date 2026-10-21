@@ -27,14 +27,19 @@
      stages             the magnetism, MSTVQ, TGCR and ZPE rotations keep
                         the energy exactly; ZPE adds only its source; the
                         TGCR geometry recomputed by walking faces
-     R4                 every step ends at or below T + d(T+1) + d^2;
-                        dormant, braked and gated all seen; a step past what
-                        the gate can contain stops at once and says where
+     R4                 a dormant step is the formulas' own, bit for bit,
+                        every state it stores at or below L + d(L+1) + d^2;
+                        a stopped step began where the formulas' own run
+                        first rose above that, and ends at or below
+                        T + d(T+1) + d^2; dormant, sigma only, stopped in
+                        the step and gated at its end all seen; a stage past
+                        what the gate can bring back stops at once and says
+                        where
      step export        an exported step replays bit for bit from its file,
                         its ramp with it
      ramp               every strength the step runs is the ramp's, against
-                        the same rule in bare BigInt fractions; ALL ON stops
-                        where its title says
+                        the same rule in bare BigInt fractions; ALL ON does
+                        what its title says
      modes              the mode identities decide and pass
      Maya, magnetism, torus, sources, parameters, gate weights, presets
 
@@ -426,43 +431,58 @@ section('the stages of the real field');
 
 const R4_CASES = [['3,9,11,25,29', 'SERIES', 4, Q.TWO, 0n], ['1,5,9,22', 'PARALLEL', 4, Q.TWO, 0n],
                   ['2,5,12,22,29', 'PARALLEL', 4, Q.TWO, 0n], ['2,23', 'PARALLEL', 4, Q.mk(1n, 10n), 0n],
-                  ['7,12', 'SERIES', 4, Q.TWO, 4n]];
+                  ['7,12', 'SERIES', 4, Q.TWO, 4n], ['28', 'SERIES', 4, Q.TWO, 0n]];
+const r4Branch = r4 => !r4.engaged ? 'dormant' : r4.gate ? 'gated' : r4.stops.length ? 'stopped' : 'sigma';
 section('R4 singularity controller');
 {
-  const seen = { dormant: 0, braked: 0, gated: 0 };
+  const allow = (E, d) => Q.add(E, Q.add(Q.mul(E, d), Q.add(d, Q.mul(d, d))));
+  const seen = { dormant: 0, sigma: 0, stopped: 0, gated: 0 };
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     const p = PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)) });
     let eng = K.rampedEngine(K.initEngine(), active), held = true, why = '';
     for (let s = 0; s < n; s++) {
       const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
-      const T = Q.cmp(eIn, ceiling) > 0 ? eIn : ceiling;
+      const T = Q.cmp(eIn, ceiling) > 0 ? eIn : ceiling, twice = Q.mul(Q.TWO, eIn), Lv = Q.cmp(twice, ceiling) > 0 ? twice : ceiling;
       eng = K.step(eng, p, active, mode);
-      const L = eng.last, d = L.stepError.delta;
-      const bound = Q.add(T, Q.add(Q.mul(T, d), Q.add(d, Q.mul(d, d))));
-      const eOut = K.energy(eng.psi);
-      if (Q.cmp(eOut, bound) > 0) { held = false; why = `step ${s + 1} ends above T + d(T+1) + d^2`; }
+      const L = eng.last, d = L.stepError.delta, eOut = K.energy(eng.psi), r4 = L.r4;
       if (!Q.eq(eOut, eng.energyLedger) || !Q.eq(eOut, energyQ(eng.psi))) { held = false; why = `step ${s + 1} ledger is not the state's energy`; }
-      if (L.r4.gate) {
-        seen.gated++;
-        const g = L.r4.gate.meanGate;
-        if (Q.sign(g) < 0 || Q.cmp(g, Q.ONE) > 0) { held = false; why = 'mean gate outside [0, 1]'; }
-      } else if (L.r4.engaged) seen.braked++;
-      else seen.dormant++;
+      if (!Q.eq(r4.target, T) || !Q.eq(r4.level, Lv)) { held = false; why = `step ${s + 1} T or L is not max(E_in, C), max(2 E_in, C)`; }
+      let delta = Q.ZERO, first = null;
+      const tr = { label: '' };
+      let own = null;
+      try {
+        own = K.stagesFrom(L.input, L.active, mode, L.wheeler, p, x => { const y = x.map(K.storeQ); delta = Q.add(delta, K.storeBudget(y));
+          if (Q.cmp(K.energy(y), allow(Lv, delta)) > 0) { first = { at: tr.label, e: K.energy(y) }; throw first; } return y; }, L.ctx, tr);
+      } catch (e) { if (e !== first) throw e; }
+      if (!r4.engaged) {
+        if (first !== null || !own || !sameQ(own.afterZ, eng.psi)) { held = false; why = `step ${s + 1} is dormant but is not the formulas' own run below L`; }
+      } else {
+        if (first === null || first.at !== r4.blowup.at || !Q.eq(first.e, r4.blowup.energy)) { held = false; why = `step ${s + 1} names a blow-up the formulas' own run does not have there`; }
+        if (Q.cmp(eOut, allow(T, d)) > 0) { held = false; why = `step ${s + 1} is stopped but ends above T + d(T+1) + d^2`; }
+        if (Q.sign(r4.sigma) < 0 || Q.cmp(r4.sigma, Q.ONE) > 0) { held = false; why = `step ${s + 1} sigma outside [0, 1]`; }
+        for (const g of [...r4.stops, ...(r4.gate ? [r4.gate] : [])])
+          if (Q.cmp(g.eGated, T) > 0 || Q.sign(g.meanGate) < 0 || Q.cmp(g.meanGate, Q.ONE) > 0) { held = false; why = `step ${s + 1} a gate at ${g.at} ends above T or its mean is outside [0, 1]`; }
+      }
+      seen[r4Branch(r4)]++;
     }
-    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}, drive ${drive}: ${n} steps end at or below T + d(T+1) + d^2`, why);
+    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}, drive ${drive}: ${n} steps, each dormant as the formulas run it or stopped where they first rise above L and ended at or below T`, why);
   }
-  ok(seen.dormant > 0 && seen.braked > 0 && seen.gated > 0,
-     `the controller was seen dormant (${seen.dormant}), braking only (${seen.braked}) and gating (${seen.gated})`);
-  /* past what the gate can contain: stop at once, and say where */
+  ok(seen.dormant > 0 && seen.sigma > 0 && seen.stopped > 0 && seen.gated > 0,
+     `the controller was seen dormant (${seen.dormant}), stopping with sigma alone (${seen.sigma}), stopping a stage (${seen.stopped}) and gating the end (${seen.gated})`);
   const all = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.ONE }));
   const t0 = Date.now();
+  const big = K.step(K.rampedEngine(K.initEngine(), all), PARAMS(), all, 'SERIES');
+  const ms = Date.now() - t0, br = big.last.r4;
+  ok(br.engaged && br.blowup.at === 'S1' && br.stops.map(g => g.at).join(',') === 'S1,S5,S7,S15,S16' && br.gate && Q.cmp(K.energy(big.psi), br.target) <= 0 && ms < 5000,
+     `all 29 at full strength: R4 stops the blow-up at S1, S5, S7, S15 and S16 where each rises, gates the end, and the step ends at or below T, in ${ms} ms`,
+     JSON.stringify({ at: br.blowup && br.blowup.at, stops: br.stops.map(g => g.at), gate: !!br.gate }));
+  const s28 = [{ id: 28, strength: Q.ONE }], e28 = K.rampedEngine(K.initEngine(), s28);
   let msg = '', name = '';
-  try { K.step(K.rampedEngine(K.initEngine(), all), PARAMS(), all, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
-  const ms = Date.now() - t0;
-  ok(name === 'R4Uncontained' && /S15/.test(msg) && ms < 5000,
-     `all 29 at full strength: R4 stops the step in ${ms} ms and names where it left containment`, msg.slice(0, 160));
-  /* the bound it stops at is its own gate's: a_min^(2 x 257) E > T */
+  const t1 = Date.now();
+  try { K.step({ ...e28, psi: e28.psi.map(x => Q.mul(x, Q.mk(256n))) }, PARAMS(), s28, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
+  ok(name === 'R4Uncontained' && /S28/.test(msg) && Date.now() - t1 < 5000,
+     `S28 at full strength on the seed times 256: one application goes past what the gate can bring back, and R4 stops the run at once and names it`, msg.slice(0, 160));
   const eng0 = K.initEngine(), p0 = PARAMS();
   const dn = K.evolveDielectric(eng0.dielectric, all, p0, K.energyShare(K.rhoHat(eng0.psi)));
   const ab = K.gateABField(dn, K.r4Scale(dn, all, K.Q.ZERO));
@@ -471,14 +491,14 @@ section('R4 singularity controller');
 
 section('step export');
 {
-  const tested = { dormant: 0, braked: 0, gated: 0 };
+  const tested = { dormant: 0, sigma: 0, stopped: 0, gated: 0 };
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     let eng = K.rampedEngine(K.initEngine(), active);
     for (let s = 0; s < n; s++) {
       eng = K.step(eng, PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)), vortex: Q.ONE }), active, mode);
       if (s === 0) continue;
-      const branch = eng.last.r4.gate ? 'gated' : eng.last.r4.engaged ? 'braked' : 'dormant';
+      const branch = r4Branch(eng.last.r4);
       if (tested[branch]) continue;
       tested[branch]++;
       const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
@@ -505,13 +525,13 @@ section('step export');
         if (!same) why = 'the replay differs from the file';
       } catch (e) { why = e.message; }
       ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
-      ok(L.stagesRun === (eng.last.r4.engaged ? 'sigma-braked' : 'uncontrolled'), `${where}: names the run its stage states come from (${L.stagesRun})`);
+      ok(L.stagesRun === (eng.last.r4.engaged ? 'r4' : 'uncontrolled'), `${where}: names the run its stage states come from (${L.stagesRun})`);
       ok(L.magnetismIn.closed && L.tgcr.cubeFlux.every(x => x.n === '0'), `${where}: the flux it starts from and the vortex curvature it ends with close on every cube`);
       ok(L.lambdaIn.length === 4 && L.lambdaOut.length === 4 && L.sutraRecord.length === active.length * (mode === 'SYMMETRIC_CONCURRENT' ? 2 : 1),
          `${where}: carries lambda in and out and one record per formula applied`);
     }
   }
-  ok(tested.dormant && tested.braked && tested.gated, `exports were replayed from all three R4 branches (dormant ${tested.dormant}, braked ${tested.braked}, gated ${tested.gated})`);
+  ok(tested.dormant && tested.sigma && tested.stopped && tested.gated, `exports were replayed from all four R4 branches (dormant ${tested.dormant}, sigma alone ${tested.sigma}, a stage stopped ${tested.stopped}, the end gated ${tested.gated})`);
 }
 
 section('the strength ramp');
@@ -545,16 +565,19 @@ section('the strength ramp');
   for (let s2 = 1; s2 <= 4; s2++) { e = K.step(e, PARAMS(), tg, 'SERIES');
     const sig = e.last.r4.engaged ? e.last.r4.sigma : Q.ONE, al = red(9n * 3n * BigInt(s2) * sig.n, 435n * 10n * N * sig.d);
     if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, red(3n * BigInt(s2), 10n * N)) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
-  ok(stepsOk, 'a step from the seed runs each formula at its ramped strength: alpha = id/435 x setting x k/180 at step k, times sigma where R4 brakes');
+  ok(stepsOk, 'a step from the seed runs each formula at its ramped strength: alpha = id/435 x setting x k/180 at step k, times sigma on a step R4 stops');
   const allHalf = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.mk(1n, 2n) }));
-  const refusal = mode => { let eng = K.initEngine();
-    for (let s2 = 1; s2 <= 3; s2++) { try { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), allHalf, mode); } catch (err) { return { step: s2, name: err.name, msg: err.message }; } }
-    return { step: 0 }; };
-  const rs = refusal('SERIES'), rc = refusal('SYMMETRIC_CONCURRENT'), rp = refusal('PARALLEL');
+  const allOnRun = (mode, n) => { let eng = K.initEngine(), stopped = 0;
+    for (let s2 = 1; s2 <= n; s2++) { try { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), allHalf, mode); } catch (err) { return { step: s2, stopped, name: err.name, msg: err.message }; }
+      if (eng.last.r4.engaged) stopped++; }
+    return { step: 0, stopped }; };
+  const rs = allOnRun('SERIES', 60), rc = allOnRun('SYMMETRIC_CONCURRENT', 60), rp = allOnRun('PARALLEL', 140);
   const title = HTML.split("document.getElementById('btn-all').title = '")[1].split("';")[0];
-  ok(rs.step === 1 && rs.name === 'R4Uncontained' && rc.step === 1 && rc.name === 'R4Uncontained' && rp.step === 2 && /GRVQ/.test(rp.msg) && /divides by zero/.test(rp.msg) &&
-     /SERIES and CONCURRENT R4 cannot contain even the first step of the ramp, at 1\/360/.test(title) && /PARALLEL the second step\\'s GRVQ walk measure divides by zero/.test(title),
-     'ALL ON from the seed stops where its title says: the first step in SERIES and CONCURRENT, the second in PARALLEL', JSON.stringify({ rs, rc, rp }).slice(0, 300));
+  ok(rs.step === 0 && rs.stopped === 60 && rc.step === 0 && rc.stopped === 60 &&
+     rp.step === 140 && rp.stopped === 139 && rp.name === 'R4Uncontained' && /S7 took the energy to 2\^2057 times the target/.test(rp.msg) &&
+     /in SERIES and CONCURRENT each of the first 60 steps is a blow-up that R4 stops/.test(title) && /in PARALLEL R4 stops 139, and at step 140 S7 takes the energy 2\^2057 times past the target/.test(title),
+     'ALL ON from the seed does what its title says: in SERIES and CONCURRENT R4 stops a blow-up on each of the first 60 steps, in PARALLEL on 139, and at step 140 S7 goes past what the gate can bring back',
+     JSON.stringify({ rs, rc, rp: { ...rp, msg: (rp.msg || '').slice(0, 160) } }));
 }
 
 section('series / parallel / concurrent');
