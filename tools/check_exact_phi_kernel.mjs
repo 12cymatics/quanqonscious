@@ -30,7 +30,11 @@
      R4                 every step ends at or below T + d(T+1) + d^2;
                         dormant, braked and gated all seen; a step past what
                         the gate can contain stops at once and says where
-     step export        an exported step replays bit for bit from its file
+     step export        an exported step replays bit for bit from its file,
+                        its ramp with it
+     ramp               every strength the step runs is the ramp's, against
+                        the same rule in bare BigInt fractions; ALL ON stops
+                        where its title says
      modes              the mode identities decide and pass
      Maya, magnetism, torus, sources, parameters, gate weights, presets
 
@@ -342,7 +346,7 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
-  let eng = K.initEngine();
+  let eng = K.rampedEngine(K.initEngine(), act);
   for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
   const L = eng.last;
   const N = BigInt(act.length);
@@ -429,7 +433,7 @@ section('R4 singularity controller');
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     const p = PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)) });
-    let eng = K.initEngine(), held = true, why = '';
+    let eng = K.rampedEngine(K.initEngine(), active), held = true, why = '';
     for (let s = 0; s < n; s++) {
       const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
       const T = Q.cmp(eIn, ceiling) > 0 ? eIn : ceiling;
@@ -454,7 +458,7 @@ section('R4 singularity controller');
   const all = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.ONE }));
   const t0 = Date.now();
   let msg = '', name = '';
-  try { K.step(K.initEngine(), PARAMS(), all, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
+  try { K.step(K.rampedEngine(K.initEngine(), all), PARAMS(), all, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
   const ms = Date.now() - t0;
   ok(name === 'R4Uncontained' && /S15/.test(msg) && ms < 5000,
      `all 29 at full strength: R4 stops the step in ${ms} ms and names where it left containment`, msg.slice(0, 160));
@@ -470,7 +474,7 @@ section('step export');
   const tested = { dormant: 0, braked: 0, gated: 0 };
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    let eng = K.initEngine();
+    let eng = K.rampedEngine(K.initEngine(), active);
     for (let s = 0; s < n; s++) {
       eng = K.step(eng, PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)), vortex: Q.ONE }), active, mode);
       if (s === 0) continue;
@@ -486,11 +490,12 @@ section('step export');
       try {
         const fromA = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
         const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
-        const act = L.activeSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+        const act = L.setSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
         const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ), ceiling: fromQ(file.ceiling),
                                 energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
                                 mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
-                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition);
+                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ),
+                                ramp: L.rampIn.map(r => ({ id: r.id, from: fromQ(r.from), to: fromQ(r.to), k: r.k, rest: r.rest.map(fromQ) })) }, p, act, L.composition);
         same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
                JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
                JSON.stringify(K.serializeQ(replay.tgcrKappa)) === JSON.stringify(file.tgcrKappa) &&
@@ -507,6 +512,49 @@ section('step export');
     }
   }
   ok(tested.dormant && tested.braked && tested.gated, `exports were replayed from all three R4 branches (dormant ${tested.dormant}, braked ${tested.braked}, gated ${tested.gated})`);
+}
+
+section('the strength ramp');
+{
+  const N = BigInt(K.RAMP_STEPS), red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
+  const at = (fn, fd, tn, td, k) => red(fn * td * N + (tn * fd - fn * td) * BigInt(Math.min(k, K.RAMP_STEPS)), fd * td * N);
+  const eqF = (q, [n, d]) => q.n === n && q.d === d;
+  ok(K.RAMP_STEPS === 180, 'a ramp is 180 steps, 60 s at 3 steps a second');
+  let r = [], good = true, why = '';
+  const plan = [[1, [{ id: 9, strength: Q.mk(3n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [90, [{ id: 9, strength: Q.mk(1n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [200, [{ id: 22, strength: Q.mk(1n, 2n) }]]];
+  const ref = { 9: { f: [0n, 1n], t: [3n, 10n], k: 0 }, 22: { f: [0n, 1n], t: [1n, 2n], k: 0 } };
+  let targets = plan[0][1];
+  for (let step = 1; step <= 420; step++) {
+    const change = plan.find(p => p[0] === step && step > 1);
+    if (change) {
+      targets = change[1];
+      for (const id of [9, 22]) { const t = targets.find(x => x.id === id), want = t ? [t.strength.n, t.strength.d] : [0n, 1n], R0 = ref[id];
+        if (R0 && !(R0.t[0] === want[0] && R0.t[1] === want[1])) ref[id] = { f: at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), t: want, k: 0 }; }
+    }
+    for (const id of Object.keys(ref)) ref[id].k++;
+    const x = K.rampStep(r, targets); r = x.ramp;
+    for (const id of [9, 22]) {
+      const R0 = ref[id], want = at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), got = x.active.find(a => a.id === id);
+      if (want[0] === 0n ? got !== undefined : !(got && eqF(got.strength, want) && eqF(got.args[0], want))) { good = false; why = `S${id} at step ${step}`; }
+    }
+  }
+  ok(good && r.length === 1 && r[0].id === 22 && r[0].k === K.RAMP_STEPS,
+     'over 420 steps -- on, changed at step 90 from where it stood, off at step 200 -- every strength is the BigInt rule, run at exactly that strength, and a formula ramped off is gone', why);
+  const tg = [{ id: 9, strength: Q.mk(3n, 10n) }];
+  let e = K.initEngine(), stepsOk = true;
+  for (let s2 = 1; s2 <= 4; s2++) { e = K.step(e, PARAMS(), tg, 'SERIES');
+    const sig = e.last.r4.engaged ? e.last.r4.sigma : Q.ONE, al = red(9n * 3n * BigInt(s2) * sig.n, 435n * 10n * N * sig.d);
+    if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, red(3n * BigInt(s2), 10n * N)) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
+  ok(stepsOk, 'a step from the seed runs each formula at its ramped strength: alpha = id/435 x setting x k/180 at step k, times sigma where R4 brakes');
+  const allHalf = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.mk(1n, 2n) }));
+  const refusal = mode => { let eng = K.initEngine();
+    for (let s2 = 1; s2 <= 3; s2++) { try { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), allHalf, mode); } catch (err) { return { step: s2, name: err.name, msg: err.message }; } }
+    return { step: 0 }; };
+  const rs = refusal('SERIES'), rc = refusal('SYMMETRIC_CONCURRENT'), rp = refusal('PARALLEL');
+  const title = HTML.split("document.getElementById('btn-all').title = '")[1].split("';")[0];
+  ok(rs.step === 1 && rs.name === 'R4Uncontained' && rc.step === 1 && rc.name === 'R4Uncontained' && rp.step === 2 && /GRVQ/.test(rp.msg) && /divides by zero/.test(rp.msg) &&
+     /SERIES and CONCURRENT R4 cannot contain even the first step of the ramp, at 1\/360/.test(title) && /PARALLEL the second step\\'s GRVQ walk measure divides by zero/.test(title),
+     'ALL ON from the seed stops where its title says: the first step in SERIES and CONCURRENT, the second in PARALLEL', JSON.stringify({ rs, rc, rp }).slice(0, 300));
 }
 
 section('series / parallel / concurrent');
