@@ -313,14 +313,29 @@ try {
   }
   await evaluate(`document.getElementById('btn-none').click()`);
   await applied('ALL OFF', { active: '' });
-  await evaluate(`document.getElementById('btn-all').click()`);
-  await applied('ALL ON', { comp: 'SYMMETRIC_CONCURRENT', active: Array.from({ length: 29 }, (_, i) => i + 1).join(',') });
-  const aoFrame = await evaluate(`KERNEL_VIEW.state.frame`);
-  const allOn = await waitFor(`KERNEL_VIEW.state.frame >= ${aoFrame} + 3 && KERNEL_VIEW.r4.engaged`, 60000);
-  const ao = await evaluate(`(() => { updateSimulationHud(); return { engaged: KERNEL_VIEW.r4.engaged, row: document.getElementById('sim-r4').textContent,
-    halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message }; })()`);
-  ok(allOn && !ao.halted && /^stopped a blow-up at \S/.test(ao.row),
-     'ALL ON: all 29 at 50% go to the worker, R4 stops the blow-ups they make, and its row names where each began', JSON.stringify(ao));
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await sleep(400);
+  await evaluate(`document.getElementById('btn-all').click(); document.getElementById('btn-reset').click()`);
+  await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0`, 30000);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await waitFor(`KERNEL_VIEW.halted || (KERNEL_VIEW.state && KERNEL_VIEW.state.frame >= 3)`, 60000);
+  const ao = await evaluate(`(() => { updateSimulationHud();
+    const st = KERNEL_VIEW.state, F = st.frame, halted = KERNEL_VIEW.halted ? KERNEL_VIEW.halted.message : null;
+    const row = document.getElementById('sim-r4').textContent, params = kernelParams(), active = activeSutras();
+    let e = KERNEL.initEngine(), engaged = 0, lastAt = null, threw = null;
+    for (let k = 1; k <= F + (halted ? 1 : 0); k++) {
+      try { e = KERNEL.step(e, params, active, COMPOSITION); } catch (err) { threw = err.message; break; }
+      if (e.last.r4.engaged) { engaged++; lastAt = e.last.r4.blowup.at; } else lastAt = null;
+    }
+    const same = e.frame === F && e.psi.every((q, i) => Q.eq(q, st.psi[i]));
+    return { F, ids: active.map(a => a.id).join(','), comp: COMPOSITION, applied: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
+             halted, threw, same, engaged, lastAt, row };
+  })()`);
+  const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
+  ok(ao.ids === all29 && ao.applied === all29 && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.same && ao.engaged > 0 &&
+     (ao.halted ? ao.threw === ao.halted : ao.threw === null && (ao.lastAt ? ao.row.startsWith(`stopped a blow-up at ${ao.lastAt} (`) : ao.row === 'dormant')),
+     `ALL ON from the seed: all 29 at 50% go to the worker, its ${ao.F} steps are the kernel's own bit for bit, R4 stops a blow-up on ${ao.engaged} of them and its row names where the last began${ao.halted ? ', and the run stops where the kernel stops' : ''}`,
+     JSON.stringify(ao));
   const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
   await evaluate(`document.getElementById('pre-damper').click()`);
   await applied('a preset after ALL ON starts again from the seed', dp);
