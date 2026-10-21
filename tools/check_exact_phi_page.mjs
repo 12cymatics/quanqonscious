@@ -1092,6 +1092,26 @@ try {
      `on a fresh page every one of ${lawFrames} frames over DYNAMO, MIXER and CAPACITOR keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
+  section('on a phone');
+  await cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
+  await cmd('Page.navigate', { url: PAGE });
+  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame >= 3 && SURFACE_STATUS.drawn`, 90000);
+  const ph = await evaluate(`(() => { projectTorus(); renderTorus();
+    const right = document.getElementById('right'), r = right.getBoundingClientRect();
+    return { w: innerWidth, collapsed: right.classList.contains('collapsed'), panelLeft: r.left, charts: CHARTS.on, flux: FLUX_MAP.drawn,
+             surface: SURFACE_STATUS.drawn, quads: PROJECTION.quads, label: document.getElementById('btn-charts').textContent }; })()`);
+  ok(phoneUp && ph.w === 390 && ph.collapsed && ph.panelLeft >= 390 && !ph.charts && ph.label === 'CHARTS OFF' && ph.surface && ph.quads > 1000,
+     'on a phone the page opens on the torus alone: the controls closed off the screen and the charts off', JSON.stringify(ph));
+  await evaluate(`document.getElementById('toggle-right').click()`);
+  await sleep(600);
+  const ph2 = await evaluate(`(() => { const r = document.getElementById('right').getBoundingClientRect(), d = getComputedStyle(document.getElementById('dynLine')).display;
+    return { left: r.left, width: r.width, dyn: d }; })()`);
+  await evaluate(`document.getElementById('toggle-right').click(); document.getElementById('btn-charts').click()`);
+  await sleep(600);
+  const ph3 = await evaluate(`({ charts: CHARTS.on, flux: FLUX_MAP.drawn, label: document.getElementById('btn-charts').textContent })`);
+  ok(ph2.left === 0 && ph2.width === 390 && ph2.dyn === 'none' && ph3.charts && ph3.label === 'CHARTS ON' && ph3.flux,
+     'opened, the controls fill the screen with nothing drawn over them; CHARTS puts the charts back', JSON.stringify({ ph2, ph3 }));
+
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));
 } finally {

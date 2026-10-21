@@ -55,7 +55,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 .ctrls button:hover{border-color:#d4af37;color:#d4af37}
 .ctrls button:disabled{opacity:.45;cursor:default}
 #preset-ctrls button{font-size:7.5px;padding:3px 5px;line-height:1.2}
-#btn-fields.active,#btn-lattice.active,#preset-ctrls button.preset-active,#comp-ctrls button.active{border-color:#d4af37;color:#d4af37;background:#14142a}
+#btn-fields.active,#btn-lattice.active,#btn-charts.active,#preset-ctrls button.preset-active,#comp-ctrls button.active{border-color:#d4af37;color:#d4af37;background:#14142a}
 .grp{color:#4a90d9;font-size:7px;width:100%;border-bottom:1px solid #1a1a3a;padding-bottom:2px;margin:4px 0 2px}
 .amp-row{display:flex;align-items:center;gap:4px;padding:2px 0;font-size:7px;color:#666}
 .amp-row span:first-child{width:52px;flex-shrink:0;text-align:right}
@@ -111,6 +111,26 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   max-width:min(96%, calc(100% - 96px));overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .dyn-line.withheld{color:#E4572E;border-color:#7a2f1a}
 @media (prefers-reduced-motion: reduce){#left,#right,.panel-toggle{transition:none}}
+.dyn-line.low{bottom:8px}
+@media (max-width:760px){
+  #right{width:100%;padding-top:72px;font-size:10px}
+  #wrap.panel-open .dyn-line{display:none}
+  #right.collapsed{transform:translateX(100%)}
+  #toggle-right.open{right:8px}
+  #left{width:100%}
+  #left.collapsed{transform:translateX(-100%)}
+  #toggle-left.open{left:8px}
+  #left h3{padding-left:44px;padding-top:72px}
+  #right h4{font-size:11px}
+  .section h5{font-size:10px}
+  .section p.note{font-size:9px}
+  #formula-display,#mode-identities{font-size:9px}
+  .ctrls button{font-size:10px;padding:7px 10px}
+  #preset-ctrls button{font-size:9.5px;padding:6px 8px}
+  .amp-row{font-size:9px;padding:4px 0}
+  .st{font-size:11px;padding:9px 10px}
+  .st .sid{font-size:10px}
+}
 </style>
 </head>
 <body>
@@ -159,6 +179,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
     <button id="btn-fields" type="button" class="active" title="Show or hide the fields around the construct: the magnetic pressure of its lattice currents seen through as a haze, and the energy densities of the magnetic and electric fields on the equatorial plane">FIELDS ON</button>
     <button id="btn-lattice" type="button" title="Draw the hypercube on the surface itself: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its vertices and its reconnections. The flux map shows the same values flat.">LATTICE OFF</button>
+    <button id="btn-charts" type="button" class="active" title="Show or hide the charts drawn over the view: the composition comparison, the flux map, the vertex bars and the dynamo timeline">CHARTS ON</button>
     <button id="btn-proof" type="button" title="Exact proof run on the audit worker: every statement about each of the 29 formulas (SutraWS/VedicFormulas.lean) decided on the test states, and each refusal named. Results go to the EVENT LOG.">PROOF</button>
     <button id="btn-export" type="button" title="Export the exact state and every stage of the last step as JSON">EXPORT STEP</button>
     <button id="btn-exact-operator-audit" type="button" title="The 29 formulas, their operands and every statement decided on the test states, exact, as JSON">AUDIT 29 EXACT</button>
@@ -5964,10 +5985,12 @@ function frame(t) {
     syncFaithfulBadge();
     renderTorus();
     updateDrawHud();
-    drawModeComparison(ctx, cw, ch);
-    drawVertexBars(ctx, cw, ch);
-    drawDynamoTimeline(ctx, cw, ch);
-    drawFluxMap(ctx, cw, ch);
+    if (CHARTS.on) {
+      drawModeComparison(ctx, cw, ch);
+      drawVertexBars(ctx, cw, ch);
+      drawDynamoTimeline(ctx, cw, ch);
+      drawFluxMap(ctx, cw, ch);
+    }
     /* a landed state: the surface is where that state's sources are */
     if (FIELDS.show && DISPLAY.tau === 1 && KERNEL_VIEW.state && FIELDS.frame !== KERNEL_VIEW.state.frame) { FIELDS.frame = KERNEL_VIEW.state.frame; requestFields(); }
   }
@@ -5978,16 +6001,37 @@ function frame(t) {
 /* ---------------------------------------------------------------------------
    CONTROLS
    --------------------------------------------------------------------------- */
+function markPanels() {
+  const open = id => !document.getElementById(id).classList.contains('collapsed');
+  document.getElementById('wrap').classList.toggle('panel-open', open('right') || open('left'));
+}
 document.getElementById('toggle-right').addEventListener('click', () => {
   const right = document.getElementById('right'), btn = document.getElementById('toggle-right');
   right.classList.toggle('collapsed');
   btn.classList.toggle('open', !right.classList.contains('collapsed'));
+  markPanels();
 });
+const CHARTS = { on: true };
+function setCharts(on) {
+  CHARTS.on = on;
+  const b = document.getElementById('btn-charts');
+  b.textContent = on ? 'CHARTS ON' : 'CHARTS OFF';
+  b.classList.toggle('active', on);
+  document.getElementById('dynLine').classList.toggle('low', !on);
+}
+document.getElementById('btn-charts').addEventListener('click', () => setCharts(!CHARTS.on));
+if (matchMedia('(max-width: 760px)').matches) {
+  setCharts(false);
+  document.getElementById('right').classList.add('collapsed');
+  document.getElementById('toggle-right').classList.remove('open');
+}
+markPanels();
 document.getElementById('toggle-left').addEventListener('click', () => {
   const left = document.getElementById('left'), btn = document.getElementById('toggle-left');
   left.classList.toggle('collapsed');
   btn.classList.toggle('open', !left.classList.contains('collapsed'));
   btn.textContent = left.classList.contains('collapsed') ? '☰' : '✕';
+  markPanels();
 });
 document.getElementById('btn-run').addEventListener('click', () => {
   KERNEL_VIEW.running = !KERNEL_VIEW.running;
