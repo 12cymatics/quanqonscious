@@ -14,7 +14,10 @@
      it loads           the first exact state arrives, nothing throws
      every control      each preset, composition, ALL ON / OFF, RESET and
                         PAUSE / RUN reaches the worker, and the worker runs
-                        exactly the set and composition the control chose
+                        toward exactly the set and composition the control
+                        chose
+     the ramp           the strengths row shows each formula at the strength
+                        the step ran, the gate's own count of the ramp
      the surface        is drawn, every point finite and in front of the
                         camera
      no clamping        the colour formula runs past 255 and each channel goes
@@ -26,9 +29,12 @@
      certified          the badge reaches FAITHFUL on a preset
      the torus          the flux map and the lattice on the surface show the
                         worker's exact A and chi as the gate reads them
-     the fields         B by Biot-Savart integrated numerically here, E by
-                        Coulomb, S = E x B, at the plane's samples; every step
-                        of every field line along its field within 11 degrees
+     the fields         B by Biot-Savart integrated numerically here and E by
+                        Coulomb at the plane's samples; the magnetic pressure
+                        |B|^2 / 2 on its grid, its places and differences bit
+                        for bit; the GPU's ray sums through the grid against
+                        the same sums here; the view the scene read where the
+                        haze says; no line and no arrow drawn
      motion             the kernel is paced, every step is drawn, the surface
                         moves to each state over its step interval and the
                         framing eases: no strobe, no jump
@@ -258,15 +264,31 @@ try {
      both round to 255, so strictly brighter cannot be required */
   ok(hk.bright && hk.hot[2] < 0.5 * hk.hot[0], 'a brighter colour of one hue is never darker, and far past 255 an orange is still orange, not white (highKnee_mono)', JSON.stringify(hk.hot));
 
+  section('the strength ramp');
+  await presetFromSeed('pre-dynamo');
+  await waitFor(`KERNEL_VIEW.state.frame >= 12`, 60000);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
+  const rw = await evaluate(`(() => { VISUAL_CERTIFICATE.status(); updateSimulationHud();
+    return { frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-ramp').textContent, ok: RAMP_VIEW.ok, why: RAMP_VIEW.why,
+             cert: VISUAL_CERTIFICATE._last.ramp, set: PRESETS['pre-dynamo'].set, N: KERNEL.RAMP_STEPS }; })()`);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  const rpct = x => (100 * x).toFixed(1).replace(/\.0$/, '') + '%';
+  const rids = Object.keys(rw.set).map(Number).sort((a, b) => a - b);
+  const rwant = `${rids.length} of ${rids.length} ramping over 180 steps · ` +
+    rids.map(id => `S${id} ${rpct(rw.set[id] / 100 * rw.frame / 180)} → ${rpct(rw.set[id] / 100)} (${rw.frame}/180)`).join(' · ');
+  ok(rw.N === 180 && rw.ok && rw.cert && rw.row === rwant,
+     `${rw.frame} steps from the seed each formula runs at ${rw.frame}/180 of its setting, and the strengths row says so (ramp_steady, ramp_zero)`, `${rw.row} | want ${rwant} | ${rw.why}`);
+
   section('every control reaches the kernel');
   const applied = async (label, want) => {
-    const got = await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && !KERNEL_VIEW.halted`, 30000);
-    const s = await evaluate(`({ active: KERNEL_VIEW.appliedActive.slice().sort((a, b) => a - b).join(','),
+    const got = await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && KERNEL_VIEW.appliedComposition !== null && !KERNEL_VIEW.halted`, 30000);
+    const s = await evaluate(`({ active: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
                                  comp: KERNEL_VIEW.appliedComposition, halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message })`);
     const okSet = want.active === undefined || s.active === want.active;
     const okComp = want.comp === undefined || s.comp === want.comp;
-    ok(got && okSet && okComp, `${label}: the worker ran ${want.comp || s.comp} [${s.active || 'none'}]`,
-       `applied=${got} active=${s.active} comp=${s.comp} halted=${s.halted}`);
+    ok(got && okSet && okComp, `${label}: the worker ran ${want.comp || s.comp} set to [${s.active || 'none'}]`,
+       `applied=${got} set=${s.active} comp=${s.comp} halted=${s.halted}`);
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
   ok(presets.length === 12, `${presets.length} presets`);
@@ -298,6 +320,7 @@ try {
      'ALL ON: all 29 at 50% go to the worker, and R4 refuses the step and names the formula that took it past containment', JSON.stringify(ao));
   await evaluate(`document.getElementById('pre-damper').click()`);
   await applied('a preset after the refusal starts again from the seed', { comp: 'SERIES', active: '9,11,29' });
+  await waitFor(`KERNEL_VIEW.state.frame >= 8`, 30000);
   const before = await evaluate(`KERNEL_VIEW.state.frame`);
   await evaluate(`document.getElementById('btn-reset').click()`);
   ok(await waitFor(`KERNEL_VIEW.state.frame < ${before}`, 20000), 'RESET starts the run again from the seed');
@@ -563,16 +586,15 @@ try {
     for (let g = 0; g < C.NR * C.NS; g += 7) pick.push(g);
     return { cert: VISUAL_CERTIFICATE.status().fields, ok: F.ok, why: F.why, drawWhy: F.drawWhy, drawn: F.drawn, nOv: OV.n, nPl: PLANE.nV, badOv,
              frame: KERNEL_VIEW.state.frame, curFrame: C.frame, reqFrame: rq && rq.frame,
-             rows: ['fld-current', 'fld-charge', 'fld-lines', 'fld-mforce', 'fld-eforce'].map(id => document.getElementById(id).textContent),
+             rows: ['fld-current', 'fld-charge', 'fld-haze', 'fld-mforce', 'fld-eforce'].map(id => document.getElementById(id).textContent),
+             hazeDrawn: HAZE.drawn, hazeWhy: HAZE.why,
+             haze: { id: C.id, N: C.hazeN, R: C.hazeR, req: rq.hazeR, reqN: rq.hazeN, maxNorm: PROJECTION.maxNorm, range: C.pRange, onPiece: C.onPiece },
              J: src.current.map(num), Qc: src.charge.map(num), kirchhoff: src.kirchhoff, neutral: src.neutral,
              at, edges: KERNEL.MAG_EDGES.map(([v, , h]) => [v, h]),
              req: { nodes: Array.from(rq.nodes), paths: Array.from(rq.paths), J: Array.from(rq.J), Q: Array.from(rq.Q), R: rq.R, nseg: rq.nseg },
-             pick, plane: pick.map(g => [C.plane[g * 4], C.plane[g * 4 + 1], C.plane[g * 4 + 2], C.planeVal[g * 3], C.planeVal[g * 3 + 1], C.planeVal[g * 3 + 2],
-                                        C.planeS[g * 3], C.planeS[g * 3 + 1], C.planeS[g * 3 + 2]]),
-             bPts: Array.from(C.bPts), bOff: Array.from(C.bOff), ePts: Array.from(C.ePts), eOff: Array.from(C.eOff), bEnds: C.bEnds, eEnds: C.eEnds, h: C.h,
-             arrows: Array.from(C.arrows), arrowPts: Array.from(C.arrowPts), singular: C.singular,
+             pick, plane: pick.map(g => [C.plane[g * 4], C.plane[g * 4 + 1], C.plane[g * 4 + 2], C.planeVal[g * 3], C.planeVal[g * 3 + 1], C.planeVal[g * 3 + 2]]),
+             singular: C.singular,
              mForce: Array.from(C.mForce), eForce: Array.from(C.eForce), eNet: C.eNet, eSum: C.eSum, mSingular: C.mSingular, eSingular: C.eSingular,
-             forcePts: Array.from(C.forcePts), forceInfo: Array.from(C.forceInfo),
              /* each stored energy's place in its range, as the plane is coloured */
              places: (() => { const lo = C.planeRange, V = C.planeVal; let out = 0, n = 0;
                for (let g = 0; g < C.NR * C.NS; g++) { if (!V[g * 3 + 2]) continue;
@@ -582,8 +604,8 @@ try {
   })()`);
   ok(fieldsLanded && fd.curFrame === fd.frame && fd.reqFrame === fd.frame, `the fields drawn are those of the state on the screen (step ${fd.frame})`);
   ok(fd.cert && fd.ok && fd.kirchhoff && fd.neutral, 'the fields channel holds: the kernel decided both conservation laws on the sources', fd.why);
-  ok(fd.drawn && fd.drawn.lines > 10 && fd.drawn.arrows > 50 && fd.drawn.plane > 1000,
-     `the fields are drawn: ${fd.drawn && fd.drawn.lines} field lines, ${fd.drawn && fd.drawn.arrows} energy-flow arrows, ${fd.drawn && fd.drawn.plane} plane cells`, fd.drawWhy);
+  ok(fd.drawn && fd.drawn.plane > 1000 && fd.hazeDrawn && Object.keys(fd.drawn).join() === 'plane',
+     `the fields are drawn: ${fd.drawn && fd.drawn.plane} plane cells and the magnetic pressure seen through, and nothing else -- no line, no arrow`, fd.drawWhy + ' ' + fd.hazeWhy);
   ok(fd.badOv === 0, `every overlay and plane vertex written for the GPU is finite, its depth in [-1, 1] and its colour and opacity in [0, 1], every plane index a vertex (${fd.nOv} + ${fd.nPl}; mix_mem, level_mem)`, `${fd.badOv} outside`);
   ok(fd.places.out === 0 && fd.places.n > 1000, `every stored energy on the plane is inside its own range: its place is in [0, 1] (plot_mem; ${fd.places.n} values)`, `${fd.places.out} outside`);
   const sameArr = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -627,80 +649,178 @@ try {
     return [ex, ey, ez]; };
   const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], nrm = a => Math.sqrt(dot(a, a));
-  let worstB = 0, worstE = 0, worstS = 0, worstOrth = 0, nPlane = 0, onPlane = true;
-  for (const [x, y, z, uE, uB, has, sx, sy, sz] of fd.plane) {
+  const tl0 = Date.now();
+  let worstB = 0, worstE = 0, nPlane = 0, onPlane = true;
+  for (const [x, y, z, uE, uB, has] of fd.plane) {
     if (y !== 0 || Math.hypot(x, z) > fd.req.R * (1 + 1e-6)) onPlane = false;
     if (!has) continue;
     nPlane++;
-    const B = Bq(x, y, z), E = Eq(x, y, z), S = crs(E, B);
+    const B = Bq(x, y, z), E = Eq(x, y, z);
     worstB = Math.max(worstB, Math.abs(uB / (dot(B, B) / 2) - 1));
     worstE = Math.max(worstE, Math.abs(uE / (dot(E, E) / 2) - 1));
-    worstS = Math.max(worstS, Math.hypot(sx - S[0], sy - S[1], sz - S[2]) / (nrm(E) * nrm(B)));
-    worstOrth = Math.max(worstOrth, Math.abs(dot([sx, sy, sz], E)) / (nrm([sx, sy, sz]) * nrm(E) || 1), Math.abs(dot([sx, sy, sz], B)) / (nrm([sx, sy, sz]) * nrm(B) || 1));
   }
   ok(onPlane && nPlane > 1000, `the plane samples lie on the equatorial plane inside the ball (${nPlane} checked, ${fd.singular} on a source)`);
   ok(worstB < 1e-4, `the magnetic energy density at every sample is Biot-Savart integrated numerically (segment_field_integral; worst ${worstB.toExponential(1)})`);
   ok(worstE < 1e-4, `the electric energy density at every sample is Coulomb's (worst ${worstE.toExponential(1)})`);
-  ok(worstS < 1e-4 && worstOrth < 1e-4, `the energy flow at every sample is E x B, perpendicular to both (poynting_orth; worst ${worstS.toExponential(1)}, ${worstOrth.toExponential(1)})`);
-  const lineCheck = (pts, off, field) => {
-    let worst = 1, against = 0, outside = 0, steps = 0, lines = 0;
-    const cos11 = Math.cos(11.01 * Math.PI / 180);
-    for (let L = 0; L + 1 < off.length; L++) {
-      lines++;
-      for (let i = off[L]; i < off[L + 1]; i++) if (Math.hypot(pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]) > fd.req.R * (1 + 1e-6)) outside++;
-      for (let i = off[L]; i + 1 < off[L + 1]; i++) {
-        const a = [pts[i * 4], pts[i * 4 + 1], pts[i * 4 + 2]], b = [pts[i * 4 + 4], pts[i * 4 + 5], pts[i * 4 + 6]];
-        const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], f = field((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-        const c = dot(d, f) / (nrm(d) * nrm(f)); steps++;
-        if (c < worst) worst = c;
-        if (!(c > 0)) against++;
-      }
+  const grab = async (name, n) => {
+    const bytes = new Uint8Array(4 * n);
+    for (let o = 0; o < n; o += 65536) {
+      const b64 = await evaluate(`(() => { const a = ${name}, u = new Uint8Array(a.buffer, a.byteOffset + ${o} * 4, Math.min(65536, a.length - ${o}) * 4);
+        let s = ''; for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); })()`);
+      bytes.set(Buffer.from(b64, 'base64'), 4 * o);
     }
-    return { ok: worst >= cos11 && against === 0 && outside === 0, worst: Math.acos(Math.max(-1, Math.min(1, worst))) * 180 / Math.PI, against, outside, steps, lines };
+    return new Float32Array(bytes.buffer);
   };
-  const tl0 = Date.now(), lb = lineCheck(fd.bPts, fd.bOff, Bq), le = lineCheck(fd.ePts, fd.eOff, Eq);
-  ok(lb.ok && lb.steps > 200, `every step of all ${lb.lines} magnetic lines runs along +B within 11 degrees, so each line and its marks point the way B does, B being Biot-Savart's integrated here, every element of which turns about its current by the right-hand rule, inside the ball (${lb.steps} steps, widest ${lb.worst.toFixed(2)} degrees; rk4_step_le, element_right_hand, right_hand_nonneg)`, JSON.stringify(lb));
-  ok(le.ok && le.steps > 200, `every step of all ${le.lines} electric lines runs along +E within 11 degrees, inside the ball (${le.steps} steps, widest ${le.worst.toFixed(2)} degrees)`, JSON.stringify(le));
-  const segDist = (Pc, p) => { const d = [Pc.c[0] - Pc.a[0], Pc.c[1] - Pc.a[1], Pc.c[2] - Pc.a[2]], L2 = dot(d, d);
-    const t = Math.max(0, Math.min(1, ((p[0] - Pc.a[0]) * d[0] + (p[1] - Pc.a[1]) * d[1] + (p[2] - Pc.a[2]) * d[2]) / L2));
-    return { dist: Math.hypot(p[0] - Pc.a[0] - t * d[0], p[1] - Pc.a[1] - t * d[1], p[2] - Pc.a[2] - t * d[2]), foot: [Pc.a[0] + t * d[0], Pc.a[1] + t * d[1], Pc.a[2] + t * d[2]] }; };
-  const pcs = [];
-  for (let e = 0; e < 32; e++) { const I = fd.req.J[e]; if (I === 0) continue;
-    for (let k = 0; k < fd.req.nseg; k++) { const o = (e * NS1 + k) * 3, a = [PP[o], PP[o + 1], PP[o + 2]], c = [PP[o + 3], PP[o + 4], PP[o + 5]];
-      const L = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]); if (L > 0) pcs.push({ I, a, c, L }); } }
-  const bPt = i => [fd.bPts[i * 4], fd.bPts[i * 4 + 1], fd.bPts[i * 4 + 2]];
-  const nearWire = p => Math.min(...pcs.map(Pc => segDist(Pc, p).dist));
-  const ends = { closed: 0, outside: 0, length: 0, wire: 0 }, bad = [];
-  let wireMax = 0;
-  fd.bEnds.forEach((b, L) => {
-    const s = fd.bOff[L], e = fd.bOff[L + 1] - 1, P0 = bPt(s), P1 = bPt(e);
-    if (b.ends[0] === 'closed') {
-      if (b.ends.length === 1 && P0.every((x, c) => x === P1[c])) ends.closed++; else bad.push(`line ${L} closed but its ends differ`);
-      return;
-    }
-    if (b.ends.length !== 2) { bad.push(`line ${L} has ${b.ends.length} ends`); return; }
-    b.ends.forEach((end, k) => {
-      const P = k === 0 ? P0 : P1;
-      if (end === 'outside' && nrm(P) >= fd.req.R - 1.0001 * fd.h) ends.outside++;
-      else if (end === 'length' && b.len >= 7 * fd.req.R) ends.length++;
-      else if ((end === 'singular' || end === 'stiff') && nearWire(P) <= fd.h) { ends.wire++; wireMax = Math.max(wireMax, nearWire(P) / fd.h); }
-      else bad.push(`line ${L} (${b.kind}) ends '${end}' at ${nrm(P).toFixed(1)} from the centre, ${nearWire(P).toFixed(3)} from the nearest current`);
-    });
-  });
-  ok(fd.bEnds.length === lb.lines && bad.length === 0 && ends.closed + ends.outside > 0,
-     `no magnetic line starts or stops in empty space: of ${lb.lines}, ${ends.closed} close on themselves, and of the open ones' ends ${ends.outside} leave the ball, ${ends.length} run out the length budget and ${ends.wire} stop on a current-carrying piece, within ${wireMax.toFixed(2)} of a step (element_div_free)`, bad.slice(0, 4).join('; '));
-  ok(fd.rows[2].startsWith(`${lb.lines} magnetic, ${le.lines} electric`), 'the row counts the lines drawn', fd.rows[2]);
-  let arrowsOk = true, nA = 0, worstA = 0;
-  for (let k = 0; k < fd.arrows.length; k += 4) {
-    const q = k / 4 * 6, P = fd.arrowPts, x = (P[q] + P[q + 3]) / 2, z = (P[q + 2] + P[q + 5]) / 2, t = fd.arrows[k + 3];
-    /* to the accuracy S itself has here: the arrow's direction times the
-       in-plane |S| reproduces the in-plane S within 1e-4 of |E||B| (where S
-       is nearly vertical its in-plane direction is ill-conditioned) */
-    const E = Eq(x, 0, z), B = Bq(x, 0, z), S = crs(E, B), sp = Math.hypot(S[0], S[2]);
-    worstA = Math.max(worstA, Math.hypot(fd.arrows[k] * sp - S[0], fd.arrows[k + 2] * sp - S[2]) / (nrm(E) * nrm(B))); nA++;
-    if (!(t >= 0 && t <= 1) || P[q + 1] !== 0 || P[q + 4] !== 0) arrowsOk = false;
+  const HZ = fd.haze, HN = HZ.N, HR = HZ.R, hh = 2 * HR / (HN - 1), NH = HN * HN * HN;
+  HZ.pB = await grab('FIELDS.cur.pB', NH); HZ.g = await grab('FIELDS.cur.haze', 4 * NH);
+  ok(await evaluate(`FIELDS.cur.id`) === HZ.id && HZ.pB.length === NH && HZ.g.length === 4 * NH, 'the pressure grid read here is the one on the screen, whole');
+  ok(HN === 40 && HZ.reqN === 40 && HR === HZ.req && HR === 1.3 * HZ.maxNorm && HZ.pB.length === NH && HZ.g.length === 4 * NH && HZ.onPiece === 0,
+     `the pressure is taken on ${HN}^3 nodes over the cube of half-side ${HR.toFixed(1)}, 1.3 times the farthest surface point, none of them on a current-carrying piece`);
+  let worstP = 0, nP = 0;
+  for (let g = 0; g < NH; g += 211) {
+    const i = g % HN, j = Math.floor(g / HN) % HN, k = Math.floor(g / (HN * HN)), B = Bq(-HR + i * hh, -HR + j * hh, -HR + k * hh);
+    worstP = Math.max(worstP, Math.abs(HZ.pB[g] / (dot(B, B) / 2) - 1)); nP++;
   }
-  ok(arrowsOk && nA > 50 && worstA < 1e-4, `each of the ${nA} arrows on the plane points along S's part in the plane there, sized within its range (plot_mem; worst ${worstA.toExponential(1)} of |E||B|)`);
+  ok(worstP < 1e-4, `the stored pressure at ${nP} nodes spread over the grid is |B|^2 / 2 with B Biot-Savart's integrated here (haze_pressure_nonneg, haze_stress_trace; worst ${worstP.toExponential(1)})`);
+  let lo = Infinity, hi = -Infinity;
+  for (const p of HZ.pB) if (p > 0) { const L = Math.log(p); if (L < lo) lo = L; if (L > hi) hi = L; }
+  let tBad = 0, tMin = Infinity, tMax = -Infinity, gBad = 0, gWide = 0;
+  for (let g = 0; g < NH; g++) {
+    const t = HZ.g[g * 4 + 3], want = Math.fround(HZ.pB[g] > 0 && hi > lo ? (Math.log(HZ.pB[g]) - lo) / (hi - lo) : 0);
+    if (t !== want || !(t >= 0 && t <= 1)) tBad++;
+    tMin = Math.min(tMin, t); tMax = Math.max(tMax, t);
+  }
+  for (let k = 0; k < HN; k++) for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) {
+    const g = (k * HN + j) * HN + i, at = [i, j, k], st = [1, HN, HN * HN];
+    for (let c = 0; c < 3; c++) {
+      const side = at[c] === 0 || at[c] === HN - 1, a = at[c] === 0 ? g : g - st[c], b = at[c] === HN - 1 ? g : g + st[c];
+      const d = HZ.g[g * 4 + c];
+      if (d !== Math.fround((HZ.g[b * 4 + 3] - HZ.g[a * 4 + 3]) / (side ? 1 : 2))) gBad++;
+      if (Math.abs(d) > (side ? 1 : 0.5)) gWide++;
+    }
+  }
+  ok(lo === HZ.range[0] && hi === HZ.range[1] && tBad === 0 && tMin === 0 && tMax === 1,
+     `every node's place in the log range of the stored pressures is in [0, 1], taken again here bit for bit, the range's ends attained (plot_mem, plot_log_mono)`, `${tBad} differ; range ${HZ.range} against ${lo}, ${hi}`);
+  ok(gBad === 0 && gWide === 0, `every difference along every axis at every node is the stored places' central difference inside and one-sided on the faces, bit for bit, within 1/2 and 1 a step (haze_central_le, haze_side_le)`, `${gBad} differ, ${gWide} too wide`);
+  const f16 = x => { if (x === 0) return 0; const a = Math.abs(x); let e = Math.floor(Math.log2(a)); if (Math.pow(2, e) > a) e--; if (Math.pow(2, e + 1) <= a) e++;
+    const q = Math.pow(2, Math.max(e, -14) - 10), r = a / q, f = Math.floor(r), n = r - f > 0.5 || (r - f === 0.5 && f % 2 === 1) ? f + 1 : f; return Math.sign(x) * n * q; };
+  const H16 = Float64Array.from(HZ.g, f16);
+  const gpu = await evaluate(`(() => {
+    projectTorus(); renderTorus();
+    const zk = OV.zk; OV.zk = 0; const h = hazeFrame(); SURFACE_GL.finish(h, W / devicePixelRatio, H / devicePixelRatio); OV.zk = zk;
+    const r = SURFACE_GL.readHaze(), c = PROJECTION.cam, out = [];
+    for (let a = 1; a < 12; a++) for (let b = 1; b < 8; b++) { const i = Math.floor(a * r.w / 12), j = Math.floor(b * r.h / 8), o = (j * r.w + i) * 4;
+      out.push([i, j, r.px[o], r.px[o + 1], r.px[o + 2]]); }
+    return { w: r.w, h: r.h, cssW: W / devicePixelRatio, cssH: H / devicePixelRatio, cam: c, steps: HAZE.steps, hw: HAZE.w, slots: h && [h.q0, h.q1], id: FIELDS.cur.id, tex: SURFACE_GL.tex3Id.slice(), out };
+  })()`);
+  const cR = gpu.cam, colM = (x1, y2, z2) => { const y = y2 * cR.cRX + z2 * cR.sRX, z1 = -y2 * cR.sRX + z2 * cR.cRX; return [x1 * cR.cRY + z1 * cR.sRY, y, -x1 * cR.sRY + z1 * cR.cRY]; };
+  const M0 = colM(1, 0, 0), M1 = colM(0, 1, 0), M2 = colM(0, 0, 1);
+  const tri = (x) => {
+    if (x.some(v => Math.abs(v) > HR)) return [0, 0, 0, 0];
+    const u = x.map(v => ((v / (2 * HR) + 0.5) * (HN - 1) / HN + 0.5 / HN) * HN - 0.5);
+    const i0 = u.map(v => Math.floor(v)), f = u.map((v, c) => v - i0[c]), out = [0, 0, 0, 0];
+    for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+      const ii = [i0[0] + dx, i0[1] + dy, i0[2] + dz].map(v => Math.min(HN - 1, Math.max(0, v)));
+      const wgt = (dx ? f[0] : 1 - f[0]) * (dy ? f[1] : 1 - f[1]) * (dz ? f[2] : 1 - f[2]), g = (ii[2] * HN + ii[1]) * HN + ii[0];
+      for (let c = 0; c < 4; c++) out[c] += wgt * H16[g * 4 + c];
+    }
+    return [out[0] * (HN - 1) / (2 * HR), out[1] * (HN - 1) / (2 * HR), out[2] * (HN - 1) / (2 * HR), out[3]];
+  };
+  let worstG = 0, worstV = 0, scaleG = 0, through = 0;
+  const cpu = gpu.out.map(([i, j]) => {
+    const css = [(i + 0.5) / gpu.w * gpu.cssW, (1 - (j + 0.5) / gpu.h) * gpu.cssH], kk = cR.D * cR.scale;
+    const a = (css[0] - cR.cx) / kk, b = (css[1] - cR.cy) / kk;
+    const O = [0, 1, 2].map(c => -cR.D * M2[c]), d = [0, 1, 2].map(c => a * M0[c] + b * M1[c] + M2[c]);
+    const qa = dot(d, d), qb = dot(O, d), disc = qb * qb - qa * (dot(O, O) - HR * HR);
+    let u0 = 0, u1 = -1;
+    if (disc > 0) { u0 = Math.max(0, (-qb - Math.sqrt(disc)) / qa); u1 = (-qb + Math.sqrt(disc)) / qa; }
+    const G = [0, 0, 0]; let P = 0;
+    if (u1 > u0) { through++; const du = (u1 - u0) / gpu.steps, ds = du * nrm(d);
+      for (let s2 = 0; s2 < gpu.steps; s2++) { const uu = u0 + (s2 + 0.5) * du, x = [0, 1, 2].map(c => O[c] + uu * d[c]), v = tri(x);
+        for (let c = 0; c < 3; c++) G[c] += v[c] * ds; P += v[3] * ds; } }
+    return [dot(G, M0), dot(G, M1), P / (2 * HR)];
+  });
+  for (const v of cpu) scaleG = Math.max(scaleG, Math.abs(v[0]), Math.abs(v[1]));
+  gpu.out.forEach(([, , gx, gy, gv], n) => { worstG = Math.max(worstG, Math.abs(gx - cpu[n][0]), Math.abs(gy - cpu[n][1])); worstV = Math.max(worstV, Math.abs(gv - cpu[n][2])); });
+  ok(gpu.hw === 1 && gpu.slots && gpu.tex[gpu.slots[1]] === gpu.id && through > 30 && scaleG > 0.05 && worstG < 4e-3 * scaleG && worstV < 4e-3,
+     `at ${gpu.out.length} pixels of the haze, ${through} of whose rays cross the ball, the GPU's sums along the ray of the trilinearly read gradient and place are those taken here from the same half-precision grid: the view moved toward the higher pressure (haze_trilinear_mem, haze_ray_sum_le, haze_turn_norm, haze_chord_le; worst ${(worstG / scaleG).toExponential(1)} of the largest, glow ${worstV.toExponential(1)}; haze_veil_mem)`,
+     JSON.stringify({ hw: gpu.hw, slots: gpu.slots, tex: gpu.tex, id: gpu.id, through, scaleG, worstG, worstV }));
+  const PV = await evaluate(`FIELDS.prev && { id: FIELDS.prev.id, N: FIELDS.prev.hazeN, R: FIELDS.prev.hazeR, slot: SURFACE_GL.tex3Id.indexOf(FIELDS.prev.id) }`);
+  let blendOk = false, worstBl = Infinity, nBl = 0, blWhy = 'no earlier field state in a grid slot';
+  if (PV && PV.slot >= 0 && PV.N === HN) {
+    const G0 = Float64Array.from(await grab('FIELDS.prev.haze', 4 * NH), f16), R0 = PV.R;
+    const layers = [0, 7, 19, 31, 39];
+    const bl = await evaluate(`(() => {
+      const S = SURFACE_GL, gl = S.gl, q1 = S.tex3Id.indexOf(FIELDS.cur.id);
+      projectTorus(); renderTorus();
+      S.finish({ q0: ${PV.slot}, q1, w: 0.375 }, W / devicePixelRatio, H / devicePixelRatio);
+      const out = [], buf = new Float32Array(${HN} * ${HN} * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, S.mixFB);
+      for (const k of ${JSON.stringify(layers)}) {
+        gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, S.tex3[2], 0, k);
+        gl.readPixels(0, 0, ${HN}, ${HN}, gl.RGBA, gl.FLOAT, buf);
+        for (let j = 1; j < ${HN}; j += 6) for (let i = 2; i < ${HN}; i += 6) { const o = (j * ${HN} + i) * 4; out.push([i, j, k, buf[o], buf[o + 1], buf[o + 2], buf[o + 3]]); }
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return { out, mixN: S.mixN, R1: S.tex3R[q1] };
+    })()`);
+    worstBl = 0;
+    const tri0 = x => {
+      if (x.some(v => Math.abs(v) > R0)) return [0, 0, 0, 0];
+      const u = x.map(v => ((v / (2 * R0) + 0.5) * (HN - 1) / HN + 0.5 / HN) * HN - 0.5), i0 = u.map(Math.floor), f = u.map((v, c) => v - i0[c]), o4 = [0, 0, 0, 0];
+      for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const ii = [i0[0] + dx, i0[1] + dy, i0[2] + dz].map(v => Math.min(HN - 1, Math.max(0, v)));
+        const wg = (dx ? f[0] : 1 - f[0]) * (dy ? f[1] : 1 - f[1]) * (dz ? f[2] : 1 - f[2]), g = (ii[2] * HN + ii[1]) * HN + ii[0];
+        for (let c = 0; c < 4; c++) o4[c] += wg * G0[g * 4 + c];
+      }
+      return o4;
+    };
+    for (const [i, j, k, ...got] of bl.out) {
+      const x = [i, j, k].map(v => -HR + v * 2 * HR / (HN - 1)), v0 = tri0(x), g = (k * HN + j) * HN + i, w = 0.375;
+      const want = [0, 1, 2].map(c => (1 - w) * v0[c] * (HR / R0) + w * H16[g * 4 + c]).concat([(1 - w) * v0[3] + w * H16[g * 4 + 3]]);
+      for (let c = 0; c < 4; c++) worstBl = Math.max(worstBl, Math.abs(got[c] - want[c]));
+      nBl++;
+    }
+    blendOk = bl.mixN === HN && bl.R1 === HR && nBl > 100 && worstBl < 2e-3;
+    blWhy = JSON.stringify({ mixN: bl.mixN, R1: bl.R1, HR, R0, nBl, worstBl });
+  }
+  ok(blendOk, `while a new state fades in, the grid the haze reads is the two states' grids blended node by node, the older read at the newer one's nodes and its differences taken to the newer grid's step (blend_mem, haze_rescale; ${nBl} nodes, worst ${worstBl.toExponential(1)})`, blWhy);
+  const comp = await evaluate(`(() => {
+    projectTorus(); renderTorus();
+    const gl = SURFACE_GL.gl, S = SURFACE_GL, scene = new Uint8Array(4 * W * H), view = new Uint8Array(4 * W * H);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, view);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, S.sceneFB); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, scene); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const hz = S.readHaze(), cssW = W / devicePixelRatio, cssH = H / devicePixelRatio;
+    const bil = (img, w, h, x, y, c, n) => { const X = Math.min(w - 1, Math.max(0, x)), Y = Math.min(h - 1, Math.max(0, y)), x0 = Math.floor(X), y0 = Math.floor(Y), fx = X - x0, fy = Y - y0;
+      const at = (i, j) => img[(Math.min(h - 1, j) * w + Math.min(w - 1, i)) * n + c];
+      return (1 - fy) * ((1 - fx) * at(x0, y0) + fx * at(x0 + 1, y0)) + fy * ((1 - fx) * at(x0, y0 + 1) + fx * at(x0 + 1, y0 + 1)); };
+    let checked = 0, worst = 0, moved = 0, diff = 0;
+    for (let y = 3; y < H; y += 7) for (let x = 3; x < W; x += 7) {
+      const hu = (x + 0.5) / W * hz.w - 0.5, hv = (y + 0.5) / H * hz.h - 0.5;
+      const gx = bil(hz.px, hz.w, hz.h, hu, hv, 0, 4), gy = bil(hz.px, hz.w, hz.h, hu, hv, 1, 4), gv = bil(hz.px, hz.w, hz.h, hu, hv, 2, 4);
+      const dx = HAZE.gain * gx / cssW * W, dy = -HAZE.gain * gy / cssH * H;
+      if (Math.hypot(dx, dy) < 1) continue;
+      moved++;
+      const va = HAZE.veil * gv;
+      for (let c = 0; c < 4; c++) {
+        const sc = bil(scene, W, H, x + dx, y + dy, c, 4) / 255, col = c < 3 ? HAZE.col[c] : 1;
+        const want = col * va + sc * (1 - va), got = view[(y * W + x) * 4 + c] / 255;
+        worst = Math.max(worst, Math.abs(got - want));
+        if (Math.abs(scene[(y * W + x) * 4 + c] - view[(y * W + x) * 4 + c]) > 8) diff++;
+      }
+      checked++;
+    }
+    FIELDS.show = false; projectTorus(); renderTorus();
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, view);
+    let covered = 0; for (let k = 3; k < view.length; k += 4) if (view[k] > 0) covered++;
+    const off = { drawn: HAZE.drawn, viaScene: S.viaScene, covered: covered / (W * H) };
+    FIELDS.show = true; projectTorus(); renderTorus();
+    return { checked, moved, worst, diff, off };
+  })()`);
+  ok(comp.moved > 500 && comp.worst <= 4 / 255 && comp.diff > 0,
+     `at ${comp.moved} pixels the haze moves the view by more than a pixel, and each shows the scene read where the haze says, under its glow, within ${Math.round(comp.worst * 255)} of 255`, JSON.stringify(comp));
+  ok(!comp.off.drawn && comp.off.viaScene === false && comp.off.covered > 0.02, 'with the fields off there is no haze: the surface is drawn straight onto the view', JSON.stringify(comp.off));
+  ok(fd.rows[2].startsWith(`${HN}³ nodes · highest `) && fd.rows[2].endsWith('seen through'), 'the row tells the pressure grid and that it is seen through', fd.rows[2]);
   /* the forces on the construct: each recomputed here, the magnetic one by
      integrating Biot-Savart numerically over every other piece (a piece's
      own field is zero on its own line, axis_integrand_zero), the electric one
@@ -747,37 +867,26 @@ try {
   ok(worstE2 < 1e-9, `each is q E with E Coulomb's from the other charges, summed here (worst ${worstE2.toExponential(1)})`);
   ok(nrm(fd.eNet) <= 1e-12 * fd.eSum && nrm(gNet) <= 1e-12 * gSum,
      `the electric forces on the charges sum to zero (coulomb_newton3; net ${(nrm(fd.eNet) / fd.eSum).toExponential(1)} of their sum, ${(nrm(gNet) / gSum).toExponential(1)} here)`);
-  /* each arrow from where its force acts, along it */
-  const FP_ = fd.forcePts, FI_ = fd.forceInfo, recs = [];
-  for (let k = 0; k < MF.length; k += 6) if (Math.hypot(MF[k + 3], MF[k + 4], MF[k + 5]) > 0) recs.push([MF.slice(k, k + 6), 0]);
-  for (let k = 0; k < EF.length; k += 6) if (Math.hypot(EF[k + 3], EF[k + 4], EF[k + 5]) > 0) recs.push([EF.slice(k, k + 6), 1]);
-  let arrowsAt = recs.length === FI_.length / 2, worstDir = 0;
-  recs.forEach(([r, kind], i) => {
-    const o = i * 6, t = FI_[i * 2], d = [FP_[o + 3] - FP_[o], FP_[o + 4] - FP_[o + 1], FP_[o + 5] - FP_[o + 2]];
-    if (FI_[i * 2 + 1] !== kind || !(t >= 0 && t <= 1) || Math.hypot(FP_[o] - r[0], FP_[o + 1] - r[1], FP_[o + 2] - r[2]) > 1e-6 * fd.req.R) arrowsAt = false;
-    worstDir = Math.max(worstDir, 1 - dot(d, r.slice(3)) / (nrm(d) * nrm(r.slice(3))));
-  });
-  ok(arrowsAt && worstDir < 1e-6 && fd.drawn.forces === recs.length, `each of the ${recs.length} force arrows starts where its force acts and points along it, sized within its kind's range (plot_mem; worst 1 - cos ${worstDir.toExponential(1)}; ${fd.drawn.forces} drawn)`);
   ok(fd.rows[3].startsWith(`${nM} pieces`) && fd.rows[4].startsWith(`${nE} charges`), 'the rows count the forces', fd.rows.slice(3).join(' | '));
   console.log(`       (the gate's own fields took ${((Date.now() - tl0) / 1000).toFixed(1)} s)`);
   /* the toggle, and nothing drawn without the certificate */
   await evaluate(`document.getElementById('btn-fields').click()`);
-  const off = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
+  const off = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, haze: HAZE.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
   await evaluate(`document.getElementById('btn-fields').click()`);
   /* shown again, nothing is drawn until the fields of the state on the
      screen have been computed afresh */
-  const blank = await evaluate(`(() => { projectTorus(); renderTorus(); return FIELDS.drawn.lines + FIELDS.drawn.arrows + FIELDS.drawn.plane; })()`);
+  const blank = await evaluate(`(() => { projectTorus(); renderTorus(); return FIELDS.drawn.plane + (HAZE.drawn ? 1 : 0); })()`);
   const back = await waitFor(`FIELDS.cur && FIELDS.cur.frame === KERNEL_VIEW.state.frame && !FIELDS.busy`, 20000);
-  const on = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
-  ok(!off.show && off.label === 'FIELDS OFF' && off.drawn.lines + off.drawn.arrows + off.drawn.plane === 0 &&
-     blank === 0 && back && on.show && on.label === 'FIELDS ON' && on.drawn.lines > 0,
+  const on = await evaluate(`(() => { projectTorus(); renderTorus(); return { show: FIELDS.show, drawn: FIELDS.drawn, haze: HAZE.drawn, label: document.getElementById('btn-fields').textContent }; })()`);
+  ok(!off.show && off.label === 'FIELDS OFF' && off.drawn.plane === 0 && !off.haze &&
+     blank === 0 && back && on.show && on.label === 'FIELDS ON' && on.drawn.plane > 0 && on.haze,
      'FIELDS takes the fields off and puts fresh ones back', JSON.stringify({ off, blank, back, on }));
   await evaluate(`FIELDS.ok = false; FIELDS.why = 'withheld by the gate'`);
   await sleep(600);
-  const fw = await evaluate(`(() => { const cert = VISUAL_CERTIFICATE.status().fields; updateDynamoHud(); projectTorus(); renderTorus(); return { cert, drawn: FIELDS.drawn,
+  const fw = await evaluate(`(() => { const cert = VISUAL_CERTIFICATE.status().fields; updateDynamoHud(); projectTorus(); renderTorus(); return { cert, drawn: FIELDS.drawn, haze: HAZE.drawn,
     rows: ['fld-current', 'fld-charge'].map(id => document.getElementById(id).textContent) }; })()`);
   await evaluate(`FIELDS.ok = true; FIELDS.why = ''`);
-  ok(!fw.cert && fw.drawn.lines + fw.drawn.arrows + fw.drawn.plane === 0 && fw.rows[0] === 'withheld' && fw.rows[1] === 'withheld by the gate',
+  ok(!fw.cert && fw.drawn.plane === 0 && !fw.haze && fw.rows[0] === 'withheld' && fw.rows[1] === 'withheld by the gate',
      'without its certificate nothing of the fields is drawn, and the reason is shown', JSON.stringify(fw));
   await evaluate(`document.getElementById('btn-run').click()`);
   /* running, and the fields off: states land and nothing is computed for them */
@@ -982,6 +1091,26 @@ try {
   ok(lawBroken.length === 0 && lawFrames > 100,
      `on a fresh page every one of ${lawFrames} frames over DYNAMO, MIXER and CAPACITOR keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
+
+  section('on a phone');
+  await cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
+  await cmd('Page.navigate', { url: PAGE });
+  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame >= 3 && SURFACE_STATUS.drawn`, 90000);
+  const ph = await evaluate(`(() => { projectTorus(); renderTorus();
+    const right = document.getElementById('right'), r = right.getBoundingClientRect();
+    return { w: innerWidth, collapsed: right.classList.contains('collapsed'), panelLeft: r.left, charts: CHARTS.on, flux: FLUX_MAP.drawn,
+             surface: SURFACE_STATUS.drawn, quads: PROJECTION.quads, label: document.getElementById('btn-charts').textContent }; })()`);
+  ok(phoneUp && ph.w === 390 && ph.collapsed && ph.panelLeft >= 390 && !ph.charts && ph.label === 'CHARTS OFF' && ph.surface && ph.quads > 1000,
+     'on a phone the page opens on the torus alone: the controls closed off the screen and the charts off', JSON.stringify(ph));
+  await evaluate(`document.getElementById('toggle-right').click()`);
+  await sleep(600);
+  const ph2 = await evaluate(`(() => { const r = document.getElementById('right').getBoundingClientRect(), d = getComputedStyle(document.getElementById('dynLine')).display;
+    return { left: r.left, width: r.width, dyn: d }; })()`);
+  await evaluate(`document.getElementById('toggle-right').click(); document.getElementById('btn-charts').click()`);
+  await sleep(600);
+  const ph3 = await evaluate(`({ charts: CHARTS.on, flux: FLUX_MAP.drawn, label: document.getElementById('btn-charts').textContent })`);
+  ok(ph2.left === 0 && ph2.width === 390 && ph2.dyn === 'none' && ph3.charts && ph3.label === 'CHARTS ON' && ph3.flux,
+     'opened, the controls fill the screen with nothing drawn over them; CHARTS puts the charts back', JSON.stringify({ ph2, ph3 }));
 
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));

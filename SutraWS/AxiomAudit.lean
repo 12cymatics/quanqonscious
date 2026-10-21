@@ -26,6 +26,8 @@ import SutraWS.FieldsAround
 import SutraWS.VedicFormulas
 import SutraWS.FluxSurface
 import SutraWS.FieldLines
+import SutraWS.StrengthRamp
+import SutraWS.PressureHaze
 import Lean
 
 /-!
