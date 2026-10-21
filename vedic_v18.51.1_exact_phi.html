@@ -3540,7 +3540,7 @@ function tick() {
 }
 self.onmessage = e => {
   const m = e.data;
-  if (m.type === 'config') { config = m; halted = null; schedule(); }
+  if (m.type === 'config') { config = m; halted = null; if (m.reset) { engine = KERNEL.initEngine(); postState(0); } schedule(); }
   else if (m.type === 'pace') { intervalMs = m.intervalMs; }
   else if (m.type === 'ack') { inFlight = Math.max(0, inFlight - 1); if (waiting) { waiting = false; schedule(); } }
   else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; postState(0); schedule(); }
@@ -3671,7 +3671,7 @@ function exactParamsKey(params) {
     return k + '=' + ('a' in x && 'd' in x && typeof x.a === 'object' ? [x.a, x.b, x.c, x.d].map(q).join(':') : q(x));
   }).join(';');
 }
-function pushConfig(reason) {
+function pushConfig(reason, reset) {
   if (!KERNEL_WORKER) return;
   let params;
   try { params = kernelParams(); }
@@ -3680,10 +3680,10 @@ function pushConfig(reason) {
   /* the key is every exact parameter the kernel receives, so no parameter
      can change without the kernel hearing of it */
   const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
-  if (key === LAST_CONFIG_KEY && reason !== 'force') return;
+  if (key === LAST_CONFIG_KEY && reason !== 'force') { if (reset) KERNEL_WORKER.postMessage({ type: 'reset' }); return; }
   LAST_CONFIG_KEY = key;
   KERNEL_VIEW.configVersion++;
-  KERNEL_WORKER.postMessage({ type: 'config', version: KERNEL_VIEW.configVersion, active, composition: COMPOSITION, params });
+  KERNEL_WORKER.postMessage({ type: 'config', version: KERNEL_VIEW.configVersion, active, composition: COMPOSITION, params, reset: !!reset });
   requestCertificates(active);
   updateFormulaDisplay(active);
   if (reason && reason !== 'force') LOG.add(reason, 'sys');
@@ -5999,8 +5999,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (!KERNEL_WORKER) return;
   KERNEL_VIEW.r4.count = 0;
-  KERNEL_WORKER.postMessage({ type: 'reset' });
-  pushConfig('force');
+  pushConfig('force', true);
   LOG.add('RESET — state and dielectric reseeded; R4 ceiling is the seed energy again', 'sys');
 });
 document.getElementById('btn-all').addEventListener('click', () => {
@@ -6124,8 +6123,8 @@ function applyPreset(id) {
     el.value = String(v); document.getElementById(sid + '-v').textContent = fmt(v);
   }
   syncPanel(); clearPresetHighlight(); btn.classList.add('preset-active');
-  pushConfig(`PRESET ${btn.textContent.trim()} from the seed → ${COMPOSITION_LABEL[p.comp]} [${Object.keys(p.set).map(i => 'S' + i).join(' ')}]`);
-  if (KERNEL_WORKER) { KERNEL_VIEW.r4.count = 0; KERNEL_WORKER.postMessage({ type: 'reset' }); }
+  KERNEL_VIEW.r4.count = 0;
+  pushConfig(`PRESET ${btn.textContent.trim()} from the seed → ${COMPOSITION_LABEL[p.comp]} [${Object.keys(p.set).map(i => 'S' + i).join(' ')}]`, true);
 }
 Object.entries(PRESETS).forEach(([id, p]) => {
   const btn = document.getElementById(id);
