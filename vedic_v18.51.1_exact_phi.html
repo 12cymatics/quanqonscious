@@ -158,9 +158,9 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">step</span><span class="v" id="sim-step">0</span></div>
     <div class="row"><span class="k">time per step</span><span class="v" id="sim-ms">–</span></div>
     <div class="row"><span class="k">Σ|ψ|²</span><span class="v" id="sim-energy">–</span></div>
-    <div class="row"><span class="k">R4 ceiling</span><span class="v" id="sim-ceiling">–</span></div>
+    <div class="row"><span class="k">seed energy C</span><span class="v" id="sim-ceiling">–</span></div>
     <div class="row"><span class="k">R4</span><span class="v" id="sim-r4">dormant</span></div>
-    <div class="row"><span class="k">R4 engaged</span><span class="v" id="sim-r4count">0 steps</span></div>
+    <div class="row"><span class="k">R4 blow-ups stopped</span><span class="v" id="sim-r4count">0 steps</span></div>
     <div class="row"><span class="k">strengths</span><span class="v" id="sim-ramp">–</span></div>
     <div class="row"><span class="k">stored precision</span><span class="v" id="sim-store">128 bits</span></div>
     <div class="row"><span class="k">composition</span><span class="v" id="sim-comp">SERIES</span></div>
@@ -173,7 +173,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="ctrls">
     <button id="btn-run" type="button">PAUSE</button>
-    <button id="btn-reset" type="button" title="Reseed the state and the dielectric field; the R4 ceiling becomes the seed's energy again">RESET</button>
+    <button id="btn-reset" type="button" title="Reseed the state and the dielectric field; C becomes the new seed's energy">RESET</button>
     <button id="btn-all" type="button">ALL ON</button>
     <button id="btn-none" type="button">ALL OFF</button>
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
@@ -227,7 +227,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>R4 SINGULARITY CONTROLLER</h5>
-    <p class="note">Dormant unless a step would raise the energy above both its own start and the ceiling (the energy the run was seeded with). Then the step is redone with every strength times σ = ∏ λₖ⁴/(r⁴+λₖ⁴), and if that is not enough the R4 gate pulls the energy back to the ceiling.</p>
+    <p class="note">Stops blow-ups and nothing else. A step is a blow-up when any stage of it more than doubles the energy and takes it above C, the energy the run was seeded with; every other step runs exactly as the formulas give it. On a blow-up the step is redone with every strength times σ = ∏ λₖ⁴/(r⁴+λₖ⁴), and the R4 gate stops the energy where it rises past that level and at the end, holding it at the step's start or C. Without R4, every preset blows up by step 19 and then either divides by zero or slows to more than 5 s a step.</p>
     <div class="amp-row"><span>R4 radius r</span><input type="range" min="1" max="200" value="20" id="amp-r4r"><span id="amp-r4r-v">2.0</span></div>
   </div>
   <div class="section">
@@ -1789,12 +1789,11 @@ const KERNEL_FACTORY = () => {
     return ex>=0?Q.mk(S<<BigInt(ex)):Q.mk(S,1n<<BigInt(-ex));
   };
   const storageAllowance = (T,d) => Q.add(T,Q.add(Q.mul(T,d),Q.add(d,Q.mul(d,d))));
-  const makeKeep = (limit, trace) => {
+  const makeKeep = (check, trace) => {
     const ledger={delta:Q.ZERO,stores:0};
-    const keep=x=>{const s=x.map(storeQ);ledger.delta=Q.add(ledger.delta,storeBudget(s));ledger.stores++;
-      if(limit){const e=energy(s);if(Q.cmp(Q.mul(e,limit.shrink),limit.T)>0){throw new R4Overflow(e,trace?trace.label:'',ledger.stores);}}
-      return s;};
-    return {ledger,keep};
+    const store=x=>{const s=x.map(storeQ);ledger.delta=Q.add(ledger.delta,storeBudget(s));ledger.stores++;return s;};
+    const keep=x=>{const s=store(x);return check?check(s,store,trace?trace.label:'',ledger):s;};
+    return {ledger,keep,store};
   };
   const stagesFrom = (input,act,mode,W,params,keep,ctx,trace={label:''}) => {
     const record=[],grvqRecord=[];
@@ -1861,51 +1860,58 @@ const KERNEL_FACTORY = () => {
     const eIn=energy(input);
     const ceiling=engine.ceiling;
     const T=Q.cmp(eIn,ceiling)>0?eIn:ceiling;
+    const twice=Q.mul(Q.TWO,eIn),L=Q.cmp(twice,ceiling)>0?twice:ceiling;
     const s4=r4Scale(dielectricNext,active,dDrift);
     const ab=gateABField(dielectricNext,s4);
     const aMin=ab.reduce((m,g)=>Q.cmp(g.a,m)<0?g.a:m,Q.ONE);
-    const limit={T,shrink:Q.pow(aMin,2*(R4_MAX_GATE_PASSES+1))};
+    const shrink=Q.pow(aMin,2*(R4_MAX_GATE_PASSES+1));
     const trU={label:''};
-    const run={uncontrolled:makeKeep(limit,trU),braked:null};
-    let st=null,overflow=null;
-    try{st=stagesFrom(input,active,mode,W,params,run.uncontrolled.keep,ctx,trU);}
-    catch(e){if(!(e instanceof R4Overflow))throw e;overflow=e;}
-    let ledger=run.uncontrolled.ledger;
-    const eUncontrolled=overflow?overflow.energy:energy(st.afterZ);
-    const TU=storageAllowance(T,ledger.delta);
-    const r4={engaged:false,target:T,triggerLevel:TU,eUncontrolled,uncontrolledStopped:overflow?overflow.where():null,lambda:null,sigma:null,eBraked:null,gate:null};
-    let out=overflow?null:st.afterZ;
-    if(overflow||Q.cmp(eUncontrolled,TU)>0){
-      r4.engaged=true;
+    const probe=makeKeep((x,store,where,lg)=>{const e=energy(x);if(Q.cmp(e,storageAllowance(L,lg.delta))>0)throw new R4Overflow(e,where,lg.stores);return x;},trU);
+    let st=null,blowup=null;
+    try{st=stagesFrom(input,active,mode,W,params,probe.keep,ctx,trU);}
+    catch(e){if(!(e instanceof R4Overflow))throw e;blowup=e;}
+    let ledger=probe.ledger;
+    const r4={engaged:blowup!==null,target:T,level:L,blowup:blowup?{at:blowup.where(),energy:blowup.energy,store:blowup.stores}:null,lambda:null,sigma:null,stops:[],eStopped:null,endLevel:null,gate:null};
+    let out=blowup?null:st.afterZ;
+    if(blowup){
       r4.lambda=inverseL(input);
       r4.sigma=storeQ(r4ReinforcedOf(r4.lambda,params.r4R));
-      const trB={label:''};
-      run.braked=makeKeep(limit,trB);
-      try{st=stagesFrom(input,scaleActiveByR4(active,r4.sigma),mode,W,params,run.braked.keep,ctx,trB);}
-      catch(e){if(!(e instanceof R4Overflow))throw e;
-        throw new R4Uncontained(`R4 could not contain this step: ${r4.uncontrolledStopped||'the step'} took the energy past what its gate can bring back to the ceiling, and with every strength times σ = ${qApprox(r4.sigma).toPrecision(4)} ${e.where()} took it to ${fmtRatio(e.energy,T)} times the ceiling`,{T,sigma:r4.sigma});}
-      ledger=run.braked.ledger;
-      out=st.afterZ;
-      r4.eBraked=energy(out);
-      r4.brakedLevel=storageAllowance(T,ledger.delta);
-      if(Q.cmp(r4.eBraked,r4.brakedLevel)>0){
-        let x=out,passes=0,cert=null,poly=null;
+      const gateTo=(x,store,where)=>{
+        let passes=0,cert=null,poly=null;
         for(;;){
           poly=r4GateEnergyPoly(x,ab);
           cert=certifyGateCeiling(poly,T);
           if(cert!==null)break;
-          if(++passes>=R4_MAX_GATE_PASSES){
-            throw new R4Uncontained(`R4 could not contain this step: after the sigma-brake and ${passes} full gate passes the energy is still ${(qApprox(evalGatePoly(poly,Q.ZERO))/qApprox(T)).toFixed(4)} times the target`,{passes,T});
-          }
-          x=run.braked.keep(x.map((z,v)=>Q.mul(z,ab[v].a)));
+          if(++passes>=R4_MAX_GATE_PASSES)
+            throw new R4Uncontained(`R4 could not stop this blow-up: after ${passes} full gate passes at ${where} the energy is still ${fmtRatio(evalGatePoly(poly,Q.ZERO),T)} times the target`,{passes,T});
+          x=store(x.map((z,v)=>Q.mul(z,ab[v].a)));
         }
         const gates=ab.map(g=>Q.add(g.a,Q.mul(g.b,cert.eps)));
-        out=x.map((z,v)=>Q.mul(z,gates[v]));
-        const eGated=energy(out);
+        const y=x.map((z,v)=>Q.mul(z,gates[v])),eGated=energy(y);
         if(!Q.eq(eGated,evalGatePoly(poly,cert.eps))||Q.cmp(eGated,T)>0)
           throw new Error('R4 gate certificate does not hold for the gated state');
-        out=run.braked.keep(out);
-        r4.gate={s4,passes,eps:cert.eps,gridBits:cert.gridBits,gates,eGated,meanGate:Q.mul(gates.reduce((s,g)=>Q.add(s,g),Q.ZERO),Q.SIXTEENTH)};
+        return {out:store(y),gate:{at:where,s4,passes,eps:cert.eps,gridBits:cert.gridBits,gates,eGated,meanGate:Q.mul(gates.reduce((s,g)=>Q.add(s,g),Q.ZERO),Q.SIXTEENTH)}};
+      };
+      const trR={label:''};
+      const run=makeKeep((x,store,where,lg)=>{
+        const e=energy(x);
+        if(Q.cmp(Q.mul(e,shrink),T)>0)throw new R4Overflow(e,where,lg.stores);
+        if(Q.cmp(e,storageAllowance(L,lg.delta))<=0)return x;
+        const g=gateTo(x,store,where);
+        r4.stops.push(Object.assign(g.gate,{eBefore:e}));
+        return g.out;
+      },trR);
+      try{st=stagesFrom(input,scaleActiveByR4(active,r4.sigma),mode,W,params,run.keep,ctx,trR);}
+      catch(e){if(!(e instanceof R4Overflow))throw e;
+        throw new R4Uncontained(`R4 could not stop this blow-up: with every strength times σ = ${qApprox(r4.sigma).toPrecision(4)} ${e.where()} took the energy to ${fmtRatio(e.energy,T)} times the target, past what its gate can bring back`,{T,sigma:r4.sigma});}
+      ledger=run.ledger;
+      out=st.afterZ;
+      r4.eStopped=energy(out);
+      r4.endLevel=storageAllowance(T,ledger.delta);
+      if(Q.cmp(r4.eStopped,r4.endLevel)>0){
+        const g=gateTo(out,run.store,'the end of the step');
+        r4.gate=g.gate;
+        out=g.out;
       }
     }
     r4.containLimit={aMin,passes:R4_MAX_GATE_PASSES+1};
@@ -1918,7 +1924,7 @@ const KERNEL_FACTORY = () => {
     return {
       psi,dielectric,ceiling,energyLedger:eFinal,frame:engine.frame+1,tgcrKappa,
       mayaPhase:maya.next,mayaErr:maya.err,magA:mag.A,magChi:mag.chi,ramp:rs.ramp,
-      last:{input,dielectricIn:engine.dielectric,stagesRun:r4.engaged?'sigma-braked':'uncontrolled',
+      last:{input,dielectricIn:engine.dielectric,stagesRun:r4.engaged?'r4':'uncontrolled',
             mayaPhaseIn:engine.mayaPhase,mayaErrIn:engine.mayaErr,magAIn:engine.magA,magChiIn:engine.magChi,tgcrKappaIn:engine.tgcrKappa,
             frameIn:engine.frame,time:t,maya,ctx,rhoIn,rhoOut,shareIn,edgeShares:mag.share,
             afterS:st.afterS,afterD:st.afterD,afterB:st.afterB,afterG:st.afterG,afterM:st.afterM,afterT:st.afterT,afterZ:st.afterZ,controlled:out,
@@ -2219,7 +2225,8 @@ const KERNEL_FACTORY = () => {
     const five=[3,9,22,26,29].map(id=>({id,strength:Q.ONE})),loud=step(rampedEngine(initEngine(),five),p,five,"PARALLEL");
     if(loud.last.r4.engaged){
       const r4l=loud.last.r4;
-      assert("R4 controlled energy at most T",r4l.gate?Q.cmp(r4l.gate.eGated,r4l.target)<=0:Q.cmp(r4l.eBraked,r4l.brakedLevel)<=0);
+      assert("R4 controlled energy at most T",r4l.gate?Q.cmp(r4l.gate.eGated,r4l.target)<=0:Q.cmp(r4l.eStopped,r4l.endLevel)<=0);
+      assert("R4 stops end at most T",r4l.stops.every(g=>Q.cmp(g.eGated,r4l.target)<=0));
       assert("R4 sigma in [0,1]",Q.sign(r4l.sigma)>=0&&Q.cmp(r4l.sigma,Q.ONE)<=0);
     }
     {const half=Q.mk(1n,2n),tenth=Q.mk(1n,10n),N=BigInt(RAMP_STEPS),tg=[{id:9,strength:half}];
@@ -2702,7 +2709,7 @@ const LEAN_PROVED = Object.freeze({
      and SutraWS/Magnetism.lean, built by
      `lake build SutraWS`. tools/check_citations.mjs fails the build if any
      name here has no theorem behind it. */
-  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','target_ge','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid','cell_centre','surface_grid','glyph_mem','lowKnee_pos','highKnee_lt','highKnee_le','highKnee_mono','toneRGB_mem','toneRGB_ratio','toneRGB_grey','bary_mem','frame_out_in','frame_hold','edges_are_edges','incidence_dd','d0_rows','kirchhoff','charge_neutral','charge_laplacian','segPrim_hasDeriv','segment_field_integral','poynting_orth','poynting_le_energy','rk4_step_le','share_mem','mix_mem','level_mem','ndc_depth_lift_mem','lorentz_perp','axis_integrand_zero','coulomb_newton3','vedic_update_zero','identity_preserved','identity_preserved_of_strength_zero','ekadhikena_factor_bound','radix_order_bracket','nikhilam_affine','yavadunam_magnifies','xor_conv_sum','horner_eval','shunyam_pair_contract','anurupye_fixed_point','sankalana_lower_fixed','laplacian_sum_zero','layer_mean_sum','transfer_sum','conservation_mean','digital_root_congr','cf_det_step','convergent_det','ekanyunena_contracts','gunita_residual_cross','ext_euclid_step','bezout_identity','crt_residue_step','vieta_disc_square','nearest_multiple','osculation_shift','dvandva_pair_contract','antyayor_pair_difference','gcd_divides_tails','digital_root_nine','log_ratio_sign','flag_is_max','ap_endpoints','purana_uniform_fixed','anurupyena_uniform_fixed','walk_measure_total','median_minimises_l1','inverse_inject','stress_trace','stress_symm','rot_pair_energy','complement_rotation_swap','pontryagin_density','hodge_split_norm'],
+  kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','r4_factor_nonneg','r4_factor_le_one','r4_reinforced_mem_unit_interval','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','energy_allowance','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','gate_energy_le','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','gate_weights_nonneg','gate_weights_sum','pair_avg_weights','gate_factor_mem','mean_gate_mem','gate_energy_poly','gate_poly_coeffs_nonneg','gate_energy_mono','bisection_below','controlled_le','controlled_dormant','controlled_stopped_le','target_ge','target_le_level','level_le_double','run_le_pow_two','pinch_mem','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid','cell_centre','surface_grid','glyph_mem','lowKnee_pos','highKnee_lt','highKnee_le','highKnee_mono','toneRGB_mem','toneRGB_ratio','toneRGB_grey','bary_mem','frame_out_in','frame_hold','edges_are_edges','incidence_dd','d0_rows','kirchhoff','charge_neutral','charge_laplacian','segPrim_hasDeriv','segment_field_integral','poynting_orth','poynting_le_energy','rk4_step_le','share_mem','mix_mem','level_mem','ndc_depth_lift_mem','lorentz_perp','axis_integrand_zero','coulomb_newton3','vedic_update_zero','identity_preserved','identity_preserved_of_strength_zero','ekadhikena_factor_bound','radix_order_bracket','nikhilam_affine','yavadunam_magnifies','xor_conv_sum','horner_eval','shunyam_pair_contract','anurupye_fixed_point','sankalana_lower_fixed','laplacian_sum_zero','layer_mean_sum','transfer_sum','conservation_mean','digital_root_congr','cf_det_step','convergent_det','ekanyunena_contracts','gunita_residual_cross','ext_euclid_step','bezout_identity','crt_residue_step','vieta_disc_square','nearest_multiple','osculation_shift','dvandva_pair_contract','antyayor_pair_difference','gcd_divides_tails','digital_root_nine','log_ratio_sign','flag_is_max','ap_endpoints','purana_uniform_fixed','anurupyena_uniform_fixed','walk_measure_total','median_minimises_l1','inverse_inject','stress_trace','stress_symm','rot_pair_energy','complement_rotation_swap','pontryagin_density','hodge_split_norm'],
   /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
      each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
@@ -2772,10 +2779,9 @@ const VISUAL_CERTIFICATE = {
     },
     r4gate: {
       draws: 'tube pinch from the R4 controller: 1 - the mean gate it applied this step',
-      /* The pinch is 1 - mean g_v; with R4 dormant or braking only, every
-         g_v is 1 and nothing is pinched. */
       theorems: ['gate_weights_nonneg', 'gate_weights_sum', 'pair_avg_weights', 'gate_factor_mem',
-                 'mean_gate_mem', 'controlled_le', 'controlled_dormant', 'r4_reinforced_mem_unit_interval',
+                 'mean_gate_mem', 'controlled_le', 'controlled_dormant', 'controlled_stopped_le', 'target_le_level',
+                 'level_le_double', 'run_le_pow_two', 'r4_reinforced_mem_unit_interval',
                  'pinch_mem', 'store_mem_unit'],
       holds: () => KERNEL_VIEW.r4.meanGateOk === true
     },
@@ -2879,16 +2885,16 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '3ab7d9a3f8fe1387bb801c1f681fce266fa79a07e28cb25341601fa1997609fd',
+  leanCorpusSha256: '075c98ff8333835f35bc2a04e3051561738b4484bf6218898836727ae63b30f9',
   leanToolchain: 'leanprover/lean4:v4.10.0',
   /* Generated by tools/gen_provenance.mjs from the environment lake build
      produced. leanTheorems counts every theorem in the SutraWS namespace,
      the same population SutraWS.AxiomAudit gates, so it includes the
      equation and spec lemmas `deriving` generates. */
-  leanTheorems: 2482,
+  leanTheorems: 2486,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FieldLines.olean','SutraWS/FieldsAround.olean','SutraWS/FluxSurface.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/PressureHaze.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/StrengthRamp.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/VedicFormulas.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2482,
+  leanAxiomsKernelChecked: 2486,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -2898,10 +2904,10 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength the one the formula has reached on its ramp: a formula switched on, changed or started from the seed by a preset moves from where its strength stood to its setting in 180 equal steps, 60 s at 3 steps a second, and then holds there, and one switched off ramps down the same way (SutraWS/StrengthRamp.lean); in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. A division by zero or a log of zero refuses and stops the run, naming the vertex: S6 at a zero base vertex, S13 at a zero numerator, S19 at a zero root, S25 at a zero half-sum, GRVQ when both neighbours of a lambda are zero. S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 and S16 measured x1e74 and x2^127 in one step at the v18.24 seed, which R4 cannot contain, and then the run stops and says so. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength the one the formula has reached on its ramp: a formula switched on, changed or started from the seed by a preset moves from where its strength stood to its setting in 180 equal steps, 60 s at 3 steps a second, and then holds there, and one switched off ramps down the same way (SutraWS/StrengthRamp.lean); in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. A division by zero or a log of zero refuses and stops the run, naming the vertex: S6 at a zero base vertex, S13 at a zero numerator, S19 at a zero root, S25 at a zero half-sum, GRVQ when both neighbours of a lambda are zero. S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step without R4, and R4 stops that step where it rises. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
-  r4ScopeNote: 'R4 is a singularity controller and nothing else. It is dormant unless a step would raise the energy above T = max(E_in, ceiling) by more than storage alone can (energy_allowance); the ceiling is the energy the run was seeded with. Engaged, it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], and if that is not enough applies the R4 gate a_v + b_v eps on the dielectric field (a_v stored at 128 bits, b_v = 1 - a_v, store_mem_unit) with the largest eps on a 2^-32 grid whose exact energy is at most T (gate_energy_mono, controlled_le). If it cannot, the run stops and says so.',
+  r4ScopeNote: 'R4 is a singularity controller and nothing else: it stops blow-ups and leaves every other step to the formulas. A step is a blow-up when any state it stores rises above L = max(2 E_in, C), more than double the energy the step starts with and above the seed energy C, by more than storage alone can add (energy_allowance); the formulas are run until that store and no further. Without R4 every preset measured does this between step 1 and step 19 from the seed, and none recovers: six end by step 23 where the GRVQ walk measure divides by zero, and in the other six the binary exponent of the energy doubles or quadruples every step, reaching 2^11000 to 2^160000 by the time one step takes more than 5 s. Any other step R4 leaves alone (controlled_dormant), however the energy moves. On a blow-up it recomputes the step with every strength multiplied by sigma = prod lam_k^4/(r^4+lam_k^4) in [0,1], stops each stored state that rises above L where it rises, and stops the end of the step the same way, each with the R4 gate a_v + b_v eps on the dielectric field (a_v stored at 128 bits, b_v = 1 - a_v, store_mem_unit) at the largest eps on a 2^-32 grid whose exact energy is at most T = max(E_in, C) (gate_energy_mono, controlled_stopped_le). So a step ends at most L (controlled_le, target_le_level) and a run at most 2^n max(E_0, C) after n steps (run_le_pow_two). If a gate cannot reach T, the run stops and says so.',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
   wheelerScopeNote: 'The Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic, on the stored dielectric field of the state being drawn. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 and pi enter at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The projection channel (SutraWS/Projection.lean) keeps every point in front of the camera whatever their size.'
 });
@@ -3463,7 +3469,7 @@ const KERNEL_VIEW = {
   state: null, params: null,
   selfTestsOk: null, selfTestCount: 0, selfTestError: '',
   stepBudgetOk: false, delta: null, stores: 0,
-  r4: { engaged: false, gated: false, sigma: null, eps: null, passes: 0, meanGate: 1, meanGateOk: true, count: 0 },
+  r4: { engaged: false, gated: false, sigma: null, eps: null, passes: 0, growthBits: 0, at: null, stops: [], endGate: false, meanGate: 1, meanGateOk: true, count: 0 },
   /* the magnetism memory and Maya as they stand after the step drawn, and the
      run so far, one entry per step, for the dynamo timeline */
   dyn: null,
@@ -3493,10 +3499,14 @@ let config = null, running = true, halted = null, scheduled = false;
 function post(msg) { self.postMessage(msg); }
 function postState(ms) {
   const L = engine.last;
+  const lastGate = L ? (L.r4.gate || L.r4.stops[L.r4.stops.length - 1] || null) : null;
+  const lb = q => q.n === 0n ? 0 : (q.n < 0n ? -q.n : q.n).toString(2).length - q.d.toString(2).length;
   const r4 = L ? {
     engaged: L.r4.engaged, target: L.r4.target, sigma: L.r4.sigma,
-    eps: L.r4.gate ? L.r4.gate.eps : null, passes: L.r4.gate ? L.r4.gate.passes : 0,
-    meanGate: L.r4.gate ? L.r4.gate.meanGate : KERNEL.Q.ONE
+    growthBits: L.r4.engaged ? lb(L.r4.blowup.energy) - lb(L.e0) : 0, at: L.r4.engaged ? L.r4.blowup.at : null,
+    stops: L.r4.stops.map(g => g.at), endGate: !!L.r4.gate,
+    eps: lastGate ? lastGate.eps : null, passes: lastGate ? lastGate.passes : 0,
+    meanGate: lastGate ? lastGate.meanGate : KERNEL.Q.ONE
   } : null;
   post({ type: 'state', version: config ? config.version : -1, ms,
          state: { psi: engine.psi, dielectric: engine.dielectric, ceiling: engine.ceiling,
@@ -3800,6 +3810,7 @@ function applyKernelState(m) {
     if (r) {
       const mg = r.meanGate;
       KERNEL_VIEW.r4 = { engaged: r.engaged, gated: r.eps !== null, sigma: r.sigma, eps: r.eps, passes: r.passes,
+                         growthBits: r.growthBits, at: r.at, stops: r.stops, endGate: r.endGate,
                          meanGate: FAITHFUL.qNum(mg),
                          meanGateOk: Q.sign(mg) >= 0 && Q.cmp(mg, Q.ONE) <= 0,
                          count: KERNEL_VIEW.r4.count + (r.engaged ? 1 : 0) };
@@ -4363,7 +4374,6 @@ function projectTorus() {
   const CERT = VISUAL_CERTIFICATE.status();
   const cw = W / devicePixelRatio, ch = H / devicePixelRatio;
   const cx = cw / 2, cy = ch / 2;
-  /* mean gate R4 applied this step: 1 while it is dormant or only braking */
   const r4f = KERNEL_VIEW.r4.meanGate;
   const ampOn = CERT.amplitude, phaseOn = CERT.vortex, r4On = CERT.r4gate;
   if (!fluxShape(CERT)) CERT.flux = false;
@@ -5568,8 +5578,10 @@ function r4Words() {
   const r = KERNEL_VIEW.r4;
   if (!KERNEL_VIEW.state) return 'waiting';
   if (!r.engaged) return 'dormant';
-  if (!r.gated) return `braked · σ = ${qShort(r.sigma)}`;
-  return `braked + gate · ε = ${qShort(r.eps)}` + (r.passes ? ` after ${r.passes} full pass${r.passes > 1 ? 'es' : ''}` : '');
+  const where = r.stops.length ? ` at ${r.stops[0]}${r.stops.length > 1 ? ` and ${r.stops.length - 1} more` : ''}` : '';
+  const end = r.endGate ? `${where ? ',' : ''} at the end` : '';
+  const gate = r.gated ? ` · gate${where}${end} · ε = ${qShort(r.eps)}` + (r.passes ? ` after ${r.passes} full pass${r.passes > 1 ? 'es' : ''}` : '') : '';
+  return `stopped a blow-up at ${r.at} (×2^${r.growthBits} there) · σ = ${qShort(r.sigma)}${gate}`;
 }
 function updateRunBadge() {
   const el = document.getElementById('runBadge');
@@ -6044,7 +6056,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   if (!KERNEL_WORKER) return;
   KERNEL_VIEW.r4.count = 0;
   pushConfig('force', true);
-  LOG.add('RESET — state and dielectric reseeded; R4 ceiling is the seed energy again', 'sys');
+  LOG.add('RESET — state and dielectric reseeded; C is the seed energy again', 'sys');
 });
 document.getElementById('btn-all').addEventListener('click', () => {
   SUTRAS.forEach(s => setSutraStrengthExact(s, '50'));
@@ -6088,66 +6100,70 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
   pushConfig('composition → ' + COMPOSITION_LABEL[COMPOSITION]);
 }));
 const PRESETS = {
-  'pre-damper': { comp: 'SERIES', set: { 9: 50, 11: 50, 29: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer, S29 pulls it to its mean, and the field settles.',
+  'pre-damper': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state, and the field settles.',
     claims: [{ m: 'E600/E0', lt: '1/100000', text: 'the field energy falls below 1/100000 of its start' },
-             { m: 'r4', lt: '80', text: 'R4 engages on fewer than 80 steps' },
-             { m: 'r4last', lt: '300', text: 'and on none after step 300' }] },
+             { m: 'r4', lt: '120', text: 'R4 stops a blow-up on fewer than 120 steps' },
+             { m: 'r4last', lt: '120', text: 'and on none after step 120' }] },
   'pre-inductor': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
     purpose: 'An inductor: the drive and the vortex go into the magnetism memory, not into the field.',
     claims: [{ m: 'E600', lt: '1/15', text: 'the field energy falls below 1/15' },
              { m: 'flux600/flux60', gt: '8', text: 'while the flux through the torus loops grows more than 8 times over from step 60 to step 600' },
              { m: 'H600', gt: '10000', text: 'its helicity passes 10000' },
-             { m: 'r4', lt: '30', text: 'and R4 engages on fewer than 30 steps' }] },
-  'pre-dynamo': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
-    purpose: 'A self-reversing dynamo: the driven, twisted field keeps reversing the handedness of its own magnetic field.',
+             { m: 'r4', lt: '30', text: 'and R4 stops a blow-up on fewer than 30 steps' }] },
+  'pre-dynamo': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 50, 11: 50, 25: 50, 29: 50 }, omega: 20, drive: 4, chi: 20,
+    purpose: 'A self-reversing dynamo: the driven, twisted, polarised field keeps reversing the handedness of its own magnetic field.',
     claims: [{ m: 'Hflips', ge: '5', text: 'the magnetic helicity changes sign at least 5 times' },
-             { m: 'H600', gt: '3000', text: 'ending above 3000' },
-             { m: 'rec', gt: '400', text: 'with more than 400 reconnections over the run' },
-             { m: 'flux600/flux60', gt: '3/2', text: 'and the loop flux at step 600 is more than 3/2 of that at step 60' }] },
+             { m: 'H600', gt: '6000', text: 'ending above 6000' },
+             { m: 'rec', gt: '450', text: 'with more than 450 reconnections over the run' },
+             { m: 'flux600/flux60', gt: '10', text: 'the loop flux at step 600 is more than 10 times that at step 60' },
+             { m: 'r4last', lt: '200', text: 'and R4 is not needed after step 200' }] },
   'pre-containment': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
-    purpose: 'Containment: a strong vortex keeps pushing the field past its ceiling, and R4 holds it there step after step.',
-    claims: [{ m: 'r4', ge: '500', text: 'R4 engages on at least 500 of the 600 steps' },
+    purpose: 'Containment: a strong vortex drives a blow-up on almost every step, and R4 stops each one where it begins.',
+    claims: [{ m: 'r4', ge: '500', text: 'R4 stops a blow-up on at least 500 of the 600 steps' },
              { m: 'r4late', ge: '50', text: 'and on at least 50 of the last 60' },
-             { m: 'Emin/E0', gt: '3/5', text: 'and the field never falls below 3/5 of its ceiling' },
-             { m: 'H600', gt: '30000', text: 'while its helicity passes 30000' }] },
+             { m: 'Emin/E0', gt: '3/2', text: 'the field never falls below 3/2 of its start' },
+             { m: 'H600', gt: '25000', text: 'while its helicity passes 25000' }] },
   'pre-capacitor': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
     purpose: 'A capacitor: with the polarisation at 3 the field charges the dielectric, then the charge drains away.',
     claims: [{ m: 'rhoMax/rho1', gt: '9', text: 'the dielectric charge rises to more than 9 times its first value' },
              { m: 'rhoArg', lt: '150', text: 'peaking before step 150' },
              { m: 'rho600/rhoMax', lt: '3/5', text: 'and by step 600 it has fallen below 3/5 of that peak' }] },
-  'pre-balancer': { comp: 'SERIES', set: { 22: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'A balancer: S22 pulls every vertex toward the mean of itself and its complement.',
-    claims: [{ m: 'symEarly', lt: '2/5', text: 'the share of the field that is even under the complement is below 2/5 over the first 20 steps' },
+  'pre-balancer': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'A balancer: Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha each time, while S9 diffuses the field.',
+    claims: [{ m: 'symEarly', lt: '1/2', text: 'the share of the field that is even under the complement is below 1/2 over the first 20 steps' },
              { m: 'symLate', gt: '19/20', text: 'and above 19/20 over the last 60' }] },
   'pre-checksum': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50 }, omega: 10, drive: 0, chi: 10,
     purpose: 'A checksum: casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once.',
     claims: [{ m: 'r4first', ge: '15', text: 'R4 is not needed before step 15' },
-             { m: 'r4', lt: '25', text: 'it engages on fewer than 25 steps in all' },
+             { m: 'r4', lt: '120', text: 'it stops a blow-up on fewer than 120 steps in all' },
+             { m: 'r4last', lt: '200', text: 'none after step 200' },
              { m: 'E600/E0', lt: '1/20', text: 'and the field energy settles below 1/20 of its start' }] },
-  'pre-lock': { comp: 'SERIES', set: { 20: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'A latch: S20 moves every vertex toward the nearest multiple of 7, and the field locks.',
-    claims: [{ m: 'moving', lt: '1/20', text: 'the distribution of the field over its vertices changes by less than 1/20 between steps 300 to 360 and 540 to 600' },
-             { m: 'r4last', lt: '150', text: 'and R4 is not needed after step 150' }] },
-  'pre-rejector': { comp: 'SERIES', set: { 14: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Common-mode rejection: S14 shrinks every vertex by what its neighbour across one axis leaves it, and the part of the field that is the same at a vertex and its complement dies away while the part opposite at the two survives, as a differential line rejects what both its wires carry.',
+  'pre-lock': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'A latch: S20 moves every vertex toward the nearest multiple of 7 while S9 diffuses the field, and the field locks.',
+    claims: [{ m: 'moving', lt: '1/10', text: 'the distribution of the field over its vertices changes by less than 1/10 between steps 300 to 360 and 540 to 600' },
+             { m: 'r4', lt: '5', text: 'R4 is needed on fewer than 5 steps' },
+             { m: 'r4last', lt: '100', text: 'and on none after step 100' }] },
+  'pre-rejector': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'Common-mode rejection: S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and S11 averages each Hamming layer, each from the same state, and the part that is the same at a vertex and its complement dies away while the part opposite at the two is what is left, as a differential line rejects what both its wires carry.',
     claims: [{ m: 'symEarly', gt: '2/5', text: 'the share of the field even under the complement is above 2/5 over the first 20 steps' },
-             { m: 'symLate', lt: '1/10', text: 'and below 1/10 over the last 60' },
-             { m: 'r4last', lt: '150', text: 'and R4 is not needed after step 150' }] },
-  'pre-mixer': { comp: 'SERIES', set: { 2: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'A mixer: Nikhilam reflects every vertex about half the base above the field, and the field never settles.',
+             { m: 'symLate', lt: '1/20', text: 'and below 1/20 over the last 60' },
+             { m: 'r4', lt: '10', text: 'R4 stops a blow-up on fewer than 10 steps' },
+             { m: 'r4last', lt: '60', text: 'none after step 60' }] },
+  'pre-mixer': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'A mixer: S22 pulls every vertex toward the mean of itself and its complement while S9 diffuses the field, and the field never settles.',
     claims: [{ m: 'moving', gt: '1/2', text: 'its distribution over the vertices changes by more than 1/2 between steps 300 to 360 and 540 to 600' },
              { m: 'lateCount', ge: '8', text: 'over the last 60 steps 80% of it is spread over at least 8 vertices' },
              { m: 'maxShare', lt: '1/5', text: 'and no vertex holds more than 1/5 of it' }] },
   'pre-amplifier': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'An amplifier with a limiter: S1 multiplies every vertex up by one more than its neighbour gives, and R4 limits it.',
-    claims: [{ m: 'r4', ge: '400', text: 'R4 engages on at least 400 of the 600 steps' },
+    purpose: 'An amplifier with a fuse: S1 multiplies every vertex up by one more than its neighbour gives, the field grows, and on almost every step R4 stops the blow-up the growth would become.',
+    claims: [{ m: 'r4', ge: '500', text: 'R4 stops a blow-up on at least 500 of the 600 steps' },
              { m: 'r4late', eq: '60', text: 'every one of the last 60' },
-             { m: 'E600/E0', gt: '99/100', text: 'and the field ends above 99/100 of its ceiling' }] },
-  'pre-correlator': { comp: 'SERIES', set: { 3: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'A correlator: S3 pulls the field toward its own crosswise (XOR) convolution.',
-    claims: [{ m: 'E600', lt: '5', text: 'its energy falls below 5' },
-             { m: 'moving', lt: '1/10', text: 'its distribution changes by less than 1/10 between steps 300 to 360 and 540 to 600' },
+             { m: 'E600/E0', gt: '10000', text: 'and the field ends more than 10000 times its start' }] },
+  'pre-correlator': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
+    purpose: 'A correlator: S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it, and the field settles on vertices closed under XOR.',
+    claims: [{ m: 'late', eq: '0000 0011 1100 1111', text: 'over the last 60 steps 80% of it sits on the vertices 0000 0011 1100 1111, which XOR maps to one another' },
+             { m: 'moving', lt: '1/5', text: 'its distribution changes by less than 1/5 between steps 300 to 360 and 540 to 600' },
              { m: 'r4last', lt: '120', text: 'and R4 is not needed after step 120' }] }
 };
 const DEFAULT_PRESET = 'pre-dynamo';
@@ -6175,7 +6191,7 @@ Object.entries(PRESETS).forEach(([id, p]) => {
   btn.title = presetTitle(p);
   btn.addEventListener('click', () => applyPreset(id));
 });
-document.getElementById('btn-all').title = 'Every one of the 29, ramping to 50%. From the seed it does not get past step 2: in SERIES and CONCURRENT R4 cannot contain even the first step of the ramp, at 1/360, and in PARALLEL the second step\'s GRVQ walk measure divides by zero. The run stops, and the refusal names where.';
+document.getElementById('btn-all').title = 'Every one of the 29, ramping to 50%. Measured from the seed: in SERIES and CONCURRENT each of the first 60 steps is a blow-up that R4 stops, and the run goes on; in PARALLEL R4 stops 139, and at step 140 S7 takes the energy 2^2057 times past the target in one application, more than its gate can bring back, so the run stops and names it.';
 /* Kernel parameters: exact rationals from integer slider positions. */
 for (const [id, dispId, fmt] of [['amp-r4r', 'amp-r4r-v', v => (v / 10).toFixed(1)],
                                  ['amp-dielectric', 'amp-dielectric-v', v => (v / 10).toFixed(1)],

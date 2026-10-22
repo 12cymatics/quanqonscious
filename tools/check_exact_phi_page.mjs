@@ -313,13 +313,32 @@ try {
   }
   await evaluate(`document.getElementById('btn-none').click()`);
   await applied('ALL OFF', { active: '' });
-  await evaluate(`document.getElementById('btn-all').click()`);
-  const allOn = await waitFor(`KERNEL_VIEW.halted && KERNEL_VIEW.halted.name === 'R4Uncontained'`, 30000);
-  const ao = await evaluate(`({ active: activeSutras().map(a => a.id).join(','), halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message })`);
-  ok(allOn && ao.active === Array.from({ length: 29 }, (_, i) => i + 1).join(',') && /^R4 could not contain this step: .*S\d+/.test(ao.halted || ''),
-     'ALL ON: all 29 at 50% go to the worker, and R4 refuses the step and names the formula that took it past containment', JSON.stringify(ao));
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await sleep(400);
+  await evaluate(`document.getElementById('btn-all').click(); document.getElementById('btn-reset').click()`);
+  await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0`, 30000);
+  await evaluate(`document.getElementById('btn-run').click()`);
+  await waitFor(`KERNEL_VIEW.halted || (KERNEL_VIEW.state && KERNEL_VIEW.state.frame >= 3)`, 60000);
+  const ao = await evaluate(`(() => { updateSimulationHud();
+    const st = KERNEL_VIEW.state, F = st.frame, halted = KERNEL_VIEW.halted ? KERNEL_VIEW.halted.message : null;
+    const row = document.getElementById('sim-r4').textContent, params = kernelParams(), active = activeSutras();
+    let e = KERNEL.initEngine(), engaged = 0, lastAt = null, threw = null;
+    for (let k = 1; k <= F + (halted ? 1 : 0); k++) {
+      try { e = KERNEL.step(e, params, active, COMPOSITION); } catch (err) { threw = err.message; break; }
+      if (e.last.r4.engaged) { engaged++; lastAt = e.last.r4.blowup.at; } else lastAt = null;
+    }
+    const same = e.frame === F && e.psi.every((q, i) => Q.eq(q, st.psi[i]));
+    return { F, ids: active.map(a => a.id).join(','), comp: COMPOSITION, applied: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
+             halted, threw, same, engaged, lastAt, row };
+  })()`);
+  const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
+  ok(ao.ids === all29 && ao.applied === all29 && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.same && ao.engaged > 0 &&
+     (ao.halted ? ao.threw === ao.halted : ao.threw === null && (ao.lastAt ? ao.row.startsWith(`stopped a blow-up at ${ao.lastAt} (`) : ao.row === 'dormant')),
+     `ALL ON from the seed: all 29 at 50% go to the worker, its ${ao.F} steps are the kernel's own bit for bit, R4 stops a blow-up on ${ao.engaged} of them and its row names where the last began${ao.halted ? ', and the run stops where the kernel stops' : ''}`,
+     JSON.stringify(ao));
+  const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
   await evaluate(`document.getElementById('pre-damper').click()`);
-  await applied('a preset after the refusal starts again from the seed', { comp: 'SERIES', active: '9,11,29' });
+  await applied('a preset after ALL ON starts again from the seed', dp);
   await waitFor(`KERNEL_VIEW.state.frame >= 8`, 30000);
   const before = await evaluate(`KERNEL_VIEW.state.frame`);
   await evaluate(`document.getElementById('btn-reset').click()`);
@@ -1004,7 +1023,7 @@ try {
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
   ok(gotStep && st.schema === 'vedic-step-export/3' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
-  ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'sigma-braked'),
+  ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'r4'),
      'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
   ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
@@ -1103,7 +1122,8 @@ try {
   ok(phoneUp && ph.w === 390 && ph.collapsed && ph.panelLeft >= 390 && !ph.charts && ph.label === 'CHARTS OFF' && ph.surface && ph.quads > 1000,
      'on a phone the page opens on the torus alone: the controls closed off the screen and the charts off', JSON.stringify(ph));
   await evaluate(`document.getElementById('toggle-right').click()`);
-  await sleep(600);
+  await sleep(100);
+  await waitFor(`document.getElementById('right').getAnimations().length === 0`, 10000);
   const ph2 = await evaluate(`(() => { const r = document.getElementById('right').getBoundingClientRect(), d = getComputedStyle(document.getElementById('dynLine')).display;
     return { left: r.left, width: r.width, dyn: d }; })()`);
   await evaluate(`document.getElementById('toggle-right').click(); document.getElementById('btn-charts').click()`);
