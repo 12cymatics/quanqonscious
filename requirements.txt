@@ -127,7 +127,7 @@ tomlkit
 # SCI/ENG UTILITIES (GEOMETRY / GRAPHS / SIGNALS / IMAGING)
 # ============================================================
 cadquery==2.8.0
-Pillow==12.3.0
+Pillow==13.0.0
 networkx
 shapely
 pyvista
