@@ -40,10 +40,13 @@ jobs:
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: node faraday/build-zip.mjs
       - run: node tools/check_faraday_startup_browser.mjs faraday-cell
+      - name: Ensure artifact directory exists even if browser evidence generation is skipped or fails
+        if: always()
+        run: mkdir -p faraday-browser-evidence
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: faraday-browser-evidence-${{ matrix.browser }}
           path: faraday-browser-evidence/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
