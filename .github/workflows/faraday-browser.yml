@@ -36,6 +36,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # The browser smoke test is a transient Node-only check: it does not build a
+      # package or commit new files, so we use a throwaway install instead of a
+      # checked-in package.json. Playwright is pinned to the tested runtime version
+      # for the browser matrix; the `--with-deps` step fetches the system libraries
+      # that this Linux runner needs for Chromium/WebKit launch.
       - run: npm install --no-save --package-lock=false playwright@1.56.1
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: node faraday/build-zip.mjs
