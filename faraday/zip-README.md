@@ -1,11 +1,48 @@
 # faraday-cell
 
+## Start here
+
+Extract the ZIP, open the faraday-cell folder, then open **index.html** in a
+full desktop browser such as Safari, Chrome or Firefox. This is the complete
+standalone simulator, not a link or a launcher requiring Node. No installation
+is needed. A static attachment or iPhone Files preview may display the controls
+without executing JavaScript; the startup notice will remain visible there.
+
+The page now shows whether startup has reached a rendered frame, and reports
+startup errors rather than leaving an unexplained blank surface.
+
+The ZIP includes both index.html and faraday-cell-standalone.html with identical
+contents. The source cymatic.html is also included, but requires the local HTTP
+server described below. Running from a folder does not itself accelerate the
+numerical solver. The default modal view and the nonlinear Navier–Stokes modes
+are distinct models, labelled explicitly; no solver or accuracy setting was
+replaced to make this package appear faster.
+
+
 A Faraday-wave simulation of a circular cell: a 24.25 mm disc holding 3 mm of
 water, shaken vertically, forming the standing surface patterns Chladni and
 Faraday drew. Two solvers and a page that draws them.
 
 Everything here runs on `node` and a browser. There is nothing to install: no
 npm packages, no build step, no compiler.
+
+## Playback update — 22 October 2026
+
+Pause/resume in the modal view now resumes from the frozen simulation time,
+without adding the time spent paused. Repeated pauses and re-exciting while
+paused preserve that behavior. The numerical solvers, grid selection and
+accuracy settings are unchanged. This is a playback-clock correction, not a
+new physics model or a speed-up of the nonlinear solver.
+
+`node faraday/check-playback.mjs` checks the page's actual playback handlers and
+clock update with controlled timestamps, including re-excite while paused.
+It is a deterministic logic check, not a substitute for the real-browser suite.
+
+The modal view is the quick interactive starting point. The Navier–Stokes
+views evolve a separate physical clock in a worker; the modal playback button
+does not pause that solver. Those views can take a long time at the strict
+accuracy grid. See the physical-time and wall-time readouts; do not expect
+real-time fluid evolution.
 
 ## What is in here
 

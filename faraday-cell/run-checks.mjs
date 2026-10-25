@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SUITES = [
+  {"name":"faraday/check-startup.mjs","file":"faraday/check-startup.mjs","slow":false,"browser":false},
+  {"name":"faraday/check-playback.mjs","file":"faraday/check-playback.mjs","slow":false,"browser":false},
   {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false},
   {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false},
   {"name":"dns/check-dns.mjs","file":"dns/check-dns.mjs","slow":false,"browser":false},

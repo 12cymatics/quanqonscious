@@ -1,0 +1,57 @@
+name: Faraday browser startup
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - cymatic.html
+      - faraday/**
+      - dns/**
+      - faraday-cell/**
+      - faraday-cell.zip
+      - tools/check_faraday_startup_browser.mjs
+      - .github/workflows/faraday-browser.yml
+  push:
+    paths:
+      - cymatic.html
+      - faraday/**
+      - dns/**
+      - faraday-cell/**
+      - faraday-cell.zip
+      - tools/check_faraday_startup_browser.mjs
+      - .github/workflows/faraday-browser.yml
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      FARADAY_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The browser smoke test is a transient Node-only check: it does not build a
+      # package or commit new files, so we use a throwaway install instead of a
+      # checked-in package.json. Playwright is pinned to the tested runtime version
+      # for the browser matrix; the `--with-deps` step fetches the system libraries
+      # that this Linux runner needs for Chromium/WebKit launch.
+      - run: npm install --no-save --package-lock=false playwright@1.56.1
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: node faraday/build-zip.mjs
+      - run: node tools/check_faraday_startup_browser.mjs faraday-cell
+      - name: Ensure artifact directory exists even if browser evidence generation is skipped or fails
+        if: always()
+        run: mkdir -p faraday-browser-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: faraday-browser-evidence-${{ matrix.browser }}
+          path: faraday-browser-evidence/
+          if-no-files-found: warn
+          retention-days: 14

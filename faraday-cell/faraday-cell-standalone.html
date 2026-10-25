@@ -1,8 +1,6 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Faraday Cell</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
   --void:#070A0D; --panel:#0D1116; --panel2:#141A21; --panel3:#1B222B;
@@ -118,6 +116,33 @@ footer b{color:var(--ink2);font-weight:500}
   <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,
   circular quartz cells · surface responds at <b>f/2</b></p>
 </header>
+<div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
+<noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
+<script id="startup">
+globalThis.FARADAY_STARTUP = {
+  drawn: false,
+  failed: false,
+  fail(error) {
+    this.failed = true;
+    const status = document.getElementById('startupStatus');
+    status.textContent = 'Simulation error: ' + String(error && error.message || error)
+      + '. No substitute simulation has been loaded. Reload after resolving this error.';
+    status.style.color = 'var(--red)';
+  },
+  ready() {
+    if (this.drawn || this.failed) return;
+    this.drawn = true;
+    const status = document.getElementById('startupStatus');
+    status.textContent = 'Canvas rendering started. The active model is identified under surface drawn from. Nonlinear Navier–Stokes physical time can advance much more slowly than wall time.';
+    status.style.color = 'var(--grn)';
+  }
+};
+document.getElementById('startupStatus').textContent = 'Starting the simulator…';
+window.addEventListener('error', event => {
+  FARADAY_STARTUP.fail(event.error || event.message || 'A required script could not load');
+});
+window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(event.reason));
+</script>
 
 <div class="rig">
   <div class="stage">
@@ -8574,6 +8599,7 @@ bind('h', 'hv', v => depth = v, v => v.toFixed(1));
 bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
 $('sprinkleBtn').addEventListener('click', sprinkle);
 $('play').addEventListener('click', e => {
+  if (!running) t0 = performance.now() - simT*1000;
   running = !running; e.target.setAttribute('aria-pressed', String(running));
   e.target.textContent = running ? 'running' : 'paused';
 });
@@ -9406,7 +9432,9 @@ function loop(now){
   }
   renderSurface(state);
   paintOverlay();
+  FARADAY_STARTUP.ready();
   } catch (error){
+    FARADAY_STARTUP.fail(error);
     refuseRender(error);
   } finally {
     // A failed draw must not terminate the event loop: the CPU selector and an
