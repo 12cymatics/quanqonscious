@@ -20,6 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SUITES = [
   {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false},
   {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false},
+  {"name":"faraday/check-clean.mjs","file":"faraday/check-clean.mjs","slow":false,"browser":false},
   {"name":"dns/check-dns.mjs","file":"dns/check-dns.mjs","slow":false,"browser":false},
   {"name":"dns/check-disc.mjs","file":"dns/check-disc.mjs","slow":false,"browser":false},
   {"name":"dns/check-wasm-build.mjs","file":"dns/check-wasm-build.mjs","slow":false,"browser":false},

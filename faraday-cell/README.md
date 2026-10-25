@@ -95,7 +95,14 @@ integrates the solver over many grids to measure convergence orders, the second
 rebuilds the C++ and holds it to the JavaScript over a whole drive period — which
 is why `--fast` exists and why those two are the only things it leaves out. `dns/check-page.mjs` drives a real Chrome over
 the DevTools protocol; it **refuses** rather than skipping if it cannot find one,
-and `CHROME=/path/to/chrome` tells it where to look.
+and `CHROME=/path/to/chrome` tells it where to look. `faraday/check-clean.mjs` reads
+the comment-free build back with [acorn](https://github.com/acornjs/acorn), a parser
+independent of the one that built it, and likewise refuses without it:
+`npm install --prefix /tmp/tok acorn@8.18.0`, then `ACORN=/tmp/tok/node_modules/acorn`.
+
+`node faraday/build-clean.mjs out.html` writes the single file again with every
+comment and every on-screen sentence taken out; the readings, controls and solvers
+are the same, and both gates above hold it to that.
 
 ## Two things to know before you file a bug
 
