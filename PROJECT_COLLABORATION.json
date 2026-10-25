@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "project_id": "quanqonscious-github",
+  "family": "quanqonscious",
+  "instruction_state": "file_adopted_runtime_unverified",
+  "generation": "collab-2026-10-23.2",
+  "contract_sha256": "2b4b0fcc309edf4e40b698dd8866ed00b207cab07e4e4468b0676c56279f74f8",
+  "canonical_contract_relative_path": "../../Codex/2026-10-23/task/Claude-Codex-Collaboration-Adopted-2026-10-23/COLLABORATION_CONTRACT.md",
+  "canonical_identity_relative_path": "../../Codex/2026-10-23/task/Claude-Codex-Collaboration-Adopted-2026-10-23/records/adoption.json",
+  "overlays": [
+    {
+      "path": "v5/projects/CYMATICA-FARADAY.md",
+      "applies_to": "Faraday/Cymatica simulation tasks and relevant faraday-cell/dns/fsi/boundary modules"
+    }
+  ],
+  "source_selection_reason": "Newest integrated Git lineage inspected: HEAD 7eb8fa0 (19 October), containing b1b1a78; preserve the other dirty and specialist branches rather than equate this HEAD with all current work.",
+  "source_observation": {
+    "head": "7eb8fa06f76a0c5e1ce774e111f873208f2b8e88",
+    "branch": "codex/create-github-repository-for-pcfe-v3.0",
+    "dirty_state": "clean",
+    "status_counts": {},
+    "status_porcelain": "",
+    "latest_commit": "7eb8fa06f76a0c5e1ce774e111f873208f2b8e88 2026-10-19T16:16:06+10:00 Merge pull request #155 from 12cymatics/claude/vedic-vertex-substrate-v18-3yzix9",
+    "worktrees": "worktree /Users/danielmeyer/Documents/GitHub/quanqonscious\nHEAD 7eb8fa06f76a0c5e1ce774e111f873208f2b8e88\nbranch refs/heads/codex/create-github-repository-for-pcfe-v3.0"
+  },
+  "source_observation_is_frozen_snapshot": false,
+  "live_writer_status": "unknown",
+  "registry_writer": "Codex adoption integrator in task 01a16713-ced2-74cd-b458-17f921de50cc",
+  "adoption_write_scope": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "PROJECT_COLLABORATION.json"
+  ],
+  "production_code_write_assignments": [],
+  "new_task_assignment_required_for_code_writes": true,
+  "backups": "/Users/danielmeyer/Documents/Codex/2026-10-23/task/instruction-adoption-evidence-2026-10-23/backups/quanqonscious-github",
+  "protected_source_before_manifest": "/Users/danielmeyer/Documents/Codex/2026-10-23/task/instruction-adoption-evidence-2026-10-23/before/quanqonscious-github.protected.json",
+  "codex_loading": "unverified",
+  "claude_loading": "not_run",
+  "claude_cross_review": "not_run",
+  "prepared_at": "2026-10-23T05:37:24.715954+00:00"
+}
