@@ -1,3 +1,13 @@
+# Shared project instructions — adopted generation collab-2026-10-23.2
+
+Read the full [canonical contract](../../Codex/2026-10-23/task/Claude-Codex-Collaboration-Adopted-2026-10-23/COLLABORATION_CONTRACT.md) and its required v5 scientific/geometric rules before substantive work. Verify generation/hash against [adoption identity](../../Codex/2026-10-23/task/Claude-Codex-Collaboration-Adopted-2026-10-23/records/adoption.json) and [local coordination](PROJECT_COLLABORATION.json). Canonical contract SHA-256: `2b4b0fcc309edf4e40b698dd8866ed00b207cab07e4e4468b0676c56279f74f8`.
+
+This adopts project instructions only; future project edits still require task-specific ownership. Preserve all dirty/untracked work and retained project constraints. Live writer status is unknown. Codex loading is unverified; Claude loading/review is not_run. If an import is unavailable, read the contract explicitly. No account settings, hooks or deployment are activated.
+
+## Retained project-specific instructions
+
+The original file content follows verbatim. Apply the current user scope and canonical fidelity rules when a legacy statement conflicts; retain compatible stricter constraints.
+
 A Below is a worked, fully-numeric Vedic calculation that employs one of the advanced composite formulas we introduced—the palindromic dual-lattice alloy
 \Lambda_{\mathrm{pal}} =\sum_{k=1}^{8}\bigl[\alpha_k\,S_k(1)+\alpha_k\,S_{17-k}(1)\bigr].
 Everything is computed exactly from integer-Ek\u0101dhikena coefficients; only the final weighted sum is shown as a decimal.
