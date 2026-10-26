@@ -5533,8 +5533,10 @@ function drawFluxMap(ctx, cw, ch) {
   const cell = 44, pw = 4 * cell + 96, ph = 4 * cell + 80;
   let gx = (leftOpen ? 230 : 10) + 22, gy = Math.max(80, ch - 150 - 4 * cell - 48);
   if (FLUX_MAP.pos) {
-    gx = Math.min(Math.max(FLUX_MAP.pos.x, 20), Math.max(20, cw - pw + 20));
-    gy = Math.min(Math.max(FLUX_MAP.pos.y, 44), Math.max(44, ch - ph + 44));
+    const rightOpen = !document.getElementById('right').classList.contains('collapsed');
+    const L0 = (leftOpen ? 228 : 8) + 20, R0 = cw - (rightOpen ? 244 : 8) - pw + 20;
+    gx = Math.min(Math.max(FLUX_MAP.pos.x, L0), Math.max(L0, R0));
+    gy = Math.min(Math.max(FLUX_MAP.pos.y, 84), Math.max(84, ch - 8 - ph + 44));
   }
   const X = r => gx + r * cell, Y = s => gy + (4 - s) * cell;
   FLUX_MAP.x = gx; FLUX_MAP.y = gy; FLUX_MAP.cell = cell; FLUX_MAP.box = { x: gx - 20, y: gy - 44, w: pw, h: ph };
