@@ -547,8 +547,8 @@ section('Maya coherence flow');
 
 section('magnetism memory');
 {
-  const base = PARAMS({ zpeSource: X.ONE, vortex: Q.mk(3n, 2n) });
-  const act = [3, 9, 11, 25, 29].map(id => ({ id, strength: Q.mk(1n, 2n) }));
+  const base = PARAMS({ vortex: Q.ONE });
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
   const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
   const edges = []; for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) edges.push([v, a, v | (1 << a)]);
   const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
@@ -556,7 +556,7 @@ section('magnetism memory');
   let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
   for (let s = 0; s < 40; s++) {
     const prev = eng;
-    eng = K.step(eng, base, act, 'SERIES');
+    eng = K.step(eng, base, act, 'PARALLEL');
     const L = eng.last, rOut = eng.psi.map(x => Q.mul(x, x));
     const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
     edges.forEach(([v, a, h], e) => {
@@ -604,8 +604,8 @@ section('magnetism memory');
 section('no parameter is ignored');
 {
   const base = PARAMS();
-  const act = [3, 9, 22].map(id => ({ id, strength: Q.mk(1n, 2n) }));
-  const run = p => { let e = K.initEngine(); for (let s = 0; s < 6; s++) e = K.step(e, p, act, 'SERIES'); return e; };
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const run = p => { let e = K.initEngine(); for (let s = 0; s < 6; s++) e = K.step(e, p, act, 'PARALLEL'); return e; };
   const ref = run(base), key = e => JSON.stringify(K.serializeState(e.psi)) + JSON.stringify(e.dielectric.map(K.serializeQ));
   ok(key(run({ ...base, vortex: Q.ONE })) !== key(ref), 'vortex omega changes the field');
   ok(key(run({ ...base, zpeSource: X.ONE })) !== key(ref), 'the drive changes the field');
