@@ -3326,7 +3326,6 @@ function tick() {
 self.onmessage = e => {
   const m = e.data;
   if (m.type === 'config') { config = m; halted = null; if (m.reset) { engine = KERNEL.initEngine(); postState(0); } pending = true; schedule(); }
-  else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; postState(0); pending = true; schedule(); }
   else if (m.type === 'run') { running = !!m.running; schedule(); }
   else if (m.type === 'export') {
     if (!engine.last) { post({ type: 'export', id: m.id, error: 'no step has run yet' }); return; }
@@ -3471,7 +3470,7 @@ function pushConfig(reason, reset) {
   /* the key is every exact parameter the kernel receives, so no parameter
      can change without the kernel hearing of it */
   const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
-  if (key === LAST_CONFIG_KEY && reason !== 'force') { if (reset) KERNEL_WORKER.postMessage({ type: 'reset' }); return; }
+  if (key === LAST_CONFIG_KEY && reason !== 'force' && !reset) return;
   LAST_CONFIG_KEY = key;
   if (KERNEL_VIEW.configVersion > 0 && KERNEL_VIEW.doneVersion < KERNEL_VIEW.configVersion) { KERNEL_WORKER.terminate(); startKernelWorker(); }
   KERNEL_VIEW.configVersion++;

@@ -280,16 +280,17 @@ try {
 
   section('the glide');
   await setGlide(5);
+  const tr0 = await evaluate(`DISPLAY.transitions`);
   await presetFromSeed('pre-damper');
-  await waitFor(`KERNEL_VIEW.state.frame === 1 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
+  await waitFor(`DISPLAY.transitions >= ${tr0} + 2 && KERNEL_VIEW.state.frame === 1 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
   const gr = await evaluate(`({ frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-glide').textContent, dur: DISPLAY.dur, ms: STEP_INTERVAL_MS })`);
   ok(gr.frame === 1 && gr.dur === 5000 && gr.ms === 5000 && /^to step 1: [0-4] of 5 s$/.test(gr.row),
      `set to 5 s, the glide row names the step the surface is gliding to and how far it has come (${gr.row})`, JSON.stringify(gr));
-  await waitFor(`DISPLAY.tau === 1`, 20000);
-  const h0 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions, row: document.getElementById('sim-glide').textContent })`);
+  await waitFor(`DISPLAY.tau === 1 && document.getElementById('sim-glide').textContent === 'holding step 1 until a setting changes'`, 20000);
+  const h0 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions })`);
   await sleep(3000);
-  const h1 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions, q: KERNEL_VIEW.queue.length, frame: KERNEL_VIEW.state.frame, done: KERNEL_VIEW.doneVersion, cfg: KERNEL_VIEW.configVersion })`);
-  ok(h1.v === h0.v && h1.n === h0.n && h1.q === 0 && h1.frame === 1 && h1.done === h1.cfg && h0.row === 'holding step 1 until a setting changes',
+  const h1 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions, q: KERNEL_VIEW.queue.length, frame: KERNEL_VIEW.state.frame, done: KERNEL_VIEW.doneVersion, cfg: KERNEL_VIEW.configVersion, row: document.getElementById('sim-glide').textContent })`);
+  ok(h1.v === h0.v && h1.n === h0.n && h1.q === 0 && h1.frame === 1 && h1.done === h1.cfg && h1.row === 'holding step 1 until a setting changes',
      'landed, the surface holds its one calculation: nothing more is calculated until a setting changes', JSON.stringify({ h0, h1 }));
   await setGlide(1);
 
@@ -1093,7 +1094,7 @@ try {
   await cmd('Page.navigate', { url: PAGE });
   await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && document.getElementById('amp-glide')`, 90000);
   await setGlide(1);
-  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame === 1 && SURFACE_STATUS.drawn`, 90000);
+  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.selfTestsOk === true && SURFACE_STATUS.drawn`, 90000);
   const ph = await evaluate(`(() => { projectTorus(); renderTorus();
     const right = document.getElementById('right'), r = right.getBoundingClientRect();
     return { w: innerWidth, collapsed: right.classList.contains('collapsed'), panelLeft: r.left, charts: CHARTS.on, flux: FLUX_MAP.drawn,
