@@ -261,7 +261,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PACE</h5>
-    <p class="note">Every active formula is calculated once, and the surface then glides from that exact state to the result over this many seconds. The next calculation starts only when the glide has landed, so none starts during it. A preset or RESET starts again from the seed.</p>
+    <p class="note">Each setting of the formulas, the preset and the mode is calculated once, from the seed. The surface then glides from what it shows to that result over this many seconds and holds it. Nothing is calculated again until a setting changes.</p>
     <div class="amp-row"><span>Glide (s)</span><input type="range" min="1" max="120" value="60" id="amp-glide"><span id="amp-glide-v">60</span></div>
   </div>
   <div class="section">
@@ -2693,7 +2693,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength it is set to, calculated once a step; the page then glides from that exact state to the next over the time PACE sets, 60 s unless changed, and the next step is calculated only when the glide has landed; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. A division by zero or a log of zero refuses and stops the run, naming the vertex: S6 at a zero base vertex, S13 at a zero numerator, S19 at a zero root, S25 at a zero half-sum. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength it is set to, calculated once from the seed for each setting of the formulas, the preset and the mode; the page then glides from what it shows to that exact state over the time the Glide control sets, 60 s unless changed, and holds it, and nothing is calculated again until a setting changes; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. A division by zero or a log of zero refuses and stops the run, naming the vertex: S6 at a zero base vertex, S13 at a zero numerator, S19 at a zero root, S25 at a zero half-sum. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -2975,10 +2975,6 @@ function refreshVortex(tg) {
 const FROM_FIELD = new Float64Array(FIELD_TH * FIELD_PH), FROM_PHASE = new Float64Array(FIELD_TH * FIELD_PH);
 const DISPLAY = { started: false, t0: 0, dur: 0, tau: 1, ok: false, frames: 0, bad: 0,
                   transitions: 0, landed: 0, landedThis: true };
-/* The next state is taken only once the last has landed, so the move to it
-   starts from the last state exactly. A move takes the glide PACE sets; the
-   seed a run starts again from is drawn as it is. The worker calculates the
-   next state only when told the move has landed (postLanded). */
 function displayBegin() {
   if (!DISPLAY.started) return;
   FROM_FIELD.set(DISPLAY_FIELD); FROM_PHASE.set(DISPLAY_PHASE);
@@ -2986,15 +2982,6 @@ function displayBegin() {
   DISPLAY.waiting = KERNEL_VIEW.queue.length;
   DISPLAY.dur = KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0 ? 0 : STEP_INTERVAL_MS / (1 + DISPLAY.waiting);
   DISPLAY.transitions++; DISPLAY.landedThis = false;
-}
-let LANDED_SENT = '';
-function postLanded() {
-  const st = KERNEL_VIEW.state;
-  if (!KERNEL_WORKER || !st) return;
-  const key = KERNEL_VIEW.appliedVersion + ':' + st.frame;
-  if (key === LANDED_SENT) return;
-  LANDED_SENT = key;
-  KERNEL_WORKER.postMessage({ type: 'landed', frame: st.frame });
 }
 function displayAdvance(now) {
   if (!FAITHFUL_RENDER.co) return;
@@ -3017,7 +3004,6 @@ function displayAdvance(now) {
   if (tau === 1 && !DISPLAY.landedThis) { DISPLAY.landed++; DISPLAY.landedThis = true; }
   DISPLAY.tau = tau; DISPLAY.at = now; DISPLAY.ok = ok; DISPLAY.frames++;
   if (!ok) DISPLAY.bad++;
-  if (tau === 1) postLanded();
 }
 function sampleDisplayPhase(theta, phi) {
   const ti = ((theta % TAU + TAU) % TAU) / TAU * FIELD_TH;
@@ -3267,11 +3253,7 @@ const KERNEL_VIEW = {
   dyn: null,
   hist: { frame: [], E: [], UB: [], H: [], recon: [], phase: [], M: [] },
   stepMs: 0, halted: null, running: true, workerError: null,
-  configVersion: 0, appliedVersion: -1, appliedActive: [], appliedSet: [], appliedComposition: null,
-  /* states from the worker wait in queue, in order; the frame loop takes the
-     next one once the surface has landed exactly on the last (DISPLAY), so
-     every state is drawn and none is skipped. projected keeps the frame
-     numbers of the last 64 taken. */
+  configVersion: 0, appliedVersion: -1, doneVersion: -1, appliedActive: [], appliedSet: [], appliedComposition: null,
   dirty: false, lastProjectAt: 0, projected: [], queue: []
 };
 /* Pace. The worker takes one step every STEP_INTERVAL_MS (the steps/s
@@ -3320,33 +3302,31 @@ function dynamoOf(e) {
            closed: md.closed, torus: md.torus, sources: KERNEL.sourcesData(e.magA, e.dielectric), phase: e.mayaPhase, phaseErr: e.mayaErr, beta: mo.beta, betaEnclosure: mo.betaEnclosure,
            M: mo.M, layer: KERNEL.MAYA_LAYER };
 }
-/* One calculation, then nothing until the page has glided onto its result:
-   the next step is taken only once the page says it has landed on the state
-   last posted. */
-let landed = -1;
+let pending = false;
 function schedule() {
-  if (scheduled || !running || halted || !config || landed !== engine.frame) return;
+  if (scheduled || !running || !config || !pending) return;
   scheduled = true;
   setTimeout(tick, 0);
 }
 function tick() {
   scheduled = false;
-  if (!running || halted || !config || landed !== engine.frame) return;
+  if (!running || !config || !pending) return;
+  pending = false;
   const t0 = performance.now();
   try {
-    engine = KERNEL.step(engine, config.params, config.active, config.composition);
+    engine = KERNEL.step(KERNEL.initEngine(), config.params, config.active, config.composition);
   } catch (err) {
+    engine = KERNEL.initEngine();
     halted = { name: err.name || 'Error', message: String(err.message || err) };
-    post({ type: 'halted', version: config.version, frame: engine.frame, reason: halted });
+    post({ type: 'halted', version: config.version, frame: 0, reason: halted });
     return;
   }
   postState(performance.now() - t0);
 }
 self.onmessage = e => {
   const m = e.data;
-  if (m.type === 'config') { config = m; halted = null; if (m.reset) { engine = KERNEL.initEngine(); landed = -1; postState(0); } schedule(); }
-  else if (m.type === 'landed') { if (m.frame === engine.frame) { landed = m.frame; schedule(); } }
-  else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; landed = -1; postState(0); }
+  if (m.type === 'config') { config = m; halted = null; if (m.reset) { engine = KERNEL.initEngine(); postState(0); } pending = true; schedule(); }
+  else if (m.type === 'reset') { engine = KERNEL.initEngine(); halted = null; postState(0); pending = true; schedule(); }
   else if (m.type === 'run') { running = !!m.running; schedule(); }
   else if (m.type === 'export') {
     if (!engine.last) { post({ type: 'export', id: m.id, error: 'no step has run yet' }); return; }
@@ -3414,7 +3394,17 @@ function next() {
 }
 self.onmessage = e => { queue.push(e.data); setTimeout(next, 0); };
 `;
-let KERNEL_WORKER = null, AUDIT_WORKER = null;
+let KERNEL_WORKER = null, AUDIT_WORKER = null, KERNEL_WORKER_URL = null;
+function startKernelWorker() {
+  KERNEL_WORKER = new Worker(KERNEL_WORKER_URL);
+  KERNEL_WORKER.onmessage = onKernelMessage;
+  KERNEL_WORKER.onerror = ev => {
+    KERNEL_VIEW.workerError = 'kernel worker: ' + (ev.message || 'failed');
+    LOG.add('worker failed -- ' + KERNEL_VIEW.workerError, 'off');
+    updateRunBadge();
+  };
+  if (!KERNEL_VIEW.running) KERNEL_WORKER.postMessage({ type: 'run', running: false });
+}
 /* The series / parallel / concurrent identities are decided exactly, with no
    storage, and for all 29 sutras that takes seconds. They get their own
    worker, so they never hold up the operator certificates; and a decision
@@ -3440,7 +3430,8 @@ const EXPORT_WAIT = new Map();
 let EXPORT_SEQ = 0;
 function startWorkers() {
   try {
-    KERNEL_WORKER = new Worker(URL.createObjectURL(new Blob([workerSource(KERNEL_WORKER_HANDLER)], { type: 'text/javascript' })));
+    KERNEL_WORKER_URL = URL.createObjectURL(new Blob([workerSource(KERNEL_WORKER_HANDLER)], { type: 'text/javascript' }));
+    startKernelWorker();
     const auditUrl = URL.createObjectURL(new Blob([workerSource(AUDIT_WORKER_HANDLER)], { type: 'text/javascript' }));
     AUDIT_WORKER = new Worker(auditUrl);
     MODES_WORKER_URL = auditUrl;
@@ -3451,14 +3442,12 @@ function startWorkers() {
     updateRunBadge();
     return false;
   }
-  KERNEL_WORKER.onmessage = onKernelMessage;
   AUDIT_WORKER.onmessage = onAuditMessage;
   const fail = which => ev => {
     KERNEL_VIEW.workerError = which + ': ' + (ev.message || 'failed');
     LOG.add('worker failed -- ' + KERNEL_VIEW.workerError, 'off');
     updateRunBadge();
   };
-  KERNEL_WORKER.onerror = fail('kernel worker');
   AUDIT_WORKER.onerror = fail('audit worker');
   AUDIT_WORKER.postMessage({ type: 'selfTests' });
   return true;
@@ -3484,6 +3473,7 @@ function pushConfig(reason, reset) {
   const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
   if (key === LAST_CONFIG_KEY && reason !== 'force') { if (reset) KERNEL_WORKER.postMessage({ type: 'reset' }); return; }
   LAST_CONFIG_KEY = key;
+  if (KERNEL_VIEW.configVersion > 0 && KERNEL_VIEW.doneVersion < KERNEL_VIEW.configVersion) { KERNEL_WORKER.terminate(); startKernelWorker(); }
   KERNEL_VIEW.configVersion++;
   KERNEL_WORKER.postMessage({ type: 'config', version: KERNEL_VIEW.configVersion, active, composition: COMPOSITION, params, reset: !!reset });
   requestCertificates(active);
@@ -3493,7 +3483,7 @@ function pushConfig(reason, reset) {
 function requestCertificates(active) {
   const key = activeKey(active);
   const st = KERNEL_VIEW.state;
-  const certKey = key + '@' + (st ? st.frame : -1);
+  const certKey = key + '@' + KERNEL_VIEW.appliedVersion + ':' + (st ? st.frame : -1);
   if (certKey !== SUTRA_CERT.key && st && (!SUTRA_CERT.pending || key !== SUTRA_CERT.activeKey)) {
     SUTRA_CERT.key = certKey; SUTRA_CERT.activeKey = key; SUTRA_CERT.pending = true;
     AUDIT_WORKER.postMessage({ type: 'sutraCert', key: certKey, frame: st.frame, active, psi: st.psi });
@@ -3513,6 +3503,7 @@ function onAuditMessage(ev) {
   const m = ev.data;
   if (m.type === 'selfTests') {
     KERNEL_VIEW.selfTestsOk = !!m.ok; KERNEL_VIEW.selfTestCount = m.count || 0; KERNEL_VIEW.selfTestError = m.error || '';
+    if (KERNEL_VIEW.lastDyn) { const from = LATTICE_VIEW.from; recordDynamo(...KERNEL_VIEW.lastDyn); LATTICE_VIEW.from = from; KERNEL_VIEW.dirty = true; }
     LOG.add(m.ok ? `kernel self-tests pass (${m.count}, ${Math.round(m.ms)} ms)` : `KERNEL SELF-TEST FAILED: ${m.error}`, m.ok ? 'sys' : 'off');
     if (!DISTINCTNESS_REQUESTED) { DISTINCTNESS_REQUESTED = true; AUDIT_WORKER.postMessage({ type: 'distinctness' }); }
   } else if (m.type === 'sutraCert') {
@@ -3522,6 +3513,7 @@ function onAuditMessage(ev) {
     const wasOk = SUTRA_CERT.ok;
     SUTRA_CERT.ok = SUTRA_CERT.defects.length === 0;
     SUTRA_CERT.pending = false;
+    requestCertificates(activeSutras());
     if (!SUTRA_CERT.ok && wasOk !== false) LOG.add('sutra formula claims fail: ' + SUTRA_CERT.defects.map(d => 'S' + d.id + ' ' + d.why).join('; '), 'off');
   } else if (m.type === 'distinctness') {
     SUTRA_CERT.dist = m.d;
@@ -3552,9 +3544,10 @@ function onAuditMessage(ev) {
 }
 function onKernelMessage(ev) {
   const m = ev.data;
-  /* a state arriving means the worker is stepping: not halted */
-  if (m.type === 'state') { KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m); }
+  if ((m.type === 'state' || m.type === 'halted') && m.version < KERNEL_VIEW.configVersion) return;
+  if (m.type === 'state') { KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m); if (m.state.frame > 0) KERNEL_VIEW.doneVersion = m.version; }
   else if (m.type === 'halted') {
+    KERNEL_VIEW.doneVersion = m.version;
     KERNEL_VIEW.halted = m.reason;
     LOG.add(`step ${m.frame + 1} refused -- ${m.reason.message}`, 'off');
     updateRunBadge();
@@ -3574,7 +3567,7 @@ function applyKernelState(m) {
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedSet = m.setIds; KERNEL_VIEW.appliedComposition = m.composition;
     KERNEL_VIEW.couplings = m.couplings; KERNEL_VIEW.lambda = m.lambda; KERNEL_VIEW.tgcr = m.tgcr;
     requestCertificates(activeSutras());
-    if (m.dyn) recordDynamo(m.state.frame, m.dyn, A4.fromQ(m.state.energyLedger), FAITHFUL.project(m.state.psi).prob);
+    if (m.dyn) { KERNEL_VIEW.lastDyn = [m.state.frame, m.dyn, A4.fromQ(m.state.energyLedger), FAITHFUL.project(m.state.psi).prob]; recordDynamo(...KERNEL_VIEW.lastDyn); }
     KERNEL_VIEW.dirty = true;
 }
 /* Maya as drawn: M = observed / true, certified while the self-tests hold,
@@ -3594,8 +3587,7 @@ const DYNAMO_VIEW = { ok: false, why: 'no step yet' };
 const LATTICE_VIEW = { ok: false, why: 'no step yet', from: null, to: null, recon: [], frame: -1, balanced: false, strips: 0 };
 function recordDynamo(frame, d, energy, prob) {
   const H = KERNEL_VIEW.hist;
-  /* a reset starts a new run: its history starts again */
-  if (H.frame.length && frame <= H.frame[H.frame.length - 1]) for (const k of Object.keys(H)) H[k].length = 0;
+  while (H.frame.length && frame <= H.frame[H.frame.length - 1]) for (const k of Object.keys(H)) H[k].pop();
   const num = FAITHFUL.qNum, E = FAITHFUL.aNum(energy);
   const row = { frame, E, UB: num(d.fluxEnergy), H: num(d.helicity), recon: d.reconnections.length,
                 phase: num(d.phase), M: num(d.M) };
@@ -3613,7 +3605,7 @@ function recordDynamo(frame, d, energy, prob) {
   const to = { flow: T.flow.map(num), cells: T.cells.flat().map(num), hole: T.hole.map(num), tube: T.tube.map(num),
                prob: Array.from(prob) };
   /* a new run, or the first state, is drawn as it is; otherwise from what was drawn */
-  LV.from = LV.to && frame > LV.frame ? LV.to : to;
+  LV.from = LV.to && frame > 0 ? LV.to : to;
   LV.to = to; LV.frame = frame; LV.recon = d.reconnections.slice();
   LV.strips = T.strips.filter(x => x.ok).length;
   /* each strip's balance, by the loop it starts from: between loops s and s + 1 */
@@ -5317,7 +5309,7 @@ function updateRunBadge() {
   const el = document.getElementById('runBadge');
   let cls = 'run-badge', text;
   if (KERNEL_VIEW.workerError) { cls += ' halted'; text = 'NOT RUNNING — ' + KERNEL_VIEW.workerError; }
-  else if (KERNEL_VIEW.halted) { cls += ' halted'; text = 'STOPPED at step ' + ((KERNEL_VIEW.state ? KERNEL_VIEW.state.frame : 0) + 1) + ': ' + KERNEL_VIEW.halted.message + '. Change a setting or press RESET to continue.'; }
+  else if (KERNEL_VIEW.halted) { cls += ' halted'; text = 'REFUSED: ' + KERNEL_VIEW.halted.message + '. Change a setting or press RESET to continue.'; }
   else if (!KERNEL_VIEW.state) text = 'starting the kernel worker';
   else {
     const st = KERNEL_VIEW.state;
@@ -5345,9 +5337,9 @@ function updateSimulationHud() {
 function glideWords() {
   const st = KERNEL_VIEW.state;
   if (!st) return '–';
-  if (KERNEL_VIEW.halted) return `stopped on step ${st.frame}`;
+  if (KERNEL_VIEW.halted) return 'refused';
   if (!DISPLAY.started || DISPLAY.tau === 1 || DISPLAY.dur === 0)
-    return KERNEL_VIEW.running ? `on step ${st.frame} · calculating step ${st.frame + 1}` : `on step ${st.frame} · paused`;
+    return st.frame === 0 ? (KERNEL_VIEW.running ? 'on the seed · calculating' : 'on the seed · paused') : `holding step ${st.frame} until a setting changes`;
   return `to step ${st.frame}: ${Math.floor(DISPLAY.tau * DISPLAY.dur / 1000)} of ${Math.round(DISPLAY.dur / 1000)} s`;
 }
 function updateCouplingsHud() {
@@ -5712,11 +5704,8 @@ function frame(t) {
   }
   /* the overlay layer starts clear each frame; the surface layer is beneath it */
   ctx.clearRect(0, 0, cw, ch);
-  /* the next state is taken once the surface has landed on the last one */
-  if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1)) applyKernelState(KERNEL_VIEW.queue.shift());
+  if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1 || KERNEL_VIEW.queue[0].version !== KERNEL_VIEW.appliedVersion)) applyKernelState(KERNEL_VIEW.queue.shift());
   if (KERNEL_VIEW.dirty) projectState();
-  /* a view with no pixels has nothing to draw into; the kernel carries on */
-  if (KERNEL_VIEW.state && !(W > 0 && H > 0 && FAITHFUL_RENDER.co)) postLanded();
   if (KERNEL_VIEW.state && W > 0 && H > 0) {
     displayAdvance(performance.now());
     const g = document.getElementById('sim-glide'); if (g) g.textContent = glideWords();
@@ -5731,7 +5720,7 @@ function frame(t) {
       drawFluxMap(ctx, cw, ch);
     }
     /* a landed state: the surface is where that state's sources are */
-    if (FIELDS.show && DISPLAY.tau === 1 && KERNEL_VIEW.state && FIELDS.frame !== KERNEL_VIEW.state.frame) { FIELDS.frame = KERNEL_VIEW.state.frame; requestFields(); }
+    if (FIELDS.show && DISPLAY.tau === 1 && KERNEL_VIEW.state && FIELDS.frame !== KERNEL_VIEW.appliedVersion + ':' + KERNEL_VIEW.state.frame) { FIELDS.frame = KERNEL_VIEW.appliedVersion + ':' + KERNEL_VIEW.state.frame; requestFields(); }
   }
   SUTRA_GRAPH_INSPECTOR.requestUpdate(activeSutrasCanonical());
   LOG.render();
@@ -5776,7 +5765,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
   KERNEL_VIEW.running = !KERNEL_VIEW.running;
   if (KERNEL_WORKER) KERNEL_WORKER.postMessage({ type: 'run', running: KERNEL_VIEW.running });
   document.getElementById('btn-run').textContent = KERNEL_VIEW.running ? 'PAUSE' : 'RUN';
-  LOG.add(KERNEL_VIEW.running ? 'stepping resumed' : 'stepping paused', 'sys');
+  LOG.add(KERNEL_VIEW.running ? 'calculation resumed' : 'calculation paused', 'sys');
   updateRunBadge();
 });
 document.getElementById('btn-reset').addEventListener('click', () => {
@@ -5827,51 +5816,36 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
 }));
 const PRESETS = {
   'pre-damper': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state, and the field settles.',
-    claims: [{ m: 'E600/E0', lt: '1/100000', text: 'the field energy falls below 1/100000 of its start' },
-             { m: 'flux600/flux60', gt: '5', text: 'while the flux through the torus loops at step 600 is more than 5 times that at step 60' }] },
+    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state.' },
   'pre-inductor': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
-    purpose: 'S3, S9 and S27 with the drive and the vortex going into the magnetism memory.',
-    claims: [] },
+    purpose: 'S3, S9 and S27 with the drive and the vortex going into the magnetism memory.' },
   'pre-dynamo': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
-    purpose: 'S3, S9, S11, S25 and S29, driven and twisted by the vortex.',
-    claims: [] },
+    purpose: 'S3, S9, S11, S25 and S29, driven and twisted by the vortex.' },
   'pre-containment': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
-    purpose: 'S9 and S28 under a strong vortex.',
-    claims: [] },
+    purpose: 'S9 and S28 under a strong vortex.' },
   'pre-capacitor': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
-    purpose: 'S4, S5 and S26 with the polarisation at 3, so the field charges the dielectric.',
-    claims: [] },
+    purpose: 'S4, S5 and S26 with the polarisation at 3, so the field charges the dielectric.' },
   'pre-balancer': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha each time, while S9 diffuses the field.',
-    claims: [] },
+    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha each time, while S9 diffuses the field.' },
   'pre-checksum': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once, with S9 diffusing the field over the hypercube.',
-    claims: [] },
+    purpose: 'Casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once, with S9 diffusing the field over the hypercube.' },
   'pre-lock': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S20 moves every vertex toward the nearest multiple of 7 while S9 diffuses the field.',
-    claims: [] },
+    purpose: 'S20 moves every vertex toward the nearest multiple of 7 while S9 diffuses the field.' },
   'pre-rejector': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and S11 averages each Hamming layer, each from the same state.',
-    claims: [] },
+    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and S11 averages each Hamming layer, each from the same state.' },
   'pre-mixer': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S22 pulls every vertex toward the mean of itself and its complement while S9 diffuses the field.',
-    claims: [] },
-  'pre-amplifier': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10, steps: 10,
-    purpose: 'S1 multiplies every vertex up by one more than its neighbour gives, and the field grows: each step multiplies the binary exponent of its energy by about 4, so each takes longer to calculate than the last.',
-    claims: [{ m: 'Ebits', gt: '40000', text: 'after 10 steps the field energy is above 2^40000' },
-             { m: 'Ebits/EbitsPrev', gt: '39/10', text: 'its binary exponent more than 39/10 times what it was a step before' }] },
+    purpose: 'S22 pulls every vertex toward the mean of itself and its complement while S9 diffuses the field.' },
+  'pre-amplifier': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S1 multiplies every vertex up by one more than its neighbour gives, and the field grows.' },
   'pre-correlator': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.',
-    claims: [] }
+    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.' }
 };
 
 const DEFAULT_PRESET = 'pre-damper';
 function presetTitle(p) {
   const ops = Object.entries(p.set).map(([i, v]) => `S${i}(${v})`).join(' ');
   const knobs = [`vortex ω ${(p.omega / 10).toFixed(1)}`, p.drive ? `drive ${(p.drive / 4).toFixed(2)}` : '', p.chi !== 10 ? `χ ${(p.chi / 10).toFixed(1)}` : ''].filter(Boolean).join(', ');
-  const over = p.steps ? `Measured over its first ${p.steps} calculations from the seed` : 'Measured over 600 calculations from the seed, 10 hours at the default 60 s glide';
-  return `${COMPOSITION_LABEL[p.comp]}: ${ops} · ${knobs}. ${p.purpose}` + (p.claims.length ? ` ${over}: ${p.claims.map(c => c.text).join('; ')}.` : '');
+  return `${COMPOSITION_LABEL[p.comp]}: ${ops} · ${knobs}. ${p.purpose}`;
 }
 function applyPreset(id) {
   const p = PRESETS[id], btn = document.getElementById(id);

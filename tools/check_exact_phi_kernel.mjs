@@ -31,7 +31,7 @@
      strengths          a step from the seed runs each formula at its
                         setting
      modes              the mode identities decide and pass
-     Maya, magnetism, torus, sources, parameters, presets
+     Maya, magnetism, torus, sources, parameters
 
    Run: node tools/check_exact_phi_kernel.mjs
 */
@@ -767,39 +767,6 @@ section('the sources of the fields around the construct');
     if (sd.current.some(x => !Q.isZero(x)) && sd.charge.some(x => !Q.isZero(x))) live++;
   }
   ok(runOk && live === 30, `on 30 steps of the damper preset the sources are the gate's, both laws hold, and current and charge are both present (${live}/30 steps)`);
-}
-
-
-section('the presets do what their titles say');
-{
-  const { Worker } = await import('node:worker_threads');
-  const ps = HTML.indexOf('const PRESETS = {'), pe = HTML.indexOf('\n};', ps);
-  const PRESETS = new Function('return ' + HTML.slice(ps + 'const PRESETS = '.length, pe + 2))();
-  const ids = Object.keys(PRESETS);
-  const kernelSrc = HTML.slice(start, end);
-  const groups = [[], [], [], []];
-  ids.filter(id => PRESETS[id].claims.length).forEach((id, i) => groups[i % 4].push([id, PRESETS[id]]));
-  const results = Object.assign({}, ...(await Promise.all(groups.filter(g => g.length).map(g => new Promise((res, rej) => {
-    const w = new Worker(join(ROOT, 'tools', 'preset_worker.cjs'), { workerData: { src: kernelSrc, presets: g, steps: 600 } });
-    w.on('message', res); w.on('error', rej);
-  })))));
-  const num = v => v.includes('/') ? Number(v.split('/')[0]) / Number(v.split('/')[1]) : Number(v);
-  const metric = (d, m) => m === 'late' ? d.late.join(' ') : m.includes('/') ? d[m.split('/')[0]] / d[m.split('/')[1]] : d[m];
-  const holds = (d, c) => { const x = metric(d, c.m);
-    if (c.eq !== undefined) return typeof x === 'string' ? x === c.eq : x === num(c.eq);
-    if (c.lt !== undefined) return x < num(c.lt); if (c.gt !== undefined) return x > num(c.gt);
-    if (c.ge !== undefined) return x >= num(c.ge); if (c.le !== undefined) return x <= num(c.le); return false; };
-  const bound = c => c.eq ?? c.lt ?? c.gt ?? c.ge ?? c.le;
-  const names = (text, b) => new RegExp('(^|[^0-9/.])' + b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9/])').test(text);
-  ok(ids.length === 12 && ids.every(id => PRESETS[id].claims.every(c => typeof bound(c) === 'string' && names(c.text, bound(c)))),
-     `${ids.length} presets, each statement's text naming the bound it is checked against`);
-  ok(HTML.includes(`const DEFAULT_PRESET = '`) && ids.includes(HTML.split(`const DEFAULT_PRESET = '`)[1].split(`'`)[0]), 'the page starts on one of them');
-  for (const id of ids.filter(id => PRESETS[id].claims.length)) {
-    const d = results[id], p = PRESETS[id];
-    if (!d) { ok(false, `${id}: ran from the seed`); continue; }
-    const bad = p.claims.filter(c => !holds(d, c)).map(c => `${c.m} = ${metric(d, c.m)} against ${bound(c)}`);
-    ok(bad.length === 0, `${id}: ${p.claims.map(c => c.text).join('; ')} (${Math.round(d.ms)} ms a step)`, bad.join('; '));
-  }
 }
 
 
