@@ -202,7 +202,7 @@ section('the 29 v18.24 formulas against an independent transcription');
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
      `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times): ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
-  const want = { 'a zero base vertex (S6)': '6', 'a zero complement numerator (S13)': '13', 'a zero root (S19)': '19', 'a zero half-sum (S25)': '25' };
+  const want = {};
   for (const [name, id] of Object.entries(want))
     ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
   const unexpected = Object.entries(refusals).filter(([n]) => !(n in want)).map(([n, s]) => `${n}: S${[...s].join(',S')}`);

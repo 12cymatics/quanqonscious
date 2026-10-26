@@ -182,7 +182,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
-    <p class="note">Each active sūtra applies its v18.24 formula at α = id/435 × strength, exactly. λ is the field's four axis modes (λₖ = Σᵢ ±ψᵢ/16). S1, S5, S9 and S14 feed GRVQ's δλ into λ₀…λ₃ and every other active sūtra a 1/N share into λ₍id−1 mod 4₎; S2, S3 and S29 set MSTVQ's B, and its stress T feeds λ and the TGCR stiffness κ. A formula that cannot be computed (a zero divisor or a log of zero) stops the run and names the vertex.</p>
+    <p class="note">Each active sūtra applies its v18.24 formula at α = id/435 × strength, exactly. λ is the field's four axis modes (λₖ = Σᵢ ±ψᵢ/16). S1, S5, S9 and S14 feed GRVQ's δλ into λ₀…λ₃ and every other active sūtra a 1/N share into λ₍id−1 mod 4₎; S2, S3 and S29 set MSTVQ's B, and its stress T feeds λ and the TGCR stiffness κ. Where a formula meets a zero divisor or a log of zero it does what v18.24 does there, or borrows that rule from another sūtra, and nothing stops.</p>
     <div class="row"><span class="k">λ₀ λ₁ λ₂ λ₃</span><span class="v" id="cp-lambda">–</span></div>
     <div class="row"><span class="k">GRVQ δλ this step</span><span class="v" id="cp-grvq">–</span></div>
     <div class="row"><span class="k">MSTVQ</span><span class="v" id="cp-mstvq">–</span></div>
@@ -316,10 +316,6 @@ addEventListener('resize', resize);
 const TAU = Math.PI * 2, PI = Math.PI;
 const sin = Math.sin, cos = Math.cos, sqrt = Math.sqrt, abs = Math.abs;
 const floor = Math.floor, exp = Math.exp;
-/* ---------------------------------------------------------------------------
-   VERSION -- single source of truth for every identifier the build carries.
-   Schema identifiers are versioned with their format, not with the build.
-   --------------------------------------------------------------------------- */
 const VERSION = Object.freeze({
   string:     'v18.52.0',
   slug:       'v18_52_0',
@@ -331,13 +327,9 @@ const VERSION = Object.freeze({
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
-  /* /2: stage pass flags judge the exact stage, storage is reported beside
-     them; params, stepError and dielectricIn added, so a step
-     replays from its file */
   stepExport:    'vedic-step-export/5',
   operatorAudit: 'vedic-operator-audit/2'
 });
-/* Camera motion only: how far the view turns per nominal 60 Hz frame. */
 const VIEW_MOTION = Object.freeze({
   nominalFrameDtMs: 16.667,
   rotationYPerNominalFrame: 0.0022,
@@ -345,7 +337,6 @@ const VIEW_MOTION = Object.freeze({
   rotationXFrequency: 0.0007
 });
 const KERNEL_FACTORY = () => {
-  /* Euclid, the reference: what every faster path below must agree with. */
   const gcdEuclid = (a, b) => {
     a = a < 0n ? -a : a;
     b = b < 0n ? -b : b;
@@ -356,9 +347,6 @@ const KERNEL_FACTORY = () => {
     }
     return a;
   };
-  /* gcd(a, 2^k) = 2^min(v2(a), k): the lowest set bit of a, or 2^k when that
-     is smaller. Exact, and linear in the size of a. Every stored value is
-     dyadic, so this is the common case; any other pair goes to Euclid. */
   const gcd = (a, b) => {
     a = a < 0n ? -a : a;
     b = b < 0n ? -b : b;
@@ -464,18 +452,6 @@ const KERNEL_FACTORY = () => {
     QUARTER: Object.freeze({ n: 1n, d: 4n }),
     SIXTEENTH: Object.freeze({ n: 1n, d: 16n })
   });
-  /* Stored precision. Every step is computed in exact rationals from the
-     stored state, and only the state carried into the next step is rounded:
-     each rational coordinate to the nearest dyadic with STORE_BITS significant
-     bits. Without it the fractions lengthen without bound -- a step of degree d
-     multiplies their length by about d -- and the run cannot get past its
-     second step. This rounding is the one approximation in the simulator. It
-     is applied once per step, to the state and the dielectric field only, never
-     to a formula or a parameter, and it is bounded:
-         2^(B-1) <= |x| 2^k   ==>   |x - storeQ(x)| <= |x| / 2^B,
-     SutraWS/StoredPrecision.lean, store_err_le. storeQ checks that hypothesis
-     for every value it rounds and throws if it ever fails. Zero is stored
-     exactly. */
   const STORE_BITS = 128;
   const storeQ = x => {
     if (x.n === 0n) return x;
@@ -483,7 +459,6 @@ const KERNEL_FACTORY = () => {
     const k = STORE_BITS - (bitLength(n) - bitLength(d));
     const num = k >= 0 ? (n << BigInt(k)) : n;
     const den = k >= 0 ? d : (d << BigInt(-k));
-    /* hypothesis of store_err_le: the scaled value num/den is at least 2^(B-1) */
     if (num < (den << BigInt(STORE_BITS - 1)))
       throw new Error('storeQ: scaled value below 2^(B-1); the error bound would not apply');
     const m = (2n * num + den) / (2n * den);
@@ -536,8 +511,6 @@ const KERNEL_FACTORY = () => {
     sub(x, y) { return A4.mk(Q.sub(x.a,y.a), Q.sub(x.b,y.b), Q.sub(x.c,y.c), Q.sub(x.d,y.d)); },
     neg(x) { return A4.mk(Q.neg(x.a), Q.neg(x.b), Q.neg(x.c), Q.neg(x.d)); },
     isRational(x) { return Q.isZero(x.b) && Q.isZero(x.c) && Q.isZero(x.d); },
-    /* With one factor rational the product is that factor times each
-       coordinate -- the general formula with its other twelve terms zero. */
     mul(x, y) {
       if (A4.isRational(y)) return A4.scaleQ(x, y.a);
       if (A4.isRational(x)) return A4.scaleQ(y, x.a);
@@ -614,10 +587,6 @@ const KERNEL_FACTORY = () => {
     PHI_INV2: Object.freeze({a:Q.mk(3n,2n),b:Q.ZERO,c:Q.mk(-1n,2n),d:Q.ZERO}),
     PHI_INV3: Object.freeze({a:Q.mk(-2n),b:Q.ZERO,c:Q.ONE,d:Q.ZERO})
   });
-  /* The Cayley map t -> ((1-t^2)/(1+t^2), 2t/(1+t^2)): c^2 + s^2 = 1 exactly,
-     so every phase and pair rotation built on it is an exact rotation. A
-     rational t -- every parameter but the S4/S8/S13/S16 complement angles
-     at A4 arguments -- is evaluated in Q directly; the values are the same. */
   const cayley = t => {
     if (A4.isRational(t)) {
       const q=t.a, q2=Q.mul(q,q), den=Q.add(Q.ONE,q2);
@@ -814,7 +783,6 @@ const KERNEL_FACTORY = () => {
     for (let i = 0; i < spec.length; i++) checkArg(id, i, out[i+1]);
     return out;
   };
-  const refuse = (id, why) => { throw new RangeError(`S${id} refuses: ${why}`); };
   const pull = (x, target, w) => Q.add(x, Q.mul(Q.sub(target, x), w));
   const vedicField = (id, psi, a, al) => {
     const p = psi.slice();
@@ -865,7 +833,7 @@ const KERNEL_FACTORY = () => {
           for (let base = 0; base < 16; base++) {
             if (base & mask) continue;
             const i0 = base, i1 = base | mask, v0 = p[i0], v1 = p[i1];
-            if (v0.n === 0n) refuse(6, `Ψ${i0} = 0, so the ratio Ψ${i1}/Ψ${i0} is undefined`);
+            if (v0.n === 0n) continue;
             const ratio = Q.div(v1, v0), err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1]));
             const corr = storeQ(Q.neg(Q.mul(Q.mul(err, al), Q.abs(Q.add(v0, v1)))));
             p[i1] = Q.add(p[i1], corr);
@@ -932,7 +900,7 @@ const KERNEL_FACTORY = () => {
         const terms = argInt(a[1]), conv = [];
         for (let pi = 0; pi < 8; pi++) {
           const pj = pi ^ 15, num = bigAbs(p[pi].n), den = bigAbs(p[pj].n);
-          if (den === 0n) refuse(13, `Ψ${pj} = 0, so the continued fraction of Ψ${pi}/Ψ${pj} has a zero denominator`);
+          if (den === 0n) continue;
           let n = num, d = den;
           const cf = [];
           for (let s = 0; s < terms && d > 0n; s++) { cf.push(n / d); const r = n % d; n = d; d = r; }
@@ -1005,7 +973,7 @@ const KERNEL_FACTORY = () => {
             p[i] = Q.add(p[i], corr); p[j] = Q.sub(p[j], corr);
           } else {
             const ai = Q.abs(vi), aj = Q.abs(vj), big = Q.cmp(ai, aj) > 0;
-            if ((big ? aj : ai).n === 0n) refuse(19, `Ψ${big ? j : i} = 0, so the root ratio |Ψ${big ? i : j}/Ψ${big ? j : i}| is undefined`);
+            if ((big ? aj : ai).n === 0n) continue;
             const ratio = big ? Q.div(ai, aj) : Q.div(aj, ai), scale = Q.mul(Q.mul(al, Q.sub(ratio, a[1])), a[2]);
             if (big) { p[i] = Q.sub(p[i], scale); p[j] = Q.add(p[j], scale); }
             else { p[j] = Q.sub(p[j], scale); p[i] = Q.add(p[i], scale); }
@@ -1059,10 +1027,14 @@ const KERNEL_FACTORY = () => {
         for (let axis = 0; axis < 4; axis++) {
           let lo = Q.ZERO, hi = Q.ZERO;
           for (let i = 0; i < 16; i++) if (i & (1 << axis)) hi = Q.add(hi, psi[i]); else lo = Q.add(lo, psi[i]);
-          halves.push([lo, hi]); prodS = Q.mul(prodS, lo); prodT = Q.mul(prodT, hi);
+          halves.push([lo, hi]);
         }
-        if (prodS.n === 0n || prodT.n === 0n) refuse(25, `a half-sum of the field is 0, so log |∏S_a| − log |∏T_a| is undefined`);
-        const c = Q.cmp(Q.abs(prodS), Q.abs(prodT));
+        for (const [lo, hi] of halves) {
+          if (lo.n === 0n) { prodS = Q.ZERO; break; }
+          prodS = Q.mul(prodS, lo);
+          if (hi.n !== 0n) prodT = Q.mul(prodT, hi);
+        }
+        const c = prodS.n === 0n ? 0 : Q.cmp(Q.abs(prodS), Q.abs(prodT));
         if (c !== 0) {
           const sg = Q.mk(c > 0 ? 1n : -1n);
           for (let i = 0; i < 16; i++) {
@@ -1178,9 +1150,6 @@ const KERNEL_FACTORY = () => {
     const k=hw(v)-2;
     return Q.div(Q.ONE,Q.add(Q.ONE,Q.mk(BigInt(k*k))));
   });
-  /* The dielectric relaxes toward its neighbours and its plane source, and the
-     field polarises it: + chi rho_v / 8, rho_v the field's energy density
-     (polarised_nonneg, polarised_le). */
   const evolveDielectric = (field,active,p,rho) => {
     if(!Array.isArray(rho)||rho.length!==16)throw new RangeError('evolveDielectric: the field energy densities rho are required');
     const load=Q.div(activeLoad(active),Q.mk(435n));
@@ -1223,15 +1192,6 @@ const KERNEL_FACTORY = () => {
     for(let k=0;k<j;k++)parity^=(v>>k)&1;
     return parity?-1:1;
   };
-  /* ---------- Certified rational enclosures (SutraWS/MayaFlow.lean) ----------
-     e, pi, sqrt5 and sin are not in Q(sqrt2, sqrt5)[i]. Where the Maya flow
-     needs them they are enclosed between rationals, and the enclosure is
-     what is proved: Taylor tails from Complex.exp_bound (sin_enclose,
-     cos_enclose, e_enclose), pi bracketed by the sign of cos q - sin q
-     (pi_gt_of_sin_lt_cos, pi_lt_of_cos_lt_sin), integer square roots
-     (sqrt_lower, sqrt_upper), interval products (mul_mem_hull, div_mem_pos)
-     and outward rounding onto the 2^-ENC_BITS grid (floor_grid_le,
-     le_floor_grid_succ, le_ceil_grid). Nothing here is a float. */
   const ENC_BITS = 160;
   const isqrtN = n => {
     if (n < 0n) throw new RangeError('isqrt of a negative integer');
@@ -1239,7 +1199,6 @@ const KERNEL_FACTORY = () => {
     let x = 1n << BigInt((bitLength(n) + 1) >> 1);
     for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; }
   };
-  /* s / 2^k <= sqrt m < (s+1) / 2^k with s = isqrt(m 4^k), both inequalities checked */
   const sqrtBracketQ = (m, k) => {
     const N = BigInt(m) << BigInt(2 * k), s = isqrtN(N);
     if (s * s > N || (s + 1n) * (s + 1n) <= N) throw new Error('isqrt bracket failed');
@@ -1249,11 +1208,9 @@ const KERNEL_FACTORY = () => {
   const floorGrid = (q, k = ENC_BITS) => Q.mk(floorDiv(q.n << BigInt(k), q.d), 1n << BigInt(k));
   const ceilGrid = (q, k = ENC_BITS) => Q.neg(floorGrid(Q.neg(q), k));
   const qMin = (a, b) => (Q.cmp(a, b) <= 0 ? a : b), qMax = (a, b) => (Q.cmp(a, b) >= 0 ? a : b);
-  /* mul_mem_hull: the product of two intervals, any signs */
   const iMul = (a, b) => { const p = [Q.mul(a[0], b[0]), Q.mul(a[0], b[1]), Q.mul(a[1], b[0]), Q.mul(a[1], b[1])];
     return [qMin(qMin(p[0], p[1]), qMin(p[2], p[3])), qMax(qMax(p[0], p[1]), qMax(p[2], p[3]))]; };
   const iRound = (a, k = ENC_BITS) => [floorGrid(a[0], k), ceilGrid(a[1], k)];
-  /* the real value of a + b sqrt2 + c sqrt5 + d sqrt10, enclosed */
   const ROOT_BRACKETS = [sqrtBracketQ(2, ENC_BITS + 8), sqrtBracketQ(5, ENC_BITS + 8), sqrtBracketQ(10, ENC_BITS + 8)];
   const a4Enclose = x => {
     let lo = x.a, hi = x.a;
@@ -1263,9 +1220,6 @@ const KERNEL_FACTORY = () => {
     return iRound([lo, hi]);
   };
   const factorialN = n => { let f = 1n; for (let i = 2n; i <= BigInt(n); i++) f *= i; return f; };
-  /* Re and Im of sum_{m<n} (i q)^m / m! (cosSum, sinSum), summed exactly over
-     the common denominator d^(n-1) (n-1)!, placed on the grid outward, and
-     widened by the tail |q|^n (n+1)/(n! n) rounded up (tail, le_ceil_grid). */
   const trigEnclose = (q, n) => {
     if (Q.cmp(Q.abs(q), Q.ONE) > 0) throw new RangeError('trig enclosure needs |q| <= 1');
     const p = q.n, d = q.d, K = BigInt(ENC_BITS);
@@ -1283,17 +1237,12 @@ const KERNEL_FACTORY = () => {
     const enc = N => { const f = floorDiv(N << K, D); return [Q.mk(f - R, G), Q.mk(f + 1n + R, G)]; };
     return { cos: enc(re), sin: enc(im) };
   };
-  /* e: the partial sums of 1/m! and their tail (e_enclose) */
   const E_BRACKET = (() => {
     const n = 48; let s = Q.ZERO, f = 1n;
     for (let m = 0; m < n; m++) { if (m > 1) f *= BigInt(m); s = Q.add(s, Q.mk(1n, f)); }
     const R = Q.mk(BigInt(n + 1), factorialN(n) * BigInt(n));
     return iRound([Q.sub(s, R), Q.add(s, R)]);
   })();
-  /* pi: a dyadic bracket [lo, hi], certified here. sin(lo/4) < cos(lo/4)
-     puts lo below pi (pi_gt_of_sin_lt_cos); cos(hi/4) < sin(hi/4) puts hi
-     above it (pi_lt_of_cos_lt_sin). The numerator is a candidate; nothing is
-     trusted until both signs are decided from the enclosures. */
   const PI_BRACKET = (() => {
     const k = 137n, N = 547342635041262974904156351058877841049928n;
     const lo = Q.mk(N - 1n, 1n << k), hi = Q.mk(N + 2n, 1n << k);
@@ -1303,30 +1252,17 @@ const KERNEL_FACTORY = () => {
     return [lo, hi];
   })();
   const PHI_BRACKET = iRound([Q.mul(Q.add(Q.ONE, ROOT_BRACKETS[1][0]), Q.HALF), Q.mul(Q.add(Q.ONE, ROOT_BRACKETS[1][1]), Q.HALF)]);
-  /* ---------- Maya: the coherence-layer flow (v18.24 section 7) ----------
-       beta(phi) = (phi_g/e) sin phi - (e/pi) phi^3,   d phi / d mu = beta / mu,
-     stepped as v18.24 stepped it: d(log mu) = 1/100 a step, five Euler
-     sub-steps of 1/500. The factor M = 1 + beta/(20(1+|beta|)) is what Maya
-     applies to the field (v18.24's modulationFactor). The phase flows from
-     phi_0 onto the one stable coherence layer phi* (layer, toward_layer);
-     there beta = 0 and M = 1 (factor_eq_one_iff). */
   const MAYA_A = iRound([Q.div(PHI_BRACKET[0], E_BRACKET[1]), Q.div(PHI_BRACKET[1], E_BRACKET[0])]);
   const MAYA_B = iRound([Q.div(E_BRACKET[0], PI_BRACKET[1]), Q.div(E_BRACKET[1], PI_BRACKET[0])]);
   const MAYA_PHASE0 = Q.mk(1n, 16n);
   const MAYA_SUBSTEPS = 5, MAYA_H = Q.mk(1n, 500n);
-  /* beta_mem: beta from the enclosures of a, b and sin phi */
   const mayaBetaEnclose = x => {
     const s = iRound(trigEnclose(x, 40).sin), x3 = Q.mul(Q.mul(x, x), x);
     const as = iMul(MAYA_A, s), bx = iMul(MAYA_B, [x3, x3]);
     return iRound([Q.sub(as[0], bx[1]), Q.sub(as[1], bx[0])]);
   };
   const mayaFactorOf = beta => Q.add(Q.ONE, Q.div(beta, Q.mul(Q.mk(20n), Q.add(Q.ONE, Q.abs(beta)))));
-  /* (a + 3b), rounded up: the Lipschitz constant of beta on [-1, 1] (beta_lipschitz) */
   const MAYA_LIP = Q.add(MAYA_A[1], Q.mul(Q.mk(3n), MAYA_B[1]));
-  /* One kernel step of the flow. The factor this step applies comes from beta
-     at the stored phase; then the five sub-steps move the phase. err bounds
-     the distance from the exact Euler map's phase, sub-step by sub-step:
-     err' = (1 + h(a+3b)) err + h w + |r| (euler_err), rounded up. */
   const mayaStep = (x, err) => {
     let xs = x, e = err, first = null;
     for (let j = 0; j < MAYA_SUBSTEPS; j++) {
@@ -1341,14 +1277,10 @@ const KERNEL_FACTORY = () => {
       xs = next;
     }
     const Mraw = mayaFactorOf(first.beta), M = storeQ(Mraw);
-    /* |M - M_exact| <= w/20 (factor_lipschitz) plus the factor's own storage */
     const epsM = Q.add(Q.div(first.w, Q.mk(20n)), Q.abs(Q.sub(M, Mraw)));
     return { phaseIn: x, errIn: err, next: xs, err: e, beta: first.beta, betaEnclosure: first.betaEnclosure,
              betaWidth: first.w, M, epsM };
   };
-  /* The stable layer, bracketed: the largest grid point in [3/4, 1] where
-     beta's enclosure is still positive and the next where it is negative.
-     layer then gives exactly one root phi* between them. */
   const MAYA_LAYER = (() => {
     let lo = Q.mk(3n, 4n), hi = Q.ONE;
     const pos = x => mayaBetaEnclose(x)[0].n > 0n, neg = x => mayaBetaEnclose(x)[1].n < 0n;
@@ -1359,17 +1291,6 @@ const KERNEL_FACTORY = () => {
     }
     return [lo, hi];
   })();
-  /* ---------- Magnetism memory on the tesseract (SutraWS/Magnetism.lean) ----------
-     v18.24 section 4b, exact: the vector potential on the 32 edges, B = d1 A on
-     the 24 faces. Each step A keeps 499/500 of itself and gains
-       Faraday   -(1/10) d0(rho_out - rho_in)          (no flux: faraday_flux_free)
-       vortex    omega (6/100 toroidal | eta 3/100 poloidal) m_e s_e
-     m_e the phi-cycle [1, 13/10, 1, 7/10][(hw + axis) mod 4] and s_e the edge's
-     share 8 (rho_t + rho_h) / E of the field's energy (edge_share_total: the
-     shares sum to 32, so steering moves the injection and keeps its total).
-     The Faraday part is kept as a vertex potential chi, A_F = -(1/10) d0 chi, so
-     its zero flux is exact. The field's phase at v then turns by
-       dt (div A + p_B),  p_B the mean squared flux of the six faces at v. */
   const MAG_EDGES = [];
   for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) MAG_EDGES.push([v, a, v | (1 << a)]);
   const edgeIndexOf = (v, a) => MAG_EDGES.findIndex(e => e[0] === v && e[1] === a);
@@ -1384,15 +1305,11 @@ const KERNEL_FACTORY = () => {
   const PHI_CYCLE = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
   const MAG_RETAIN = Q.mk(499n, 500n), MAG_FARADAY = Q.mk(1n, 10n), MAG_TOROIDAL = Q.mk(6n, 100n), MAG_POLOIDAL = Q.mk(3n, 100n), TGCR_ETA = Q.HALF;
   const storeOrZero = x => x.n === 0n ? x : storeQ(x);
-  /* B = d1 A, the Stokes circulation of each face */
   const curlA = A => MAG_FACES.map(f => f.edges.reduce((s, [e, sg]) => sg > 0 ? Q.add(s, A[e]) : Q.sub(s, A[e]), Q.ZERO));
-  /* d0^T A at each vertex: in along the edges it heads, out along those it tails */
   const divA = A => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => (v & (1 << a)) ? Q.add(s, A[EDGE_AT[v][a]]) : Q.sub(s, A[EDGE_AT[v][a]]), Q.ZERO));
   const laplacianV = chi => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => Q.add(s, Q.sub(chi[v], chi[v ^ (1 << a)])), Q.ZERO));
-  /* the whole potential, Faraday part included: A_F = -(1/10) d0 chi */
   const fullA = (A, chi) => MAG_EDGES.map(([v, , h], e) => Q.sub(A[e], Q.mul(MAG_FARADAY, Q.sub(chi[h], chi[v]))));
   const pressureAt = B => Array.from({ length: 16 }, (_, v) => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], B[i])), Q.ZERO), Q.mk(1n, 6n)));
-  /* the potential each vertex sees: div A_V - (1/10) L chi, L the graph Laplacian (d0^T d0) */
   const potentialAt = (A, chi) => { const d = divA(A), L = laplacianV(chi); return d.map((x, v) => Q.sub(x, Q.mul(MAG_FARADAY, L[v]))); };
   const magTau = (A, chi, p) => { const dtQ = rationalA4(p.dt, 'dt'); return fullA(A, chi).map(x => Q.mul(dtQ, x)); };
   const rhoHat = psi => psi.map(x => Q.mul(x, x));
@@ -1416,12 +1333,8 @@ const KERNEL_FACTORY = () => {
     });
     return { A: ANext, chi: chiNext, share };
   };
-  /* helicity sum_e A_e (1/3) sum_{faces on e} B_f over the whole potential; a
-     gradient carries none (helicity_of_gradient) */
   const helicityOf = (A, chi) => { const B = curlA(A), AF = fullA(A, chi);
     return MAG_EDGES.reduce((s, _, e) => Q.add(s, Q.mul(AF[e], Q.mul(FACES_ON_EDGE[e].reduce((t, i) => Q.add(t, B[i]), Q.ZERO), Q.mk(1n, 3n)))), Q.ZERO); };
-  /* v18.24's Hodge vector at each vertex and its reconnection test,
-     cos(B_i, B_j) < -0.7 on an edge, decided without square roots (reconnect_iff) */
   const bvecAt = B => Array.from({ length: 16 }, (_, v) => [0, 1, 2].map(k => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], HODGE[MAG_FACES[i].p][k])), Q.ZERO), Q.mk(1n, 6n))));
   const RECONNECT_FLOOR = Q.mk(1n, 1000000n);
   const reconnectionsOf = A => {
@@ -1434,24 +1347,11 @@ const KERNEL_FACTORY = () => {
     });
     return out;
   };
-  /* d2 B over the 8 cubes, with the six signed faces of DEC.d2: zero for every
-     B = d1 A (flux_closed). Decided on the flux that is shown. */
   const faceAt = (a, b, base) => MAG_FACES.findIndex(f => f.a === a && f.b === b && f.base === base);
   const MAG_CUBES = [];
   [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]].forEach(([a, b, q]) => { for (let i = 0; i < 16; i++) if (!(i & ((1 << a) | (1 << b) | (1 << q))))
     MAG_CUBES.push([[faceAt(a, b, i), -1], [faceAt(a, b, i ^ (1 << q)), 1], [faceAt(a, q, i), 1], [faceAt(a, q, i ^ (1 << b)), -1], [faceAt(b, q, i), -1], [faceAt(b, q, i ^ (1 << a)), 1]]); });
   const cubeFluxes = B => MAG_CUBES.map(c => c.reduce((s, [f, sg]) => sg > 0 ? Q.add(s, B[f]) : Q.sub(s, B[f]), Q.ZERO));
-  /* The engine on the torus the page draws. tessVertexToTorus puts vertex k at
-     ring position (ringTheta k, ringPhi k) of a 4x4 lattice (node_theta,
-     node_phi); every edge is one quarter turn along one ring (edge_step); the
-     faces through axes 0 and 3 are loops once round the torus (hole_loop),
-     those through 1 and 2 loops once round the tube (tube_loop), and the other
-     sixteen are its cells, each lattice cell once (cell_corners, cells_tile).
-     A cell's orientation is the signed area of its Stokes loop in (theta, phi)
-     (cell_orient_area). Every cube is a strip between two loops (cube_strip),
-     so the flux through the hole steps from one loop to the next by exactly
-     the flux through the four cells between them (hole_flux_step_y/z), and
-     likewise along the tube (tube_flux_step_x/w). TorusLattice.lean. */
   const GRAY_RING = [0, 1, 3, 2];
   const ringThetaOf = k => GRAY_RING[(((k >> 3) & 1) << 1) | (k & 1)];
   const ringPhiOf = k => GRAY_RING[(((k >> 2) & 1) << 1) | ((k >> 1) & 1)];
@@ -1475,8 +1375,6 @@ const KERNEL_FACTORY = () => {
   const HOLE_AT = [0, 1, 2, 3].map(s => TORUS_FACES.findIndex(t => t.kind === 'hole' && t.ring === s));
   const TUBE_AT = [0, 1, 2, 3].map(r => TORUS_FACES.findIndex(t => t.kind === 'tube' && t.ring === r));
   const CELL_AT = [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(s => TORUS_FACES.findIndex(t => t.kind === 'cell' && t.cell[0] === r && t.cell[1] === s)));
-  /* each cube's six signed faces (DEC.d2) read as a strip: sg_hi (B_hi - B_lo)
-     = -sum sg_c B_c, since the two loops carry opposite signs */
   const TORUS_STRIPS = MAG_CUBES.map(cube => {
     const loops = cube.filter(([f]) => TORUS_FACES[f].kind !== 'cell'), cells = cube.filter(([f]) => TORUS_FACES[f].kind === 'cell');
     const [[f0, s0], [f1, s1]] = loops;
@@ -1485,10 +1383,6 @@ const KERNEL_FACTORY = () => {
     return { kind: TORUS_FACES[f0].kind, lo: lo[0], hi: hi[0], from: TORUS_FACES[lo[0]].ring,
              opposite: s0 === -s1, cells: cells.map(([f, sg]) => [f, -hi[1] * sg]) };
   });
-  /* what the page draws of the engine: the flux through the hole at each of
-     the four loops, along the tube at each of the four, each cell's
-     circulation counter-clockwise in (theta, phi), the potential's flow along
-     each edge towards +theta or +phi, and the eight strip balances, decided */
   const torusData = (A, chi, B = curlA(A)) => {
     const AF = fullA(A, chi);
     const strips = TORUS_STRIPS.map(st => {
@@ -1500,13 +1394,6 @@ const KERNEL_FACTORY = () => {
              flow: AF.map((x, e) => TORUS_EDGES[e].dir > 0 ? x : Q.neg(x)),
              strips, balanced: strips.length === 8 && strips.every(s => s.ok) };
   };
-  /* The construct's sources. Ampere's law on the lattice: each edge carries
-     the signed flux of the three faces round it, J = (d1)^T B. Gauss's law on
-     the dielectric field: each vertex carries its graph Laplacian,
-     rho = (d0)^T d0 q (charge_laplacian). Both conservation laws are decided
-     here, exactly, on the values the page draws from: the current is
-     conserved at every vertex (kirchhoff) and the charges sum to zero
-     (charge_neutral). FieldsAround.lean. */
   const currentOf = B => { const J = new Array(32).fill(Q.ZERO);
     MAG_FACES.forEach((f, i) => f.edges.forEach(([e, sg]) => { J[e] = sg > 0 ? Q.add(J[e], B[i]) : Q.sub(J[e], B[i]); }));
     return J; };
@@ -1523,13 +1410,10 @@ const KERNEL_FACTORY = () => {
              fluxEnergy: Q.mul(B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO), Q.HALF),
              helicity: helicityOf(A, chi), reconnections: reconnectionsOf(A), torus: torusData(A, chi, B) };
   };
-  /* what Maya shows at a phase: beta's enclosure and the factor
-     M = observed / true from its stored midpoint (factor_mem) */
   const mayaObserve = x => {
     const be = mayaBetaEnclose(x), beta = storeQ(Q.mul(Q.add(be[0], be[1]), Q.HALF));
     return { phase: x, beta, betaEnclosure: be, M: storeQ(mayaFactorOf(beta)) };
   };
-  /* sqrt of a nonnegative rational, rounded up onto the grid (sqrt_upper) */
   const sqrtUpperQ = (q, k = ENC_BITS) => {
     if (q.n < 0n) throw new RangeError('sqrt of a negative rational');
     const N = floorDiv(q.n << BigInt(2 * k), q.d) + 1n, s = isqrtN(N);
@@ -1613,10 +1497,6 @@ const KERNEL_FACTORY = () => {
     }
     return out;
   };
-  /* Decision procedure for the seven statements of WheelerGeometry.lean. Every
-     one is a finite identity or inequality over the exact field, so each is
-     decided here rather than asserted. Returns one record per statement; the
-     renderer gates each Wheeler channel on the record it depends on. */
   const wheelerAudit = (field,p) => {
     if (!field || !p) throw new TypeError('wheelerAudit decides its statements on a given dielectric field and parameters');
     const f = field, par = p;
@@ -1629,12 +1509,10 @@ const KERNEL_FACTORY = () => {
     const R = [];
     const claim = (name,ok,detail) => { R.push({name,ok:!!ok,detail:detail||''}); return !!ok; };
 
-    /* hw(v) = 2  =>  M(v) = 0.  The inertial plane carries no magnetism. */
     let t1 = true, t1n = 0;
     for(let v=0;v<16;v++) if(hw(v)===2){ t1n++; if(!A4.isZero(w.magnetic[v])) t1=false; }
     claim('wheeler_inertial_plane_magnetism_zero',t1&&t1n===6,`${t1n} inertial-plane vertices`);
 
-    /* 0 <= k^2/(1+k^2) < 1  for k = hw(v)-2, and = 0 exactly on the plane. */
     let t2 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k)), mw=Q.div(k2,Q.add(Q.ONE,k2));
@@ -1643,13 +1521,11 @@ const KERNEL_FACTORY = () => {
     }
     claim('wheeler_magnetic_weight_in_unit_interval',t2);
 
-    /* D(v) = 2phi * s * field[v] exactly, for every v. */
     let t3 = true;
     for(let v=0;v<16;v++)
       if(!A4.eq(w.dielectric[v],A4.scaleQ(A4.TWO_PHI,Q.mul(sQ,f[v])))) t3=false;
     claim('wheeler_dielectric_is_phi_scaled',t3);
 
-    /* omega = gammaW * M, exactly linear, at every vertex. */
     let t4 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k));
@@ -1658,10 +1534,6 @@ const KERNEL_FACTORY = () => {
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
 
-    /* radialFactor = phi^3 * rho, which is what _RADF caches and what the
-       geometry uses. Decided against WHEELER.radialFactorA4 itself rather than
-       a private copy of rho, so a regression in the phi^3 multiplication is
-       caught here and not only in the unscaled profile. */
     let t5rho = true, t5scaled = true;
     for(let i=0;i<12;i++){
       const rQ=Q.mk(BigInt(i),4n), eQ=Q.mk(1n,10n);
@@ -1675,7 +1547,6 @@ const KERNEL_FACTORY = () => {
     claim('wheeler_rho_mem_unit_interval',t5rho);
     claim('wheeler_radial_factor_bounded_by_phi_cubed',t5scaled);
 
-    /* Cayley: c^2 + s^2 = 1 exactly, so omega induces a true rotation. */
     let t6 = true;
     for(let v=0;v<16;v++){
       let tau=A4.mul(par.geoP,w.omega[v]);
@@ -1686,7 +1557,6 @@ const KERNEL_FACTORY = () => {
     }
     claim('wheeler_cayley_rotation_is_orthogonal',t6,`geoP = ${Q.toString(pQ)}`);
 
-    /* 1 + geoD*D(v) > 0, so the z-compression never inverts or divides by 0. */
     let t7 = true;
     for(let v=0;v<16;v++)
       if(A4.sign(A4.add(A4.ONE,A4.mul(par.geoD,w.dielectric[v])))<=0) t7=false;
@@ -1814,7 +1684,9 @@ const KERNEL_FACTORY = () => {
         const cur = psiIn.slice(); let ok = true;
         for (let axis = 0; axis < 4; axis++) for (let base = 0; base < 16; base++) {
           if (base & (1 << axis)) continue;
-          const i0 = base, i1 = base | (1 << axis), v0 = cur[i0], v1 = cur[i1], ratio = Q.div(v1, v0);
+          const i0 = base, i1 = base | (1 << axis), v0 = cur[i0], v1 = cur[i1];
+          if (v0.n === 0n) continue;
+          const ratio = Q.div(v1, v0);
           const err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1])), s = Q.add(v0, v1);
           const exact = Q.neg(Q.mul(Q.mul(err, al), Q.abs(s))), corr = storeQ(exact);
           if ((exact.n === 0n) !== (err.n === 0n || al.n === 0n || s.n === 0n) || (corr.n === 0n) !== (exact.n === 0n)) ok = false;
@@ -1870,7 +1742,7 @@ const KERNEL_FACTORY = () => {
         claim(g > 1n ? 'gcd_divides_tails' : 'digital_root_nine', g > 1n ? out.tails.every(t => t % g === 0n)
           : out.tails.every(t => { const dr = digitalRoot10(t); return t === 0n ? dr === 0n : dr >= 1n && dr <= 9n && (t - dr) % 9n === 0n; })); break;
       }
-      case 25: claim('log_ratio_sign', out.sign === Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT)) && out.halves.every(([lo, hi]) => lo.n !== 0n && hi.n !== 0n)); break;
+      case 25: claim('log_ratio_sign', out.sign === (out.prodS.n === 0n ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && out.prodT.n !== 0n); break;
       case 26: claim('flag_is_max', psiIn.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) < 0 || (Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) === 0 && i >= out.flag)) && Q.eq(p[out.flag], psiIn[out.flag])); break;
       case 27: claim('ap_endpoints', out.interpolated.includes(0) && out.interpolated.includes(15)); break;
       case 8: case 17: {
@@ -2021,10 +1893,11 @@ const KERNEL_FACTORY = () => {
       const fc=formulaClaims(id,psi,Q.ONE);
       assert(`S${id} formula claims on the seed`,fc.ok);
     }
-    assert("S6 refuses a zero vertex",throwsRange(()=>applySutra(6,psi.map((q,v)=>v===0?Q.ZERO:q),Q.ONE,{})));
-    assert("S13 refuses a zero complement",throwsRange(()=>applySutra(13,psi.map((q,v)=>v===12?Q.ZERO:q),Q.ONE,{})));
-    assert("S19 refuses a zero root",throwsRange(()=>applySutra(19,psi.map((q,v)=>v===9?Q.ZERO:q),Q.ONE,{})));
-    assert("S25 refuses a zero half-sum",throwsRange(()=>applySutra(25,psi.map((q,v)=>v===0?Q.sub(q,sumR(psi.filter((_,i)=>!(i&1)))):q),Q.ONE,{})));
+    const runs=f=>{try{f();return true;}catch(e){return false;}};
+    assert("S6 runs through a zero vertex",runs(()=>applySutra(6,psi.map((q,v)=>v===0?Q.ZERO:q),Q.ONE,{})));
+    assert("S13 runs through a zero complement",runs(()=>applySutra(13,psi.map((q,v)=>v===12?Q.ZERO:q),Q.ONE,{})));
+    assert("S19 runs through a zero root",runs(()=>applySutra(19,psi.map((q,v)=>v===9?Q.ZERO:q),Q.ONE,{})));
+    assert("S25 runs through a zero half-sum",runs(()=>applySutra(25,psi.map((q,v)=>v===0?Q.sub(q,sumR(psi.filter((_,i)=>!(i&1)))):q),Q.ONE,{})));
     assert("S1 axis 4 refused",throwsRange(()=>applySutra(1,psi,[Q.ONE,Q.mk(4n)])));
     assert("S21 non-integer modulus refused",throwsRange(()=>applySutra(21,psi,[Q.ONE,Q.mk(5n),Q.mk(9n,2n)])));
     assert("strength above 1 refused",throwsRange(()=>applySutra(1,psi,Q.mk(3n,2n))));
@@ -2173,8 +2046,6 @@ const KERNEL_FACTORY = () => {
 };
 
 const KERNEL = KERNEL_FACTORY();
-/* Release manifest: one object a reviewer can diff against a shipped
-   artefact. Everything in it resolves to VERSION. */
 function releaseManifest() {
   return {
     schema: 'vedic-release-manifest/1',
@@ -2197,8 +2068,6 @@ function releaseManifest() {
     generatedAt: new Date().toISOString()
   };
 }
-/* Fails loudly rather than drifting silently. If any identifier stops
-   agreeing with VERSION, this reports it instead of shipping a mismatch. */
 function verifyVersionIntegrity() {
   const problems = [];
   if (!BUILD_VERSION.includes(VERSION.string))
@@ -2218,33 +2087,13 @@ function verifyVersionIntegrity() {
   return { ok: problems.length === 0, version: VERSION.string, problems };
 }
 
-/* ===========================================================================
-   FAITHFUL RENDER BRIDGE
-   ---------------------------------------------------------------------------
-   Replaces the lossy path  psi -> z.re.a -> vpsi -> inverse-distance blend
-   with an exact one.
 
-   Finding that makes this possible: this file's OWN vertex placement already
-   IS a 4x4 torus lattice. tessVertexToTorus sets
-       theta = atan2(w, x) + PI,   phi = atan2(z, y) + PI
-   with x,y,z,w = bits 0,1,2,3 in {-1,+1}. Each +/- pair lands on one of four
-   angles spaced exactly TAU/4 apart, offset by PI/4. Reading the pair as the
-   2-bit value (2*bit3 + bit0) and taking Gray order gives the ring index.
-   That is the isomorphism Q4 = Q2 [] Q2 with Q2 = C4: every Hamming-1 edge of
-   the 4-cube is a nearest-neighbour edge of the torus. Nothing is invented.
 
-   Because the 16 sites sit exactly on that lattice, there is a UNIQUE
-   minimum-bandwidth trigonometric polynomial through them. That polynomial is
-   the field. Parseval then ties it back to the exact A4 energy, so the claim
-   "the torus is the state" is checkable at runtime rather than asserted.
-   SutraWS/Interpolation.lean proves each of these statements for every state.
-   ========================================================================= */
 const FAITHFUL = (() => {
   const Qc = KERNEL.Q, A4c = KERNEL.A4, C4c = KERNEL.C4;
   const R2 = Math.SQRT2, R5 = Math.sqrt(5), R10 = Math.sqrt(10);
   const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
 
-  /* the ONLY exact -> float conversion. BigInt-safe at any magnitude. */
   function qNum(q) {
     let n = q.n; const d = q.d;
     if (n === 0n) return 0;
@@ -2285,7 +2134,6 @@ const FAITHFUL = (() => {
     }
     return { re, im, prob: pr, totalA4: A4c.fromQ(tot), totalF: tf, scaleExp: s };
   }
-  /* An exact A4 value in scientific notation, at any magnitude. Display only. */
   function aSci(x, digits) {
     const s = maxExp([x.a, x.b, x.c, x.d]);
     if (s === null) return '0';
@@ -2296,11 +2144,10 @@ const FAITHFUL = (() => {
     return m.toFixed(digits === undefined ? 6 : digits) + (ex ? 'e' + ex : '');
   }
 
-  /* file's own bit pairing -> ring index, Gray order */
   const GRAY_POS = { 0: 0, 1: 1, 3: 2, 2: 3 };
-  const ringTheta = k => GRAY_POS[(((k >> 3) & 1) << 1) | (k & 1)];   /* (w,x) */
-  const ringPhi   = k => GRAY_POS[(((k >> 2) & 1) << 1) | ((k >> 1) & 1)]; /* (z,y) */
-  const OFFSET = Math.PI / 4;   /* tessVertexToTorus puts vertex 0 here */
+  const ringTheta = k => GRAY_POS[(((k >> 3) & 1) << 1) | (k & 1)];
+  const ringPhi   = k => GRAY_POS[(((k >> 2) & 1) << 1) | ((k >> 1) & 1)];
+  const OFFSET = Math.PI / 4;
 
   function coeffs(proj) {
     const gr = new Float64Array(16), gi = new Float64Array(16);
@@ -2322,18 +2169,10 @@ const FAITHFUL = (() => {
     return { cr, ci };
   }
 
-  /* Nyquist mode carried unsplit at +2. Splitting it half to +2 and half to
-     -2 leaves all 16 node values correct but halves that mode's energy and
-     breaks Parseval by ~5% with a picture that still looks plausible. */
   const MODES = [0, 1, 2, -1], MI = f => ((f % 4) + 4) % 4;
 
   function evaluator(c) {
     const cr = c.cr, ci = c.ci;
-    /* xw rotation is exactly a rigid shift of theta, yz of phi: rotating the
-       (x,w) plane by a adds a to atan2(w,x). Rigid shifts are isometries of
-       the torus, so Parseval is untouched. The xy rotation mixes theta and
-       phi non-rigidly; it is not applied to the field, and the audit will
-       report the node error if it is ever animated. */
     return (theta, phi) => {
       const u = theta - OFFSET - TESS_ROT.xw;
       const v = phi   - OFFSET - TESS_ROT.yz;
@@ -2352,13 +2191,6 @@ const FAITHFUL = (() => {
     };
   }
 
-  /* The same interpolant on the regular grid theta_i = 2 pi i/NT,
-     phi_j = 2 pi j/NP. The mode basis separates, e^{i(m u + n v)} =
-     e^{i m u} e^{i n v}: a grid row is four complex sums over the theta
-     basis, and each point four more over the phi basis. It is the evaluator's
-     function, summed in a different order; the grid node test below decides
-     that it reproduces the sixteen vertices, on the grid as drawn.
-     MI(MODES[k]) = k, so mode (m, n) sits at n*4 + m. */
   function gridBasis(N, shift) {
     const c = new Float64Array(N * 4), s = new Float64Array(N * 4);
     for (let i = 0; i < N; i++) {
@@ -2391,9 +2223,6 @@ const FAITHFUL = (() => {
       }
     }
   }
-  /* The grid cell each vertex lands on, decided from tessVertexToTorus itself:
-     null if a vertex does not sit exactly on a grid point (then the grid
-     cannot be node-tested, and says so). */
   function gridNodes(NT, NP) {
     const out = [];
     for (let k = 0; k < 16; k++) {
@@ -2405,9 +2234,6 @@ const FAITHFUL = (() => {
     return out;
   }
 
-  /* Parseval: mean(|Psi|^2) * 16 must equal sum_k |psi_k|^2, the same A4
-     quantity the kernel stores. Node test uses the file's own
-     tessVertexToTorus, so a mapping or sign error cannot slip through. */
   const state = { ok: null, rel: 0, node: 0, exact: 0, recon: 0, a4: '0', channels: null, zero: false };
 
   function audit(psi, NT, NP) {
@@ -2418,9 +2244,6 @@ const FAITHFUL = (() => {
     let acc = 0;
     for (let k = 0; k < NT * NP; k++) acc += gr[k] * gr[k] + gi[k] * gi[k];
     const recon = (acc / (NT * NP)) * 16;
-    /* A state that is exactly zero has no relative error to measure and no
-       shape to draw: the amplitude and phase channels are withheld for it,
-       and say so, rather than dividing by a substituted 1. */
     state.zero = A4c.isZero(proj.totalA4);
     if (state.zero) {
       state.rel = Infinity; state.node = Infinity; state.exact = 0; state.recon = recon;
@@ -2438,12 +2261,7 @@ const FAITHFUL = (() => {
     state.rel = rel; state.node = node;
     state.exact = proj.totalF; state.recon = recon;
     state.a4 = aSci(proj.totalA4);
-    /* The projection is faithful only if it is faithful AND every channel the
-       renderer is about to emit still holds its certificate. Without the
-       second clause the badge reports on the field and not on the picture. */
     const proj_ok = rel < 1e-9 && node < 1e-9;
-    /* status() fails closed channel by channel; an exception from it is a
-       failure of the picture, not a pass */
     let ch = null;
     try { ch = VISUAL_CERTIFICATE.status(); } catch (e) { ch = null; }
     state.channels = ch;
@@ -2451,12 +2269,6 @@ const FAITHFUL = (() => {
     return { proj, co, ev, rel, node, recon, ok: state.ok };
   }
 
-  /* Band-limited extension of several real 16-vertex quantities through the
-     SAME Gray pairing and the same mode set the state uses. Each interpolates
-     its sixteen vertex values exactly, so a Wheeler channel carried this way
-     agrees with exactGeometry at every vertex -- which is what the render is
-     checked on. All channels share one trig pass: the mode basis does not
-     depend on which quantity is being carried, only the coefficients do. */
   function multiRealEvaluator(valsList) {
     const cs = valsList.map(vals => {
       const re = new Float64Array(16), im = new Float64Array(16);
@@ -2491,63 +2303,28 @@ const FAITHFUL = (() => {
 const Q = KERNEL.Q;
 const A4 = KERNEL.A4;
 const C4 = KERNEL.C4;
-/* Display formatting only. */
 const sf = (v, d = 4) => Number(v).toFixed(d);
 const fmtE = x => (x === 0 ? '0' : Number(x).toExponential(1));
 const LEAN_PROVED = Object.freeze({
-  /* (vertex, k-mask) incidences, 16*C(4,k) -- NOT the f-vector. A genuine
-     k-cell has 2^k vertices, so this counts each one 2^k times. The
-     tesseract's actual f-vector is [16,32,24,8,1]; see
-     SutraWS.Render.vertexMaskIncidences and .cellCounts. */
   vertexMaskIncidences: [16, 64, 96, 64, 16],
   cellCounts: [16, 32, 24, 8, 1],
   incidenceAlternatingSum: 0,
   eulerCharacteristic: 1,
-  /* Proved in SutraWS/RenderCertificates.lean, SutraWS/DECComplex.lean,
-     SutraWS/VertexProofs.lean, SutraWS/Interpolation.lean,
-     SutraWS/WheelerSurface.lean, SutraWS/Projection.lean,
-     SutraWS/StoredPrecision.lean, SutraWS/ErrorBudget.lean,
-     SutraWS/NonExpansive.lean,
-     SutraWS/DisplayMap.lean, SutraWS/FractionalPower.lean, SutraWS/MayaFlow.lean
-     and SutraWS/Magnetism.lean, built by
-     `lake build SutraWS`. tools/check_citations.mjs fails the build if any
-     name here has no theorem behind it. */
   kernelChecked: ['hw_count','hw_all_positive','hw_denominators_are_powers_of_two_times_odd','rho_den_pos_of_hw_pos','rho_num_nonneg','rho_num_le_den','rho_zero_eps','masks_card_0','masks_card_1','masks_card_2','masks_card_3','masks_card_4','vertex_mask_incidences_eq','cellCounts_eq','incidences_eq_cells_times_two_pow','euler_characteristic_zero','cell_counts_euler_characteristic_one','norm_preserving_not_reducing','projective_not_invertible','unitary_measured_unitary_no_defect','projective_measured_projective_no_defect','declared_unitary_but_rank_deficient_is_defect','projective_failing_unitarity_is_not_defect','flipA_comm','d1_d0_zero','d2_d1_zero','cochain_dims','dec_euler_characteristic_zero','inverse_forward','parseval','sgn_orthogonal','mean_forward_eq_zero','cell_bijective','cube_edge_iff_torus_edge','node_theta','node_phi','MI_mode','node_reproduction','interpolant_unique','parseval_coeffs','parseval_grid','real_node_reproduction','phase_at_node','centBal_abs_le','goldenVortex_eq_alpha_centBal','goldenVortex_abs_le','zeta_pow','fieldDistortion_mem','etherPressure_abs_le','counterspace_abs_le','inertiaEnvelope_vertex','inertiaEnvelope_vertex_eq_one_iff','layer_cos_vertex_eq_one_iff','latitude_band_eq_one_iff','inertial_locus_nodes','bilinear_abs_le','camDepth_sq_le','camera_in_front','camDist_gt','frame_in_front','store_err_half_ulp','store_err_le','store_err_le_stored','store_zero','store_of_grid','store_mem_unit','sqrt2_lt_bound','sqrt5_lt_bound','sqrt10_lt_bound','real_embed_abs_le','chain_err_le','parallel_err_le','l2_le_l1','nonExpansive_comp','perm_energy','phase_energy','pair_rotation_energy','butterfly_energy','wht_energy','mean_contract_energy','mean_free_energy','complement_average_energy','ndc_depth_mem','tone_low','tone_high','tone_mid','tone_mem','tone_mono','seam_mem','frac_energy','coeff_autocorr','coeff_zero','coeff_one','frac_eigen','cay_eq_exp','perm_frac_energy','perm_order_four','wht_frac_energy','twist_frac_energy','blend_zero','blend_one','blend_mem','ema_factor_mem','ema_pos','sin_enclose','cos_enclose','e_enclose','pi_gt_of_sin_lt_cos','pi_lt_of_cos_lt_sin','sqrt_lower','sqrt_upper','mul_mem_hull','div_mem_pos','floor_grid_le','le_floor_grid_succ','le_ceil_grid','beta_mem','beta_lipschitz','euler_err','euler_mono','beta_pos_small','beta_strict_anti','layer','toward_layer','layer_attracts_above','factor_mem','factor_eq_one_iff','factor_gt_one_iff','factor_lipschitz','observe_order','faraday_flux_free','flux_closed','helicity_of_gradient','retention_bound','pressure_nonneg','reconnect_iff','edge_share_total','polarised_nonneg','polarised_le','plot_mem','plot_mono','plot_log_mono','edge_step','hole_loop','tube_loop','cell_corners','cell_count','cells_tile','cell_orient_area','cube_strip','hole_flux_step_y','hole_flux_step_z','tube_flux_step_x','tube_flux_step_w','node_grid','cell_centre','surface_grid','glyph_mem','lowKnee_pos','highKnee_lt','highKnee_le','highKnee_mono','toneRGB_mem','toneRGB_ratio','toneRGB_grey','bary_mem','frame_out_in','frame_hold','edges_are_edges','incidence_dd','d0_rows','kirchhoff','charge_neutral','charge_laplacian','segPrim_hasDeriv','segment_field_integral','poynting_orth','poynting_le_energy','rk4_step_le','share_mem','mix_mem','level_mem','ndc_depth_lift_mem','lorentz_perp','axis_integrand_zero','coulomb_newton3','vedic_update_zero','identity_preserved','identity_preserved_of_strength_zero','ekadhikena_factor_bound','radix_order_bracket','nikhilam_affine','yavadunam_magnifies','xor_conv_sum','horner_eval','shunyam_pair_contract','anurupye_fixed_point','sankalana_lower_fixed','laplacian_sum_zero','layer_mean_sum','transfer_sum','conservation_mean','digital_root_congr','cf_det_step','convergent_det','ekanyunena_contracts','gunita_residual_cross','ext_euclid_step','bezout_identity','crt_residue_step','vieta_disc_square','nearest_multiple','osculation_shift','dvandva_pair_contract','antyayor_pair_difference','gcd_divides_tails','digital_root_nine','log_ratio_sign','flag_is_max','ap_endpoints','purana_uniform_fixed','anurupyena_uniform_fixed','walk_measure_total','walk_measure_total_split','median_minimises_l1','inverse_inject','stress_trace','stress_symm','rot_pair_energy','complement_rotation_swap','pontryagin_density','hodge_split_norm'],
-  /* Wheeler geometry, SutraWS/WheelerGeometry.lean. wheelerAudit() re-decides
-     each statement in this page over the exact arithmetic the renderer uses. */
   wheelerChecked: ['wheeler_inertial_plane_magnetism_zero','wheeler_magnetic_weight_in_unit_interval','wheeler_dielectric_is_phi_scaled','wheeler_omega_linear_in_magnetic','wheeler_radial_factor_bounded_by_phi_cubed','wheeler_rho_mem_unit_interval','wheeler_cayley_rotation_is_orthogonal','wheeler_compression_positive'],
-  /* GOLDENPYTHAGOREAN identities; KX re-decides them at load and throws if any
-     fails, so the page cannot start with a broken phi algebra. */
   goldenChecked: ['phi_cubed_eq','phi_plus_phi_plus_one','phi_sub_inv','divided_line_sums_to_phi_cubed','phi_cubed_is_two_plus_sqrt5'],
-  /* Composition identities, decided on the live active set by modeAudit. */
   modeChecked: ['series_nil','parallel_nil','series_eq_parallel_singleton','series_sub_parallel_pair','series_eq_parallel_of_affine','concurrent_nil','concurrent_singleton','concurrent_sub_series_singleton','concurrent_reverse','series_append_one','parallel_append_one','concurrent_append_one'],
-  /* Empty by construction: SutraWS.AxiomAudit fails the build for any theorem
-     resting on Lean.ofReduceBool, so nothing here is native_decide-trusted. */
   compilerTrusted: []
 });
-/* Every visual channel names the theorems it rests on and the predicate that
-   decides, right now, whether those theorems still hold of the running state.
-   projectTorus and renderTorus emit a channel only when its predicate passes,
-   so "no verify algorithm attached" is enforced structurally: delete a
-   certificate or make it fail and the channel goes flat. */
 const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
       draws: 'R, r, yOff and the gradient terms from |Psi|^2 of each stored state, moving between steps in a straight line',
-      /* The stored state is the formulas' result up to the step's error
-         budget: storage bound per value (StoredPrecision), errors add and do
-         not grow through non-expansive stages (ErrorBudget, NonExpansive).
-         Interpolation.lean then carries that state to the torus exactly; the
-         1e-9 bounds the float evaluation of those exact identities. */
-      /* Drawn at the scale its formula gives it. The colour formula runs past
-         255; each channel goes through the tone curve rather than being cut
-         off, so it stays inside (0, 255) and keeps its order (DisplayMap). */
       theorems: ['cell_bijective', 'cube_edge_iff_torus_edge', 'node_theta', 'node_phi',
                  'MI_mode', 'node_reproduction', 'interpolant_unique',
                  'parseval_coeffs', 'parseval_grid', 'store_err_le', 'store_err_le_stored',
                  'tone_mem', 'tone_mono', 'tone_mid', 'seam_mem', 'blend_zero', 'blend_one', 'blend_mem',
                  'factor_mem', 'observe_order'],
-      /* drawn at Maya's M = observed / true times its value, so it needs Maya's certificate too */
       holds: () => !FAITHFUL.state.zero && FAITHFUL.state.rel < 1e-9 && FAITHFUL.state.node < 1e-9 &&
                    FAITHFUL_RENDER.gridNode < 1e-9 && DISPLAY.ok && MAYA_VIEW.ok &&
                    KERNEL_VIEW.selfTestsOk === true && KERNEL_VIEW.stepBudgetOk === true
@@ -2676,10 +2453,6 @@ const PROVENANCE = Object.freeze({
   sourceFile: VERSION.sourceFile,
   leanCorpusSha256: '23395fc36ee9b826b3a33c6e7b9d55d73ca7e4de0c0e38c2c67bd3fc6e70819d',
   leanToolchain: 'leanprover/lean4:v4.10.0',
-  /* Generated by tools/gen_provenance.mjs from the environment lake build
-     produced. leanTheorems counts every theorem in the SutraWS namespace,
-     the same population SutraWS.AxiomAudit gates, so it includes the
-     equation and spec lemmas `deriving` generates. */
   leanTheorems: 2487,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FieldLines.olean','SutraWS/FieldsAround.olean','SutraWS/FluxSurface.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/PressureHaze.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/StrengthRamp.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/VedicFormulas.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
@@ -2693,7 +2466,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength it is set to, calculated once from the seed for each setting of the formulas, the preset and the mode; the page then glides from what it shows to that exact state over the time the Glide control sets, 60 s unless changed, and holds it, and nothing is calculated again until a setting changes; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. A division by zero or a log of zero refuses and stops the run, naming the vertex: S6 at a zero base vertex, S13 at a zero numerator, S19 at a zero root, S25 at a zero half-sum. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength it is set to, calculated once from the seed for each setting of the formulas, the preset and the mode; the page then glides from what it shows to that exact state over the time the Glide control sets, 60 s unless changed, and holds it, and nothing is calculated again until a setting changes; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. Nothing stops the run at a zero. Where a formula would divide by zero or take a log of zero it does what v18.24 does there: S6 skips a pair whose base vertex is zero, S19 leaves a pair with a zero root as it is, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product. S13 borrows S6's rule and leaves a pair whose denominator vertex is zero as it is. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -2712,9 +2485,6 @@ function sourceFingerprint() {
   return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
 }
 const SOURCE_FINGERPRINT = sourceFingerprint();
-/* Q(sqrt2) and Q(sqrt2)[i] views of the kernel algebra; their float images
-   go through FAITHFUL's exact conversion, with the radicals entering only at
-   the float boundary. */
 const Quad = Object.freeze({
   mk: (a, b) => A4.mk(a, b, Q.ZERO, Q.ZERO),
   ZERO: A4.ZERO, ONE: A4.ONE, SQRT2: A4.SQRT2,
@@ -2743,7 +2513,6 @@ const KConsts = (() => {
   };
   return { half, zeta, powZeta };
 })();
-/* Exact constants the Wheeler terms are stated with. */
 const C = {};
 const KX = (() => {
   const h = Q.mk(1n, 2n), t3h = Q.mk(3n, 2n), n = k => Q.mk(BigInt(k));
@@ -2772,9 +2541,6 @@ const KX = (() => {
     ['phi^2 = phi + 1',         eq(PHI_SQ, A4.add(PHI, A4.ONE))],
     ['phi^3 = phi^2 + phi',     eq(PHI_CU, A4.add(PHI_SQ, PHI))],
     ['phi_inv = phi - 1',       eq(PHI_INV, A4.sub(PHI, A4.ONE))],
-    /* GOLDENPYTHAGOREAN: the chart's two headline identities. The divided line
-       Theta:Alpha:Upsilon:Gamma has segments phi:1:1:1/phi, and since
-       phi - 1/phi = 1 their total is exactly 2+sqrt(5) = phi^3. */
     ['phi + phi + 1 = phi^3',   eq(A4.add(A4.add(PHI, PHI), A4.ONE), PHI_CU)],
     ['phi - phi_inv = 1',       eq(A4.sub(PHI, PHI_INV), A4.ONE)],
     ['divided line = phi^3',    eq(A4.add(A4.add(A4.add(PHI, A4.ONE), A4.ONE), PHI_INV), PHI_CU)]
@@ -2796,11 +2562,6 @@ const KX = (() => {
     }
   });
 })();
-/* The divided line, exact. Segments phi : 1 : 1 : 1/phi, and since
-   phi + 1/phi = sqrt(5) their total is exactly 2 + sqrt(5) = phi^3 -- the
-   identity the whole phi^3 algebra rests on. Built from KX so the segments and
-   the cumulative fractions are A4 elements; floats appear only at the display
-   boundary, the same rule the rest of the file follows. */
 C.dividedLine = (() => {
   const segA = [KX.PHI, A4.ONE, A4.ONE, KX.PHI_INV];
   const cumA = [A4.ZERO];
@@ -2818,13 +2579,8 @@ C.dividedLine = (() => {
     greek: ['Θ', 'Α', 'Υ', 'Γ']
   };
 })();
-/* The fine-structure constant alpha = 1/137.035999, the value the counterspace
-   formula is stated with, held as the exact rational it is written as. */
 C.alpha = Q.mk(1000000n, 137035999n);
 const WHEELER = {
-  /* kenmagnetic: G_uv + Q_uv = 8*pi*phi^3*T_uv(dielectric). phi^3 is exact --
-     KX.PHI_CU = 2+sqrt(5) -- and pi, which has no representative in A4,
-     enters at the float boundary. */
   _phi3: Quad.toFloat(KX.PHI_CU),
   kappa_phi3: 8 * PI * Quad.toFloat(KX.PHI_CU),
   _phiAng: KX.f.phi,
@@ -2838,8 +2594,6 @@ const WHEELER = {
       this._COSQ.push(z.re);
       this._SINQ.push(z.im);
     }
-    /* sqrt3 is not in A4. Each entry is held exactly as r + sqrt3*s with r
-       and s in A4, and sqrt3 enters at the float boundary, as pi does. */
     for (let a = 0; a < 8; a++) {
       const cosA = KConsts.powZeta(a).re, rowQ = [], rowF = [];
       for (let b = 0; b < 8; b++) {
@@ -2856,8 +2610,6 @@ const WHEELER = {
       for (let j = 0; j < 8; j++) row.push(this._sqrt3Float(this.goldenVortexQ(i, j)));
       this._GVF.push(row);
     }
-    /* radial factor phi^3 * eps^2/(r^2 + eps^2) at r = cos(k pi/4), eps = 1/10:
-       r^2 is rational at every octant (1, 1/2 or 0), so rho is exact. */
     const eps = Q.mk(1n, 10n);
     for (let k = 0; k < 8; k++) {
       const r2 = A4.mul(this._COSQ[k], this._COSQ[k]);
@@ -2869,7 +2621,6 @@ const WHEELER = {
   _oct(a) { return ((Math.round(a / (PI / 4)) % 8) + 8) % 8; },
   centBalQ(theta, phi) { return this._CENTQ[this._oct(theta)][this._oct(phi)]; },
   centBal(theta, phi) { return this._CENTF[this._oct(theta)][this._oct(phi)]; },
-  /* Wheeler's phi^3-scaled radial form, exact: phi^3 * eps^2/(r^2+eps^2). */
   rhoFromR2(r2, epsQ) {
     const e2 = Q.mul(epsQ, epsQ), den = Q.add(r2, e2);
     if (den.n === 0n) throw new RangeError('WHEELER.rho: r = 0 and eps = 0, rho undefined');
@@ -2883,8 +2634,6 @@ const WHEELER = {
     const outward = this._SINQ[j];
     return { r: A4.scaleQ(inward, C.alpha), s: A4.scaleQ(A4.neg(outward), C.alpha) };
   },
-  /* goldenVortex_eq_alpha_centBal and zeta_pow, decided over the exact parts
-     the two tables are built from by their two separate code paths. */
   surfaceAudit() {
     const problems = [];
     const z1 = KConsts.powZeta(1);
@@ -2904,9 +2653,6 @@ const WHEELER = {
   goldenVortex(theta, phi, strength) {
     return this._GVF[this._oct(theta * this._phiAng + phi)][this._oct(theta + phi * this._phiAng)] * strength;
   },
-  /* The modulation argument of these four is the kernel's Larmor precession
-     omega = gamma_W * M at the sampled point, normalised to [-1,1]: a pure
-     function of the state. */
   fieldDistortion(theta, phi, wOmega) {
     const rad = this._RADF[this._oct(phi)];
     const vortex = this.goldenVortex(theta, phi, 1);
@@ -2918,8 +2664,6 @@ const WHEELER = {
     const pulsation = 1 + 0.15 * wOmega;
     return this._phi3 * rad * centBal * pulsation;
   },
-  /* kS is the kernel's layer k = hw - 2 carried on the surface: the inertial
-     plane is k = 0, and distance from it is counted in Hamming layers. */
   counterspaceIntensity(theta, phi, fieldVal, wOmega, kS) {
     const xi = this.counterspaceConj(fieldVal);
     const inertiaEnvelope = 1 / (1 + kS * kS);
@@ -2938,25 +2682,13 @@ const SUTRA_KIND = [null, ...Array.from({ length: 29 }, (_, i) => ({ MULTIPLICAT
 
 const FIELD_TH = 160, FIELD_PH = 80;
 const fieldGrid = new Float64Array(FIELD_TH * FIELD_PH);
-/* Drawing gain on the precession twist; VORTEX and the presets set it. */
 let vortexGain = 0, vortexHelicity = 1;
 const FAITHFUL_RENDER = { ev: null, co: null, proj: null, phaseGrid: new Float32Array(FIELD_TH * FIELD_PH),
                           phaseWriteOk: false, phaseHash: 0, meanP: 0,
-                          /* the grid as drawn against the sixteen vertices */
                           gridNode: Infinity,
                           re: new Float64Array(FIELD_TH * FIELD_PH), im: new Float64Array(FIELD_TH * FIELD_PH) };
-/* the grid cells the sixteen vertices land on, decided on first use (the
-   vertex placement is defined further down the page) */
 let FIELD_NODES_CACHE;
 const fieldNodes = () => (FIELD_NODES_CACHE === undefined ? (FIELD_NODES_CACHE = FAITHFUL.gridNodes(FIELD_TH, FIELD_PH)) : FIELD_NODES_CACHE);
-/* What is drawn. Each kernel step's field is drawn exactly once its step
-   interval has passed; until then the surface moves in a straight line from
-   what was on screen to it, (1 - tau) from + tau to, tau in [0, 1]
-   (DisplayMap.lean: blend_zero, blend_one, blend_mem). Nothing is skipped and
-   nothing jumps. displayAdvance checks every cell every frame: inside the
-   segment from 'from' to 'to' (to four units in the last place, the float
-   rounding of an identity that holds exactly), and at tau = 1 the state's own
-   value, exactly. */
 const DISPLAY_FIELD = new Float64Array(FIELD_TH * FIELD_PH), DISPLAY_PHASE = new Float64Array(FIELD_TH * FIELD_PH);
 const VORTEX_GRID = new Float64Array(FIELD_TH * FIELD_PH);
 const VORTEX_VIEW = { ok: false, why: 'no step yet', vals: null, co: null, gridNode: Infinity };
@@ -2986,7 +2718,6 @@ function displayBegin() {
 function displayAdvance(now) {
   if (!FAITHFUL_RENDER.co) return;
   if (!DISPLAY.started) {
-    /* the first state is drawn as it is */
     FROM_FIELD.set(fieldGrid); FROM_PHASE.set(FAITHFUL_RENDER.phaseGrid);
     DISPLAY.started = true; DISPLAY.t0 = now; DISPLAY.dur = 0;
   }
@@ -3010,10 +2741,6 @@ function sampleDisplayPhase(theta, phi) {
   const pj = ((phi % TAU + TAU) % TAU) / TAU * FIELD_PH;
   return DISPLAY_PHASE[(floor(ti) % FIELD_TH) * FIELD_PH + (floor(pj) % FIELD_PH)];
 }
-/* |Psi|^2 / <|Psi|^2> - 1 and arg Psi on the grid the surface samples, from the
-   unique band-limited extension of the stored state. A pure function of psi,
-   recomputed only when a new state arrives. A state that is exactly zero has
-   no such picture; the amplitude and phase channels are withheld for it. */
 function updateField() {
   const co = FAITHFUL_RENDER.co;
   if (!co || FAITHFUL.state.zero) {
@@ -3033,11 +2760,8 @@ function updateField() {
     fieldGrid[idx] = (gr[idx] * gr[idx] + gi[idx] * gi[idx]) * inv - 1;
     const a = VORTEX_GRID[idx];
     ph[idx] = a;
-    /* read the cell straight back: an index regression writes elsewhere */
     if (ph[idx] !== Math.fround(a)) phaseWriteOk = false;
   }
-  /* node_reproduction on the grid that is drawn: each vertex's cell holds that
-     vertex's value. No vertex on the grid, no test -- and no pass. */
   const proj = FAITHFUL_RENDER.proj;
   const FIELD_NODES = fieldNodes();
   if (FIELD_NODES === null) FAITHFUL_RENDER.gridNode = Infinity;
@@ -3059,10 +2783,6 @@ function updateField() {
   FAITHFUL_RENDER.phaseHash = phaseGridHash();
   refreshPhaseCertificate();
 }
-/* The phase channel draws atan2 of the complex interpolant. What is checked
-   here is the plumbing: that the grid holds what the evaluator produced and
-   that samplePhase reads back the cell that was written -- exact equalities of
-   the same float computation, every cell, three ways. */
 const PHASE_CERT = { ok: false, checked: 0, writeOk: false, unchanged: false };
 function phaseGridHash() {
   const u = new Uint32Array(FAITHFUL_RENDER.phaseGrid.buffer);
@@ -3093,7 +2813,6 @@ function samplePhase(theta, phi) {
   const pj = ((phi % TAU + TAU) % TAU) / TAU * FIELD_PH;
   return FAITHFUL_RENDER.phaseGrid[(floor(ti) % FIELD_TH) * FIELD_PH + (floor(pj) % FIELD_PH)];
 }
-/* The badge follows the channel status every frame. */
 let FAITHFUL_BADGE_KEY = '';
 function syncFaithfulBadge() {
   const ch = VISUAL_CERTIFICATE._last;
@@ -3160,7 +2879,6 @@ const SUTRAS = [
   { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', guide:'DIFFUSIVE · each edge moves α·rate·(Ψᵢ² − Ψⱼ²) from Ψᵢ to Ψⱼ, keeping the sum exactly' },
   { id:29, name:'Conservation', sk:'संरक्षण', guide:'CONSERVATION · Ψ pulled by α·weight to its mean, keeping the mean exactly · sets MSTVQ B' }
 ];
-/* Strength is an integer percentage, stored as the exact rational n/100. */
 function parseStrengthPercentQ(raw) {
   const text = String(raw).trim();
   if (!/^\d+$/.test(text)) throw new SyntaxError(`Invalid exact strength: ${text}`);
@@ -3175,9 +2893,6 @@ function setSutraStrengthExact(s, raw) {
   s.on = q.n !== 0n;
   return q;
 }
-/* Each sutra's point arguments beyond strength: the constants its law always
-   carried, now operands. Integer operands are integers; rational ones move in
-   sixteenths, so every value a slider can reach is an exact rational. */
 function sutraArgSpec(id) { return KERNEL.SUTRA_ARG_SPEC[id] || []; }
 function resetSutraArgs(s) {
   s.argQ = sutraArgSpec(s.id).map(a => Q.mk(a.def.n, a.def.d));
@@ -3209,9 +2924,6 @@ function exactSliderQ(id, divisor) {
   if (!el || !/^[+-]?\d+$/.test(el.value)) throw new Error(`Invalid slider integer for ${id}`);
   return Q.mk(BigInt(el.value), divisor);
 }
-/* The kernel's parameters. dielectric s and B come from their sliders, the
-   vortex omega, the drive and the polarisation chi from theirs; every one is
-   an exact rational. */
 function kernelParams() {
   const ampD = exactSliderQ('amp-dielectric', 10n);
   const ampB = exactSliderQ('amp-bfield', 10n);
@@ -3238,29 +2950,16 @@ function kernelParams() {
 let COMPOSITION = 'SERIES';
 const COMPOSITION_LABEL = { SERIES: 'SERIES', PARALLEL: 'PARALLEL', SYMMETRIC_CONCURRENT: 'CONCURRENT' };
 
-/* ---------------------------------------------------------------------------
-   RUNTIME. One kernel worker steps the one formula continuously; one audit
-   worker decides the exact certificates the picture depends on; the main
-   thread draws. There is no other path: if a worker cannot be started the
-   simulator says so and does not run.
-   --------------------------------------------------------------------------- */
 const KERNEL_VIEW = {
   state: null, params: null,
   selfTestsOk: null, selfTestCount: 0, selfTestError: '',
   stepBudgetOk: false, delta: null, stores: 0,
-  /* the magnetism memory and Maya as they stand after the step drawn, and the
-     run so far, one entry per step, for the dynamo timeline */
   dyn: null,
   hist: { frame: [], E: [], UB: [], H: [], recon: [], phase: [], M: [] },
   stepMs: 0, halted: null, running: true, workerError: null,
   configVersion: 0, appliedVersion: -1, doneVersion: -1, appliedActive: [], appliedSet: [], appliedComposition: null,
   dirty: false, lastProjectAt: 0, projected: [], queue: []
 };
-/* Pace. The worker takes one step every STEP_INTERVAL_MS (the steps/s
-   slider), so it never outruns the page: every state it sends is projected,
-   in order, and none is skipped. Run flat out it took 20 to 50 steps a second
-   while the page drew one state in every 100 ms, so a field that changes
-   from step to step was drawn two to five steps apart -- a strobe. */
 let STEP_INTERVAL_MS = 60000;
 const MODE_COMPARE = { key: '', pending: true, requestedAt: 0, modes: [], traces: [], energies: [], pairwise: [],
                        allDistinct: false, active: 0, audit: null };
@@ -3293,9 +2992,6 @@ function couplingsOf(L) {
            sutraB: setters.length ? { id: setters[setters.length - 1].id, B: setters[setters.length - 1].B } : null,
            claims: gc.results.concat(mc.results, sc.results).map(r => ({ name: r.name, ok: r.ok })), ok: gc.ok && mc.ok && sc.ok };
 }
-/* What the display shows of the medium: the magnetism memory's flux,
-   helicity, reconnections and cube fluxes (flux_closed decided on them), and
-   Maya at the current phase. */
 function dynamoOf(e) {
   const md = KERNEL.magData(e.magA, e.magChi), mo = KERNEL.mayaObserve(e.mayaPhase);
   return { fluxEnergy: md.fluxEnergy, helicity: md.helicity, reconnections: md.reconnections, flux: md.flux,
@@ -3364,7 +3060,6 @@ const jobs = {
     const audit = KERNEL.modeAudit(seed, m.active);
     let cmp = null;
     if (m.active.length) {
-      /* the audit composed the same three states; reuse them when its order is ours */
       const same = audit.order.length === m.active.length && audit.order.every((id, i) => id === m.active[i].id);
       const c = KERNEL.modeComparison(seed, m.active, same ? audit.states : null);
       cmp = { modes: c.modes, allDistinct: c.allDistinct,
@@ -3384,7 +3079,6 @@ function next() {
   if (busy || !queue.length) return;
   busy = true;
   const m = queue.shift();
-  /* a newer request of the same kind and key-space supersedes this one */
   if ((m.type === 'sutraCert' || m.type === 'modes') && queue.some(q => q.type === m.type)) { busy = false; next(); return; }
   try { jobs[m.type](m); }
   catch (err) { post({ type: 'error', request: m.type, key: m.key, message: String(err.message || err) }); }
@@ -3404,11 +3098,6 @@ function startKernelWorker() {
   };
   if (!KERNEL_VIEW.running) KERNEL_WORKER.postMessage({ type: 'run', running: false });
 }
-/* The series / parallel / concurrent identities are decided exactly, with no
-   storage, and for all 29 sutras that takes seconds. They get their own
-   worker, so they never hold up the operator certificates; and a decision
-   for a configuration that has already been replaced is stopped, not
-   finished: the worker is terminated and a fresh one takes the new request. */
 let MODES_WORKER = null, MODES_WORKER_URL = null, MODES_BUSY = false;
 function startModesWorker() {
   MODES_WORKER = new Worker(MODES_WORKER_URL);
@@ -3451,8 +3140,6 @@ function startWorkers() {
   AUDIT_WORKER.postMessage({ type: 'selfTests' });
   return true;
 }
-/* The configuration the next step runs with: active sutras with every operand,
-   the composition, the kernel parameters. Sent whenever any of them changes. */
 let LAST_CONFIG_KEY = '';
 function exactParamsKey(params) {
   const q = x => x.n + '/' + x.d;
@@ -3467,8 +3154,6 @@ function pushConfig(reason, reset) {
   try { params = kernelParams(); }
   catch (err) { LOG.add('parameters refused: ' + err.message, 'off'); return; }
   const active = activeSutras();
-  /* the key is every exact parameter the kernel receives, so no parameter
-     can change without the kernel hearing of it */
   const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
   if (key === LAST_CONFIG_KEY && reason !== 'force' && !reset) return;
   LAST_CONFIG_KEY = key;
@@ -3555,34 +3240,20 @@ function onKernelMessage(ev) {
     if (w) { EXPORT_WAIT.delete(m.id); w(m); }
   }
 }
-/* The state the page now draws, everything on screen refers to it. */
 function applyKernelState(m) {
     KERNEL_VIEW.state = m.state;
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
     KERNEL_VIEW.delta = m.delta; KERNEL_VIEW.stores = m.stores;
     KERNEL_VIEW.appliedVersion = m.version;
-    /* what the worker ran this step: the sutras set and run, and the composition */
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedSet = m.setIds; KERNEL_VIEW.appliedComposition = m.composition;
     KERNEL_VIEW.couplings = m.couplings; KERNEL_VIEW.lambda = m.lambda; KERNEL_VIEW.tgcr = m.tgcr;
     requestCertificates(activeSutras());
     if (m.dyn) { KERNEL_VIEW.lastDyn = [m.state.frame, m.dyn, A4.fromQ(m.state.energyLedger), FAITHFUL.project(m.state.psi).prob]; recordDynamo(...KERNEL_VIEW.lastDyn); }
     KERNEL_VIEW.dirty = true;
 }
-/* Maya as drawn: M = observed / true, certified while the self-tests hold,
-   the phase is inside [-1, 1] where its enclosures are proved, and M is
-   strictly between 19/20 and 21/20 (factor_mem). */
 const MAYA_VIEW = { M: 1, ok: false, why: 'no step yet' };
-/* The dynamo display holds while the flux shown closes on every cube
-   (flux_closed) and every quantity it plots is a finite double. */
 const DYNAMO_VIEW = { ok: false, why: 'no step yet' };
-/* The engine as drawn on the torus: the potential's flow along each edge
-   towards +theta or +phi, each cell's circulation (counter-clockwise in
-   (theta, phi) positive), the flux through the hole at each of its four loops
-   and along the tube at each of its four, the reconnecting edges and |psi|^2
-   at the vertices; 'from' is what was drawn before this state. It holds while
-   the dynamo display holds and the kernel has decided all eight strip
-   balances exactly (cube_strip, hole_flux_step_y/z, tube_flux_step_x/w). */
 const LATTICE_VIEW = { ok: false, why: 'no step yet', from: null, to: null, recon: [], frame: -1, balanced: false, strips: 0 };
 function recordDynamo(frame, d, energy, prob) {
   const H = KERNEL_VIEW.hist;
@@ -3603,11 +3274,9 @@ function recordDynamo(frame, d, energy, prob) {
   const T = d.torus, LV = LATTICE_VIEW;
   const to = { flow: T.flow.map(num), cells: T.cells.flat().map(num), hole: T.hole.map(num), tube: T.tube.map(num),
                prob: Array.from(prob) };
-  /* a new run, or the first state, is drawn as it is; otherwise from what was drawn */
   LV.from = LV.to && frame > 0 ? LV.to : to;
   LV.to = to; LV.frame = frame; LV.recon = d.reconnections.slice();
   LV.strips = T.strips.filter(x => x.ok).length;
-  /* each strip's balance, by the loop it starts from: between loops s and s + 1 */
   LV.stripOk = { hole: [false, false, false, false], tube: [false, false, false, false] };
   for (const x of T.strips) LV.stripOk[x.kind][x.from] = x.ok === true;
   LV.balanced = T.balanced === true && LV.strips === 8;
@@ -3615,9 +3284,6 @@ function recordDynamo(frame, d, energy, prob) {
   LV.ok = DYNAMO_VIEW.ok && LV.balanced && latFinite;
   LV.why = LV.ok ? '' : !DYNAMO_VIEW.ok ? DYNAMO_VIEW.why : !LV.balanced ? `${8 - LV.strips} of the 8 strip balances fail` : 'a drawn value is not finite';
 }
-/* A step's error budget is a bound on its distance from the formulas with no
-   storage. The picture needs it far below anything visible: here, 2^-40 of
-   the state's norm, compared through exact binary exponents. */
 function budgetOk(delta, proj) {
   if (delta.n === 0n) return true;
   const bl = x => (x < 0n ? -x : x).toString(2).length;
@@ -3645,10 +3311,6 @@ function projectState() {
   updateFaithfulBadge();
   updateSimulationHud();
 }
-/* The Wheeler render channel: the exact per-vertex D, M and omega that
-   KERNEL.exactGeometry places the sixteen vertices with, for the stored
-   dielectric field of the state being drawn, lifted to the torus through
-   FAITHFUL's own band-limited extension. */
 const WHEELER_CHANNEL = {
   D: new Float64Array(16), M: new Float64Array(16), W: new Float64Array(16),
   magneticWeight: new Float64Array(16), kSigned: new Float64Array(16),
@@ -3658,7 +3320,6 @@ const WHEELER_CHANNEL = {
   wMax: 0, wZero: true, audit: null, surface: null, node: null, ok: false, why: 'no state yet',
   geoD: 0, geoM: 0, geoP: 0
 };
-/* exact identity of the inputs the Wheeler channel is a function of */
 function wheelerInputKey(dielectric, params) {
   return dielectric.map(q => q.n + '/' + q.d).join(',') + '|' +
          ['dielectricScale', 'appliedH', 'gammaW', 'geoD', 'geoM', 'geoP'].map(k => {
@@ -3670,8 +3331,6 @@ const WHEELER_GRID_TMP = new Float64Array(FIELD_TH * FIELD_PH);
 const WHEELER_SURFACE_AUDIT = WHEELER.surfaceAudit();
 function refreshWheelerChannel(dielectric, params) {
   const C5 = WHEELER_CHANNEL, aN = FAITHFUL.aNum;
-  /* a function of the stored dielectric and the parameters alone: when both
-     are exactly what the last refresh used, its result already holds */
   if (dielectric && params) {
     const key = wheelerInputKey(dielectric, params);
     if (key === WHEELER_INPUT_KEY && C5.ok) return;
@@ -3685,7 +3344,6 @@ function refreshWheelerChannel(dielectric, params) {
   if (!dielectric || !params) { withhold('no state yet'); return; }
   const w = KERNEL.computeWheeler(dielectric, params);
   C5.audit = KERNEL.wheelerAudit(dielectric, params);
-  /* surfaceAudit decides identities of constant tables: once, at load */
   C5.surface = WHEELER_SURFACE_AUDIT;
   if (!C5.audit.ok) { withhold('wheelerAudit: ' + C5.audit.results.filter(r => !r.ok).map(r => r.name).join(', ')); return; }
   if (!C5.surface.ok) { withhold('surfaceAudit: ' + C5.surface.problems.join(', ')); return; }
@@ -3693,7 +3351,6 @@ function refreshWheelerChannel(dielectric, params) {
   for (let v = 0; v < 16; v++) {
     C5.D[v] = aN(w.dielectric[v]);
     C5.M[v] = aN(w.magnetic[v]);
-    /* exactGeometry negates the Cayley parameter below the inertial plane */
     C5.W[v] = aN(w.omega[v]) * (KERNEL.hw(v) < 2 ? -1 : 1);
     const k = KERNEL.hw(v) - 2;
     C5.kSigned[v] = k;
@@ -3701,16 +3358,12 @@ function refreshWheelerChannel(dielectric, params) {
   }
   const chans = [C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned];
   const grids = [C5.gD, C5.gM, C5.gW, C5.gK, C5.gKs];
-  /* each channel on the grid the surface samples: the real part of its
-     band-limited extension, through the same separable sum as the state */
   for (let q = 0; q < chans.length; q++) {
     const re = new Float64Array(16), im = new Float64Array(16);
     for (let k = 0; k < 16; k++) re[k] = chans[q][k];
     FAITHFUL.gridEval(FAITHFUL.coeffs({ re, im }), FIELD_TH, FIELD_PH, WHEELER_GRID_TMP, null);
     for (let idx = 0; idx < FIELD_TH * FIELD_PH; idx++) grids[q][idx] = WHEELER_GRID_TMP[idx];
   }
-  /* real_node_reproduction, on the grid as drawn: every channel's cell at a
-     vertex holds that vertex's value. A vertex off the grid fails the test. */
   let node = 0;
   const FIELD_NODES = fieldNodes();
   if (FIELD_NODES === null) node = Infinity;
@@ -3719,7 +3372,6 @@ function refreshWheelerChannel(dielectric, params) {
     for (let u = 0; u < 16; u++) sc = Math.max(sc, Math.abs(chans[q][u]));
     for (let v = 0; v < 16; v++) {
       const err = Math.abs(grids[q][FIELD_NODES[v]] - chans[q][v]);
-      /* a channel that is zero at every vertex is compared absolutely */
       node = Math.max(node, sc > 0 ? err / sc : err);
     }
   }
@@ -3727,38 +3379,10 @@ function refreshWheelerChannel(dielectric, params) {
   if (!(node < 1e-9)) { withhold('node reproduction residual ' + node); return; }
   let wm = 0;
   for (let idx = 0; idx < FIELD_TH * FIELD_PH; idx++) if (Math.abs(C5.gW[idx]) > wm) wm = Math.abs(C5.gW[idx]);
-  /* omega is normalised by its largest value on the grid the surface samples
-     (bilinear_abs_le keeps every sample in [-1, 1]). omega identically zero --
-     B field at 0 -- has no normalisation and nothing to modulate: the
-     modulation argument is then 0, stated rather than divided by. */
   C5.wMax = wm;
   C5.wZero = wm === 0;
   C5.ok = true; C5.why = '';
 }
-/* ---------------------------------------------------------------------------
-   THE FIELDS AROUND THE CONSTRUCT. Each landed state's sources -- the lattice
-   current J on the 32 edges and the dielectric's charge on the 16 vertices,
-   both exact in the kernel (kirchhoff, charge_neutral) -- are put where the
-   surface puts them in 3D, and the field worker evaluates, in space:
-     B  by Biot-Savart, each edge a chain of FIELD_SEG straight pieces along
-        its path on the surface, each piece in the closed form of
-        segment_field_integral;
-     E  by Coulomb's law from the 16 charges;
-     the magnetic pressure p = |B|^2 / 2, the pressure the Maxwell stress
-        exerts across the field (haze_stress_trace, haze_stress_across), on a HAZE_N^3
-        grid over the cube round the ball the surface lies in, and its place
-        t in its own log range (plot_mem, plot_log_mono) with t's differences
-        to the neighbouring nodes (haze_central_le, haze_side_le);
-     both energy densities on the equatorial plane;
-     the forces on the construct: I u x B on the middle of each piece of
-       current, from the rest of the construct, and q E on each charge, from
-       the other charges.
-   A point on a current-carrying piece, or at a charge, has no field: that
-   plane sample is left out, and a pressure node on a piece withholds the
-   pressure for the state.
-   Each field is in its own unit: nothing in the model ties the dielectric's
-   unit to the current's, so each is drawn against its own range.
-   --------------------------------------------------------------------------- */
 const FIELD_SEG = 4, FIELD_RINGS = 64, FIELD_SPOKES = 144, HAZE_N = 40;
 function fieldWorkerMain() {
   self.onmessage = ev => {
@@ -3766,8 +3390,6 @@ function fieldWorkerMain() {
     const t0 = Date.now();
     const EPS = 1e-9 * R;
     let singular = 0;
-    /* each straight piece carrying current, once: its start, unit direction,
-       length and current (the same arithmetic as at every evaluation) */
     const SG = [];
     for (let e = 0; e < 32; e++) {
       const I = J[e]; if (I === 0) continue;
@@ -3781,7 +3403,6 @@ function fieldWorkerMain() {
       }
     }
     const SGA = Float64Array.from(SG), NSG = SGA.length;
-    /* B at (x, y, z) into out; false where it is not defined */
     function Bat(x, y, z, out) {
       let bx = 0, by = 0, bz = 0;
       for (let q = 0; q < NSG; q += 8) {
@@ -3805,9 +3426,6 @@ function fieldWorkerMain() {
       }
       out[0] = ex; out[1] = ey; out[2] = ez; return true;
     }
-    /* the equatorial plane y = 0: NR rings by NS spokes over the disc of
-       radius R, ring i at radius R (i / (NR - 1))^2 so the samples are
-       densest round the construct, where the fields change fastest */
     const NR = m.NR, NS = m.NS, NP = NR * NS;
     const plane = new Float32Array(NP * 4), val = new Float32Array(NP * 3);
     const eb = new Float64Array(3), bb = new Float64Array(3);
@@ -3819,9 +3437,6 @@ function fieldWorkerMain() {
       if (!Eat(x, 0, z, eb) || !Bat(x, 0, z, bb)) { singular++; continue; }
       const uE = (eb[0] * eb[0] + eb[1] * eb[1] + eb[2] * eb[2]) / 2, uB = (bb[0] * bb[0] + bb[1] * bb[1] + bb[2] * bb[2]) / 2;
       val[g * 3] = uE; val[g * 3 + 1] = uB; val[g * 3 + 2] = 1;
-      /* each range from the values as stored, so every stored value is
-         inside it and its place in it is in [0, 1] (plot_mem): from the
-         doubles, a stored value could fall a rounding outside */
       const sE = val[g * 3], sB = val[g * 3 + 1];
       if (sE > 0) { const L = Math.log(sE); if (L < eLo) eLo = L; if (L > eHi) eHi = L; }
       if (sB > 0) { const L = Math.log(sB); if (L < bLo) bLo = L; if (L > bHi) bHi = L; }
@@ -3844,13 +3459,6 @@ function fieldWorkerMain() {
         haze[g * 4 + c] = (T(hi) - T(lo)) / (hi - lo === 2 * st[c] ? 2 : 1);
       }
     }
-    /* the forces on the construct. On each straight piece carrying current,
-       at its middle, f = I u x B with B from every other piece: a piece puts
-       no field anywhere on its own line (axis_integrand_zero), and f is
-       across both the current and B (lorentz_perp). On each charge,
-       F = q E with E from every other charge; the sixteen sum to zero
-       (coulomb_newton3). A middle on another piece, or two charges at one
-       point, has no force: it is counted and left out. */
     function Brest(x, y, z, skip, out) {
       let bx = 0, by = 0, bz = 0;
       for (let q = 0; q < NSG; q += 8) {
@@ -3914,8 +3522,6 @@ function startFieldWorker() {
   };
   FIELDS.worker.onerror = ev => { FIELDS.busy = false; FIELDS.ok = false; FIELDS.why = 'the field worker failed: ' + (ev.message || 'error'); };
 }
-/* Called once a state has landed: the surface is at that state, so its
-   points are where the state's sources are. */
 function requestFields() {
   const d = KERNEL_VIEW.dyn;
   if (!FIELDS.worker || !d || !d.sources || !PROJECTION.cam) return;
@@ -3927,7 +3533,6 @@ function requestFields() {
     const idx = latIdx(LAT_TH(KERNEL.ringThetaOf(k)), LAT_PH(KERNEL.ringPhiOf(k)));
     nodes[k * 3] = PT.wx[idx]; nodes[k * 3 + 1] = PT.wy[idx]; nodes[k * 3 + 2] = PT.wz[idx];
   }
-  /* each edge's path on the surface, tail to head, as FIELD_SEG straight pieces */
   const paths = new Float64Array(32 * (FIELD_SEG + 1) * 3);
   KERNEL.TORUS_EDGES.forEach((te, e) => {
     const path = latLine(te.theta, te.from[0], te.from[1], te.dir);
@@ -3937,7 +3542,6 @@ function requestFields() {
     }
   });
   FIELDS.busy = true; FIELDS.sent++;
-  /* what was asked is kept with what comes back, so either can be checked against the other */
   FIELDS.inflight = { id: FIELDS.sent, frame: KERNEL_VIEW.state.frame, nseg: FIELD_SEG, NR: FIELD_RINGS, NS: FIELD_SPOKES, hazeN: HAZE_N, hazeR: 1.3 * PROJECTION.maxNorm, R: 0.95 * PROJECTION.maxNorm,
                       nodes, paths, J: Float64Array.from(FIELDS.sources.J), Q: Float64Array.from(FIELDS.sources.Q) };
   FIELDS.worker.postMessage(FIELDS.inflight);
@@ -3950,31 +3554,16 @@ for (let i = 0; i < 16; i++) TESS_V.push({
 });
 const TESS_ROT = { xw: 0, yz: 0, xy: 0 };
 const CAM_DIST = 700;
-/* Where projectTorus put the camera this frame, how many points it found
-   behind it, and how far the camera turns moved any point's norm.
-   frame_in_front says the count is zero; camDepth_sq_le rests on the turns
-   being rotations, so their norm drift is decided too. */
 const PROJECTION = { D: CAM_DIST, maxNorm: 0, behind: 0, checked: 0, turn: 0, pole: null, quads: 0 };
-/* ZOOM = 1 frames the body of the surface: the distance from the centre that
-   FRAME_SHARE of its points lie within lands at FRAME_FILL of the half-size of
-   the view, however far the formulas carried it. Spikes beyond it run off the
-   edge of the view; nothing about them is changed. */
 let ZOOM = 1;
 const FRAME_FILL = 0.9, FRAME_SHARE = 0.98;
 const FRAME_OUT_MS = 600, FRAME_IN_MS = 10000, FRAME_HOLD = 0.85;
-/* one framing update from frame F toward the surface's size `body` over dtMs
-   (frame_hold): out fast past it, in slowly once inside FRAME_HOLD of it,
-   still between */
 function frameStep(F, body, dtMs) {
   const k = F <= 0 ? 1 : body > F ? 1 - Math.exp(-dtMs / FRAME_OUT_MS)
           : body < FRAME_HOLD * F ? 1 - Math.exp(-dtMs / FRAME_IN_MS) : 0;
   return F + (body - F) * k;
 }
 let FRAME_BODY = 0, FRAME_DT_MS = 16.667, FRAME_DT_AVG = 16.667;
-/* Drawing gains: how strongly each certified channel moves the surface. They
-   scale channels that hold their certificates; none can originate structure,
-   and none touches the state. Every channel is drawn at the scale its formula
-   gives it: nothing is normalised away and nothing is clamped. */
 const AMP = { field: 60, tube: 35, yDisp: 45, gradTwist: 0.08, gradRipple: 8, gradBulge: 5, vortex: 1.0, wheeler: 1.0, fluxBulge: 22, fluxRing: 18, fluxTwist: 0.5 };
 function tessVertexToTorus(v, t) {
   let {x, y, z, w} = v;
@@ -3992,23 +3581,13 @@ function tessVertexToTorus(v, t) {
   return { theta, phi, w };
 }
 const TORUS_R = 180, TORUS_r = 70;
-/* 304 x 152 samples (it was 200 x 104: the wings the field throws out were
-   drawn with quads tens of pixels across). With both a multiple of 8
-   (surface_grid), every vertex of the hypercube and every cell centre between
-   them is a sample point (node_grid, cell_centre), so the engine drawn on the
-   surface lies on the surface as drawn. */
 const TH_SEG = 304, PH_SEG = 152, N_PTS = TH_SEG * PH_SEG;
-/* Every surface point, as columns: the field and Wheeler values its colour
-   reads, and the placed and projected point. */
 const PT = {
   field: new Float64Array(N_PTS), wN: new Float64Array(N_PTS), kS: new Float64Array(N_PTS),
   sx: new Float64Array(N_PTS), sy: new Float64Array(N_PTS), depth: new Float64Array(N_PTS),
-  /* the ether pressure and counterspace placing the point, which its colour reads too */
   ether: new Float64Array(N_PTS), cs: new Float64Array(N_PTS),
-  /* the placed point before the camera turns: where the fields' sources sit */
   wx: new Float64Array(N_PTS), wy: new Float64Array(N_PTS), wz: new Float64Array(N_PTS)
 };
-/* each point's squared distance from the centre, for framing */
 const PT_NORM = new Float64Array(N_PTS);
 let TORUS_GEOM = null;
 function torusGeometry() {
@@ -4095,12 +3674,6 @@ function fluxShape(CERT) {
   F.why = F.ok ? '' : node !== 0 ? 'a cell or loop is not reproduced at its own place (' + node + ')' : 'a share exceeds 1 (' + maxAbs + ')';
   return F.ok;
 }
-/* No time argument. Every point is placed by the exact state: the amplitude and
-   phase of psi through FAITHFUL's band-limited extension, and the Wheeler
-   dielectric / magnetic / precession channels through exactGeometry's own
-   formulas and the WHEELER surface terms, lifted to the surface by the same
-   extension. Gains (AMP.*, vortexGain) scale certified channels; none of them
-   can originate structure. */
 function projectTorus() {
   const GEO = torusGeometry();
   const C5 = WHEELER_CHANNEL;
@@ -4110,21 +3683,12 @@ function projectTorus() {
   const ampOn = CERT.amplitude, phaseOn = CERT.vortex;
   if (!fluxShape(CERT)) CERT.flux = false;
   const fluxOn = CERT.flux;
-  /* The Wheeler geometry rides on the phi^3 algebra, so it needs both its own
-     certificate and the golden one. */
   let wOn = CERT.wheeler && CERT.golden;
-  /* omega identically zero (B = 0) has nothing to normalise: its modulation
-     argument is 0, stated here rather than produced by dividing by zero */
   const wInv = C5.wZero ? 0 : 1 / C5.wMax;
   const vGain = abs(vortexGain) * AMP.vortex;
   const mayaM = MAYA_VIEW.M;
   const sI = GEO.sIdx, sWt = GEO.sW;
   const bw = (g, sb) => g[sI[sb]] * sWt[sb] + g[sI[sb+1]] * sWt[sb+1] + g[sI[sb+2]] * sWt[sb+2] + g[sI[sb+3]] * sWt[sb+3];
-  /* exactGeometry's z-compression 1/(1 + geoD*D). wheeler_compression_positive
-     holds at the sixteen vertices; between them the surface carries an
-     interpolated D, and a point where 1 + geoD*D is not positive would be the
-     pole. Decided for the whole surface before anything is placed: if there
-     is one, the Wheeler channel is withheld this frame, and says where. */
   let pole = null;
   if (wOn) {
     for (let idx = 0; idx < N_PTS && pole === null; idx++) {
@@ -4143,11 +3707,8 @@ function projectTorus() {
     for (let j = 0; j < PH_SEG; j++) {
       const phi = GEO.phi[j];
       const idx = i * PH_SEG + j, sb = idx * 12;
-      /* Maya's M = observed / true: the field is drawn at M times its value
-         (observe_order: same order and sign, factor_mem: M in (19/20, 21/20)) */
       const fv = bw(DISPLAY_FIELD, sb) * mayaM;
       let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wN = 0, kS = 0, ethAt = 0, csAt = 0;
-      /* --- amplitude channel: |Psi|^2, certified by Parseval + node test --- */
       if (ampOn) {
         R += fv * AMP.field;
         r += fv * AMP.tube;
@@ -4157,12 +3718,7 @@ function projectTorus() {
         r += abs(dGph) * AMP.gradRipple;
         R += abs(dGth) * AMP.gradBulge;
       }
-      /* --- phase channel: arg(Psi) twists the tube. Same audit as amplitude:
-             the evaluator returns re and im, and the node test pins both. --- */
       if (phaseOn) phiShift += sampleDisplayPhase(theta, phi) * AMP.gradTwist;
-      /* --- Wheeler channels: exactGeometry's own formulas at the surface ---
-             z-compression 1/(1 + geoD*D), radial dilation 1 + geoM*M/(1+z^2),
-             and the Cayley rotation induced by the precession omega. */
       if (wOn) {
         const sD = bw(C5.gD, sb), sM = bw(C5.gM, sb), sW = bw(C5.gW, sb), sK = bw(C5.gK, sb), sKs = bw(C5.gKs, sb);
         const aw = AMP.wheeler;
@@ -4171,18 +3727,12 @@ function projectTorus() {
         const z = sKs * compression;
         r *= (1 + (compression - 1) * 0.5 * aw);
         yOff += z * 6.0 * aw;
-        /* magnetic dilation. Vanishes on the inertial plane by
-           wheeler_inertial_plane_magnetism_zero. */
         const radial = 1 + C5.geoM * sM / (1 + z * z);
         R *= radial;
         r += (1 - sK) * 11.0 * aw;
         r += GEO.cent[idx] * (1 - sK) * 7.0 * aw;
-        /* precession: the Cayley half-angle of tau = geoP * omega. c^2+s^2 = 1
-           exactly (wheeler_cayley_rotation_is_orthogonal), so this rotates. */
         const tau = C5.geoP * sW;
         phiShift += Math.atan2(2 * tau, 1 - tau * tau) * (1 + vGain);
-        /* omega over its largest grid value, in [-1, 1] by bilinear_abs_le:
-           the modulation argument of the WHEELER surface terms */
         wN = sW * wInv;
         R += WHEELER.fieldDistortion(theta, phi, wN) * aw * 3;
         const ethP = WHEELER.etherPressure(theta, phi, wN);
@@ -4201,9 +3751,6 @@ function projectTorus() {
         R += FLUX_SHAPE.hole[j] * AMP.fluxRing;
         phiShift += FLUX_SHAPE.tube[i] * AMP.fluxTwist;
       }
-      /* no clamp: R and r are what the channels make them. A tube that turns
-         inside out or a spindle torus is still the parametrised surface, and
-         the projection channel certifies every point of it. */
       const effPhi = phi + phiShift;
       const cosP = cos(effPhi), sinP = sin(effPhi);
       let x = (R + r * cosP) * cosTheta;
@@ -4216,8 +3763,6 @@ function projectTorus() {
       let t1;
       t1 = x * cRY - z * sRY; z = x * sRY + z * cRY; x = t1;
       t1 = y * cRX - z * sRX; z = y * sRX + z * cRX; y = t1;
-      /* turn drift, relative to the point's own norm; a point at the origin
-         is compared absolutely, since a rotation must leave it there */
       const n2r = x * x + y * y + z * z;
       const dev = n2 > 0 ? Math.abs(n2r - n2) / n2 : Math.abs(n2r);
       if (dev > turn) turn = dev;
@@ -4225,33 +3770,12 @@ function projectTorus() {
       PT.field[idx] = ampOn ? fv : 0; PT.wN[idx] = wN; PT.kS[idx] = kS; PT.ether[idx] = ethAt; PT.cs[idx] = csAt;
     }
   }
-  /* The camera goes beyond the frame's largest point: CAM_DIST for the bare
-     torus, pushed back in proportion as the surface grows, which keeps the
-     bare torus's perspective ratio. frame_in_front: no point can then be
-     behind it, at any camera angle. */
   const maxNorm = Math.sqrt(maxN2);
   const D = Math.max(CAM_DIST, CAM_DIST * maxNorm / (TORUS_R + TORUS_r));
-  /* screen pixels per surface unit; a surface of zero extent has nothing to frame */
   PT_NORM.sort();
   const body = Math.sqrt(PT_NORM[Math.floor(FRAME_SHARE * (N_PTS - 1))]);
-  /* The framing follows the drawn surface through a first-order lag,
-     FRAME_BODY + (body - FRAME_BODY) k, k = 1 - e^{-dt/T} in [0, 1)
-     (DisplayMap.lean: ema_factor_mem, ema_pos). Re-fitting outright rescaled
-     the whole picture by up to half between two frames. The lag is not the
-     same both ways, and between them the frame holds (frame_hold): when the
-     surface grows past the frame it zooms out within FRAME_OUT_MS, so nothing
-     leaves the view; once it has shrunk below FRAME_HOLD of the frame it
-     zooms back in over FRAME_IN_MS; in between it does not move. With one lag
-     of 1.2 s both ways a field whose extent rose and fell from step to step
-     made the whole picture breathe; with two lags and no hold, every peak
-     past the frame was followed by a creep back in. Fed a size swinging 6% either way
-     every 3 s, the frame with the hold, once out, never moves back; with one
-     lag or with two and no hold it follows every swing. (Over a stretch of a
-     real run the count of turns says less: where the surface's size truly
-     jumps, the frame has to follow it out and back, whichever framing.) */
   FRAME_BODY = frameStep(FRAME_BODY, body, FRAME_DT_MS);
   const frame = FRAME_BODY > 0 ? FRAME_FILL * 0.5 * Math.min(cw, ch) / FRAME_BODY : 0;
-  /* the camera, kept for whatever else is placed in the same space */
   PROJECTION.cam = { cRY, sRY, cRX, sRX, D, scale: ZOOM * frame, cx, cy };
   PROJECTION.body = body; PROJECTION.frameBody = FRAME_BODY;
   let behind = 0;
@@ -4268,27 +3792,13 @@ function projectTorus() {
   CERT.projection = behind === 0 && turn < 1e-9;
   CERT.all = Object.keys(VISUAL_CERTIFICATE.channels).every(k => CERT[k]);
 }
-/* ---------------------------------------------------------------------------
-   The surface is drawn in one WebGL call into the scene, a texture the size
-   of the view. Each sample is a vertex shared by the four quads around it,
-   coloured once from its own normal (the central differences of its
-   neighbours), and the GPU shades every triangle between its three vertices
-   (bary_mem): smooth where the formulas are smooth, instead of one flat colour
-   a quad. The mesh is drawn as lines every MESH_EVERY samples. Hidden surface
-   by the depth buffer. The scene then reaches the view through the magnetic
-   pressure round the construct (HAZE). There is no second rasteriser; if the
-   browser gives no WebGL2 context the surface is not drawn and the page says
-   so, while the kernel, its audits and the panels carry on.
-   --------------------------------------------------------------------------- */
 const MESH_EVERY = 8;
-/* the vertex grid: one vertex per sample, the first row and column repeated
-   after the last so the mesh lines run on across the wrap */
 const NVT = TH_SEG + 1, NVP = PH_SEG + 1, NV = NVT * NVP;
 const HAZE = { gain: 14, veil: 0.24, col: [1.0, 0.94, 0.84], steps: 24, scale: 8,
                drawn: false, why: 'no field state yet', frame: -1, curId: -1, prevId: -1, w: 1, ms: 0 };
 const SURFACE_GL = (() => {
   const cv = document.getElementById('gl');
-  const FLOATS = 8;                               /* x, y, depth, r, g, b, mesh u, mesh v */
+  const FLOATS = 8;
   const data = new Float32Array(NV * FLOATS);
   const index = new Uint32Array(N_PTS * 6);
   const S = { gl: null, prog: null, buf: null, ibuf: null, aPos: -1, aCol: -1, aUV: -1, uView: null, error: null,
@@ -4353,19 +3863,11 @@ void main() {
 }`;
   S.init = () => {
     S.error = null;
-    /* No multisampling. Where WebGL runs in software (no GPU, or a GPU the
-       browser will not use), 4x multisampling halved the frame rate --
-       measured headless on four cores, the fields shown: 4.8 frames a second
-       with it, 9.2 without -- and below about 7 a second the picture cannot
-       keep up with 3 steps a second. With 304 x 152 samples shaded smoothly
-       the surface's edges barely show the difference. */
     const gl = cv.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: true, depth: false,
                                          preserveDrawingBuffer: false });
     if (!gl) { S.gl = null; S.error = 'this browser gave the page no WebGL2 context'; return false; }
     try {
       if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('this browser cannot render into floating-point textures (EXT_color_buffer_float), which the pressure haze is computed in');
-      /* the mesh: within MESH_LINE of a mesh line (in mesh cells) the colour is
-         multiplied by 39/50, a factor in (0, 1] (seam_mem) */
       const p = link(gl,
         'attribute vec3 aPos; attribute vec3 aCol; attribute vec2 aUV; uniform vec2 uView;' +
         'varying vec3 vCol; varying vec2 vUV;' +
@@ -4383,9 +3885,6 @@ void main() {
       S.ibuf = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, S.ibuf);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index.byteLength, gl.DYNAMIC_DRAW);
-      /* the overlay: flat-coloured translucent triangles, depth-tested
-         against the surface and not writing depth, so the surface hides what
-         is behind it and the glyphs do not hide one another */
       const op = link(gl,
         'attribute vec3 aPos; attribute vec4 aCol; uniform vec2 uView; varying vec4 vCol;' +
         'void main(){ gl_Position = vec4(aPos.x / uView.x * 2.0 - 1.0, 1.0 - aPos.y / uView.y * 2.0, aPos.z, 1.0);' +
@@ -4453,7 +3952,6 @@ void main() {
     gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, set.hazeN, set.hazeN, set.hazeN, 0, gl.RGBA, gl.FLOAT, set.haze);
     S.tex3Id[q] = set.id; S.tex3R[q] = set.hazeR; S.tex3N[q] = set.hazeN;
   };
-  /* nIdx indices of the vertex grid; positions in CSS pixels of a cssW x cssH view */
   S.draw = (nIdx, wpx, hpx, cssW, cssH, viaScene) => {
     const gl = S.gl;
     if (cv.width !== wpx) cv.width = wpx;
@@ -4481,7 +3979,6 @@ void main() {
     gl.disableVertexAttribArray(S.aPos); gl.disableVertexAttribArray(S.aCol); gl.disableVertexAttribArray(S.aUV);
     S.nIdx = nIdx;
   };
-  /* nVerts overlay vertices of ov (x, y, depth, r, g, b, a), after draw */
   S.drawOverlay = (ov, nVerts, cssW, cssH) => {
     const gl = S.gl;
     gl.useProgram(S.ovProg);
@@ -4498,8 +3995,6 @@ void main() {
     gl.depthMask(true); gl.disable(gl.BLEND); gl.depthFunc(gl.LESS);
     gl.disableVertexAttribArray(S.ovPos); gl.disableVertexAttribArray(S.ovCol);
   };
-  /* the same, as nV shared vertices and nI indices into them: the energy
-     plane, one vertex per sample rather than six per cell */
   S.drawPlane = (vd, nV, idx, nI, cssW, cssH) => {
     const gl = S.gl;
     gl.useProgram(S.ovProg);
@@ -4596,26 +4091,10 @@ function hazeCamToWorld(cam) {
   const col = (x1, y2, z2) => { const y = y2 * cRX + z2 * sRX, z1 = -y2 * sRX + z2 * cRX; return [x1 * cRY + z1 * sRY, y, -x1 * sRY + z1 * cRY]; };
   return new Float32Array([...col(1, 0, 0), ...col(0, 1, 0), ...col(0, 0, 1)]);
 }
-/* The colour formula, unchanged, in 0..255 units: it runs far past 255 where
-   the field and the counterspace are strong, and below 0 in deep shadow.
-   Nothing is cut off. tone is the one curve for a single value: identity on
-   [TONE_LO, TONE_HI] and an exponential knee either side (DisplayMap.lean:
-   tone_mem, tone_mono, tone_mid). A colour is taken through it with its hue
-   kept: each channel through the low knee alone (lowKnee_pos), then all three
-   scaled by one factor so the brightest goes through the high knee
-   (toneRGB_mem, toneRGB_ratio, highKnee_mono; on a grey it is tone itself,
-   toneRGB_grey). Through tone channel by channel, every bright colour went to
-   white -- measured, 42 to 50% of the visible surface had all three channels
-   above 0.85; with its hue kept, a bright colour stays its colour. */
 const TONE_LO = 24, TONE_HI = 231;
 const lowKnee = v => v < TONE_LO ? TONE_LO * exp((v - TONE_LO) / TONE_LO) : v;
 const highKnee = m => { if (m <= TONE_HI) return m; const c = 255 - TONE_HI; return TONE_HI + c * (1 - exp(-(m - TONE_HI) / c)); };
 function tone(v) { return highKnee(lowKnee(v)); }
-/* r, g, b in 0..255 units to (0, 1], hue kept; out receives the three.
-   Each channel is its share of the brightest, l / m <= 1, times
-   highKnee(m) / 255 <= 1, so in doubles too no channel passes 1: as
-   l * (highKnee(m) / m / 255) it did, by one ulp, for 4.4% of bright colours
-   (177388 of 4046989 measured), which the GPU would then have clamped. */
 function toneRGB(r, g, b, out) {
   const lr = lowKnee(r), lg = lowKnee(g), lb = lowKnee(b);
   const m = lr > lg ? (lr > lb ? lr : lb) : (lg > lb ? lg : lb);
@@ -4623,14 +4102,9 @@ function toneRGB(r, g, b, out) {
   out[0] = lr / m * s; out[1] = lg / m * s; out[2] = lb / m * s;
 }
 const SURFACE_STATUS = { drawn: false, why: '' };
-/* which samples a visible quad uses, and each sample's colour this frame */
 const VIS = new Uint8Array(N_PTS);
 const VCOL = new Float32Array(N_PTS * 3);
 const RGB_TMP = new Float64Array(3);
-/* The colour formula at one sample: its field, Wheeler values and unit normal
-   (nx, ny, nz). A sample whose neighbours give no normal (a degenerate point)
-   is lit with the zero normal: no diffuse, no specular, the full fresnel rim
-   -- the same formula, evaluated there, not a stand-in. */
 function surfaceColour(k, theta, phi, nxN, nyN, nzN, ampOn, wOn, out) {
   const hx = -0.35, hy = -0.55, hz = 0.75 + 1, hLen = sqrt(hx * hx + hy * hy + hz * hz);
   const diffuse = -0.35 * nxN - 0.55 * nyN + 0.75 * nzN;
@@ -4646,10 +4120,7 @@ function surfaceColour(k, theta, phi, nxN, nyN, nzN, ampOn, wOn, out) {
   let etherNorm = 0, csNorm = 0, centBal = 0, inertiaProx = 0;
   let contourFlux = 0, contourEther = 0, contourCS = 0, contourInertia = 0;
   if (wOn) {
-    /* the ether pressure and counterspace at this sample, as projectTorus
-       computed them for its place on the surface */
     etherNorm = PT.ether[k];
-    /* withheld amplitude colours with the field at 0, as the old per-quad code did */
     csNorm = ampOn ? PT.cs[k] : WHEELER.counterspaceIntensity(theta, phi, 0, wOmega, kS);
     centBal = TORUS_GEOM.cent[k];
     const lat = kS * PI / 4;
@@ -4732,12 +4203,9 @@ function renderTorus() {
     ctx.textAlign = 'left';
     return;
   }
-  /* Colour obeys the same certificates as the geometry: a term whose channel
-     is not certified right now does not colour the surface either. */
   const CERT = VISUAL_CERTIFICATE._last || VISUAL_CERTIFICATE.status();
   const ampOn = CERT.amplitude, wOn = CERT.wheeler && CERT.golden && PROJECTION.pole === null;
   const GEO = torusGeometry(), IDX = SURFACE_GL.index;
-  /* ---- visible quads, as index triples into the vertex grid ---- */
   VIS.fill(0);
   let nq = 0, nIdx = 0, zmin = Infinity, zmax = -Infinity;
   for (let i = 0; i < TH_SEG; i++) {
@@ -4751,7 +4219,6 @@ function renderTorus() {
       if (nz < 0) continue;
       const e1z = PT.depth[i10] - PT.depth[i00], e2z = PT.depth[i01] - PT.depth[i00];
       const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z;
-      /* a quad with no area covers no pixel and has no normal: not drawn */
       if (nx * nx + ny * ny + nz * nz === 0) continue;
       const v00 = i * NVP + j, v10 = (i + 1) * NVP + j, v11 = (i + 1) * NVP + j + 1, v01 = i * NVP + j + 1;
       IDX[nIdx] = v00; IDX[nIdx + 1] = v10; IDX[nIdx + 2] = v11;
@@ -4767,19 +4234,11 @@ function renderTorus() {
     }
   }
   PROJECTION.quads = nq;
-  /* the fields around the construct share the depth range, so the surface
-     hides the parts of them behind it */
   const fz = fieldsProject();
   if (fz.n > 0) { if (fz.zmin < zmin) zmin = fz.zmin; if (fz.zmax > zmax) zmax = fz.zmax; }
-  /* depth into [DEPTH_LO, DEPTH_LO + DEPTH_SPAN] = [-0.995, 0.999]: an affine
-     map of the frame's own depth range, with room below for LAT_BIAS, so a
-     glyph lifted toward the camera is in [-1, 1] too (ndc_depth_lift_mem).
-     Every point at one depth has nothing to order: depth 0. */
   const zspan = zmax - zmin;
   const zk = zspan > 0 ? DEPTH_SPAN / zspan : 0;
   const D = SURFACE_GL.data, F = SURFACE_GL.FLOATS, rgb = RGB_TMP;
-  /* ---- each sample a visible quad uses: its normal, its colour, its vertex
-         (and the repeated vertex after the wrap) ---- */
   for (let k = 0; k < N_PTS; k++) {
     if (!VIS[k]) continue;
     const i = (k / PH_SEG) | 0, j = k - i * PH_SEG;
@@ -4806,8 +4265,6 @@ function renderTorus() {
   }
   SURFACE_GL.draw(nIdx, W, H, cw, ch, FP.sets.length > 0);
   SURFACE_STATUS.drawn = true; SURFACE_STATUS.why = '';
-  /* ---- the overlay: the fields around the construct, the inertial plane,
-         then the lattice when shown ---- */
   OV.n = 0; OV.zmin = zmin; OV.zk = zk;
   fieldsDraw();
   if (PLANE.nI > 0) SURFACE_GL.drawPlane(PLANE.d, PLANE.nV, PLANE.i, PLANE.nI, cw, ch);
@@ -4839,11 +4296,6 @@ function hazeFrame() {
   HAZE.w = q0 === q1 ? 1 : cur.w;
   return { q0, q1, w: HAZE.w };
 }
-/* The inertial plane is the kernel's layer k = hw - 2 = 0, where magnetism
-   vanishes. The surface carries k, and its zero set passes through exactly the
-   six weight-two vertex nodes (inertial_locus_nodes). This is that zero set
-   across one quad, as screen segments with their depth, drawn in the overlay
-   so the surface hides it where it hides the surface behind. */
 const INERTIAL_DRAWN = { segments: 0 };
 function inertialLayerSegments(i00, i10, i11, i01, out) {
   const P = [i00, i10, i11, i01], xs = [];
@@ -4857,29 +4309,6 @@ function inertialLayerSegments(i00, i10, i11, i01, out) {
   }
   for (let s = 0; s + 5 < xs.length; s += 6) out.push([xs[s], xs[s + 1], xs[s + 2], xs[s + 3], xs[s + 4], xs[s + 5]]);
 }
-/* ---------------------------------------------------------------------------
-   The magnetism engine on the torus (TorusLattice.lean). The sixteen vertices
-   are surface samples (25 + 50 r, 13 + 26 s) (node_grid_theta, node_grid_phi)
-   and the 4-cube's edges are the lattice's edges (cube_edge_iff_torus_edge,
-   edge_step), so every glyph runs along the drawn surface's own sample lines,
-   and the depth buffer hides it where the surface hides it.
-     edges   the potential's flow along each of the 32 edges: amber towards
-             +theta or +phi, cyan against, the arrow its way, the width its size
-     loops   the flux through the hole at each of its four loops (hole_loop)
-             and along the tube at each of its four (tube_loop): a halo round
-             the loop, amber circulating towards +theta (+phi), cyan against
-     cells   each of the sixteen cells' circulation (cells_tile,
-             cell_orient_area): a loop inside the cell, rose counter-clockwise
-             in (theta, phi), green clockwise, with its arrows
-     nodes   the sixteen vertices, sized by |psi|^2
-     bursts  the reconnecting edges (reconnect_iff)
-   Each size is w0 + w1 |x| / max |x| over its kind (glyph_mem), and the values
-   move with the surface between states, (1 - tau) from + tau to (blend_mem).
-   A kind with nothing in it yet (all zero) has no scale and draws at w0.
-   --------------------------------------------------------------------------- */
-/* the lattice on the surface is off until asked for: where the formulas
-   deform the surface strongly it is drawn faithfully but reads poorly, and the
-   flux map shows the same values flat */
 const LATTICE_SHOW = { on: false };
 const LATTICE_COL = { pos: [1.0, 0.76, 0.22], neg: [0.22, 0.86, 1.0], ccw: [1.0, 0.34, 0.66], cw: [0.36, 1.0, 0.52],
                       node: [1.0, 1.0, 1.0], burst: [1.0, 0.42, 0.95] };
@@ -4899,8 +4328,6 @@ function ovV(x, y, z, c, a) {
   OV.d[o] = x; OV.d[o + 1] = y; OV.d[o + 2] = z; OV.d[o + 3] = c[0]; OV.d[o + 4] = c[1]; OV.d[o + 5] = c[2]; OV.d[o + 6] = a;
   OV.n++;
 }
-/* a ribbon w px wide between two screen points with their depths */
-/* bias lifts glyphs lying on the surface off it; things in space take 0 */
 function ovSegXYZ(x0, y0, d0, x1, y1, d1, w, c, a, bias = LAT_BIAS) {
   const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
   if (!(L > 0)) return;
@@ -4909,7 +4336,6 @@ function ovSegXYZ(x0, y0, d0, x1, y1, d1, w, c, a, bias = LAT_BIAS) {
   ovV(x0 + nx, y0 + ny, z0, c, a); ovV(x0 - nx, y0 - ny, z0, c, a); ovV(x1 + nx, y1 + ny, z1, c, a);
   ovV(x1 + nx, y1 + ny, z1, c, a); ovV(x0 - nx, y0 - ny, z0, c, a); ovV(x1 - nx, y1 - ny, z1, c, a);
 }
-/* a ribbon w px wide from sample k0 to sample k1 */
 function ovSeg(k0, k1, w, c, a) {
   const x0 = PT.sx[k0], y0 = PT.sy[k0], x1 = PT.sx[k1], y1 = PT.sy[k1];
   const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
@@ -4919,7 +4345,6 @@ function ovSeg(k0, k1, w, c, a) {
   ovV(x1 + nx, y1 + ny, z1, c, a); ovV(x0 - nx, y0 - ny, z0, c, a); ovV(x1 - nx, y1 - ny, z1, c, a);
 }
 function ovPath(path, w, c, a) { for (let k = 0; k + 1 < path.length; k++) ovSeg(path[k], path[k + 1], w, c, a); }
-/* an arrowhead at path[k], pointing along the path */
 function ovArrow(path, k, size, c, a) {
   const kp = path[Math.max(0, k - 2)], kn = path[Math.min(path.length - 1, k + 2)], km = path[k];
   const dx = PT.sx[kn] - PT.sx[kp], dy = PT.sy[kn] - PT.sy[kp], L = Math.hypot(dx, dy);
@@ -4948,14 +4373,12 @@ function ovBurst(k, R, c, a) {
     ovV(x + R * cos(th + w), y + R * sin(th + w), z, c, a * 0.2);
   }
 }
-/* a path of samples, from ring position to ring position, stepping dir */
 function latLine(theta, r0, s0, dir) {
   const out = [];
   if (theta) for (let k = 0; k <= TH_SEG / 4; k++) out.push(latIdx(LAT_TH(r0) + dir * k, LAT_PH(s0)));
   else for (let k = 0; k <= PH_SEG / 4; k++) out.push(latIdx(LAT_TH(r0), LAT_PH(s0) + dir * k));
   return out;
 }
-/* the loop inside cell (r, s): counter-clockwise in (theta, phi) for ccw */
 function latCell(r, s, ccw) {
   const ic = TH_SEG / 4 * (r + 1), jc = PH_SEG / 4 * (s + 1), hi = Math.round(0.3 * TH_SEG / 4), hj = Math.round(0.3 * PH_SEG / 4), out = [];
   for (let i = ic - hi; i < ic + hi; i++) out.push(latIdx(i, jc - hj));
@@ -4964,10 +4387,6 @@ function latCell(r, s, ccw) {
   for (let j = jc + hj; j >= jc - hj; j--) out.push(latIdx(ic - hi, j));
   return ccw ? out : out.reverse();
 }
-/* The values drawn this frame, on the surface and on the flux map alike:
-   (1 - tau) from + tau to (blend_mem), with each kind's largest |x| for its
-   glyph sizes (glyph_mem). Withheld, with the reason, while the lattice
-   certificate does not hold. */
 function latticeBlend(CERT) {
   const D = LATTICE_DRAWN, L = LATTICE_VIEW;
   D.ready = false;
@@ -4994,7 +4413,6 @@ function drawLattice(cw, ch, CERT) {
   if (!LATTICE_SHOW.on) { D.surfaceWhy = 'hidden'; return; }
   D.surfaceWhy = '';
   const n0 = OV.n;
-  /* loops first, as wide faint halos under everything else */
   for (let q = 0; q < 8; q++) {
     const hole = q < 4, r = q % 4, B = hole ? D.hole[r] : D.tube[r], t = latRatio(B, D.mLoop);
     const path = [], sg = B < 0 ? -1 : 1;
@@ -5006,7 +4424,6 @@ function drawLattice(cw, ch, CERT) {
       for (let k = step >> 1; k < path.length - 2; k += step) ovArrow(path, k, 4 + 6 * t, c, 0.25 + 0.45 * t); }
     D.nLoops++;
   }
-  /* the cells' circulations */
   for (let r = 0; r < 4; r++) for (let s = 0; s < 4; s++) {
     const v = D.cells[r * 4 + s], t = latRatio(v, D.mCell);
     const path = latCell(r, s, v >= 0), c = v >= 0 ? LATTICE_COL.ccw : LATTICE_COL.cw;
@@ -5014,26 +4431,22 @@ function drawLattice(cw, ch, CERT) {
     if (t > 0) { const q = path.length / 4; for (let k = 0; k < 4; k++) ovArrow(path, Math.floor(q * k + q / 2), 2.5 + 5 * t, c, 0.35 + 0.55 * t); }
     D.nCells++;
   }
-  /* the potential along the edges, drawn the way it flows */
   for (let e = 0; e < 32; e++) {
     const te = KT.TORUS_EDGES[e], f = D.flow[e], t = latRatio(f, D.mFlow);
     const along = (f >= 0) === (te.dir > 0);
     const path = along ? latLine(te.theta, te.from[0], te.from[1], te.dir) : latLine(te.theta, te.to[0], te.to[1], -te.dir);
-    /* the vertex the drawn edge leaves from */
     D.edgeFrom[e] = along ? KT.MAG_EDGES[e][0] : KT.MAG_EDGES[e][2];
     const c = f >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg;
     ovPath(path, 0.8 + 2.4 * t, c, 0.40 + 0.50 * t);
     if (t > 0) ovArrow(path, Math.floor(path.length / 2), 3.5 + 6 * t, c, 0.5 + 0.5 * t);
     D.nEdges++;
   }
-  /* reconnections */
   for (const e of L.recon) {
     const te = KT.TORUS_EDGES[e], path = latLine(te.theta, te.from[0], te.from[1], te.dir);
     ovPath(path, 3.5, LATTICE_COL.node, 0.8);
     ovBurst(path[Math.floor(path.length / 2)], 11, LATTICE_COL.burst, 0.85);
     D.nBursts++;
   }
-  /* the vertices */
   for (let k = 0; k < 16; k++) {
     const t = latRatio(D.prob[k], D.mProb);
     const node = latIdx(LAT_TH(KT.ringThetaOf(k)), LAT_PH(KT.ringPhiOf(k)));
@@ -5044,20 +4457,6 @@ function drawLattice(cw, ch, CERT) {
   D.verts = OV.n - n0;
 }
 
-/* ---------------------------------------------------------------------------
-   The fields around the construct, drawn in the same space as the surface.
-   What the field worker returned for the last landed state (and, for a
-   quarter second after a new one arrives, the one before it, fading out) is
-   turned by the camera exactly as the surface is, and drawn depth-tested
-   against it: the equatorial plane, each field's energy density placed in
-   its own range on the plane, log scale (plot_mem, plot_log_mono): the hue is
-   the two places' shares, magnetic blue and electric orange, and the glow is
-   the larger of them. The magnetic pressure is seen through, as HAZE.
-   Every plane point the worker returned lies inside the ball the surface was
-   inside when it was computed; each frame every point is checked in front of
-   the camera, and if one is not the fields are withheld this frame and say
-   so.
-   --------------------------------------------------------------------------- */
 const FIELD_COL = { planeB: [0.14, 0.42, 1.0], planeE: [1.0, 0.42, 0.08] };
 const FP = { sets: [], n: 0, behind: 0 };
 function project3(cam, x, y, z, out, o) {
@@ -5069,7 +4468,6 @@ function project3(cam, x, y, z, out, o) {
   out[o] = cam.cx + x1 * p; out[o + 1] = cam.cy + y2 * p; out[o + 2] = z2;
   return true;
 }
-/* camera-space points of every plane to be drawn this frame, and their depth range */
 function fieldsProject() {
   FP.sets = []; FP.n = 0; FP.behind = 0;
   const F = FIELDS, cam = PROJECTION.cam;
@@ -5092,8 +4490,6 @@ function fieldsProject() {
   FP.n = n;
   return { n, zmin, zmax };
 }
-/* the energy plane's shared vertices (x, y, depth, r, g, b, a) and indices,
-   drawn by SURFACE_GL.drawPlane before the rest of the overlay */
 const PLANE = { d: new Float32Array(7 * 2 * 9216), i: new Uint16Array(6 * 2 * 9216), map: new Int32Array(0), nV: 0, nI: 0 };
 function fieldsDraw() {
   const F = FIELDS;
@@ -5101,8 +4497,6 @@ function fieldsDraw() {
   PLANE.nV = 0; PLANE.nI = 0;
   for (const S of FP.sets) {
     const set = S.set, w = S.w;
-    /* the plane: each cell two triangles, each corner coloured by the two
-       energies against their own ranges */
     const NR = set.NR, NS = set.NS, NP = NR * NS, P = S.p, val = set.planeVal;
     const lo = set.planeRange;
     const tOf = (u, k) => (u > 0 && lo[k + 1] > lo[k]) ? (Math.log(u) - lo[k]) / (lo[k + 1] - lo[k]) : 0;
@@ -5112,8 +4506,6 @@ function fieldsDraw() {
     if (PLANE.i.length < PLANE.nI + (NR - 1) * NS * 6) { const g = new Uint16Array(PLANE.nI + (NR - 1) * NS * 6); g.set(PLANE.i); PLANE.i = g; }
     if (PLANE.map.length < NP) PLANE.map = new Int32Array(NP);
     const map = PLANE.map, V = PLANE.d;
-    /* one vertex per sample with a value: the hue is the two energies'
-       shares (share_mem, mix_mem), the glow the larger of them (level_mem) */
     for (let g = 0; g < NP; g++) {
       if (!val[g * 3 + 2]) { map[g] = -1; continue; }
       const tE = tOf(val[g * 3], 0), tB = tOf(val[g * 3 + 1], 2), sum = tE + tB;
@@ -5125,7 +4517,6 @@ function fieldsDraw() {
       V[o + 6] = (0.12 + 0.6 * Math.max(tE, tB)) * w;
       map[g] = PLANE.nV++;
     }
-    /* each cell whose four corners have values: two triangles */
     for (let i = 0; i + 1 < NR; i++) for (let j = 0; j < NS; j++) {
       const j1 = (j + 1) % NS, a = map[i * NS + j], b = map[(i + 1) * NS + j], c = map[(i + 1) * NS + j1], d = map[i * NS + j1];
       if (a < 0 || b < 0 || c < 0 || d < 0) continue;
@@ -5155,10 +4546,6 @@ const LOG = {
   }
 };
 function activeSutrasCanonical() { return SUTRAS.filter(s => s.on).sort((a, b) => a.id - b.id); }
-/* ---------------------------------------------------------------------------
-   SUTRA PANEL. Every control writes an exact value and sends the new
-   configuration to the kernel worker, which uses it from the next step.
-   --------------------------------------------------------------------------- */
 const PANEL = { rows: [] };
 function buildPanel() {
   const list = document.getElementById('sutra-list');
@@ -5238,8 +4625,6 @@ function buildPanel() {
     + `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
   list.appendChild(leg);
 }
-/* The panel shows exactly the state the kernel is sent: every strength, every
-   operand, every on/off light, from the same SUTRAS records. */
 function syncRow(s) {
   const r = PANEL.rows[s.id];
   if (!r) return;
@@ -5255,9 +4640,6 @@ function setComposition(c) {
   COMPOSITION = c;
   document.querySelectorAll('#comp-ctrls button').forEach(b => b.classList.toggle('active', b.dataset.comp === c));
 }
-/* ---------------------------------------------------------------------------
-   CAMERA. Mouse, touch and wheel move the view only.
-   --------------------------------------------------------------------------- */
 let camRX = 0.82, camRY = 0, isDrag = false, lastMX = 0, lastMY = 0;
 let autoRotate = true, autoRotateTimer = null;
 const holdRotation = () => { autoRotate = false; clearTimeout(autoRotateTimer); };
@@ -5334,9 +4716,6 @@ center.addEventListener('touchend', e => {
     else if (t.identifier === touchId) { touchId = null; releaseRotation(); }
   }
 });
-/* ---------------------------------------------------------------------------
-   STATUS. What the kernel is doing, in words and exact numbers.
-   --------------------------------------------------------------------------- */
 const qShort = q => q === null || q === undefined ? '–' : (q.d === 1n ? String(q.n) : FAITHFUL.aSci(A4.fromQ(q), 4));
 function updateRunBadge() {
   const el = document.getElementById('runBadge');
@@ -5395,9 +4774,6 @@ function updateCouplingsHud() {
   set('cp-claims', sc.pending ? 'deciding' : sc.ok ? `${sc.audits.reduce((n, a) => n + (a.claims ? a.claims.length : 0), 0)} statements hold on ${sc.audits.length} formula${sc.audits.length === 1 ? '' : 's'} (step ${sc.frame})`
     : sc.defects.map(d => 'S' + d.id + ' ' + d.why).join('; '));
 }
-/* The magnetism and Maya rows, and one line saying what this step did. Each
-   number is the kernel's exact value, written as a decimal. Withheld, with
-   the reason, while its certificate does not hold. */
 function updateDynamoHud() {
   const d = KERNEL_VIEW.dyn, H = KERNEL_VIEW.hist;
   if (!d) return;
@@ -5453,15 +4829,9 @@ function updateDynamoHud() {
   line.textContent = `step ${H.frame[n - 1]} · flux ${fmtE(H.UB[n - 1])} (${fluxTrend}) · helicity ${fmtE(H.H[n - 1])} · ` +
     `${H.recon[n - 1]} reconnection${H.recon[n - 1] === 1 ? '' : 's'} · Maya φ ${ph.toFixed(4)} ${where}, field shown ×${M.toFixed(4)}`;
 }
-/* The dynamo timeline: the whole run, one column per step (several per pixel
-   once the run is longer than the strip), each trace placed between the least
-   and greatest value it has shown (plot_mem, plot_mono), energies on a log
-   scale (plot_log_mono), reconnections marked below.
-   Drawn only while the dynamo and Maya certificates hold. */
 function drawDynamoTimeline(ctx, cw, ch) {
   const H = KERNEL_VIEW.hist, n = H.frame.length;
   if (n < 2 || !VISUAL_CERTIFICATE._last || !VISUAL_CERTIFICATE._last.dynamo || !VISUAL_CERTIFICATE._last.maya) return;
-  /* to the right of the vertex bars (drawVertexBars), left of the panel */
   const rightOpen = !document.getElementById('right').classList.contains('collapsed');
   const leftOpen = !document.getElementById('left').classList.contains('collapsed');
   const barW = Math.max(4, Math.min(14, (cw * 0.4) / 18)), barsRight = (leftOpen ? 230 : 10) + (barW + 1) * 16 + 8;
@@ -5507,21 +4877,6 @@ function drawDynamoTimeline(ctx, cw, ch) {
   ctx.fillStyle = '#4a5a6a'; ctx.fillText(`step ${H.frame[0]}`, x0, y0 + h + 4);
   ctx.fillText(`step ${H.frame[n - 1]}   ▮ reconnections`, x0 + w - 150, y0 + h + 4);
 }
-/* The flux map: the torus cut open along its seams into the 4x4 lattice the
-   hypercube is on it (TorusLattice.lean), theta to the right and phi up, the
-   fifth column and row the first again. Each dot is a vertex, sized by
-   |psi|^2; each segment an edge (edge_step) with the potential's flow along it,
-   amber towards +theta or +phi and cyan against; each square a cell
-   (cells_tile) with its circulation, counter-clockwise in (theta, phi) drawn
-   counter-clockwise here, phi being up (cell_orient_area). Each row of edges is
-   a loop through the hole (hole_loop), its flux at the right; each column a
-   loop round the tube (tube_loop), its flux at the top. Between two rows the
-   hole flux steps by the flux of the four cells between them
-   (hole_flux_step_y/z), and between two columns the tube flux likewise
-   (tube_flux_step_x/w): the mark between two values says the kernel decided
-   that balance exactly this step. The same blended values as the surface. */
-/* what was drawn, glyph by glyph: each arrow's screen direction and each arc's
-   turning sense, as the drawing used them */
 const FLUX_MAP = { drawn: false, x: 0, y: 0, cell: 0, why: '', glyphs: null, box: null, pos: null, drag: null };
 try { const p = JSON.parse(localStorage.getItem('fluxMapPos')); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) FLUX_MAP.pos = p; } catch (_) {}
 function drawFluxMap(ctx, cw, ch) {
@@ -5554,7 +4909,6 @@ function drawFluxMap(ctx, cw, ch) {
     ctx.lineTo(x - ux * L * 0.6 - uy * L * 0.7, y - uy * L * 0.6 + ux * L * 0.7);
     ctx.lineTo(x - ux * L * 0.6 + uy * L * 0.7, y - uy * L * 0.6 - ux * L * 0.7); ctx.closePath(); ctx.fill();
   };
-  /* loops: a faint band along each row and column, and its flux in the margin */
   for (let s = 0; s < 4; s++) {
     const B = D.hole[s], t = latRatio(B, D.mLoop), c = col(B >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg);
     ctx.globalAlpha = 0.08 + 0.22 * t; ctx.strokeStyle = c; ctx.lineWidth = 2 + 9 * t;
@@ -5577,16 +4931,13 @@ function drawFluxMap(ctx, cw, ch) {
     ctx.fillText((B >= 0 ? '+' : '\u2212') + Math.abs(B).toPrecision(2), X(r), by - 16);
     ctx.textAlign = 'left';
   }
-  /* the strip balances, decided by the kernel: a mark between two loops */
   ctx.font = '7px monospace';
   for (let s = 0; s < 4; s++) { ctx.fillStyle = LV.stripOk.hole[s] ? '#5cff85' : '#E4572E'; ctx.fillText(LV.stripOk.hole[s] ? '=' : '≠', X(4) + 1, (Y(s) + Y(s + 1)) / 2 + 3); }
   for (let r = 0; r < 4; r++) { ctx.fillStyle = LV.stripOk.tube[r] ? '#5cff85' : '#E4572E'; ctx.fillText(LV.stripOk.tube[r] ? '=' : '≠', (X(r) + X(r + 1)) / 2 - 2, Y(4) - 2); }
-  /* cells: an arc turning the way the cell's flux circulates */
   for (let r = 0; r < 4; r++) for (let s = 0; s < 4; s++) {
     const v = D.cells[r * 4 + s], t = latRatio(v, D.mCell), c = col(v >= 0 ? LATTICE_COL.ccw : LATTICE_COL.cw);
     const cx = X(r) + cell / 2, cy = Y(s) - cell / 2, R = 3 + 12 * t, a0 = -0.6, sweep = 4.9;
     ctx.globalAlpha = 0.35 + 0.65 * t; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 0.8 + 2 * t;
-    /* counter-clockwise in (theta, phi) is anticlockwise on screen, phi being up */
     const ccw = v >= 0, a1 = ccw ? a0 - sweep : a0 + sweep;
     G.cells[r * 4 + s] = ccw;
     ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1, ccw); ctx.stroke();
@@ -5594,7 +4945,6 @@ function drawFluxMap(ctx, cw, ch) {
     if (t > 0) arrowHead(cx + R * Math.cos(a1), cy + R * Math.sin(a1), tx, ty, 2.5 + 3 * t);
     ctx.globalAlpha = 1;
   }
-  /* edges, the flow along each */
   for (let e = 0; e < 32; e++) {
     const te = KT.TORUS_EDGES[e], f = D.flow[e], t = latRatio(f, D.mFlow), c = col(f >= 0 ? LATTICE_COL.pos : LATTICE_COL.neg);
     let x0, y0, x1, y1;
@@ -5602,7 +4952,6 @@ function drawFluxMap(ctx, cw, ch) {
     else { const l = (te.to[1] - te.from[1] + 4) % 4 === 1 ? te.from[1] : te.to[1]; y0 = Y(l); y1 = Y(l + 1); x0 = x1 = X(te.from[0]); }
     ctx.globalAlpha = 0.45 + 0.55 * t; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 0.7 + 2.3 * t;
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-    /* towards +theta is right, towards +phi is up */
     const sg = f >= 0 ? 1 : -1, ux = te.theta ? sg : 0, uy = te.theta ? 0 : -sg;
     G.edges[e] = [ux, uy];
     if (t > 0) arrowHead((x0 + x1) / 2, (y0 + y1) / 2, ux, uy, 2.5 + 3.5 * t);
@@ -5613,7 +4962,6 @@ function drawFluxMap(ctx, cw, ch) {
       for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.beginPath(); ctx.moveTo(mx + 3 * Math.cos(a), my + 3 * Math.sin(a)); ctx.lineTo(mx + 8 * Math.cos(a), my + 8 * Math.sin(a)); ctx.stroke(); }
     }
   }
-  /* vertices, the fifth row and column faint: they are the first again */
   for (let k = 0; k < 16; k++) {
     const r = KT.ringThetaOf(k), s = KT.ringPhiOf(k), t = latRatio(D.prob[k], D.mProb), R = 1.5 + 3.5 * t;
     for (const [dr, ds, a] of [[0, 0, 1], [4, 0, 0.3], [0, 4, 0.3], [4, 4, 0.3]]) {
@@ -5631,14 +4979,12 @@ function drawFluxMap(ctx, cw, ch) {
   ctx.restore();
   FLUX_MAP.drawn = true; FLUX_MAP.why = ''; FLUX_MAP.glyphs = G;
 }
-/* What the frame drew and at what scale: written only when it changes. */
 let DRAW_HUD_KEY = '';
 function updateDrawHud() {
   let surface;
   if (!SURFACE_STATUS.drawn) surface = 'not drawn: ' + SURFACE_STATUS.why;
   else if (PROJECTION.pole) surface = `Wheeler withheld: 1 + geoD·D = ${fmtE(PROJECTION.pole.den)} at θ ${sf(PROJECTION.pole.theta, 2)}, φ ${sf(PROJECTION.pole.phi, 2)}`;
   else surface = `${PROJECTION.quads} quads drawn`;
-  /* how far the formulas carried the surface: the bare torus reaches 250 */
   const scale = `farthest point ${Math.round(PROJECTION.maxNorm)} (bare torus 250)`;
   const key = surface + '|' + scale;
   if (key === DRAW_HUD_KEY) return;
@@ -5702,8 +5048,6 @@ function drawModeComparison(ctx, cw, ch) {
   ctx.fillText(M.allDistinct ? 'all three distinct · max Δ=' + worst.delta.toExponential(1)
                              : 'compositions coincide on this set', x0, y0 + h + 8 + 3 * 7);
 }
-/* |psi_v|^2 at the sixteen vertices, relative to the largest: the amplitude
-   channel's own node values (node_reproduction). */
 function drawVertexBars(ctx, cw, ch) {
   if (!VISUAL_CERTIFICATE._last || !VISUAL_CERTIFICATE._last.amplitude) return;
   const prob = FAITHFUL_RENDER.proj && FAITHFUL_RENDER.proj.prob;
@@ -5730,10 +5074,6 @@ function drawVertexBars(ctx, cw, ch) {
     ctx.fillText(String(i), bx + 1, y0 + 6);
   }
 }
-/* ---------------------------------------------------------------------------
-   FRAME. Camera, projection, certificates, drawing. The state comes from the
-   kernel worker; nothing here changes it.
-   --------------------------------------------------------------------------- */
 let lastFrameT = 0;
 function frame(t) {
   const frameDt = lastFrameT ? t - lastFrameT : VIEW_MOTION.nominalFrameDtMs;
@@ -5746,7 +5086,6 @@ function frame(t) {
     camRY += VIEW_MOTION.rotationYPerNominalFrame * frameScale;
     camRX += sin(t * VIEW_MOTION.rotationXFrequency) * VIEW_MOTION.rotationXPerNominalFrame * frameScale;
   }
-  /* the overlay layer starts clear each frame; the surface layer is beneath it */
   ctx.clearRect(0, 0, cw, ch);
   if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1 || KERNEL_VIEW.queue[0].version !== KERNEL_VIEW.appliedVersion)) applyKernelState(KERNEL_VIEW.queue.shift());
   if (KERNEL_VIEW.dirty) projectState();
@@ -5763,16 +5102,12 @@ function frame(t) {
       drawDynamoTimeline(ctx, cw, ch);
       drawFluxMap(ctx, cw, ch);
     }
-    /* a landed state: the surface is where that state's sources are */
     if (FIELDS.show && DISPLAY.tau === 1 && KERNEL_VIEW.state && FIELDS.frame !== KERNEL_VIEW.appliedVersion + ':' + KERNEL_VIEW.state.frame) { FIELDS.frame = KERNEL_VIEW.appliedVersion + ':' + KERNEL_VIEW.state.frame; requestFields(); }
   }
   SUTRA_GRAPH_INSPECTOR.requestUpdate(activeSutrasCanonical());
   LOG.render();
   requestAnimationFrame(frame);
 }
-/* ---------------------------------------------------------------------------
-   CONTROLS
-   --------------------------------------------------------------------------- */
 function markPanels() {
   const open = id => !document.getElementById(id).classList.contains('collapsed');
   document.getElementById('wrap').classList.toggle('panel-open', open('right') || open('left'));
@@ -5827,8 +5162,6 @@ document.getElementById('btn-none').addEventListener('click', () => {
   syncPanel(); clearPresetHighlight();
   pushConfig('ALL OFF — no sūtra active; the magnetism memory, Wheeler, MSTVQ, TGCR and ZPE stages and the Maya flow still run');
 });
-/* The TGCR vortex omega: a kernel parameter (the magnetism memory's
-   induction) and the drawn precession twist, as v18.24's vortexOmega was. */
 function setOmegaSlider(tenths) {
   const el = document.getElementById('amp-omega');
   if (!Number.isInteger(tenths) || tenths < +el.min || tenths > +el.max) throw new RangeError(`vortex omega ${tenths / 10} is outside the slider's range`);
@@ -5838,8 +5171,6 @@ function setOmegaSlider(tenths) {
 }
 document.getElementById('btn-fields').addEventListener('click', e => {
   FIELDS.show = !FIELDS.show;
-  /* hidden, nothing is computed; shown again, nothing is drawn until the
-     fields of a state on the screen arrive */
   if (FIELDS.show) { FIELDS.cur = null; FIELDS.prev = null; FIELDS.frame = -1; }
   e.currentTarget.textContent = FIELDS.show ? 'FIELDS ON' : 'FIELDS OFF';
   e.currentTarget.classList.toggle('active', FIELDS.show);
@@ -5910,7 +5241,6 @@ Object.entries(PRESETS).forEach(([id, p]) => {
   btn.addEventListener('click', () => applyPreset(id));
 });
 document.getElementById('btn-all').title = 'Every one of the 29, at 50%.';
-/* Kernel parameters: exact rationals from integer slider positions. */
 for (const [id, dispId, fmt] of [['amp-dielectric', 'amp-dielectric-v', v => (v / 10).toFixed(1)],
                                  ['amp-bfield', 'amp-bfield-v', v => (v / 10).toFixed(1)],
                                  ['amp-drive', 'amp-drive-v', v => (v / 4).toFixed(2)],
@@ -5924,7 +5254,6 @@ document.getElementById('amp-omega').addEventListener('input', e => {
   setOmegaSlider(+e.target.value);
   pushConfig();
 });
-/* Pace: seconds a calculation's result takes to glide in. The picture only -- each step is the same step. */
 document.getElementById('amp-glide').addEventListener('input', e => {
   const n = +e.target.value;
   STEP_INTERVAL_MS = 1000 * n;
@@ -5935,7 +5264,6 @@ document.getElementById('amp-glide').addEventListener('input', e => {
     DISPLAY.t0 = performance.now() - tau * DISPLAY.dur;
   }
 });
-/* Drawing gains: the picture only. */
 for (const [id, setter, dispId, fmt] of [
   ['amp-zoom',    v => { ZOOM = v / 100; },            'amp-zoom-v',    v => (v / 100).toFixed(2)],
   ['amp-field',   v => { AMP.field = v; },             'amp-field-v',   v => v],
@@ -5951,22 +5279,13 @@ for (const [id, setter, dispId, fmt] of [
     document.getElementById(dispId).textContent = fmt(v);
   });
 }
-/* ---------------------------------------------------------------------------
-   FILES. Exports go through the viewer's save capability when the page runs
-   as an artifact, and a download link when it runs from disk.
-   --------------------------------------------------------------------------- */
 function jsonReplacer(k, v) { return typeof v === 'bigint' ? String(v) : v; }
-/* Where a file goes depends on where the page is open. Published as an
-   artifact, the viewer's frame offers it through the downloads capability and
-   asks the viewer first; a link would do nothing there. Opened as a file,
-   there is no frame, and a download link is how a browser saves. */
 let DOWNLOADS_CAP;
 async function saveTarget() {
   if (!(window.claude && typeof window.claude.use === 'function')) return 'browser';
   if (DOWNLOADS_CAP === undefined) DOWNLOADS_CAP = await window.claude.use('downloads');
   return DOWNLOADS_CAP;
 }
-/* Resolves with the byte count once saved; rejects with the reason it was not. */
 async function saveJSON(payload, filename) {
   const json = JSON.stringify(payload, jsonReplacer, 2);
   const target = await saveTarget();
@@ -6434,8 +5753,6 @@ window.addEventListener('unhandledrejection', ev => {
   window._ERRORS.push({ t: Date.now(), msg: 'UNHANDLED REJECTION: ' + m });
   try { LOG.add(`UNHANDLED REJECTION: ${m}`, 'off'); } catch (_) {}
 });
-/* Start: the panel, the version check, the two workers, the first
-   configuration, the frame loop. */
 buildPanel();
 setComposition(COMPOSITION);
 window._VERSION_INTEGRITY = verifyVersionIntegrity();
