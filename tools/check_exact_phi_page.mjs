@@ -16,8 +16,9 @@
                         PAUSE / RUN reaches the worker, and the worker runs
                         toward exactly the set and composition the control
                         chose
-     the ramp           the strengths row shows each formula at the strength
-                        the step ran, the gate's own count of the ramp
+     the glide          one calculation, then the surface glides to its
+                        result over the time PACE sets (60 s unless changed);
+                        the next calculation starts only once it has landed
      the surface        is drawn, every point finite and in front of the
                         camera
      no clamping        the colour formula runs past 255 and each channel goes
@@ -160,6 +161,19 @@ try {
   const tests = await waitFor(`KERNEL_VIEW.selfTestsOk === true`, 60000);
   ok(tests, 'the kernel self-tests pass on the audit worker');
   ok(await evaluate(`KERNEL_VIEW.workerError === null`), 'every worker started', await evaluate(`String(KERNEL_VIEW.workerError)`));
+  /* the default glide, a minute: one calculation, and none starts while the
+     surface glides to it */
+  await waitFor(`KERNEL_VIEW.state.frame >= 1 && DISPLAY.started && DISPLAY.dur > 0`, 60000);
+  const g0 = await evaluate(`({ ms: STEP_INTERVAL_MS, slider: document.getElementById('amp-glide').value, frame: KERNEL_VIEW.state.frame, dur: DISPLAY.dur, tau: DISPLAY.tau })`);
+  await sleep(5000);
+  const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, queue: KERNEL_VIEW.queue.length, dur: DISPLAY.dur, tau: DISPLAY.tau, row: document.getElementById('sim-glide').textContent })`);
+  ok(g0.ms === 60000 && g0.slider === '60' && g0.dur === 60000 && g1.frame === g0.frame && g1.queue === 0 && g1.dur === 60000 &&
+     g1.tau > g0.tau && g1.tau < 0.2 && new RegExp('^to step ' + g0.frame + ': \\d+ of 60 s$').test(g1.row),
+     `by default each calculation glides in over 60 s: 5 s into the glide to step ${g0.frame} the surface is ${(100 * g1.tau).toFixed(0)}% of the way there, no new calculation has started, and the glide row says so`,
+     JSON.stringify({ g0, g1 }));
+  const setGlide = s => evaluate(`(() => { const el = document.getElementById('amp-glide'); el.value = '${s}'; el.dispatchEvent(new Event('input')); return STEP_INTERVAL_MS; })()`);
+  /* the rest of the checks run at the shortest glide the slider allows, 1 s */
+  await setGlide(1);
 
   /* one frame drawn and read back in the same task, before the buffer is
      presented: what the GPU was given, and what it drew */
@@ -264,21 +278,12 @@ try {
      both round to 255, so strictly brighter cannot be required */
   ok(hk.bright && hk.hot[2] < 0.5 * hk.hot[0], 'a brighter colour of one hue is never darker, and far past 255 an orange is still orange, not white (highKnee_mono)', JSON.stringify(hk.hot));
 
-  section('the strength ramp');
+  section('the glide');
   await presetFromSeed('pre-dynamo');
-  await waitFor(`KERNEL_VIEW.state.frame >= 12`, 60000);
-  await evaluate(`document.getElementById('btn-run').click()`);
-  await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
-  const rw = await evaluate(`(() => { VISUAL_CERTIFICATE.status(); updateSimulationHud();
-    return { frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-ramp').textContent, ok: RAMP_VIEW.ok, why: RAMP_VIEW.why,
-             cert: VISUAL_CERTIFICATE._last.ramp, set: PRESETS['pre-dynamo'].set, N: KERNEL.RAMP_STEPS }; })()`);
-  await evaluate(`document.getElementById('btn-run').click()`);
-  const rpct = x => (100 * x).toFixed(1).replace(/\.0$/, '') + '%';
-  const rids = Object.keys(rw.set).map(Number).sort((a, b) => a - b);
-  const rwant = `${rids.length} of ${rids.length} ramping over 180 steps · ` +
-    rids.map(id => `S${id} ${rpct(rw.set[id] / 100 * rw.frame / 180)} → ${rpct(rw.set[id] / 100)} (${rw.frame}/180)`).join(' · ');
-  ok(rw.N === 180 && rw.ok && rw.cert && rw.row === rwant,
-     `${rw.frame} steps from the seed each formula runs at ${rw.frame}/180 of its setting, and the strengths row says so (ramp_steady, ramp_zero)`, `${rw.row} | want ${rwant} | ${rw.why}`);
+  await waitFor(`KERNEL_VIEW.state.frame >= 3 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
+  const gr = await evaluate(`({ frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-glide').textContent, dur: DISPLAY.dur, ms: STEP_INTERVAL_MS })`);
+  ok(gr.dur === 1000 && gr.ms === 1000 && new RegExp('^to step ' + gr.frame + ': [01] of 1 s$').test(gr.row),
+     `set to 1 s, the glide row names the step the surface is gliding to and how far it has come (${gr.row})`, JSON.stringify(gr));
 
   section('every control reaches the kernel');
   const applied = async (label, want) => {
@@ -584,7 +589,7 @@ try {
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
   await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
-  const fieldsLanded = await waitFor(`FIELDS.cur && !FIELDS.busy && FIELDS.cur.frame === KERNEL_VIEW.state.frame && performance.now() - FIELDS.t0 > FIELDS.FADE_MS`, 30000);
+  const fieldsLanded = await waitFor(`FIELDS.cur && !FIELDS.busy && FIELDS.cur.frame === KERNEL_VIEW.state.frame && performance.now() - FIELDS.t0 > FIELDS.fadeMs`, 30000);
   const fd = await evaluate(`(() => {
     VISUAL_CERTIFICATE.status(); updateDynamoHud(); projectTorus(); renderTorus();
     const F = FIELDS, C = F.cur, rq = C.req, src = KERNEL_VIEW.dyn.sources, num = FAITHFUL.qNum;
@@ -920,21 +925,17 @@ try {
      JSON.stringify({ q0, q1, resumed }));
 
   section('motion');
-  /* The kernel ran flat out (20 to 50 steps a second) while the page drew the
-     newest state every 100 ms and replaced the surface outright, and the
-     framing re-fitted every frame: measured on pre-singularity, 2.5 steps
-     went by between drawn states, the surface jumped by up to 6.5 field units
-     in one frame and the whole picture rescaled by up to 50%. Now the worker
-     is paced, every step is drawn in order, the surface moves to each new
-     state over the step interval, and the framing eases. Held here on
-     pre-singularity, whose field changes most from step to step. */
+  /* One calculation, then the glide to its result: no state may arrive while
+     the surface is still gliding, every move takes exactly the glide set and
+     lands exactly on its state, and every frame between is a point on the
+     segment between the two exact states. */
   await presetFromSeed('pre-dynamo');
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
     const tr0 = DISPLAY.transitions, la0 = DISPLAY.landed;
     let prev = Float64Array.from(DISPLAY_FIELD), prevAt = DISPLAY.at, prevT0 = DISPLAY.t0, prevBody = PROJECTION.frameBody;
-    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, minDur = Infinity, maxQueue = 0, shortMove = 0;
+    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, maxQueue = 0, midGlide = 0, wrongDur = 0, durs = [];
     function tick() {
       const now = performance.now();
       let jump = 0, span = 0;
@@ -942,54 +943,43 @@ try {
         jump = Math.max(jump, Math.abs(DISPLAY_FIELD[i] - prev[i]));
         span = Math.max(span, Math.abs(fieldGrid[i] - FROM_FIELD[i]));
       }
-      /* within one move, on the page's own clock: the share of a step's change
-         this frame drew, against the share of the move's time it took */
       if (DISPLAY.t0 === prevT0 && span > 0 && DISPLAY.dur > 0)
         worstShare = Math.max(worstShare, jump / span - (DISPLAY.at - prevAt) / DISPLAY.dur);
       if (DISPLAY.tau > 0 && DISPLAY.tau < 1) interior++;
       maxQueue = Math.max(maxQueue, KERNEL_VIEW.queue.length);
-      if (DISPLAY.dur > 0) { minDur = Math.min(minDur, DISPLAY.dur); if (DISPLAY.dur < 0.25 * STEP_INTERVAL_MS / (1 + DISPLAY.waiting) * (1 - 1e-12)) shortMove++; }
+      if (KERNEL_VIEW.queue.length && DISPLAY.tau < 1) midGlide++;
+      if (DISPLAY.t0 !== prevT0) { durs.push(DISPLAY.dur); if (DISPLAY.dur !== STEP_INTERVAL_MS) wrongDur++; }
       if (prevBody > 0) worstZoom = Math.max(worstZoom, Math.abs(PROJECTION.frameBody - prevBody) / prevBody);
       prev = Float64Array.from(DISPLAY_FIELD); prevAt = DISPLAY.at; prevT0 = DISPLAY.t0; prevBody = PROJECTION.frameBody; frames++;
-      if (now - t0 < 4000) requestAnimationFrame(tick);
+      if (now - t0 < 8000) requestAnimationFrame(tick);
       else {
-        const pr = KERNEL_VIEW.projected.slice(-8), gaps = pr.slice(1).filter((f, i) => f - pr[i] !== 1).length;
-        res({ sps: (KERNEL_VIEW.state.frame - f0) / ((now - t0) / 1000), set: 1000 / STEP_INTERVAL_MS, gaps, projected: pr.join(' '),
-              bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, minDur, shortMove, interval: STEP_INTERVAL_MS, maxQueue,
-              transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis });
+        const pr = KERNEL_VIEW.projected.slice(-6), gaps = pr.slice(1).filter((f, i) => f - pr[i] !== 1).length;
+        res({ sps: (KERNEL_VIEW.state.frame - f0) / ((now - t0) / 1000), gaps, projected: pr.join(' '),
+              bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, maxQueue, midGlide, wrongDur, durs: durs.join(' '),
+              interval: STEP_INTERVAL_MS, transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis });
       }
     }
     requestAnimationFrame(tick);
   })`, true);
-  ok(mo.sps >= 0.7 * mo.set && mo.sps <= 1.3 * mo.set, `the kernel steps at the pace set (${mo.sps.toFixed(2)} steps/s, set ${mo.set})`);
+  ok(mo.midGlide === 0 && mo.maxQueue <= 1, `no calculation starts while the surface glides: in ${mo.frames} frames no state arrived before the glide had landed`, JSON.stringify({ midGlide: mo.midGlide, maxQueue: mo.maxQueue }));
+  ok(mo.sps > 0 && mo.sps <= 1000 / mo.interval * 1.01, `one calculation per glide: ${mo.sps.toFixed(2)} a second at a glide of ${mo.interval} ms`);
   ok(mo.gaps === 0, `every step is drawn, in order (${mo.projected})`);
-  ok(mo.maxQueue <= 1, `at the pace set the kernel never gets ahead of the picture (at most ${mo.maxQueue} state waiting)`);
-  /* each move ends on its state, exactly, before the next begins: without
-     that the surface only chases the states (measured: 40 to 75% of the way)
-     and the exactness check above has nothing to check */
-  ok(mo.transitions >= 6 && mo.landed >= mo.transitions - (mo.landedNow ? 0 : 1),
-     `every move lands exactly on its state before the next begins (${mo.landed} of ${mo.transitions})`);
+  ok(mo.transitions >= 5 && mo.landed >= mo.transitions - (mo.landedNow ? 0 : 1),
+     `every glide lands exactly on its state before the next begins (${mo.landed} of ${mo.transitions})`);
+  ok(mo.wrongDur === 0 && mo.interior >= 0.5 * mo.frames, `every glide takes the time set (${mo.durs} ms), and ${mo.interior} of ${mo.frames} frames are drawn mid-glide`);
   ok(mo.bad === 0 && mo.checked > 10, `every frame draws a point on the segment between two exact states, and each state exactly at its end (${mo.checked} frames)`);
-  ok(mo.worstShare <= 0.01, `within a move, each frame draws the share of a step's change that its share of the move's time calls for (worst excess ${mo.worstShare.toFixed(4)})`);
-  ok(mo.shortMove === 0 && mo.minDur > 0 && mo.interior >= 0.3 * mo.frames,
-     `each move takes time: at least a quarter of a step interval, shared among the states waiting when it began (shortest ${mo.minDur.toFixed(1)} ms of ${mo.interval} ms, at most ${mo.maxQueue} waiting), and ${mo.interior} of ${mo.frames} frames are drawn mid-move`, JSON.stringify({ shortMove: mo.shortMove }));
+  ok(mo.worstShare <= 0.01, `within a glide, each frame draws the share of the step's change that its share of the glide's time calls for (worst excess ${mo.worstShare.toFixed(4)})`);
   ok(mo.worstZoom <= 0.1, `the framing eases: never more than 10% between frames (worst ${(100 * mo.worstZoom).toFixed(2)}%)`);
-  /* At 10 steps a second a slow display (this headless one draws under ten
-     frames a second) cannot land every state in time. The kernel must wait
-     for the picture rather than let the queue and the delay grow. */
-  await evaluate(`(() => { const el = document.getElementById('amp-steps'); el.value = '10'; el.dispatchEvent(new Event('input')); })()`);
-  const bp = await evaluate(`new Promise(res => {
-    const t0 = performance.now(); let maxQueue = 0, maxLag = 0;
-    function tick() {
-      const q = KERNEL_VIEW.queue;
-      maxQueue = Math.max(maxQueue, q.length);
-      if (q.length) maxLag = Math.max(maxLag, q[q.length - 1].state.frame - KERNEL_VIEW.state.frame);
-      if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else res({ maxQueue, maxLag });
-    }
-    requestAnimationFrame(tick);
-  })`, true);
-  await evaluate(`(() => { const el = document.getElementById('amp-steps'); el.value = '3'; el.dispatchEvent(new Event('input')); })()`);
-  ok(bp.maxQueue <= 3 && bp.maxLag <= 3, `on a display slower than the pace the kernel waits: never more than 3 steps ahead of the picture (queue ${bp.maxQueue}, lag ${bp.maxLag})`);
+  /* changed mid-glide, the glide keeps the surface where it is and takes the new time from there */
+  await waitFor(`DISPLAY.tau > 0.3 && DISPLAY.tau < 0.6`, 20000);
+  const ch0 = await evaluate(`({ tau: DISPLAY.tau, frame: KERNEL_VIEW.state.frame })`);
+  await setGlide(20);
+  const ch1 = await evaluate(`({ tau: DISPLAY.tau, dur: DISPLAY.dur, frame: KERNEL_VIEW.state.frame })`);
+  await sleep(2000);
+  const ch2 = await evaluate(`({ tau: DISPLAY.tau, frame: KERNEL_VIEW.state.frame, queue: KERNEL_VIEW.queue.length })`);
+  await setGlide(1);
+  ok(ch1.dur === 20000 && ch2.frame === ch0.frame && ch2.queue === 0 && Math.abs(ch1.tau - ch0.tau) < 0.15 && ch2.tau > ch1.tau && ch2.tau - ch1.tau < 0.2,
+     'a glide time changed mid-glide keeps the surface where it is and goes on from there at the new time, with no new calculation', JSON.stringify({ ch0, ch1, ch2 }));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1022,7 +1012,7 @@ try {
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/3' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(gotStep && st.schema === 'vedic-step-export/4' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'r4'),
      'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
@@ -1070,6 +1060,7 @@ try {
      `fed a size swinging 6% either way every 3 s, the frame once out never moves back (frame_hold; one lag of 1.2 s moves back in ${fs.oneLag.back} of 269 steps)`, JSON.stringify(fs));
   await cmd('Page.navigate', { url: PAGE });
   ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
+  await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
   for (const id of ['pre-dynamo', 'pre-mixer', 'pre-capacitor']) {
@@ -1114,6 +1105,8 @@ try {
   section('on a phone');
   await cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
   await cmd('Page.navigate', { url: PAGE });
+  await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && document.getElementById('amp-glide')`, 90000);
+  await setGlide(1);
   const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame >= 3 && SURFACE_STATUS.drawn`, 90000);
   const ph = await evaluate(`(() => { projectTorus(); renderTorus();
     const right = document.getElementById('right'), r = right.getBoundingClientRect();

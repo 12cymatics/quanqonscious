@@ -35,11 +35,9 @@
                         the step and gated at its end all seen; a stage past
                         what the gate can bring back stops at once and says
                         where
-     step export        an exported step replays bit for bit from its file,
-                        its ramp with it
-     ramp               every strength the step runs is the ramp's, against
-                        the same rule in bare BigInt fractions; ALL ON does
-                        what its title says
+     step export        an exported step replays bit for bit from its file
+     strengths          a step from the seed runs each formula at its
+                        setting; ALL ON does what its title says
      modes              the mode identities decide and pass
      Maya, magnetism, torus, sources, parameters, gate weights, presets
 
@@ -351,7 +349,7 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
-  let eng = K.rampedEngine(K.initEngine(), act);
+  let eng = K.initEngine();
   for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
   const L = eng.last;
   const N = BigInt(act.length);
@@ -440,7 +438,7 @@ section('R4 singularity controller');
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
     const p = PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)) });
-    let eng = K.rampedEngine(K.initEngine(), active), held = true, why = '';
+    let eng = K.initEngine(), held = true, why = '';
     for (let s = 0; s < n; s++) {
       const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
       const T = Q.cmp(eIn, ceiling) > 0 ? eIn : ceiling, twice = Q.mul(Q.TWO, eIn), Lv = Q.cmp(twice, ceiling) > 0 ? twice : ceiling;
@@ -472,12 +470,12 @@ section('R4 singularity controller');
      `the controller was seen dormant (${seen.dormant}), stopping with sigma alone (${seen.sigma}), stopping a stage (${seen.stopped}) and gating the end (${seen.gated})`);
   const all = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.ONE }));
   const t0 = Date.now();
-  const big = K.step(K.rampedEngine(K.initEngine(), all), PARAMS(), all, 'SERIES');
+  const big = K.step(K.initEngine(), PARAMS(), all, 'SERIES');
   const ms = Date.now() - t0, br = big.last.r4;
   ok(br.engaged && br.blowup.at === 'S1' && br.stops.map(g => g.at).join(',') === 'S1,S5,S7,S15,S16' && br.gate && Q.cmp(K.energy(big.psi), br.target) <= 0 && ms < 5000,
      `all 29 at full strength: R4 stops the blow-up at S1, S5, S7, S15 and S16 where each rises, gates the end, and the step ends at or below T, in ${ms} ms`,
      JSON.stringify({ at: br.blowup && br.blowup.at, stops: br.stops.map(g => g.at), gate: !!br.gate }));
-  const s28 = [{ id: 28, strength: Q.ONE }], e28 = K.rampedEngine(K.initEngine(), s28);
+  const s28 = [{ id: 28, strength: Q.ONE }], e28 = K.initEngine();
   let msg = '', name = '';
   const t1 = Date.now();
   try { K.step({ ...e28, psi: e28.psi.map(x => Q.mul(x, Q.mk(256n))) }, PARAMS(), s28, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
@@ -494,7 +492,7 @@ section('step export');
   const tested = { dormant: 0, sigma: 0, stopped: 0, gated: 0 };
   for (const [ids, mode, n, r, drive] of R4_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    let eng = K.rampedEngine(K.initEngine(), active);
+    let eng = K.initEngine();
     for (let s = 0; s < n; s++) {
       eng = K.step(eng, PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)), vortex: Q.ONE }), active, mode);
       if (s === 0) continue;
@@ -510,12 +508,11 @@ section('step export');
       try {
         const fromA = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
         const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
-        const act = L.setSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+        const act = L.activeSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
         const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ), ceiling: fromQ(file.ceiling),
                                 energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
                                 mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
-                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ),
-                                ramp: L.rampIn.map(r => ({ id: r.id, from: fromQ(r.from), to: fromQ(r.to), k: r.k, rest: r.rest.map(fromQ) })) }, p, act, L.composition);
+                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition);
         same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
                JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
                JSON.stringify(K.serializeQ(replay.tgcrKappa)) === JSON.stringify(file.tgcrKappa) &&
@@ -534,50 +531,30 @@ section('step export');
   ok(tested.dormant && tested.sigma && tested.stopped && tested.gated, `exports were replayed from all four R4 branches (dormant ${tested.dormant}, sigma alone ${tested.sigma}, a stage stopped ${tested.stopped}, the end gated ${tested.gated})`);
 }
 
-section('the strength ramp');
+section('strengths and ALL ON');
 {
-  const N = BigInt(K.RAMP_STEPS), red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
-  const at = (fn, fd, tn, td, k) => red(fn * td * N + (tn * fd - fn * td) * BigInt(Math.min(k, K.RAMP_STEPS)), fd * td * N);
+  const red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
   const eqF = (q, [n, d]) => q.n === n && q.d === d;
-  ok(K.RAMP_STEPS === 180, 'a ramp is 180 steps, 60 s at 3 steps a second');
-  let r = [], good = true, why = '';
-  const plan = [[1, [{ id: 9, strength: Q.mk(3n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [90, [{ id: 9, strength: Q.mk(1n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [200, [{ id: 22, strength: Q.mk(1n, 2n) }]]];
-  const ref = { 9: { f: [0n, 1n], t: [3n, 10n], k: 0 }, 22: { f: [0n, 1n], t: [1n, 2n], k: 0 } };
-  let targets = plan[0][1];
-  for (let step = 1; step <= 420; step++) {
-    const change = plan.find(p => p[0] === step && step > 1);
-    if (change) {
-      targets = change[1];
-      for (const id of [9, 22]) { const t = targets.find(x => x.id === id), want = t ? [t.strength.n, t.strength.d] : [0n, 1n], R0 = ref[id];
-        if (R0 && !(R0.t[0] === want[0] && R0.t[1] === want[1])) ref[id] = { f: at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), t: want, k: 0 }; }
-    }
-    for (const id of Object.keys(ref)) ref[id].k++;
-    const x = K.rampStep(r, targets); r = x.ramp;
-    for (const id of [9, 22]) {
-      const R0 = ref[id], want = at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), got = x.active.find(a => a.id === id);
-      if (want[0] === 0n ? got !== undefined : !(got && eqF(got.strength, want) && eqF(got.args[0], want))) { good = false; why = `S${id} at step ${step}`; }
-    }
-  }
-  ok(good && r.length === 1 && r[0].id === 22 && r[0].k === K.RAMP_STEPS,
-     'over 420 steps -- on, changed at step 90 from where it stood, off at step 200 -- every strength is the BigInt rule, run at exactly that strength, and a formula ramped off is gone', why);
   const tg = [{ id: 9, strength: Q.mk(3n, 10n) }];
   let e = K.initEngine(), stepsOk = true;
   for (let s2 = 1; s2 <= 4; s2++) { e = K.step(e, PARAMS(), tg, 'SERIES');
-    const sig = e.last.r4.engaged ? e.last.r4.sigma : Q.ONE, al = red(9n * 3n * BigInt(s2) * sig.n, 435n * 10n * N * sig.d);
-    if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, red(3n * BigInt(s2), 10n * N)) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
-  ok(stepsOk, 'a step from the seed runs each formula at its ramped strength: alpha = id/435 x setting x k/180 at step k, times sigma on a step R4 stops');
+    const sig = e.last.r4.engaged ? e.last.r4.sigma : Q.ONE, al = red(9n * 3n * sig.n, 435n * 10n * sig.d);
+    if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, [3n, 10n]) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
+  ok(stepsOk, 'a step from the seed runs each formula at its setting from the first step: alpha = id/435 x setting, times sigma on a step R4 stops');
   const allHalf = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.mk(1n, 2n) }));
   const allOnRun = (mode, n) => { let eng = K.initEngine(), stopped = 0;
     for (let s2 = 1; s2 <= n; s2++) { try { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), allHalf, mode); } catch (err) { return { step: s2, stopped, name: err.name, msg: err.message }; }
       if (eng.last.r4.engaged) stopped++; }
     return { step: 0, stopped }; };
-  const rs = allOnRun('SERIES', 60), rc = allOnRun('SYMMETRIC_CONCURRENT', 60), rp = allOnRun('PARALLEL', 140);
+  const rs = allOnRun('SERIES', 60), rc = allOnRun('SYMMETRIC_CONCURRENT', 113), rp = allOnRun('PARALLEL', 43);
   const title = HTML.split("document.getElementById('btn-all').title = '")[1].split("';")[0];
-  ok(rs.step === 0 && rs.stopped === 60 && rc.step === 0 && rc.stopped === 60 &&
-     rp.step === 140 && rp.stopped === 139 && rp.name === 'R4Uncontained' && /S7 took the energy to 2\^2057 times the target/.test(rp.msg) &&
-     /in SERIES and CONCURRENT each of the first 60 steps is a blow-up that R4 stops/.test(title) && /in PARALLEL R4 stops 139, and at step 140 S7 takes the energy 2\^2057 times past the target/.test(title),
-     'ALL ON from the seed does what its title says: in SERIES and CONCURRENT R4 stops a blow-up on each of the first 60 steps, in PARALLEL on 139, and at step 140 S7 goes past what the gate can bring back',
-     JSON.stringify({ rs, rc, rp: { ...rp, msg: (rp.msg || '').slice(0, 160) } }));
+  ok(rs.step === 0 && rs.stopped === 60 &&
+     rc.step === 113 && rc.stopped === 112 && rc.name === 'R4Uncontained' && /after 256 full gate passes at S6 the energy is still/.test(rc.msg) &&
+     rp.step === 43 && rp.stopped === 42 && rp.name === 'R4Uncontained' && /after 256 full gate passes at S15 the energy is still/.test(rp.msg) &&
+     /in SERIES each of the first 60 steps is a blow-up that R4 stops/.test(title) && /in CONCURRENT R4 stops 112, and at step 113 S6 is still past the target after 256 full gate passes/.test(title) &&
+     /in PARALLEL R4 stops 42, and at step 43 S15 is/.test(title),
+     'ALL ON from the seed does what its title says: in SERIES R4 stops a blow-up on each of the first 60 steps; in CONCURRENT on 112 and at step 113 S6 goes past what the gate can bring back; in PARALLEL on 42 and at step 43 S15 does',
+     JSON.stringify({ rs, rc: { ...rc, msg: (rc.msg || '').slice(0, 160) }, rp: { ...rp, msg: (rp.msg || '').slice(0, 160) } }));
 }
 
 section('series / parallel / concurrent');
