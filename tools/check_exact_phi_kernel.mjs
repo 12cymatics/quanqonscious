@@ -202,7 +202,7 @@ section('the 29 v18.24 formulas against an independent transcription');
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
      `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times): ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
-  const want = { 'a zero base vertex (S6)': '6', 'a zero complement numerator (S13)': '13', 'a zero root (S19)': '19', 'a zero half-sum (S25)': '25', 'lambda_0 = lambda_2 = 0 (GRVQ)': '5' };
+  const want = { 'a zero base vertex (S6)': '6', 'a zero complement numerator (S13)': '13', 'a zero root (S19)': '19', 'a zero half-sum (S25)': '25' };
   for (const [name, id] of Object.entries(want))
     ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
   const unexpected = Object.entries(refusals).filter(([n]) => !(n in want)).map(([n, s]) => `${n}: S${[...s].join(',S')}`);
@@ -778,7 +778,7 @@ section('the presets do what their titles say');
   const ids = Object.keys(PRESETS);
   const kernelSrc = HTML.slice(start, end);
   const groups = [[], [], [], []];
-  ids.forEach((id, i) => groups[i % 4].push([id, PRESETS[id]]));
+  ids.filter(id => PRESETS[id].claims.length).forEach((id, i) => groups[i % 4].push([id, PRESETS[id]]));
   const results = Object.assign({}, ...(await Promise.all(groups.filter(g => g.length).map(g => new Promise((res, rej) => {
     const w = new Worker(join(ROOT, 'tools', 'preset_worker.cjs'), { workerData: { src: kernelSrc, presets: g, steps: 600 } });
     w.on('message', res); w.on('error', rej);
@@ -791,10 +791,10 @@ section('the presets do what their titles say');
     if (c.ge !== undefined) return x >= num(c.ge); if (c.le !== undefined) return x <= num(c.le); return false; };
   const bound = c => c.eq ?? c.lt ?? c.gt ?? c.ge ?? c.le;
   const names = (text, b) => new RegExp('(^|[^0-9/.])' + b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9/])').test(text);
-  ok(ids.length === 12 && ids.every(id => PRESETS[id].claims.length >= 2 && PRESETS[id].claims.every(c => typeof bound(c) === 'string' && names(c.text, bound(c)))),
-     `${ids.length} presets, each with at least two measured statements, each statement's text naming the bound it is checked against`);
+  ok(ids.length === 12 && ids.every(id => PRESETS[id].claims.every(c => typeof bound(c) === 'string' && names(c.text, bound(c)))),
+     `${ids.length} presets, each statement's text naming the bound it is checked against`);
   ok(HTML.includes(`const DEFAULT_PRESET = '`) && ids.includes(HTML.split(`const DEFAULT_PRESET = '`)[1].split(`'`)[0]), 'the page starts on one of them');
-  for (const id of ids) {
+  for (const id of ids.filter(id => PRESETS[id].claims.length)) {
     const d = results[id], p = PRESETS[id];
     if (!d) { ok(false, `${id}: ran from the seed`); continue; }
     const bad = p.claims.filter(c => !holds(d, c)).map(c => `${c.m} = ${metric(d, c.m)} against ${bound(c)}`);

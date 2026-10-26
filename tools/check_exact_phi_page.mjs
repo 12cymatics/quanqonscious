@@ -1062,7 +1062,7 @@ try {
   await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-damper', 'pre-mixer', 'pre-capacitor']) {
+  for (const id of ['pre-damper', 'pre-amplifier']) {
     await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
@@ -1098,7 +1098,7 @@ try {
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
   ok(lawBroken.length === 0 && lawFrames > 100,
-     `on a fresh page every one of ${lawFrames} frames over DYNAMO, MIXER and CAPACITOR keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     `on a fresh page every one of ${lawFrames} frames over DAMPER and AMPLIFIER keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
   section('on a phone');

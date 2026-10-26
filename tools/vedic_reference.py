@@ -78,9 +78,11 @@ def walk(lam, x):
     wp, wn = abs(lam[prev]), abs(lam[nxt])
     tot = wp + wn
     if tot == 0:
-        raise ZeroDivisionError("walk measure")
-    mu[prev] += F(1, 2) * wp / tot
-    mu[nxt] += F(1, 2) * wn / tot
+        mu[prev] += F(1, 2) * F(1, 2)
+        mu[nxt] += F(1, 2) * F(1, 2)
+    else:
+        mu[prev] += F(1, 2) * wp / tot
+        mu[nxt] += F(1, 2) * wn / tot
     return mu
 
 
