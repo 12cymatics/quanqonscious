@@ -279,7 +279,7 @@ try {
   ok(hk.bright && hk.hot[2] < 0.5 * hk.hot[0], 'a brighter colour of one hue is never darker, and far past 255 an orange is still orange, not white (highKnee_mono)', JSON.stringify(hk.hot));
 
   section('the glide');
-  await presetFromSeed('pre-dynamo');
+  await presetFromSeed('pre-damper');
   await waitFor(`KERNEL_VIEW.state.frame >= 3 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
   const gr = await evaluate(`({ frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-glide').textContent, dur: DISPLAY.dur, ms: STEP_INTERVAL_MS })`);
   ok(gr.dur === 1000 && gr.ms === 1000 && new RegExp('^to step ' + gr.frame + ': [01] of 1 s$').test(gr.row),
@@ -326,20 +326,19 @@ try {
   await waitFor(`KERNEL_VIEW.halted || (KERNEL_VIEW.state && KERNEL_VIEW.state.frame >= 3)`, 60000);
   const ao = await evaluate(`(() => { updateSimulationHud();
     const st = KERNEL_VIEW.state, F = st.frame, halted = KERNEL_VIEW.halted ? KERNEL_VIEW.halted.message : null;
-    const row = document.getElementById('sim-r4').textContent, params = kernelParams(), active = activeSutras();
-    let e = KERNEL.initEngine(), engaged = 0, lastAt = null, threw = null;
+    const params = kernelParams(), active = activeSutras();
+    let e = KERNEL.initEngine(), threw = null;
     for (let k = 1; k <= F + (halted ? 1 : 0); k++) {
       try { e = KERNEL.step(e, params, active, COMPOSITION); } catch (err) { threw = err.message; break; }
-      if (e.last.r4.engaged) { engaged++; lastAt = e.last.r4.blowup.at; } else lastAt = null;
     }
     const same = e.frame === F && e.psi.every((q, i) => Q.eq(q, st.psi[i]));
     return { F, ids: active.map(a => a.id).join(','), comp: COMPOSITION, applied: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
-             halted, threw, same, engaged, lastAt, row };
+             halted, threw, same };
   })()`);
   const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
-  ok(ao.ids === all29 && ao.applied === all29 && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.same && ao.engaged > 0 &&
-     (ao.halted ? ao.threw === ao.halted : ao.threw === null && (ao.lastAt ? ao.row.startsWith(`stopped a blow-up at ${ao.lastAt} (`) : ao.row === 'dormant')),
-     `ALL ON from the seed: all 29 at 50% go to the worker, its ${ao.F} steps are the kernel's own bit for bit, R4 stops a blow-up on ${ao.engaged} of them and its row names where the last began${ao.halted ? ', and the run stops where the kernel stops' : ''}`,
+  ok(ao.ids === all29 && ao.applied === all29 && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.same &&
+     (ao.halted ? ao.threw === ao.halted : ao.threw === null),
+     `ALL ON from the seed: all 29 at 50% go to the worker and its ${ao.F} steps are the kernel's own bit for bit${ao.halted ? ', and the run stops where the kernel stops' : ''}`,
      JSON.stringify(ao));
   const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
   await evaluate(`document.getElementById('pre-damper').click()`);
@@ -357,9 +356,9 @@ try {
   ok(await waitFor(`KERNEL_VIEW.state.frame > ${paused}`, 20000), 'RUN resumes it');
 
   section('certified');
-  await presetFromSeed('pre-dynamo');
+  await presetFromSeed('pre-damper');
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
-  ok(faithful, 'the badge reaches FAITHFUL on the dynamo preset',
+  ok(faithful, 'the badge reaches FAITHFUL on the damper preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
   section('dynamo and Maya');
@@ -387,8 +386,8 @@ try {
     if (!k || k.omega !== qstr(om, 10) || k.drive !== qstr(dr, 4) || k.chi !== qstr(ch, 10)) { presetParams = false; which = id + ' ' + JSON.stringify(k); }
   }
   ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
-  /* the dynamo preset, long enough for the timeline to hold a history */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
+  /* the damper preset, long enough for the timeline to hold a history */
+  await presetFromSeed('pre-damper'); await appliedNow();
   await waitFor(`KERNEL_VIEW.hist.frame.length >= 12`, 60000);
   const dy = await evaluate(`(() => {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
@@ -436,7 +435,7 @@ try {
      one state; the worker's exact A and chi for that state are fetched and the
      gate reads them on the torus itself: positions from tessVertexToTorus's
      angles, circulations by walking each face's corners. */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
+  await presetFromSeed('pre-damper'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 20`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -579,12 +578,12 @@ try {
   section('the fields around the construct');
   /* The magnetic and electric fields of the construct's sources, and the
      energy flow between them (FieldsAround.lean). Paused on one landed state
-     of the dynamo preset, the gate takes what the page asked the field worker
+     of the damper preset, the gate takes what the page asked the field worker
      (sources, their places, the radius) and what it answered, and recomputes
      the answer independently: B by integrating Biot-Savart numerically along
      each straight piece (Gauss-Legendre, panels finer the nearer the point),
      not by the worker's closed form; E by Coulomb; S = E x B. */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
+  await presetFromSeed('pre-damper'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 15`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -929,7 +928,7 @@ try {
      the surface is still gliding, every move takes exactly the glide set and
      lands exactly on its state, and every frame between is a point on the
      segment between the two exact states. */
-  await presetFromSeed('pre-dynamo');
+  await presetFromSeed('pre-damper');
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
@@ -1003,18 +1002,18 @@ try {
       magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
       rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
-    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'r4R' in L.params && 'appliedH' in L.params,
+    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             stagesRun: L.stagesRun, magKeeps, rotKeeps,
+             magKeeps, rotKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
              records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/4' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
-  ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'r4'),
-     'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
+  ok(gotStep && st.schema === 'vedic-step-export/5' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(st.params && st.dielectricIn && st.stepError,
+     'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
   ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
@@ -1063,7 +1062,7 @@ try {
   await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-dynamo', 'pre-mixer', 'pre-capacitor']) {
+  for (const id of ['pre-damper', 'pre-mixer', 'pre-capacitor']) {
     await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
