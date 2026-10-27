@@ -1,5 +1,5 @@
 {
-  ".github/workflows/instruction-contracts.yml": "8b06aa07372a027bc455035945d5b3401033f56a652397a76b2472f084625fb0",
+  ".github/workflows/instruction-contracts.yml": "d6d31180f164e99ba86910e852b5e832dac1cd78b7005c5b02520a7d7992a8dd",
   "ACTIVATION.md": "5bf04c260fabb9f25ff1b0239340f7f5dc41bef8b24d8e0a08176ae202fe3af9",
   "AGENTS.md": "cb9df4eea8dbd0ef8c21096cf796d564199a96fae6b1948a95c7cd886d9bab18",
   "BEHAVIOURAL_EVALUATION.md": "90d7e53a00dacddbd446b0963c76cd0bb682c0ea9c5ea495c1c9f79393ea2953",
@@ -30,7 +30,7 @@
   "geometry/STRUCTURAL-CHECKS.json": "9314877c9aa5d6d0b6841ccc7bf161ac4e03d356e6263706532a507264e1679e",
   "geometry/geometry-index.template.json": "0eaa2bb9181cf8f577630846b312a4784fd2a5ff2ab6449dbe085d47dfc50083",
   "geometry/q4-source-inspection.json": "2af98f370b66d656889860594950c37aeb37ad9f9861a4b1ff81514ea3ad5ade",
-  "geometry/verify_structures.py": "0c4534497a50dc7b11d3cb31e5855a6720709817ab27372d487f90ae2d2591d2",
+  "geometry/verify_structures.py": "c5cd5fa82a9b3550c5dbe80681d7277a0507d9dbb5a415140649709e262d1af5",
   "memory-claim.example.json": "dc39cbdf4eeb3b86b970e5dcf562ed8f9391869c4e03804befa9dd0f368ac0b4",
   "policy.yaml": "26d3f4fddfdae97ab7be15c495d2d323e9fc740fdf44575fc7192ef50b7a0e67",
   "project-memory.template.yaml": "5b7d2d9d5d96865d05343c37faec6085c846ac2e754c84d3b153f23a18ca2d9e",
@@ -54,11 +54,11 @@
   "test_handoff_fixtures.py": "641af12eb7de874b1549d24a5d2ce09bc6b94ee74e3072dbb20be56442da8f78",
   "test_project_handoff.py": "cdcebfc3ed01581fb5fd1b4e2df482ac2ce8aba11c33fb5b51f926e437d04de1",
   "test_readiness.py": "c979ae2f0cf7e70f4fcf7b5446a5120b164f29977afa056b0a1498440caf77c1",
-  "test_validation_identity.py": "a7c10f6398d3a73063195890d83e5185a58b2c1fe24cfe91d74ec2d42073d553",
+  "test_validation_identity.py": "04381f73e09c19cdacfe89fbee516bd1a7d3d3433856d99819fcbc30514804fe",
   "test_verify_package.py": "26c1e0fe11dd493b8c320f06c106eb76302430ce2f02adf3ba80d31c5aa776dd",
   "validate_contracts.py": "02c2f9f0b25ee6419841caf67ef933bc9c2bf807adec106ade6d84c412e5c27c",
   "validate_readiness.py": "16eb2fbb08cd6fb069f996aba52febbc0fc10d2466a46d945f3c0e91fffb7a71",
   "validation_identity.py": "f1e21d8296869e9ef9644e122f74c79ca2e27db207905069b45e201101069400",
   "verify_package.py": "45b8d694b37beefe38dfaad425f3dba40899c10eb56b681a5dd96f595883b7f5",
-  "workflows/instruction-contracts.yml.template": "8b06aa07372a027bc455035945d5b3401033f56a652397a76b2472f084625fb0"
+  "workflows/instruction-contracts.yml.template": "d6d31180f164e99ba86910e852b5e832dac1cd78b7005c5b02520a7d7992a8dd"
 }

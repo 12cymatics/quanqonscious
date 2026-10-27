@@ -105,14 +105,14 @@ def verify():
     check('Q4 has four distinct unsigned neighbors', all(len(set(cube_neighbors(v, 4))) == 4 for v in vertices))
     check('Q4 adjacency is symmetric', all(v in cube_neighbors(w, 4) for v in vertices for w in cube_neighbors(v, 4)))
     check('Q4 routes retain their requested endpoints', all(cube_route(a, b, 4)[0] == a and cube_route(a, b, 4)[-1] == b for a in vertices for b in vertices))
-    check('Q4 shortest route length equals Hamming distance', all(len(cube_route(a, b, 4)) - 1 == (a ^ b).bit_count() for a in vertices for b in vertices))
+    check('Q4 shortest route length equals Hamming distance', all(len(cube_route(a, b, 4)) - 1 == bin(a ^ b).count('1') for a in vertices for b in vertices))
     check('Q4 routes use valid edges', all(all(y in cube_neighbors(x, 4) for x, y in zip(route, route[1:])) for a in vertices for b in vertices for route in [cube_route(a, b, 4)]))
     for mask in vertices:
-        f = lambda v: -1 if (v & mask).bit_count() % 2 else 1
-        check('Q4 negative Laplacian Walsh mask ' + str(mask), all(sum(f(w) - f(v) for w in cube_neighbors(v, 4)) == -2 * mask.bit_count() * f(v) for v in vertices))
+        f = lambda v: -1 if bin(v & mask).count('1') % 2 else 1
+        check('Q4 negative Laplacian Walsh mask ' + str(mask), all(sum(f(w) - f(v) for w in cube_neighbors(v, 4)) == -2 * bin(mask).count('1') * f(v) for v in vertices))
     order = [gray(i) for i in vertices]
     check('Gray order is bijective on Q4', len(set(order)) == 16 and set(order) == set(vertices))
-    check('Gray consecutive vertices differ in one bit', all((a ^ b).bit_count() == 1 for a, b in zip(order, order[1:])))
+    check('Gray consecutive vertices differ in one bit', all(bin(a ^ b).count('1') == 1 for a, b in zip(order, order[1:])))
     shape = (3, 5)
     coordinates = tuple(itertools.product(*(range(n) for n in shape)))
     check('3 by 5 toroidal grid has four distinct neighbors', all(len({n for _, _, n in periodic_slots(v, shape)}) == 4 for v in coordinates))
@@ -128,8 +128,8 @@ def verify():
     check('2D Morton map is bijective on the tested 4 by 4 grid', codes == set(range(16)))
     ordered = sorted(points, key=lambda p: morton2(*p, 2))
     check('Morton consecutive addresses need not be nearest neighbors', any(abs(a[0]-b[0]) + abs(a[1]-b[1]) > 1 for a, b in zip(ordered, ordered[1:])))
-    check('Independent BFS distances equal Q4 Hamming distances', all(bfs_distance(a, b, 4) == (a ^ b).bit_count() for a in vertices for b in vertices))
-    check('Gray closing pair differs in one bit', (order[-1] ^ order[0]).bit_count() == 1)
+    check('Independent BFS distances equal Q4 Hamming distances', all(bfs_distance(a, b, 4) == bin(a ^ b).count('1') for a in vertices for b in vertices))
+    check('Gray closing pair differs in one bit', bin(order[-1] ^ order[0]).count('1') == 1)
     check('Gray inverse exhaustive round trips through eight bits', all(inverse_gray(gray(i)) == i and gray(inverse_gray(i)) == i for i in range(256)))
     check('Length-one periodic axis retains two self stencil slots', periodic_slots((0,), (1,)) == ((0, -1, (0,)), (0, 1, (0,))))
     check('Length-one simple graph excludes self loops', not {n for _, _, n in periodic_slots((0,), (1,)) if n != (0,)})

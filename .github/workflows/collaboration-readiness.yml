@@ -5,12 +5,14 @@ on:
     paths:
       - 'collaboration-readiness/**'
       - '.github/workflows/collaboration-readiness.yml'
+      - 'tests/test_documented_paths.py'
   push:
     branches:
       - claude/repair-collaboration-readiness-20261028
     paths:
       - 'collaboration-readiness/**'
       - '.github/workflows/collaboration-readiness.yml'
+      - 'tests/test_documented_paths.py'
 permissions:
   contents: read
 jobs:

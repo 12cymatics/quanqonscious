@@ -30,10 +30,14 @@ repository has always been run.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+from unittest import TestCase as AssertionCase
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -116,6 +120,41 @@ GENERATED = {
     "faraday-cell-standalone.html": "node faraday/build-standalone.mjs",
 }
 
+HISTORICAL_REFERENCES = {
+    ("collaboration-readiness/reviews/AGENT-METHODS-AUDIT.md", "nonexistent.txt"): {
+        "document_sha256": "b3acad7d546969677f18905c94db5c43ceb378b7fd99ad713dcfecb57177da7b",
+        "context": "with evidence string `nonexistent.txt` validates successfully.",
+        "reason": (
+            "The historical audit reports a deliberately missing evidence-file "
+            "fixture accepted by the former validator."
+        ),
+    },
+    ("collaboration-readiness/reviews/AGENT-METHODS-AUDIT.md", "src/main.py"): {
+        "document_sha256": "b3acad7d546969677f18905c94db5c43ceb378b7fd99ad713dcfecb57177da7b",
+        "context": "Assigning `src` to worker A and `src/main.py` to worker B validates.",
+        "reason": (
+            "The historical audit uses this path as a parent/child "
+            "ownership-overlap example."
+        ),
+    },
+    ("collaboration-readiness/reviews/VALIDATION-METHODS-AUDIT.md", "src/module.py"): {
+        "document_sha256": "20bb0cf4321a9662f580bef6240947dbd727343e4e7130d9083a84fd35c7b514",
+        "context": "`src` plus `src/module.py`, or aliased spellings of a path, pass.",
+        "reason": (
+            "The historical audit uses this path as an ownership-overlap "
+            "counterexample to the former validator."
+        ),
+    },
+    ("collaboration-readiness/reviews/VALIDATION-METHODS-AUDIT.md", "test-results.txt"): {
+        "document_sha256": "20bb0cf4321a9662f580bef6240947dbd727343e4e7130d9083a84fd35c7b514",
+        "context": "`test-results.txt` records the run.",
+        "reason": (
+            "The preserved historical review names an earlier unbundled "
+            "test-run output, not a current repository artifact."
+        ),
+    },
+}
+
 _PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|json|yaml|yml|jsonl|"
                    r"sh|html|txt|md|hpp|cpp|ipynb|toml|cfg|jl|adoc))`")
 
@@ -153,11 +192,21 @@ def resolves(citation: str, doc: str) -> bool:
     return len(BY_NAME.get(Path(citation).name, ())) == 1
 
 
+def historical_reference(citation: str, doc: str, source_bytes=None) -> bool:
+    entry = HISTORICAL_REFERENCES.get((doc, citation))
+    if entry is None:
+        return False
+    if source_bytes is None:
+        source_bytes = (REPO / doc).read_bytes()
+    text = source_bytes.decode("utf-8")
+    return (hashlib.sha256(source_bytes).hexdigest() == entry["document_sha256"]
+            and citation in _PATH.findall(text)
+            and entry["context"] in text)
+
+
 def is_live(citation: str, doc: str) -> bool:
-    """The whole decision, in one pure function — see the trainer's gate for
-    what happens when the tested helper and the called helper drift apart."""
     return (citation in ASPIRATIONAL or citation in GENERATED
-            or resolves(citation, doc))
+            or resolves(citation, doc) or historical_reference(citation, doc))
 
 
 def dead_pointers() -> list[str]:
@@ -183,6 +232,103 @@ def test_no_document_points_at_something_that_is_not_there():
           "it to ASPIRATIONAL here, with the reason — or it is written by a "
           "documented build command, in which case add it to GENERATED with "
           "that command.")
+
+
+def test_historical_reference_entries_match_unchanged_cited_reviews():
+    assert len(HISTORICAL_REFERENCES) == 4
+    for (doc, citation), entry in HISTORICAL_REFERENCES.items():
+        assert doc in DOCS, f"Historical source is not a checked document: {doc}"
+        content = (REPO / doc).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == entry["document_sha256"], doc
+        assert citation in cited(doc), (
+            f"Historical reference is no longer cited: {doc}: {citation}"
+        )
+        assert entry["context"] in content.decode("utf-8"), (doc, citation)
+        assert entry["reason"].strip(), (doc, citation)
+        assert historical_reference(citation, doc, content) is True
+        assert is_live(citation, doc) is True
+
+
+def test_historical_reference_allowances_are_exact_document_reference_pairs():
+    for doc, citation in HISTORICAL_REFERENCES:
+        content = (REPO / doc).read_bytes()
+        assert historical_reference(
+            "another-missing-evidence.txt", doc, content
+        ) is False
+        assert historical_reference(citation, "README.md", content) is False
+        assert historical_reference(
+            citation, "collaboration-readiness/reviews/OTHER-AUDIT.md", content
+        ) is False
+        for other_doc, other_citation in HISTORICAL_REFERENCES:
+            if (doc, other_citation) not in HISTORICAL_REFERENCES:
+                assert historical_reference(other_citation, doc, content) is False
+
+
+def test_historical_reference_gate_rejects_changed_review_bytes_then_accepts_restored_copy():
+    originals = {
+        doc: (REPO / doc).read_bytes() for doc, citation in HISTORICAL_REFERENCES
+    }
+    with tempfile.TemporaryDirectory(
+        prefix="documented-path-historical-copy-"
+    ) as folder:
+        copied_root = Path(folder)
+        for doc, content in originals.items():
+            target = copied_root / doc
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        with patch.multiple(
+            sys.modules[__name__], REPO=copied_root, DOCS=tuple(sorted(originals))
+        ):
+            test_no_document_points_at_something_that_is_not_there()
+            for doc, content in originals.items():
+                target = copied_root / doc
+                target.write_bytes(content + b"\n")
+                expected = sorted(
+                    f"{doc}: {citation}"
+                    for listed_doc, citation in HISTORICAL_REFERENCES
+                    if listed_doc == doc
+                )
+                assert dead_pointers() == expected
+                with AssertionCase().assertRaisesRegex(
+                    AssertionError, "documented paths that resolve to nothing"
+                ):
+                    test_no_document_points_at_something_that_is_not_there()
+                target.write_bytes(content)
+                assert dead_pointers() == []
+                test_no_document_points_at_something_that_is_not_there()
+
+
+def test_historical_reference_gate_rejects_new_citations_and_copied_other_documents():
+    doc = "collaboration-readiness/reviews/AGENT-METHODS-AUDIT.md"
+    content = (REPO / doc).read_bytes()
+    with tempfile.TemporaryDirectory(
+        prefix="documented-path-unlisted-copy-"
+    ) as folder:
+        copied_root = Path(folder)
+        target = copied_root / doc
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        with patch.multiple(sys.modules[__name__], REPO=copied_root, DOCS=(doc,)):
+            test_no_document_points_at_something_that_is_not_there()
+            target.write_bytes(content + b"\n`another-missing-evidence.txt`\n")
+            assert f"{doc}: another-missing-evidence.txt" in dead_pointers()
+            with AssertionCase().assertRaisesRegex(
+                AssertionError, "documented paths that resolve to nothing"
+            ):
+                test_no_document_points_at_something_that_is_not_there()
+            target.write_bytes(content)
+            test_no_document_points_at_something_that_is_not_there()
+        other_doc = "historical-review-copy.md"
+        (copied_root / other_doc).write_bytes(content)
+        with patch.multiple(
+            sys.modules[__name__], REPO=copied_root, DOCS=(other_doc,)
+        ):
+            assert f"{other_doc}: nonexistent.txt" in dead_pointers()
+            assert f"{other_doc}: src/main.py" in dead_pointers()
+            with AssertionCase().assertRaisesRegex(
+                AssertionError, "documented paths that resolve to nothing"
+            ):
+                test_no_document_points_at_something_that_is_not_there()
 
 
 def test_every_aspirational_entry_is_still_cited():

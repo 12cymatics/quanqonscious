@@ -364,8 +364,24 @@ class ValidationIdentityTests(unittest.TestCase):
             validate_ownership([{'owner': 'a', 'write_paths': ['new/Result.txt']}, {'owner': 'b', 'write_paths': ['new/result.txt']}], self.source)
 
     def test_existing_case_collision_is_rejected_on_either_filesystem(self):
-        (self.source / 'CaseOwned').mkdir()
-        (self.source / 'caseowned').mkdir(exist_ok=True)
+        first = self.source / 'CaseOwned'
+        second = self.source / 'caseowned'
+        first.mkdir()
+        second.mkdir(exist_ok=True)
+        first_exists = first.exists()
+        second_exists = second.exists()
+        first_stat = first.stat() if first_exists else None
+        second_stat = second.stat() if second_exists else None
+        samefile = first_exists and second_exists and first.samefile(second)
+        runner_os = os.environ.get('RUNNER_OS')
+        diagnostic = {'test': 'existing_case_alias_ownership', 'runner_os': runner_os, 'samefile': samefile, 'paths': [
+            {'name': first.name, 'exists': first_exists, 'device': first_stat.st_dev if first_stat else None, 'inode': first_stat.st_ino if first_stat else None},
+            {'name': second.name, 'exists': second_exists, 'device': second_stat.st_dev if second_stat else None, 'inode': second_stat.st_ino if second_stat else None},
+        ]}
+        print(json.dumps(diagnostic, sort_keys=True), flush=True)
+        if runner_os == 'macOS':
+            self.assertTrue(first_exists and second_exists, 'GitHub macOS case-alias regression requires both existing path spellings')
+            self.assertTrue(samefile, 'GitHub macOS case-alias regression requires CaseOwned and caseowned to identify the same filesystem object; the required case-insensitive filesystem scenario is absent')
         with self.assertRaisesRegex(ValueError, 'case/Unicode'):
             validate_ownership([{'owner': 'a', 'write_paths': ['CaseOwned']}, {'owner': 'b', 'write_paths': ['caseowned']}], self.source)
 
