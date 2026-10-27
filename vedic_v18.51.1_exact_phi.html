@@ -155,7 +155,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="section" style="margin-top:0;border-top:none;padding-top:24px">
     <h5>SIMULATION</h5>
     <div class="row"><span class="k">step</span><span class="v" id="sim-step">0</span></div>
-    <div class="row"><span class="k">time per step</span><span class="v" id="sim-ms">–</span></div>
+    <div class="row"><span class="k">calculation</span><span class="v" id="sim-ms">–</span></div>
     <div class="row"><span class="k">Σ|ψ|²</span><span class="v" id="sim-energy">–</span></div>
     <div class="row"><span class="k">glide</span><span class="v" id="sim-glide">–</span></div>
     <div class="row"><span class="k">stored precision</span><span class="v" id="sim-store">128 bits</span></div>
@@ -4727,7 +4727,7 @@ function updateRunBadge() {
     const st = KERNEL_VIEW.state;
     const paused = !KERNEL_VIEW.running ? 'PAUSED · ' : '';
     const pending = KERNEL_VIEW.appliedVersion < KERNEL_VIEW.configVersion ? ' · new settings apply next step' : '';
-    text = `${paused}step ${st.frame} · ${Math.round(KERNEL_VIEW.stepMs)} ms/step · ${COMPOSITION_LABEL[COMPOSITION]}${pending}`;
+    text = `${paused}step ${shownStep()} · calculated in ${Math.round(KERNEL_VIEW.stepMs)} ms · ${COMPOSITION_LABEL[COMPOSITION]}${pending}`;
   }
   el.className = cls;
   el.textContent = text;
@@ -4736,7 +4736,7 @@ function updateSimulationHud() {
   const st = KERNEL_VIEW.state;
   if (!st) return;
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  set('sim-step', String(st.frame));
+  set('sim-step', String(shownStep()));
   set('sim-ms', Math.round(KERNEL_VIEW.stepMs) + ' ms');
   set('sim-energy', FAITHFUL.aSci(A4.fromQ(st.energyLedger)));
   updateCouplingsHud();
@@ -4746,13 +4746,20 @@ function updateSimulationHud() {
   updateDynamoHud();
   updateRunBadge();
 }
+function shownStep() {
+  const st = KERNEL_VIEW.state;
+  if (!st || st.frame === 0) return 0;
+  const dur = DISPLAY.dur > 0 ? DISPLAY.dur : STEP_INTERVAL_MS;
+  return Math.floor((!DISPLAY.started || DISPLAY.tau === 1 ? dur : DISPLAY.tau * dur) / 1000);
+}
 function glideWords() {
   const st = KERNEL_VIEW.state;
   if (!st) return '–';
   if (KERNEL_VIEW.halted) return 'refused';
-  if (!DISPLAY.started || DISPLAY.tau === 1 || DISPLAY.dur === 0)
-    return st.frame === 0 ? (KERNEL_VIEW.running ? 'on the seed · calculating' : 'on the seed · paused') : `holding step ${st.frame} until a setting changes`;
-  return `to step ${st.frame}: ${Math.floor(DISPLAY.tau * DISPLAY.dur / 1000)} of ${Math.round(DISPLAY.dur / 1000)} s`;
+  if (st.frame === 0) return KERNEL_VIEW.running ? 'on the seed · calculating' : 'on the seed · paused';
+  const T = Math.round((DISPLAY.dur > 0 ? DISPLAY.dur : STEP_INTERVAL_MS) / 1000);
+  if (!DISPLAY.started || DISPLAY.tau === 1) return `step ${T} of ${T} s · holding until a setting changes`;
+  return `step ${shownStep()} of ${T} s`;
 }
 function updateCouplingsHud() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -4901,7 +4908,7 @@ function drawFluxMap(ctx, cw, ch) {
   ctx.fillStyle = FLUX_MAP.drag ? '#1e2f40' : '#111a24'; ctx.fillRect(gx - 20, gy - 44, pw, 16);
   ctx.strokeStyle = FLUX_MAP.drag ? '#4a90d9' : '#1e2a36'; ctx.strokeRect(gx - 20, gy - 44, pw, ph);
   ctx.font = '8px monospace'; ctx.fillStyle = '#8a9aaa';
-  ctx.fillText(`⠿ FLUX GRID · the hypercube on the torus, cut open · step ${LV.frame}`, gx - 14, gy - 33);
+  ctx.fillText(`⠿ FLUX GRID · the hypercube on the torus, cut open · step ${shownStep()}`, gx - 14, gy - 33);
   ctx.font = '7px monospace'; ctx.fillStyle = '#5a6a7a';
   ctx.fillText('θ →', X(4) - 14, Y(0) + 13); ctx.fillText('φ ↑', gx - 17, gy + 6);
   const arrowHead = (x, y, ux, uy, L) => {
@@ -5092,6 +5099,8 @@ function frame(t) {
   if (KERNEL_VIEW.state && W > 0 && H > 0) {
     displayAdvance(performance.now());
     const g = document.getElementById('sim-glide'); if (g) g.textContent = glideWords();
+    const ss = document.getElementById('sim-step'), sn = String(shownStep());
+    if (ss && ss.textContent !== sn) { ss.textContent = sn; updateRunBadge(); }
     projectTorus();
     syncFaithfulBadge();
     renderTorus();
