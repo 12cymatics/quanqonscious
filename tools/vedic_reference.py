@@ -78,9 +78,11 @@ def walk(lam, x):
     wp, wn = abs(lam[prev]), abs(lam[nxt])
     tot = wp + wn
     if tot == 0:
-        raise ZeroDivisionError("walk measure")
-    mu[prev] += F(1, 2) * wp / tot
-    mu[nxt] += F(1, 2) * wn / tot
+        mu[prev] += F(1, 2) * F(1, 2)
+        mu[nxt] += F(1, 2) * F(1, 2)
+    else:
+        mu[prev] += F(1, 2) * wp / tot
+        mu[nxt] += F(1, 2) * wn / tot
     return mu
 
 
@@ -159,7 +161,7 @@ def field(sid, psi, a, al):
                     continue
                 v0, v1 = p[base], p[base | m]
                 if v0 == 0:
-                    raise ZeroDivisionError("S6")
+                    continue
                 ratio = v1 / v0
                 err = ratio - (a[1] if ratio >= 0 else -a[1])
                 corr = store(-err * al * abs(v0 + v1))
@@ -201,7 +203,7 @@ def field(sid, psi, a, al):
             j = i ^ 15
             num, den = abs(p[i].numerator), abs(p[j].numerator)
             if den == 0:
-                raise ZeroDivisionError("S13")
+                continue
             n, d, cf = num, den, []
             while len(cf) < int(a[1]) and d > 0:
                 cf.append(n // d)
@@ -262,6 +264,8 @@ def field(sid, psi, a, al):
                 p[j] -= corr
             else:
                 ai, aj = abs(vi), abs(vj)
+                if ai == 0 or aj == 0:
+                    continue
                 ratio = ai / aj if ai > aj else aj / ai
                 scale = al * (ratio - a[1]) * a[2]
                 if ai > aj:
@@ -319,11 +323,13 @@ def field(sid, psi, a, al):
         for axis in range(4):
             lo = sum((psi[i] for i in range(16) if not i & (1 << axis)), F(0))
             hi = sum((psi[i] for i in range(16) if i & (1 << axis)), F(0))
+            if lo == 0:
+                prodS = F(0)
+                break
             prodS *= lo
-            prodT *= hi
-        if prodS == 0 or prodT == 0:
-            raise ZeroDivisionError("S25")
-        if abs(prodS) != abs(prodT):
+            if hi != 0:
+                prodT *= hi
+        if prodS != 0 and abs(prodS) != abs(prodT):
             sg = 1 if abs(prodS) > abs(prodT) else -1
             for i in range(16):
                 h = popcount(i)

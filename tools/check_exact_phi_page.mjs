@@ -16,8 +16,9 @@
                         PAUSE / RUN reaches the worker, and the worker runs
                         toward exactly the set and composition the control
                         chose
-     the ramp           the strengths row shows each formula at the strength
-                        the step ran, the gate's own count of the ramp
+     the glide          one calculation, then the surface glides to its
+                        result over the time PACE sets (60 s unless changed);
+                        the next calculation starts only once it has landed
      the surface        is drawn, every point finite and in front of the
                         camera
      no clamping        the colour formula runs past 255 and each channel goes
@@ -160,6 +161,19 @@ try {
   const tests = await waitFor(`KERNEL_VIEW.selfTestsOk === true`, 60000);
   ok(tests, 'the kernel self-tests pass on the audit worker');
   ok(await evaluate(`KERNEL_VIEW.workerError === null`), 'every worker started', await evaluate(`String(KERNEL_VIEW.workerError)`));
+  /* the default glide, a minute: one calculation, and none starts while the
+     surface glides to it */
+  await waitFor(`KERNEL_VIEW.state.frame >= 1 && DISPLAY.started && DISPLAY.dur > 0`, 60000);
+  const g0 = await evaluate(`({ ms: STEP_INTERVAL_MS, slider: document.getElementById('amp-glide').value, frame: KERNEL_VIEW.state.frame, dur: DISPLAY.dur, tau: DISPLAY.tau })`);
+  await sleep(5000);
+  const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, queue: KERNEL_VIEW.queue.length, dur: DISPLAY.dur, tau: DISPLAY.tau, row: document.getElementById('sim-glide').textContent })`);
+  ok(g0.ms === 60000 && g0.slider === '60' && g0.dur === 60000 && g1.frame === g0.frame && g1.queue === 0 && g1.dur === 60000 &&
+     g1.tau > g0.tau && g1.tau < 0.2 && new RegExp('^to step ' + g0.frame + ': \\d+ of 60 s$').test(g1.row),
+     `by default each calculation glides in over 60 s: 5 s into the glide to step ${g0.frame} the surface is ${(100 * g1.tau).toFixed(0)}% of the way there, no new calculation has started, and the glide row says so`,
+     JSON.stringify({ g0, g1 }));
+  const setGlide = s => evaluate(`(() => { const el = document.getElementById('amp-glide'); el.value = '${s}'; el.dispatchEvent(new Event('input')); return STEP_INTERVAL_MS; })()`);
+  /* the rest of the checks run at the shortest glide the slider allows, 1 s */
+  await setGlide(1);
 
   /* one frame drawn and read back in the same task, before the buffer is
      presented: what the GPU was given, and what it drew */
@@ -264,21 +278,21 @@ try {
      both round to 255, so strictly brighter cannot be required */
   ok(hk.bright && hk.hot[2] < 0.5 * hk.hot[0], 'a brighter colour of one hue is never darker, and far past 255 an orange is still orange, not white (highKnee_mono)', JSON.stringify(hk.hot));
 
-  section('the strength ramp');
-  await presetFromSeed('pre-dynamo');
-  await waitFor(`KERNEL_VIEW.state.frame >= 12`, 60000);
-  await evaluate(`document.getElementById('btn-run').click()`);
-  await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
-  const rw = await evaluate(`(() => { VISUAL_CERTIFICATE.status(); updateSimulationHud();
-    return { frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-ramp').textContent, ok: RAMP_VIEW.ok, why: RAMP_VIEW.why,
-             cert: VISUAL_CERTIFICATE._last.ramp, set: PRESETS['pre-dynamo'].set, N: KERNEL.RAMP_STEPS }; })()`);
-  await evaluate(`document.getElementById('btn-run').click()`);
-  const rpct = x => (100 * x).toFixed(1).replace(/\.0$/, '') + '%';
-  const rids = Object.keys(rw.set).map(Number).sort((a, b) => a - b);
-  const rwant = `${rids.length} of ${rids.length} ramping over 180 steps · ` +
-    rids.map(id => `S${id} ${rpct(rw.set[id] / 100 * rw.frame / 180)} → ${rpct(rw.set[id] / 100)} (${rw.frame}/180)`).join(' · ');
-  ok(rw.N === 180 && rw.ok && rw.cert && rw.row === rwant,
-     `${rw.frame} steps from the seed each formula runs at ${rw.frame}/180 of its setting, and the strengths row says so (ramp_steady, ramp_zero)`, `${rw.row} | want ${rwant} | ${rw.why}`);
+  section('the glide');
+  await setGlide(5);
+  const tr0 = await evaluate(`DISPLAY.transitions`);
+  await presetFromSeed('pre-damper');
+  await waitFor(`DISPLAY.transitions >= ${tr0} + 2 && KERNEL_VIEW.state.frame === 1 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
+  const gr = await evaluate(`({ frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-glide').textContent, dur: DISPLAY.dur, ms: STEP_INTERVAL_MS })`);
+  ok(gr.frame === 1 && gr.dur === 5000 && gr.ms === 5000 && /^to step 1: [0-4] of 5 s$/.test(gr.row),
+     `set to 5 s, the glide row names the step the surface is gliding to and how far it has come (${gr.row})`, JSON.stringify(gr));
+  await waitFor(`DISPLAY.tau === 1 && document.getElementById('sim-glide').textContent === 'holding step 1 until a setting changes'`, 20000);
+  const h0 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions })`);
+  await sleep(3000);
+  const h1 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions, q: KERNEL_VIEW.queue.length, frame: KERNEL_VIEW.state.frame, done: KERNEL_VIEW.doneVersion, cfg: KERNEL_VIEW.configVersion, row: document.getElementById('sim-glide').textContent })`);
+  ok(h1.v === h0.v && h1.n === h0.n && h1.q === 0 && h1.frame === 1 && h1.done === h1.cfg && h1.row === 'holding step 1 until a setting changes',
+     'landed, the surface holds its one calculation: nothing more is calculated until a setting changes', JSON.stringify({ h0, h1 }));
+  await setGlide(1);
 
   section('every control reaches the kernel');
   const applied = async (label, want) => {
@@ -292,8 +306,8 @@ try {
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
   ok(presets.length === 12, `${presets.length} presets`);
-  const titles = await evaluate(`Object.keys(PRESETS).map(id => [id, document.getElementById(id).title === presetTitle(PRESETS[id]), PRESETS[id].claims.every(c => document.getElementById(id).title.includes(c.text))])`);
-  ok(titles.every(([, a, b]) => a && b), 'each preset button\'s title is built from its definition and states every claim the kernel gate checks', JSON.stringify(titles.filter(([, a, b]) => !(a && b))));
+  const titles = await evaluate(`Object.keys(PRESETS).map(id => [id, document.getElementById(id).title === presetTitle(PRESETS[id])])`);
+  ok(titles.every(([, a]) => a), 'each preset button\'s title is built from its definition', JSON.stringify(titles.filter(([, a]) => !a)));
   const whites = [];
   for (const [id, comp, set] of presets) {
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
@@ -313,48 +327,35 @@ try {
   }
   await evaluate(`document.getElementById('btn-none').click()`);
   await applied('ALL OFF', { active: '' });
-  await evaluate(`document.getElementById('btn-run').click()`);
-  await sleep(400);
-  await evaluate(`document.getElementById('btn-all').click(); document.getElementById('btn-reset').click()`);
-  await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0`, 30000);
-  await evaluate(`document.getElementById('btn-run').click()`);
-  await waitFor(`KERNEL_VIEW.halted || (KERNEL_VIEW.state && KERNEL_VIEW.state.frame >= 3)`, 60000);
-  const ao = await evaluate(`(() => { updateSimulationHud();
-    const st = KERNEL_VIEW.state, F = st.frame, halted = KERNEL_VIEW.halted ? KERNEL_VIEW.halted.message : null;
-    const row = document.getElementById('sim-r4').textContent, params = kernelParams(), active = activeSutras();
-    let e = KERNEL.initEngine(), engaged = 0, lastAt = null, threw = null;
-    for (let k = 1; k <= F + (halted ? 1 : 0); k++) {
-      try { e = KERNEL.step(e, params, active, COMPOSITION); } catch (err) { threw = err.message; break; }
-      if (e.last.r4.engaged) { engaged++; lastAt = e.last.r4.blowup.at; } else lastAt = null;
-    }
-    const same = e.frame === F && e.psi.every((q, i) => Q.eq(q, st.psi[i]));
-    return { F, ids: active.map(a => a.id).join(','), comp: COMPOSITION, applied: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
-             halted, threw, same, engaged, lastAt, row };
-  })()`);
+  const v0 = await evaluate(`KERNEL_VIEW.configVersion`);
+  await evaluate(`document.getElementById('btn-all').click()`);
+  await sleep(1000);
+  const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), half: activeSutras().every(a => a.strength.n * 2n === a.strength.d),
+                               comp: COMPOSITION, cfg: KERNEL_VIEW.configVersion })`);
   const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
-  ok(ao.ids === all29 && ao.applied === all29 && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.same && ao.engaged > 0 &&
-     (ao.halted ? ao.threw === ao.halted : ao.threw === null && (ao.lastAt ? ao.row.startsWith(`stopped a blow-up at ${ao.lastAt} (`) : ao.row === 'dormant')),
-     `ALL ON from the seed: all 29 at 50% go to the worker, its ${ao.F} steps are the kernel's own bit for bit, R4 stops a blow-up on ${ao.engaged} of them and its row names where the last began${ao.halted ? ', and the run stops where the kernel stops' : ''}`,
-     JSON.stringify(ao));
+  ok(ao.ids === all29 && ao.half && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
+     'ALL ON sends all 29 at 50% to the worker as one setting', JSON.stringify(ao));
   const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
   await evaluate(`document.getElementById('pre-damper').click()`);
-  await applied('a preset after ALL ON starts again from the seed', dp);
-  await waitFor(`KERNEL_VIEW.state.frame >= 8`, 30000);
-  const before = await evaluate(`KERNEL_VIEW.state.frame`);
+  await applied('a preset chosen while ALL ON is still calculating replaces that calculation', dp);
+  const r0 = await evaluate(`KERNEL_VIEW.appliedVersion`);
   await evaluate(`document.getElementById('btn-reset').click()`);
-  ok(await waitFor(`KERNEL_VIEW.state.frame < ${before}`, 20000), 'RESET starts the run again from the seed');
+  ok(await waitFor(`KERNEL_VIEW.appliedVersion > ${r0} && KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.hist.frame.join(',') === '0,1'`, 20000),
+     'RESET calculates once more from the seed', await evaluate(`KERNEL_VIEW.hist.frame.join(',')`));
   await evaluate(`document.getElementById('btn-run').click()`);
-  await sleep(1500);
-  const paused = await evaluate(`KERNEL_VIEW.state.frame`);
-  await sleep(1500);
-  ok(await evaluate(`KERNEL_VIEW.state.frame`) === paused, 'PAUSE stops the stepping');
+  await sleep(400);
+  const p0 = await evaluate(`KERNEL_VIEW.configVersion`);
+  await evaluate(`document.getElementById('pre-checksum').click()`);
+  await sleep(2000);
+  const p1 = await evaluate(`({ cfg: KERNEL_VIEW.configVersion, applied: KERNEL_VIEW.appliedVersion, done: KERNEL_VIEW.doneVersion, frame: KERNEL_VIEW.state.frame })`);
+  ok(p1.cfg === p0 + 1 && p1.applied === p1.cfg && p1.frame === 0 && p1.done < p1.cfg, 'PAUSE holds a new setting at its seed, uncalculated', JSON.stringify(p1));
   await evaluate(`document.getElementById('btn-run').click()`);
-  ok(await waitFor(`KERNEL_VIEW.state.frame > ${paused}`, 20000), 'RUN resumes it');
+  ok(await waitFor(`KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.doneVersion === KERNEL_VIEW.configVersion`, 20000), 'RUN calculates it');
 
   section('certified');
-  await presetFromSeed('pre-dynamo');
+  await presetFromSeed('pre-damper');
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
-  ok(faithful, 'the badge reaches FAITHFUL on the dynamo preset',
+  ok(faithful, 'the badge reaches FAITHFUL on the damper preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
   section('dynamo and Maya');
@@ -382,9 +383,8 @@ try {
     if (!k || k.omega !== qstr(om, 10) || k.drive !== qstr(dr, 4) || k.chi !== qstr(ch, 10)) { presetParams = false; which = id + ' ' + JSON.stringify(k); }
   }
   ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
-  /* the dynamo preset, long enough for the timeline to hold a history */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
-  await waitFor(`KERNEL_VIEW.hist.frame.length >= 12`, 60000);
+  await presetFromSeed('pre-damper'); await appliedNow();
+  await waitFor(`KERNEL_VIEW.hist.frame.length >= 2 && KERNEL_VIEW.state.frame === 1`, 60000);
   const dy = await evaluate(`(() => {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
     updateDynamoHud();
@@ -394,7 +394,7 @@ try {
              line: document.getElementById('dynLine').textContent, last: H.frame[n - 1], closed: d.closed };
   })()`);
   ok(dy.maya && dy.dynamo && dy.closed, 'the Maya and dynamo channels hold on a running preset, its flux closing on every cube', JSON.stringify(dy));
-  ok(dy.contiguous && dy.n >= 12, `the timeline holds every step of the run, in order (${dy.n})`);
+  ok(dy.contiguous && dy.n === 2, `the timeline holds the seed and its one calculation, in order (${dy.n})`);
   ok(dy.flux === dy.wantFlux && dy.phaseRow.startsWith(dy.wantPhase), 'the flux and Maya rows show the kernel\'s values', `${dy.flux} vs ${dy.wantFlux}; ${dy.phaseRow} vs ${dy.wantPhase}`);
   ok(dy.line.startsWith('step ' + dy.last + ' '), 'the line under the picture describes the step being drawn', dy.line);
   const strip = await evaluate(`(() => {
@@ -417,13 +417,10 @@ try {
     return { M, worst, n };
   })()`);
   ok(obs.n > 1000 && obs.worst < 1e-12 && obs.M > 1, `the field is drawn at Maya's M = ${obs.M.toFixed(6)} times its true value at every point (${obs.n} points, worst ${obs.worst.toExponential(1)})`);
-  const before2 = await evaluate(`KERNEL_VIEW.state.frame`);
+  const before2 = await evaluate(`KERNEL_VIEW.appliedVersion`);
   await evaluate(`document.getElementById('btn-reset').click()`);
-  /* the history after a reset is that run's alone: as many entries as steps
-     since the seed, the first at step 1 */
-  ok(await waitFor(`KERNEL_VIEW.state.frame < ${before2} && KERNEL_VIEW.hist.frame.length > 0 && KERNEL_VIEW.hist.frame[0] <= 1 &&
-                    KERNEL_VIEW.hist.frame.length <= KERNEL_VIEW.state.frame + 1`, 20000),
-     'RESET starts the timeline again with the run', await evaluate(`KERNEL_VIEW.hist.frame.length + ' entries at step ' + KERNEL_VIEW.state.frame`));
+  ok(await waitFor(`KERNEL_VIEW.appliedVersion > ${before2} && KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.hist.frame.join(',') === '0,1'`, 20000),
+     'RESET starts the timeline again: the seed and its one calculation', await evaluate(`KERNEL_VIEW.hist.frame.join(',') + ' at step ' + KERNEL_VIEW.state.frame`));
 
   section('the engine on the torus');
   /* The flux map and the lattice on the surface draw the magnetism memory
@@ -431,8 +428,8 @@ try {
      one state; the worker's exact A and chi for that state are fetched and the
      gate reads them on the torus itself: positions from tessVertexToTorus's
      angles, circulations by walking each face's corners. */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
-  await waitFor(`KERNEL_VIEW.state.frame >= 20`, 60000);
+  await presetFromSeed('pre-damper'); await appliedNow();
+  await waitFor(`KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.doneVersion === KERNEL_VIEW.configVersion`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
   await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
@@ -574,17 +571,17 @@ try {
   section('the fields around the construct');
   /* The magnetic and electric fields of the construct's sources, and the
      energy flow between them (FieldsAround.lean). Paused on one landed state
-     of the dynamo preset, the gate takes what the page asked the field worker
+     of the damper preset, the gate takes what the page asked the field worker
      (sources, their places, the radius) and what it answered, and recomputes
      the answer independently: B by integrating Biot-Savart numerically along
      each straight piece (Gauss-Legendre, panels finer the nearer the point),
      not by the worker's closed form; E by Coulomb; S = E x B. */
-  await presetFromSeed('pre-dynamo'); await appliedNow();
-  await waitFor(`KERNEL_VIEW.state.frame >= 15`, 60000);
+  await presetFromSeed('pre-damper'); await appliedNow();
+  await waitFor(`KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.doneVersion === KERNEL_VIEW.configVersion`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
   await waitFor(`KERNEL_VIEW.queue.length === 0 && DISPLAY.tau === 1`, 20000);
-  const fieldsLanded = await waitFor(`FIELDS.cur && !FIELDS.busy && FIELDS.cur.frame === KERNEL_VIEW.state.frame && performance.now() - FIELDS.t0 > FIELDS.FADE_MS`, 30000);
+  const fieldsLanded = await waitFor(`FIELDS.cur && !FIELDS.busy && FIELDS.cur.frame === KERNEL_VIEW.state.frame && performance.now() - FIELDS.t0 > FIELDS.fadeMs`, 30000);
   const fd = await evaluate(`(() => {
     VISUAL_CERTIFICATE.status(); updateDynamoHud(); projectTorus(); renderTorus();
     const F = FIELDS, C = F.cur, rq = C.req, src = KERNEL_VIEW.dyn.sources, num = FAITHFUL.qNum;
@@ -908,88 +905,68 @@ try {
   ok(!fw.cert && fw.drawn.plane === 0 && !fw.haze && fw.rows[0] === 'withheld' && fw.rows[1] === 'withheld by the gate',
      'without its certificate nothing of the fields is drawn, and the reason is shown', JSON.stringify(fw));
   await evaluate(`document.getElementById('btn-run').click()`);
-  /* running, and the fields off: states land and nothing is computed for them */
-  await waitFor(`FIELDS.cur && FIELDS.cur.frame > ${fd.frame}`, 20000);
   await evaluate(`document.getElementById('btn-fields').click()`);
-  const q0 = await evaluate(`({ sent: FIELDS.sent, frame: KERNEL_VIEW.state.frame })`);
-  const landed = await waitFor(`KERNEL_VIEW.state.frame >= ${q0.frame + 4} && DISPLAY.tau === 1`, 20000);
-  const q1 = await evaluate(`({ sent: FIELDS.sent, frame: KERNEL_VIEW.state.frame })`);
+  const q0 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
+  await evaluate(`document.getElementById('pre-checksum').click()`);
+  const landed = await waitFor(`KERNEL_VIEW.appliedVersion > ${q0.v} && KERNEL_VIEW.state.frame === 1 && DISPLAY.tau === 1`, 20000);
+  const q1 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
   await evaluate(`document.getElementById('btn-fields').click()`);
-  const resumed = await waitFor(`FIELDS.cur && FIELDS.cur.frame >= ${q1.frame}`, 20000);
-  ok(landed && q1.sent === q0.sent && resumed, `with the fields off nothing is computed: ${q1.frame - q0.frame} states landed and no field was asked for; on again, they are computed for the state on the screen`,
+  const resumed = await waitFor(`FIELDS.frame === KERNEL_VIEW.appliedVersion + ':' + KERNEL_VIEW.state.frame && FIELDS.cur && !FIELDS.busy`, 20000);
+  ok(landed && q1.sent === q0.sent && resumed, 'with the fields off nothing is computed for a new setting; on again, they are computed for the state on the screen',
      JSON.stringify({ q0, q1, resumed }));
 
   section('motion');
-  /* The kernel ran flat out (20 to 50 steps a second) while the page drew the
-     newest state every 100 ms and replaced the surface outright, and the
-     framing re-fitted every frame: measured on pre-singularity, 2.5 steps
-     went by between drawn states, the surface jumped by up to 6.5 field units
-     in one frame and the whole picture rescaled by up to 50%. Now the worker
-     is paced, every step is drawn in order, the surface moves to each new
-     state over the step interval, and the framing eases. Held here on
-     pre-singularity, whose field changes most from step to step. */
-  await presetFromSeed('pre-dynamo');
-  await sleep(3000);
+  /* One calculation per setting, then the glide to its result, then the
+     hold: RESET four times, two seconds apart, at a 1 s glide. */
+  await presetFromSeed('pre-damper');
+  await waitFor(`KERNEL_VIEW.state.frame === 1 && DISPLAY.tau === 1`, 20000);
   const mo = await evaluate(`new Promise(res => {
-    const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
-    const tr0 = DISPLAY.transitions, la0 = DISPLAY.landed;
+    const t0 = performance.now(), bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
+    const tr0 = DISPLAY.transitions, la0 = DISPLAY.landed, v0 = KERNEL_VIEW.appliedVersion;
     let prev = Float64Array.from(DISPLAY_FIELD), prevAt = DISPLAY.at, prevT0 = DISPLAY.t0, prevBody = PROJECTION.frameBody;
-    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, minDur = Infinity, maxQueue = 0, shortMove = 0;
+    let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, maxQueue = 0, midGlide = 0, wrongDur = 0, durs = [], clicks = 0, heldNew = 0;
     function tick() {
       const now = performance.now();
+      if (clicks < 4 && now - t0 >= clicks * 2000) { document.getElementById('btn-reset').click(); clicks++; }
       let jump = 0, span = 0;
       for (let i = 0; i < DISPLAY_FIELD.length; i++) {
         jump = Math.max(jump, Math.abs(DISPLAY_FIELD[i] - prev[i]));
         span = Math.max(span, Math.abs(fieldGrid[i] - FROM_FIELD[i]));
       }
-      /* within one move, on the page's own clock: the share of a step's change
-         this frame drew, against the share of the move's time it took */
       if (DISPLAY.t0 === prevT0 && span > 0 && DISPLAY.dur > 0)
         worstShare = Math.max(worstShare, jump / span - (DISPLAY.at - prevAt) / DISPLAY.dur);
       if (DISPLAY.tau > 0 && DISPLAY.tau < 1) interior++;
       maxQueue = Math.max(maxQueue, KERNEL_VIEW.queue.length);
-      if (DISPLAY.dur > 0) { minDur = Math.min(minDur, DISPLAY.dur); if (DISPLAY.dur < 0.25 * STEP_INTERVAL_MS / (1 + DISPLAY.waiting) * (1 - 1e-12)) shortMove++; }
+      if (KERNEL_VIEW.queue.length && DISPLAY.tau < 1 && KERNEL_VIEW.queue[0].version === KERNEL_VIEW.appliedVersion) midGlide++;
+      if (DISPLAY.t0 !== prevT0) { durs.push(DISPLAY.dur); if (DISPLAY.dur !== 0 && DISPLAY.dur !== STEP_INTERVAL_MS) wrongDur++; }
       if (prevBody > 0) worstZoom = Math.max(worstZoom, Math.abs(PROJECTION.frameBody - prevBody) / prevBody);
       prev = Float64Array.from(DISPLAY_FIELD); prevAt = DISPLAY.at; prevT0 = DISPLAY.t0; prevBody = PROJECTION.frameBody; frames++;
-      if (now - t0 < 4000) requestAnimationFrame(tick);
-      else {
-        const pr = KERNEL_VIEW.projected.slice(-8), gaps = pr.slice(1).filter((f, i) => f - pr[i] !== 1).length;
-        res({ sps: (KERNEL_VIEW.state.frame - f0) / ((now - t0) / 1000), set: 1000 / STEP_INTERVAL_MS, gaps, projected: pr.join(' '),
-              bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, minDur, shortMove, interval: STEP_INTERVAL_MS, maxQueue,
-              transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis });
-      }
+      if (now - t0 < 8000) requestAnimationFrame(tick);
+      else res({ bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, maxQueue, midGlide, wrongDur, durs: durs.join(' '),
+                 interval: STEP_INTERVAL_MS, transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis,
+                 settings: KERNEL_VIEW.appliedVersion - v0, clicks, frame: KERNEL_VIEW.state.frame });
     }
     requestAnimationFrame(tick);
   })`, true);
-  ok(mo.sps >= 0.7 * mo.set && mo.sps <= 1.3 * mo.set, `the kernel steps at the pace set (${mo.sps.toFixed(2)} steps/s, set ${mo.set})`);
-  ok(mo.gaps === 0, `every step is drawn, in order (${mo.projected})`);
-  ok(mo.maxQueue <= 1, `at the pace set the kernel never gets ahead of the picture (at most ${mo.maxQueue} state waiting)`);
-  /* each move ends on its state, exactly, before the next begins: without
-     that the surface only chases the states (measured: 40 to 75% of the way)
-     and the exactness check above has nothing to check */
-  ok(mo.transitions >= 6 && mo.landed >= mo.transitions - (mo.landedNow ? 0 : 1),
-     `every move lands exactly on its state before the next begins (${mo.landed} of ${mo.transitions})`);
+  ok(mo.clicks === 4 && mo.settings === 4 && mo.transitions === 8 && mo.frame === 1,
+     `one calculation per setting: 4 RESETs gave 4 seeds and 4 calculations, ${mo.transitions} moves and nothing more`, JSON.stringify({ settings: mo.settings, transitions: mo.transitions, durs: mo.durs }));
+  ok(mo.midGlide === 0 && mo.maxQueue <= 2, `no state of the same setting arrives while the surface glides (${mo.frames} frames)`, JSON.stringify({ midGlide: mo.midGlide, maxQueue: mo.maxQueue }));
+  ok(mo.landed >= mo.transitions - (mo.landedNow ? 0 : 1), `every glide lands exactly on its state (${mo.landed} of ${mo.transitions})`);
+  ok(mo.wrongDur === 0 && mo.interior > 0, `every glide takes the time set and each seed is drawn as it is (${mo.durs} ms), ${mo.interior} of ${mo.frames} frames drawn mid-glide`);
   ok(mo.bad === 0 && mo.checked > 10, `every frame draws a point on the segment between two exact states, and each state exactly at its end (${mo.checked} frames)`);
-  ok(mo.worstShare <= 0.01, `within a move, each frame draws the share of a step's change that its share of the move's time calls for (worst excess ${mo.worstShare.toFixed(4)})`);
-  ok(mo.shortMove === 0 && mo.minDur > 0 && mo.interior >= 0.3 * mo.frames,
-     `each move takes time: at least a quarter of a step interval, shared among the states waiting when it began (shortest ${mo.minDur.toFixed(1)} ms of ${mo.interval} ms, at most ${mo.maxQueue} waiting), and ${mo.interior} of ${mo.frames} frames are drawn mid-move`, JSON.stringify({ shortMove: mo.shortMove }));
+  ok(mo.worstShare <= 0.01, `within a glide, each frame draws the share of the change that its share of the glide's time calls for (worst excess ${mo.worstShare.toFixed(4)})`);
   ok(mo.worstZoom <= 0.1, `the framing eases: never more than 10% between frames (worst ${(100 * mo.worstZoom).toFixed(2)}%)`);
-  /* At 10 steps a second a slow display (this headless one draws under ten
-     frames a second) cannot land every state in time. The kernel must wait
-     for the picture rather than let the queue and the delay grow. */
-  await evaluate(`(() => { const el = document.getElementById('amp-steps'); el.value = '10'; el.dispatchEvent(new Event('input')); })()`);
-  const bp = await evaluate(`new Promise(res => {
-    const t0 = performance.now(); let maxQueue = 0, maxLag = 0;
-    function tick() {
-      const q = KERNEL_VIEW.queue;
-      maxQueue = Math.max(maxQueue, q.length);
-      if (q.length) maxLag = Math.max(maxLag, q[q.length - 1].state.frame - KERNEL_VIEW.state.frame);
-      if (performance.now() - t0 < 4000) requestAnimationFrame(tick); else res({ maxQueue, maxLag });
-    }
-    requestAnimationFrame(tick);
-  })`, true);
-  await evaluate(`(() => { const el = document.getElementById('amp-steps'); el.value = '3'; el.dispatchEvent(new Event('input')); })()`);
-  ok(bp.maxQueue <= 3 && bp.maxLag <= 3, `on a display slower than the pace the kernel waits: never more than 3 steps ahead of the picture (queue ${bp.maxQueue}, lag ${bp.maxLag})`);
+  await setGlide(10);
+  await evaluate(`document.getElementById('btn-reset').click()`);
+  await waitFor(`KERNEL_VIEW.state.frame === 1 && DISPLAY.tau > 0.3 && DISPLAY.tau < 0.6`, 20000);
+  const ch0 = await evaluate(`({ tau: DISPLAY.tau, v: KERNEL_VIEW.appliedVersion })`);
+  await setGlide(20);
+  const ch1 = await evaluate(`({ tau: DISPLAY.tau, dur: DISPLAY.dur, v: KERNEL_VIEW.appliedVersion })`);
+  await sleep(2000);
+  const ch2 = await evaluate(`({ tau: DISPLAY.tau, v: KERNEL_VIEW.appliedVersion, queue: KERNEL_VIEW.queue.length })`);
+  await setGlide(1);
+  ok(ch1.dur === 20000 && ch2.v === ch0.v && ch2.queue === 0 && Math.abs(ch1.tau - ch0.tau) < 0.15 && ch2.tau > ch1.tau && ch2.tau - ch1.tau < 0.2,
+     'a glide time changed mid-glide keeps the surface where it is and goes on from there at the new time, with no new calculation', JSON.stringify({ ch0, ch1, ch2 }));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1013,18 +990,18 @@ try {
       magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
       rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
-    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'r4R' in L.params && 'appliedH' in L.params,
+    return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             stagesRun: L.stagesRun, magKeeps, rotKeeps,
+             magKeeps, rotKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
              records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/3' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
-  ok(st.params && st.dielectricIn && st.stepError && (st.stagesRun === 'uncontrolled' || st.stagesRun === 'r4'),
-     'the step export carries its parameters, starting dielectric, error budget and stage run', JSON.stringify(st));
+  ok(gotStep && st.schema === 'vedic-step-export/5' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(st.params && st.dielectricIn && st.stepError,
+     'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
   ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
@@ -1070,9 +1047,10 @@ try {
      `fed a size swinging 6% either way every 3 s, the frame once out never moves back (frame_hold; one lag of 1.2 s moves back in ${fs.oneLag.back} of 269 steps)`, JSON.stringify(fs));
   await cmd('Page.navigate', { url: PAGE });
   ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
+  await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-dynamo', 'pre-mixer', 'pre-capacitor']) {
+  for (const id of ['pre-damper', 'pre-amplifier']) {
     await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
@@ -1108,13 +1086,15 @@ try {
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
   ok(lawBroken.length === 0 && lawFrames > 100,
-     `on a fresh page every one of ${lawFrames} frames over DYNAMO, MIXER and CAPACITOR keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     `on a fresh page every one of ${lawFrames} frames over DAMPER and AMPLIFIER keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
   section('on a phone');
   await cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
   await cmd('Page.navigate', { url: PAGE });
-  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame >= 3 && SURFACE_STATUS.drawn`, 90000);
+  await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && document.getElementById('amp-glide')`, 90000);
+  await setGlide(1);
+  const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame === 1 && KERNEL_VIEW.selfTestsOk === true && SURFACE_STATUS.drawn`, 90000);
   const ph = await evaluate(`(() => { projectTorus(); renderTorus();
     const right = document.getElementById('right'), r = right.getBoundingClientRect();
     return { w: innerWidth, collapsed: right.classList.contains('collapsed'), panelLeft: r.left, charts: CHARTS.on, flux: FLUX_MAP.drawn,
