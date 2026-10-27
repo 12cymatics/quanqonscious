@@ -357,17 +357,17 @@ print(json.dumps({'schema_version': 1, 'check_id': sys.argv[1], 'outcome': 'pass
         self.rejected_contract('Assignment must be an object', lambda p: p['ownership'].update(assignments=[None]))
 
     def test_parent_overlap(self):
-        self.rejected_contract('Overlapping, duplicate or aliased ownership', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['src']}, {'owner': 'b', 'write_paths': ['src/module.py']}]))
+        self.rejected_contract(r'^Overlapping, duplicate or portable case/Unicode ownership collision: src/module\.py$', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['src']}, {'owner': 'b', 'write_paths': ['src/module.py']}]))
 
     def test_alias_overlap(self):
         self.rejected_contract('Path must be canonical and relative', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['src/file']}, {'owner': 'b', 'write_paths': ['src/./file']}]))
 
     def test_case_alias_existing_directory(self):
         (self.source / 'CaseOwned').mkdir()
-        self.rejected_contract('Overlapping, duplicate or aliased ownership|Case or Unicode ownership alias', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['CaseOwned']}, {'owner': 'b', 'write_paths': ['caseowned']}]))
+        self.rejected_contract(r'^Overlapping, duplicate or portable case/Unicode ownership collision: caseowned$', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['CaseOwned']}, {'owner': 'b', 'write_paths': ['caseowned']}]))
 
     def test_case_alias_planned_descendant(self):
-        self.rejected_contract('Overlapping, duplicate or aliased ownership', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['Future']}, {'owner': 'b', 'write_paths': ['future/file.py']}]))
+        self.rejected_contract(r'^Overlapping, duplicate or portable case/Unicode ownership collision: future/file\.py$', lambda p: p['ownership'].update(assignments=[{'owner': 'a', 'write_paths': ['Future']}, {'owner': 'b', 'write_paths': ['future/file.py']}]))
 
     def test_distinct_source_escape(self):
         (self.source / 'outside').symlink_to(self.evidence, target_is_directory=True)

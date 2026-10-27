@@ -53,7 +53,7 @@
   "reviews/v5_opaque_evidence_repro.py": "40e18e4d0177ea4b9ce82761c60db80ee5e7c87ec7fb7e0cd0c0d08e2bbf068e",
   "test_handoff_fixtures.py": "641af12eb7de874b1549d24a5d2ce09bc6b94ee74e3072dbb20be56442da8f78",
   "test_project_handoff.py": "cdcebfc3ed01581fb5fd1b4e2df482ac2ce8aba11c33fb5b51f926e437d04de1",
-  "test_readiness.py": "34aa74cec694a201a13bf7d0547a4536a7e3ede4b2edce61d34e1a5da45d0547",
+  "test_readiness.py": "c979ae2f0cf7e70f4fcf7b5446a5120b164f29977afa056b0a1498440caf77c1",
   "test_validation_identity.py": "a7c10f6398d3a73063195890d83e5185a58b2c1fe24cfe91d74ec2d42073d553",
   "test_verify_package.py": "26c1e0fe11dd493b8c320f06c106eb76302430ce2f02adf3ba80d31c5aa776dd",
   "validate_contracts.py": "02c2f9f0b25ee6419841caf67ef933bc9c2bf807adec106ade6d84c412e5c27c",
