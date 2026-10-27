@@ -71,6 +71,45 @@ function ok(cond, label, detail) {
 const section = t => console.log('\n' + t);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function measureStepPace(observation) {
+  const { windowStart, windowEnd, initialFrame, finalFrame, samples } = observation;
+  const windowValid = Number.isFinite(windowStart) && Number.isFinite(windowEnd) && windowEnd > windowStart
+    && Number.isSafeInteger(initialFrame) && initialFrame >= 0 && Number.isSafeInteger(finalFrame) && finalFrame >= initialFrame;
+  const ordered = windowValid && Array.isArray(samples) && samples.length >= 2
+    && samples.every((event, i) => event && Number.isSafeInteger(event.frame)
+      && event.frame > (i ? samples[i - 1].frame : initialFrame)
+      && Number.isFinite(event.time) && event.time > (i ? samples[i - 1].time : windowStart)
+      && event.time <= windowEnd)
+    && samples[samples.length - 1].frame === finalFrame;
+  const eventSteps = ordered ? samples[samples.length - 1].frame - samples[0].frame : null;
+  const eventElapsedMs = ordered ? samples[samples.length - 1].time - samples[0].time : null;
+  const sps = ordered ? eventSteps / (eventElapsedMs / 1000) : null;
+  const windowSps = windowValid ? (finalFrame - initialFrame) / ((windowEnd - windowStart) / 1000) : null;
+  return { valid: ordered, eventSteps, eventElapsedMs, sps, windowSps,
+    passed: ordered && sps >= 0.8 && sps <= 1.1 && windowSps >= 0.8 };
+}
+function paceTrace(interval, count, windowEnd = 8000) {
+  return { windowStart: 0, windowEnd, initialFrame: 0, finalFrame: count,
+    samples: Array.from({ length: count }, (_, i) => ({ frame: i + 1, time: 50 + i * interval })) };
+}
+section('pace measurement');
+const boundaryPace = measureStepPace(paceTrace(1000, 9, 8100));
+ok(boundaryPace.passed && boundaryPace.eventSteps === 8 && boundaryPace.eventElapsedMs === 8000
+   && boundaryPace.sps === 1 && boundaryPace.windowSps > 1.1,
+   'nine changes spanning eight one-second intervals pass despite the partial window boundaries', JSON.stringify(boundaryPace));
+const fastPace = measureStepPace(paceTrace(800, 10));
+ok(fastPace.valid && fastPace.sps > 1.1 && fastPace.windowSps >= 0.8 && !fastPace.passed,
+   'the unchanged upper pace limit rejects a too-fast trace', JSON.stringify(fastPace));
+const slowPace = measureStepPace(paceTrace(1300, 7));
+ok(slowPace.valid && slowPace.sps < 0.8 && slowPace.windowSps >= 0.8 && !slowPace.passed,
+   'the unchanged lower pace limit rejects a slow trace even when window progress passes', JSON.stringify(slowPace));
+const stalledPace = measureStepPace(paceTrace(1000, 4));
+ok(stalledPace.valid && stalledPace.sps === 1 && stalledPace.windowSps < 0.8 && !stalledPace.passed,
+   'whole-window progress rejects a one-step-per-second burst followed by a stall', JSON.stringify(stalledPace));
+const emptyPace = measureStepPace(paceTrace(1000, 0));
+ok(!emptyPace.valid && emptyPace.sps === null && emptyPace.windowSps === 0 && !emptyPace.passed,
+   'a window with no observed frame changes cannot pass', JSON.stringify(emptyPace));
+
 const CANDIDATES = [
   process.env.CHROME, process.env.CHROMIUM,
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -934,9 +973,11 @@ try {
     const tr0 = DISPLAY.transitions, la0 = DISPLAY.landed;
     let prev = Float64Array.from(DISPLAY_FIELD), prevAt = DISPLAY.at, prevT0 = DISPLAY.t0, prevBody = PROJECTION.frameBody;
     let worstShare = 0, worstZoom = 0, frames = 0, interior = 0, maxQueue = 0, wrongDur = 0;
-    const starts = [];
+    const starts = [], samples = [];
+    let observedFrame = f0;
     function tick() {
-      const now = performance.now();
+      const now = performance.now(), currentFrame = KERNEL_VIEW.state.frame;
+      if (currentFrame !== observedFrame) { samples.push({ frame: currentFrame, time: now }); observedFrame = currentFrame; }
       let jump = 0, span = 0;
       for (let i = 0; i < DISPLAY_FIELD.length; i++) {
         jump = Math.max(jump, Math.abs(DISPLAY_FIELD[i] - prev[i]));
@@ -953,7 +994,7 @@ try {
       else {
         const pr = KERNEL_VIEW.projected.slice(-8), gaps = pr.slice(1).filter((f, i) => f - pr[i] !== 1).length;
         const spacing = starts.slice(1).map((x, i) => x - starts[i]);
-        res({ sps: (KERNEL_VIEW.state.frame - f0) / ((now - t0) / 1000), gaps, projected: pr.join(' '),
+        res({ cadence: { windowStart: t0, windowEnd: now, initialFrame: f0, finalFrame: KERNEL_VIEW.state.frame, samples }, gaps, projected: pr.join(' '),
               bad: DISPLAY.bad - bad0, checked: DISPLAY.frames - n0, worstShare, worstZoom, frames, interior, maxQueue, wrongDur,
               spacing: spacing.map(x => x.toFixed(3)).join(' '), worstSpacing: spacing.reduce((m, x) => Math.max(m, Math.abs(x - STEP_INTERVAL_MS)), 0),
               transitions: DISPLAY.transitions - tr0, landed: DISPLAY.landed - la0, landedNow: DISPLAY.landedThis });
@@ -961,7 +1002,11 @@ try {
     }
     requestAnimationFrame(tick);
   })`, true);
-  ok(mo.sps >= 0.8 && mo.sps <= 1.1, `the run takes one step a second (${mo.sps.toFixed(2)} a second over 8 s)`);
+  const pace = measureStepPace(mo.cadence);
+  console.log('       pace observation ' + JSON.stringify({ ...mo.cadence, ...pace }));
+  ok(pace.passed, 'the run takes one step a second (' + (pace.sps === null ? 'unmeasurable' : pace.sps.toFixed(2))
+     + ' across observed changes; ' + (pace.windowSps === null ? 'unmeasurable' : pace.windowSps.toFixed(2)) + ' over the whole window)',
+     JSON.stringify({ ...mo.cadence, ...pace }));
   ok(mo.wrongDur === 0 && mo.transitions >= 6 && mo.worstSpacing <= 1e-6,
      `each step is drawn over exactly 1 s and the next starts where the last ended (${mo.spacing} ms apart)`);
   ok(mo.gaps === 0, `every step is drawn, in order (${mo.projected})`);
@@ -1133,3 +1178,4 @@ try {
 }
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log('  ' + f); process.exit(1); }
+
