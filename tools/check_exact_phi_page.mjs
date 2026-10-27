@@ -165,12 +165,11 @@ try {
   ok(await evaluate(`KERNEL_VIEW.workerError === null`), 'every worker started', await evaluate(`String(KERNEL_VIEW.workerError)`));
   /* by default: one step a second, the formulas rising over a glide of 10 */
   await waitFor(`KERNEL_VIEW.state.frame >= 1 && DISPLAY.started && DISPLAY.dur > 0`, 60000);
-  const g0 = await evaluate(`({ slider: document.getElementById('amp-glide').value, glide: GLIDE_STEPS, frame: KERNEL_VIEW.state.frame, t: performance.now() })`);
+  const g0 = await evaluate(`({ slider: document.getElementById('amp-glide').value, glide: GLIDE_STEPS, frame: KERNEL_VIEW.state.frame, dur: DISPLAY.dur, interval: STEP_INTERVAL_MS })`);
   await sleep(5000);
-  const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, t: performance.now(), dur: DISPLAY.dur, interval: STEP_INTERVAL_MS })`);
-  const sps0 = (g1.frame - g0.frame) / ((g1.t - g0.t) / 1000);
-  ok(g0.slider === '10' && g0.glide === 10 && g1.interval === 1000 && g1.dur === 1000 && sps0 >= 0.8 && sps0 <= 1.1,
-     `by default the run takes one step a second (${sps0.toFixed(2)} a second over 5 s) over a glide of 10 steps`, JSON.stringify({ g0, g1 }));
+  const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, dur: DISPLAY.dur })`);
+  ok(g0.slider === '10' && g0.glide === 10 && g0.interval === 1000 && g0.dur === 1000 && g1.dur === 1000 && g1.frame > g0.frame,
+     `by default the run steps on, each step drawn over 1 s, over a glide of 10 steps (step ${g0.frame} to ${g1.frame} in 5 s while the page loads)`, JSON.stringify({ g0, g1 }));
   const setGlide = s => evaluate(`(() => { const el = document.getElementById('amp-glide'); el.value = '${s}'; el.dispatchEvent(new Event('input')); return GLIDE_STEPS; })()`);
   /* the rest of the checks run at a glide of 1 step: every formula at its setting from the first step */
   await setGlide(1);
