@@ -326,6 +326,7 @@ try {
      channels above 0.85 (measured on six presets). */
   const worstWhite = whites.reduce((m, w) => w[1] > m[1] ? w : m, ['', 0]);
   ok(worstWhite[1] < 0.05, `on no preset is more than 5% of the drawn surface near white (worst ${worstWhite[0]}, ${(100 * worstWhite[1]).toFixed(2)}%)`);
+  await presetFromSeed('pre-damper');
   for (const comp of ['PARALLEL', 'SERIES', 'SYMMETRIC_CONCURRENT']) {
     await evaluate(`document.querySelector('#comp-ctrls button[data-comp="${comp}"]').click()`);
     await applied(`composition ${comp}`, { comp });
