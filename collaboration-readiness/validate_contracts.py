@@ -38,7 +38,10 @@ def validate(policy, memory):
     foundation = policy['foundation']
     require(foundation.get('require_traceable_formalization') is True, 'Formalization must remain required')
     require(foundation.get('historical_attribution_is_proof') is False, 'Attribution cannot be treated as proof')
-    require(foundation.get('silent_model_substitution_allowed') is False, 'Silent substitution must remain prohibited')
+    forbidden = ('model_substitution_allowed', 'approximations_allowed', 'simplifications_allowed', 'truncations_allowed', 'reduced_models_allowed', 'transformed_formulations_allowed', 'replacement_formulas_allowed', 'required_function_disabling_allowed')
+    require('silent_model_substitution_allowed' not in foundation, 'Legacy silent-only substitution policy must be migrated')
+    for field in forbidden:
+        require(foundation.get(field) is False, 'Required categorical prohibition missing: ' + field)
     require(set(foundation['companion_contracts']) == {'MATHEMATICAL_FOUNDATION.md', 'INTEGRITY_RULES.md'}, 'Foundation references differ')
     require(set(foundation['evidence_classes']) == EVIDENCE_CLASSES, 'Evidence classes differ')
     require(set(policy['outcomes']['check_states']) == CHECK_STATES, 'Check outcome set differs')
@@ -47,7 +50,7 @@ def validate(policy, memory):
     gate_ids = [gate['id'] for gate in policy['gates']]
     require(len(gate_ids) == len(set(gate_ids)), 'Duplicate gate IDs')
     require(set(gate_ids) == REQUIRED_GATES, 'Required gates are missing or unknown')
-    require(all(gate.get('required') is True for gate in policy['gates']), 'Draft gates cannot silently be disabled')
+    require(all(gate.get('required') is True for gate in policy['gates']), 'Required draft gates cannot be disabled')
     bindings = policy['project_command_bindings']
     require(bindings.get('configured') is False and bindings.get('commands') == [], 'Draft cannot claim bound repository commands')
     release = policy['release']
@@ -114,7 +117,10 @@ def self_test(policy, memory):
         raise AssertionError('Invalid case was accepted: ' + name)
     case('automatic enforcement claim', lambda p, m: p['activation'].update(automatically_enforced=True))
     case('attribution as proof', lambda p, m: p['foundation'].update(historical_attribution_is_proof=True))
-    case('silent model substitution', lambda p, m: p['foundation'].update(silent_model_substitution_allowed=True))
+    for field in ('model_substitution_allowed', 'approximations_allowed', 'simplifications_allowed', 'truncations_allowed', 'reduced_models_allowed', 'transformed_formulations_allowed', 'replacement_formulas_allowed', 'required_function_disabling_allowed'):
+        case('prohibited permission: ' + field, lambda p, m, field=field: p['foundation'].update({field: True}))
+        case('missing prohibition: ' + field, lambda p, m, field=field: p['foundation'].pop(field))
+    case('legacy silent-only substitution policy', lambda p, m: p['foundation'].update(silent_model_substitution_allowed=False))
     case('duplicate gate', lambda p, m: p['gates'].append(copy.deepcopy(p['gates'][0])))
     case('disabled gate', lambda p, m: p['gates'][0].update(required=False))
     case('invented command activation', lambda p, m: p['project_command_bindings'].update(configured=True))

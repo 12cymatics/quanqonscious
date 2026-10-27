@@ -1,41 +1,43 @@
-REFINED PROJECT INSTRUCTIONS
-Edition 5 | 23 October 2026
+PROJECT INSTRUCTION AND VALIDATION PACKAGE
+Repair revision | 28 October 2026
 
-This edition applies a second fresh critical review to the geometric and cross-project guidance. It is an instruction and validation-contract package, not a game, simulator, deployment or installed account configuration.
+This package contains executable contract, source-identity, readiness and handoff checks, together with the project's mathematical-integrity instructions. Its current test outcome is established by the GitHub Actions run for the delivered commit and its uploaded logs. Historical reports remain attached to their original versions.
 
-START WITH
-1. CUSTOM-INSTRUCTIONS.txt: concise text for the assistant's project-wide behaviour.
-2. AGENTS.md: implementation, coordination and evidence rules for project agents.
-3. MATHEMATICAL_FOUNDATION.md: required ancient/geometric foundation and traceability.
-4. INTEGRITY_RULES.md: complete equations, exactness, forbidden approximations, validation and performance.
-5. The applicable document in projects/.
-6. The policy and project-memory templates supplied with this bundle.
+ENTRYPOINTS
+validate_contracts.py validates unassigned draft policy and memory records.
+validate_readiness.py verifies a signed execution contract, binds actual source bytes, validates foundation/equation linkage and compares gate evidence with freshly executed checks.
+validation_identity.py verifies contract signatures, source manifests and ownership paths.
+project_handoff.py checks write admission, validates worker change artifacts and applies authorized changes through the integrator's serialized path.
+verify_package.py compares the exact delivered file inventory and bytes with SHA256.json.
 
-WHAT IS REQUIRED
-Ancient mathematical traditions, supplied formulations, geometry and formally defined higher constructs are the required starting framework. Every claimed connection must have a source, definition, derivation and test or proof appropriate to the claim. An unresolved connection is recorded and investigated, not invented.
+INSTRUCTIONS
+AGENTS.md supplies core project instructions and load triggers.
+INTEGRITY_RULES.md prohibits approximation, simplification, truncation, reduction, transformed formulations, replacement formulas, disabled required functions and fabricated outcomes.
+MATHEMATICAL_FOUNDATION.md records complete supplied formulations and their implementation obligations.
+OPERATING_PROCEDURES.md covers scoped work, delegation, integration and delivery.
+OPERATIONS_README.md and MIGRATION.md describe the current executable formats and interfaces.
+The applicable projects/ overlay preserves each project's additional requirements.
 
-No approximations, simplifications, truncations, reduced models, transformed formulations, replacement formulas, substitute solvers, false exactness, disabled checks or fabricated outcomes. Implement every specified equation, term, coupling, mode, domain, initial condition and boundary condition. Performance work must preserve the agreed mathematical contract. Historical provenance, mathematical proof, implementation correctness, empirical calibration and commercial evidence remain distinct.
+Every specified equation, term, coupling, mode, domain, initial condition and boundary condition must remain intact. Equivalence, a disclosure, an approval field, performance constraints and passing tests provide no exception. Storage and data movement changes must preserve the supplied formulation, arithmetic and all required operations. Historical provenance, proof, implementation correctness, physical validation and commercial evidence are separate claims.
 
-WHAT HAS AND HAS NOT BEEN APPLIED
-The user's stated working preference has been recorded for future project work. The files are supplied for review and adoption. They have not been copied into every repository, inserted into account settings, activated as CI, or deployed to Sites. Merely storing policy YAML does not enforce it. The validator checks the supplied contract structure, not the truth of the mathematics or the quality of a game.
+CURRENT READINESS FORMAT
+readiness.template.json uses schema 3 and remains unassigned. It has no subject revision, signed contract identity or integration owner. Template consistency is not readiness.
+A real readiness record must match the independently pinned, signed schema-2 contract and actual source manifest.
+All profiles require existing_aggregate_checks. Worker declarations cannot narrow the signed domain, mathematical scope, deliverable kind, completion criterion or required gates.
+Empty evidence, explicit failure, invented revision labels, stale source and opaque success text are rejected. Checks must execute the bound real entrypoints and return the exact required assertion set.
+Mathematical acceptance requires actual FOUNDATION_REGISTER and geometry-index records that match the signed equations and their component requirements. Their empty templates cannot supply a scientific result.
 
-ADOPTION
-Use the shared rules at each repository's instruction entrypoint and link only the relevant project overlay. Keep changing status out of durable rules. Reconcile existing AGENTS.md and workflows before replacing anything; preserve project-specific requirements and user changes. Establish real commands, baseline results, supported hardware and evidence locations in each project before activating release gates. Do not duplicate whole rule sets in every file.
+GITHUB VERIFICATION
+The package includes .github/workflows/instruction-contracts.yml and the byte-identical workflows/instruction-contracts.yml.template. For the selected GitHub repository the same content is installed at the repository root as .github/workflows/collaboration-readiness.yml and locates the package in collaboration-readiness/. Only a workflow at the repository root is discoverable by GitHub.
+The workflow runs package manifest verification, draft-policy checks, the complete discovered unit suite, the explicit template-readiness rejection, and the finite structural suite on Linux and macOS with declared Python versions.
+It uploads raw logs, command outcomes, runtime information and manifest reports. Inspect the run on the exact delivered commit; the presence of the workflow file does not prove it has run.
+All testing for this repair is to run in GitHub as requested. Readiness's project execution interface must likewise be invoked in the authorized project environment, with its trusted inputs.
 
-Existing simulations and commercial claims are not retroactively validated by this bundle. Missing source formulas, unproved mappings, unmeasured performance and untested hardware remain explicit gaps.
+PRODUCTION INPUTS
+This package does not contain the user's Cymatica, GRVQ, MSTVQ, TGCR or ETERNAL production implementation, the complete supplied scientific specification, or its domain-specific acceptance commands. Those missing inputs must be identified and supplied to complete a scientific project. Finite geometry fixtures and workflow regressions cannot replace them.
 
-No account credentials, internal assistant records or private operating instructions are included. Project-memory templates describe records the user and project collaborators can maintain in the repository.
+The broader typed retrieval index and device benchmarks described in geometry/ remain research plans. The implemented geometry record validates equation-to-implementation-to-check linkage. No populated production retrieval corpus, GPU speedup, physical prediction, deployed game or account setting is established by this package.
 
-WORKFLOW TEMPLATE
-workflows/instruction-contracts.yml.template is deliberately inactive. If the shared files are adopted at a repository root, it can be reviewed and copied to .github/workflows/instruction-contracts.yml. Its single job runs draft consistency, readiness-template consistency, readiness unit tests and finite geometric examples with Python 3.11; the actions are pinned to verified release commits. It does not run application, scientific, browser, audio, GPU or commercial acceptance tests. Actual project release workflows must retain their existing suites and bind the applicable gates to real commands.
-
-EDITION 3 READING ORDER
-Read REVISION-NOTES.md for changes and limits, ACTIVATION.md before adoption, MIGRATION.md for the readiness format, and reviews/ for sourced independent findings. BEHAVIOURAL_EVALUATION.md proposes actual agent trials; none have been run.
-
-EDITION 4 GEOMETRY EXTENSION
-Start with GEOMETRIC-STRUCTURE.md. The geometry/ folder contains official/primary research, CPU/GPU and retrieval instruction overlays, an empty index design template, pinned Q4 source inspection, benchmark requirements and finite structural example checks. No actual repository reorganisation, populated recall index, GPU activation or performance benchmark was performed.
-
-EDITION 5 START HERE
-Read REVISION-NOTES.md for the new changes. ACTIVATION.md and discovery-receipt.template.yaml cover host-specific loading and fresh-worker checks. DOMAIN-EVIDENCE.md distinguishes semantic scientific review from evidence-file consistency. RESEARCH-AND-TRUST.md separates verified guidance, community leads and authorization. The two fresh source-linked reviews are reviews/V5-AGENT-METHODS.md and reviews/V5-GEOMETRY-VALIDATION.md.
-
-The current example suite has 57 named finite structural assertions, not 57 production validations. The 25 readiness unit tests and 16 invalid draft cases remain separate. The new discovery receipt and memory example are documentation formats, not schemas implemented by the existing validators. Generic readiness still accepts opaque evidence by design; the included reproduction demonstrates why content must be reviewed. No behavioral trials, production GPU tests, retrieval benchmarks, repo migration or account changes occurred.
+HISTORY AND ADOPTION
+REVISION-NOTES.md and reviews/ retain earlier review claims with their version boundaries. READINESS-TESTS.txt preserves the old schema-2 output as history. Do not relabel an old pass as evidence for current source.
+Adopt these instructions only in the intended project tree, reconcile existing instructions and preserve the actual user's scope. A signed contract authenticates its bytes to an independently pinned key; it cannot invent user authorization. Publication, deployment, destructive actions and unrelated access remain governed by the user's instructions.

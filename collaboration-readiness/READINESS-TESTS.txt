@@ -1,3 +1,15 @@
+HISTORICAL SCHEMA-2 TEST OUTPUT
+
+The output below predates the signed schema-3 readiness implementation. It records the former 25 schema tests only. It is retained as historical evidence and cannot validate current source bytes.
+
+Current package verification commands, executed in GitHub for this repair:
+python3 -B verify_package.py
+python3 -B validate_contracts.py --self-test
+python3 -B -m unittest discover -v
+python3 -B geometry/verify_structures.py
+
+Capture each actual exit status and output for the final integrated revision. Project scientific checks require their separately bound production source, equation inventory and commands.
+
 test_active_operations (test_readiness.ReadinessTests.test_active_operations) ... ok
 test_alias_overlap (test_readiness.ReadinessTests.test_alias_overlap) ... ok
 test_bad_assignment (test_readiness.ReadinessTests.test_bad_assignment) ... ok

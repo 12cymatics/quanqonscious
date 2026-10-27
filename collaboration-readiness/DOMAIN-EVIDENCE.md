@@ -1,29 +1,39 @@
-# Domain evidence review before acceptance
+# Domain evidence bound to executed checks
 
-Edition 5. This checklist supplements the generic readiness checker. It is not an implemented scientific validator. A hash-matching file can be irrelevant, mistaken or fabricated; the integrator must inspect its content and relationship to each claim. One integrated report can support multiple gates only if it actually contains the required evidence.
+## Executable acceptance
 
-## Minimum review record
+The readiness checker reads structured gate reports and re-executes the checks bound in the independently pinned signed contract. Source identity is verified against actual files and repository HEAD where applicable. Each applicable gate must return its declared check and assertion identities with passing outcomes. Empty, malformed, unrelated, explicitly failed and stale reports are rejected.
 
-For each applicable gate, record the claim, exact candidate revision, input and model identities, command or inspection performed, target environment, expected criterion, observed result, relevant evidence location, reviewer and limits. Identify the actual assertion inside a report, not merely its filename. Record failures and unsupported parameter ranges. Use an independent reference or reviewer for high-impact scientific and performance claims where possible; agreement between two agents is not itself an independent experiment.
+For mathematical work it also reads the bound foundation register and geometry index. Every signed equation maps its complete component requirements to implementation files and actual assertions. Required categories cannot disappear through a worker's changed profile or altered evidence. The fixture tests exercise these mechanisms; they do not supply the user's scientific equations or certify a production solver.
 
-The existing readiness validator verifies selected structural relationships, local evidence existence and digests. It does not parse scientific results, authenticate authors, validate a derivation, inspect a device or guarantee that declared profile and applicability match the task. Do not extend its meaning by calling an accepted record a certified simulation.
+## Establish the actual scientific obligations
 
-## Cymatica / Faraday
+Inventory the full supplied formulation before creating a production contract. Preserve every term, coupling, mode, domain, initial condition, boundary condition and exact-arithmetic requirement. Each equation requirement must refer to the actual statement, active implementation and check that evaluates its intended output. Record a concrete unresolved calculation when a required implementation or verification method is missing.
 
-Bind supplied formulas, units, coefficients, boundary conditions, forcing, initial conditions and solver settings to the tested implementation. Check applicable conservation/balance laws (including forcing and dissipation), residuals and resolution/time convergence against declared criteria. Test representative nonlinear regimes and failures, not only a visually pleasing pattern. Identify numerical compute backend separately from rendering backend. Keep physical validation against measurements distinct from numerical agreement. An honestly labelled uncalibrated research tool may be released within its agreed scope; physical-accuracy claims require matching empirical validation. The package must show changing computed state from the actual entrypoint after clean extraction.
+The trusted operator must inspect whether the inventory and checks satisfy the user's actual task before pinning the contract. A signature binds the approved bytes; it is not a proof that the specified check is mathematically sufficient. Assertions must be evaluated by domain adapters exercising the actual implementation. A hardcoded success producer, unused function, finite structural substitute or merely copied declaration cannot satisfy this obligation.
 
-## Exact geometric / hybrid solver
+Distinguish proof of an identity, implementation evidence and physical validation. Exact arithmetic does not establish that a physical model describes observations. A finite test set does not prove an unrestricted theorem. Independent references and proof certificates must apply to the exact supplied formulation and cannot replace it.
 
-Bind the formal coefficient domain, operators, orientations and conventions to source symbols and tests. Check exact identities at the actual arithmetic boundary, and inspect conversions and serialization. A generic hypercube example cannot validate a different quotient or DEC complex. For advantage claims require a named classical comparator, equal objective and acceptance criteria, full resource accounting and verifiable certificates where supported. State whether quantum hardware, simulated quantum execution or only a classical component ran.
+## Cymatica and Faraday
+
+Bind supplied equations, units, coefficients, geometry, boundary conditions, forcing, initial conditions, constitutive laws and every fluid-solid coupling to the actual implementation. Exercise all required modes through the real entrypoint. Check the specified outputs, exact identities, applicable balances including forcing and dissipation, and invalid-domain behavior. Existing discretised, linearised, modal-only, capped or otherwise approximate paths remain incomplete under the user's no-approximation requirement.
+
+Compute backend and rendering backend are distinct evidence. If a GPU calculation is required, an actual device check must establish that calculation ran on the required backend. A changing image alone cannot validate the calculation. Physical-accuracy claims also require empirical evidence with its measurement uncertainty and scope intact.
+
+## Exact geometric and hybrid solvers
+
+Bind coefficient domains, operators, orientations, signs, quotient relations and boundary maps to concrete source symbols and executable checks. Inspect all intermediate conversions and serialization boundaries; exact inputs and outputs alone do not prove exact intermediate arithmetic. Test that removing a required term, disabling a mode or replacing a domain check causes rejection.
+
+An unrelated Q4 example cannot validate the user's DEC complex or supplied hybrid ansatz. Quantum hardware execution, quantum simulation and a classical component must have their actual observed identities. Comparisons use the separately requested named baseline and equal objectives; they cannot replace the required implementation.
 
 ## ETERNAL and Sites
 
-For ETERNAL, exercise movement, turns, grounded contacts, collision/audio timing and repeated interactions in the real build; distinguish authored tuning from physical calibration. For Sites, exercise each changed control through its actual data and computation path. Neither a static screenshot, compilation nor an isolated mock proves the user-visible workflow. Record device, browser/engine, frame timing and observed failures without inventing acceptance thresholds after seeing results.
+Exercise required movement, turns, grounded contacts, collisions, sound timing, repeated interactions and exports through the real build. Distinguish authored gameplay from physical calibration. For a site, follow each changed control through its actual data and computation path. A screenshot, successful import or isolated mock cannot validate that workflow.
 
-## Ableton / live applications
+Record the engine or browser, input sequence, expected output, actual output, source identity and observed failures. Retain original acceptance criteria rather than selecting looser thresholds after observing results.
 
-Inspect the current set and installed control device before recreating work reported elsewhere. Serialize live-app control. Separate inventory/readback, reversible parameter control, audio monitoring, transport and recording capabilities. Test only within granted scope; do not infer recording or persistent-access authority from a successful read. Report latency settings separately from measured end-to-end latency. Reconcile lost acknowledgements before retrying operations.
+## Packaging and actions
 
-## Commercial and packaging
+Verify the exact unpacked artifact, its entrypoint and required assets. Execute existing aggregate checks alongside targeted regressions on the final candidate. A successful controlled handoff is still pending final acceptance. An acceptance record cannot authorize publication, installation, deployment, recording or access outside the user's actual instruction.
 
-Keep the demonstrable capability, research hypothesis, licensing rights and buyer evidence separate. A benchmark or test report is not demand evidence or a valuation. Confirm the exact delivered artifact opens, includes its entrypoint and reproduces the claimed scope; distinguish the working local package from a deployed service. Never present this instruction bundle as evidence that the simulator, game or business is complete.
+The GitHub workflow records the package's current tests and raw results. It must not convert those package results into completion of an absent scientific implementation, game, retrieval deployment or commercial claim.

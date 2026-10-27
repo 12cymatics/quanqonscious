@@ -150,7 +150,7 @@ def verify_signed_contract(path, public_key_path, public_key_sha256):
 
 
 def _key(parts):
-    return tuple(unicodedata.normalize('NFC', part).casefold() for part in parts)
+    return tuple(unicodedata.normalize('NFC', unicodedata.normalize('NFC', part).casefold()) for part in parts)
 
 
 def _overlap(first, second):
@@ -188,7 +188,7 @@ def _inventory(root, skip_git=True):
                 continue
             require(stat.S_ISREG(value.st_mode) or stat.S_ISDIR(value.st_mode), 'Unsupported filesystem entry: ' + relative)
             key = _key(child_parts)
-            require(key not in aliases, 'Case or Unicode path alias: ' + relative)
+            require(key not in aliases, 'Portable case/Unicode path collision is prohibited: ' + relative)
             aliases[key] = relative
             entries[relative] = _state(value)
             if stat.S_ISDIR(value.st_mode):
@@ -254,6 +254,48 @@ def _git_head(root):
     return None
 
 
+def _external_inventory(items, root, verify_hashes):
+    require(isinstance(items, list), 'external_assets must be a list')
+    identifiers = set()
+    locations = set()
+    identities = set()
+    result = []
+    for item in items:
+        require(isinstance(item, dict) and set(item) == {'id', 'location', 'sha256', 'reason'}, 'External assets require exactly id, location, sha256 and reason')
+        identifier = _text(item['id'], 'External asset ID')
+        require(identifier not in identifiers, 'Duplicate external asset ID: ' + identifier)
+        identifiers.add(identifier)
+        location = _text(item['location'], 'External asset location')
+        expected = _digest(item['sha256'], 'External asset digest')
+        _text(item['reason'], 'External asset reason')
+        path = Path(location)
+        require(path.is_absolute() and str(path) == location, 'External asset must have a canonical absolute local path: ' + identifier)
+        require(path.resolve(strict=True) == path and not path.is_symlink(), 'External asset path contains a symlink or alias: ' + identifier)
+        require(not path.is_relative_to(root), 'In-root inputs must be listed in manifest files: ' + identifier)
+        key = _key(path.parts)
+        require(key not in locations, 'Duplicate or portable case/Unicode external asset collision: ' + identifier)
+        locations.add(key)
+        value = path.lstat()
+        require(stat.S_ISREG(value.st_mode) and value.st_nlink == 1, 'External asset must be a regular, non-hard-linked file: ' + identifier)
+        state = _state(value)
+        require(state[:2] not in identities, 'External assets share a filesystem identity: ' + identifier)
+        identities.add(state[:2])
+        if verify_hashes:
+            actual = _hash_source(path.parent, PurePosixPath(path.name), state)
+            require(actual == expected, 'External asset digest mismatch: ' + identifier)
+        result.append((identifier, location, state))
+    return tuple(result)
+
+
+def source_state(source_root, manifest=None):
+    root = _root(source_root)
+    head = _git_head(root)
+    initial = _inventory(root)
+    external = _external_inventory(manifest['external_assets'], root, False) if manifest is not None else ()
+    require(_inventory(root) == initial and _git_head(root) == head, 'Source changed during state capture')
+    return (str(root), head, initial, external)
+
+
 def verify_source_manifest(manifest, source_root):
     require(isinstance(manifest, dict) and set(manifest) == {'schema_version', 'base_head', 'files', 'excluded_paths', 'external_assets'}, 'Source manifest fields differ from schema version 1')
     require(type(manifest['schema_version']) is int and manifest['schema_version'] == 1, 'Expected source manifest schema version 1')
@@ -278,25 +320,18 @@ def verify_source_manifest(manifest, source_root):
         _text(item['reason'], 'Exclusion reason')
         require(all(not _overlap(key, prior) for prior in file_keys + excluded), 'Exclusion overlaps an included file or exclusion: ' + str(relative))
         excluded.append(key)
-    external_ids = set()
-    for item in manifest['external_assets']:
-        require(isinstance(item, dict) and set(item) == {'id', 'location', 'sha256', 'reason'}, 'External assets require exactly id, location, sha256 and reason')
-        identifier = _text(item['id'], 'External asset ID')
-        require(identifier not in external_ids, 'Duplicate external asset ID: ' + identifier)
-        external_ids.add(identifier)
-        _text(item['location'], 'External asset location')
-        _text(item['reason'], 'External asset reason')
-        _digest(item['sha256'], 'External asset digest')
     manifest_digest = digest_bytes(_canonical(manifest))
     root = _root(source_root)
     require(_git_head(root) == head, 'Source base_head does not match the actual repository HEAD')
     initial = _inventory(root)
+    external = _external_inventory(manifest['external_assets'], root, True)
     actual = {name: value for name, value in initial[1].items() if stat.S_ISREG(value[2])}
     require(set(files) <= set(actual), 'Manifest includes missing or non-regular files: ' + ', '.join(sorted(set(files) - set(actual))))
     unaccounted = [name for name in actual if name not in files and not any(_key(PurePosixPath(name).parts)[:len(prefix)] == prefix for prefix in excluded)]
     require(not unaccounted, 'Source files are not accounted for: ' + ', '.join(sorted(unaccounted)))
     for name, expected_digest in files.items():
         require(_hash_source(root, relative_path(name), actual[name]) == expected_digest, 'Source file digest mismatch: ' + name)
+    require(_external_inventory(manifest['external_assets'], root, False) == external, 'External asset changed during source verification')
     require(_inventory(root) == initial, 'Source inventory changed during verification')
     require(_git_head(root) == head, 'Repository HEAD changed during source verification')
     require(digest_bytes(_canonical(manifest)) == manifest_digest, 'Source manifest changed during verification')
@@ -310,7 +345,7 @@ def _resolve_owned(root, relative):
             require(current.is_dir() and not current.is_symlink(), 'Ownership parent is not a regular directory: ' + str(current))
             with os.scandir(current) as listing:
                 matches = [entry.name for entry in listing if _key((entry.name,)) == _key((part,))]
-            require(len(matches) <= 1 and (not matches or matches[0] == part), 'Case or Unicode ownership alias: ' + str(relative))
+            require(len(matches) <= 1 and (not matches or matches[0] == part), 'Portable case/Unicode ownership collision is prohibited: ' + str(relative))
         current = current / part
         require(not current.is_symlink(), 'Symlink ownership path is not supported: ' + str(relative))
     resolved = current.resolve(strict=False)
@@ -321,6 +356,7 @@ def _resolve_owned(root, relative):
 def validate_ownership(assignments, ownership_root):
     require(isinstance(assignments, list), 'Assignments must be a list')
     root = _root(ownership_root)
+    initial = _inventory(root)
     seen = []
     inode_owners = {}
     for assignment in assignments:
@@ -331,7 +367,7 @@ def validate_ownership(assignments, ownership_root):
         for raw in paths:
             relative = relative_path(raw)
             key = _key(relative.parts)
-            require(all(not _overlap(key, prior) for prior in seen), 'Overlapping, duplicate or aliased ownership: ' + str(relative))
+            require(all(not _overlap(key, prior) for prior in seen), 'Overlapping, duplicate or portable case/Unicode ownership collision: ' + str(relative))
             full = _resolve_owned(root, relative)
             seen.append(key)
             if not full.exists():
@@ -347,4 +383,5 @@ def validate_ownership(assignments, ownership_root):
                 if stat.S_ISREG(state[2]):
                     require(state[3] == 1, 'Hard-linked ownership target is not supported: ' + str(relative))
                 inode_owners[inode] = (owner, str(relative))
+    require(_inventory(root) == initial, 'Ownership filesystem changed during validation')
     return True

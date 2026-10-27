@@ -11,7 +11,6 @@
     "priority": "ancient_mathematics_geometry_and_higher_constructs",
     "require_traceable_formalization": true,
     "historical_attribution_is_proof": false,
-    "silent_model_substitution_allowed": false,
     "evidence_classes": [
       "observed",
       "reported",
@@ -21,7 +20,15 @@
     "companion_contracts": [
       "MATHEMATICAL_FOUNDATION.md",
       "INTEGRITY_RULES.md"
-    ]
+    ],
+    "model_substitution_allowed": false,
+    "approximations_allowed": false,
+    "simplifications_allowed": false,
+    "truncations_allowed": false,
+    "reduced_models_allowed": false,
+    "transformed_formulations_allowed": false,
+    "replacement_formulas_allowed": false,
+    "required_function_disabling_allowed": false
   },
   "outcomes": {
     "task_states": [

@@ -1,56 +1,6 @@
 {
   "schema_version": 1,
-  "status": "unpopulated_template_not_validated",
-  "repository": null,
-  "source_revision": null,
-  "generated_at": null,
-  "index_sha256": null,
-  "nodes": [],
-  "edges": [],
-  "geometry_contracts": [],
-  "retrieval_configuration": null,
-  "record_shapes": {
-    "node": {
-      "stable_id": null,
-      "node_kind": null,
-      "canonical_path": null,
-      "symbol": null,
-      "source_revision": null,
-      "content_sha256": null,
-      "definition_ids": [],
-      "formula_ids": [],
-      "operator_ids": [],
-      "kernel_ids": [],
-      "test_ids": [],
-      "evidence_ids": [],
-      "aliases": [],
-      "geometry_contract_id": null
-    },
-    "edge": {
-      "from_id": null,
-      "relation": null,
-      "to_id": null,
-      "source_revision": null,
-      "verification_evidence_id": null
-    },
-    "geometry_contract": {
-      "stable_id": null,
-      "mathematical_definition_id": null,
-      "space_kind": null,
-      "domain": null,
-      "metric": null,
-      "dimension": null,
-      "coordinate_semantics": [],
-      "axis_sizes": [],
-      "periodic_axes": [],
-      "equivalence_relation": null,
-      "neighbor_multiplicity_convention": null,
-      "orientation_convention": null,
-      "operator_sign_convention": null,
-      "coefficient_domain": null,
-      "storage_precision_and_rounding": null,
-      "layout_mapping_and_inverse": null,
-      "invariant_test_ids": []
-    }
-  }
+  "kind": "template",
+  "task_id": null,
+  "equations": []
 }

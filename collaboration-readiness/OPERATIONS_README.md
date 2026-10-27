@@ -1,55 +1,53 @@
-# Agent, memory and workflow contracts
+# Agent, memory and execution contracts
 
-## Files and adoption
-- AGENTS.md: shared operating instructions for agents and the integrator.
-- PROJECT_MEMORY.md: project-visible status and evidence discipline.
-- policy.yaml: declarative policy, explicitly draft and not automatically enforced.
-- project-memory.template.yaml: empty status record; null means not established.
-- validate_contracts.py: Python standard-library consistency validator.
-- VALIDATION.json: the observed result of validating the supplied templates and rejecting 16 deliberately invalid cases.
+## Executable boundaries
 
-Place the shared mathematical documents beside AGENTS.md in the final bundle: MATHEMATICAL_FOUNDATION.md and INTEGRITY_RULES.md. The integrator must check these links and merge with existing project instructions without overwriting them blindly.
+`validate_contracts.py` validates the unassigned policy and project-memory format. It rejects completion in that format and enforces categorical prohibitions on substitution, approximation, simplification, truncation, reduced models, transformed formulations, replacement formulas and disabling required functions. Its output describes draft consistency.
 
-policy.yaml and project-memory.template.yaml intentionally use the JSON-compatible subset of YAML 1.2. This makes them valid YAML while allowing Python's standard-library JSON parser to read them without installing a parser package. Retain JSON syntax when editing these files, or change the loader deliberately and test that change. A file extension does not imply GitHub Actions, an agent runner or a website will automatically consume it.
+`validate_readiness.py` checks a schema-3 project record against a signed schema-2 execution contract, verifies the actual source manifest, parses the evidence, runs the contract's checks and compares observed results with submitted evidence. It rejects legacy records, unassigned templates, empty or failed evidence, invented revisions, changed scope, missing required checks and unresolved operations. `existing_aggregate_checks` is required for every profile.
 
-Run from this folder:
+`validation_identity.py` verifies Ed25519 signatures, source manifests and ownership. Public-key identity and the expected contract digest enter through the trusted operator's invocation; neither is read from the submitting record. The operator establishes the request, root, generation, ownership and exact checks from the user's actual instructions. A signature authenticates those bytes to the pinned key; an agent-generated key or signed approval field does not create user authorization.
 
-    python3 validate_contracts.py --self-test
+`project_handoff.py` implements controlled write admission, handoff verification and serialized application. The integrator owns registry updates and applies accepted worker results. Workers cannot grant themselves ownership, transfer assignments or mark their own changes integrated. Direct writes by an unrestricted external process remain outside this program's control. Its successful states distinguish `admitted`, `handoff_validated` and `applied_requires_acceptance`; none grants publication or scientific completion.
 
-A pass means only that the checked contract relationships and fields are consistent. It does not verify mathematics, provenance, historical accuracy, physical calibration, code correctness, permissions, deployment or actual agent compliance. The validator does not activate CI, inspect remote state or run project commands. The draft checker rejects lexical duplicate and parent/child ownership paths, traversal and globs; it does not resolve symlinks. The readiness checker resolves ownership against the explicitly supplied --ownership-root and evidence against --evidence-root; set the former to the actual source repository. Neither is a filesystem lock, and target-host case aliases require explicit review. It does not reject every unspecified extra field or implement a complete YAML parser. A separate foundation register written in native YAML is not read or validated by this script; validate that file separately with an appropriate YAML parser and its own domain checks.
+`verify_package.py` verifies the delivered package's exact file inventory and integrity manifest. Its default root is the package; `--root` and `--manifest` select another actual package. The manifest excludes its own file to avoid a circular self-hash. Historical evidence and pre-repair hashes remain distinct from current verification. The checker never regenerates a manifest to conceal differences.
 
-## Project record schema
-Keep the listed top-level fields from project-memory.template.yaml. Replace status with project_record when beginning a real record. For this draft-format validator, set task_state to not_started, in_progress, blocked or cancelled. Assessed completion uses readiness.template.json migrated into a project record; see MIGRATION.md. Unknown values remain null; dirty_state is unknown, clean or dirty. Source and build identifiers refer to actual inspected states, not proposed names. Candidate SHA-256, when known, is 64 lowercase hexadecimal characters.
+## Formats and source identity
 
-Populate the collections with these minimum fields:
+`policy.yaml`, `project-memory.template.yaml` and `FOUNDATION_REGISTER.template.yaml` use JSON-compatible YAML. The executable loaders use JSON parsing; native YAML syntax is not accepted by these interfaces. A file extension does not activate CI, an agent runner or a release process.
 
-| Collection | Minimum entry fields | Meaning |
-|---|---|---|
-| inputs | id, location, version, sha256, units, provenance, limitations | Exact supplied inputs; unknown fields remain null. Do not claim a hash validates scientific accuracy. |
-| foundation_records | id, contract_reference, derivation_reference, status, unresolved_requirements | Traceability to the companion mathematical contracts. |
-| claims | text, kind, source, timestamp, time_basis; reasoning for inferred claims | kind is observed, reported, inferred or proposed. time_basis is event, observation, document_metadata or unknown. |
-| ownership.assignments | owner, outcome, write_paths | File ownership and bounded worker result; assignments require a named integrator. |
-| changes | description, source_revision, files, evidence | Changes actually made, not intentions. |
-| checks | id, scope, outcome; evidence for passed/failed; reason for blocked/not_run | outcome is passed, failed, blocked or not_run. Include command, environment and source revision when applicable. |
-| active_operations | id, target, state, last_observed_at, evidence, reconciliation_action | Track running or uncertain operations separately from completed checks. |
-| blockers | description, affected_scope, required_action, evidence | Specific obstacles, not generic failure labels. |
-| approvals | action, target, scope, source, status, limitations | An evidence record, not a mechanism for granting permission. Never store secrets. |
+The signed execution contract binds the task ID, actual user request and its digest, contract generation, completion criterion, domain, mathematical-claim status, deliverable kind, absolute source root, source manifest, ownership, equation requirements, check commands and all nine gate decisions. The submitting readiness record must match these decisions exactly. A different `domain`, `mathematical_claims` or `deliverable_kind` cannot reduce the signed scope.
 
-Timestamps, when known, use ISO 8601 with a timezone. In the separate readiness format, a task marked complete requires a completion criterion, decisions for every gate, revision-bound evidence, and no unresolved operations or blockers. For a gate genuinely outside scope, document applicability and review in the evidence record rather than pretending a test ran. Do not label an untested applicable capability complete.
+The source identity is `sha256:` followed by the canonical manifest digest. Source verification checks the actual bytes of every included file, accounts for scoped dirty and untracked files, and compares the declared base HEAD with the repository state when applicable. Check entrypoints and executable digests are also bound. A revision label alone cannot establish any of these facts.
 
-The validator checks selected safety-critical fields and relationships, not every recommended subfield in this table. Human review of provenance, ownership boundaries, applicability and actual completion is still required.
+Ownership paths are literal paths relative to the actual source root. The identity layer checks parent/child overlap, aliases and existing filesystem identity, including planned descendant paths. Its conservative case and Unicode spelling policy may reject distinct spellings on a case-sensitive volume; such a rejection is a portability policy, not a claim that those paths are physically identical. Unsupported symlink and hard-link inputs remain errors.
 
-## Connecting real workflows later
-1. Identify the actual repository and read its existing build/test/deployment workflows.
-2. Map each applicable policy gate to a real command or a documented manual verification. Record command provenance, expected outputs and the target environment.
-3. Preserve existing aggregate checks and add regressions for changed behaviour.
-4. Add CI only in the correct repository and only within the user's authorized scope. Validate the YAML and run it on an identified source revision.
-5. Verify failures are surfaced and that blocked or unrun checks cannot masquerade as successful release gates.
-6. Test the exact final archive after extraction, then report remote revision and CI status separately from deployment.
+## Mathematical linkage
 
-Do not flip the draft activation flags merely to satisfy a validator. This validator intentionally covers the supplied draft contract. A project-specific activated contract needs an explicit schema/version change and corresponding validation work, not a cosmetic assertion that enforcement exists.
+When the mathematical integrity gate applies, the contract references actual foundation and geometry records by path and digest. Unassigned templates do not satisfy this requirement. The foundation record must carry the same complete equation inventory as the signed contract. Every equation includes its statement, implementation paths, checks and individually identified requirements for its equations, terms, couplings, modes, domains, initial conditions, boundary conditions and arithmetic, as specified by the user.
 
+Each requirement names the bound implementation files and the executable assertions that check it. The geometry record links these equations, requirement IDs, implementation paths and checks. The validator reads both records and rejects missing, stale, inconsistent or unbound entries. The full equation inventory comes from the supplied specification; shortening that inventory cannot be authorized by a worker's record.
 
-Edition 3 adds validate_readiness.py and readiness.template.json. See MIGRATION.md. The older draft checker now refuses task_state=complete; it cannot be used as a completion receipt. Readiness verifies declared gate/evidence consistency, not the truth of scientific claims or authority to act.
+Each equation's signed `requirement_applicability` contains all eight requirement kinds. An applicable kind needs at least one requirement. An inapplicable kind needs an explicit reason and no requirements of that kind. Equation, domain and arithmetic requirements cannot be excluded. These decisions describe the supplied equation; they cannot excuse an omitted required term or condition.
 
-Edition 5 adds DOMAIN-EVIDENCE.md for semantic review of each gate. The checker still does not inspect scientific evidence content or certify performance. No schema or acceptance criterion is silently expanded by this documentation.
+The actual domain checks must exercise the production implementation and evaluate its intended outputs in the required arithmetic. A static mapping, code coverage, a signature, a successful build or the package's finite examples does not establish a derivation, the completeness of an independently supplied specification, or physical validity. Required missing equations, implementations or domain checks remain specific incomplete calculations.
+
+## Execution and evidence
+
+Only commands bound in the trusted contract are eligible for readiness execution. The first argument after the executable must be the literal bound source entrypoint; an unused filename appended to an inline command cannot satisfy entrypoint binding. The caller must already be authorized to execute them in the selected environment. The checker runs the actual entrypoints and requires the exact declared assertion set. An exit code of zero with a failed, missing or malformed assertion cannot pass. Check results identify their check and its structured outcome; gate reports also bind the source and contract identities. Each run retains raw stdout, stderr and execution metadata, including failed execution. The result identifies checked equation and requirement IDs and its execution-evidence locations.
+
+The readiness operation re-executes the bound checks and compares current outcomes with submitted reports. Empty files, opaque text, arbitrary success JSON, mixed failure/success evidence and matching fabricated revision strings cannot replace execution. Failed or unrun checks cannot be marked inapplicable by a reason string or a reviewer name. Applicable gate exclusions must already be allowed by the independently established contract, and mandatory profile gates cannot be excluded.
+
+The GitHub workflow runs these package verification commands with this directory as its working directory. All testing for this repair is performed in GitHub:
+
+```sh
+python3 -B verify_package.py
+python3 -B validate_contracts.py --self-test
+python3 -B -m unittest discover -v
+python3 -B validate_readiness.py --record readiness.template.json --evidence-root .
+python3 -B geometry/verify_structures.py
+```
+
+The template command must report `readiness_attestation: not_evaluated`. Adding `--readiness` must fail because a template cannot establish readiness. `MIGRATION.md` gives the project execution interface. The template workflow runs package checks and a template rejection test; activation in another repository still requires that repository's real paths and existing checks.
+
+The draft project-memory record remains useful for sourced claims, pending operations and blockers. Its approval references are evidence of an actual instruction, never a mechanism that grants new authority. Publication, deployment, installation and mathematical acceptance require their own applicable project checks and the user's existing scope.

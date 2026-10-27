@@ -1,49 +1,6 @@
-schema_version: 1
-status: template_not_a_completed_record
-feature_id: null
-objective: null
-source_revision: null
-sources: []
-formal_definition:
-  objects: []
-  domains: []
-  dimensions: []
-  units: []
-  hypotheses: []
-  statement: null
-  exceptional_cases: []
-framework_mapping:
-  vedic: null
-  grvq: null
-  mstvq: null
-  tgcr: null
-derivation:
-  steps: []
-  unresolved_obligations: []
-implementation:
-  symbols: []
-  modules: []
-  exact_kernel_boundaries: []
-  representation_policy: null
-  approximations_allowed: false
-  reduced_models_allowed: false
-  transformed_formulations_allowed: false
-  replacement_formulas_allowed: false
-  unresolved_required_calculations: []
-evidence:
-  provenance_status: unresolved
-  mathematical_status: unresolved
-  implementation_status: not_assessed
-  numerical_status: not_run
-  physical_status: not_assessed
-  product_status: not_assessed
-  proofs_or_certificates: []
-  test_records: []
-  calibration_records: []
-  benchmark_records: []
-release:
-  required_gates: []
-  gate_results: []
-  limitations: []
-  approval_references: []
-  eligible_for_claim: false
+{
+  "schema_version": 1,
+  "kind": "template",
+  "task_id": null,
+  "equations": []
+}

@@ -35,6 +35,14 @@ Create a foundation record before claiming implementation completion. It must st
 
 An unknown field remains explicitly unknown. Do not complete a record with invented sources, guessed identifiers, meaningless hashes or a generic statement such as “based on geometry.”
 
+## Consumed foundation register
+
+`FOUNDATION_REGISTER.template.yaml` uses JSON-compatible YAML. Its exact fields are `schema_version`, `kind`, `task_id` and `equations`. The unassigned template cannot establish readiness. A project record uses `schema_version: 1`, `kind: project_record`, the signed contract's task ID and the complete signed equation inventory. The actual file path and SHA-256 are included in both the source manifest and signed contract.
+
+Each equation identifies its statement file and digest, implementation paths, check IDs, all requirement components and every category applicability decision. Each component has an ID, kind, statement, implementation paths and references to the actual check/assertion pair that assesses it. The supported kinds are equation, term, coupling, mode, domain, initial condition, boundary condition and arithmetic. Equation, domain and arithmetic requirements cannot be excluded. Every other category that occurs in the supplied formulation must be populated; its absence cannot be justified by a worker-written approval field.
+
+`validate_readiness.py` reads the register, compares it with the signed inventory, resolves the geometry-index links and requires executable assertions for every listed component. It executes the bound checks on the verified source. The trusted operator must establish that the complete supplied specification is represented before pinning the contract. The validator cannot derive an omitted scientific law or recover an absent production implementation from a register name.
+
 ## Higher constructs
 
 A higher-dimensional, topological, algebraic or geometric construct is admissible only after its objects and operations are defined. Specify the relevant dimension, field or ring, orientation, inner product or metric, boundary, quotient relation and operator domain. Include only structures actually needed by the derivation.
@@ -64,7 +72,7 @@ A separately requested comparison must remain separate from the required impleme
 
 ## Domain boundaries
 
-- Cymatica: map supplied equations and parameters to geometry, boundary conditions, constitutive assumptions, forcing, discretisation and observable outputs.
+- Cymatica: map supplied equations and parameters to geometry, boundary conditions, constitutive assumptions, forcing, the full requested formulation and observable outputs. An existing discretisation that replaces a requested continuum calculation remains an unresolved implementation gap.
 - ETERNAL: distinguish scientifically supported mechanics and measured audio from fictional worldbuilding, authored movement tuning and visual symbolism. Historical-site claims require sources separate from game lore.
 - Solver commercialisation: connect mathematical claims to reproducible objective-level results, exact certificates where applicable, resource costs and a named classical comparator. Do not claim quantum advantage, uniqueness or market value from terminology or visualisations alone.
 - Sites and interfaces: display the active model, its relevant assumptions and its actual execution state. A presentation layer must not conceal an unresolved foundation or a failed calculation.

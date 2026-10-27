@@ -28,7 +28,6 @@ Preserve the supplied physical formulation and its required arithmetic throughou
 
 No approximation, reduced precision, rounding stage, transformed formulation or replacement calculation is authorized by this contract. Labelling a change, recording an approval field, proving equivalence or passing a tolerance check does not create an exception. If the full requested calculation is unresolved, retain its failure and identify the exact missing calculation instead of substituting another method.
 
-## No approximations
 ## Physical and numerical release gates
 
 Select the checks required by the actual equations, not a generic checklist that can pass without exercising the implementation:
@@ -38,7 +37,7 @@ Select the checks required by the actual equations, not a generic checklist that
 3. Residuals for the implemented equations and constraints, evaluated using an appropriate independent calculation where feasible.
 4. Conservation or balance laws actually implied by the model. In forced or dissipative systems, test the relevant balance including forcing, boundary fluxes and losses; do not demand a false conservation law.
 5. Spatial, temporal, modal and solver-tolerance convergence at declared operating points and challenging regimes.
-6. Stability and failure detection without silent clipping, damping changes or timestep substitution.
+6. Stability and failure detection without clipping, damping changes or timestep substitution.
 7. Comparisons against analytic solutions, manufactured solutions, independent implementations or established benchmarks where applicable, with their limitations recorded.
 8. Calibration and validation against suitable measurements for claims about physical behaviour, preserving measurement uncertainty and the distinction between fitted and held-out observations.
 9. Reproducibility records: exact inputs, source revision, dependencies, arithmetic policy, seeds if used, hardware/backend and relevant compiler/runtime settings.

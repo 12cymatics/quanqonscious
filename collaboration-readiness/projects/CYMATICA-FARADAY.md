@@ -4,7 +4,7 @@ Status: instruction overlay. It does not change or certify any existing solver.
 
 ## Mathematical foundation
 
-Start from the user's supplied formulas, parameters and geometric/Vedic framework. Build an explicit chain from source definition to mathematical model, discretisation, implementation, observable and validation. Investigate higher-dimensional, algebraic, topological and geometric constructions where relevant; do not claim a physical correspondence merely because an attractive pattern or shared symbol exists. If a requested correspondence is unresolved, record the missing derivation and continue independent work without inventing it.
+Start from the user's supplied formulas, parameters and geometric/Vedic framework. Build an explicit chain from source definition to the complete supplied formulation, implementation, observable and validation. Do not insert a discretised substitute for a requested continuum formulation. Investigate higher-dimensional, algebraic, topological and geometric constructions where relevant; do not claim a physical correspondence merely because an attractive pattern or shared symbol exists. If a requested correspondence is unresolved, record the missing derivation and continue independent work without inventing it.
 
 Every model must identify its variables, units, parameter provenance, domain, boundary and initial conditions, forcing, damping, constitutive laws and coupling assumptions. Record whether a value is supplied, measured, fitted or selected for an experiment. Resolve inconsistent supplied inputs openly without replacing them.
 

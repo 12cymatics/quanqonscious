@@ -1,3 +1,13 @@
+# Current repair interface
+
+28 October 2026. Current acceptance uses signed execution-contract schema 2 and readiness-record schema 3. The executable interfaces bind actual source bytes, complete equation/component requirements, consumed foundation and geometry records, required aggregate checks and observed command results. Controlled handoff admission and application use independently pinned coordination state. Unassigned templates cannot establish readiness or write authority.
+
+The categorical formulation prohibition is enforced in the draft policy fields as well as the instructions. Storage-only changes preserve the actual supplied formulation and arithmetic; no equation transformation, reduced calculation or labelled approximation is authorized. Historical exceptions below are retained solely as a record of earlier text.
+
+Current verification belongs to the GitHub Actions run for the exact repaired commit, with uploaded raw command output and manifest reports. The older counts and opaque-evidence reproductions below remain historical. No scientific production acceptance is supplied by those package checks, and no GitHub success is claimed before its run is observed.
+
+---
+
 # Edition 5: second critical review
 
 Historical revision record. The entries below describe earlier package versions and are not current implementation instructions or verification results. Prescriptions permitting equivalent transformed formulations, approximations or separate explanatory deliverables are superseded by the current AGENTS.md and INTEGRITY_RULES.md; earlier validator acceptance claims do not validate the repaired implementation.
