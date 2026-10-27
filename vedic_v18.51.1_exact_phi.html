@@ -169,7 +169,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="ctrls">
     <button id="btn-run" type="button">PAUSE</button>
-    <button id="btn-reset" type="button" title="Reseed the state and the dielectric field; C becomes the new seed's energy">RESET</button>
+    <button id="btn-reset" type="button" title="Start again from the seed, every formula gliding in from 0">RESET</button>
     <button id="btn-all" type="button">ALL ON</button>
     <button id="btn-none" type="button">ALL OFF</button>
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
@@ -205,7 +205,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PRESETS</h5>
-    <p class="note">Each preset sets the active sūtras, their strengths, the composition, the vortex ω, the drive and the polarisation, and starts the run again from the seed. Its title says what it does, measured over 600 calculations from the seed; each statement there is checked by the gate on a fresh run.</p>
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
       <button type="button" id="pre-damper">⏚ DAMPER</button>
       <button type="button" id="pre-inductor">🧲 INDUCTOR</button>
@@ -261,8 +260,8 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PACE</h5>
-    <p class="note">Each setting of the formulas, the preset and the mode is calculated once, from the seed. The surface then glides from what it shows to that result over this many seconds and holds it. Nothing is calculated again until a setting changes.</p>
-    <div class="amp-row"><span>Glide (s)</span><input type="range" min="1" max="120" value="60" id="amp-glide"><span id="amp-glide-v">60</span></div>
+    <p class="note">One step a second. A formula you switch on or change reaches its strength in this many steps, then holds it while the run goes on.</p>
+    <div class="amp-row"><span>Glide (steps)</span><input type="range" min="1" max="120" value="10" id="amp-glide"><span id="amp-glide-v">10</span></div>
   </div>
   <div class="section">
     <h5>DRAWING GAINS</h5>
@@ -1610,6 +1609,29 @@ const KERNEL_FACTORY = () => {
     return {psi,dielectric:initDielectric(),energyLedger:e,frame:0,last:null,tgcrKappa:Q.ONE,
             mayaPhase:MAYA_PHASE0,mayaErr:Q.ZERO,magA:Array(32).fill(Q.ZERO),magChi:Array(16).fill(Q.ZERO)};
   };
+  const rampValue = r => Q.add(r.from, Q.mul(Q.sub(r.to, r.from), Q.mk(BigInt(r.k), BigInt(r.n))));
+  const rampStep = (ramp, targets, n) => {
+    if (!Number.isInteger(n) || n < 1) throw new RangeError(`a glide of ${n} steps is not a whole number of at least 1`);
+    const byId = new Map();
+    for (const t of targets) {
+      if (byId.has(t.id)) throw new RangeError(`S${t.id} is set twice`);
+      const a = sutraArgs(t.id, t.args !== undefined ? t.args : t.strength);
+      byId.set(t.id, { to: a[0], rest: a.slice(1) });
+    }
+    const prev = new Map(ramp.map(r => [r.id, r]));
+    const ids = [...new Set([...byId.keys(), ...prev.keys()])].sort((a, b) => a - b);
+    const next = [], active = [];
+    for (const id of ids) {
+      const t = byId.get(id), r = prev.get(id), to = t ? t.to : Q.ZERO, rest = t ? t.rest : r.rest;
+      const start = !r ? { from: Q.ZERO, k: 0 } : Q.eq(r.to, to) && r.n === n ? { from: r.from, k: r.k } : { from: rampValue(r), k: 0 };
+      const e = { id, from: start.from, to, n, k: Math.min(start.k + 1, n), rest };
+      const s = rampValue(e);
+      if (Q.isZero(s) && Q.isZero(to)) continue;
+      next.push(Object.freeze(e));
+      if (!Q.isZero(s)) active.push(Object.freeze({ id, strength: s, args: Object.freeze([s, ...rest]) }));
+    }
+    return { ramp: next, active };
+  };
   const step = (engine,params,active,mode) => {
     const input=engine.psi,t=timeOf(engine.frame);
     const rhoIn=rhoHat(input),shareIn=energyShare(rhoIn);
@@ -2041,7 +2063,7 @@ const KERNEL_FACTORY = () => {
     forwardL,inverseL,injectLambda,LAMBDA0,PHI_Q,PHI_INV_Q,SIM_DT,timeOf,SUTRA_TYPE,GRVQ_K,mstvqB,stressOf,distributedGRVQ,distributedMSTVQ,
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
-    initState,initEngine,step,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
+    initState,initEngine,step,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
     hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley});
 };
 
@@ -2404,6 +2426,11 @@ const VISUAL_CERTIFICATE = {
                  'haze_trilinear_mem', 'haze_ray_sum_le', 'haze_chord_le', 'haze_veil_mem', 'haze_turn_norm', 'haze_rescale'],
       holds: () => FIELDS.ok && DYNAMO_VIEW.ok
     },
+    ramp: {
+      draws: 'the glide row and the strengths in the computation line: each formula at the strength the step ran it with, rising in equal steps from where it stood to its setting over the glide, then held there while the run goes on',
+      theorems: ['ramp_zero', 'ramp_steady', 'ramp_end', 'ramp_hold', 'ramp_share', 'ramp_eq_lerp', 'ramp_between', 'ramp_unit', 'ramp_mono', 'ramp_pos', 'ramp_restart'],
+      holds: () => RAMP_VIEW.ok
+    },
     sutra: {
       draws: 'each active sutra: its v18.24 formula and type, and the statements about it decided on the live field at its strength and operands',
       theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'ext_euclid_step', 'bezout_identity', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
@@ -2430,7 +2457,7 @@ const VISUAL_CERTIFICATE = {
     }));
   }
 };
-const SUTRA_CERT = { ok: false, pending: true, key: '', activeKey: '', frame: -1, audits: [], defects: [], dist: null, activeCollisions: [] };
+const SUTRA_CERT = { ok: false, pending: true, key: '', activeKey: '', decidedKey: null, frame: -1, audits: [], defects: [], dist: null, activeCollisions: [] };
 function sutraCertFromAudits(audits) {
   const defects = [];
   for (const a of audits) {
@@ -2466,7 +2493,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength it is set to, calculated once from the seed for each setting of the formulas, the preset and the mode; the page then glides from what it shows to that exact state over the time the Glide control sets, 60 s unless changed, and holds it, and nothing is calculated again until a setting changes; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. Nothing stops the run at a zero. Where a formula would divide by zero or take a log of zero it does what v18.24 does there: S6 skips a pair whose base vertex is zero, S19 leaves a pair with a zero root as it is, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product. S13 borrows the rule of S6 and leaves a pair whose denominator vertex is zero as it is. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength the formula has reached on its glide: one step a second, and a formula switched on or changed rises in equal steps from where it stood to its setting over the number of steps the Glide control sets, 10 unless changed, then holds there while the run goes on (ramp_steady, ramp_end, ramp_hold); a preset or RESET starts again from the seed; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. Nothing stops the run at a zero. Where a formula would divide by zero or take a log of zero it does what v18.24 does there: S6 skips a pair whose base vertex is zero, S19 leaves a pair with a zero root as it is, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product. S13 borrows the rule of S6 and leaves a pair whose denominator vertex is zero as it is. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 feed GRVQ into lambda_0..3 and every other active sutra a 1/N share into lambda_(id-1 mod 4), lambda being the four axis modes of psi (inverse_inject); S2, S3 and S29 set MSTVQ B, and S1 strength its stress feedback T_kk / 2e8 into lambda and T trace / 500 into the TGCR stiffness kappa. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -2710,9 +2737,9 @@ const DISPLAY = { started: false, t0: 0, dur: 0, tau: 1, ok: false, frames: 0, b
 function displayBegin() {
   if (!DISPLAY.started) return;
   FROM_FIELD.set(DISPLAY_FIELD); FROM_PHASE.set(DISPLAY_PHASE);
-  DISPLAY.t0 = performance.now();
-  DISPLAY.waiting = KERNEL_VIEW.queue.length;
-  DISPLAY.dur = KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0 ? 0 : STEP_INTERVAL_MS / (1 + DISPLAY.waiting);
+  const now = performance.now(), due = DISPLAY.t0 + DISPLAY.dur;
+  DISPLAY.t0 = DISPLAY.dur > 0 && now >= due && KERNEL_VIEW.stateAt <= due ? due : now;
+  DISPLAY.dur = KERNEL_VIEW.state && KERNEL_VIEW.state.frame === 0 ? 0 : STEP_INTERVAL_MS;
   DISPLAY.transitions++; DISPLAY.landedThis = false;
 }
 function displayAdvance(now) {
@@ -2814,6 +2841,7 @@ function samplePhase(theta, phi) {
   return FAITHFUL_RENDER.phaseGrid[(floor(ti) % FIELD_TH) * FIELD_PH + (floor(pj) % FIELD_PH)];
 }
 let FAITHFUL_BADGE_KEY = '';
+function sutraDeciding() { return SUTRA_CERT.decidedKey !== activeKey(activeSutras()); }
 function syncFaithfulBadge() {
   const ch = VISUAL_CERTIFICATE._last;
   if (!ch) return;
@@ -2821,7 +2849,7 @@ function syncFaithfulBadge() {
   st.channels = ch;
   st.ok = !st.zero && st.rel < 1e-9 && st.node < 1e-9 && ch.all;
   const key = Object.keys(ch).map(k => k + (ch[k] ? 1 : 0)).join('') + st.rel + ':' + st.node + ':' +
-              (SUTRA_CERT.pending ? 'p' : '') + (KERNEL_VIEW.selfTestsOk === null ? 's' : '') + st.a4 + ':' +
+              (sutraDeciding() ? 'p' : '') + (KERNEL_VIEW.selfTestsOk === null ? 's' : '') + st.a4 + ':' +
               (MODE_COMPARE.pending ? 'm' + Math.floor((performance.now() - MODE_COMPARE.requestedAt) / 1000) : '');
   if (key !== FAITHFUL_BADGE_KEY) { FAITHFUL_BADGE_KEY = key; updateFaithfulBadge(); }
 }
@@ -2829,7 +2857,7 @@ function updateFaithfulBadge() {
   const el = document.getElementById('faithfulBadge');
   if (!el) return;
   const st = FAITHFUL.state;
-  const waiting = KERNEL_VIEW.selfTestsOk === null || SUTRA_CERT.pending || MODE_COMPARE.pending;
+  const waiting = KERNEL_VIEW.selfTestsOk === null || sutraDeciding() || MODE_COMPARE.pending;
   const ok = st.ok;
   el.className = 'faithful-badge ' + (ok ? 'ok' : (waiting && !st.zero ? 'wait' : 'bad'));
   const head = ok ? 'FAITHFUL' : (st.zero ? 'STATE IS ZERO' : (waiting ? 'AUDITING' : 'NOT FAITHFUL'));
@@ -2843,7 +2871,7 @@ function updateFaithfulBadge() {
       : 'unknown') + "</span>" +
     (waiting ? "<span>deciding: " + [
         KERNEL_VIEW.selfTestsOk === null ? 'kernel self-tests' : '',
-        SUTRA_CERT.pending ? 'operator classes' : '',
+        sutraDeciding() ? 'operator classes' : '',
         MODE_COMPARE.pending ? `series / parallel / concurrent identities, ${MODE_COMPARE.active} sūtras exact, ` +
                                `${Math.floor((performance.now() - MODE_COMPARE.requestedAt) / 1000)} s` : ''
       ].filter(Boolean).join(' · ') + "</span>" : "");
@@ -2957,29 +2985,33 @@ const KERNEL_VIEW = {
   dyn: null,
   hist: { frame: [], E: [], UB: [], H: [], recon: [], phase: [], M: [] },
   stepMs: 0, halted: null, running: true, workerError: null,
-  configVersion: 0, appliedVersion: -1, doneVersion: -1, appliedActive: [], appliedSet: [], appliedComposition: null,
+  configVersion: 0, appliedVersion: -1, epoch: 0, appliedEpoch: -1, inFlight: false, inFlightSince: 0, stateAt: 0,
+  appliedActive: [], appliedSet: [], appliedComposition: null,
   dirty: false, lastProjectAt: 0, projected: [], queue: []
 };
-let STEP_INTERVAL_MS = 60000;
+const STEP_INTERVAL_MS = 1000;
+let GLIDE_STEPS = 10;
 const MODE_COMPARE = { key: '', pending: true, requestedAt: 0, modes: [], traces: [], energies: [], pairwise: [],
                        allDistinct: false, active: 0, audit: null };
 function workerSource(handler) {
   return 'const KERNEL = (' + KERNEL_FACTORY.toString() + ')();\n' + handler;
 }
 const KERNEL_WORKER_HANDLER = `
-let engine = KERNEL.initEngine();
-let config = null, running = true, halted = null, scheduled = false;
+let engine = KERNEL.initEngine(), ramp = [];
+let config = null, halted = null, scheduled = false, wanted = false;
 function post(msg) { self.postMessage(msg); }
 function postState(ms) {
   const L = engine.last;
-  post({ type: 'state', version: config ? config.version : -1, ms,
+  post({ type: 'state', version: config ? config.version : -1, epoch: config ? config.epoch : -1, ms,
          state: { psi: engine.psi, dielectric: engine.dielectric,
                   energyLedger: engine.energyLedger, frame: engine.frame },
          params: config ? config.params : null, couplings: couplingsOf(L), lambda: KERNEL.inverseL(engine.psi),
          tgcr: L ? { density: L.tgcr.density, pontryagin: L.tgcr.pontryagin, FSq: L.tgcr.FSq, vSq: L.tgcr.vSq, energy: L.tgcr.energy,
                      kappa: L.tgcr.kappa, closed: L.tgcr.cubeFlux.every(KERNEL.Q.isZero) } : null,
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
-         composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [], setIds: L ? L.active.map(a => a.id) : [],
+         composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [], setIds: L ? config.active.map(a => a.id) : [],
+         strengths: L ? L.active.map(a => ({ id: a.id, strength: a.strength })) : [],
+         ramp: ramp.map(r => ({ id: r.id, from: r.from, to: r.to, k: r.k, n: r.n })),
          dyn: dynamoOf(engine) });
 }
 function couplingsOf(L) {
@@ -2998,31 +3030,36 @@ function dynamoOf(e) {
            closed: md.closed, torus: md.torus, sources: KERNEL.sourcesData(e.magA, e.dielectric), phase: e.mayaPhase, phaseErr: e.mayaErr, beta: mo.beta, betaEnclosure: mo.betaEnclosure,
            M: mo.M, layer: KERNEL.MAYA_LAYER };
 }
-let pending = false;
 function schedule() {
-  if (scheduled || !running || !config || !pending) return;
+  if (scheduled || !wanted || halted || !config) return;
   scheduled = true;
   setTimeout(tick, 0);
 }
 function tick() {
   scheduled = false;
-  if (!running || !config || !pending) return;
-  pending = false;
+  if (!wanted || halted || !config) return;
+  wanted = false;
   const t0 = performance.now();
+  let rs, next;
   try {
-    engine = KERNEL.step(KERNEL.initEngine(), config.params, config.active, config.composition);
+    rs = KERNEL.rampStep(ramp, config.active, config.glide);
+    next = KERNEL.step(engine, config.params, rs.active, config.composition);
   } catch (err) {
-    engine = KERNEL.initEngine();
     halted = { name: err.name || 'Error', message: String(err.message || err) };
-    post({ type: 'halted', version: config.version, frame: 0, reason: halted });
+    post({ type: 'halted', version: config.version, epoch: config.epoch, frame: engine.frame, reason: halted });
     return;
   }
+  engine = next; ramp = rs.ramp;
   postState(performance.now() - t0);
 }
 self.onmessage = e => {
   const m = e.data;
-  if (m.type === 'config') { config = m; halted = null; if (m.reset) { engine = KERNEL.initEngine(); postState(0); } pending = true; schedule(); }
-  else if (m.type === 'run') { running = !!m.running; schedule(); }
+  if (m.type === 'config') {
+    config = m; halted = null;
+    if (m.reset) { engine = KERNEL.initEngine(); ramp = []; wanted = false; postState(0); }
+    schedule();
+  }
+  else if (m.type === 'next') { wanted = true; schedule(); }
   else if (m.type === 'export') {
     if (!engine.last) { post({ type: 'export', id: m.id, error: 'no step has run yet' }); return; }
     try { post({ type: 'export', id: m.id, payload: { frame: engine.frame, last: KERNEL.serializeLast(engine.last),
@@ -3033,7 +3070,6 @@ self.onmessage = e => {
     catch (err) { post({ type: 'export', id: m.id, error: String(err.message || err) }); }
   }
 };
-postState(0);
 `;
 const AUDIT_WORKER_HANDLER = `
 const auditCache = new Map();
@@ -3096,7 +3132,11 @@ function startKernelWorker() {
     LOG.add('worker failed -- ' + KERNEL_VIEW.workerError, 'off');
     updateRunBadge();
   };
-  if (!KERNEL_VIEW.running) KERNEL_WORKER.postMessage({ type: 'run', running: false });
+}
+function requestNext() {
+  if (!KERNEL_WORKER || !KERNEL_VIEW.running || KERNEL_VIEW.halted || KERNEL_VIEW.inFlight || KERNEL_VIEW.queue.length) return;
+  KERNEL_VIEW.inFlight = true; KERNEL_VIEW.inFlightSince = performance.now();
+  KERNEL_WORKER.postMessage({ type: 'next' });
 }
 let MODES_WORKER = null, MODES_WORKER_URL = null, MODES_BUSY = false;
 function startModesWorker() {
@@ -3154,14 +3194,20 @@ function pushConfig(reason, reset) {
   try { params = kernelParams(); }
   catch (err) { LOG.add('parameters refused: ' + err.message, 'off'); return; }
   const active = activeSutras();
-  const key = activeKey(active) + '|' + COMPOSITION + '|' + exactParamsKey(params);
+  const key = activeKey(active) + '|' + COMPOSITION + '|' + GLIDE_STEPS + '|' + exactParamsKey(params);
   if (key === LAST_CONFIG_KEY && reason !== 'force' && !reset) return;
   LAST_CONFIG_KEY = key;
-  if (KERNEL_VIEW.configVersion > 0 && KERNEL_VIEW.doneVersion < KERNEL_VIEW.configVersion) { KERNEL_WORKER.terminate(); startKernelWorker(); }
+  if (reset) {
+    if (KERNEL_VIEW.inFlight) { KERNEL_WORKER.terminate(); startKernelWorker(); }
+    KERNEL_VIEW.epoch++; KERNEL_VIEW.inFlight = false; KERNEL_VIEW.queue.length = 0;
+  }
   KERNEL_VIEW.configVersion++;
-  KERNEL_WORKER.postMessage({ type: 'config', version: KERNEL_VIEW.configVersion, active, composition: COMPOSITION, params, reset: !!reset });
+  KERNEL_VIEW.halted = null;
+  KERNEL_WORKER.postMessage({ type: 'config', version: KERNEL_VIEW.configVersion, epoch: KERNEL_VIEW.epoch, active, composition: COMPOSITION,
+                              glide: GLIDE_STEPS, params, reset: !!reset });
+  requestNext();
   requestCertificates(active);
-  updateFormulaDisplay(active);
+  updateFormulaDisplay();
   if (reason && reason !== 'force') LOG.add(reason, 'sys');
 }
 function requestCertificates(active) {
@@ -3192,7 +3238,7 @@ function onAuditMessage(ev) {
     if (!DISTINCTNESS_REQUESTED) { DISTINCTNESS_REQUESTED = true; AUDIT_WORKER.postMessage({ type: 'distinctness' }); }
   } else if (m.type === 'sutraCert') {
     if (m.key !== SUTRA_CERT.key) return;
-    SUTRA_CERT.audits = m.audits; SUTRA_CERT.frame = m.frame;
+    SUTRA_CERT.audits = m.audits; SUTRA_CERT.frame = m.frame; SUTRA_CERT.decidedKey = SUTRA_CERT.activeKey;
     SUTRA_CERT.defects = sutraCertFromAudits(m.audits);
     const wasOk = SUTRA_CERT.ok;
     SUTRA_CERT.ok = SUTRA_CERT.defects.length === 0;
@@ -3228,12 +3274,16 @@ function onAuditMessage(ev) {
 }
 function onKernelMessage(ev) {
   const m = ev.data;
-  if ((m.type === 'state' || m.type === 'halted') && m.version < KERNEL_VIEW.configVersion) return;
-  if (m.type === 'state') { KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m); if (m.state.frame > 0) KERNEL_VIEW.doneVersion = m.version; }
-  else if (m.type === 'halted') {
-    KERNEL_VIEW.doneVersion = m.version;
+  if ((m.type === 'state' || m.type === 'halted') && m.epoch !== KERNEL_VIEW.epoch) return;
+  if (m.type === 'state') {
+    if (m.state.frame > 0) KERNEL_VIEW.inFlight = false;
+    m.at = performance.now();
+    KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m);
+  } else if (m.type === 'halted') {
+    KERNEL_VIEW.inFlight = false;
+    if (m.version < KERNEL_VIEW.configVersion) { requestNext(); return; }
     KERNEL_VIEW.halted = m.reason;
-    LOG.add(`calculation refused -- ${m.reason.message}`, 'off');
+    LOG.add(`step ${m.frame + 1} refused -- ${m.reason.message}`, 'off');
     updateRunBadge();
   } else if (m.type === 'export') {
     const w = EXPORT_WAIT.get(m.id);
@@ -3245,12 +3295,32 @@ function applyKernelState(m) {
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
     KERNEL_VIEW.delta = m.delta; KERNEL_VIEW.stores = m.stores;
-    KERNEL_VIEW.appliedVersion = m.version;
+    KERNEL_VIEW.appliedVersion = m.version; KERNEL_VIEW.appliedEpoch = m.epoch; KERNEL_VIEW.stateAt = m.at;
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedSet = m.setIds; KERNEL_VIEW.appliedComposition = m.composition;
+    rampView(m.ramp, m.strengths);
+    updateFormulaDisplay();
     KERNEL_VIEW.couplings = m.couplings; KERNEL_VIEW.lambda = m.lambda; KERNEL_VIEW.tgcr = m.tgcr;
     requestCertificates(activeSutras());
     if (m.dyn) { KERNEL_VIEW.lastDyn = [m.state.frame, m.dyn, A4.fromQ(m.state.energyLedger), FAITHFUL.project(m.state.psi).prob]; recordDynamo(...KERNEL_VIEW.lastDyn); }
     KERNEL_VIEW.dirty = true;
+}
+const RAMP_VIEW = { ok: false, why: 'no step yet', rows: [], rising: 0 };
+function rampView(ramp, strengths) {
+  const R = RAMP_VIEW, run = new Map(strengths.map(x => [x.id, x.strength]));
+  R.rows = []; R.rising = 0;
+  for (const r of ramp) {
+    if (!(Number.isInteger(r.n) && r.n >= 1 && Number.isInteger(r.k) && r.k >= 1 && r.k <= r.n)) { R.ok = false; R.why = `S${r.id} is ${r.k} steps into a glide of ${r.n}`; return; }
+    const s = Q.add(r.from, Q.mul(Q.sub(r.to, r.from), Q.mk(BigInt(r.k), BigInt(r.n))));
+    if (Q.sign(s) < 0 || Q.cmp(s, Q.ONE) > 0) { R.ok = false; R.why = `S${r.id} strength ${Q.toString(s)} outside [0, 1]`; return; }
+    const ran = run.get(r.id);
+    if (Q.isZero(s) ? ran !== undefined : !(ran && Q.eq(ran, s))) { R.ok = false; R.why = `S${r.id} ran at a strength its glide does not give`; return; }
+    run.delete(r.id);
+    const rising = r.k < r.n && !Q.eq(r.from, r.to);
+    if (rising) R.rising++;
+    R.rows.push({ id: r.id, s, to: r.to, k: r.k, n: r.n, rising });
+  }
+  if (run.size) { R.ok = false; R.why = `S${[...run.keys()].join(', S')} ran with no glide`; return; }
+  R.ok = true; R.why = '';
 }
 const MAYA_VIEW = { M: 1, ok: false, why: 'no step yet' };
 const DYNAMO_VIEW = { ok: false, why: 'no step yet' };
@@ -4724,13 +4794,14 @@ function updateRunBadge() {
   else if (KERNEL_VIEW.halted) { cls += ' halted'; text = 'REFUSED: ' + KERNEL_VIEW.halted.message + '. Change a setting or press RESET to continue.'; }
   else if (!KERNEL_VIEW.state) text = 'starting the kernel worker';
   else {
-    const st = KERNEL_VIEW.state;
     const paused = !KERNEL_VIEW.running ? 'PAUSED · ' : '';
     const pending = KERNEL_VIEW.appliedVersion < KERNEL_VIEW.configVersion ? ' · new settings apply next step' : '';
-    text = `${paused}step ${shownStep()} · calculated in ${Math.round(KERNEL_VIEW.stepMs)} ms · ${COMPOSITION_LABEL[COMPOSITION]}${pending}`;
+    const wait = KERNEL_VIEW.inFlight && DISPLAY.tau === 1 && !KERNEL_VIEW.queue.length
+      ? ` · calculating step ${shownStep() + 1} for ${Math.floor((performance.now() - KERNEL_VIEW.inFlightSince) / 1000)} s` : '';
+    text = `${paused}step ${shownStep()} · calculated in ${Math.round(KERNEL_VIEW.stepMs)} ms · ${COMPOSITION_LABEL[COMPOSITION]}${pending}${wait}`;
   }
-  el.className = cls;
-  el.textContent = text;
+  if (el.className !== cls) el.className = cls;
+  if (el.textContent !== text) el.textContent = text;
 }
 function updateSimulationHud() {
   const st = KERNEL_VIEW.state;
@@ -4748,18 +4819,16 @@ function updateSimulationHud() {
 }
 function shownStep() {
   const st = KERNEL_VIEW.state;
-  if (!st || st.frame === 0) return 0;
-  const dur = DISPLAY.dur > 0 ? DISPLAY.dur : STEP_INTERVAL_MS;
-  return Math.floor((!DISPLAY.started || DISPLAY.tau === 1 ? dur : DISPLAY.tau * dur) / 1000);
+  return st ? st.frame : 0;
 }
 function glideWords() {
-  const st = KERNEL_VIEW.state;
+  const st = KERNEL_VIEW.state, R = RAMP_VIEW;
   if (!st) return '–';
-  if (KERNEL_VIEW.halted) return 'refused';
-  if (st.frame === 0) return KERNEL_VIEW.running ? 'on the seed · calculating' : 'on the seed · paused';
-  const T = Math.round((DISPLAY.dur > 0 ? DISPLAY.dur : STEP_INTERVAL_MS) / 1000);
-  if (!DISPLAY.started || DISPLAY.tau === 1) return `step ${T} of ${T} s · holding until a setting changes`;
-  return `step ${shownStep()} of ${T} s`;
+  if (!(VISUAL_CERTIFICATE._last && VISUAL_CERTIFICATE._last.ramp)) return 'withheld: ' + (R.why || 'the glide certificate does not hold');
+  if (!R.rows.length) return st.frame === 0 ? 'on the seed' : 'no sūtra running';
+  const pct = q => (100 * FAITHFUL.qNum(q)).toFixed(1).replace(/\.0$/, '') + '%';
+  const head = R.rising ? `${R.rising} of ${R.rows.length} rising · ` : `all ${R.rows.length} held · `;
+  return head + R.rows.map(r => `S${r.id} ${pct(r.s)}` + (r.rising ? ` → ${pct(r.to)} (${r.k}/${r.n})` : '')).join(' · ');
 }
 function updateCouplingsHud() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -4778,7 +4847,8 @@ function updateCouplingsHud() {
     set('tg-energy', `ℰ ${sg(num(T.energy))} · κ ${sg(num(T.kappa))}`);
   } else { set('tg-pontryagin', 'withheld'); set('tg-energy', VORTEX_VIEW.why); }
   const sc = SUTRA_CERT;
-  set('cp-claims', sc.pending ? 'deciding' : sc.ok ? `${sc.audits.reduce((n, a) => n + (a.claims ? a.claims.length : 0), 0)} statements hold on ${sc.audits.length} formula${sc.audits.length === 1 ? '' : 's'}`
+  set('cp-claims', sc.decidedKey !== activeKey(activeSutras()) ? 'deciding'
+    : sc.ok ? `${sc.audits.reduce((n, a) => n + (a.claims ? a.claims.length : 0), 0)} statements hold on ${sc.audits.length} formula${sc.audits.length === 1 ? '' : 's'} at step ${sc.frame}`
     : sc.defects.map(d => 'S' + d.id + ' ' + d.why).join('; '));
 }
 function updateDynamoHud() {
@@ -5000,10 +5070,15 @@ function updateDrawHud() {
   set('sim-surface', surface);
   set('sim-scale', scale);
 }
-function updateFormulaDisplay(active) {
+function updateFormulaDisplay() {
   const el = document.getElementById('formula-display');
   if (!el) return;
-  const list = active.map(s => `S${s.id}·${Q.toString(s.strength)}` + (s.args.length > 1 ? `(${s.args.slice(1).map(Q.toString).join(',')})` : '')).join(' ');
+  const set = new Map(activeSutras().map(s => [s.id, s])), ran = new Map(RAMP_VIEW.ok ? RAMP_VIEW.rows.map(r => [r.id, r.s]) : []);
+  const list = [...new Set([...set.keys(), ...ran.keys()])].sort((a, b) => a - b).map(id => {
+    const s = set.get(id), to = s ? s.strength : Q.ZERO, now = ran.has(id) ? ran.get(id) : (RAMP_VIEW.ok ? Q.ZERO : to);
+    return `S${id}·${Q.eq(now, to) ? Q.toString(to) : Q.toString(now) + '→' + Q.toString(to)}` +
+      (s && s.args.length > 1 ? `(${s.args.slice(1).map(Q.toString).join(',')})` : '');
+  }).join(' ');
   let p;
   try { p = kernelParams(); } catch (err) { el.textContent = 'parameters refused: ' + err.message; return; }
   el.innerHTML =
@@ -5094,13 +5169,17 @@ function frame(t) {
     camRX += sin(t * VIEW_MOTION.rotationXFrequency) * VIEW_MOTION.rotationXPerNominalFrame * frameScale;
   }
   ctx.clearRect(0, 0, cw, ch);
-  if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1 || KERNEL_VIEW.queue[0].version !== KERNEL_VIEW.appliedVersion)) applyKernelState(KERNEL_VIEW.queue.shift());
+  if (KERNEL_VIEW.queue.length && (!DISPLAY.started || DISPLAY.tau === 1 || KERNEL_VIEW.queue[0].epoch !== KERNEL_VIEW.appliedEpoch)) {
+    applyKernelState(KERNEL_VIEW.queue.shift());
+    requestNext();
+  }
   if (KERNEL_VIEW.dirty) projectState();
+  updateRunBadge();
   if (KERNEL_VIEW.state && W > 0 && H > 0) {
     displayAdvance(performance.now());
-    const g = document.getElementById('sim-glide'); if (g) g.textContent = glideWords();
+    const g = document.getElementById('sim-glide'), gw = glideWords(); if (g && g.textContent !== gw) g.textContent = gw;
     const ss = document.getElementById('sim-step'), sn = String(shownStep());
-    if (ss && ss.textContent !== sn) { ss.textContent = sn; updateRunBadge(); updateDynamoHud(); }
+    if (ss && ss.textContent !== sn) { ss.textContent = sn; updateDynamoHud(); }
     projectTorus();
     syncFaithfulBadge();
     renderTorus();
@@ -5151,7 +5230,7 @@ document.getElementById('toggle-left').addEventListener('click', () => {
 });
 document.getElementById('btn-run').addEventListener('click', () => {
   KERNEL_VIEW.running = !KERNEL_VIEW.running;
-  if (KERNEL_WORKER) KERNEL_WORKER.postMessage({ type: 'run', running: KERNEL_VIEW.running });
+  requestNext();
   document.getElementById('btn-run').textContent = KERNEL_VIEW.running ? 'PAUSE' : 'RUN';
   LOG.add(KERNEL_VIEW.running ? 'calculation resumed' : 'calculation paused', 'sys');
   updateRunBadge();
@@ -5264,15 +5343,11 @@ document.getElementById('amp-omega').addEventListener('input', e => {
   pushConfig();
 });
 document.getElementById('amp-glide').addEventListener('input', e => {
-  const n = +e.target.value;
-  STEP_INTERVAL_MS = 1000 * n;
-  document.getElementById('amp-glide-v').textContent = String(n);
-  if (DISPLAY.started && DISPLAY.dur > 0 && DISPLAY.tau < 1) {
-    const tau = DISPLAY.tau;
-    DISPLAY.dur = STEP_INTERVAL_MS / (1 + DISPLAY.waiting);
-    DISPLAY.t0 = performance.now() - tau * DISPLAY.dur;
-  }
+  GLIDE_STEPS = +e.target.value;
+  document.getElementById('amp-glide-v').textContent = String(GLIDE_STEPS);
+  pushConfig();
 });
+document.getElementById('amp-glide').addEventListener('change', () => LOG.add(`glide → ${GLIDE_STEPS} steps`, 'sys'));
 for (const [id, setter, dispId, fmt] of [
   ['amp-zoom',    v => { ZOOM = v / 100; },            'amp-zoom-v',    v => (v / 100).toFixed(2)],
   ['amp-field',   v => { AMP.field = v; },             'amp-field-v',   v => v],

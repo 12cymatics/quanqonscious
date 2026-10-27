@@ -30,6 +30,8 @@
      step export        an exported step replays bit for bit from its file
      strengths          a step from the seed runs each formula at its
                         setting
+     glide              each strength rises in equal steps from where it
+                        stood to its setting over the glide, then holds
      modes              the mode identities decide and pass
      Maya, magnetism, torus, sources, parameters
 
@@ -466,6 +468,58 @@ section('strengths');
     const al = red(9n * 3n, 435n * 10n);
     if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, [3n, 10n]) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
   ok(stepsOk, 'a step from the seed runs each formula at its setting from the first step: alpha = id/435 x setting');
+}
+
+section('glide');
+{
+  const red = (n, d) => { if (d < 0n) { n = -n; d = -d; } const g = euclid(n, d) || 1n; return [n / g, d / g]; };
+  const F = (n, d = 1n) => red(n, d);
+  const add = ([a, b], [c, d]) => red(a * d + c * b, b * d), sub = ([a, b], [c, d]) => red(a * d - c * b, b * d), mul = ([a, b], [c, d]) => red(a * c, b * d);
+  const eqF = (q, [n, d]) => q.n === n && q.d === d;
+  const at = (from, to, k, n) => add(from, mul(sub(to, from), F(BigInt(Math.min(k, n)), BigInt(n))));
+  const s9 = q => [{ id: 9, strength: q }];
+  let r = [], up = true;
+  const seen = [];
+  for (let j = 1; j <= 12; j++) {
+    const x = K.rampStep(r, s9(Q.mk(1n, 2n)), 10); r = x.ramp;
+    const want = at(F(0n), F(1n, 2n), j, 10);
+    seen.push(x.active.length ? Q.toString(x.active[0].strength) : 'none');
+    if (!(x.active.length === 1 && x.active[0].id === 9 && eqF(x.active[0].strength, want) && eqF(x.active[0].args[0], want))) up = false;
+  }
+  ok(up, 'switched on, a formula rises from 0 by the same share each step, reaches its setting at the end of the glide and holds it (ramp_steady, ramp_end, ramp_hold)', seen.join(' '));
+  r = [];
+  for (let j = 0; j < 5; j++) r = K.rampStep(r, s9(Q.mk(1n, 2n)), 10).ramp;
+  const ch = K.rampStep(r, s9(Q.mk(1n, 10n)), 10);
+  ok(ch.active.length === 1 && eqF(ch.active[0].strength, at(F(1n, 4n), F(1n, 10n), 1, 10)),
+     'a setting changed mid-glide glides on from where the strength stood (ramp_zero, ramp_restart)', Q.toString(ch.active[0].strength));
+  let d = ch.ramp, down = [];
+  for (let j = 1; j <= 10; j++) { const x = K.rampStep(d, [], 10); d = x.ramp; down.push(x.active.length); }
+  ok(down.slice(0, 9).every(n => n === 1) && down[9] === 0 && d.length === 0,
+     'a formula switched off glides down to nothing over the glide and is then gone', down.join(','));
+  r = [];
+  for (let j = 0; j < 4; j++) r = K.rampStep(r, s9(Q.mk(1n, 2n)), 10).ramp;
+  const re = [];
+  for (let j = 1; j <= 5; j++) { const x = K.rampStep(r, s9(Q.mk(1n, 2n)), 4); r = x.ramp; re.push(x.active[0].strength); }
+  ok(re.every((q, i) => eqF(q, at(F(1n, 5n), F(1n, 2n), i + 1, 4))),
+     'a glide length changed mid-glide goes on from where the strength stood, over the new number of steps', re.map(Q.toString).join(' '));
+  r = [];
+  for (let j = 0; j < 12; j++) r = K.rampStep(r, s9(Q.mk(3n, 10n)), 10).ramp;
+  const held = [];
+  for (let j = 0; j < 3; j++) { const x = K.rampStep(r, s9(Q.mk(3n, 10n)), 25); r = x.ramp; held.push(x.active[0].strength); }
+  ok(held.every(q => eqF(q, F(3n, 10n))), 'a formula held at its setting stays there exactly when the glide length changes', held.map(Q.toString).join(' '));
+  r = [];
+  const s2 = radix => [{ id: 2, strength: Q.mk(1n, 2n), args: [Q.mk(1n, 2n), Q.mk(BigInt(radix))] }];
+  for (let j = 0; j < 3; j++) r = K.rampStep(r, s2(10), 10).ramp;
+  const op = K.rampStep(r, s2(12), 10);
+  ok(eqF(op.active[0].strength, at(F(0n), F(1n, 2n), 4, 10)) && op.active[0].args[1].n === 12n,
+     'an operand changed mid-glide applies at once and the strength glides on', `${Q.toString(op.active[0].strength)} radix ${op.active[0].args[1].n}`);
+  const mix = K.rampStep([], [{ id: 29, strength: Q.ONE }, { id: 3, strength: Q.ONE }, { id: 11, strength: Q.ONE }], 3);
+  ok(mix.active.map(a => a.id).join(',') === '3,11,29' && mix.active.every(a => eqF(a.strength, F(1n, 3n))),
+     'the formulas run in id order, each at its share of the glide', mix.active.map(a => `S${a.id}·${Q.toString(a.strength)}`).join(' '));
+  const throws = f => { try { f(); return false; } catch { return true; } };
+  ok(throws(() => K.rampStep([], s9(Q.ONE), 0)) && throws(() => K.rampStep([], s9(Q.ONE), 1.5)) &&
+     throws(() => K.rampStep([], [...s9(Q.ONE), ...s9(Q.HALF)], 10)) && throws(() => K.rampStep([], s9(Q.mk(3n, 2n)), 10)),
+     'a glide that is not a whole number of steps of at least 1, a formula set twice, or a strength outside [0, 1] is refused');
 }
 
 section('series / parallel / concurrent');
