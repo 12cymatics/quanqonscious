@@ -391,12 +391,12 @@ try {
     return { maya: s.maya, dynamo: s.dynamo, n, contiguous: H.frame.every((f, i) => i === 0 || f === H.frame[i - 1] + 1),
              flux: document.getElementById('dyn-flux').textContent, wantFlux: fmtE(FAITHFUL.qNum(d.fluxEnergy)),
              phaseRow: document.getElementById('maya-phase').textContent, wantPhase: FAITHFUL.qNum(d.phase).toFixed(5),
-             line: document.getElementById('dynLine').textContent, last: H.frame[n - 1], closed: d.closed };
+             line: document.getElementById('dynLine').textContent, last: shownStep(), closed: d.closed };
   })()`);
   ok(dy.maya && dy.dynamo && dy.closed, 'the Maya and dynamo channels hold on a running preset, its flux closing on every cube', JSON.stringify(dy));
   ok(dy.contiguous && dy.n === 2, `the timeline holds the seed and its one calculation, in order (${dy.n})`);
   ok(dy.flux === dy.wantFlux && dy.phaseRow.startsWith(dy.wantPhase), 'the flux and Maya rows show the kernel\'s values', `${dy.flux} vs ${dy.wantFlux}; ${dy.phaseRow} vs ${dy.wantPhase}`);
-  ok(dy.line.startsWith('step ' + dy.last + ' '), 'the line under the picture describes the step being drawn', dy.line);
+  ok(dy.line.startsWith('step ' + dy.last + ' '), 'the line under the picture names the step shown', dy.line);
   const strip = await evaluate(`(() => {
     const cw = W / devicePixelRatio, chh = H / devicePixelRatio;
     ctx.clearRect(0, 0, cw, chh); drawDynamoTimeline(ctx, cw, chh);
