@@ -3233,7 +3233,7 @@ function onKernelMessage(ev) {
   else if (m.type === 'halted') {
     KERNEL_VIEW.doneVersion = m.version;
     KERNEL_VIEW.halted = m.reason;
-    LOG.add(`step ${m.frame + 1} refused -- ${m.reason.message}`, 'off');
+    LOG.add(`calculation refused -- ${m.reason.message}`, 'off');
     updateRunBadge();
   } else if (m.type === 'export') {
     const w = EXPORT_WAIT.get(m.id);
@@ -4778,7 +4778,7 @@ function updateCouplingsHud() {
     set('tg-energy', `ℰ ${sg(num(T.energy))} · κ ${sg(num(T.kappa))}`);
   } else { set('tg-pontryagin', 'withheld'); set('tg-energy', VORTEX_VIEW.why); }
   const sc = SUTRA_CERT;
-  set('cp-claims', sc.pending ? 'deciding' : sc.ok ? `${sc.audits.reduce((n, a) => n + (a.claims ? a.claims.length : 0), 0)} statements hold on ${sc.audits.length} formula${sc.audits.length === 1 ? '' : 's'} (step ${sc.frame})`
+  set('cp-claims', sc.pending ? 'deciding' : sc.ok ? `${sc.audits.reduce((n, a) => n + (a.claims ? a.claims.length : 0), 0)} statements hold on ${sc.audits.length} formula${sc.audits.length === 1 ? '' : 's'}`
     : sc.defects.map(d => 'S' + d.id + ' ' + d.why).join('; '));
 }
 function updateDynamoHud() {
@@ -4808,7 +4808,7 @@ function updateDynamoHud() {
     const jm = Math.max(...FS.J.map(Math.abs)), qp = FS.Q.filter(x => x > 0).length, qn = FS.Q.filter(x => x < 0).length;
     set('fld-current', `largest |J| ${fmtE(jm)} · conserved at all 16 vertices`);
     set('fld-charge', `${qp} positive, ${qn} negative · they sum to 0`);
-    set('fld-haze', `${FC.hazeN}³ nodes · highest ${fmtE(Math.exp(FC.pRange[1] - FC.pRange[0]))} × lowest (step ${FC.frame}, ${FC.ms} ms) · ` + (HAZE.drawn ? 'seen through' : HAZE.why));
+    set('fld-haze', `${FC.hazeN}³ nodes · highest ${fmtE(Math.exp(FC.pRange[1] - FC.pRange[0]))} × lowest (${FC.ms} ms) · ` + (HAZE.drawn ? 'seen through' : HAZE.why));
     let fm = 0, fe = 0;
     for (let k = 0; k < FC.mForce.length; k += 6) fm = Math.max(fm, Math.hypot(FC.mForce[k + 3], FC.mForce[k + 4], FC.mForce[k + 5]));
     for (let k = 0; k < FC.eForce.length; k += 6) fe = Math.max(fe, Math.hypot(FC.eForce[k + 3], FC.eForce[k + 4], FC.eForce[k + 5]));
@@ -4831,9 +4831,9 @@ function updateDynamoHud() {
   line.className = 'dyn-line';
   const pct = (a, b) => (b !== 0 ? ((a - b) / Math.abs(b) * 100) : 0);
   const k = Math.max(0, n - 31);
-  const fluxTrend = n > 1 ? `${pct(H.UB[n - 1], H.UB[k]) >= 0 ? '+' : ''}${pct(H.UB[n - 1], H.UB[k]).toFixed(1)}% over ${n - 1 - k} steps` : 'first step';
+  const fluxTrend = n > 1 ? `${pct(H.UB[n - 1], H.UB[k]) >= 0 ? '+' : ''}${pct(H.UB[n - 1], H.UB[k]).toFixed(1)}% from the seed` : 'the seed';
   const where = ph < lo ? 'flowing up onto the layer' : ph > hi ? 'flowing down onto the layer' : 'on the layer';
-  line.textContent = `step ${H.frame[n - 1]} · flux ${fmtE(H.UB[n - 1])} (${fluxTrend}) · helicity ${fmtE(H.H[n - 1])} · ` +
+  line.textContent = `step ${shownStep()} · flux ${fmtE(H.UB[n - 1])} (${fluxTrend}) · helicity ${fmtE(H.H[n - 1])} · ` +
     `${H.recon[n - 1]} reconnection${H.recon[n - 1] === 1 ? '' : 's'} · Maya φ ${ph.toFixed(4)} ${where}, field shown ×${M.toFixed(4)}`;
 }
 function drawDynamoTimeline(ctx, cw, ch) {
@@ -4882,7 +4882,7 @@ function drawDynamoTimeline(ctx, cw, ch) {
     if (H.recon[i]) { ctx.fillStyle = '#44ddaa'; ctx.fillRect(xAt(i), tickY, 1, Math.min(6, 1 + H.recon[i])); }
   }
   ctx.fillStyle = '#4a5a6a'; ctx.fillText(`step ${H.frame[0]}`, x0, y0 + h + 4);
-  ctx.fillText(`step ${H.frame[n - 1]}   ▮ reconnections`, x0 + w - 150, y0 + h + 4);
+  ctx.fillText(`step ${shownStep()}   ▮ reconnections`, x0 + w - 150, y0 + h + 4);
 }
 const FLUX_MAP = { drawn: false, x: 0, y: 0, cell: 0, why: '', glyphs: null, box: null, pos: null, drag: null };
 try { const p = JSON.parse(localStorage.getItem('fluxMapPos')); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) FLUX_MAP.pos = p; } catch (_) {}
@@ -5100,7 +5100,7 @@ function frame(t) {
     displayAdvance(performance.now());
     const g = document.getElementById('sim-glide'); if (g) g.textContent = glideWords();
     const ss = document.getElementById('sim-step'), sn = String(shownStep());
-    if (ss && ss.textContent !== sn) { ss.textContent = sn; updateRunBadge(); }
+    if (ss && ss.textContent !== sn) { ss.textContent = sn; updateRunBadge(); updateDynamoHud(); }
     projectTorus();
     syncFaithfulBadge();
     renderTorus();
@@ -5320,8 +5320,8 @@ document.getElementById('btn-export').addEventListener('click', () => {
     try {
       const n = await saveJSON({ schema: SCHEMAS.stepExport, build: BUILD_VERSION, manifest: releaseManifest(), ...m.payload },
                                `vedic_${VERSION.slug}_step_${m.payload.frame}.json`);
-      LOG.add(`exported step ${m.payload.frame} (${Math.round(n / 1024)} KB)`, 'sys');
-    } catch (err) { saveRefused(`step ${m.payload.frame}`, err); }
+      LOG.add(`exported the calculation (${Math.round(n / 1024)} KB)`, 'sys');
+    } catch (err) { saveRefused('the calculation', err); }
   });
   KERNEL_WORKER.postMessage({ type: 'export', id });
 });
