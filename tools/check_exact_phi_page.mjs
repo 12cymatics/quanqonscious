@@ -168,7 +168,7 @@ try {
   await sleep(5000);
   const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, queue: KERNEL_VIEW.queue.length, dur: DISPLAY.dur, tau: DISPLAY.tau, row: document.getElementById('sim-glide').textContent })`);
   ok(g0.ms === 60000 && g0.slider === '60' && g0.dur === 60000 && g1.frame === g0.frame && g1.queue === 0 && g1.dur === 60000 &&
-     g1.tau > g0.tau && g1.tau < 0.2 && new RegExp('^to step ' + g0.frame + ': \\d+ of 60 s$').test(g1.row),
+     g1.tau > g0.tau && g1.tau < 0.2 && /^step \d+ of 60 s$/.test(g1.row),
      `by default each calculation glides in over 60 s: 5 s into the glide to step ${g0.frame} the surface is ${(100 * g1.tau).toFixed(0)}% of the way there, no new calculation has started, and the glide row says so`,
      JSON.stringify({ g0, g1 }));
   const setGlide = s => evaluate(`(() => { const el = document.getElementById('amp-glide'); el.value = '${s}'; el.dispatchEvent(new Event('input')); return STEP_INTERVAL_MS; })()`);
@@ -284,13 +284,13 @@ try {
   await presetFromSeed('pre-damper');
   await waitFor(`DISPLAY.transitions >= ${tr0} + 2 && KERNEL_VIEW.state.frame === 1 && DISPLAY.tau > 0.2 && DISPLAY.tau < 0.8`, 60000);
   const gr = await evaluate(`({ frame: KERNEL_VIEW.state.frame, row: document.getElementById('sim-glide').textContent, dur: DISPLAY.dur, ms: STEP_INTERVAL_MS })`);
-  ok(gr.frame === 1 && gr.dur === 5000 && gr.ms === 5000 && /^to step 1: [0-4] of 5 s$/.test(gr.row),
+  ok(gr.frame === 1 && gr.dur === 5000 && gr.ms === 5000 && /^step [0-4] of 5 s$/.test(gr.row),
      `set to 5 s, the glide row names the step the surface is gliding to and how far it has come (${gr.row})`, JSON.stringify(gr));
-  await waitFor(`DISPLAY.tau === 1 && document.getElementById('sim-glide').textContent === 'holding step 1 until a setting changes'`, 20000);
+  await waitFor(`DISPLAY.tau === 1 && document.getElementById('sim-glide').textContent === 'step 5 of 5 s · holding until a setting changes'`, 20000);
   const h0 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions })`);
   await sleep(3000);
   const h1 = await evaluate(`({ v: KERNEL_VIEW.appliedVersion, n: DISPLAY.transitions, q: KERNEL_VIEW.queue.length, frame: KERNEL_VIEW.state.frame, done: KERNEL_VIEW.doneVersion, cfg: KERNEL_VIEW.configVersion, row: document.getElementById('sim-glide').textContent })`);
-  ok(h1.v === h0.v && h1.n === h0.n && h1.q === 0 && h1.frame === 1 && h1.done === h1.cfg && h1.row === 'holding step 1 until a setting changes',
+  ok(h1.v === h0.v && h1.n === h0.n && h1.q === 0 && h1.frame === 1 && h1.done === h1.cfg && h1.row === 'step 5 of 5 s · holding until a setting changes',
      'landed, the surface holds its one calculation: nothing more is calculated until a setting changes', JSON.stringify({ h0, h1 }));
   await setGlide(1);
 
