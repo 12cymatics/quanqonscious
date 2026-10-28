@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "receipt_state": "template",
+  "recorded_at": null,
+  "runtime": {
+    "name": null,
+    "version": null,
+    "evidence_status": "unknown",
+    "evidence": null
+  },
+  "project_root": null,
+  "working_directory": null,
+  "source_revision": null,
+  "dirty_state": "unknown",
+  "approved_contract": {
+    "revision": null,
+    "sha256": null,
+    "approval_reference": null
+  },
+  "loader": {
+    "documentation_url": null,
+    "documentation_checked_at": null,
+    "reported_limit_bytes": null,
+    "observed_configuration_limit_bytes": null,
+    "configuration_evidence_status": "unknown",
+    "mode": null
+  },
+  "instruction_files": [],
+  "manually_read_overlays": [],
+  "unresolved_conflicts": [],
+  "fixture_results": [],
+  "activation_observation": "unknown",
+  "revalidate_when": [
+    "runtime changes",
+    "launch directory changes",
+    "instruction files change",
+    "relevant settings change"
+  ],
+  "supersedes_receipt": null,
+  "record_shapes": {
+    "instruction_file": {
+      "path": null,
+      "sha256": null,
+      "scope": null,
+      "existence": "unknown",
+      "discovery_expectation": null,
+      "expectation_source": null,
+      "host_loading": "unknown",
+      "loading_evidence_status": "unknown",
+      "loading_evidence": null,
+      "manually_read": false,
+      "observed_at": null
+    },
+    "fixture_result": {
+      "fixture_id": null,
+      "host_version": null,
+      "fixture_input_sha256": null,
+      "expected_behavior_source": null,
+      "outcome": "not_run",
+      "observed_behavior": null,
+      "evidence_reference": null,
+      "evidence_sha256": null,
+      "run_at": null,
+      "limitations": []
+    }
+  }
+}

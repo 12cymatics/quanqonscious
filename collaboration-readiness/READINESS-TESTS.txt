@@ -1,0 +1,42 @@
+HISTORICAL SCHEMA-2 TEST OUTPUT
+
+The output below predates the signed schema-3 readiness implementation. It records the former 25 schema tests only. It is retained as historical evidence and cannot validate current source bytes.
+
+Current package verification commands, executed in GitHub for this repair:
+python3 -B verify_package.py
+python3 -B validate_contracts.py --self-test
+python3 -B -m unittest discover -v
+python3 -B geometry/verify_structures.py
+
+Capture each actual exit status and output for the final integrated revision. Project scientific checks require their separately bound production source, equation inventory and commands.
+
+test_active_operations (test_readiness.ReadinessTests.test_active_operations) ... ok
+test_alias_overlap (test_readiness.ReadinessTests.test_alias_overlap) ... ok
+test_bad_assignment (test_readiness.ReadinessTests.test_bad_assignment) ... ok
+test_bad_gate_id (test_readiness.ReadinessTests.test_bad_gate_id) ... ok
+test_cancelled (test_readiness.ReadinessTests.test_cancelled) ... ok
+test_cymatica_integrity (test_readiness.ReadinessTests.test_cymatica_integrity) ... ok
+test_distinct_source_alias (test_readiness.ReadinessTests.test_distinct_source_alias) ... ok
+test_distinct_source_escape (test_readiness.ReadinessTests.test_distinct_source_escape) ... ok
+test_failed_gate (test_readiness.ReadinessTests.test_failed_gate) ... ok
+test_foundation_always (test_readiness.ReadinessTests.test_foundation_always) ... ok
+test_hash (test_readiness.ReadinessTests.test_hash) ... ok
+test_legitimate_na (test_readiness.ReadinessTests.test_legitimate_na) ... ok
+test_missing_evidence (test_readiness.ReadinessTests.test_missing_evidence) ... ok
+test_missing_gate (test_readiness.ReadinessTests.test_missing_gate) ... ok
+test_parent_overlap (test_readiness.ReadinessTests.test_parent_overlap) ... ok
+test_profile_na (test_readiness.ReadinessTests.test_profile_na) ... ok
+test_revision (test_readiness.ReadinessTests.test_revision) ... ok
+test_symlink_escape (test_readiness.ReadinessTests.test_symlink_escape) ... ok
+test_template_completion (test_readiness.ReadinessTests.test_template_completion) ... ok
+test_traversal (test_readiness.ReadinessTests.test_traversal) ... ok
+test_unknown_gate (test_readiness.ReadinessTests.test_unknown_gate) ... ok
+test_unknown_revision (test_readiness.ReadinessTests.test_unknown_revision) ... ok
+test_unresolved_applicability (test_readiness.ReadinessTests.test_unresolved_applicability) ... ok
+test_unreviewed_na (test_readiness.ReadinessTests.test_unreviewed_na) ... ok
+test_valid (test_readiness.ReadinessTests.test_valid) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 0.008s
+
+OK
