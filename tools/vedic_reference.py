@@ -50,14 +50,6 @@ def mean(p):
     return sum(p, F(0)) / 16
 
 
-def inverse(p):
-    return [sum((p[i] if (i >> k) & 1 else -p[i]) for i in range(16)) / 16 for k in range(4)]
-
-
-def inject(p, k, d):
-    return [p[i] + d if (i >> k) & 1 else p[i] - d for i in range(16)]
-
-
 def set_b(p, s):
     return [((p[0] + p[1]) - (p[14] + p[15])) * s,
             ((p[0] + p[2]) - (p[13] + p[15])) * s,
@@ -381,16 +373,8 @@ def field(sid, psi, a, al):
     return p
 
 
-GRVQ_K = {1: 0, 5: 1, 9: 2, 14: 3}
-
-
 def sutra(sid, psi, a, gain, t):
-    al = F(sid, 435) * a[0] * gain
-    out = field(sid, psi, a, al)
-    if sid in GRVQ_K:
-        k = GRVQ_K[sid]
-        out = inject(out, k, grvq(inverse(psi), k, t) * gain)
-    return out
+    return field(sid, psi, a, F(sid, 435) * a[0] * gain)
 
 
 def q(x):

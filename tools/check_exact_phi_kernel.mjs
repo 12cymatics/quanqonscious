@@ -329,17 +329,15 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
      "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
      'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
-  /* S1, S5, S9, S14: the field formula, then GRVQ's increment on lambda_0..3 */
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
-    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [];
-    const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec });
+    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], reg = inv(seedS), reg0 = reg.slice();
+    const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec, lam: reg });
     const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain)).p;
-    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), gain);
-    const lam = inv(out), lamF = inv(field);
-    if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
+    const d = Q.mul(K.grvqDelta(reg0, k, t), gain);
+    if (!sameQ(out, field) || !reg.every((x, j) => Q.eq(x, j === k ? Q.add(reg0[j], d) : reg0[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
-  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x gain to lambda_0, 1, 2, 3 of their result and change no other lambda');
+  ok(feedOk, 'S1, S5, S9 and S14 move psi by their own formula only, and add GRVQ(lambda) x gain to lambda_0, 1, 2, 3 of the step register, as v18.24 adds it to lambda[k]');
   /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
@@ -347,20 +345,21 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
   const L = eng.last;
   const N = BigInt(act.length);
-  let shares = L.grvqRecord.length === 3, x = L.afterS;
+  let shares = L.grvqRecord.length === 3;
+  const reg = inv(L.input);
+  for (const r of L.sutraRecord) if (r.grvq) reg[r.grvq.k] = Q.add(reg[r.grvq.k], r.grvq.delta);
   for (const g of L.grvqRecord) {
-    const k = (g.id - 1) % 4, want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mk(1n, N));
+    const k = (g.id - 1) % 4, want = Q.mul(K.grvqDelta(reg, k, L.time), Q.mk(1n, N));
     if (g.k !== k || !Q.eq(g.delta, want)) shares = false;
-    x = K.injectLambda(x, k, g.delta).map(K.storeQ);
+    reg[k] = Q.add(reg[k], g.delta);
   }
-  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ / N to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
+  ok(shares && sameQ(L.afterD, L.afterS), 'each other active sutra adds GRVQ / N to lambda_(id-1 mod 4) of the register, in order, and psi is left as the formulas made it');
   const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
-  const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
+  const B = K.mstvqB(L.afterS, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
   const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
-  let fb = L.afterD;
-  for (let k = 0; k < 3; k++) fb = K.injectLambda(fb, k, Q.mul(T[k], Q.mk(1n, 200000000n)));
-  ok(sameQ(fb.map(K.storeQ), L.afterB) && sameQ(L.mstvq.B, B),
-     "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
+  for (let k = 0; k < 3; k++) reg[k] = Q.add(reg[k], Q.mul(T[k], Q.mk(1n, 200000000n)));
+  ok(sameQ(L.afterB, L.afterS) && sameQ(L.mstvq.B, B) && sameQ(L.lambdaReg, reg),
+     "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2 of the register, psi left as it was, recomputed here");
   const trace = Q.add(Q.add(T[0], T[1]), T[2]);
   ok(Q.eq(eng.tgcrKappa, K.storeQ(Q.add(L.tgcrKappaIn, Q.mul(trace, Q.mk(1n, 500n))))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
      'the TGCR stiffness kappa moves by tr T / 500, and tr T = -|B|^2 / 2 (stress_trace)');

@@ -433,7 +433,7 @@ try {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
     updateDynamoHud();
     return { maya: s.maya, dynamo: s.dynamo, n, contiguous: H.frame.every((f, i) => f === i),
-             flux: document.getElementById('dyn-flux').textContent, wantFlux: fmtE(FAITHFUL.qNum(d.fluxEnergy)),
+             flux: document.getElementById('dyn-flux').textContent, wantFlux: FAITHFUL.aSci(A4.fromQ(d.fluxEnergy), 1),
              phaseRow: document.getElementById('maya-phase').textContent, wantPhase: FAITHFUL.qNum(d.phase).toFixed(5),
              line: document.getElementById('dynLine').textContent, last: shownStep(), closed: d.closed };
   })()`);
