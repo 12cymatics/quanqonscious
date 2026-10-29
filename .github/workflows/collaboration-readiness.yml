@@ -1,0 +1,128 @@
+name: Package execution and handoff validation
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'collaboration-readiness/**'
+      - '.github/workflows/collaboration-readiness.yml'
+      - 'tests/test_documented_paths.py'
+  push:
+    branches:
+      - claude/repair-collaboration-readiness-20261028
+    paths:
+      - 'collaboration-readiness/**'
+      - '.github/workflows/collaboration-readiness.yml'
+      - 'tests/test_documented_paths.py'
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: '3.9.25'
+          - os: ubuntu-24.04
+            python: '3.11.14'
+          - os: macos-15-intel
+            python: '3.9.25'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - name: Execute required package checks and retain every outcome
+        shell: bash
+        run: |
+          python -B - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import platform
+          import subprocess
+          import sys
+
+          root = pathlib.Path.cwd()
+          if (root / 'collaboration-readiness').is_dir():
+              root = root / 'collaboration-readiness'
+          logs = pathlib.Path(os.environ['RUNNER_TEMP']) / 'contract-validation'
+          logs.mkdir(parents=True, exist_ok=False)
+          environment = {
+              'python': sys.version,
+              'executable': sys.executable,
+              'platform': platform.platform(),
+              'machine': platform.machine(),
+              'commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          }
+          (logs / 'environment.json').write_text(json.dumps(environment, indent=2) + '\n')
+          commands = [
+              ('manifest', [sys.executable, '-B', 'verify_package.py'], 0, None),
+              ('draft-contract', [sys.executable, '-B', 'validate_contracts.py', '--self-test'], 0, None),
+              ('unit-suite', [sys.executable, '-B', '-m', 'unittest', 'discover', '-v'], 0, None),
+              ('template-shape', [sys.executable, '-B', 'validate_readiness.py', '--record', 'readiness.template.json', '--evidence-root', '.'], 0, None),
+              ('template-readiness-rejected', [sys.executable, '-B', 'validate_readiness.py', '--record', 'readiness.template.json', '--evidence-root', '.', '--readiness'], 1, 'Template cannot claim readiness or completion'),
+              ('finite-structures', [sys.executable, '-B', 'geometry/verify_structures.py'], 0, None),
+              ('unpacked-deliverable', [sys.executable, '-B', 'check_packaged.py', '--output-root', str(logs / 'packaged')], 0, None),
+          ]
+          outcomes = []
+          for name, command, expected_exit, diagnostic in commands:
+              started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+              timed_out = False
+              try:
+                  result = subprocess.run(command, cwd=root, capture_output=True, timeout=1200)
+                  stdout, stderr, returncode = result.stdout, result.stderr, result.returncode
+              except subprocess.TimeoutExpired as error:
+                  stdout = error.stdout or b''
+                  stderr = (error.stderr or b'') + b'\nRequired package command timed out.\n'
+                  returncode = None
+                  timed_out = True
+              (logs / (name + '.stdout')).write_bytes(stdout)
+              (logs / (name + '.stderr')).write_bytes(stderr)
+              passed = not timed_out and returncode == expected_exit and (diagnostic is None or diagnostic.encode() in stderr)
+              if name == 'template-shape' and passed:
+                  try:
+                      passed = json.loads(stdout).get('readiness_attestation') == 'not_evaluated'
+                  except (ValueError, UnicodeDecodeError):
+                      passed = False
+              outcome = {
+                  'name': name,
+                  'command': command,
+                  'started_at': started,
+                  'finished_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  'exit_code': returncode,
+                  'expected_exit_code': expected_exit,
+                  'required_diagnostic': diagnostic,
+                  'timed_out': timed_out,
+                  'passed': passed,
+                  'stdout_sha256': hashlib.sha256(stdout).hexdigest(),
+                  'stderr_sha256': hashlib.sha256(stderr).hexdigest(),
+              }
+              outcomes.append(outcome)
+              (logs / 'outcomes.json').write_text(json.dumps(outcomes, indent=2) + '\n')
+              print(json.dumps(outcome, sort_keys=True), flush=True)
+              sys.stdout.write(stdout.decode(errors='replace'))
+              sys.stdout.write(stderr.decode(errors='replace'))
+              sys.stdout.flush()
+          raise SystemExit(0 if all(item['passed'] for item in outcomes) else 1)
+          PY
+      - name: Upload complete verification logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: package-validation-${{ matrix.os }}-python-${{ matrix.python }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/contract-validation
+          if-no-files-found: error
+          retention-days: 30

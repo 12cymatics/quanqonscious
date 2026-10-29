@@ -1,0 +1,12 @@
+{
+  "repository": "12cymatics/quanqonscious",
+  "ref": "c427c2f83df21a05ab68482e07b95d7b65eb4528",
+  "path": "vedic_trainer/vedic/kernel/q4_complex.py",
+  "github_blob_sha": "baf236047e2d6541172f4fcb94b941516f419897",
+  "url": "https://github.com/12cymatics/quanqonscious/blob/c427c2f83df21a05ab68482e07b95d7b65eb4528/vedic_trainer/vedic/kernel/q4_complex.py",
+  "inspection": "read_only_source_not_runtime_test",
+  "laplacian_sign": "A-D",
+  "local_head": "e60bad2168c5b915ad9f1efe9f0e99c0bb5e47bb",
+  "local_file_matches_head": true,
+  "local_file_sha256": "45b2662c091abdd514de4400bab1a762d62a8386fa87e4cb78d9a8157bf42319"
+}

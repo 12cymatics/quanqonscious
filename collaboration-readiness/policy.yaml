@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "activation": {
+    "automatically_enforced": false,
+    "installed_in_repository": false,
+    "external_settings_changed": false,
+    "note": "Explicit adoption and project-specific integration are required."
+  },
+  "foundation": {
+    "priority": "ancient_mathematics_geometry_and_higher_constructs",
+    "require_traceable_formalization": true,
+    "historical_attribution_is_proof": false,
+    "evidence_classes": [
+      "observed",
+      "reported",
+      "inferred",
+      "proposed"
+    ],
+    "companion_contracts": [
+      "MATHEMATICAL_FOUNDATION.md",
+      "INTEGRITY_RULES.md"
+    ],
+    "model_substitution_allowed": false,
+    "approximations_allowed": false,
+    "simplifications_allowed": false,
+    "truncations_allowed": false,
+    "reduced_models_allowed": false,
+    "transformed_formulations_allowed": false,
+    "replacement_formulas_allowed": false,
+    "required_function_disabling_allowed": false
+  },
+  "outcomes": {
+    "task_states": [
+      "not_started",
+      "in_progress",
+      "blocked",
+      "complete",
+      "cancelled"
+    ],
+    "check_states": [
+      "passed",
+      "failed",
+      "blocked",
+      "not_run"
+    ],
+    "uncertain_operations_require_reconciliation": true
+  },
+  "ownership": {
+    "integration_role": "integrator",
+    "overlapping_writes_require_coordination": true,
+    "simultaneous_live_application_controllers_allowed": false
+  },
+  "projects": [
+    "eternal",
+    "cymatica",
+    "sites",
+    "monetisation"
+  ],
+  "gates": [
+    {
+      "id": "source_and_input_provenance",
+      "required": true
+    },
+    {
+      "id": "foundation_traceability",
+      "required": true
+    },
+    {
+      "id": "mathematical_integrity",
+      "required": true
+    },
+    {
+      "id": "targeted_regressions",
+      "required": true
+    },
+    {
+      "id": "existing_aggregate_checks",
+      "required": true
+    },
+    {
+      "id": "actual_runtime_validation",
+      "required": true
+    },
+    {
+      "id": "exact_unpacked_deliverable",
+      "required": true
+    },
+    {
+      "id": "authorization_before_publication",
+      "required": true
+    },
+    {
+      "id": "remote_revision_and_ci",
+      "required": true
+    }
+  ],
+  "project_command_bindings": {
+    "configured": false,
+    "commands": [],
+    "instruction": "Inspect the actual project and bind reviewed commands; do not invent passing checks."
+  },
+  "release": {
+    "permitted_by_this_file": false,
+    "requires_applicable_gates_passed": true,
+    "requires_no_unresolved_blocking_failure": true,
+    "unsupported_gate_handling": "report_blocked",
+    "applicability_exceptions_require_reason_and_review": true,
+    "mock_execution_equals_runtime_validation": false,
+    "source_overlay_equals_runnable_package": false
+  }
+}
