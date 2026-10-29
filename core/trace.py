@@ -21,6 +21,7 @@ import copy
 
 from .state import FieldState, FieldStateSnapshot, ArithmeticMode, RationalComplex, state_digest
 from .lattice import ToroidalHypercube
+from .exact_codec import fraction_text
 from .operators.base import Operator, OperatorContext, OperatorTrace, TraceEntry, OperatorCategory
 
 
@@ -60,9 +61,7 @@ class StateCheckpoint:
 
     @staticmethod
     def _safe_fraction_repr(value: Fraction) -> str:
-        if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
-            return f"{float(value):.12e}"
-        return str(value)
+        return fraction_text(value)
 
     @staticmethod
     def _compute_hash(state: FieldState) -> str:
@@ -208,10 +207,19 @@ class TraceReplayer:
                 continue
 
             op = self.operator_registry[op_name]
-            context = context.with_timestep(entry.timestep)
+            context = OperatorContext(timestep=entry.timestep, parameters=copy.deepcopy(entry.parameters))
+            for name, value in entry.context_values.items():
+                if name not in {"dt", "h_m", "seed", "mode", "parent_hash"}:
+                    raise ValueError(f"Unknown recorded context field: {name}")
+                setattr(context, name, ArithmeticMode(value) if name == "mode" else value)
+            if verify_intermediate and state_digest(state) != entry.input_hash:
+                errors.append(f"Step {entry.timestep}: input hash mismatch")
 
             # Apply operator
-            state = op.apply(state, context)
+            state = op(state, context)
+            expected_receipt = entry.parameters.get("sutra_execution")
+            if expected_receipt is not None and context.parameters.get("sutra_execution") != expected_receipt:
+                errors.append(f"Step {entry.timestep}: sutra execution receipt mismatch")
 
             # Verify output hash if checking intermediate
             if verify_intermediate:

@@ -24,6 +24,7 @@
 #include <tuple>
 #include <optional>
 #include <functional>
+#include <array>
 
 namespace vedic {
 
@@ -152,7 +153,7 @@ namespace S1_Ekadhikena {
 
     // Compute 1/n where n ends in 9, using Ekādhikena method
     // Returns the recurring decimal representation
-    inline RecurringDecimal divide_by_nine_ender(const BigInt& denominator, size_t max_digits = 1000) {
+    inline RecurringDecimal divide_by_nine_ender(const BigInt& denominator, std::optional<size_t> max_digits = std::nullopt) {
         RecurringDecimal result;
         result.negative = (denominator < 0);
 
@@ -188,10 +189,13 @@ namespace S1_Ekadhikena {
         std::set<std::pair<std::string, std::string>> seen_states;
         BigInt digit = 1, carry = 0;
 
-        for (size_t i = 0; i < max_digits; ++i) {
+        for (size_t i = 0; ; ++i) {
             auto state = std::make_pair(digit.str(), carry.str());
             if (!seen_states.insert(state).second) {
                 break;  // the (digit, carry) state repeated: the cycle closes
+            }
+            if (max_digits && i >= *max_digits) {
+                throw std::length_error("S1 recurring decimal is incomplete at the requested digit limit");
             }
             reversed_digits.push_back(static_cast<int>(digit));
 
@@ -205,7 +209,7 @@ namespace S1_Ekadhikena {
     }
 
     // General division a/b producing recurring decimal
-    inline RecurringDecimal divide_recurring(const BigInt& numerator, const BigInt& denominator, size_t max_digits = 1000) {
+    inline RecurringDecimal divide_recurring(const BigInt& numerator, const BigInt& denominator, std::optional<size_t> max_digits = std::nullopt) {
         RecurringDecimal result;
         result.negative = (numerator < 0) != (denominator < 0);
 
@@ -227,7 +231,7 @@ namespace S1_Ekadhikena {
         std::vector<int> decimal_digits;
         std::vector<BigInt> remainders;
 
-        while (remainder != 0 && decimal_digits.size() < max_digits) {
+        while (remainder != 0) {
             // Check for cycle
             for (size_t i = 0; i < remainders.size(); ++i) {
                 if (remainders[i] == remainder) {
@@ -242,6 +246,10 @@ namespace S1_Ekadhikena {
                 }
             }
 
+            if (max_digits && decimal_digits.size() >= *max_digits) {
+                throw std::length_error("Recurring decimal is incomplete at the requested digit limit");
+            }
+
             remainders.push_back(remainder);
             remainder *= 10;
             int digit = static_cast<int>(remainder / denom);
@@ -249,7 +257,6 @@ namespace S1_Ekadhikena {
             remainder = remainder % denom;
         }
 
-        // No cycle found (terminates or exceeds max)
         for (int d : decimal_digits) {
             result.non_recurring.push_back(d);
         }
@@ -1229,11 +1236,9 @@ namespace S11_Vyashti {
 } // namespace S11_Vyashti
 
 // =============================================================================
-// SUTRA S12: Śeṣāṇyaṅkena Carameṇa (Remainders by the Last Digit)
 // =============================================================================
-// Application: Divisibility tests, modular arithmetic
 
-namespace S12_Sesanyankena {
+namespace Divisibility {
 
     // Divisibility test by examining last digit(s)
     struct DivisibilityResult {
@@ -1316,14 +1321,35 @@ namespace S12_Sesanyankena {
         return divisible_by_9(n);
     }
 
-} // namespace S12_Sesanyankena
+}
+
+namespace S12_Sesanyankena {
+
+    inline constexpr std::array<int, 3> printed_pages{195, 196, 197};
+
+    inline std::vector<int> remainder_digits(const BigInt& denominator) {
+        if (denominator <= 1 || util::gcd(denominator, BigInt(10)) != 1) {
+            throw std::invalid_argument("The denominator must exceed one and be coprime to ten");
+        }
+        int last_digit = 1;
+        while ((denominator * last_digit) % 10 != 9) ++last_digit;
+        BigInt remainder = 1;
+        std::vector<int> result;
+        do {
+            remainder = (10 * remainder) % denominator;
+            result.push_back(static_cast<int>((remainder * last_digit) % 10));
+        } while (remainder != 1);
+        return result;
+    }
+
+    inline bool test() {
+        return remainder_digits(BigInt(7)) == std::vector<int>{1, 4, 2, 8, 5, 7};
+    }
+
+}
 
 // =============================================================================
-// SUTRA S13: Sopāntyadvayamantyam (Ultimate and Twice the Penultimate)
-// =============================================================================
-// Application: Continued fractions, convergent sequences
-
-namespace S13_Sopantya {
+namespace ContinuedFractions {
 
     // Continued fraction representation [a0; a1, a2, a3, ...]
     // Represents a0 + 1/(a1 + 1/(a2 + 1/(a3 + ...)))
@@ -1341,7 +1367,7 @@ namespace S13_Sopantya {
         size_t n
     ) {
         if (n >= cf.size()) {
-            n = cf.size() - 1;
+            throw std::out_of_range("The continued fraction does not contain the requested convergent");
         }
 
         // p_{-1} = 1, p_0 = a_0
@@ -1374,13 +1400,16 @@ namespace S13_Sopantya {
     ) {
         std::vector<Convergent> result;
 
+        if (n >= cf.size()) {
+            throw std::out_of_range("The continued fraction does not contain the requested convergents");
+        }
+
         BigInt p_prev2 = 1, p_prev1 = cf[0];
         BigInt q_prev2 = 0, q_prev1 = 1;
 
         result.push_back({p_prev1, q_prev1});
 
-        size_t limit = std::min(n, cf.size() - 1);
-        for (size_t i = 1; i <= limit; ++i) {
+        for (size_t i = 1; i <= n; ++i) {
             BigInt p_curr = cf[i] * p_prev1 + p_prev2;
             BigInt q_curr = cf[i] * q_prev1 + q_prev2;
 
@@ -1434,7 +1463,59 @@ namespace S13_Sopantya {
         return conv.numerator == 144 && conv.denominator == 89;
     }
 
-} // namespace S13_Sopantya
+}
+
+namespace S13_Sopantya {
+
+    inline constexpr std::array<int, 2> printed_pages{136, 137};
+
+    struct EquationResult {
+        bool identity;
+        std::vector<Rational> roots;
+        std::vector<Rational> excluded;
+        std::array<Rational, 4> spectral_coefficients;
+    };
+
+    inline EquationResult solve_arithmetic_progression(
+        const std::array<Rational, 2>& first,
+        const std::array<Rational, 2>& difference
+    ) {
+        const Rational zero(0);
+        if (first[1] == zero && difference[1] == zero) {
+            throw std::invalid_argument("At least one denominator factor must depend on the variable");
+        }
+        std::set<Rational> poles;
+        for (int k = 0; k < 4; ++k) {
+            const Rational c = first[0] + Rational(k) * difference[0];
+            const Rational m = first[1] + Rational(k) * difference[1];
+            if (c == zero && m == zero) {
+                throw std::invalid_argument("A denominator factor is identically zero");
+            }
+            if (m != zero) poles.insert(-c / m);
+        }
+        const Rational c = Rational(3) * first[0] + Rational(7) * difference[0];
+        const Rational m = Rational(3) * first[1] + Rational(7) * difference[1];
+        const bool identity = (difference[0] == zero && difference[1] == zero)
+                              || (c == zero && m == zero);
+        std::set<Rational> roots;
+        if (!identity) {
+            if (m != zero && poles.count(-c / m) == 0) roots.insert(-c / m);
+            if (difference[1] != zero) {
+                const Rational r = -difference[0] / difference[1];
+                if (poles.count(r) == 0) roots.insert(r);
+            }
+        }
+        return {identity, {roots.begin(), roots.end()}, {poles.begin(), poles.end()},
+                {difference[0], difference[1], c, m}};
+    }
+
+    inline bool test() {
+        const auto result = solve_arithmetic_progression({Rational(2), Rational(1)},
+                                                         {Rational(1), Rational(0)});
+        return !result.identity && result.roots == std::vector<Rational>{Rational(-13, 3)};
+    }
+
+}
 
 // =============================================================================
 // SUTRA S14: Ekanyūnena Pūrveṇa (By One Less Than the Previous)
@@ -1567,11 +1648,9 @@ namespace S15_Gunitasamuccaya {
 } // namespace S15_Gunitasamuccaya
 
 // =============================================================================
-// SUTRA S16: Guṇakasamuccayaḥ (Factors of Sum = Sum of Factors)
 // =============================================================================
-// Application: GCD/LCM verification, prime factorization
 
-namespace S16_Gunakasamuccaya {
+namespace IntegerFactors {
 
     // Prime factorization
     struct PrimeFactor {
@@ -1645,7 +1724,43 @@ namespace S16_Gunakasamuccaya {
                verify_gcd_lcm_identity(BigInt(12), BigInt(18));
     }
 
-} // namespace S16_Gunakasamuccaya
+}
+
+namespace S16_Gunakasamuccaya {
+
+    inline constexpr std::array<int, 4> printed_pages{175, 176, 177, 178};
+
+    inline std::vector<Rational> differentiate_product(const std::vector<std::vector<Rational>>& factors) {
+        if (factors.empty()) throw std::invalid_argument("At least one polynomial factor is required");
+        size_t degree = 0;
+        for (const auto& factor : factors) {
+            if (factor.empty()) throw std::invalid_argument("Polynomial factors must be nonempty");
+            degree += factor.size() - 1;
+        }
+        std::vector<Rational> result(std::max(size_t(1), degree), Rational(0));
+        for (size_t i = 0; i < factors.size(); ++i) {
+            std::vector<Rational> term;
+            for (size_t k = 1; k < factors[i].size(); ++k) {
+                term.push_back(Rational(BigInt(k)) * factors[i][k]);
+            }
+            if (term.empty()) term.push_back(Rational(0));
+            for (size_t j = 0; j < factors.size(); ++j) {
+                if (i != j) term = S3_Urdhva::polynomial_multiply(term, factors[j]);
+            }
+            for (size_t k = 0; k < term.size(); ++k) {
+                if (term[k] != Rational(0)) result.at(k) += term[k];
+            }
+        }
+        return result;
+    }
+
+    inline bool test() {
+        return differentiate_product({{Rational(1), Rational(1)}, {Rational(2), Rational(1)},
+                                      {Rational(3), Rational(1)}})
+               == std::vector<Rational>{Rational(11), Rational(12), Rational(3)};
+    }
+
+}
 
 // =============================================================================
 // SUB-SUTRA US1: Ānurūpyeṇa (Proportionately)
@@ -1820,10 +1935,9 @@ namespace US3_Adyam {
 } // namespace US3_Adyam
 
 // =============================================================================
-// SUB-SUTRA US4: Kevalaih Saptakam Guṇyāt (Multiply by 7 Using Complements)
 // =============================================================================
 
-namespace US4_Kevalaih {
+namespace ComplementProducts {
 
     // Multiply by 7 using complement: 7x = 10x - 3x = 10x - 2x - x
     inline BigInt multiply_by_7(const BigInt& n) {
@@ -1849,7 +1963,24 @@ namespace US4_Kevalaih {
                multiply_by_7_shift(BigInt(123)) == 861;
     }
 
-} // namespace US4_Kevalaih
+}
+
+namespace US4_Kevalaih {
+
+    inline constexpr std::array<int, 1> printed_pages{202};
+
+    inline std::vector<int> sevenths_repetend(int numerator) {
+        if (numerator < 1 || numerator > 6) {
+            throw std::invalid_argument("A proper positive seventh requires a numerator from one to six");
+        }
+        return util::to_digits(BigInt(numerator) * 143 * (1000 - 1));
+    }
+
+    inline bool test() {
+        return sevenths_repetend(1) == std::vector<int>{1, 4, 2, 8, 5, 7};
+    }
+
+}
 
 // =============================================================================
 // SUB-SUTRA US5: Veṣṭanam (Osculation)
