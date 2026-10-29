@@ -6,14 +6,14 @@
    not compute, it is: the 29 v18.24 formulas and GRVQ against
    tools/vedic_reference.py, a separate transcription of v18.24's
    SUTRAS[].evolve in Python's exact Fraction; reduced fractions against a
-   Euclid written here; the storage bound in bare BigInt arithmetic; the TGCR
+   Euclid written here; exact storage equality in bare BigInt arithmetic; the TGCR
    geometry, the stages and the couplings recomputed here from their
    definitions.
 
    What it holds the page to:
      self-tests         every one of runSelfTests passes
      canonical Q        Q.mk reduces by the true gcd, dyadic or not
-     storage            |x - storeQ(x)| <= |x| / 2^128, idempotent
+     storage            storeQ(x) = x, canonical and idempotent, without rounding
      refusal            an operand or strength outside its domain throws
      formulas           each of the 29 equals the reference exactly, at its
                         default and its extreme operands, at two gains and
@@ -36,8 +36,16 @@
      Maya, magnetism, torus, sources, parameters
 
    Run: node tools/check_exact_phi_kernel.mjs
+   Separate required full-set run (one GitHub job per composition):
+     node tools/check_exact_phi_kernel.mjs --full-29=SERIES
+     node tools/check_exact_phi_kernel.mjs --full-29=PARALLEL
+     node tools/check_exact_phi_kernel.mjs --full-29=SYMMETRIC_CONCURRENT
+   These runs use the native seed, all 29 at 50%, and the literal operands.
+   They require an actual completed step; a timeout or domain refusal is a
+   failure, never a smaller substitute run. The default corpus remains intact.
 */
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -75,12 +83,175 @@ const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fro
   tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
   geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
-const S = x => ({ n: x.n.toString(), d: x.d.toString() });
-const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
+/* Exact hexadecimal integer transport avoids Python's decimal digit limit;
+   it changes no value and preserves every numerator and denominator bit. */
+const S = x => ({ n: x.n.toString(16), d: x.d.toString(16), base: 16 });
+const integerOf = (s, base = 10) => {
+  if (base === 10) return BigInt(s);
+  if (base !== 16 || typeof s !== 'string' || !/^-?[0-9a-f]+$/i.test(s))
+    throw new TypeError('invalid exact integer encoding');
+  return s[0] === '-' ? -BigInt('0x' + s.slice(1)) : BigInt('0x' + s);
+};
+const fromQ = o => Q.mk(integerOf(o.n, o.base), integerOf(o.d, o.base));
 const sameQ = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
 const energyQ = p => p.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
-const reference = cases => JSON.parse(execFileSync('python3', ['-I', join(ROOT, 'tools', 'vedic_reference.py')],
-  { input: JSON.stringify({ cases }), maxBuffer: 1 << 28 }).toString()).results;
+const reference = cases => {
+  let raw;
+  try {
+    raw = execFileSync('python3', ['-I', join(ROOT, 'tools', 'vedic_reference.py')],
+      { input: JSON.stringify({ cases }), maxBuffer: 1 << 28 }).toString();
+  } catch (e) {
+    throw new Error('exact Fraction oracle did not complete: code=' + e.code +
+      ', status=' + e.status + ', signal=' + e.signal + '. ' + e.message);
+  }
+  const response = JSON.parse(raw);
+  if (response.arithmetic !== 'exact-rational' || !Array.isArray(response.results) ||
+      response.results.length !== cases.length)
+    throw new Error('Fraction oracle omitted a result or did not declare exact rational arithmetic');
+  return response.results;
+};
+
+/* Frozen input contract, independent of K.SUTRA_ARG_SPEC. The phi operand is
+   the specified rational 12586269025/7778742049, not an assertion that it is
+   the exact algebraic golden ratio. Changing a default must not silently
+   change both the calculation and its expected input at the same time. */
+const literal = (n, d = 1n) => Object.freeze({ n, d });
+const literalPhi = literal(12586269025n, 7778742049n);
+const LITERAL_DEFAULTS = Object.freeze({
+  1: [literal(0n), literal(1n)], 2: [literal(10n)], 3: [literal(16n)],
+  4: [literal(4n)], 5: [], 6: [literalPhi], 7: [], 8: [literal(1n, 4n)],
+  9: [], 10: [literal(10n)], 11: [], 12: [literal(9n)], 13: [literal(8n)],
+  14: [literal(3n), literal(1n)], 15: [], 16: [], 17: [literalPhi],
+  18: [literal(5n), literal(7n)], 19: [literalPhi, literal(1n, 10n)],
+  20: [literal(7n)], 21: [literal(5n), literal(7n)], 22: [],
+  23: [literal(10n)], 24: [literal(2n)],
+  25: [literal(1n, 4n), literal(1n, 20n)], 26: [literal(16n)], 27: [],
+  28: [literal(1n, 20n)], 29: [literal(1n, 5n)]
+});
+function checkLiteralDefaults() {
+  const bad = [];
+  for (let id = 1; id <= 29; id++) {
+    const actual = K.SUTRA_ARG_SPEC[id], expected = LITERAL_DEFAULTS[id];
+    if (!Array.isArray(actual) || actual.length !== expected.length ||
+        actual.some((arg, i) => arg.def.n * expected[i].d !== expected[i].n * arg.def.d)) bad.push(id);
+  }
+  ok(Object.keys(K.SUTRA_ARG_SPEC).length === 29 && bad.length === 0,
+    'all 29 default operand lists equal the independent literal rational input contract',
+    bad.length ? 'different defaults: S' + bad.join(', S') : '');
+}
+
+const cli = process.argv.slice(2);
+const fullArg = cli.length === 1 && /^--full-29=(SERIES|PARALLEL|SYMMETRIC_CONCURRENT)$/.exec(cli[0]);
+if (cli.length && !fullArg) {
+  console.error('unknown arguments: use no arguments, or --full-29=SERIES|PARALLEL|SYMMETRIC_CONCURRENT');
+  process.exit(2);
+}
+if (fullArg) {
+  const mode = fullArg[1];
+  const reportDir = process.env.EXACT29_REPORT_DIR || join(ROOT, 'artifacts', 'exact29');
+  mkdirSync(reportDir, { recursive: true });
+  const reportPath = join(reportDir, mode + '.json');
+  const report = { schema: 'vedic-full29-verification/1', mode,
+    head: process.env.GITHUB_SHA || null,
+    pageSha256: createHash('sha256').update(HTML).digest('hex'),
+    scope: 'unrounded literal rational vertex formulas and their consumption by one completed implemented step; Maya enclosures and full-model coupling fidelity are separate claims',
+    integerEncoding: 'hexadecimal numerator and denominator, base=16',
+    completed: false, stage: 'initialization' };
+  const checkpoint = (stage, values = {}) => {
+    Object.assign(report, values, { stage, updatedAt: new Date().toISOString() });
+    writeFileSync(reportPath, JSON.stringify(report));
+    console.log('FULL29 ' + mode + ': ' + stage);
+  };
+  const freeze = value => {
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      for (const child of Object.values(value)) freeze(child);
+      Object.freeze(value);
+    }
+    return value;
+  };
+  const rawJson = value => JSON.stringify(value, (_, x) => typeof x === 'bigint' ? { bigintHex: x.toString(16) } : x);
+  const canonical = value => value && typeof value.n === 'bigint' && typeof value.d === 'bigint' &&
+    value.d > 0n && euclid(value.n, value.d) === 1n;
+  try {
+    checkpoint('checking literal inputs');
+    checkLiteralDefaults();
+    ok(K.STORE_BITS === null, 'the full-set calculation has no finite precision storage setting');
+    const active = freeze(Array.from({ length: 29 }, (_, i) => ({ id: i + 1,
+      strength: literal(1n, 2n), args: [literal(1n, 2n), ...LITERAL_DEFAULTS[i + 1]] })));
+    const initial = freeze(K.initEngine()), params = freeze(PARAMS({ vortex: Q.ONE }));
+    const initialJson = rawJson(initial), activeJson = rawJson(active), paramsJson = rawJson(params);
+    let nativeSeed = initial.psi.length === 16;
+    for (let i = 0; i < 16; i++) {
+      const hw = (i & 1) + ((i >> 1) & 1) + ((i >> 2) & 1) + ((i >> 3) & 1);
+      const den = 1n + BigInt((hw - 2) * (hw - 2));
+      const axis = [3n, 4n, 5n, 6n].reduce((sum, x, k) => sum + ((i & (1 << k)) ? x : -x), 0n);
+      if (!initial.psi[i] || initial.psi[i].n * den !== (axis * den + 1n) * initial.psi[i].d) nativeSeed = false;
+    }
+    ok(nativeSeed, 'all29 starts from the complete native forwarded lambda plus dielectric seed');
+    if (failures.length) throw new Error('full-set input contract failed: ' + failures.join('; '));
+    checkpoint('calculating complete production step', { active: active.map(a => ({ id: a.id, strength: S(a.strength), args: a.args.map(S) })),
+      input: initial.psi.map(S), parameters: JSON.parse(rawJson(params)) });
+    const progress = event => checkpoint(event.stage + (event.id ? ' S' + event.id : '') + ': ' + event.phase,
+      { progress: event });
+    const engine = K.stepComplete29(initial, params, active, mode, progress), last = engine.last;
+    checkpoint('production step returned; calculating independent complete composition');
+    const oracle = reference([{ kind: 'composition', psi: initial.psi.map(S), mode,
+      active: active.map(a => ({ id: a.id, args: a.args.map(S) })), t: S(Q.ZERO) }])[0];
+    if (oracle.refused) throw new Error('full29 reference composition is undefined: ' + oracle.refused);
+    const expectedIds = Array.from({ length: 29 }, (_, i) => i + 1);
+    if (mode === 'SYMMETRIC_CONCURRENT') expectedIds.push(...expectedIds.slice().reverse());
+    const records = last && last.sutraRecord;
+    ok(engine.frame === 1 && last && last.frameIn === 0 && last.mode === mode &&
+       last.active.length === 29 && last.active.every((a, i) => a.id === i + 1 && a.strength.n * 2n === a.strength.d),
+       'one complete production step returned with all 29 at their actual 50% setting');
+    ok(Array.isArray(records) && records.length === expectedIds.length &&
+       records.every((r, i) => r.id === expectedIds[i]),
+       'every required formula application is present in order (' + expectedIds.length + ' records)');
+    ok(last && last.execution && last.execution.required === 29 && last.execution.completed === 29 &&
+       last.execution.applications === expectedIds.length &&
+       Array.isArray(last.execution.order) && last.execution.order.length === expectedIds.length &&
+       last.execution.order.every((id, i) => id === expectedIds[i]),
+       'the production all29 entry point records complete execution before returning');
+    ok(Array.isArray(oracle.records) && oracle.records.length === expectedIds.length &&
+       oracle.records.every((r, i) => r.id === expectedIds[i]),
+       'the independent reference completed every required application in the same specified order');
+    let exactRecords = Array.isArray(records) && records.length === expectedIds.length &&
+      Array.isArray(oracle.records) && oracle.records.length === expectedIds.length;
+    if (exactRecords) for (let i = 0; i < expectedIds.length; i++) {
+      const actual = records[i], expected = oracle.records[i];
+      if (!actual.info || !Array.isArray(actual.info.p) || actual.info.p.length !== 16 ||
+          !actual.info.p.every(canonical) || !sameQ(actual.info.p, expected.psi.map(fromQ)) ||
+          !Q.eq(actual.alpha, fromQ(expected.alpha))) exactRecords = false;
+    }
+    ok(exactRecords, 'each actual formula output and alpha equals the independent unrounded Fraction calculation');
+    ok(last && Array.isArray(last.afterS) && last.afterS.length === 16 &&
+       sameQ(last.afterS, oracle.psi.map(fromQ)),
+       'the completed step consumes the full independently composed field as afterS');
+    ok(Array.isArray(engine.psi) && engine.psi.length === 16 && engine.psi.every(canonical) &&
+       last && sameQ(engine.psi, last.afterZ),
+       'the returned state is the canonical rational output of the completed final stage');
+    ok(last && last.arithmetic === 'exact-rational' && last.storeBits === null &&
+       last.stepError && Q.isZero(last.stepError.delta),
+       'the completed step reports exact rational storage with zero quantization error');
+    ok(rawJson(initial) === initialJson && rawJson(active) === activeJson && rawJson(params) === paramsJson,
+       'the calculation leaves its complete input state, arguments and parameters unchanged');
+    if (failures.length) throw new Error(failures.join('; '));
+    checkpoint('completed and compared', { completed: true, checksPassed: pass,
+      execution: last.execution, output: engine.psi.map(S), afterS: last.afterS.map(S),
+      formulaRecords: records.map(r => ({ id: r.id, alpha: S(r.alpha), output: r.info.p.map(S) })),
+      referenceAfterS: oracle.psi, referenceRecords: oracle.records });
+    console.log(pass + ' full29 checks passed; complete exact outputs: ' + reportPath);
+    process.exit(0);
+  } catch (error) {
+    checkpoint('failed', { completed: false, error: error.stack || String(error), checksPassed: pass,
+      failures: failures.slice() });
+    console.error('FAIL full29 ' + mode + ': ' + (error.stack || error));
+    process.exit(1);
+  }
+}
+
+section('literal formula operands');
+checkLiteralDefaults();
 
 section('self-tests');
 let tests = [];
@@ -109,8 +280,7 @@ section('canonical rationals');
 
 section('storage');
 {
-  const B = BigInt(K.STORE_BITS);
-  ok(K.STORE_BITS === 128, 'STORE_BITS is 128');
+  ok(K.STORE_BITS === null, 'STORE_BITS is null: rational storage has no precision truncation');
   let bad = 0, notIdem = 0, n = 0;
   for (let t = 0; t < 2000; t++) {
     let num = rnd(1 + (t * 29) % 700) + 1n;
@@ -118,15 +288,17 @@ section('storage');
     if (t % 2) num = -num;
     const x = Q.mk(num, den), s = K.storeQ(x);
     n++;
-    /* |x - s| <= |x| / 2^B  <=>  |x.n s.d - s.n x.d| 2^B <= |x.n| s.d  (both sides over x.d s.d > 0) */
-    const diff = x.n * s.d - s.n * x.d;
-    if ((diff < 0n ? -diff : diff) << B > (x.n < 0n ? -x.n : x.n) * s.d) bad++;
+    /* Equality is decided independently in bare BigInt arithmetic. A small
+       nonzero difference is a failure, regardless of its relative size. */
+    if (s.d <= 0n || x.n * s.d !== s.n * x.d || euclid(s.n, s.d) !== 1n) bad++;
     const s2 = K.storeQ(s);
     if (s2.n !== s.n || s2.d !== s.d) notIdem++;
   }
-  ok(bad === 0, `|x - storeQ(x)| <= |x|/2^128 on ${n} rationals, checked in bare BigInt`, `${bad} exceed it`);
+  ok(bad === 0, `storeQ(x) = x exactly and remains canonical on ${n} rationals, checked in bare BigInt`, `${bad} differ`);
   ok(notIdem === 0, 'storeQ returns its own output unchanged', `${notIdem} moved`);
   ok(K.storeQ(Q.ZERO).n === 0n, 'zero is stored as zero');
+  ok(K.storeBudget([Q.mk(1n, 3n), Q.mk(-7n, 11n), Q.mk((1n << 700n) + 1n, 17n)]).n === 0n,
+     'the rational storage quantization error is zero, including non-dyadic values beyond 128 bits');
 }
 
 
@@ -155,7 +327,23 @@ section('refusal, not clamping');
 }
 
 
-section('the 29 v18.24 formulas against an independent transcription');
+section('S13 undefined denominator is visible');
+{
+  const psi = K.initState().slice(); psi[12] = Q.ZERO;
+  const before = psi.map(S), args = [Q.HALF, ...LITERAL_DEFAULTS[13]];
+  let error = null;
+  try { K.applySutra(13, psi, args, { t: Q.ZERO, gain: Q.ONE }); }
+  catch (e) { error = e; }
+  const expected = reference([{ kind: 'sutra', id: 13, psi: before, args: args.map(S),
+    t: S(Q.ZERO), gain: S(Q.ONE) }])[0];
+  ok(error instanceof RangeError && /S13/.test(error.message) && /12/.test(error.message),
+     'S13 names its zero denominator pair instead of silently skipping it', error ? error.message : 'calculation returned');
+  ok(typeof expected.refused === 'string' && /S13/.test(expected.refused) && /12/.test(expected.refused),
+     'the independent Fraction oracle refuses the same explicitly undefined S13 pair', expected.refused || 'calculation returned');
+  ok(JSON.stringify(psi.map(S)) === JSON.stringify(before), 'an undefined S13 application leaves its caller input unchanged');
+}
+
+section('the 29 v18.24 formulas against an independent unrounded transcription');
 {
   const states = [['the seed', K.initState()], ['the seed, stored', K.initState().map(K.storeQ)]];
   for (let k = 0; k < 6; k++) states.push([`stored state ${k}`, Array.from({ length: 16 }, () => {
@@ -199,15 +387,20 @@ section('the 29 v18.24 formulas against an independent transcription');
       else bad.push(`S${m.id} on ${m.name}: reference ${r.refused ? 'refuses' : 'computes'}, kernel ${m.js.refused || 'computes'}`);
       return;
     }
-    if (r.psi.every((x, j) => x.n === m.js.psi[j].n && x.d === m.js.psi[j].d)) agree++;
+    if (Array.isArray(r.psi) && r.psi.length === 16 && m.js.psi.length === 16 &&
+        r.psi.every((x, j) => x.n === m.js.psi[j].n && x.d === m.js.psi[j].d && x.base === m.js.psi[j].base)) agree++;
     else bad.push(`S${m.id} on ${m.name}: values differ`);
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
      `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times): ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
-  const want = {};
+  /* S13 divides by each complement vertex 8..15. Determine this expectation
+     from the supplied field, independently of either implementation's refusal. */
+  const want = Object.fromEntries(states.filter(([, psi]) => psi.slice(8).some(x => x.n === 0n))
+    .map(([name]) => [name, 13]));
   for (const [name, id] of Object.entries(want))
     ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
-  const unexpected = Object.entries(refusals).filter(([n]) => !(n in want)).map(([n, s]) => `${n}: S${[...s].join(',S')}`);
+  const unexpected = Object.entries(refusals).flatMap(([name, ids]) => [...ids]
+    .filter(id => want[name] !== id).map(id => `${name}: S${id}`));
   ok(unexpected.length === 0, 'nothing refuses where nothing divides by zero', unexpected.join('; '));
   /* GRVQ's increment and MSTVQ's B on their own */
   const gcases = [], gmeta = [];
@@ -228,7 +421,12 @@ section('the 29 v18.24 formulas against an independent transcription');
      'MSTVQ.setB equals the reference on 8 states');
 }
 
-section('the 29 formulas against v18.24\'s own evolve code');
+/* This retained compatibility check deliberately transforms the legacy
+   rounding and S15 residual and stubs GRVQ/MSTVQ/USO/R4. Its float tolerance
+   checks only that transformed vertex-formula harness, not the complete
+   original coupled model or exact equality. The Fraction oracle above is
+   the independent exact rational comparison. */
+section('the 29 formulas against the transformed v18.24 floating-point compatibility harness');
 {
   const V18 = readFileSync(join(ROOT, 'vedic_v18.24_full_kernel.html'), 'utf8');
   const cut = (from, to) => { const a = V18.indexOf(from); const b = V18.indexOf(to, a); if (a < 0 || b < 0) throw new Error('v18.24: cannot find ' + from); return V18.slice(a, b + to.length); };
@@ -290,7 +488,7 @@ section('the 29 formulas against v18.24\'s own evolve code');
   }
   ok(conv1.n >= 40 && s15ok, `v18.24's SUTRAS array, Q and VTX are read from vedic_v18.24_full_kernel.html; each of its ${conv1.n} roundings Q.mk(Bi(x · N), N) is made the exact value of the double x, and S15's float residual is taken exactly`);
   ok(compared === 29 * 3 * 6 - refusedBoth && mismatchRefusal.length === 0 && worstBits >= 32,
-     `on ${compared} applications (29 formulas x 5%, 50%, 100% x 6 states) v18.24's own evolve and the kernel agree to within 2^-${worstBits === Infinity ? 'inf' : worstBits} of the displacement (worst ${where}); ${refusedBoth} refused by both`,
+     `on ${compared} applications (29 formulas x 5%, 50%, 100% x 6 states) the transformed v18.24 harness and the kernel agree to within 2^-${worstBits === Infinity ? 'inf' : worstBits} of the displacement (worst ${where}); ${refusedBoth} refused by both`,
      mismatchRefusal.slice(0, 3).join('; ') + ' ' + Object.entries(perId).filter(([, b]) => b < 32).map(([i, b]) => `S${i}:${b}`).join(' '));
 }
 
@@ -338,7 +536,7 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
     const d = Q.mul(K.grvqDelta(reg0, k, t), gain);
     if (!sameQ(out, field) || !reg.every((x, j) => Q.eq(x, j === k ? st(Q.add(reg0[j], d)) : reg0[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
-  ok(feedOk, 'S1, S5, S9 and S14 move psi by their own formula only, and add GRVQ(lambda) x gain to lambda_0, 1, 2, 3 of the step register, stored to 128 bits, as v18.24 adds it to lambda[k]');
+  ok(feedOk, 'S1, S5, S9 and S14 move psi by their own formula only, and add GRVQ(lambda) x gain to lambda_0, 1, 2, 3 of the step register without quantization, as v18.24 adds it to lambda[k]');
   /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
@@ -606,7 +804,7 @@ section('magnetism memory');
   const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
   const edges = []; for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) edges.push([v, a, v | (1 << a)]);
   const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
-  const within = (got, want) => Q.cmp(Q.abs(Q.sub(got, want)), Q.mul(Q.abs(want), Q.mk(1n, 1n << 127n))) <= 0;
+  const exact = (got, want) => got.n * want.d === want.n * got.d;
   let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
   for (let s = 0; s < 40; s++) {
     const prev = eng;
@@ -617,10 +815,10 @@ section('magnetism memory');
       const share = Q.div(Q.mul(Q.mk(8n), Q.add(rOut[v], rOut[h])), Etot);
       const k = a >= 2 ? Q.mul(Q.mk(6n, 100n), base.vortex) : Q.mul(Q.mul(Q.mk(3n, 100n), Q.HALF), base.vortex);
       const want = Q.add(Q.mul(Q.mk(499n, 500n), prev.magA[e]), Q.mul(Q.mul(k, cyc[(hwf(v) + a) % 4]), share));
-      if (!within(eng.magA[e], want)) inductOk = false;
+      if (!exact(eng.magA[e], want)) inductOk = false;
       if (Q.cmp(Q.abs(eng.magA[e]), maxA) > 0) maxA = Q.abs(eng.magA[e]);
     });
-    for (let v = 0; v < 16; v++) if (!within(eng.magChi[v], Q.add(Q.mul(Q.mk(499n, 500n), prev.magChi[v]), Q.sub(eng.psi[v], prev.psi[v])))) chiOk = false;
+    for (let v = 0; v < 16; v++) if (!exact(eng.magChi[v], Q.add(Q.mul(Q.mk(499n, 500n), prev.magChi[v]), Q.sub(eng.psi[v], prev.psi[v])))) chiOk = false;
     const Ein = prev.psi.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
     if (!L.shareIn.every((x, v) => Q.eq(x, Q.div(Q.mul(Q.mk(16n), Q.mul(prev.psi[v], prev.psi[v])), Ein)))) shareOk = false;
     const md = K.magData(eng.magA, eng.magChi);
@@ -635,8 +833,8 @@ section('magnetism memory');
     const fl = q => Number(q.n) / Number(q.d), bv = K.bvecAt(md.flux);
     edges.forEach(([v, , h], e) => {
       const a = bv[v].map(fl), b = bv[h].map(fl), na = Math.hypot(...a), nb = Math.hypot(...b);
-      if (na * na <= 1e-6 || nb * nb <= 1e-6) { if (md.reconnections.includes(e)) recOk = false; return; }
-      const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
+      if (na * na < 1e-6 || nb * nb < 1e-6) { if (md.reconnections.includes(e)) recOk = false; return; }
+      const c = a.reduce((dot, value, k) => dot + value * b[k], 0) / (na * nb);
       if (Math.abs(c + 0.7) > 1e-9 && (c < -0.7) !== md.reconnections.includes(e)) recOk = false;
     });
   }

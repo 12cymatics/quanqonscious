@@ -158,7 +158,8 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">calculation</span><span class="v" id="sim-ms">–</span></div>
     <div class="row"><span class="k">Σ|ψ|²</span><span class="v" id="sim-energy">–</span></div>
     <div class="row"><span class="k">glide</span><span class="v" id="sim-glide">–</span></div>
-    <div class="row"><span class="k">stored precision</span><span class="v" id="sim-store">128 bits</span></div>
+    <div class="row"><span class="k">arithmetic</span><span class="v" id="sim-store">exact rationals</span></div>
+    <details style="font-size:11px;line-height:1.4;color:#e9b775;margin:8px 0"><summary>Full formulation remains unresolved</summary><div id="formulation-status">Coefficient meanings, source domains and the full coupled formulation require reconciliation.</div></details>
     <div class="row"><span class="k">composition</span><span class="v" id="sim-comp">SERIES</span></div>
     <div class="row"><span class="k">surface reach</span><span class="v" id="sim-scale">–</span></div>
     <div class="row"><span class="k">surface</span><span class="v" id="sim-surface">–</span></div>
@@ -171,7 +172,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-run" type="button">PAUSE</button>
     <button id="btn-reset" type="button" title="Start again from the seed, every formula gliding in from 0">RESET</button>
     <button id="btn-all" type="button">ALL ON</button>
-    <button id="btn-none" type="button">ALL OFF</button>
+    <button id="btn-none" type="button" disabled>29 REQUIRED</button>
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
     <button id="btn-fields" type="button" class="active" title="Show or hide the fields around the construct: the magnetic pressure of its lattice currents seen through as a haze, and the energy densities of the magnetic and electric fields on the equatorial plane">FIELDS ON</button>
     <button id="btn-lattice" type="button" title="Draw the hypercube on the surface itself: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its vertices and its reconnections. The flux map shows the same values flat.">LATTICE OFF</button>
@@ -182,7 +183,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
-    <p class="note">Each active sūtra applies its v18.24 formula at α = id/435 × strength, exactly. λ is the field's four axis modes (λₖ = Σᵢ ±ψᵢ/16), taken from Ψ at the start of each step. S1, S5, S9 and S14 add GRVQ's δλ to λ₀…λ₃ and every other active sūtra a 1/N share to λ₍id−1 mod 4₎, and MSTVQ's stress T adds to λ and to the TGCR stiffness κ, as in v18.24, where λ is taken from Ψ again at the end of every frame: only the sūtra formulas move Ψ. S2, S3 and S29 set MSTVQ's B. Where a formula meets a zero divisor or a log of zero it does what v18.24 does there, or borrows that rule from another sūtra, and nothing stops.</p>
+    <p class="note">Every live step requires all 29 sūtras, at α = id/435 × strength × composition gain, with unrounded rational arithmetic. S13 refuses a zero denominator; source-defined piecewise branches in S6, S19 and S25 remain explicit. GRVQ and MSTVQ currently update a λ register and report its values. Their connection to the complete original evolving system remains unresolved. A completed formula calculation does not establish complete coupling or validate the inherited model parameters.</p>
     <div class="row"><span class="k">λ₀ λ₁ λ₂ λ₃</span><span class="v" id="cp-lambda">–</span></div>
     <div class="row"><span class="k">GRVQ δλ this step</span><span class="v" id="cp-grvq">–</span></div>
     <div class="row"><span class="k">MSTVQ</span><span class="v" id="cp-mstvq">–</span></div>
@@ -252,7 +253,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>MAYA · COHERENCE FLOW</h5>
-    <p class="note">v18.24's Maya: dφ/dμ = β/μ, β = (φ_g/e)·sin φ − (e/π)·φ³, five Euler sub-steps of 1/500 a step from φ₀ = 1/16. The phase flows onto the one stable coherence layer φ* and settles there. M = observed / true scales the field where it is drawn, never the field itself; on the layer M = 1.</p>
+    <p class="note">Maya currently approximates β = (φ_g/e)·sin φ − (e/π)·φ³ with rational enclosures and takes five Euler sub-steps of 1/500 from φ₀ = 1/16. This is not the exact continuous flow. Its error ledger and root bracket are separate from exact rational storage. M scales the displayed field.</p>
     <div class="row"><span class="k">phase φ</span><span class="v" id="maya-phase">–</span></div>
     <div class="row"><span class="k">β(φ)</span><span class="v" id="maya-beta">–</span></div>
     <div class="row"><span class="k">layer φ*</span><span class="v" id="maya-layer">–</span></div>
@@ -318,7 +319,7 @@ const floor = Math.floor, exp = Math.exp;
 const VERSION = Object.freeze({
   string:     'v18.52.0',
   slug:       'v18_52_0',
-  name:       'one_formula_simulator',
+  name:       'exact_29_formulation_review',
   title:      'Vedic Sutra Simulator',
   sourceFile: 'vedic_v18.51.1_exact_phi.html',
   leanMirror: 'SutraWS.lean@v18.52.0'
@@ -326,7 +327,7 @@ const VERSION = Object.freeze({
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
-  stepExport:    'vedic-step-export/5',
+  stepExport:    'vedic-step-export/6',
   operatorAudit: 'vedic-operator-audit/2'
 });
 const VIEW_MOTION = Object.freeze({
@@ -451,18 +452,15 @@ const KERNEL_FACTORY = () => {
     QUARTER: Object.freeze({ n: 1n, d: 4n }),
     SIXTEENTH: Object.freeze({ n: 1n, d: 16n })
   });
-  const STORE_BITS = 128;
+  // null means there is no finite precision budget. These are canonical
+  // rationals, including at every intermediate update and storage boundary.
+  // Resource exhaustion is an error; it must never select rounded arithmetic.
+  const STORE_BITS = null;
+  const ARITHMETIC = 'exact-rational';
   const storeQ = x => {
-    if (x.n === 0n) return x;
-    const neg = x.n < 0n, n = neg ? -x.n : x.n, d = x.d;
-    const k = STORE_BITS - (bitLength(n) - bitLength(d));
-    const num = k >= 0 ? (n << BigInt(k)) : n;
-    const den = k >= 0 ? d : (d << BigInt(-k));
-    if (num < (den << BigInt(STORE_BITS - 1)))
-      throw new Error('storeQ: scaled value below 2^(B-1); the error bound would not apply');
-    const m = (2n * num + den) / (2n * den);
-    const sm = neg ? -m : m;
-    return k >= 0 ? Q.mk(sm, 1n << BigInt(k)) : Q.mk(sm << BigInt(-k), 1n);
+    if (!x || typeof x.n !== 'bigint' || typeof x.d !== 'bigint' || x.d <= 0n)
+      throw new TypeError('storeQ requires a rational with a positive denominator');
+    return Q.mk(x.n, x.d);
   };
   const solveLinearQ = (matrix, rhs) => {
     const n = matrix.length;
@@ -640,10 +638,31 @@ const KERNEL_FACTORY = () => {
   const bigAbs = x => x < 0n ? -x : x;
   const absFloor = x => bigAbs(floorQ(x));
   const sgnQ = x => x.n < 0n ? -1n : 1n;
-  const SUTRA_SUM = 435n;
+  const SUTRA_COUNT = 29n;
+  const SUTRA_SUM = SUTRA_COUNT * (SUTRA_COUNT + 1n) / 2n;
   const SIM_DT = Q.mk(16667n, 50000n);
   const PHI_Q = Q.mk(12586269025n, 7778742049n);
   const PHI_INV_Q = Q.mk(12586269025n - 7778742049n, 7778742049n);
+  // Historical API names retained for replay. PHI_Q is the literal rational
+  // used in v18.24, not the algebraic golden ratio. PHI_INV_Q is PHI_Q - 1,
+  // not its reciprocal. A4.PHI is the distinct exact algebraic number.
+  const FORMULATION_STATUS = Object.freeze({
+    complete: false,
+    arithmetic: ARITHMETIC,
+    rationalStorageExact: true,
+    referenceCommit: '2ab11b4d33b455c37f866e39f056fdef0f88d9e5',
+    formulaSource: 'vedic_v18.24_full_kernel.html:SUTRAS[].evolve',
+    literalPhi: PHI_Q,
+    literalPhiPolynomialResidual: Q.sub(Q.sub(Q.mul(PHI_Q, PHI_Q), PHI_Q), Q.ONE),
+    literalPhiReciprocalResidual: Q.sub(Q.mul(PHI_Q, PHI_INV_Q), Q.ONE),
+    blockers: Object.freeze([
+      'The literal rational used as phi is not (1 + sqrt(5))/2; the intended operand must be specified.',
+      'Model coefficients and initial conditions have source literals but no complete derivation or approved parameter specification.',
+      'GRVQ/MSTVQ register updates are not established as the complete original persistent coupling pipeline.',
+      'Several original domains, thresholds and the initial field differ from the preserved source.',
+      'Maya uses finite rational enclosures and Euler steps; it is not an exact evaluation of the continuous transcendental flow.'
+    ])
+  });
   const LAMBDA0 = Object.freeze([3n, 4n, 5n, 6n].map(n => Q.mk(n)));
   const NEIGHBORS = i => [i ^ 1, i ^ 2, i ^ 4, i ^ 8];
   const vtxSign = (i, k) => ((i >> k) & 1) ? 1n : -1n;
@@ -899,7 +918,7 @@ const KERNEL_FACTORY = () => {
         const terms = argInt(a[1]), conv = [];
         for (let pi = 0; pi < 8; pi++) {
           const pj = pi ^ 15, num = bigAbs(p[pi].n), den = bigAbs(p[pj].n);
-          if (den === 0n) continue;
+          if (den === 0n) throw new RangeError(`S13 continued fraction denominator is zero at pair (${pi}, ${pj})`);
           let n = num, d = den;
           const cf = [];
           for (let s = 0; s < terms && d > 0n; s++) { cf.push(n / d); const r = n % d; n = d; d = r; }
@@ -1106,7 +1125,12 @@ const KERNEL_FACTORY = () => {
   const gainOf = s => s.gain || Q.ONE;
   const applySutraCore = (psi,active,mode,keep=x=>x,ctx={}) => {
     const list=active.slice().sort((a,b)=>a.id-b.id);
-    const run=(s,x,g)=>applySutra(s.id,x,argsFor(s),{t:ctx.t,gain:Q.mul(gainOf(s),g),record:ctx.record,lam:ctx.lam});
+    const run=(s,x,g)=>{
+      if(ctx.progress)ctx.progress({stage:'sutra',id:s.id,phase:'started'});
+      const out=applySutra(s.id,x,argsFor(s),{t:ctx.t,gain:Q.mul(gainOf(s),g),record:ctx.record,lam:ctx.lam});
+      if(ctx.progress)ctx.progress({stage:'sutra',id:s.id,phase:'completed'});
+      return out;
+    };
     if(mode==="SERIES"){
       let out=psi.slice();for(const s of list)out=keep(run(s,out,Q.ONE));return out;
     }
@@ -1297,7 +1321,11 @@ const KERNEL_FACTORY = () => {
     edges: [[edgeIndexOf(v, a), 1], [edgeIndexOf(v ^ (1 << a), b), 1], [edgeIndexOf(v ^ (1 << b), a), -1], [edgeIndexOf(v, b), -1]] }); });
   const FACES_AT = Array.from({ length: 16 }, (_, v) => MAG_FACES.map((f, i) => [f, i]).filter(([f]) => (v & ~((1 << f.a) | (1 << f.b))) === f.base).map(([, i]) => i));
   const FACES_ON_EDGE = MAG_EDGES.map(([v, a]) => MAG_FACES.map((f, i) => [f, i]).filter(([f]) => (f.a === a || f.b === a) && f.base === (v & ~((1 << f.a) | (1 << f.b)))).map(([, i]) => i));
-  const HODGE = [[0, 0, 1], [0, -1, 0], [0, -1, 1], [1, 0, 0], [1, 0, -1], [-1, 1, 0]].map((r, p) => r.map(c => (p === 2 || p === 4 || p === 5) ? Q.mk(BigInt(c), 2n) : Q.mk(BigInt(c))));
+  // Oriented Euclidean basis (01,02,03,12,13,23). These coefficients
+  // follow from F+ = (F + *F)/2 and F- = (F - *F)/2. Keep both halves.
+  // Source correction: b24792f9d7f4b35e0c3ada988ec8fc51356914e6.
+  const HODGE_SD = [[1,0,0],[0,1,0],[0,0,1],[0,0,1],[0,-1,0],[1,0,0]].map(r => r.map(c => Q.mk(BigInt(c), 2n)));
+  const HODGE_ASD = [[1,0,0],[0,1,0],[0,0,1],[0,0,-1],[0,1,0],[-1,0,0]].map(r => r.map(c => Q.mk(BigInt(c), 2n)));
   const PHI_CYCLE = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
   const MAG_RETAIN = Q.mk(499n, 500n), MAG_FARADAY = Q.mk(1n, 10n), MAG_TOROIDAL = Q.mk(6n, 100n), MAG_POLOIDAL = Q.mk(3n, 100n), TGCR_ETA = Q.HALF;
   const storeOrZero = x => x.n === 0n ? x : storeQ(x);
@@ -1331,13 +1359,17 @@ const KERNEL_FACTORY = () => {
   };
   const helicityOf = (A, chi) => { const B = curlA(A), AF = fullA(A, chi);
     return MAG_EDGES.reduce((s, _, e) => Q.add(s, Q.mul(AF[e], Q.mul(FACES_ON_EDGE[e].reduce((t, i) => Q.add(t, B[i]), Q.ZERO), Q.mk(1n, 3n)))), Q.ZERO); };
-  const bvecAt = B => Array.from({ length: 16 }, (_, v) => [0, 1, 2].map(k => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], HODGE[MAG_FACES[i].p][k])), Q.ZERO), Q.mk(1n, 6n))));
+  // Six coordinates per vertex: [self-dual xyz, anti-self-dual xyz]. The
+  // inherited division by six is explicit vertex averaging, not a Hodge
+  // coefficient. Reconnection dot products and norms consume all six.
+  const bvecAt = B => Array.from({ length: 16 }, (_, v) => [HODGE_SD, HODGE_ASD].flatMap(weights =>
+    [0, 1, 2].map(k => Q.mul(FACES_AT[v].reduce((s, i) => Q.add(s, Q.mul(B[i], weights[MAG_FACES[i].p][k])), Q.ZERO), Q.mk(1n, 6n)))));
   const RECONNECT_FLOOR = Q.mk(1n, 1000000n);
   const reconnectionsOf = A => {
     const bv = bvecAt(curlA(A)), n2 = u => u.reduce((s, c) => Q.add(s, Q.mul(c, c)), Q.ZERO), out = [];
     MAG_EDGES.forEach(([v, , h], e) => {
       const a = bv[v], b = bv[h], na = n2(a), nb = n2(b);
-      if (Q.cmp(na, RECONNECT_FLOOR) <= 0 || Q.cmp(nb, RECONNECT_FLOOR) <= 0) return;
+      if (Q.cmp(na, RECONNECT_FLOOR) < 0 || Q.cmp(nb, RECONNECT_FLOOR) < 0) return;
       const dot = a.reduce((s, c, k) => Q.add(s, Q.mul(c, b[k])), Q.ZERO);
       if (dot.n < 0n && Q.cmp(Q.mul(dot, dot), Q.mul(Q.mk(49n, 100n), Q.mul(na, nb))) > 0) out.push(e);
     });
@@ -1439,8 +1471,6 @@ const KERNEL_FACTORY = () => {
     return v => (v & 1) ? Q.neg(base) : base;
   };
   const applyMSTVQ = (psi, w, p) => complementRotate(psi, mstvqTau(w, p));
-  const HODGE_SD = [[1,0,0],[0,1,0],[0,0,1],[0,0,1],[0,-1,0],[1,0,0]].map(r => r.map(c => Q.mk(BigInt(c), 2n)));
-  const HODGE_ASD = [[1,0,0],[0,1,0],[0,0,1],[0,0,-1],[0,1,0],[-1,0,0]].map(r => r.map(c => Q.mk(BigInt(c), 2n)));
   const bondCurrent = (psi, vortex) => MAG_EDGES.map(([v, , h]) => Q.mul(vortex, Q.mul(psi[v], psi[h])));
   const tgcrTau = (psi, p) => { const k = Q.mul(rationalA4(p.dt, 'dt'), rationalA4(p.tgcr, 'tgcr')); return bondCurrent(psi, p.vortex).map(x => Q.mul(k, x)); };
   const applyTGCR = (psi, p, keep) => edgeRotate(psi, tgcrTau(psi, p), keep);
@@ -1569,21 +1599,10 @@ const KERNEL_FACTORY = () => {
     return {maxNumeratorBits:maxN,maxDenominatorBits:maxD,meanNumeratorBits:totalN/16,meanDenominatorBits:totalD/16};
   };
   const initState = () => { const f = forwardL(LAMBDA0), d = initDielectric(); return f.map((x, v) => Q.add(x, d[v])); };
-  const storeBudget = stored => {
-    const terms=[];
-    let emin=null;
-    for(const q of stored){
-      if(q.n===0n)continue;
-      const e=bitLength(q.n)-(bitLength(q.d)-1);
-      terms.push(e);
-      if(emin===null||e<emin)emin=e;
-    }
-    if(emin===null)return Q.ZERO;
-    let S=0n;
-    for(const e of terms)S+=1n<<BigInt(e-emin);
-    const ex=emin-(STORE_BITS-1);
-    return ex>=0?Q.mk(S<<BigInt(ex)):Q.mk(S,1n<<BigInt(-ex));
-  };
+  // This reports quantization error only. It is exactly zero because storeQ
+  // preserves the value; it says nothing about the validity of the model or
+  // the separately reported Maya enclosure / time discretization error.
+  const storeBudget = stored => { stored.forEach(storeQ); return Q.ZERO; };
   const makeKeep = () => {
     const ledger={delta:Q.ZERO,stores:0};
     const keep=x=>{const s=x.map(storeQ);ledger.delta=Q.add(ledger.delta,storeBudget(s));ledger.stores++;return s;};
@@ -1591,12 +1610,19 @@ const KERNEL_FACTORY = () => {
   };
   const stagesFrom = (input,act,mode,W,params,keep,ctx) => {
     const record=[],grvqRecord=[],lam=inverseL(input);
-    const afterS=applySutraCore(input,act,mode,keep,{t:ctx.t,record,lam});
+    const progress=stage=>{if(ctx.progress)ctx.progress({stage,phase:'started'});};
+    const afterS=applySutraCore(input,act,mode,keep,{t:ctx.t,record,lam,progress:ctx.progress});
+    progress('distributed GRVQ');
     distributedGRVQ(lam,act,ctx.t,grvqRecord);
+    progress('MSTVQ tensor');
     const ms=distributedMSTVQ(afterS,act,lam);
+    progress('magnetic field update');
     const afterG=applyMAG(afterS,ctx.magTau,keep);
+    progress('MSTVQ field update');
     const afterM=keep(applyMSTVQ(afterG,W,params));
+    progress('TGCR field update');
     const afterT=applyTGCR(afterM,params,keep);
+    progress('ZPE field update');
     const afterZ=keep(applyZPE(afterT,W,params));
     return {afterS,afterD:afterS,afterB:afterS,afterG,afterM,afterT,afterZ,record,grvqRecord,mstvq:ms,lambdaReg:lam};
   };
@@ -1629,12 +1655,13 @@ const KERNEL_FACTORY = () => {
     }
     return { ramp: next, active };
   };
-  const step = (engine,params,active,mode) => {
+  const step = (engine,params,active,mode,progress) => {
+    if(progress)progress({stage:'dielectric and Maya',phase:'started'});
     const input=engine.psi,t=timeOf(engine.frame);
     const rhoIn=rhoHat(input),shareIn=energyShare(rhoIn);
     const dielectricNext=evolveDielectric(engine.dielectric,active,params,shareIn);
     const maya=mayaStep(engine.mayaPhase,engine.mayaErr);
-    const ctx={t,magTau:magTau(engine.magA,engine.magChi,params)};
+    const ctx={t,magTau:magTau(engine.magA,engine.magChi,params),progress};
     const dDrift=dielectricDrift(engine.dielectric,dielectricNext);
     const W=computeWheeler(dielectricNext,params);
     const eIn=energy(input);
@@ -1642,6 +1669,7 @@ const KERNEL_FACTORY = () => {
     const st=stagesFrom(input,active,mode,W,params,run.keep,ctx);
     const ledger=run.ledger;
     const psi=st.afterZ;
+    if(progress)progress({stage:'magnetic memory and diagnostics',phase:'started'});
     const dielectric=dielectricNext.map(storeQ);
     const eFinal=energy(psi);
     const rhoOut=rhoHat(psi);
@@ -1652,14 +1680,44 @@ const KERNEL_FACTORY = () => {
       mayaPhase:maya.next,mayaErr:maya.err,magA:mag.A,magChi:mag.chi,
       last:{input,dielectricIn:engine.dielectric,
             mayaPhaseIn:engine.mayaPhase,mayaErrIn:engine.mayaErr,magAIn:engine.magA,magChiIn:engine.magChi,tgcrKappaIn:engine.tgcrKappa,
-            frameIn:engine.frame,time:t,maya,ctx,rhoIn,rhoOut,shareIn,edgeShares:mag.share,
+            frameIn:engine.frame,time:t,maya,ctx:{t,magTau:ctx.magTau},rhoIn,rhoOut,shareIn,edgeShares:mag.share,
             afterS:st.afterS,afterD:st.afterD,afterB:st.afterB,afterG:st.afterG,afterM:st.afterM,afterT:st.afterT,afterZ:st.afterZ,
             sutraRecord:st.record,grvqRecord:st.grvqRecord,mstvq:st.mstvq,lambdaReg:st.lambdaReg,
             lambdaIn:inverseL(input),lambdaOut:inverseL(psi),
             tgcr:tgcrGeometry(psi,params.vortex,tgcrKappa),
             e0:eIn,eS:energy(st.afterS),eFinal,dielectricDrift:dDrift,wheeler:W,active,mode,params,
+            arithmetic:ARITHMETIC,formulationStatus:FORMULATION_STATUS,
             storeBits:STORE_BITS,stepError:{delta:ledger.delta,stores:ledger.stores},complexity:complexity(psi)}
     };
+  };
+  const requireComplete29 = active => {
+    if (!Array.isArray(active) || active.length !== 29)
+      throw new RangeError('A complete simulation step requires all 29 sutras');
+    const ids = active.map(s => s.id).sort((a,b) => a-b);
+    if (!ids.every((id,i) => id === i+1))
+      throw new RangeError('A complete simulation step requires each sutra S1 through S29 exactly once');
+    for (const s of active) {
+      const a = sutraArgs(s.id, s.args !== undefined ? s.args : s.strength);
+      if (Q.sign(a[0]) <= 0 || (s.gain !== undefined && (!isExactQ(s.gain) || Q.sign(s.gain) <= 0)))
+        throw new RangeError(`S${s.id} cannot be disabled in a complete simulation step`);
+      if (s.strength !== undefined && (!isExactQ(s.strength) || !Q.eq(s.strength,a[0])))
+        throw new RangeError(`S${s.id} strength disagrees with its formula operand`);
+    }
+    return active;
+  };
+  // Isolated operator/stage diagnostics may call step. The live worker uses
+  // this entry point, whose precondition and completed execution record
+  // require all 29. A configuration checkbox alone is never completion.
+  const stepComplete29 = (engine,params,active,mode,progress) => {
+    requireComplete29(active);
+    const next = step(engine,params,active,mode,progress);
+    const ids = Array.from({length:29},(_,i)=>i+1);
+    const expected = mode === 'SYMMETRIC_CONCURRENT' ? ids.concat(ids.slice().reverse()) : ids;
+    const ran = next.last.sutraRecord;
+    if (ran.length !== expected.length || !ran.every((r,i)=>r.id===expected[i] && Q.sign(r.alpha)>0))
+      throw new Error('Incomplete sutra execution: the completed step does not contain every required formula in order');
+    next.last.execution = Object.freeze({required:29,completed:29,applications:ran.length,order:expected});
+    return next;
   };
   const qTraceLambda = psi => inverseL(psi);
   const sumR = psi => psi.reduce((s, x) => Q.add(s, x), Q.ZERO);
@@ -1914,15 +1972,15 @@ const KERNEL_FACTORY = () => {
     }
     const runs=f=>{try{f();return true;}catch(e){return false;}};
     assert("S6 runs through a zero vertex",runs(()=>applySutra(6,psi.map((q,v)=>v===0?Q.ZERO:q),Q.ONE,{})));
-    assert("S13 runs through a zero complement",runs(()=>applySutra(13,psi.map((q,v)=>v===12?Q.ZERO:q),Q.ONE,{})));
+    assert("S13 refuses a zero complement as the preserved source does",throwsRange(()=>applySutra(13,psi.map((q,v)=>v===12?Q.ZERO:q),Q.ONE,{})));
     assert("S19 runs through a zero root",runs(()=>applySutra(19,psi.map((q,v)=>v===9?Q.ZERO:q),Q.ONE,{})));
     assert("S25 runs through a zero half-sum",runs(()=>applySutra(25,psi.map((q,v)=>v===0?Q.sub(q,sumR(psi.filter((_,i)=>!(i&1)))):q),Q.ONE,{})));
     assert("S1 axis 4 refused",throwsRange(()=>applySutra(1,psi,[Q.ONE,Q.mk(4n)])));
     assert("S21 non-integer modulus refused",throwsRange(()=>applySutra(21,psi,[Q.ONE,Q.mk(5n),Q.mk(9n,2n)])));
     assert("strength above 1 refused",throwsRange(()=>applySutra(1,psi,Q.mk(3n,2n))));
     for(const q of [Q.mk(1n,3n),Q.mk(-22n,7n),Q.mk(10n**60n+1n,3n),Q.mk(1n,10n**70n+7n),Q.mk(5n,64n),Q.ZERO]){
-      const r=storeQ(q),err=Q.abs(Q.sub(q,r));
-      assert("store bound "+Q.toString(q).slice(0,24),Q.cmp(Q.mul(err,Q.mk(1n<<BigInt(STORE_BITS))),Q.abs(q))<=0);
+      const r=storeQ(q);
+      assert("store preserves the exact value "+Q.toString(q).slice(0,24),q.n*r.d===r.n*q.d);
       assert("store idempotent "+Q.toString(q).slice(0,24),Q.eq(storeQ(r),r));
     }
     assert("store keeps zero",Q.isZero(storeQ(Q.ZERO)));
@@ -1970,8 +2028,8 @@ const KERNEL_FACTORY = () => {
      const recon=reconnectionsOf(A),bv=bvecAt(curlA(A)),fl=q=>Number(q.n)/Number(q.d);
      assert("reconnection test agrees with the cosine on this potential (reconnect_iff)",MAG_EDGES.every(([v,,h],e)=>{
        const a=bv[v].map(fl),b=bv[h].map(fl),na=Math.hypot(...a),nb=Math.hypot(...b);
-       if(na*na<=1e-6||nb*nb<=1e-6)return !recon.includes(e);
-       const c=(a[0]*b[0]+a[1]*b[1]+a[2]*b[2])/(na*nb);return Math.abs(c+0.7)<1e-9||(c<-0.7)===recon.includes(e);}));}
+       if(na*na<1e-6||nb*nb<1e-6)return !recon.includes(e);
+       const c=a.reduce((s,x,k)=>s+x*b[k],0)/(na*nb);return Math.abs(c+0.7)<1e-9||(c<-0.7)===recon.includes(e);}));}
     {const kinds=k=>TORUS_FACES.filter(t=>t.kind===k);
      const cellKeys=kinds('cell').map(t=>t.cell[0]*4+t.cell[1]);
      assert("the 24 faces are 4 loops through the hole, 4 round the tube and the 16 cells, each once (hole_loop, tube_loop, cells_tile)",
@@ -2050,6 +2108,9 @@ const KERNEL_FACTORY = () => {
       composition: last.mode,
       activeSutras: last.active.map(x => ({id:x.id,strength:serializeQ(x.strength),args:x.args?x.args.map(serializeQ):null})),
       storeBits: last.storeBits,
+      arithmetic: last.arithmetic,
+      formulationStatus: serializeExact(last.formulationStatus),
+      execution: last.execution || null,
       complexity: last.complexity
     };
   };
@@ -2061,8 +2122,8 @@ const KERNEL_FACTORY = () => {
     forwardL,inverseL,injectLambda,LAMBDA0,PHI_Q,PHI_INV_Q,SIM_DT,timeOf,SUTRA_TYPE,GRVQ_K,mstvqB,stressOf,distributedGRVQ,distributedMSTVQ,
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
-    initState,initEngine,step,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
-    hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley});
+    initState,initEngine,step,stepComplete29,requireComplete29,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
+    hwCoefficients,storeQ,storeBudget,STORE_BITS,ARITHMETIC,FORMULATION_STATUS,HODGE_SD,HODGE_ASD,alphaOf,SUTRA_SUM,cayley});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2085,6 +2146,8 @@ function releaseManifest() {
     } : null,
     leanMirror: VERSION.leanMirror,
     storeBits: KERNEL.STORE_BITS,
+    arithmetic: KERNEL.ARITHMETIC,
+    formulationStatus: KERNEL.serializeExact(KERNEL.FORMULATION_STATUS),
     generatedAt: new Date().toISOString()
   };
 }
@@ -2473,7 +2536,7 @@ function sutraCertFromAudits(audits) {
 }
 function leanConformance() {
   const checks = [];
-  checks.push(['storeBits', KERNEL.STORE_BITS === 128]);
+  checks.push(['exactRationalStorage', KERNEL.STORE_BITS === null && KERNEL.ARITHMETIC === 'exact-rational']);
   checks.push(['sutraTypes', Object.keys(KERNEL.SUTRA_TYPE).length === 29]);
   checks.push(['grvqAxes', Object.keys(KERNEL.GRVQ_K).join() === '1,5,9,14']);
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
@@ -2494,10 +2557,10 @@ const PROVENANCE = Object.freeze({
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
-  mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
+  storageScopeNote: "Rational arithmetic and every rational storage boundary preserve the complete numerator and denominator. No finite precision cap, rounding, clipping or approximation is applied by storeQ. The reported quantization error is exactly zero. This does not validate model coefficients, source fidelity or the separate Maya enclosure and time discretization. Exact nonlinear composition may exceed available time or memory; noncompletion is a failure and is never replaced by rounded results. The old StoredPrecision rounding theorem does not certify the current unrounded implementation.",
+  mayaScopeNote: "Maya implements beta = (phi_g/e) sin phase - (e/pi) phase^3 through rational interval enclosures and five Euler substeps of 1/500 from the selected phase seed 1/16. The constants and sine are enclosed using integer square-root and Taylor remainder bounds; a 160-bit enclosure grid does not imply every interval is 2^-160 wide (the initial pi bracket is wider). Midpoints provide point values, so this is not exact evaluation of the transcendental continuous flow. The phase error ledger is relative to the exact Euler map, not a proved bound against the continuous ODE solution. M scales the drawn field. These approximation and initial-condition choices remain explicit full-formulation obligations.",
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The sutra step is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, the strength the formula has reached on its glide: one step a second, and a formula switched on or changed rises in equal steps from where it stood to its setting over the number of steps the Glide control sets, 10 unless changed, then holds there while the run goes on (ramp_steady, ramp_end, ramp_hold); a preset or RESET starts again from the seed; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. Nothing stops the run at a zero. Where a formula would divide by zero or take a log of zero it does what v18.24 does there: S6 skips a pair whose base vertex is zero, S19 leaves a pair with a zero root as it is, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product. S13 borrows the rule of S6 and leaves a pair whose denominator vertex is zero as it is. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). S1, S5, S9 and S14 add GRVQ to lambda_0..3 and every other active sutra a 1/N share to lambda_(id-1 mod 4), lambda being the four axis modes of psi taken at the start of the step (inverse_inject), and S1 strength its stress feedback T_kk / 2e8 to lambda and T trace / 500 to the TGCR stiffness kappa, as v18.24 adds them to lambda[k], which its VTX.inverse() takes from psi again at the end of every frame: GRVQ and MSTVQ move lambda, and only the sutra formulas move psi; S2, S3 and S29 set MSTVQ B. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^540 over the step. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: "The live worker requires all 29 distinct sutras at positive strengths and verifies the completed application order (29 in SERIES/PARALLEL, 58 in SYMMETRIC_CONCURRENT). Individual diagnostic calls remain available. The common source weight is id/(1+...+29)=id/435 times the explicit strength and composition gain; S29 also uses 29/145=1/5. Rational updates are unrounded. S13 now refuses its zero denominator as the preserved source does. S6, S19 and S25 retain their source piecewise branches. This port is not certified as the complete unaltered source formulation: the rational phi operand is not algebraic phi; several source thresholds and the dielectric addition to the seed differ; GRVQ/MSTVQ lambda feedback and the legacy coupled assembly are not reconciled. See FORMULATION_STATUS and the formulation audit. Completed formula records and a faithful view do not establish those unresolved claims.",
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -2864,9 +2927,9 @@ function updateFaithfulBadge() {
   const waiting = KERNEL_VIEW.selfTestsOk === null || sutraDeciding() || MODE_COMPARE.pending;
   const ok = st.ok;
   el.className = 'faithful-badge ' + (ok ? 'ok' : (waiting && !st.zero ? 'wait' : 'bad'));
-  const head = ok ? 'FAITHFUL' : (st.zero ? 'STATE IS ZERO' : (waiting ? 'AUDITING' : 'NOT FAITHFUL'));
+  const head = ok ? 'FAITHFUL VIEW' : (st.zero ? 'STATE IS ZERO' : (waiting ? 'AUDITING VIEW' : 'VIEW NOT VERIFIED'));
   el.innerHTML =
-    "<b>" + head + "</b>" +
+    "<b>" + head + "</b><span>full formulation unresolved</span>" +
     "<span>&Sigma;|&psi;|&sup2; = " + st.a4 + "</span>" +
     "<span>parseval " + fmtE(st.rel) + " &middot; node " + fmtE(st.node) + "</span>" +
     "<span>channels " + (st.channels
@@ -2886,7 +2949,7 @@ const SUTRAS = [
   { id:3,  name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'CONVOLUTIVE · Ψᵢ pulled by α to Σⱼ ΨⱼΨ_{i⊕j}/divisor, the crosswise (XOR) convolution · sets MSTVQ B' },
   { id:4,  name:'Parāvartya Yojayet', sk:'परावर्त्य', guide:'DIVISIVE · Horner of the Hamming-layer means at σ = r/(1+r), r = hw/quarters; Ψᵢ pulled to it by α' },
   { id:5,  name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', guide:'REFLECTIVE · complement pairs pulled by α to Ψᵢ = −Ψ_{i⊕15}: each pair sum × (1 − 2α) · GRVQ feeds λ₁' },
-  { id:6,  name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'PERMUTATIVE · each edge ratio Ψ₁/Ψ₀ driven to ±ratio by −α·err·|Ψ₀+Ψ₁|, in place · refuses Ψ₀ = 0' },
+  { id:6,  name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'PERMUTATIVE · each edge ratio Ψ₁/Ψ₀ driven to ±ratio by −α·err·|Ψ₀+Ψ₁|, in place · source leaves a pair with Ψ₀ = 0 unchanged' },
   { id:7,  name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'PERMUTATIVE · each edge: S = (Ψ₀+Ψ₁)/2, A = (Ψ₀−Ψ₁)/2, δ = α(S²−A²)A; S += δ, A −= δ, in place' },
   { id:8,  name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'DIVISIVE · Ψᵢ pulled by α·pull to the mean of its four completed squares ½(Ψᵢ+Ψⱼ), in place' },
   { id:9,  name:'Calana-Kalanābhyām', sk:'चलन', guide:'DIFFUSIVE · Ψ ← Ψ + αΔΨ, the graph Laplacian of the tesseract · GRVQ feeds λ₂' },
@@ -2899,13 +2962,13 @@ const SUTRAS = [
   { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on each complement pair\'s numerators: gcd > 1 divided out, else Bézout cross-coupling' },
   { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', guide:'DIFFUSIVE · Ψᵢ += α·proportion·Σⱼ(Ψⱼ − Ψᵢ)/4 over its four neighbours, in place' },
   { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', guide:'MODULAR · |⌊Ψᵢ⌋| moved by α toward the residues of its Hamming weight mod modA (and modB)' },
-  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', guide:'DIVISIVE · Vieta on complement pairs: the root ratio |Ψᵢ/Ψⱼ| driven to ratio at rate · refuses a zero root' },
+  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', guide:'DIVISIVE · Vieta on complement pairs: the root ratio |Ψᵢ/Ψⱼ| driven to ratio at rate · source leaves a pair with a zero root unchanged' },
   { id:20, name:'Vilokanam', sk:'विलोकनम्', guide:'MODULAR · Ψᵢ moved by α toward the nearest multiple of base of |⌊Ψᵢ⌋|' },
   { id:21, name:'Guṇitasamuccayah Samuccayaguṇitaḥ', sk:'गुणितसमुच्चयः', guide:'MODULAR · osculation: last digit × osculator + the rest, Ψᵢ moved by α toward divisibility by modulus' },
   { id:22, name:'Dvandvayogaḥ', sk:'द्वन्द्वयोगः', guide:'REFLECTIVE · Ψᵢ pulled by α to (Ψᵢ + Ψ_{i⊕15})/2, in place' },
   { id:23, name:"Antyayordaśake'pi", sk:'अन्त्ययोः', guide:'REFLECTIVE · complement pairs whose last digits do not sum to tens both moved by α·(tens − sum)/2' },
   { id:24, name:'Lopanasthāpanābhyām', sk:'लोपन', guide:'MODULAR · tails |⌊Ψ⌋| mod 10^digits: a common gcd > 1 eliminated, else the fraction driven to digital root/9' },
-  { id:25, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'CONVOLUTIVE · ∏ of the axis half-sums S vs T: layers pushed by layer·(hw−2), the inertial layer by gradient·∇ · refuses a zero half-sum' },
+  { id:25, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'CONVOLUTIVE · axis half-sum products S vs T drive layer and gradient pushes · source makes no push for a zero low half-sum and omits zero high half-sums from its product' },
   { id:26, name:'Dhvajāṅka', sk:'ध्वजाङ्क', guide:'PERMUTATIVE · every vertex but the flag (the largest |Ψ|) pulled by α to Ψ_flag/portion' },
   { id:27, name:'Gunitasamuccayah', sk:'गुणितसमुच्चयः', guide:'DIFFUSIVE · four Hamming paths driven to arithmetic progressions; the rest pulled by α/2 to their neighbours' },
   { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', guide:'DIFFUSIVE · each edge moves α·rate·(Ψᵢ² − Ψⱼ²) from Ψᵢ to Ψⱼ, keeping the sum exactly' },
@@ -2920,6 +2983,7 @@ function parseStrengthPercentQ(raw) {
 }
 function setSutraStrengthExact(s, raw) {
   const q = parseStrengthPercentQ(raw);
+  if (q.n === 0n) throw new RangeError(`S${s.id} is required: its strength must be positive`);
   s.strengthQ = q;
   s.strength = Number(q.n * 100n / q.d);
   s.on = q.n !== 0n;
@@ -2930,20 +2994,25 @@ function resetSutraArgs(s) {
   s.argQ = sutraArgSpec(s.id).map(a => Q.mk(a.def.n, a.def.d));
 }
 function argSliderValue(s, i) {
-  const spec = sutraArgSpec(s.id)[i], q = s.argQ[i];
-  return spec.int ? String(q.n) : String(q.n * 16n / q.d);
+  return Q.toString(s.argQ[i]);
 }
 function setSutraArgExact(s, i, raw) {
   const spec = sutraArgSpec(s.id)[i];
   if (!spec) throw new RangeError(`S${s.id} has no argument ${i}`);
   const text = String(raw).trim();
-  if (!/^-?\d+$/.test(text)) throw new SyntaxError(`Invalid exact argument: ${text}`);
-  const n = BigInt(text);
-  const q = KERNEL.checkArg(s.id, i, spec.int ? Q.mk(n) : Q.mk(n, 16n));
+  const match = /^([+-]?\d+)(?:\/(\d+)|\.(\d+))?$/.exec(text);
+  if (!match) throw new SyntaxError(`Enter an exact integer, fraction or finite decimal for S${s.id}.${spec.name}`);
+  let value;
+  if (match[2] !== undefined) value = Q.mk(BigInt(match[1]), BigInt(match[2]));
+  else if (match[3] !== undefined) {
+    const d = 10n ** BigInt(match[3].length);
+    value = Q.mk(BigInt(match[1]) * d + (text.startsWith('-') ? -1n : 1n) * BigInt(match[3]), d);
+  } else value = Q.mk(BigInt(match[1]));
+  const q = KERNEL.checkArg(s.id, i, value);
   s.argQ[i] = q;
   return q;
 }
-SUTRAS.forEach(s => { setSutraStrengthExact(s, ({ 9: '50', 22: '50', 29: '50' })[s.id] || '0'); resetSutraArgs(s); });
+SUTRAS.forEach(s => { setSutraStrengthExact(s, '50'); resetSutraArgs(s); });
 function activeSutras() {
   return SUTRAS.filter(s => s.on)
     .map(s => Object.freeze({ id: s.id, strength: s.strengthQ, args: Object.freeze([s.strengthQ, ...s.argQ]) }));
@@ -2988,7 +3057,7 @@ const KERNEL_VIEW = {
   stepBudgetOk: false, delta: null, stores: 0,
   dyn: null,
   hist: { frame: [], E: [], UB: [], H: [], Hs: [], recon: [], phase: [], M: [] }, sutraDE: new Map(),
-  stepMs: 0, halted: null, running: true, workerError: null,
+  stepMs: 0, halted: null, running: true, workerError: null, progress: null, execution: null,
   configVersion: 0, appliedVersion: -1, epoch: 0, appliedEpoch: -1, inFlight: false, inFlightSince: 0, stateAt: 0,
   appliedActive: [], appliedSet: [], appliedComposition: null,
   dirty: false, lastProjectAt: 0, projected: [], queue: []
@@ -3013,6 +3082,7 @@ function postState(ms) {
          tgcr: L ? { density: L.tgcr.density, pontryagin: L.tgcr.pontryagin, FSq: L.tgcr.FSq, vSq: L.tgcr.vSq, energy: L.tgcr.energy,
                      kappa: L.tgcr.kappa, closed: L.tgcr.cubeFlux.every(KERNEL.Q.isZero) } : null,
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
+         execution: L ? L.execution : null, formulationStatus: KERNEL.FORMULATION_STATUS,
          composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [], setIds: L ? config.active.map(a => a.id) : [],
          strengths: L ? L.active.map(a => ({ id: a.id, strength: a.strength })) : [],
          sutraDE: L ? Object.values(L.sutraRecord.reduce((m, r) => { const p = m[r.id]; m[r.id] = { id: r.id, dE: p ? KERNEL.Q.add(p.dE, r.dE) : r.dE }; return m; }, {})) : [],
@@ -3048,7 +3118,9 @@ function tick() {
   let rs, next;
   try {
     rs = KERNEL.rampStep(ramp, config.active, config.glide);
-    next = KERNEL.step(engine, config.params, rs.active, config.composition);
+    KERNEL.requireComplete29(config.active);
+    next = KERNEL.stepComplete29(engine, config.params, rs.active, config.composition, progress =>
+      post({type:'progress',version:config.version,epoch:config.epoch,frame:engine.frame,progress}));
   } catch (err) {
     halted = { name: err.name || 'Error', message: String(err.message || err) };
     post({ type: 'halted', version: config.version, epoch: config.epoch, frame: engine.frame, reason: halted });
@@ -3205,6 +3277,7 @@ function pushConfig(reason, reset) {
   if (reset) {
     if (KERNEL_VIEW.inFlight) { KERNEL_WORKER.terminate(); startKernelWorker(); }
     KERNEL_VIEW.epoch++; KERNEL_VIEW.inFlight = false; KERNEL_VIEW.queue.length = 0;
+    KERNEL_VIEW.progress = null; KERNEL_VIEW.execution = null;
   }
   KERNEL_VIEW.configVersion++;
   KERNEL_VIEW.halted = null;
@@ -3279,11 +3352,15 @@ function onAuditMessage(ev) {
 }
 function onKernelMessage(ev) {
   const m = ev.data;
-  if ((m.type === 'state' || m.type === 'halted') && m.epoch !== KERNEL_VIEW.epoch) return;
+  if ((m.type === 'state' || m.type === 'halted' || m.type === 'progress') && m.epoch !== KERNEL_VIEW.epoch) return;
   if (m.type === 'state') {
     if (m.state.frame > 0) KERNEL_VIEW.inFlight = false;
     m.at = performance.now();
     KERNEL_VIEW.halted = null; KERNEL_VIEW.queue.push(m);
+  } else if (m.type === 'progress') {
+    if (m.version !== KERNEL_VIEW.configVersion) return;
+    KERNEL_VIEW.progress = m.progress;
+    updateRunBadge();
   } else if (m.type === 'halted') {
     KERNEL_VIEW.inFlight = false;
     if (m.version < KERNEL_VIEW.configVersion) { requestNext(); return; }
@@ -3297,6 +3374,8 @@ function onKernelMessage(ev) {
 }
 function applyKernelState(m) {
     KERNEL_VIEW.state = m.state;
+    KERNEL_VIEW.execution = m.execution || null;
+    if (m.state.frame > 0) KERNEL_VIEW.progress = null;
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
     KERNEL_VIEW.delta = m.delta; KERNEL_VIEW.stores = m.stores;
@@ -4642,7 +4721,7 @@ function buildPanel() {
       + `<span class="sname" style="font-size:7px;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(s.name + '\n' + s.guide)}">${escHtml(s.sk || s.name)}</span>`;
     const nameSpan = row.querySelector('.sname');
     const strength = document.createElement('input');
-    strength.type = 'range'; strength.min = '0'; strength.max = '100'; strength.step = '1';
+    strength.type = 'range'; strength.min = '1'; strength.max = '100'; strength.step = '1';
     strength.className = 'st-strength';
     strength.setAttribute('aria-label', `S${sid} strength`);
     strength.style.cssText = 'width:38px;height:8px;flex-shrink:0';
@@ -4667,19 +4746,21 @@ function buildPanel() {
         lab.style.cssText = 'width:46px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
         lab.textContent = a.name; lab.title = a.role;
         const sl = document.createElement('input');
-        sl.type = 'range'; sl.className = 'st-arg'; sl.step = '1';
-        sl.min = String(a.int ? a.lo : a.lo * 16);
-        sl.max = String(a.int ? a.hi : a.hi * 16);
+        sl.type = 'text'; sl.className = 'st-arg';
+        sl.spellcheck = false;
+        sl.title = `${a.role}; exact integer, fraction or finite decimal in [${a.lo}, ${a.hi}]`;
         sl.setAttribute('aria-label', `S${sid} ${a.name}`);
-        sl.style.cssText = 'width:34px;height:7px;flex-shrink:0';
+        sl.style.cssText = 'width:100px;min-width:0;font-size:8px;flex:1;color:#aac9ef;background:#111;border:1px solid #345';
         const val = document.createElement('span');
         val.style.cssText = 'width:24px;flex-shrink:0;color:#888';
-        sl.addEventListener('input', () => {
+        sl.addEventListener('change', () => {
           try { setSutraArgExact(s, i, sl.value); }
-          catch (err) { LOG.add(`S${sid} ${a.name} refused: ${err.message}`, 'off'); }
+          catch (err) { sl.setCustomValidity(err.message); LOG.add(`S${sid} ${a.name} refused: ${err.message}`, 'off'); return; }
+          sl.setCustomValidity('');
           syncRow(s); pushConfig();
+          LOG.add(`S${sid} ${a.name} → ${Q.toString(s.argQ[i])}`, 'on');
         });
-        sl.addEventListener('change', () => LOG.add(`S${sid} ${a.name} → ${Q.toString(s.argQ[i])}`, s.on ? 'on' : 'off'));
+        sl.addEventListener('keydown', e => { if (e.key === 'Enter') sl.dispatchEvent(new Event('change')); });
         ar.appendChild(lab); ar.appendChild(sl); ar.appendChild(val);
         wrap.appendChild(ar);
         argInputs.push({ sl, val });
@@ -4687,10 +4768,8 @@ function buildPanel() {
       el.appendChild(wrap);
     }
     nameSpan.addEventListener('click', () => {
-      setSutraStrengthExact(s, s.on ? '0' : '50');
-      syncRow(s);
-      LOG.add(`S${s.id} ${s.sk || s.name} → ${s.on ? 'on @' + s.strength : 'off'}`, s.on ? 'on' : 'off');
-      clearPresetHighlight(); pushConfig();
+      strength.focus();
+      LOG.add(`S${s.id} is required; set its positive strength with the slider`, 'sys');
     });
     strength.addEventListener('input', () => { setSutraStrengthExact(s, strength.value); syncRow(s); clearPresetHighlight(); pushConfig(); });
     strength.addEventListener('change', () => LOG.add(`S${s.id} → ${s.on ? 'strength ' + s.strength : 'off'}`, s.on ? 'on' : 'off'));
@@ -4700,7 +4779,7 @@ function buildPanel() {
   });
   const leg = document.createElement('div');
   leg.style.cssText = 'padding:4px;border-top:1px solid #222;font-size:5.5px;color:#555;line-height:1.3';
-  leg.innerHTML = `<b style="color:#666">ORDER</b>: SERIES and CONCURRENT apply the active sūtras in id order. Click a name to toggle it at 50%; the slider sets 0–100%; ΔE is the energy each formula changed the field by on the step shown; the blue rows are the sūtra's own operands. `
+  leg.innerHTML = `<b style="color:#666">ALL 29 REQUIRED</b>: SERIES and CONCURRENT apply every sūtra in id order. Each slider sets a positive strength, 1–100%; ΔE is the energy each formula changed the field by on the completed step shown; the blue rows are the sūtra's operands. `
     + `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
   list.appendChild(leg);
 }
@@ -4815,8 +4894,10 @@ function updateRunBadge() {
   else {
     const paused = !KERNEL_VIEW.running ? 'PAUSED · ' : '';
     const pending = KERNEL_VIEW.appliedVersion < KERNEL_VIEW.configVersion ? ' · new settings apply next step' : '';
-    const wait = KERNEL_VIEW.inFlight && DISPLAY.tau === 1 && !KERNEL_VIEW.queue.length
-      ? ` · calculating step ${shownStep() + 1} for ${Math.floor((performance.now() - KERNEL_VIEW.inFlightSince) / 1000)} s` : '';
+    const progress = KERNEL_VIEW.progress;
+    const current = progress ? (progress.id ? 'S' + progress.id : progress.stage) + ' ' + progress.phase : '';
+    const wait = KERNEL_VIEW.inFlight && !KERNEL_VIEW.queue.length
+      ? ` · calculating step ${shownStep() + 1} for ${Math.floor((performance.now() - KERNEL_VIEW.inFlightSince) / 1000)} s · ${current}` : '';
     text = `${paused}step ${shownStep()} · calculated in ${Math.round(KERNEL_VIEW.stepMs)} ms · ${COMPOSITION_LABEL[COMPOSITION]}${pending}${wait}`;
   }
   if (el.className !== cls) el.className = cls;
@@ -4830,7 +4911,7 @@ function updateSimulationHud() {
   set('sim-ms', Math.round(KERNEL_VIEW.stepMs) + ' ms');
   set('sim-energy', FAITHFUL.aSci(A4.fromQ(st.energyLedger)));
   updateCouplingsHud();
-  set('sim-store', `${KERNEL.STORE_BITS} bits · step error ≤ ${KERNEL_VIEW.delta ? qShort(KERNEL_VIEW.delta) : '–'}`);
+  set('sim-store', `exact rationals · quantization error ${KERNEL_VIEW.delta ? qShort(KERNEL_VIEW.delta) : '–'}`);
   set('sim-comp', COMPOSITION_LABEL[COMPOSITION]);
   set('sim-glide', glideWords());
   updateDynamoHud();
@@ -5110,7 +5191,7 @@ function updateFormulaDisplay() {
     `Maya: φ ← φ + β(φ)/500 five times, β = (φ_g/e) sin φ − (e/π) φ³; drawn field × M = 1 + β/(20(1+|β|))<br>` +
     `s = ${escHtml(Q.toString(p.dielectricScale.a))} · B = ${escHtml(Q.toString(p.appliedH.a))} · γ_W = ${escHtml(Q.toString(p.gammaW.a))} · dt = ${escHtml(Q.toString(p.dt.a))}<br>` +
     `ω = ${escHtml(Q.toString(p.vortex))} · drive = ${escHtml(Q.toString(p.zpeSource.a))} · χ = ${escHtml(Q.toString(p.polarisation))}<br>` +
-    `every operator, inner layer and stage exact, then stored to ${KERNEL.STORE_BITS} bits`;
+    `rational formulas and storage are unrounded; named constants, full coupling and Maya exactness remain unresolved`;
 }
 function renderModeIdentities() {
   const el = document.getElementById('mode-identities');
@@ -5267,11 +5348,9 @@ document.getElementById('btn-all').addEventListener('click', () => {
   syncPanel(); clearPresetHighlight();
   pushConfig('ALL ON — 29 sūtras at 50%');
 });
-document.getElementById('btn-none').addEventListener('click', () => {
-  SUTRAS.forEach(s => setSutraStrengthExact(s, '0'));
-  syncPanel(); clearPresetHighlight();
-  pushConfig('ALL OFF — no sūtra active; the magnetism memory, Wheeler, MSTVQ, TGCR and ZPE stages and the Maya flow still run');
-});
+document.getElementById('btn-none').disabled = true;
+document.getElementById('btn-none').textContent = '29 REQUIRED';
+document.getElementById('btn-none').title = 'Every simulation step must calculate all 29 sutras.';
 function setOmegaSlider(tenths) {
   const el = document.getElementById('amp-omega');
   if (!Number.isInteger(tenths) || tenths < +el.min || tenths > +el.max) throw new RangeError(`vortex omega ${tenths / 10} is outside the slider's range`);
@@ -5330,11 +5409,11 @@ const DEFAULT_PRESET = 'pre-damper';
 function presetTitle(p) {
   const ops = Object.entries(p.set).map(([i, v]) => `S${i}(${v})`).join(' ');
   const knobs = [`vortex ω ${(p.omega / 10).toFixed(1)}`, p.drive ? `drive ${(p.drive / 4).toFixed(2)}` : '', p.chi !== 10 ? `χ ${(p.chi / 10).toFixed(1)}` : ''].filter(Boolean).join(', ');
-  return `${COMPOSITION_LABEL[p.comp]}: ${ops} · ${knobs}. ${p.purpose}`;
+  return `${COMPOSITION_LABEL[p.comp]}: adjust ${ops}; all 29 remain active · ${knobs}. ${p.purpose}`;
 }
 function applyPreset(id) {
   const p = PRESETS[id], btn = document.getElementById(id);
-  SUTRAS.forEach(s => { setSutraStrengthExact(s, String(p.set[s.id] || 0)); resetSutraArgs(s); });
+  SUTRAS.forEach(s => { if (p.set[s.id] !== undefined) setSutraStrengthExact(s, String(p.set[s.id])); resetSutraArgs(s); });
   setComposition(p.comp);
   setOmegaSlider(p.omega);
   for (const [sid, v, fmt] of [['amp-drive', p.drive, x => (x / 4).toFixed(2)], ['amp-polar', p.chi, x => (x / 10).toFixed(1)]]) {
@@ -5343,7 +5422,7 @@ function applyPreset(id) {
     el.value = String(v); document.getElementById(sid + '-v').textContent = fmt(v);
   }
   syncPanel(); clearPresetHighlight(); btn.classList.add('preset-active');
-  pushConfig(`PRESET ${btn.textContent.trim()} from the seed → ${COMPOSITION_LABEL[p.comp]} [${Object.keys(p.set).map(i => 'S' + i).join(' ')}]`, true);
+  pushConfig(`PRESET ${btn.textContent.trim()} adjusts [${Object.keys(p.set).map(i => 'S' + i).join(' ')}]; all 29 remain active → ${COMPOSITION_LABEL[p.comp]}`, true);
 }
 Object.entries(PRESETS).forEach(([id, p]) => {
   const btn = document.getElementById(id);
@@ -5860,6 +5939,7 @@ window.addEventListener('unhandledrejection', ev => {
   try { LOG.add(`UNHANDLED REJECTION: ${m}`, 'off'); } catch (_) {}
 });
 buildPanel();
+document.getElementById('formulation-status').textContent = KERNEL.FORMULATION_STATUS.blockers.join(' ');
 setComposition(COMPOSITION);
 window._VERSION_INTEGRITY = verifyVersionIntegrity();
 window._RELEASE_MANIFEST = releaseManifest();
@@ -5871,7 +5951,7 @@ if (!window._VERSION_INTEGRITY.ok) console.error('VERSION MISMATCH:', window._VE
 const conformance = leanConformance();
 LOG.add(`runtime/lean conformance ${conformance.passed}/${conformance.total}${conformance.failed.length ? ' FAILED: ' + conformance.failed.join('; ') : ''}`,
         conformance.failed.length ? 'off' : 'sys');
-if (startWorkers()) applyPreset(DEFAULT_PRESET);
+if (startWorkers()) pushConfig('All 29 sutras required, at the explicit ALL ON setting of 50%', true);
 startFieldWorker();
 renderModeIdentities();
 requestAnimationFrame(frame);

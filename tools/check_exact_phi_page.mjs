@@ -11,13 +11,13 @@
    visible from node.
 
    What it holds the page to, in a real Chromium:
-     it loads           the first exact state arrives, nothing throws
-     every control      each preset, composition, ALL ON / OFF, RESET and
-                        PAUSE / RUN reaches the worker, and the worker runs
-                        toward exactly the set and composition the control
-                        chose
+     it loads           the untouched native setting completes all 29 within
+                        300 seconds; a seed or configuration is insufficient
+     every control      each preset, composition, ALL ON, RESET and PAUSE /
+                        RUN reaches the worker with all 29 still required;
+                        the disabled ALL OFF cannot remove formulas
      the pace           one step a second, each drawn in order; a formula
-                        switched on rises to its strength over the glide's
+                        rises to its strength over the glide's
                         steps (10 unless changed), then holds while the run
                         goes on
      the surface        is drawn, every point finite and in front of the
@@ -44,8 +44,12 @@
                         not move back once out; on a fresh page every frame
                         keeps the law: still in the band, toward the size
                         and never past it outside it
-     exports            the step file and the operator audit name the build
-                        that wrote them; the step carries what replays it
+     exports            the native all-29 step is saved and fully replayed;
+                        the step file and operator audit name their build
+
+   No fallback preset or reduced strength makes the completion gate pass.
+   Initial, periodic and final diagnostics are retained under
+   artifacts/exact29-browser/, even when exact computation refuses or times out.
 
    It drives Chromium over the DevTools protocol: no dependency, no install.
    It REFUSES rather than skipping when there is no browser.
@@ -54,21 +58,34 @@
    Env: CHROME=/path/to/chrome  overrides binary discovery.
 */
 import { spawn } from 'node:child_process';
-import { statSync, mkdtempSync, rmSync } from 'node:fs';
+import { statSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = pathToFileURL(join(ROOT, 'vedic_v18.51.1_exact_phi.html')).href;
+const ARTIFACT_DIR = join(ROOT, 'artifacts', 'exact29-browser');
+const COMPLETE_STEP_TIMEOUT_MS = 300000;
+const ALL_29 = Array.from({ length: 29 }, (_, i) => i + 1);
+const ALL_29_IDS = ALL_29.join(',');
+const diagnostics = { schema: 'exact29-browser-check/1', status: 'running', startedAt: new Date().toISOString(),
+  revision: process.env.GITHUB_SHA || null, page: PAGE, phase: 'initializing', timeoutMs: COMPLETE_STEP_TIMEOUT_MS,
+  nativeStepCompleted: false, nativeStepReplayCompleted: false, lastObserved: null, failures: [] };
+mkdirSync(ARTIFACT_DIR, { recursive: true });
+function saveDiagnostics(extra = {}) {
+  Object.assign(diagnostics, extra, { updatedAt: new Date().toISOString() });
+  writeFileSync(join(ARTIFACT_DIR, 'diagnostics.json'), JSON.stringify(diagnostics, null, 2) + '\n');
+}
+saveDiagnostics();
 
 let pass = 0;
 const failures = [];
 function ok(cond, label, detail) {
   if (cond) { pass++; console.log('  ok   ' + label); }
-  else { failures.push(label + (detail ? '  -- ' + detail : '')); console.log('  FAIL ' + label + (detail ? '  -- ' + detail : '')); }
+  else { failures.push(label + (detail ? '  -- ' + detail : '')); saveDiagnostics({ failures: failures.slice() }); console.log('  FAIL ' + label + (detail ? '  -- ' + detail : '')); }
 }
-const section = t => console.log('\n' + t);
+const section = t => { saveDiagnostics({ phase: t }); console.log('\n' + t); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function measureStepPace(observation) {
@@ -118,9 +135,13 @@ const CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ].filter(Boolean);
 const BROWSER = CANDIDATES.find(p => { try { return statSync(p).isFile(); } catch { return false; } });
-if (!BROWSER) throw new Error('check_exact_phi_page: no Chromium or Chrome binary found. Tried:\n  ' +
-  CANDIDATES.join('\n  ') + '\nSet CHROME=/path/to/chrome. This refuses rather than skipping: a pass ' +
-  'without a browser would be a pass that checked nothing.');
+if (!BROWSER) {
+  const message = 'check_exact_phi_page: no Chromium or Chrome binary found. Tried:\n  ' +
+    CANDIDATES.join('\n  ') + '\nSet CHROME=/path/to/chrome. This refuses rather than skipping: a pass ' +
+    'without a browser would be a pass that checked nothing.';
+  saveDiagnostics({ status: 'failed', failure: { code: 'BROWSER_UNAVAILABLE', message } });
+  throw new Error(message);
+}
 
 /* ---- DevTools protocol, as in dns/check-page.mjs ------------------------ */
 async function launch() {
@@ -149,18 +170,23 @@ async function launch() {
     const m = JSON.parse(ev.data);
     if (m.id !== undefined) {
       const p = pending.get(m.id); pending.delete(m.id);
+      if (!p) return; // A timed-out command may still receive a late reply.
+      clearTimeout(p.timer);
       if (m.error) p.rej(new Error(JSON.stringify(m.error))); else p.res(m.result);
     } else for (const f of listeners) f(m);
   };
-  const send = (method, params = {}, sessionId) => new Promise((res, rej) => {
-    const id = ++n; pending.set(id, { res, rej }); ws.send(JSON.stringify({ id, method, params, sessionId }));
+  const send = (method, params = {}, sessionId, timeoutMs = 15000) => new Promise((res, rej) => {
+    const id = ++n;
+    const timer = setTimeout(() => { pending.delete(id); rej(Object.assign(new Error(`CDP ${method} exceeded ${timeoutMs} ms`), { code: 'BROWSER_COMMAND_TIMEOUT' })); }, timeoutMs);
+    pending.set(id, { res, rej, timer }); ws.send(JSON.stringify({ id, method, params, sessionId }));
   });
-  const close = () => { try { ws.close(); } catch {} try { proc.kill('SIGKILL'); } catch {} try { rmSync(profile, { recursive: true, force: true }); } catch {} };
+  const close = () => { for (const p of pending.values()) clearTimeout(p.timer); pending.clear(); try { ws.close(); } catch {} try { proc.kill('SIGKILL'); } catch {} try { rmSync(profile, { recursive: true, force: true }); } catch {} };
   return { send, listeners, close };
 }
 
-const browser = await launch();
+let browser = null, captureFailure = null;
 try {
+  browser = await launch();
   const { targetId } = await browser.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await browser.send('Target.attachToTarget', { targetId, flatten: true });
   const errors = [];
@@ -171,24 +197,72 @@ try {
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error')
       errors.push('console.error: ' + m.params.args.map(a => a.value ?? a.description ?? a.type).join(' '));
   });
-  const cmd = (m, p) => browser.send(m, p, sessionId);
-  const evaluate = async (expression, awaitPromise = false) => {
-    const r = await cmd('Runtime.evaluate', { expression, returnByValue: true, awaitPromise });
+  const cmd = (m, p, timeoutMs) => browser.send(m, p, sessionId, timeoutMs);
+  const evaluate = async (expression, awaitPromise = false, timeoutMs = COMPLETE_STEP_TIMEOUT_MS) => {
+    const r = await cmd('Runtime.evaluate', { expression, returnByValue: true, awaitPromise }, timeoutMs);
     if (r.exceptionDetails) throw new Error('page eval threw: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text));
     return r.result.value;
   };
-  const waitFor = async (expression, ms) => {
-    const t0 = Date.now();
-    while (Date.now() - t0 < ms) {
-      try { if (await evaluate(expression)) return true; } catch { /* page still loading */ }
-      await sleep(200);
-    }
-    return false;
+  const snapshotExpression = `(() => {
+    if (typeof KERNEL_VIEW === 'undefined') return { loading: true };
+    const v = KERNEL_VIEW;
+    return { frame: v.state ? v.state.frame : null, configVersion: v.configVersion, appliedVersion: v.appliedVersion,
+      epoch: v.epoch, appliedEpoch: v.appliedEpoch, actualActive: v.appliedActive, configuredSet: v.appliedSet,
+      composition: v.appliedComposition, execution: v.execution, progress: v.progress,
+      inFlight: v.inFlight, stepMs: v.stepMs, queueFrames: v.queue.map(x => x.state ? x.state.frame : null),
+      halted: v.halted ? String(v.halted.message || v.halted) : null, workerError: v.workerError ? String(v.workerError) : null,
+      selfTestsOk: v.selfTestsOk, selfTestError: v.selfTestError,
+      nativeReplay: window.__nativeReplay || null,
+      targets: typeof activeSutras === 'function' ? activeSutras().map(s => ({ id: s.id, strength: Q.toString(s.strength) })) : [] };
+  })()`;
+  captureFailure = async () => {
+    try { diagnostics.lastObserved = await evaluate(snapshotExpression, false, 3000); } catch (e) { diagnostics.snapshotError = e.message; }
+    diagnostics.consoleErrors = errors;
+    try { const shot = await cmd('Page.captureScreenshot', { format: 'png' }, 5000); writeFileSync(join(ARTIFACT_DIR, 'failure.png'), Buffer.from(shot.data, 'base64')); }
+    catch (e) { diagnostics.screenshotError = e.message; }
   };
+  const waitFor = async (expression, ms, label = expression) => {
+    const t0 = Date.now(), deadline = t0 + ms;
+    let lastError = null, lastSaved = 0, lastLogged = 0;
+    saveDiagnostics({ waitingFor: label, waitStartedAt: new Date(t0).toISOString(), waitDeadlineAt: new Date(deadline).toISOString() });
+    while (Date.now() < deadline) {
+      let observation;
+      try {
+        observation = await evaluate(`({ ready: !!(${expression}), snapshot: ${snapshotExpression} })`, false, Math.max(1, Math.min(3000, deadline - Date.now())));
+      } catch (e) { lastError = e.message; }
+      if (observation) {
+        diagnostics.lastObserved = observation.snapshot;
+        const s = observation.snapshot;
+        if (s.halted || s.workerError || (s.selfTestsOk === false && s.selfTestError)) {
+          const reason = s.halted || s.workerError || s.selfTestError;
+          throw Object.assign(new Error(`${label}: the worker refused before the required check completed: ${reason}`),
+            { code: 'EXACT_COMPUTATION_REFUSED', observation: s });
+        }
+        if (observation.ready) { saveDiagnostics({ waitingFor: null, lastWaitElapsedMs: Date.now() - t0 }); return true; }
+      }
+      if (Date.now() - lastSaved >= 5000) { saveDiagnostics({ waitElapsedMs: Date.now() - t0, lastEvaluationError: lastError }); lastSaved = Date.now(); }
+      if (Date.now() - lastLogged >= 15000) {
+        console.log('       waiting ' + JSON.stringify({ label, elapsedMs: Date.now() - t0, observed: diagnostics.lastObserved }));
+        lastLogged = Date.now();
+      }
+      await sleep(Math.max(0, Math.min(200, deadline - Date.now())));
+    }
+    throw Object.assign(new Error(`${label}: no completion within the ${ms} ms wall-clock deadline; no preset, strength, or formula fallback was used`),
+      { code: 'EXACT_CHECK_TIMEOUT', timeoutMs: ms, lastEvaluationError: lastError, observation: diagnostics.lastObserved });
+  };
+  const completed29 = `typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state && KERNEL_VIEW.state.frame > 0
+    && KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.appliedEpoch === KERNEL_VIEW.epoch
+    && KERNEL_VIEW.execution && KERNEL_VIEW.execution.required === 29 && KERNEL_VIEW.execution.completed === 29
+    && KERNEL_VIEW.appliedActive.join(',') === '${ALL_29_IDS}'
+    && RAMP_VIEW.ok && RAMP_VIEW.rows.length === 29 && RAMP_VIEW.rows.every(r => r.s.n > 0n && r.s.d > 0n)
+    && KERNEL_VIEW.execution.applications === (KERNEL_VIEW.appliedComposition === 'SYMMETRIC_CONCURRENT' ? 58 : 29)
+    && KERNEL_VIEW.execution.order.join(',') === (KERNEL_VIEW.appliedComposition === 'SYMMETRIC_CONCURRENT'
+      ? '${[...ALL_29, ...ALL_29.slice().reverse()].join(',')}' : '${ALL_29_IDS}')`;
+  const waitForComplete29 = label => waitFor(completed29, COMPLETE_STEP_TIMEOUT_MS, label);
   const presetFromSeed = async id => {
     const e0 = await evaluate(`KERNEL_VIEW.epoch`);
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
-    return waitFor(`KERNEL_VIEW.appliedEpoch > ${e0} && KERNEL_VIEW.state && !KERNEL_VIEW.halted`, 30000);
+    return waitFor(`(${completed29}) && KERNEL_VIEW.appliedEpoch > ${e0}`, COMPLETE_STEP_TIMEOUT_MS, `${id}: a completed all-29 step from its new seed`);
   };
   await cmd('Runtime.enable');
   await cmd('Page.enable');
@@ -197,8 +271,20 @@ try {
 
   section('load');
   const t0 = Date.now();
-  const first = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null`, 60000);
-  ok(first, `the first exact state arrives (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  const first = await waitForComplete29('native initial configuration: an actual completed all-29 step');
+  const native = await evaluate(`({ frame: KERNEL_VIEW.state.frame, mode: KERNEL_VIEW.appliedComposition,
+    execution: KERNEL_VIEW.execution, targetIds: activeSutras().map(s => s.id).join(','),
+    halfTargets: activeSutras().every(s => Q.eq(s.strength, Q.HALF)), glide: GLIDE_STEPS,
+    effective: RAMP_VIEW.rows.map(r => ({ id: r.id, strength: Q.toString(r.s), target: Q.toString(r.to), k: r.k, n: r.n })) })`);
+  if (!first || native.mode !== 'SERIES' || native.targetIds !== ALL_29_IDS || !native.halfTargets || native.glide !== 10)
+    throw Object.assign(new Error('The native initial all-29 setting was changed or failed to complete; refusing a substituted configuration'), { code: 'NATIVE_CONFIGURATION_MISMATCH', observation: native });
+  saveDiagnostics({ nativeStepCompleted: true, nativeStep: native });
+  ok(true, `the untouched native setting completes all 29 formulas (${((Date.now() - t0) / 1000).toFixed(1)} s; SERIES, 50% targets, glide 10)`);
+  const operandControls = await evaluate(`SUTRAS.flatMap(s => PANEL.rows[s.id].argInputs.map((entry, i) =>
+    ({ id: s.id, operand: i, type: entry.sl.type, shown: entry.sl.value, exact: Q.toString(s.argQ[i]) })))`);
+  ok(operandControls.length > 0 && operandControls.every(x => x.type === 'text' && x.shown === x.exact),
+    'every native operand control displays its exact rational value without a slider-grid conversion',
+    JSON.stringify(operandControls.filter(x => x.type !== 'text' || x.shown !== x.exact)));
   const tests = await waitFor(`KERNEL_VIEW.selfTestsOk === true`, 60000);
   ok(tests, 'the kernel self-tests pass on the audit worker');
   ok(await evaluate(`KERNEL_VIEW.workerError === null`), 'every worker started', await evaluate(`String(KERNEL_VIEW.workerError)`));
@@ -209,6 +295,77 @@ try {
   const g1 = await evaluate(`({ frame: KERNEL_VIEW.state.frame, dur: DISPLAY.dur })`);
   ok(g0.slider === '10' && g0.glide === 10 && g0.interval === 1000 && g0.dur === 1000 && g1.dur === 1000 && g1.frame > g0.frame,
      `by default the run steps on, each step drawn over 1 s, over a glide of 10 steps (step ${g0.frame} to ${g1.frame} in 5 s while the page loads)`, JSON.stringify({ g0, g1 }));
+
+  section('native all-29 full export and replay');
+  /* Retain an actually completed native step, including every state and
+     memory channel. Pausing scheduling does not change its formula inputs.
+     The replay is isolated so a costly exact calculation cannot prevent
+     the controller's wall-clock deadline or failure artifact. */
+  await evaluate(`if (KERNEL_VIEW.running) document.getElementById('btn-run').click();
+    saveJSON = async (payload, filename) => { (window.__nativeSaved = window.__nativeSaved || []).push({ filename, json: JSON.stringify(payload, jsonReplacer) }); return 1; };
+    document.getElementById('btn-export').click();`);
+  await waitFor(`(window.__nativeSaved || []).some(s => s.filename.includes('_step_'))`, COMPLETE_STEP_TIMEOUT_MS,
+    'export of a completed native all-29 step');
+  const nativeExportJson = await evaluate(`window.__nativeSaved.find(s => s.filename.includes('_step_')).json`);
+  writeFileSync(join(ARTIFACT_DIR, 'native-all29-step.json'), nativeExportJson + '\n');
+  const nativeExport = JSON.parse(nativeExportJson), nativeLast = nativeExport.last;
+  const actualOrder = Array.isArray(nativeLast?.sutraRecord) ? nativeLast.sutraRecord.map(s => s.id) : null;
+  if (nativeExport.schema !== 'vedic-step-export/6' || !nativeLast || nativeLast.composition !== 'SERIES'
+      || !Array.isArray(nativeLast.activeSutras)
+      || nativeLast.activeSutras.map(s => s.id).join(',') !== ALL_29_IDS
+      || nativeLast.activeSutras.some(s => BigInt(s.strength.n) <= 0n || BigInt(s.strength.d) <= 0n)
+      || !nativeLast.execution || nativeLast.execution.required !== 29 || nativeLast.execution.completed !== 29
+      || nativeLast.execution.applications !== 29 || !Array.isArray(nativeLast.execution.order) || nativeLast.execution.order.join(',') !== ALL_29_IDS
+      || !Array.isArray(actualOrder) || actualOrder.join(',') !== ALL_29_IDS)
+    throw Object.assign(new Error('The native export does not contain all 29 actual applications in SERIES order'), { code: 'NATIVE_EXPORT_INCOMPLETE' });
+  saveDiagnostics({ nativeExport: { file: 'native-all29-step.json', frame: nativeExport.frame,
+    schema: nativeExport.schema, execution: nativeLast.execution,
+    strengths: nativeLast.activeSutras.map(s => ({ id: s.id, strength: s.strength })) } });
+  const replayProgram = function () {
+    self.onmessage = event => {
+      try {
+        const file = event.data, L = file.last, K = KERNEL, Q = K.Q;
+        const q = x => Q.mk(BigInt(x.n), BigInt(x.d));
+        const a = x => K.A4.mk(q(x.a), q(x.b), q(x.c), q(x.d));
+        const params = Object.fromEntries(Object.entries(L.params).map(([key, value]) => [key, 'a' in value && 'b' in value ? a(value) : q(value)]));
+        const active = L.activeSutras.map(s => ({ id: s.id, strength: q(s.strength), ...(s.args ? { args: s.args.map(q) } : {}) }));
+        const replay = K.stepComplete29({ psi: L.input.map(q), dielectric: L.dielectricIn.map(q), energyLedger: null,
+          frame: L.frameIn, last: null, tgcrKappa: q(L.tgcrKappaIn), mayaPhase: q(L.mayaPhaseIn), mayaErr: q(L.mayaErrIn),
+          magA: L.magAIn.map(q), magChi: L.magChiIn.map(q) }, params, active, L.composition,
+          progress => self.postMessage({ type: 'progress', progress }));
+        const output = { frame: replay.frame, psi: K.serializeState(replay.psi), dielectric: replay.dielectric.map(K.serializeQ),
+          tgcrKappa: K.serializeQ(replay.tgcrKappa), mayaPhase: K.serializeQ(replay.mayaPhase), mayaErr: K.serializeQ(replay.mayaErr),
+          magA: replay.magA.map(K.serializeQ), magChi: replay.magChi.map(K.serializeQ), last: K.serializeLast(replay.last) };
+        const matches = Object.fromEntries(Object.entries(output).map(([key, value]) => [key, JSON.stringify(value) === JSON.stringify(file[key])]));
+        self.postMessage({ type: 'complete', result: { matches, execution: replay.last.execution,
+          identical: Object.values(matches).every(Boolean), frame: replay.frame } });
+      } catch (error) { self.postMessage({ type: 'failed', error: error.message, stack: error.stack }); }
+    };
+  };
+  await evaluate(`(() => {
+    const file = JSON.parse(window.__nativeSaved.find(s => s.filename.includes('_step_')).json);
+    window.__nativeReplay = { status: 'running', frame: file.frame, progress: null };
+    const source = 'const KERNEL = (' + KERNEL_FACTORY.toString() + ')();\\n(' + ${JSON.stringify(replayProgram.toString())} + ')();';
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    const worker = new Worker(url); window.__nativeReplayWorker = worker;
+    const finish = result => { window.__nativeReplay = result; worker.terminate(); URL.revokeObjectURL(url); };
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'progress') window.__nativeReplay.progress = data.progress;
+      else if (data.type === 'complete') finish({ status: 'completed', ...data.result });
+      else if (data.type === 'failed') finish({ status: 'failed', error: data.error, stack: data.stack });
+    };
+    worker.onerror = event => finish({ status: 'failed', error: event.message });
+    worker.postMessage(file);
+  })()`);
+  await waitFor(`window.__nativeReplay && window.__nativeReplay.status !== 'running'`, COMPLETE_STEP_TIMEOUT_MS,
+    'full replay of the native all-29 step from its exported inputs alone');
+  const nativeReplay = await evaluate(`window.__nativeReplay`);
+  writeFileSync(join(ARTIFACT_DIR, 'native-all29-replay.json'), JSON.stringify(nativeReplay, null, 2) + '\n');
+  if (nativeReplay.status !== 'completed' || nativeReplay.identical !== true)
+    throw Object.assign(new Error('Full native all-29 replay failed: ' + JSON.stringify(nativeReplay)), { code: 'NATIVE_REPLAY_FAILED' });
+  saveDiagnostics({ nativeStepReplayCompleted: true, nativeReplay });
+  ok(true, 'the full native all-29 step replays exactly, including psi, dielectric, Maya, magnetism, TGCR memory, and every intermediate record');
+  await evaluate(`if (!KERNEL_VIEW.running) document.getElementById('btn-run').click()`);
   const setGlide = s => evaluate(`(() => { const el = document.getElementById('amp-glide'); el.value = '${s}'; el.dispatchEvent(new Event('input')); return GLIDE_STEPS; })()`);
   /* the rest of the checks run at a glide of 1 step: every formula at its setting from the first step */
   await setGlide(1);
@@ -321,40 +478,47 @@ try {
   await presetFromSeed('pre-damper');
   await waitFor(`KERNEL_VIEW.state.frame === 2`, 30000);
   const gl = await evaluate(`(() => {
-    const st = VISUAL_CERTIFICATE.status(), p = PRESETS['pre-damper'].set, f = KERNEL_VIEW.state.frame;
+    const st = VISUAL_CERTIFICATE.status(), f = KERNEL_VIEW.state.frame;
     return { f, ok: RAMP_VIEW.ok, cert: st.ramp, rising: RAMP_VIEW.rising, row: glideWords(),
              rows: RAMP_VIEW.rows.map(r => [r.id, Q.toString(r.s), Q.toString(r.to), r.k, r.n]),
-             want: Object.keys(p).map(Number).sort((a, b) => a - b).map(id => { const to = Q.mk(BigInt(p[id]), 100n);
-               return [id, Q.toString(Q.mul(to, Q.mk(BigInt(Math.min(f, 5)), 5n))), Q.toString(to), Math.min(f, 5), 5]; }) };
+             want: activeSutras().slice().sort((a, b) => a.id - b.id).map(s => { const to = s.strength;
+               return [s.id, Q.toString(Q.mul(to, Q.mk(BigInt(Math.min(f, 5)), 5n))), Q.toString(to), Math.min(f, 5), 5]; }) };
   })()`);
-  ok(gl.ok && gl.cert && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`${gl.want.length} of ${gl.want.length} rising`),
+  ok(gl.ok && gl.cert && gl.rows.length === 29 && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`${gl.want.length} of ${gl.want.length} rising`),
      `at a glide of 5, step ${gl.f} runs each formula at ${gl.f}/5 of its setting, and the glide row says so (${gl.row})`, JSON.stringify(gl));
   await waitFor(`KERNEL_VIEW.state.frame >= 6`, 30000);
-  const hd0 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, rising: RAMP_VIEW.rising, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)), row: glideWords() })`);
+  const hd0 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, rising: RAMP_VIEW.rising, held: RAMP_VIEW.rows.length === 29 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)), row: glideWords() })`);
   await sleep(3000);
-  const hd1 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)) })`);
-  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('all 3 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
+  const hd1 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, held: RAMP_VIEW.rows.length === 29 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)) })`);
+  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('all 29 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
      `past the glide each formula is held at its setting and the run goes on (step ${hd0.f} to ${hd1.f} in 3 s)`, JSON.stringify({ hd0, hd1 }));
   await setGlide(1);
 
   section('every control reaches the kernel');
   const applied = async (label, want) => {
-    const got = await waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && KERNEL_VIEW.appliedComposition !== null && !KERNEL_VIEW.halted`, 30000);
-    const s = await evaluate(`({ active: KERNEL_VIEW.appliedSet.slice().sort((a, b) => a - b).join(','),
-                                 comp: KERNEL_VIEW.appliedComposition, halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message })`);
+    const got = await waitForComplete29(`${label}: a completed all-29 step for the selected setting`);
+    const s = await evaluate(`({ active: KERNEL_VIEW.appliedActive.join(','),
+                                 comp: KERNEL_VIEW.appliedComposition, execution: KERNEL_VIEW.execution,
+                                 rampMatchesTargets: RAMP_VIEW.rows.length === 29 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)),
+                                 halted: KERNEL_VIEW.halted && KERNEL_VIEW.halted.message })`);
     const okSet = want.active === undefined || s.active === want.active;
     const okComp = want.comp === undefined || s.comp === want.comp;
-    ok(got && okSet && okComp, `${label}: the worker ran ${want.comp || s.comp} set to [${s.active || 'none'}]`,
-       `applied=${got} set=${s.active} comp=${s.comp} halted=${s.halted}`);
+    ok(got && okSet && okComp && s.rampMatchesTargets, `${label}: the worker completed ${want.comp || s.comp} on all 29 at the selected strengths`,
+       JSON.stringify(s));
   };
-  const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
+  const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp])`);
   ok(presets.length === 12, `${presets.length} presets`);
   const titles = await evaluate(`Object.keys(PRESETS).map(id => [id, document.getElementById(id).title === presetTitle(PRESETS[id])])`);
   ok(titles.every(([, a]) => a), 'each preset button\'s title is built from its definition', JSON.stringify(titles.filter(([, a]) => !a)));
   const whites = [];
-  for (const [id, comp, set] of presets) {
+  for (const [id, comp] of presets) {
+    const before = await evaluate(`activeSutras().map(s => [s.id, Q.toString(s.strength)])`);
     await evaluate(`document.getElementById(${JSON.stringify(id)}).click()`);
-    await applied(id, { comp, active: set });
+    const configured = await evaluate(`(() => { const p = PRESETS[${JSON.stringify(id)}].set;
+      return activeSutras().map(s => [s.id, Q.toString(s.strength), Object.hasOwn(p, s.id) ? Q.toString(Q.mk(BigInt(p[s.id]), 100n)) : null]); })()`);
+    ok(configured.length === 29 && configured.every(([sid, strength, specified]) => strength === (specified === null ? before.find(([n]) => n === sid)[1] : specified)),
+      `${id}: specified strengths change and all other required formulas retain their strengths`);
+    await applied(id, { comp, active: ALL_29_IDS });
     const fr = await frame();
     ok(fr.drawn && fr.badCol === 0 && fr.badDepth === 0 && fr.badPt === 0 && fr.behind === 0,
        `${id}: drawn, finite, nothing to clamp`, JSON.stringify({ drawn: fr.drawn, why: fr.why, badCol: fr.badCol, badDepth: fr.badDepth, badPt: fr.badPt }));
@@ -369,19 +533,28 @@ try {
     await evaluate(`document.querySelector('#comp-ctrls button[data-comp="${comp}"]').click()`);
     await applied(`composition ${comp}`, { comp });
   }
-  await evaluate(`document.getElementById('btn-none').click()`);
-  await applied('ALL OFF', { active: '' });
+  const requiredControls = await evaluate(`(() => {
+    const before = KERNEL_VIEW.configVersion, none = document.getElementById('btn-none'); none.click();
+    const rows = Array.from(document.querySelectorAll('.st-strength'));
+    const names = Array.from(document.querySelectorAll('#sutra-list .sname'));
+    names.forEach(el => el.click());
+    return { disabled: none.disabled, before, after: KERNEL_VIEW.configVersion,
+      ids: activeSutras().map(s => s.id).join(','), positive: rows.length === 29 && rows.every(el => el.min === '1' && el.max === '100' && Number(el.value) > 0), names: names.length };
+  })()`);
+  ok(requiredControls.disabled && requiredControls.before === requiredControls.after && requiredControls.ids === ALL_29_IDS
+     && requiredControls.positive && requiredControls.names === 29,
+     'all 29 remain required: disabling is unavailable, names keep formulas active, and strength controls span 1–100%', JSON.stringify(requiredControls));
   const v0 = await evaluate(`KERNEL_VIEW.configVersion`);
+  const compBeforeAll = await evaluate(`COMPOSITION`);
   await evaluate(`document.getElementById('btn-all').click()`);
-  await sleep(1000);
+  await applied('ALL ON', { active: ALL_29_IDS, comp: compBeforeAll });
   const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), half: activeSutras().every(a => a.strength.n * 2n === a.strength.d),
-                               comp: COMPOSITION, cfg: KERNEL_VIEW.configVersion })`);
-  const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
-  ok(ao.ids === all29 && ao.half && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
-     'ALL ON sends all 29 at 50% to the worker as one setting', JSON.stringify(ao));
-  const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
+                               comp: COMPOSITION, cfg: KERNEL_VIEW.configVersion, execution: KERNEL_VIEW.execution })`);
+  ok(ao.ids === ALL_29_IDS && ao.half && ao.comp === compBeforeAll && ao.cfg === v0 + 1,
+     'ALL ON completes all 29 at 50% in the selected composition before any next preset', JSON.stringify(ao));
+  const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: '${ALL_29_IDS}' })`);
   await evaluate(`document.getElementById('pre-damper').click()`);
-  await applied('a preset chosen while ALL ON is still calculating replaces that calculation', dp);
+  await applied('the preset selected after the completed ALL ON calculation', dp);
   const r0 = await evaluate(`KERNEL_VIEW.appliedEpoch`);
   await evaluate(`document.getElementById('btn-reset').click()`);
   ok(await waitFor(`KERNEL_VIEW.appliedEpoch > ${r0} && KERNEL_VIEW.state.frame >= 2 && KERNEL_VIEW.hist.frame.every((f, i) => f === i)`, 20000),
@@ -410,7 +583,7 @@ try {
   const qstr = (n, d) => { const g = gcdN(n, d) || 1; return d / g === 1 ? String(n / g) : `${n / g}/${d / g}`; };
   const setSlider = (id, v) => evaluate(`(() => { const el = document.getElementById(${JSON.stringify(id)}); el.value = ${JSON.stringify(String(v))}; el.dispatchEvent(new Event('input')); })()`);
   const kp = () => evaluate(`(() => { const p = KERNEL_VIEW.params; return p ? { omega: Q.toString(p.vortex), drive: Q.toString(p.zpeSource.a), chi: Q.toString(p.polarisation) } : null; })()`);
-  const appliedNow = () => waitFor(`KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion && KERNEL_VIEW.state && !KERNEL_VIEW.halted`, 30000);
+  const appliedNow = () => waitForComplete29('the changed control reaches a completed all-29 step');
   await setSlider('amp-omega', 15); await appliedNow();
   await setSlider('amp-drive', 6); await appliedNow();
   await setSlider('amp-polar', 25); await appliedNow();
@@ -1026,7 +1199,7 @@ try {
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
   const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), k: r.k, n: r.n })), dur: DISPLAY.dur })`);
   await setGlide(1);
-  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3) && rg.dur === 1000,
+  ok(rg.ok && rg.rows.length === 29 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3) && rg.dur === 1000,
      'a glide changed mid-way goes on from where each strength stands over the new number of steps, still one step a second', JSON.stringify(rg));
 
   section('exports');
@@ -1034,7 +1207,8 @@ try {
      page would offer. Both files name the build that wrote them; the step
      carries what replays it, and the audit says which arguments each matrix
      belongs to. Checked inside the page: the audit is about 12 MB. */
-  await evaluate(`saveJSON = async (payload, filename) => { (window.__saved = window.__saved || []).push({ filename, json: JSON.stringify(payload, jsonReplacer) }); return 1; }`);
+  await waitForComplete29('the step selected for export has completed every required formula');
+  await evaluate(`window.__saved = []; saveJSON = async (payload, filename) => { window.__saved.push({ filename, json: JSON.stringify(payload, jsonReplacer) }); return 1; }`);
   const fp = await evaluate(`SOURCE_FINGERPRINT`);
   await evaluate(`document.getElementById('btn-export').click()`);
   const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
@@ -1055,16 +1229,21 @@ try {
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
              magKeeps, rotKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
-             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
+             records: Array.isArray(L.sutraRecord) && L.activeSutras.map(s => s.id).join(',') === '${ALL_29_IDS}' &&
+               L.activeSutras.every(s => BigInt(s.strength.n) > 0n && BigInt(s.strength.d) > 0n) &&
+               L.execution && L.execution.required === 29 && L.execution.completed === 29 &&
+               L.execution.applications === (L.composition === 'SYMMETRIC_CONCURRENT' ? 58 : 29) &&
+               L.execution.order.join(',') === (L.composition === 'SYMMETRIC_CONCURRENT' ? '${[...ALL_29, ...ALL_29.slice().reverse()].join(',')}' : '${ALL_29_IDS}') &&
+               L.sutraRecord.map(s => s.id).join(',') === L.execution.order.join(','),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/5' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(gotStep && st.schema === 'vedic-step-export/6' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError,
      'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
-  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
+  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and completed records for all 29 formulas in the required order', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
   await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
   const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_formula_audit_'))`, 300000);
@@ -1107,7 +1286,8 @@ try {
   ok(fs.page.back === 0 && fs.oneLag.back > 50,
      `fed a size swinging 6% either way every 3 s, the frame once out never moves back (frame_hold; one lag of 1.2 s moves back in ${fs.oneLag.back} of 269 steps)`, JSON.stringify(fs));
   await cmd('Page.navigate', { url: PAGE });
-  ok(await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.selfTestsOk === true`, 90000), 'the page loads again for a fresh view');
+  ok(await waitFor(`(${completed29}) && KERNEL_VIEW.selfTestsOk === true`, COMPLETE_STEP_TIMEOUT_MS,
+    'fresh page: native all-29 step and self-tests complete'), 'the page loads again and completes all 29 for a fresh view');
   await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
@@ -1153,7 +1333,8 @@ try {
   section('on a phone');
   await cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
   await cmd('Page.navigate', { url: PAGE });
-  await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && document.getElementById('amp-glide')`, 90000);
+  await waitFor(`(${completed29}) && document.getElementById('amp-glide')`, COMPLETE_STEP_TIMEOUT_MS,
+    'phone page: the native all-29 step completes before changing controls');
   await setGlide(1);
   const phoneUp = await waitFor(`typeof KERNEL_VIEW !== 'undefined' && KERNEL_VIEW.state !== null && KERNEL_VIEW.state.frame >= 1 && KERNEL_VIEW.selfTestsOk === true && SURFACE_STATUS.drawn`, 90000);
   const ph = await evaluate(`(() => { projectTorus(); renderTorus();
@@ -1175,8 +1356,19 @@ try {
 
   section('errors');
   ok(errors.length === 0, 'no exception and no console.error', errors.slice(0, 3).join(' | '));
+  saveDiagnostics({ status: failures.length ? 'failed' : 'passed', completedAt: new Date().toISOString(), passedAssertions: pass,
+    failures: failures.slice(), consoleErrors: errors, waitingFor: null });
+} catch (error) {
+  const failure = { code: error.code || 'PAGE_CHECK_EXCEPTION', message: error.message, stack: error.stack,
+    timeoutMs: error.timeoutMs, lastEvaluationError: error.lastEvaluationError, observation: error.observation };
+  failures.push(`${failure.code}: ${failure.message}`);
+  saveDiagnostics({ status: 'failed', failure, failures: failures.slice(), passedAssertions: pass, completedAt: new Date().toISOString() });
+  if (captureFailure) await captureFailure();
+  saveDiagnostics();
+  writeFileSync(join(ARTIFACT_DIR, 'failure.json'), JSON.stringify(diagnostics, null, 2) + '\n');
+  console.error('EXACT29_BROWSER_FAILURE ' + JSON.stringify(failure));
 } finally {
-  browser.close();
+  if (browser) browser.close();
 }
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log('  ' + f); process.exit(1); }

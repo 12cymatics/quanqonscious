@@ -8,22 +8,9 @@ PHI = F(12586269025, 7778742049)
 PHI_INV = F(12586269025 - 7778742049, 7778742049)
 
 
-STORE_BITS = 128
-
-
-def store(x):
-    if x == 0:
-        return F(0)
-    neg = x < 0
-    n, d = abs(x.numerator), x.denominator
-    k = STORE_BITS - (n.bit_length() - d.bit_length())
-    num = n << k if k >= 0 else n
-    den = d if k >= 0 else d << -k
-    if num < (den << (STORE_BITS - 1)):
-        raise ArithmeticError("store hypothesis")
-    m = (2 * num + den) // (2 * den)
-    m = -m if neg else m
-    return F(m, 1 << k) if k >= 0 else F(m << -k)
+# This oracle evaluates the declared rational formulas without a storage map.
+# PHI above is the literal rational operand of those formulas. It is not an
+# assertion that this rational is the algebraic golden ratio.
 
 
 def popcount(i):
@@ -156,7 +143,7 @@ def field(sid, psi, a, al):
                     continue
                 ratio = v1 / v0
                 err = ratio - (a[1] if ratio >= 0 else -a[1])
-                corr = store(-err * al * abs(v0 + v1))
+                corr = -err * al * abs(v0 + v1)
                 p[base | m] += corr
                 p[base] -= corr / 2
     elif sid == 7:
@@ -167,7 +154,7 @@ def field(sid, psi, a, al):
                     continue
                 S = (p[base] + p[base | m]) / 2
                 A = (p[base] - p[base | m]) / 2
-                dl = store((S * S - A * A) * A * al)
+                dl = (S * S - A * A) * A * al
                 p[base] = (S + dl) + (A - dl)
                 p[base | m] = (S + dl) - (A - dl)
     elif sid == 8:
@@ -195,7 +182,9 @@ def field(sid, psi, a, al):
             j = i ^ 15
             num, den = abs(p[i].numerator), abs(p[j].numerator)
             if den == 0:
-                continue
+                raise ZeroDivisionError(
+                    f"S13 pair ({i}, {j}): denominator vertex psi[{j}] is zero"
+                )
             n, d, cf = num, den, []
             while len(cf) < int(a[1]) and d > 0:
                 cf.append(n // d)
@@ -213,7 +202,7 @@ def field(sid, psi, a, al):
             sP = sum((p[b | m] for b in bases), F(0))
             sM = sum((p[b] for b in bases), F(0))
             sPr = sum((p[b] * p[b | m] for b in bases), F(0))
-            corr = store(-(sP * sM - sPr))
+            corr = -(sP * sM - sPr)
             for b in bases:
                 p[b | m] = p[b | m] * (1 + al * corr)
                 p[b] = p[b] * (1 - al * corr / 2)
@@ -361,7 +350,7 @@ def field(sid, psi, a, al):
             for j in nbrs(i):
                 if j <= i:
                     continue
-                dl = store(al * (p[i] * p[i] - p[j] * p[j]) * a[1])
+                dl = al * (p[i] * p[i] - p[j] * p[j]) * a[1]
                 p[i] -= dl
                 p[j] += dl
     elif sid == 29:
@@ -377,12 +366,61 @@ def sutra(sid, psi, a, gain, t):
     return field(sid, psi, a, F(sid, 435) * a[0] * gain)
 
 
+def compose(psi, active, mode, t):
+    """Independent composition of the literal formulas, without quantization.
+
+    The supplied operands are exact input data, not results read from the
+    JavaScript kernel. Each record is the field returned by this oracle's own
+    formula calculation. No GRVQ, MSTVQ, or Maya equivalence is claimed here.
+    """
+    ordered = sorted(active, key=lambda item: item["id"])
+    ids = [item["id"] for item in ordered]
+    if len(set(ids)) != len(ids) or any(sid not in range(1, 30) for sid in ids):
+        raise ValueError("composition requires distinct sutra IDs in 1..29")
+    records = []
+
+    def apply(item, state, mode_gain):
+        sid = item["id"]
+        args = [q(value) for value in item["args"]]
+        gain = q(item["gain"]) * mode_gain if "gain" in item else mode_gain
+        result = sutra(sid, state, args, gain, t)
+        records.append({"id": sid, "alpha": F(sid, 435) * args[0] * gain,
+                        "psi": result})
+        return result
+
+    if mode == "SERIES":
+        result = list(psi)
+        for item in ordered:
+            result = apply(item, result, F(1))
+    elif mode == "SYMMETRIC_CONCURRENT":
+        result = list(psi)
+        for item in ordered:
+            result = apply(item, result, F(1, 2))
+        for item in reversed(ordered):
+            result = apply(item, result, F(1, 2))
+    elif mode == "PARALLEL":
+        displacement = [F(0)] * len(psi)
+        for item in ordered:
+            branch = apply(item, psi, F(1))
+            displacement = [delta + value - initial
+                            for delta, value, initial in zip(displacement, branch, psi)]
+        result = [initial + delta for initial, delta in zip(psi, displacement)]
+    else:
+        raise ValueError(f"unsupported composition: {mode}")
+    return result, records
+
+
 def q(x):
-    return F(int(x["n"]), int(x["d"]))
+    base = x.get("base", 10)
+    if base not in (10, 16):
+        raise ValueError(f"unsupported integer encoding: {base}")
+    return F(int(x["n"], base), int(x["d"], base))
 
 
 def s(x):
-    return {"n": str(x.numerator), "d": str(x.denominator)}
+    # Hexadecimal is exact integer transport and does not encounter Python's
+    # decimal int/string conversion limit when unrounded numerators grow.
+    return {"n": format(x.numerator, "x"), "d": format(x.denominator, "x"), "base": 16}
 
 
 def main():
@@ -398,9 +436,18 @@ def main():
                 out.append({"delta": s(grvq([q(x) for x in c["lambda"]], c["k"], q(c["t"])))})
             elif c["kind"] == "setB":
                 out.append({"B": [s(x) for x in set_b(psi, q(c["s"]))]})
+            elif c["kind"] == "composition":
+                result, records = compose(psi, c["active"], c["mode"], q(c["t"]))
+                out.append({"psi": [s(x) for x in result], "records": [
+                    {"id": record["id"], "alpha": s(record["alpha"]),
+                     "psi": [s(x) for x in record["psi"]]}
+                    for record in records
+                ]})
+            else:
+                raise ValueError(f"unknown reference request: {c['kind']}")
         except ZeroDivisionError as e:
             out.append({"refused": str(e)})
-    json.dump({"results": out}, sys.stdout)
+    json.dump({"arithmetic": "exact-rational", "results": out}, sys.stdout)
 
 
 if __name__ == "__main__":
