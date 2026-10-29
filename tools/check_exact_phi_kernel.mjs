@@ -23,7 +23,8 @@
      statements         every statement the sutra channel decides holds on
                         the corpus and on a run
      couplings          lambda is inverse psi; each GRVQ feed moves exactly
-                        its lambda; the 1/N shares; MSTVQ's feedback; kappa
+                        its lambda by GRVQ x its sutra's alpha; MSTVQ's
+                        feedback; kappa
      stages             the magnetism, MSTVQ, TGCR and ZPE rotations keep
                         the energy exactly; ZPE adds only its source; the
                         TGCR geometry recomputed by walking faces
@@ -71,7 +72,7 @@ const rnd = bits => {
 const euclid = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
 const X = A4;
 const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-  gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+  appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
   tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
   geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
@@ -329,31 +330,30 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
      "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
      'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
-  /* S1, S5, S9, S14: the field formula, then GRVQ's increment on lambda_0..3 */
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
-    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [];
+    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], al = Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain);
     const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec });
-    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain)).p;
-    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), gain);
+    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), al).p;
+    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), al);
     const lam = inv(out), lamF = inv(field);
     if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
-  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x gain to lambda_0, 1, 2, 3 of their result and change no other lambda');
-  /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
+  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x their alpha to lambda_0, 1, 2, 3 of their result and change no other lambda');
+  /* the other active sutras' GRVQ feeds, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
   let eng = K.initEngine();
   for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
   const L = eng.last;
-  const N = BigInt(act.length);
   let shares = L.grvqRecord.length === 3, x = L.afterS;
   for (const g of L.grvqRecord) {
-    const k = (g.id - 1) % 4, want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mk(1n, N));
+    const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
+    const want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mul(Q.mk(BigInt(g.id), 435n), s.strength));
     if (g.k !== k || !Q.eq(g.delta, want)) shares = false;
     x = K.injectLambda(x, k, g.delta).map(K.storeQ);
   }
-  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ / N to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
+  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ x its alpha to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
   const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
   const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
   const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
@@ -742,7 +742,7 @@ section('the engine on the torus');
   /* and on a run: the damper preset, every step */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
     tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
@@ -808,7 +808,7 @@ section('the sources of the fields around the construct');
   /* and on a run: the damper preset's sources are the gate's and not empty */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
     tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };

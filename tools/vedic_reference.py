@@ -389,7 +389,7 @@ def sutra(sid, psi, a, gain, t):
     out = field(sid, psi, a, al)
     if sid in GRVQ_K:
         k = GRVQ_K[sid]
-        out = inject(out, k, grvq(inverse(psi), k, t) * gain)
+        out = inject(out, k, grvq(inverse(psi), k, t) * al)
     return out
 
 
