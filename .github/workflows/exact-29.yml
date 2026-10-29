@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Exact Hodge coefficients, storage, domains and defect sensitivity
         run: node tools/check_exact_coefficients.mjs
 
@@ -33,6 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       # This must stay red while the exact named constants, source domains
       # and coupled assembly remain unresolved. Passing the arithmetic
       # identity job above does not satisfy the complete formulation claim.

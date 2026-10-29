@@ -163,6 +163,39 @@ must record evaluation and branch selection, not demand a nonzero displacement
 for every formula on every state. An undefined required expression is a failure,
 not a valid no-op branch.
 
+#### Source-threshold restoration in the accompanying PR170 patch
+
+The table above records the frozen PR169 differences. The accompanying
+restoration patch uses the source-defined thresholds below. These values are
+settled by the preserved bodies and do not require a newly selected coefficient.
+
+| Formula | Restored strict predicate | Exact evaluation |
+| --- | --- | --- |
+| S15 | `abs(residual) > 1e-6` | Compare the rational residual magnitude with `1/1000000`. |
+| S24 | `abs(psi[i]) > 0.01`, within the digital-root `else` branch (`g <= 1`, including all-zero tails with `g = 0`) | Compare the rational field magnitude with `1/100`; do not apply this gate to the separate `g > 1` gcd-reduction branch. |
+| S27 | `abs(diff) > 1e-10`, for each path interpolation | Compare the rational path difference magnitude with `1/10000000000`. Mark a vertex modified only when this predicate holds. The final neighbor interpolation has no such gate. |
+| S25 | `abs(logRatio) > 0.001`, on the original nonzero-product branch | Compare `max(abs(prodS), abs(prodT)) / min(abs(prodS), abs(prodT))` with `exp(1/1000)` using successively refined, certified rational bounds until the branch is decided. Preserve the original zero-product branches. |
+
+For S25, this evaluates the full logarithmic **predicate**. It does not store an
+approximate logarithm or replace the predicate by the sign of the product
+difference. A bound that still overlaps the decision point is insufficient to
+select the branch. No fixed enclosure midpoint, guessed outcome or discarded
+deadband establishes this condition.
+
+For S27, a below-threshold path difference leaves the vertex unmarked. That
+vertex remains eligible for a later path or the final neighbor pass. Preserving
+the threshold while marking the vertex anyway would still change the original
+ordered map.
+
+These are corrections to four identified source discrepancies. They do not
+establish that all remaining domains, constant meanings, initial conditions or
+coupling equations have been reconciled. In particular, the rational φ operand,
+Maya's continuous-flow semantics, the extra dielectric component of the seed,
+and the complete GRVQ/MSTVQ coupling pipeline remain separate unresolved
+requirements. Runtime evidence for the restoration must come from GitHub at
+the commit containing it; this source inventory does not claim such a test
+result.
+
 ### 3.4 Literal constants versus exact named mathematical constants
 
 Original `C` at 932–987 defines the sutra φ operand as
@@ -343,7 +376,6 @@ that selection is already established.
 | --- | --- | --- |
 | Field formula target | The 29 vertex bodies are the current declared target; other registries of 29 differ | Pin these bodies and their operand definitions. Do not substitute the strict generic families or unweighted primitives. |
 | Meaning of “exact φ” and other constants | Literal rational `C`/`PHI_Q` versus algebraic `A4.PHI`; different modules already use different domains | State which mathematical constant each dependency requires. Do not silently replace a rational representative or label it algebraically exact. |
-| Piecewise thresholds | Original finite thresholds versus the active page's exact-nonzero replacements | Retain the original thresholds for a literal port, or cite an instruction explicitly selecting a changed map. S25 needs its full logarithmic deadband, not sign alone. |
 | λ/Ψ state ownership | Old persistent λ with forward/inverse projection versus active persistent Ψ with derived λ and local feedback register | Select the complete update equations and timing. `inverse(forward(λ))=λ` does not imply `forward(inverse(Ψ))=Ψ` for arbitrary Ψ. |
 | Coupled assembly | Old non-strict pipeline above versus PR169 assembly | Identify required components, equations, read/write destinations, ordering and cadence. Neither switching the old flag nor inserting a guessed λ→Ψ term proves equivalence. |
 | MSTVQ source/overwrite semantics | Per-sutra B, distributed S1 B, MAGFIELD B/B_exact, second periodic feedback | Define which B feeds which T and which updates persist. Preserve source coefficients; do not sum/replace channels merely because their names match. |
@@ -355,6 +387,9 @@ that selection is already established.
 No inspected document combines these choices into one consistent, complete
 original 29-sutra coupled specification. This is a bounded statement about the
 sources listed here, not a claim that no such specification exists elsewhere.
+The four source thresholds restored in section 3.3 are therefore not listed as
+new coefficient-selection questions here. Their implementation still requires
+independent verification; restoring them does not settle the remaining rows.
 
 ## 6. Smallest implementation that can make honest progress now
 
@@ -394,7 +429,7 @@ sources listed here, not a claim that no such specification exists elsewhere.
    not replace arithmetic equivalence. Existing assertions must not be weakened
    to make the new behavior pass.
 
-## 7. What the existing comparison does and does not establish
+## 7. What the baseline comparison does and does not establish
 
 `tools/check_exact_phi_kernel.mjs`, 231–294, extracts old source but rewrites
 rounding expressions, rewrites S15, fixes `R4val`/USO to constants and stubs
@@ -407,8 +442,10 @@ register-only destination, including 128-bit storage at 341.
 `log_ratio_sign` requires both products to be nonzero, `inverse_inject` proves
 what a particular axis injection would do, and `stress_trace` proves the tensor
 trace. None of those theorems selects whether that injection belongs in the
-original dynamics, supplies S25's discarded threshold, or establishes full-step
-JavaScript equivalence.
+original dynamics or establishes full-step JavaScript equivalence. In
+particular, the sign theorem alone did not supply the S25 threshold omitted at
+the frozen baseline; the accompanying restoration must evaluate that predicate
+separately, as described in section 3.3.
 
 The completion claim must therefore remain narrower than “all original
 formulas and everything coupled are exact” until the selected formulas,

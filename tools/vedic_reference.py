@@ -37,6 +37,35 @@ def mean(p):
     return sum(p, F(0)) / 16
 
 
+def log_ratio_exceeds(a, b, threshold=F(1, 1000)):
+    """Decide |log(a)-log(b)| > threshold using independent log bounds.
+
+    Production uses bounds on exp(threshold). This oracle instead expands
+    log(r) = 2 * (z + z^3/3 + ...), z = (r-1)/(r+1), r = max(a,b)/min(a,b).
+    The omitted terms are bounded by a geometric tail; no approximate log,
+    midpoint, finite iteration cap, or rounded predicate is used.
+    """
+    if a <= 0 or b <= 0 or not 0 < threshold < 1:
+        raise ValueError("log ratio requires positive operands and 0 < threshold < 1")
+    ratio = max(a, b) / min(a, b)
+    z = (ratio - 1) / (ratio + 1)
+    if z == 0:
+        return False
+    z2, power, lower, k = z * z, z, F(0), 0
+    while True:
+        lower += 2 * power / (2 * k + 1)
+        # For z > 0, the remaining positive terms make log(r) strictly
+        # greater than this partial sum, including equality here.
+        if lower >= threshold:
+            return True
+        next_power = power * z2
+        upper = lower + 2 * next_power / ((2 * k + 3) * (1 - z2))
+        if upper <= threshold:
+            return False
+        power = next_power
+        k += 1
+
+
 def set_b(p, s):
     return [((p[0] + p[1]) - (p[14] + p[15])) * s,
             ((p[0] + p[2]) - (p[13] + p[15])) * s,
@@ -202,10 +231,12 @@ def field(sid, psi, a, al):
             sP = sum((p[b | m] for b in bases), F(0))
             sM = sum((p[b] for b in bases), F(0))
             sPr = sum((p[b] * p[b | m] for b in bases), F(0))
-            corr = -(sP * sM - sPr)
-            for b in bases:
-                p[b | m] = p[b | m] * (1 + al * corr)
-                p[b] = p[b] * (1 - al * corr / 2)
+            residual = sP * sM - sPr
+            if abs(residual) > F(1, 1000000):
+                corr = -residual
+                for b in bases:
+                    p[b | m] = p[b | m] * (1 + al * corr)
+                    p[b] = p[b] * (1 - al * corr / 2)
     elif sid == 16:
         for i in range(8):
             j = i ^ 15
@@ -297,8 +328,9 @@ def field(sid, psi, a, al):
                 dr = tails[i]
                 while dr > 9:
                     dr = sum(int(c) for c in str(dr))
-                frac = x - floor(x)
-                p[i] = x - al * (frac - F(dr, 9))
+                if abs(x) > F(1, 100):
+                    frac = x - floor(x)
+                    p[i] = x - al * (frac - F(dr, 9))
     elif sid == 25:
         prodS, prodT = F(1), F(1)
         for axis in range(4):
@@ -310,7 +342,7 @@ def field(sid, psi, a, al):
             prodS *= lo
             if hi != 0:
                 prodT *= hi
-        if prodS != 0 and abs(prodS) != abs(prodT):
+        if prodS != 0 and prodT != 0 and log_ratio_exceeds(abs(prodS), abs(prodT)):
             sg = 1 if abs(prodS) > abs(prodT) else -1
             for i in range(16):
                 h = popcount(i)
@@ -337,7 +369,7 @@ def field(sid, psi, a, al):
                 if mod[idx]:
                     continue
                 diff = vals[0] + k * md - vals[k]
-                if diff != 0:
+                if abs(diff) > F(1, 10000000000):
                     p[idx] += al * diff
                     mod[idx] = True
         for i in range(16):
@@ -436,6 +468,8 @@ def main():
                 out.append({"delta": s(grvq([q(x) for x in c["lambda"]], c["k"], q(c["t"])))})
             elif c["kind"] == "setB":
                 out.append({"B": [s(x) for x in set_b(psi, q(c["s"]))]})
+            elif c["kind"] == "logRatio":
+                out.append({"exceeds": log_ratio_exceeds(q(c["a"]), q(c["b"]), q(c["threshold"]))})
             elif c["kind"] == "composition":
                 result, records = compose(psi, c["active"], c["mode"], q(c["t"]))
                 out.append({"psi": [s(x) for x in result], "records": [

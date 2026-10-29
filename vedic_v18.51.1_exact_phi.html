@@ -640,6 +640,36 @@ const KERNEL_FACTORY = () => {
   const sgnQ = x => x.n < 0n ? -1n : 1n;
   const SUTRA_COUNT = 29n;
   const SUTRA_SUM = SUTRA_COUNT * (SUTRA_COUNT + 1n) / 2n;
+  // Literal decimal branch thresholds from the original S15/S24/S25/S27
+  // bodies. These define the piecewise maps; they are not precision caps.
+  const SUTRA_THRESHOLDS = Object.freeze({
+    sumProduct: Q.mk(1n, 1000000n),
+    fractionalVertex: Q.mk(1n, 100n),
+    logRatio: Q.mk(1n, 1000n),
+    pathInterpolation: Q.mk(1n, 10000000000n)
+  });
+  // Decide |log(a)-log(b)| > t exactly for positive rationals, 0<t<1.
+  // With r=max(a,b)/min(a,b), this is r>exp(t). For the partial sum S_N,
+  // exp(t) lies strictly between S_N and
+  // S_N + term_(N+1)/(1-t/(N+2)); the latter bounds the positive tail by
+  // a geometric series. Refine until the rational r is outside the bounds.
+  // No midpoint, rounded logarithm, fixed term count or guessed branch is
+  // used. exp(nonzero rational) is transcendental, so r cannot equal it.
+  const logRatioExceeds = (a, b, t = SUTRA_THRESHOLDS.logRatio) => {
+    if (![a, b, t].every(isExactQ))
+      throw new TypeError('logRatioExceeds requires exact rationals with positive denominators');
+    if (a.n <= 0n || b.n <= 0n || t.n <= 0n || Q.cmp(t, Q.ONE) >= 0)
+      throw new RangeError('logRatioExceeds requires positive operands and 0 < threshold < 1');
+    const r = Q.cmp(a, b) >= 0 ? Q.div(a, b) : Q.div(b, a);
+    let sum = Q.ONE, term = Q.ONE, k = 0n;
+    for (;;) {
+      const next = Q.div(Q.mul(term, t), Q.mk(k + 1n));
+      const upper = Q.add(sum, Q.div(next, Q.sub(Q.ONE, Q.div(t, Q.mk(k + 2n)))));
+      if (Q.cmp(r, sum) <= 0) return false;
+      if (Q.cmp(r, upper) >= 0) return true;
+      sum = Q.add(sum, next); term = next; k++;
+    }
+  };
   const SIM_DT = Q.mk(16667n, 50000n);
   const PHI_Q = Q.mk(12586269025n, 7778742049n);
   const PHI_INV_Q = Q.mk(12586269025n - 7778742049n, 7778742049n);
@@ -650,6 +680,7 @@ const KERNEL_FACTORY = () => {
     complete: false,
     arithmetic: ARITHMETIC,
     rationalStorageExact: true,
+    sourceThresholdsExact: true,
     referenceCommit: '2ab11b4d33b455c37f866e39f056fdef0f88d9e5',
     formulaSource: 'vedic_v18.24_full_kernel.html:SUTRAS[].evolve',
     literalPhi: PHI_Q,
@@ -659,7 +690,7 @@ const KERNEL_FACTORY = () => {
       'The literal rational used as phi is not (1 + sqrt(5))/2; the intended operand must be specified.',
       'Model coefficients and initial conditions have source literals but no complete derivation or approved parameter specification.',
       'GRVQ/MSTVQ register updates are not established as the complete original persistent coupling pipeline.',
-      'Several original domains, thresholds and the initial field differ from the preserved source.',
+      'The initial dielectric addition and state ownership still differ from the preserved source.',
       'Maya uses finite rational enclosures and Euler steps; it is not an exact evaluation of the continuous transcendental flow.'
     ])
   });
@@ -940,6 +971,7 @@ const KERNEL_FACTORY = () => {
             sM = Q.add(sM, p[base]); sP = Q.add(sP, p[base | mask]); sPr = Q.add(sPr, Q.mul(p[base], p[base | mask]));
           }
           const corr = storeQ(Q.neg(Q.sub(Q.mul(sP, sM), sPr)));
+          if (Q.cmp(Q.abs(corr), SUTRA_THRESHOLDS.sumProduct) <= 0) continue;
           for (let base = 0; base < 16; base++) {
             if (base & mask) continue;
             p[base | mask] = Q.mul(p[base | mask], Q.add(Q.ONE, Q.mul(al, corr)));
@@ -1034,6 +1066,7 @@ const KERNEL_FACTORY = () => {
         for (let i = 1; i < 16; i++) { let x = g, y = tails[i]; while (y > 0n) [x, y] = [y, x % y]; g = x; }
         if (g > 1n) for (let i = 0; i < 16; i++) p[i] = Q.add(psi[i], Q.mul(Q.mk(tails[i] / g - tails[i]), al));
         else for (let i = 0; i < 16; i++) {
+          if (Q.cmp(Q.abs(psi[i]), SUTRA_THRESHOLDS.fractionalVertex) <= 0) continue;
           const frac = Q.sub(psi[i], Q.mk(floorQ(psi[i]))), err = Q.sub(frac, Q.mk(digitalRoot10(tails[i]), 9n));
           p[i] = Q.sub(psi[i], Q.mul(al, err));
         }
@@ -1053,7 +1086,8 @@ const KERNEL_FACTORY = () => {
           if (hi.n !== 0n) prodT = Q.mul(prodT, hi);
         }
         const c = prodS.n === 0n ? 0 : Q.cmp(Q.abs(prodS), Q.abs(prodT));
-        if (c !== 0) {
+        const exceedsDeadband = c !== 0 && logRatioExceeds(Q.abs(prodS), Q.abs(prodT));
+        if (exceedsDeadband) {
           const sg = Q.mk(c > 0 ? 1n : -1n);
           for (let i = 0; i < 16; i++) {
             let push;
@@ -1062,7 +1096,7 @@ const KERNEL_FACTORY = () => {
             p[i] = Q.add(p[i], Q.mul(al, push));
           }
         }
-        return { p, halves, prodS, prodT, sign: c };
+        return { p, halves, prodS, prodT, sign: c, exceedsDeadband };
       }
       case 26: {
         let flag = 0, mx = Q.ZERO;
@@ -1082,7 +1116,7 @@ const KERNEL_FACTORY = () => {
           path.forEach((idx, k) => {
             if (modified[idx]) return;
             const diff = Q.sub(Q.add(vals[0], Q.mul(Q.mk(BigInt(k)), md)), vals[k]);
-            if (diff.n !== 0n) { p[idx] = Q.add(p[idx], Q.mul(al, diff)); modified[idx] = true; }
+            if (Q.cmp(Q.abs(diff), SUTRA_THRESHOLDS.pathInterpolation) > 0) { p[idx] = Q.add(p[idx], Q.mul(al, diff)); modified[idx] = true; }
           });
         }
         const interpolated = [];
@@ -1790,6 +1824,7 @@ const KERNEL_FACTORY = () => {
           for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(cur[b], cur[c | mask]));
           if (!Q.eq(res, cross)) ok = false;
           const corr = storeQ(Q.neg(res));
+          if (Q.cmp(Q.abs(res), SUTRA_THRESHOLDS.sumProduct) <= 0) continue;
           for (const b of bases) { cur[b | mask] = Q.mul(cur[b | mask], Q.add(Q.ONE, Q.mul(al, corr))); cur[b] = Q.mul(cur[b], Q.sub(Q.ONE, Q.mul(Q.mul(al, corr), Q.HALF))); }
         }
         claim('gunita_residual_cross', ok && sameR(cur, p)); break;
@@ -1819,7 +1854,11 @@ const KERNEL_FACTORY = () => {
         claim(g > 1n ? 'gcd_divides_tails' : 'digital_root_nine', g > 1n ? out.tails.every(t => t % g === 0n)
           : out.tails.every(t => { const dr = digitalRoot10(t); return t === 0n ? dr === 0n : dr >= 1n && dr <= 9n && (t - dr) % 9n === 0n; })); break;
       }
-      case 25: claim('log_ratio_sign', out.sign === (out.prodS.n === 0n ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && out.prodT.n !== 0n); break;
+      case 25:
+        claim('log_ratio_sign', out.sign === (out.prodS.n === 0n ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && out.prodT.n !== 0n);
+        // Runtime branch check; no new Lean theorem is claimed here.
+        claim('log_ratio_deadband', out.exceedsDeadband === (out.sign !== 0 && logRatioExceeds(Q.abs(out.prodS), Q.abs(out.prodT))));
+        break;
       case 26: claim('flag_is_max', psiIn.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) < 0 || (Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) === 0 && i >= out.flag)) && Q.eq(p[out.flag], psiIn[out.flag])); break;
       case 27: claim('ap_endpoints', out.interpolated.includes(0) && out.interpolated.includes(15)); break;
       case 8: case 17: {
@@ -2123,7 +2162,7 @@ const KERNEL_FACTORY = () => {
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
     initState,initEngine,step,stepComplete29,requireComplete29,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
-    hwCoefficients,storeQ,storeBudget,STORE_BITS,ARITHMETIC,FORMULATION_STATUS,HODGE_SD,HODGE_ASD,alphaOf,SUTRA_SUM,cayley});
+    hwCoefficients,storeQ,storeBudget,STORE_BITS,ARITHMETIC,FORMULATION_STATUS,HODGE_SD,HODGE_ASD,alphaOf,SUTRA_SUM,SUTRA_THRESHOLDS,logRatioExceeds,cayley});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2560,7 +2599,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: "Rational arithmetic and every rational storage boundary preserve the complete numerator and denominator. No finite precision cap, rounding, clipping or approximation is applied by storeQ. The reported quantization error is exactly zero. This does not validate model coefficients, source fidelity or the separate Maya enclosure and time discretization. Exact nonlinear composition may exceed available time or memory; noncompletion is a failure and is never replaced by rounded results. The old StoredPrecision rounding theorem does not certify the current unrounded implementation.",
   mayaScopeNote: "Maya implements beta = (phi_g/e) sin phase - (e/pi) phase^3 through rational interval enclosures and five Euler substeps of 1/500 from the selected phase seed 1/16. The constants and sine are enclosed using integer square-root and Taylor remainder bounds; a 160-bit enclosure grid does not imply every interval is 2^-160 wide (the initial pi bracket is wider). Midpoints provide point values, so this is not exact evaluation of the transcendental continuous flow. The phase error ledger is relative to the exact Euler map, not a proved bound against the continuous ODE solution. M scales the drawn field. These approximation and initial-condition choices remain explicit full-formulation obligations.",
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: "The live worker requires all 29 distinct sutras at positive strengths and verifies the completed application order (29 in SERIES/PARALLEL, 58 in SYMMETRIC_CONCURRENT). Individual diagnostic calls remain available. The common source weight is id/(1+...+29)=id/435 times the explicit strength and composition gain; S29 also uses 29/145=1/5. Rational updates are unrounded. S13 now refuses its zero denominator as the preserved source does. S6, S19 and S25 retain their source piecewise branches. This port is not certified as the complete unaltered source formulation: the rational phi operand is not algebraic phi; several source thresholds and the dielectric addition to the seed differ; GRVQ/MSTVQ lambda feedback and the legacy coupled assembly are not reconciled. See FORMULATION_STATUS and the formulation audit. Completed formula records and a faithful view do not establish those unresolved claims.",
+  vedicScopeNote: "The live worker requires all 29 distinct sutras at positive strengths and verifies the completed application order (29 in SERIES/PARALLEL, 58 in SYMMETRIC_CONCURRENT). Individual diagnostic calls remain available. The common source weight is id/(1+...+29)=id/435 times the explicit strength and composition gain; S29 also uses 29/145=1/5. Rational updates are unrounded. S13 refuses its zero denominator as the preserved source does. S6, S19 and S25 retain their source piecewise branches. S15, S24 and S27 preserve the original strict decimal thresholds as rationals; S25 preserves its logarithmic deadband using a certified exact branch decision without a rounded logarithm. This port is not certified as the complete unaltered source formulation: the rational phi operand is not algebraic phi; the dielectric addition to the seed and state ownership differ; GRVQ/MSTVQ lambda feedback and the legacy coupled assembly are not reconciled. See FORMULATION_STATUS and the formulation audit. Completed formula records and a faithful view do not establish those unresolved claims.",
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',

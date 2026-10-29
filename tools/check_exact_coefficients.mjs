@@ -17,6 +17,7 @@
      node tools/check_exact_coefficients.mjs --require-complete
 */
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -64,6 +65,13 @@ const dot = (a, b) => sum(a.map((value, i) => mul(value, b[i])));
 const same = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => equal(x, b[i]));
 const sameIds = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
 const encode = value => JSON.stringify(value, (_, x) => typeof x === 'bigint' ? x.toString(16) : x);
+const wire = x => ({ n: x.n.toString(16), d: x.d.toString(16), base: 16 });
+const fromWire = x => {
+  if (!x || x.base !== 16 || !/^-?[0-9a-f]+$/i.test(x.n) || !/^[0-9a-f]+$/i.test(x.d))
+    throw new Error('Invalid exact Fraction oracle result');
+  const n = x.n[0] === '-' ? -BigInt('0x' + x.n.slice(1)) : BigInt('0x' + x.n);
+  return r(n, BigInt('0x' + x.d));
+};
 const a4Coefficients = x => [x.a, x.b, x.c, x.d];
 // The basis index is a bit mask for sqrt(2) and sqrt(5). Shared factors
 // contribute 2 or 5 and the remaining factors combine by xor.
@@ -74,6 +82,76 @@ function independentA4Product(x, y) {
     out[i ^ j] = add(out[i ^ j], mul(mul(x[i], y[j]), factor));
   }
   return out;
+}
+
+const floorR = x => x.n / x.d - (x.n < 0n && x.n % x.d !== 0n ? 1n : 0n);
+const magnitude = x => r(abs(x.n), x.d);
+const neighbors = i => [i ^ 1, i ^ 2, i ^ 4, i ^ 8];
+const hamming = i => (i & 1) + ((i >> 1) & 1) + ((i >> 2) & 1) + ((i >> 3) & 1);
+// Bounded, independent full-body expectations for source threshold fixtures.
+// S25's expected branch is established by the fixture's analytic inequalities;
+// the separate Python oracle decides it with rational bounds on log(r).
+function thresholdField(id, input, alpha, s25Enabled) {
+  const p = input.slice(), interpolated = [];
+  if (id === 15) {
+    for (let axis = 0; axis < 4; axis++) {
+      const mask = 1 << axis, bases = Array.from({ length: 16 }, (_, i) => i).filter(i => !(i & mask));
+      const residual = sub(mul(sum(bases.map(i => p[i])), sum(bases.map(i => p[i | mask]))),
+        sum(bases.map(i => mul(p[i], p[i | mask]))));
+      if (compare(magnitude(residual), r(1n, 1000000n)) > 0) for (const i of bases) {
+        p[i | mask] = mul(p[i | mask], sub(ONE, mul(alpha, residual)));
+        p[i] = mul(p[i], add(ONE, mul(mul(alpha, residual), HALF)));
+      }
+    }
+  } else if (id === 24) {
+    const tails = input.map(x => abs(floorR(x)) % 100n), g = tails.reduce(gcd);
+    for (let i = 0; i < 16; i++) {
+      if (g > 1n) p[i] = add(input[i], mul(alpha, r(tails[i] / g - tails[i])));
+      else if (compare(magnitude(input[i]), r(1n, 100n)) > 0) {
+        let dr = tails[i];
+        while (dr > 9n) { let total = 0n; while (dr) { total += dr % 10n; dr /= 10n; } dr = total; }
+        const fractionalPart = sub(input[i], r(floorR(input[i])));
+        p[i] = sub(input[i], mul(alpha, sub(fractionalPart, r(dr, 9n))));
+      }
+    }
+  } else if (id === 25) {
+    let lowProduct = ONE, highProduct = ONE;
+    for (let axis = 0; axis < 4; axis++) {
+      const low = sum(input.filter((_, i) => !(i & (1 << axis))));
+      const high = sum(input.filter((_, i) => i & (1 << axis)));
+      if (low.n === 0n) { lowProduct = ZERO; break; }
+      lowProduct = mul(lowProduct, low);
+      if (high.n !== 0n) highProduct = mul(highProduct, high);
+    }
+    const sign = lowProduct.n === 0n ? 0 : compare(magnitude(lowProduct), magnitude(highProduct));
+    if (s25Enabled) {
+      if (!sign) throw new Error('Invalid S25 boundary fixture: enabled without a product imbalance');
+      for (let i = 0; i < 16; i++) {
+        const push = hamming(i) === 2 ? mul(sum(neighbors(i).map(j => sub(p[j], p[i]))), r(sign, 20n)) :
+          r(sign * (hamming(i) - 2), 4n);
+        p[i] = add(p[i], mul(alpha, push));
+      }
+    }
+  } else if (id === 27) {
+    const modified = Array(16).fill(false);
+    for (const path of [[0, 1, 3, 7, 15], [0, 2, 6, 14, 15], [0, 4, 12, 13, 15], [0, 8, 10, 11, 15]]) {
+      const values = path.map(i => p[i]);
+      const meanDifference = div(sum(values.slice(1).map((x, k) => sub(x, values[k]))), r(4n));
+      for (let k = 0; k < path.length; k++) {
+        const i = path[k];
+        if (modified[i]) continue;
+        const difference = sub(add(values[0], mul(r(k), meanDifference)), values[k]);
+        if (compare(magnitude(difference), r(1n, 10000000000n)) > 0) {
+          p[i] = add(p[i], mul(alpha, difference)); modified[i] = true;
+        }
+      }
+    }
+    for (let i = 0; i < 16; i++) if (!modified[i]) {
+      interpolated.push(i);
+      p[i] = add(p[i], mul(mul(alpha, HALF), sub(div(sum(neighbors(i).map(j => p[j])), r(4n)), p[i])));
+    }
+  } else throw new Error('Unexpected threshold fixture sutra');
+  return { p, interpolated };
 }
 
 // Independent topology: each oriented two-face has one value; a vertex
@@ -266,6 +344,84 @@ try {
     same(record[0].info.p, output) && encode(p29) === p29Before,
     'S29 actual output consumes the independent literal 1/5 coefficient, giving alpha29 = 1/150 at 50%');
 
+  const thresholds = { sumProduct: r(1n, 1000000n), fractionalVertex: r(1n, 100n),
+    logRatio: r(1n, 1000n), pathInterpolation: r(1n, 10000000000n) };
+  check(K.SUTRA_THRESHOLDS && Object.keys(thresholds).every(key => equal(K.SUTRA_THRESHOLDS[key], thresholds[key])),
+    'the four source thresholds retain their exact literal rational values');
+  const boundaryCases = [];
+  const argsById = { 15: [HALF], 24: [HALF, r(2n)], 25: [HALF, r(1n, 4n), r(1n, 20n)], 27: [HALF] };
+  function thresholdFixture(id, values, label, enabled) {
+    const input = Object.freeze(values), before = encode(input), records = [];
+    const expected = thresholdField(id, input, mul(r(id, normalization), HALF), enabled);
+    const actual = K.applySutra(id, input, HALF, { record: records });
+    let infoMatches = records.length === 1 && same(records[0].info.p, actual);
+    if (infoMatches && id === 27) infoMatches = sameIds(records[0].info.interpolated, expected.interpolated);
+    if (infoMatches && id === 25) infoMatches = records[0].info.exceedsDeadband === enabled;
+    check(same(actual, expected.p) && actual.every(canonical) && infoMatches && encode(input) === before,
+      'S' + id + ' source boundary: ' + label + ', complete output and in-place order agree');
+    boundaryCases.push({ id, input, expected: expected.p, actual, args: argsById[id], label });
+  }
+  const epsilon = r(1n, 10n ** 30n);
+  for (const [id, threshold] of [[15, thresholds.sumProduct], [24, thresholds.fractionalVertex], [27, thresholds.pathInterpolation]]) {
+    for (const sign of [-1, 1]) for (const [label, delta] of [['below', sub(ZERO, epsilon)], ['equal', ZERO], ['above', epsilon]]) {
+      const value = mul(r(sign), add(threshold, delta)), input = Array(16).fill(ZERO);
+      if (id === 15) { input[0] = ONE; input[3] = value; }
+      if (id === 24) { input[0] = value; input[1] = ONE; }
+      if (id === 27) input[1] = sub(ZERO, value);
+      thresholdFixture(id, input, (sign < 0 ? 'negative ' : 'positive ') + label + ' the strict threshold');
+    }
+  }
+  // Positive Taylor terms establish a strict lower bound; twice the first
+  // omitted term is a strict upper tail bound here since t=1/1000. This
+  // independent coarse tail is not the production helper's sharper bound.
+  let expLower = ONE, expTerm = ONE;
+  for (let k = 1; k <= 10; k++) { expTerm = div(expTerm, r(1000 * k)); expLower = add(expLower, expTerm); }
+  const expUpper = add(expLower, mul(r(2n), div(expTerm, r(11000n))));
+  const logCases = [
+    ['equal operands', ONE, ONE, false],
+    ['below exp(t) by the first two positive Taylor terms', r(1001n, 1000n), ONE, false],
+    ['above exp(t) by its geometric upper bound', r(1002n, 1000n), ONE, true],
+    ['order-10 lower bound requires adaptive refinement', expLower, ONE, false],
+    ['order-10 upper bound requires adaptive refinement', expUpper, ONE, true]
+  ];
+  for (const [label, a, b, expected] of logCases) check(K.logRatioExceeds(a, b) === expected &&
+    K.logRatioExceeds(b, a) === expected && K.logRatioExceeds(mul(a, r(3n, 7n)), mul(b, r(3n, 7n))) === expected,
+    'exact logarithmic predicate: ' + label + ', reciprocal and common-scale cases');
+  for (const [a, b, t] of [[ZERO, ONE, thresholds.logRatio], [ONE, r(-1n), thresholds.logRatio],
+    [ONE, ONE, ZERO], [ONE, ONE, ONE]]) {
+    let error = null;
+    try { K.logRatioExceeds(a, b, t); } catch (caught) { error = caught; }
+    check(error instanceof RangeError, 'logarithmic predicate refuses a nonpositive operand or out-of-domain threshold');
+  }
+  // Only vertices 0 and 15 are populated, so the four low/high products
+  // are a^4 and b^4. (1.0001)^4 < 1.001 < exp(.001), whereas
+  // (1.001)^4 > 1.004 > 1/(1-.001) > exp(.001).
+  for (const [a, b, enabled, label] of [
+    [ONE, ONE, false, 'equal products'], [r(10001n, 10000n), ONE, false, 'unequal products inside the deadband'],
+    [r(1001n, 1000n), ONE, true, 'positive log imbalance outside the deadband'],
+    [ONE, r(1001n, 1000n), true, 'negative log imbalance outside the deadband'],
+    [ZERO, ONE, false, 'source low-zero break'], [r(2n), ZERO, true, 'source high-zero omission']
+  ]) {
+    const input = Array(16).fill(ZERO); input[0] = a; input[15] = b;
+    thresholdFixture(25, input, label, enabled);
+  }
+  const oracleInput = { cases: boundaryCases.map(test => ({ kind: 'sutra', id: test.id,
+    psi: test.input.map(wire), args: test.args.map(wire), gain: wire(ONE), t: wire(ZERO) }))
+    .concat(logCases.map(([, a, b]) => ({ kind: 'logRatio', psi: [], a: wire(a), b: wire(b), threshold: wire(thresholds.logRatio) }))) };
+  const oracle = JSON.parse(execFileSync('python3', ['-I', join(ROOT, 'tools', 'vedic_reference.py')], {
+    input: JSON.stringify(oracleInput), timeout: 30000, maxBuffer: 1 << 24, encoding: 'utf8'
+  }));
+  check(oracle.arithmetic === 'exact-rational' && Array.isArray(oracle.results) && oracle.results.length === oracleInput.cases.length,
+    'the independent Python Fraction oracle completes every bounded threshold fixture');
+  for (let i = 0; i < boundaryCases.length; i++) {
+    const test = boundaryCases[i], result = oracle.results[i];
+    check(!result.refused && Array.isArray(result.psi) && result.psi.length === 16 &&
+      same(result.psi.map(fromWire), test.expected) && same(result.psi.map(fromWire), test.actual),
+      'independent Fraction body agrees at S' + test.id + ' ' + test.label);
+  }
+  for (let i = 0; i < logCases.length; i++) check(oracle.results[boundaryCases.length + i].exceeds === logCases[i][3],
+    'independent logarithm-series oracle decides ' + logCases[i][0]);
+
   const valid = Object.freeze(Array.from({ length: 29 }, (_, i) => Object.freeze({ id: i + 1, strength: HALF })));
   check(K.requireComplete29(valid) === valid, 'the complete-set input guard accepts all 29 positive strengths');
   const rejected = [
@@ -282,6 +438,7 @@ try {
   }
 
   const status = K.FORMULATION_STATUS;
+  check(status.sourceThresholdsExact === true, 'formulation status records the source threshold restoration');
   check(status && typeof status.complete === 'boolean' && Array.isArray(status.blockers) &&
     status.blockers.every(x => typeof x === 'string' && x.length > 0) &&
     (status.complete ? status.blockers.length === 0 : status.blockers.length > 0),

@@ -442,7 +442,7 @@ section('the 29 formulas against the transformed v18.24 floating-point compatibi
     return { out, n }; };
   const conv1 = exactBi(sut); sut = conv1.out;
   const s15a = "        const residual = Q.fl(Q.sub(prodSum, sumProd));\n        if (isFinite(residual) && abs(residual) > 1e-6) {\n          const corr = -residual;";
-  const s15b = "        const residual = Q.sub(prodSum, sumProd);\n        if (residual.n !== 0n) {\n          const corr = Q.mk(-residual.n, residual.d), aQ = Q.mul(Q.mk(15n, 435n), Q.mk(BigInt(this.strength), 100n));";
+  const s15b = "        const residual = Q.sub(prodSum, sumProd);\n        if (bigAbs(residual.n) * 1000000n > residual.d) {\n          const corr = Q.mk(-residual.n, residual.d), aQ = Q.mul(Q.mk(15n, 435n), Q.mk(BigInt(this.strength), 100n));";
   const s15c = ['Q.add(Q.ONE, QD((α * corr * 10000) / 10000))', 'Q.add(Q.ONE, Q.mul(aQ, corr))'], s15d = ['Q.add(Q.ONE, QD((-α * corr * 5000) / 10000))', 'Q.sub(Q.ONE, Q.mul(Q.mul(aQ, corr), Q.HALF))'];
   const s15ok = sut.split(s15a).length === 2 && sut.split(s15c[0]).length === 2 && sut.split(s15d[0]).length === 2;
   sut = sut.replace(s15a, s15b).replace(s15c[0], s15c[1]).replace(s15d[0], s15d[1]);
