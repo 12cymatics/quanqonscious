@@ -104,7 +104,7 @@ int main() {
 
     // S13: Continued fractions (Golden ratio)
     std::cout << "S13 Sopāntyadvayamantyam: Golden ratio convergent (n=10)\n";
-    auto golden = vedic::S13_Sopantya::golden_ratio_convergent(10);
+    auto golden = vedic::ContinuedFractions::golden_ratio_convergent(10);
     std::cout << "   F(12)/F(11) = " << golden.numerator << "/" << golden.denominator << "\n";
     std::cout << "   ≈ " << static_cast<double>(golden.numerator) / static_cast<double>(golden.denominator) << "\n\n";
 

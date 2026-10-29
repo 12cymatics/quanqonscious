@@ -236,7 +236,7 @@ inline SolveAgreement solve_2x2_every_way(Rational a1, Rational b1, Rational c1,
 struct IntegerReport {
     std::vector<int> divisors_found;      // from S12's digit rules
     bool osculation_agrees = false;       // US5 confirms S12 independently
-    std::vector<S16_Gunakasamuccaya::PrimeFactor> factors;
+    std::vector<IntegerFactors::PrimeFactor> factors;
     BigInt gcd_with_360;
     int last_digit_of_square = 0;
     size_t recurring_period = 0;
@@ -244,21 +244,21 @@ struct IntegerReport {
 
 inline IntegerReport inspect_integer(const BigInt& n) {
     IntegerReport out;
-    if (S12_Sesanyankena::divisible_by_2(n))  out.divisors_found.push_back(2);
-    if (S12_Sesanyankena::divisible_by_3(n))  out.divisors_found.push_back(3);
-    if (S12_Sesanyankena::divisible_by_4(n))  out.divisors_found.push_back(4);
-    if (S12_Sesanyankena::divisible_by_5(n))  out.divisors_found.push_back(5);
-    if (S12_Sesanyankena::divisible_by_8(n))  out.divisors_found.push_back(8);
-    if (S12_Sesanyankena::divisible_by_9(n))  out.divisors_found.push_back(9);
-    if (S12_Sesanyankena::divisible_by_11(n)) out.divisors_found.push_back(11);
+    if (Divisibility::divisible_by_2(n))  out.divisors_found.push_back(2);
+    if (Divisibility::divisible_by_3(n))  out.divisors_found.push_back(3);
+    if (Divisibility::divisible_by_4(n))  out.divisors_found.push_back(4);
+    if (Divisibility::divisible_by_5(n))  out.divisors_found.push_back(5);
+    if (Divisibility::divisible_by_8(n))  out.divisors_found.push_back(8);
+    if (Divisibility::divisible_by_9(n))  out.divisors_found.push_back(9);
+    if (Divisibility::divisible_by_11(n)) out.divisors_found.push_back(11);
 
     // US5 Vestanam -- osculation, an independent route to divisibility by 11.
     auto osc = US5_Vestanam::find_positive_osculator(BigInt(11));
     if (osc) {
         bool by_osculation = US5_Vestanam::divisibility_by_osculation(n, BigInt(11), *osc, true);
-        out.osculation_agrees = (by_osculation == S12_Sesanyankena::divisible_by_11(n));
+        out.osculation_agrees = (by_osculation == Divisibility::divisible_by_11(n));
     }
-    out.factors = S16_Gunakasamuccaya::prime_factorize(n);
+    out.factors = IntegerFactors::prime_factorize(n);
     out.gcd_with_360 = S11_Vyashti::gcd_multiple({n, BigInt(360)});
     out.last_digit_of_square = US9_Antyayoreva::last_digit_of_product(n, n);
     if (n > 0 && util::gcd(n, BigInt(10)) == 1)

@@ -17,6 +17,8 @@
 """
 
 from fractions import Fraction
+
+from vedic_book import sopantya
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Dict, Optional
@@ -221,11 +223,12 @@ class VedicSutraEngine:
         return (field[idx + 1] - Fraction(2) * field[idx] + field[idx - 1]) / (dx * dx)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # S13: SOPANTYADVAYAMANTYAM - Continued Fraction Convergents
     # ─────────────────────────────────────────────────────────────────────────
 
+    S13_sopantya = staticmethod(sopantya)
+
     @staticmethod
-    def S13_sopantya_fibonacci(n: int) -> Tuple[Fraction, Fraction]:
+    def fibonacci_convergent(n: int) -> Tuple[Fraction, Fraction]:
         """
         Generate Fibonacci convergent F(n+1)/F(n) → φ
         Returns (numerator, denominator)

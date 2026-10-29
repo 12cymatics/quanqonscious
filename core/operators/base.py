@@ -24,6 +24,7 @@ import json
 import copy
 
 from ..state import FieldState, FieldStateSnapshot, ArithmeticMode, state_digest
+from ..exact_codec import encode_exact, decode_exact, fraction_text
 
 
 class OperatorCategory(Enum):
@@ -113,6 +114,7 @@ class TraceEntry:
     # so on. A composite logs itself *and* its children, so a replay that
     # re-applied every entry would apply the children twice.
     depth: int = 0
+    context_values: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -124,9 +126,9 @@ class TraceEntry:
             'timestamp': self.timestamp,
             'input_hash': self.input_hash,
             'output_hash': self.output_hash,
-            'parameters': {k: str(v) if isinstance(v, Fraction) else v
-                          for k, v in self.parameters.items()},
-            'delta_summary': self.delta_summary,
+            'parameters': encode_exact(self.parameters),
+            'context_values': encode_exact(self.context_values),
+            'delta_summary': encode_exact(self.delta_summary),
             'invariants_checked': self.invariants_checked,
             'invariants_passed': self.invariants_passed,
             'depth': self.depth,
@@ -179,8 +181,10 @@ class OperatorTrace:
             timestamp=datetime.now().isoformat(),
             input_hash=self._state_hash(input_state),
             output_hash=self._state_hash(output_state),
-            parameters=dict(context.parameters),
-            delta_summary=delta_summary,
+            parameters=copy.deepcopy(context.parameters),
+            context_values={"dt": context.dt, "h_m": context.h_m, "seed": context.seed,
+                            "mode": context.mode.value, "parent_hash": context.parent_hash},
+            delta_summary=copy.deepcopy(delta_summary),
             invariants_checked=invariants,
             invariants_passed=passed,
             depth=depth
@@ -200,11 +204,13 @@ class OperatorTrace:
         return state_digest(state)
 
     def verify_determinism(self, other: 'OperatorTrace') -> bool:
-        """Check if two traces are identical (determinism test)."""
-        if len(self.entries) != len(other.entries):
+        if self.initial_state_hash != other.initial_state_hash or len(self.entries) != len(other.entries):
             return False
-        for e1, e2 in zip(self.entries, other.entries):
-            if e1.input_hash != e2.input_hash or e1.output_hash != e2.output_hash:
+        for left, right in zip(self.entries, other.entries):
+            first, second = left.to_dict(), right.to_dict()
+            first.pop("timestamp")
+            second.pop("timestamp")
+            if first != second:
                 return False
         return True
 
@@ -229,10 +235,12 @@ class OperatorTrace:
                 timestamp=e['timestamp'],
                 input_hash=e['input_hash'],
                 output_hash=e['output_hash'],
-                parameters=e['parameters'],
-                delta_summary=e['delta_summary'],
+                parameters=decode_exact(e['parameters']),
+                context_values=decode_exact(e.get('context_values', {})),
+                delta_summary=decode_exact(e['delta_summary']),
                 invariants_checked=e['invariants_checked'],
-                invariants_passed=e['invariants_passed']
+                invariants_passed=e['invariants_passed'],
+                depth=e.get('depth', 0)
             )
             trace.entries.append(entry)
         return trace
@@ -305,15 +313,7 @@ class Operator(ABC):
 
     @staticmethod
     def _safe_scalar_text(value: Any) -> str:
-        if isinstance(value, Fraction):
-            if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
-                return f"{float(value):.12e}"
-        try:
-            return str(value)
-        except ValueError:
-            if isinstance(value, Fraction):
-                return f"{float(value):.12e}"
-            return repr(value)
+        return fraction_text(value) if isinstance(value, Fraction) else str(value)
 
     def __call__(self, state: FieldState, context: OperatorContext) -> FieldState:
         """

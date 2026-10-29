@@ -170,8 +170,8 @@ static void m6_pattern() {
 
 // M7. Stability, bounded exactly, plus the wave equation's dispersion via S8.
 static void m7_stability() {
-    auto cf = S13_Sopantya::to_continued_fraction(Rational(1, 2));
-    auto conv = S13_Sopantya::nth_convergent(cf, cf.size() - 1);
+    auto cf = ContinuedFractions::to_continued_fraction(Rational(1, 2));
+    auto conv = ContinuedFractions::nth_convergent(cf, cf.size() - 1);
     check(Rational(conv.numerator, conv.denominator) == Rational(1, 2),
           "M7 S13 round-trips the CFL bound 1/2 exactly");
     Field a{Rational(0), Rational(1), Rational(0), Rational(1), Rational(0)}, b = a;
@@ -185,7 +185,7 @@ static void m7_stability() {
     check(wa <= Rational(1), "M7 r=1/2 stays bounded over 40 steps");
     check(wb > Rational(1000), "M7 r=3/2 provably diverges, as the bound predicts");
     // S12 -- does the step divide the domain evenly? A grid question, exactly.
-    check(S12_Sesanyankena::divisible_by_4(BigInt(12)) && !S12_Sesanyankena::divisible_by_8(BigInt(12)),
+    check(Divisibility::divisible_by_4(BigInt(12)) && !Divisibility::divisible_by_8(BigInt(12)),
           "M7 S12 answers grid commensurability exactly");
 }
 
