@@ -1097,7 +1097,7 @@ const KERNEL_FACTORY = () => {
     const k = GRVQ_K[id];
     const lam = k === undefined ? null : (ctx.lam ? ctx.lam.slice() : inverseL(psi));
     const grvq = k === undefined ? null : { k, lambda: lam, delta: Q.mul(grvqDelta(lam, k, ctx.t || Q.ZERO), gain) };
-    if (grvq && ctx.lam) ctx.lam[k] = Q.add(ctx.lam[k], grvq.delta);
+    if (grvq && ctx.lam) ctx.lam[k] = storeOrZero(Q.add(ctx.lam[k], grvq.delta));
     const out = vedicField(id, psi, a, al);
     if (ctx.record) ctx.record.push({ id, alpha: al, grvq, B: out.B || null, info: out, dE: Q.sub(energyR(out.p), energyR(psi)) });
     return out.p;
@@ -1129,7 +1129,7 @@ const KERNEL_FACTORY = () => {
     for (const s of list) {
       if (GRVQ_K[s.id] !== undefined) continue;
       const k = (s.id - 1) % 4, at = lam.slice(), delta = Q.mul(Q.mul(grvqDelta(at, k, t), invN), gainOf(s));
-      lam[k] = Q.add(lam[k], delta);
+      lam[k] = storeOrZero(Q.add(lam[k], delta));
       if (record) record.push({ id: s.id, k, lambda: at, delta });
     }
     return lam;
@@ -1138,7 +1138,7 @@ const KERNEL_FACTORY = () => {
     const s1 = active.find(x => x.id === 1);
     const a1 = s1 ? Q.abs(alphaOf(1, argsFor(s1), gainOf(s1))) : Q.ZERO;
     const B = mstvqB(psi, a1), T = stressOf(B);
-    for (let k = 0; k < 3; k++) lam[k] = Q.add(lam[k], Q.mul(T[k][k], MSTVQ_FEED));
+    for (let k = 0; k < 3; k++) lam[k] = storeOrZero(Q.add(lam[k], Q.mul(T[k][k], MSTVQ_FEED)));
     const trace = Q.add(Q.add(T[0][0], T[1][1]), T[2][2]);
     return { B, T, trace, strength: a1 };
   };
