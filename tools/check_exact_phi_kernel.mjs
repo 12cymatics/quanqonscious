@@ -23,7 +23,8 @@
      statements         every statement the sutra channel decides holds on
                         the corpus and on a run
      couplings          lambda is inverse psi; each GRVQ feed moves exactly
-                        its lambda; the 1/N shares; MSTVQ's feedback; kappa
+                        its lambda by GRVQ x its sutra's alpha; MSTVQ's
+                        feedback; kappa
      stages             the magnetism, MSTVQ, TGCR and ZPE rotations keep
                         the energy exactly; ZPE adds only its source; the
                         TGCR geometry recomputed by walking faces
@@ -71,7 +72,7 @@ const rnd = bits => {
 const euclid = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
 const X = A4;
 const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-  gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+  appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
   tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
   geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
@@ -329,38 +330,37 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
      "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
      'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
-  const st = x => x.n === 0n ? x : K.storeQ(x);
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
-    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], reg = inv(seedS), reg0 = reg.slice();
-    const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec, lam: reg });
-    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain)).p;
-    const d = Q.mul(K.grvqDelta(reg0, k, t), gain);
-    if (!sameQ(out, field) || !reg.every((x, j) => Q.eq(x, j === k ? st(Q.add(reg0[j], d)) : reg0[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
+    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], al = Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain);
+    const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec });
+    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), al).p;
+    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), al);
+    const lam = inv(out), lamF = inv(field);
+    if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
-  ok(feedOk, 'S1, S5, S9 and S14 move psi by their own formula only, and add GRVQ(lambda) x gain to lambda_0, 1, 2, 3 of the step register, stored to 128 bits, as v18.24 adds it to lambda[k]');
-  /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
+  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x their alpha to lambda_0, 1, 2, 3 of their result and change no other lambda');
+  /* the other active sutras' GRVQ feeds, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
   let eng = K.initEngine();
   for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
   const L = eng.last;
-  const N = BigInt(act.length);
-  let shares = L.grvqRecord.length === 3;
-  const reg = inv(L.input);
-  for (const r of L.sutraRecord) if (r.grvq) reg[r.grvq.k] = st(Q.add(reg[r.grvq.k], r.grvq.delta));
+  let shares = L.grvqRecord.length === 3, x = L.afterS;
   for (const g of L.grvqRecord) {
-    const k = (g.id - 1) % 4, want = Q.mul(K.grvqDelta(reg, k, L.time), Q.mk(1n, N));
+    const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
+    const want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mul(Q.mk(BigInt(g.id), 435n), s.strength));
     if (g.k !== k || !Q.eq(g.delta, want)) shares = false;
-    reg[k] = st(Q.add(reg[k], g.delta));
+    x = K.injectLambda(x, k, g.delta).map(K.storeQ);
   }
-  ok(shares && sameQ(L.afterD, L.afterS), 'each other active sutra adds GRVQ / N to lambda_(id-1 mod 4) of the register, in order, and psi is left as the formulas made it');
+  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ x its alpha to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
   const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
-  const B = K.mstvqB(L.afterS, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
+  const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
   const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
-  for (let k = 0; k < 3; k++) reg[k] = st(Q.add(reg[k], Q.mul(T[k], Q.mk(1n, 200000000n))));
-  ok(sameQ(L.afterB, L.afterS) && sameQ(L.mstvq.B, B) && sameQ(L.lambdaReg, reg),
-     "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2 of the register, psi left as it was, recomputed here");
+  let fb = L.afterD;
+  for (let k = 0; k < 3; k++) fb = K.injectLambda(fb, k, Q.mul(T[k], Q.mk(1n, 200000000n)));
+  ok(sameQ(fb.map(K.storeQ), L.afterB) && sameQ(L.mstvq.B, B),
+     "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
   const trace = Q.add(Q.add(T[0], T[1]), T[2]);
   ok(Q.eq(eng.tgcrKappa, K.storeQ(Q.add(L.tgcrKappaIn, Q.mul(trace, Q.mk(1n, 500n))))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
      'the TGCR stiffness kappa moves by tr T / 500, and tr T = -|B|^2 / 2 (stress_trace)');
@@ -742,7 +742,7 @@ section('the engine on the torus');
   /* and on a run: the damper preset, every step */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
     tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
@@ -808,7 +808,7 @@ section('the sources of the fields around the construct');
   /* and on a run: the damper preset's sources are the gate's and not empty */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
     tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
