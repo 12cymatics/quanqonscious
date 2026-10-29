@@ -742,14 +742,16 @@ try {
     worstP = Math.max(worstP, Math.abs(HZ.pB[g] / (dot(B, B) / 2) - 1)); nP++;
   }
   ok(worstP < 1e-4, `the stored pressure at ${nP} nodes spread over the grid is |B|^2 / 2 with B Biot-Savart's integrated here (haze_pressure_nonneg, haze_stress_trace; worst ${worstP.toExponential(1)})`);
-  const [lo, hi] = await evaluate(`(() => { const pB = FIELDS.cur.pB; let lo = Infinity, hi = -Infinity;
-    for (const p of pB) if (p > 0) { const L = Math.log(p); if (L < lo) lo = L; if (L > hi) hi = L; } return [lo, hi]; })()`);
-  let tBad = 0, tMin = Infinity, tMax = -Infinity, gBad = 0, gWide = 0;
-  for (let g = 0; g < NH; g++) {
-    const t = HZ.g[g * 4 + 3], want = Math.fround(HZ.pB[g] > 0 && hi > lo ? (Math.log(HZ.pB[g]) - lo) / (hi - lo) : 0);
-    if (t !== want || !(t >= 0 && t <= 1)) tBad++;
-    tMin = Math.min(tMin, t); tMax = Math.max(tMax, t);
-  }
+  const { lo, hi, tBad, tMin, tMax } = await evaluate(`(() => { const pB = FIELDS.cur.pB, hz = FIELDS.cur.haze; let lo = Infinity, hi = -Infinity;
+    for (const p of pB) if (p > 0) { const L = Math.log(p); if (L < lo) lo = L; if (L > hi) hi = L; }
+    let tBad = 0, tMin = Infinity, tMax = -Infinity;
+    for (let g = 0; g < pB.length; g++) {
+      const t = hz[g * 4 + 3], want = Math.fround(pB[g] > 0 && hi > lo ? (Math.log(pB[g]) - lo) / (hi - lo) : 0);
+      if (t !== want || !(t >= 0 && t <= 1)) tBad++;
+      tMin = Math.min(tMin, t); tMax = Math.max(tMax, t);
+    }
+    return { lo, hi, tBad, tMin, tMax }; })()`);
+  let gBad = 0, gWide = 0;
   for (let k = 0; k < HN; k++) for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) {
     const g = (k * HN + j) * HN + i, at = [i, j, k], st = [1, HN, HN * HN];
     for (let c = 0; c < 3; c++) {
@@ -760,7 +762,7 @@ try {
     }
   }
   ok(lo === HZ.range[0] && hi === HZ.range[1] && tBad === 0 && tMin === 0 && tMax === 1,
-     `every node's place in the log range of the stored pressures is in [0, 1], taken again here bit for bit with the range taken again in the browser's own Math.log, the range's ends attained (plot_mem, plot_log_mono)`, `${tBad} differ; range ${HZ.range} against ${lo}, ${hi}`);
+     `every node's place in the log range of the stored pressures is in [0, 1], taken again bit for bit with the browser's own Math.log, the range's ends attained (plot_mem, plot_log_mono)`, `${tBad} differ; range ${HZ.range} against ${lo}, ${hi}`);
   ok(gBad === 0 && gWide === 0, `every difference along every axis at every node is the stored places' central difference inside and one-sided on the faces, bit for bit, within 1/2 and 1 a step (haze_central_le, haze_side_le)`, `${gBad} differ, ${gWide} too wide`);
   const f16 = x => { if (x === 0) return 0; const a = Math.abs(x); let e = Math.floor(Math.log2(a)); if (Math.pow(2, e) > a) e--; if (Math.pow(2, e + 1) <= a) e++;
     const q = Math.pow(2, Math.max(e, -14) - 10), r = a / q, f = Math.floor(r), n = r - f > 0.5 || (r - f === 0.5 && f % 2 === 1) ? f + 1 : f; return Math.sign(x) * n * q; };
