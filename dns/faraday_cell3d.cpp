@@ -1121,6 +1121,29 @@ static void Hslope(double r, double th, double* o){
  *
  * Radial index a < 0 is the antipodal column reflected through the axis, carrying
  * the family's own sign. */
+static double colKnotSlope(const double* f, const double* sn, int nJ, int base, int knot){
+  const int n = nJ < 4 ? nJ : 4;
+  int j0 = knot - 1;
+  if (j0 + n > nJ) j0 = nJ - n;
+  if (j0 < 0) j0 = 0;
+  const double x = sn[knot];
+  double d = 0.0;
+  for (int j = 0; j < n; j++){
+    double den = 1.0;
+    for (int m = 0; m < n; m++) if (m != j) den *= sn[j0 + j] - sn[j0 + m];
+    double num = 0.0;
+    for (int i = 0; i < n; i++){
+      if (i == j) continue;
+      double prod = 1.0;
+      for (int m = 0; m < n; m++)
+        if (m != j && m != i) prod *= x - sn[j0 + m];
+      num += prod;
+    }
+    d += f[base + j0 + j]*num/den;
+  }
+  return d;
+}
+
 static double colValueAtZ(const double* f, const Fam& fam, int a, int k,
                           double z, int lev, int hasLev, int bracket){
   const double* sn = fam.sn; const int nJ = fam.nJ; const int half = nth >> 1;
@@ -1136,7 +1159,14 @@ static double colValueAtZ(const double* f, const Fam& fam, int a, int k,
   if (bracket){
     int lo = 0, hi = nJ - 1;
     while (hi - lo > 1){ const int m = (lo + hi) >> 1; if (sn[m] <= ss) lo = m; else hi = m; }
-    j0 = lo - 1;
+    const double ds = sn[hi] - sn[lo], t = (ss - sn[lo])/ds;
+    const double t2 = t*t, t3 = t2*t;
+    const double m0 = colKnotSlope(f, sn, nJ, base, lo);
+    const double m1 = colKnotSlope(f, sn, nJ, base, hi);
+    return sign*((2*t3 - 3*t2 + 1)*f[base + lo]
+      + (t3 - 2*t2 + t)*ds*m0
+      + (-2*t3 + 3*t2)*f[base + hi]
+      + (t3 - t2)*ds*m1);
   } else j0 = (hasLev ? lev : 1) - 1;
   if (j0 + n > nJ) j0 = nJ - n;
   if (j0 < 0) j0 = 0;

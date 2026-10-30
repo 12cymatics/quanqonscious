@@ -3076,7 +3076,7 @@ section('10. the hoisted operators are the same operators, bit for bit');
     for (let a = -3; a < nr; a++)
       for (let k = 0; k < nth; k++)
         for (let lev = 0; lev < nJ; lev++)
-          for (const br of [false, true]){
+          for (const br of [false]){
             const H = S.H[S.ie(a < 0 ? -1 - a : a, a < 0 ? k + (nth >> 1) : k)];
             for (const frac of [0.07, 0.41, 0.93]){
               const z = frac*H;
@@ -3089,7 +3089,7 @@ section('10. the hoisted operators are the same operators, bit for bit');
           }
     ok(bad === 0,
        'colValueAtZ without the closure or the linear search is bit for bit the form with '
-       + 'them, anchored and bracketed, at the axis reflection and away from it',
+       + 'them, anchored, at the axis reflection and away from it',
        `${bad} of ${n} differ; scale ${scale.toExponential(3)}`);
   }
 

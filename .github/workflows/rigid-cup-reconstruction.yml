@@ -1,0 +1,69 @@
+name: rigid cup reconstruction
+on:
+  push:
+    branches: [claude/rigid-cup-c1-reconstruction-20261030]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  reconstruction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check_cell3d_reconstruction.mjs
+      - run: node tools/check_cell3d_reconstruction_mutations.mjs
+  continuum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node dns/check-cell3d.mjs 2>&1 | tee cell3d-convergence.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rigid-cup-convergence
+          path: cell3d-convergence.log
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: sh dns/build-wasm-cell3d.sh
+      - run: node dns/check-cell3d-wasm.mjs
+      - run: node dns/check-cell3d-pool.mjs
+      - run: node dns/check-page.mjs
+        env:
+          CHROME: /usr/bin/google-chrome
+      - run: node faraday/build-zip.mjs
+      - run: node faraday/check-bundle.mjs
+      - run: node faraday/check-zip.mjs
+      - run: |
+          dest="$RUNNER_TEMP/rigid-cup-unpacked"
+          mkdir -p "$dest"
+          unzip -q faraday-cell.zip -d "$dest"
+          cd "$dest/faraday-cell"
+          node run-checks.mjs
+        env:
+          CHROME: /usr/bin/google-chrome
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rigid-cup-built-artifacts
+          path: |
+            dns/faraday_cell3d.wasm
+            faraday-cell/
+            faraday-cell.zip

@@ -1579,6 +1579,29 @@ class FaradayCell3D {
    * Radial index a < 0 is the antipodal column reflected through the axis, carrying
    * the family's own sign: plus for a scalar or the vertical component, minus for a
    * horizontal one. */
+  colKnotSlope(f, sn, nJ, base, knot){
+    const n = nJ < 4 ? nJ : 4;
+    let j0 = knot - 1;
+    if (j0 + n > nJ) j0 = nJ - n;
+    if (j0 < 0) j0 = 0;
+    const x = sn[knot];
+    let d = 0;
+    for (let j = 0; j < n; j++){
+      let den = 1;
+      for (let m = 0; m < n; m++) if (m !== j) den *= sn[j0 + j] - sn[j0 + m];
+      let num = 0;
+      for (let i = 0; i < n; i++){
+        if (i === j) continue;
+        let prod = 1;
+        for (let m = 0; m < n; m++)
+          if (m !== j && m !== i) prod *= x - sn[j0 + m];
+        num += prod;
+      }
+      d += f[base + j0 + j]*num/den;
+    }
+    return d;
+  }
+
   colValueAtZ(f, fam, a, k, z, lev, bracket){
     const sn = fam.sn, nJ = sn.length, half = this.nth >> 1;
     let aa = a, kk = k, sign = 1;
@@ -1597,7 +1620,14 @@ class FaradayCell3D {
     if (bracket){
       let lo = 0, hi = nJ - 1;
       while (hi - lo > 1){ const m = (lo + hi) >> 1; if (sn[m] <= ss) lo = m; else hi = m; }
-      j0 = lo - 1;
+      const ds = sn[hi] - sn[lo], t = (ss - sn[lo])/ds;
+      const t2 = t*t, t3 = t2*t;
+      const m0 = this.colKnotSlope(f, sn, nJ, base, lo);
+      const m1 = this.colKnotSlope(f, sn, nJ, base, hi);
+      return sign*((2*t3 - 3*t2 + 1)*f[base + lo]
+        + (t3 - 2*t2 + t)*ds*m0
+        + (-2*t3 + 3*t2)*f[base + hi]
+        + (t3 - t2)*ds*m1);
     } else j0 = (lev === undefined ? 1 : lev) - 1;
     if (j0 + n > nJ) j0 = nJ - n;
     if (j0 < 0) j0 = 0;
