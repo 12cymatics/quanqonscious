@@ -1,0 +1,51 @@
+name: rigid cup full Navier-Stokes patterns
+on:
+  push:
+    branches: [claude/rigid-cup-c1-reconstruction-20261030]
+    paths:
+      - tools/report_navier_stokes_patterns.mjs
+      - tools/report_rigid_cup_reference.mjs
+      - .github/workflows/rigid-cup-patterns.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  patterns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: sh dns/build-wasm-cell3d.sh
+      - run: node tools/report_navier_stokes_patterns.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: ns-pattern-output/
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: git show c774ddd0f04d3fb3afea37e9b8bea04b01538ea4:dns/faraday-cell3d.js > dns/faraday-cell3d-baseline.cjs
+      - run: node tools/report_rigid_cup_reference.mjs 2>&1 | tee rigid-cup-reference-candidate.jsonl
+      - run: node tools/report_rigid_cup_reference.mjs 2>&1 | tee rigid-cup-reference-baseline.jsonl
+        env:
+          CYMATICA_SOLVER_PATH: ../dns/faraday-cell3d-baseline.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rigid-cup-paper-geometry-reference
+          path: rigid-cup-reference-*.jsonl
