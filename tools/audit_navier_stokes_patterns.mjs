@@ -2,6 +2,7 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
+import {uniformPatternSamples} from './pattern_samples.mjs';
 import {createHash} from 'node:crypto';
 const require=createRequire(import.meta.url),dir=resolve(process.env.PATTERN_ARTIFACT||'ns-pattern-input');
 const out=resolve('ns-pattern-audit');mkdirSync(out,{recursive:true});
@@ -13,22 +14,23 @@ const report={sourceRun:process.env.PATTERN_EXPECTED_RUN||'41147436690',sourceCo
 let W;
 try{
  const config=read('config.json'),grid=read('grid.json'),summary=read('summary.json'),final=read('final-state.json');
- const frames=lines('surface.ndjson'),metrics=lines('metrics.ndjson');
+ const rawFrames=lines('surface.ndjson'),metrics=lines('metrics.ndjson');
+ const {frames,extraTerminalObservation}=uniformPatternSamples(config,summary,rawFrames);
+ report.extraTerminalObservation=extraTerminalObservation;
  report.originalStatus=summary.status;report.originalError=summary.error;
  assert.equal(config.commit,report.sourceCommit);assert.equal(config.run,report.sourceRun);
  assert.equal(config.engine,'full nonlinear 3D free-surface Navier-Stokes, freshly built C++/WASM');
  for(const path of ['dns/faraday-cell3d.js','dns/faraday-cell3d-wasm.js','dns/faraday_cell3d.cpp'])assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'),config.hashes[path],'same solver source '+path);
  report.rebuiltWasmSha256=createHash('sha256').update(readFileSync('dns/faraday_cell3d.wasm')).digest('hex');
  const {nr,nth,h}=config.options,NE=nr*nth;
- assert.equal(frames.length,metrics.length);assert.ok(frames.length>0);
+ assert.equal(rawFrames.length,metrics.length);assert.ok(frames.length>0);
  vector(grid.rf,nr+1,'rf');vector(grid.rc,nr,'rc');
  const weights=grid.rc.map((r,i)=>r*(grid.rf[i+1]-grid.rf[i])*2*Math.PI/nth);
  const area=weights.reduce((a,b)=>a+b,0)*nth;
  let minDepth=Infinity,peak=0,maxSampledCgResidual=0,maxSampledDivergence=0;
- for(let j=0;j<frames.length;j++){
-  const frame=frames[j],metric=metrics[j];finite(frame.time,'snapshot time');
-  if(j)assert.ok(frame.time>frames[j-1].time,'snapshot times increase');
-  assert.ok(Math.abs(frame.time-j/(8*config.frequency))<=1e-10*Math.max(1,frame.time),'snapshot cadence is one eighth drive period');
+ for(let j=0;j<rawFrames.length;j++){
+  const frame=rawFrames[j],metric=metrics[j];finite(frame.time,'snapshot time');
+  if(j)assert.ok(frame.time>rawFrames[j-1].time,'snapshot times increase');
   assert.equal(frame.time,metric.time);vector(frame.eta,NE,'snapshot eta');
   finite(metric.cgResidual,'sampled CG residual');finite(metric.maxDivergence,'sampled divergence');
   assert.ok(metric.cgResidual<1e-11,'sampled recursive CG residual below source criterion');
@@ -56,7 +58,7 @@ try{
  const angularTotal=power.reduce((a,b)=>a+b,0);finite(angularTotal,'angular power total');
  const noSolverError=summary.status!=='solver-error'&&!summary.error;
  const established=noSolverError&&final.time*config.frequency>=128&&frames.length>=513&&lastRms>10*config.seedRms&&envelopeChange!==null&&envelopeChange<0.05&&twoPeriodError!==null&&twoPeriodError<0.1;
- Object.assign(report,{savedFrames:frames.length,minSavedDepthM:minDepth,peakSavedEtaM:peak,maxSampledCgResidual,maxSampledDivergence,
+ Object.assign(report,{savedFrames:frames.length,rawSavedFrames:rawFrames.length,minSavedDepthM:minDepth,peakSavedEtaM:peak,maxSampledCgResidual,maxSampledDivergence,
   dominantSignedMode:angularTotal>0?dominant:null,dominantPowerShare:angularTotal>0?power[dominant]/angularTotal:0,angularPower:power,
   previousRms,lastRms,envelopeChange,antiPeriodError,twoPeriodError,establishedTwoPeriodDiagnostic:established,
   establishedSubharmonicDiagnostic:established&&antiPeriodError!==null&&antiPeriodError<0.1,
@@ -65,7 +67,7 @@ try{
  assert.ok(['completed-horizon','partial-wall-budget'].includes(summary.status),'known non-error status');
  const {FaradayCell3DWasm}=require('../dns/faraday-cell3d-wasm.js');W=new FaradayCell3DWasm(config.options);
  for(const name of ['eta','u','v','w']){vector(final[name],W.views[name].length,'final '+name);W.views[name].set(final[name]);}
- finite(final.time,'final time');assert.ok(final.time>=frames.at(-1).time);
+ finite(final.time,'final time');assert.ok(final.time>=rawFrames.at(-1).time);
  const finalMinDepth=Math.min(...final.eta.map(x=>h+x));assert.ok(finalMinDepth>0);
  W.t=final.time;W.refreshMetric();W.omegaFromW();W.pullState();
  const divergence=W.maxDivergence();finite(divergence,'reconstructed final divergence');

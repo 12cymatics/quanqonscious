@@ -4,6 +4,9 @@ on:
     branches: [claude/rigid-cup-c1-reconstruction-20261030]
     paths:
       - tools/audit_navier_stokes_patterns.mjs
+      - tools/pattern_samples.mjs
+      - tools/check_pattern_samples.mjs
+      - tools/compare_navier_stokes_drive.mjs
       - .github/workflows/rigid-cup-pattern-audit.yml
   workflow_dispatch:
 permissions:
@@ -24,14 +27,30 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: rigid-cup-full-ns-patterns
-          path: ns-pattern-input
+          path: ns-pattern-baseline
           run-id: 41147436690
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: ns-sensitivity-input
+          run-id: 41152145632
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: sudo apt-get update && sudo apt-get install -y clang lld
       - run: sh dns/build-wasm-cell3d.sh
+      - run: node tools/check_pattern_samples.mjs
       - run: node tools/audit_navier_stokes_patterns.mjs
+        env:
+          PATTERN_ARTIFACT: ns-sensitivity-input/ns-pattern-output
+          PATTERN_EXPECTED_RUN: '41152145632'
+          PATTERN_EXPECTED_COMMIT: 3117fffb8627b0d1c01704794eb55473e1320e57
+      - run: node tools/compare_navier_stokes_drive.mjs
+        env:
+          PATTERN_CURRENT_DIR: ns-sensitivity-input/ns-pattern-output
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rigid-cup-ns-state-audit
-          path: ns-pattern-audit/
+          path: |
+            ns-pattern-audit/
+            ns-drive-comparison/

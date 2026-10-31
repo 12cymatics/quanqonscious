@@ -2,6 +2,14 @@ name: rigid cup reconstruction
 on:
   push:
     branches: [claude/rigid-cup-c1-reconstruction-20261030]
+    paths:
+      - dns/**
+      - faraday/**
+      - faraday-cell/**
+      - faraday-cell.zip
+      - cymatic.html
+      - tools/check_cell3d_reconstruction*.mjs
+      - .github/workflows/rigid-cup-reconstruction.yml
   workflow_dispatch:
 permissions:
   contents: read
