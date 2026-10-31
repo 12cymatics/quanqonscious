@@ -9,7 +9,7 @@ const read=name=>JSON.parse(readFileSync(resolve(dir,name),'utf8'));
 const lines=name=>readFileSync(resolve(dir,name),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
 const finite=(x,label)=>assert.ok(typeof x==='number'&&Number.isFinite(x),label+' must be a finite number, not null');
 const vector=(v,n,label)=>{assert.equal(v.length,n,label+' length');v.forEach((x,i)=>finite(x,label+'['+i+']'));};
-const report={sourceRun:'41147436690',sourceCommit:'08561f8eed9676aabae50cf7b681346aebccd4f5',scope:'saved-state validation, not per-step validation or continuum convergence'};
+const report={sourceRun:process.env.PATTERN_EXPECTED_RUN||'41147436690',sourceCommit:process.env.PATTERN_EXPECTED_COMMIT||'08561f8eed9676aabae50cf7b681346aebccd4f5',scope:'saved-state validation, not per-step validation or continuum convergence'};
 let W;
 try{
  const config=read('config.json'),grid=read('grid.json'),summary=read('summary.json'),final=read('final-state.json');

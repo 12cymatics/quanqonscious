@@ -41,7 +41,14 @@ let rms=Math.sqrt(S.eta.reduce((a,x,e)=>a+x*x*area[Math.floor(e/S.nth)],0)/areaS
 for(let e=0;e<S.eta.length;e++)S.eta[e]*=seedRms/rms;
 S.refreshMetric();W.pushState();W.refreshMetric();
 const start=Date.now(), interval=1/(8*frequency), samples=[], recent=[];
-let steps=0,dtMin=Infinity,dtMax=0,status='running',error=null;
+let steps=0,dtMin=Infinity,dtMax=0,status='running',error=null,lastProgress=start;
+let lastValidatedTime=0,minStepDepth=Infinity,maxStepCgResidual=0;
+function validateState(){
+ for(const name of ['u','v','w','eta','H'])for(const x of W.views[name])if(!Number.isFinite(x))throw Error('Nonfinite '+name+' at '+W.t);
+ for(const x of W.views.H){if(!(x>0))throw Error('Nonpositive depth at '+W.t);minStepDepth=Math.min(minStepDepth,x);}
+ const residual=W.cgResidual;if(!Number.isFinite(residual)||residual>=1e-11)throw Error('Invalid pressure residual '+residual+' at '+W.t);
+ maxStepCgResidual=Math.max(maxStepCgResidual,residual);lastValidatedTime=W.t;
+}
 function snapshot(){
  const eta=Array.from(W.views.eta);let sq=0,mean=0,peak=0;
  for(let i=0;i<S.nr;i++)for(let k=0;k<S.nth;k++){const x=eta[S.ie(i,k)];sq+=area[i]*x*x;mean+=area[i]*x;peak=Math.max(peak,Math.abs(x));}
@@ -58,32 +65,35 @@ function snapshot(){
 }
 writeFileSync(out+'/grid.json',JSON.stringify({rf:Array.from(S.rf),rc:Array.from(S.rc),nth:S.nth,dtheta:S.dth,etaIndex:'i*nth+k',etaUnits:'m'}));
 try{
- snapshot();let sample=1;
+ validateState();snapshot();let sample=1;
  while(W.t<cycles/frequency){
  if((Date.now()-start)/1000>=wallSeconds){status='partial-wall-budget';break;}
  const target=Math.min(sample*interval,cycles/frequency);
  W.pullState(); const dt=Math.min(W.js.stableStep(safety),target-W.t);
  if(!(dt>0&&Number.isFinite(dt)))throw Error('Invalid stable dt '+dt);
- W.step(dt);steps++;dtMin=Math.min(dtMin,dt);dtMax=Math.max(dtMax,dt);
+ W.step(dt);validateState();steps++;dtMin=Math.min(dtMin,dt);dtMax=Math.max(dtMax,dt);
+ if(steps===100||Date.now()-lastProgress>=60000){const elapsed=(Date.now()-start)/1000;console.log(JSON.stringify({type:'progress',cycles:W.t*frequency,steps,elapsedSeconds:elapsed,projectedTotalSeconds:elapsed*cycles/(W.t*frequency)}));lastProgress=Date.now();}
  if(W.t>=target-1e-13){const row=snapshot();sample++;
  if(sample%64===1){const elapsed=(Date.now()-start)/1000;console.log(JSON.stringify({cycles:row.driveCycles,rms:row.rms,steps,elapsedSeconds:elapsed,projectedTotalSeconds:elapsed*cycles/row.driveCycles}));}
  }
  }
  if(status==='running')status='completed-horizon';
 }catch(e){status='solver-error';error=e.stack||String(e);}
-W.pullState();writeFileSync(out+'/final-state.json',JSON.stringify({time:W.t,eta:Array.from(S.eta),u:Array.from(S.u),v:Array.from(S.v),w:Array.from(S.w)}));
+W.pullState();writeFileSync(out+'/final-state.json',JSON.stringify({time:W.t,lastValidatedTime,stateValidity:error?'raw failed or invalid step; only prior validated snapshots may be interpreted':'accepted finite positive-depth state',eta:Array.from(S.eta),u:Array.from(S.u),v:Array.from(S.v),w:Array.from(S.w)}));
 const tail=samples.slice(-256), p=Array(S.nth/2+1).fill(0);
 for(const row of tail)row.power.forEach((x,m)=>p[m]+=x/Math.max(1,tail.length));
-const dominant=p.indexOf(Math.max(...p.slice(1))),total=p.reduce((a,b)=>a+b,0),share=p[dominant]/Math.max(1e-300,total);
+let dominant=1;for(let m=2;m<p.length;m++)if(p[m]>p[dominant])dominant=m;
+const total=p.reduce((a,b)=>a+b,0),share=total>0?p[dominant]/total:0;
 function lagError(lag,sign){let a=0,b=0;for(let t=Math.max(lag,recent.length-256);t<recent.length;t++)for(let e=0;e<S.NE;e++){const x=recent[t].eta[e],y=recent[t-lag].eta[e],w=area[Math.floor(e/S.nth)];a+=w*(x-sign*y)**2;b+=w*x*x;}return b?Math.sqrt(a/b):null;}
 const blockRms=offset=>{const rows=samples.slice(-512+offset,-256+offset||undefined);return rows.length?Math.sqrt(rows.reduce((a,x)=>a+x.rms*x.rms,0)/rows.length):null;};
 const previousRms=blockRms(0),lastRms=blockRms(256);
 const envelopeChange=previousRms?Math.abs(lastRms-previousRms)/previousRms:null;
 const antiPeriodError=lagError(8,-1),twoPeriodError=lagError(16,1);
-const established=W.t*frequency>=128&&samples.length>=513&&lastRms>10*seedRms&&envelopeChange<0.05&&twoPeriodError<0.1;
-const summary={status,error,simulatedDriveCycles:W.t*frequency,wallSeconds:(Date.now()-start)/1000,steps,dtMin,dtMax,
+const established=status!=='solver-error'&&W.t*frequency>=128&&samples.length>=513&&lastRms>10*seedRms&&envelopeChange<0.05&&twoPeriodError<0.1;
+const subharmonicEstablished=established&&antiPeriodError!==null&&antiPeriodError<0.1;
+const summary={status,error,lastValidatedTime,minStepDepth,maxStepCgResidual,simulatedDriveCycles:W.t*frequency,wallSeconds:(Date.now()-start)/1000,steps,dtMin,dtMax,
  dominantSignedMode:dominant,dominantPowerShare:share,phaseCombinedFoldCandidate:2*dominant,angularPower:p,
- lastRms,previousRms,envelopeChange,antiPeriodError,twoPeriodError,establishedDiagnostic:established,
+ lastRms,previousRms,envelopeChange,antiPeriodError,twoPeriodError,establishedDiagnostic:established,subharmonicEstablished,
  comparison:!established?'inconclusive: no established saturated pattern at this finite horizon':'conditional numerical surface pattern available for phase-aware inspection; signed Fourier mode alone does not establish photographed fold agreement',
  convergence:'NOT ESTABLISHED. Repeat same physical horizon at half safety and independently refined nr,nth,nz before claiming resolution-independent selection.'};
 writeFileSync(out+'/summary.json',JSON.stringify(summary,null,2));console.log(JSON.stringify(summary,null,2));

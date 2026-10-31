@@ -9,13 +9,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 defaults:
   run:
     shell: bash
 jobs:
   patterns:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,12 +24,32 @@ jobs:
           node-version: '22'
       - run: sudo apt-get update && sudo apt-get install -y clang lld
       - run: sh dns/build-wasm-cell3d.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: ns-pattern-baseline
+          run-id: 41147436690
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - run: node tools/report_navier_stokes_patterns.mjs
+        env:
+          PATTERN_ACCEL_G: '1'
+          PATTERN_CYCLES: '72'
+          PATTERN_WALL_SECONDS: '3600'
+      - run: node tools/audit_navier_stokes_patterns.mjs
+        if: always()
+        env:
+          PATTERN_ARTIFACT: ns-pattern-output
+          PATTERN_EXPECTED_RUN: ${{ github.run_id }}
+          PATTERN_EXPECTED_COMMIT: ${{ github.sha }}
+      - run: node tools/compare_navier_stokes_drive.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rigid-cup-full-ns-patterns
-          path: ns-pattern-output/
+          path: |
+            ns-pattern-output/
+            ns-pattern-audit/
+            ns-drive-comparison/
   reference:
     runs-on: ubuntu-latest
     timeout-minutes: 45
