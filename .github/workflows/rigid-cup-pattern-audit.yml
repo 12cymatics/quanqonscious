@@ -1,0 +1,37 @@
+name: rigid cup saved Navier-Stokes state audit
+on:
+  push:
+    branches: [claude/rigid-cup-c1-reconstruction-20261030]
+    paths:
+      - tools/audit_navier_stokes_patterns.mjs
+      - .github/workflows/rigid-cup-pattern-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: ns-pattern-input
+          run-id: 41147436690
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: sh dns/build-wasm-cell3d.sh
+      - run: node tools/audit_navier_stokes_patterns.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rigid-cup-ns-state-audit
+          path: ns-pattern-audit/
