@@ -1,0 +1,49 @@
+name: rigid cup water saved batch report
+on:
+  push:
+    branches: [claude/rigid-cup-c1-reconstruction-20261030]
+    paths:
+      - tools/summarize_water_sweep.mjs
+      - tools/water_common_window.mjs
+      - tools/check_water_common_window.mjs
+      - .github/workflows/rigid-cup-water-report.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check_water_common_window.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: water-case-*
+          path: all-cases
+          run-id: 41219846979
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: node tools/summarize_water_sweep.mjs
+        if: always()
+      - run: sudo apt-get update && sudo apt-get install -y inkscape
+        if: always()
+      - run: inkscape water-sweep-report/gallery.svg --export-type=png --export-filename=water-sweep-report/gallery.png
+        if: always()
+      - run: |
+          if [ -f water-sweep-report/common-window/gallery.svg ]; then
+            inkscape water-sweep-report/common-window/gallery.svg --export-type=png --export-filename=water-sweep-report/common-window/gallery.png
+          fi
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: water-variation-corrected-all-outcomes
+          path: water-sweep-report/
+          retention-days: 7

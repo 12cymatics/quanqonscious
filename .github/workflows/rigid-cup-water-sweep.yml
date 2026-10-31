@@ -1,15 +1,5 @@
 name: rigid cup water variation batch
 on:
-  push:
-    branches: [claude/rigid-cup-c1-reconstruction-20261030]
-    paths:
-      - tools/pattern_case.mjs
-      - tools/check_pattern_case.mjs
-      - tools/report_navier_stokes_patterns.mjs
-      - tools/render_water_sand_gallery.mjs
-      - tools/check_water_sand_gallery.mjs
-      - tools/summarize_water_sweep.mjs
-      - .github/workflows/rigid-cup-water-sweep.yml
   workflow_dispatch:
 permissions:
   contents: read
