@@ -7,6 +7,7 @@ assert.equal(configs[0].run,'41147436690');
 assert.equal(configs[0].options.accel,0.5*9.80665);assert.equal(configs[1].options.accel,9.80665);
 for(const key of Object.keys(configs[0].options))if(key!=='accel')assert.equal(configs[0].options[key],configs[1].options[key],key+' unchanged');
 for(const key of ['frequency','safety','seed','seedRms'])assert.equal(configs[0][key],configs[1][key],key+' unchanged');
+for(const key of ['initialCondition','initialSurfaceSha256'])assert.equal(configs[0][key],configs[1][key],key+' unchanged; legacy and common-rim seeds cannot be compared as drive-only changes');
 for(const key of ['dns/faraday-cell3d.js','dns/faraday-cell3d-wasm.js','dns/faraday_cell3d.cpp'])assert.equal(configs[0].hashes[key],configs[1].hashes[key],key+' unchanged');
 const results=[];
 for(let c=0;c<dirs.length;c++){

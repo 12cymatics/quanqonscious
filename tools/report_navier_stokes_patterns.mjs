@@ -3,44 +3,37 @@ import {createRequire} from 'node:module';
 import {mkdirSync,writeFileSync,appendFileSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
+import {patternCase,seedCommonSurface} from './pattern_case.mjs';
 const require=createRequire(import.meta.url);
 const out=resolve(process.env.PATTERN_OUT||'ns-pattern-output'); mkdirSync(out,{recursive:true});
 const num=(name,d)=>{const v=Number(process.env[name]??d);if(!Number.isFinite(v)||v<=0)throw Error(name+' must be positive finite');return v;};
 const frequency=num('PATTERN_HZ',56), cycles=num('PATTERN_CYCLES',256), wallSeconds=num('PATTERN_WALL_SECONDS',2700);
 const safety=num('PATTERN_SAFETY',0.4), seed=num('PATTERN_SEED',1729), seedRms=num('PATTERN_SEED_RMS_M',1e-7);
-const options={nr:num('PATTERN_NR',16),nth:num('PATTERN_NTH',48),nz:num('PATTERN_NZ',16),R:0.02425/2,
- h:2.5e-6/(Math.PI*(0.02425/2)**2),rho:998.2,nu:1.004e-6,gamma:0.07274,g:9.80665,
- accel:num('PATTERN_ACCEL_G',0.5)*9.80665,omegaD:2*Math.PI*frequency,contact:process.env.PATTERN_CONTACT||'free',rStretch:2.2,zStretch:2.2};
+const {options,depthInput,initialCondition}=patternCase(process.env);
 const root=resolve(process.env.PATTERN_REPO||'.');
 const paths=['dns/faraday-cell3d.js','dns/faraday-cell3d-wasm.js','dns/faraday_cell3d.cpp','dns/faraday_cell3d.wasm'];
 const hashes=Object.fromEntries(paths.map(p=>[p,createHash('sha256').update(readFileSync(resolve(root,p))).digest('hex')]));
 const {FaradayCell3DWasm}=require(resolve(root,'dns/faraday-cell3d-wasm.js'));
-const provenance={engine:'full nonlinear 3D free-surface Navier-Stokes, freshly built C++/WASM',options,frequency,cycles,safety,seed,seedRms,wallSeconds,hashes,
+const provenance={depthInput,initialCondition,engine:'full nonlinear 3D free-surface Navier-Stokes, freshly built C++/WASM',options,frequency,cycles,safety,seed,seedRms,wallSeconds,hashes,
  commit:process.env.GITHUB_SHA||null,run:process.env.GITHUB_RUN_ID||null,
  assumptions:['Rigid whole-cup vertical translation: cup-frame g+a cos(omega t), fixed no-slip floor and wall.',
  'Acceleration is an uncalibrated sensitivity input, not inferred from paper mV.',
  'Nominal water properties near 20 C; actual experiment temperature unknown.',
  'Free contact means solver 90-degree condition; no measured meniscus/contact-angle calibration.',
  'Finite pilot discretization; no continuum or experimental validation claim.',
- 'Smooth broadband m=1..12 equal area-energy initial perturbations; none singled out as target.',
+ 'Common double-zero-rim broadband m=1..12 equal area-energy initial perturbations; identical across contact and depth; none singled out as target.',
  'Signed surface Fourier mode is not directly equivalent to photographed phase-combined folds; no optical forward model is supplied.'],
- paper:{doi:'10.14294/WATER.2017.6',diameter_m:0.02425,volume_m3:2.5e-6,observed56HzFolds:[6,6,6]},
+ paper:{doi:'10.14294/WATER.2017.6',diameter_m:0.02425,referenceVolumesMl:[1.5,2.5],selectedReferenceVolumeM3:depthInput.volumeM3,observed56HzFolds:[6,6,6]},
  diagnostics:'Angular DFT power area-weighted across radius. Settling and period errors are prespecified diagnostics, not proof of asymptotic attractor.'};
 writeFileSync(out+'/config.json',JSON.stringify(provenance,null,2));
 const W=new FaradayCell3DWasm(options), S=W.js;
-let rng=seed>>>0;const random=()=>{rng=(Math.imul(rng,1664525)+1013904223)>>>0;return rng/4294967296;};
-const area=Array.from(S.rc,(r,i)=>r*S.drc[i]*S.dth), areaSum=area.reduce((a,b)=>a+b,0)*S.nth;
-const maxMode=Math.min(12,Math.floor(S.nth/3));
-for(let m=1;m<=maxMode;m++){
- const phase=2*Math.PI*random(), b=2*random()-1;
- const radial=Array.from(S.rc,r=>{const x=r/S.R;return x**m*(S.contact==='free'?1-m/(m+2)*x*x:1-x*x)*(1+b*(1-x*x)**2);});
- const norm=Math.sqrt(radial.reduce((sum,x,i)=>sum+x*x*area[i]*S.nth/2,0)/areaSum);
- for(let i=0;i<S.nr;i++)for(let k=0;k<S.nth;k++)S.eta[S.ie(i,k)]+=radial[i]/norm*Math.cos(m*k*S.dth+phase);
-}
-let rms=Math.sqrt(S.eta.reduce((a,x,e)=>a+x*x*area[Math.floor(e/S.nth)],0)/areaSum);
-for(let e=0;e<S.eta.length;e++)S.eta[e]*=seedRms/rms;
+const seeded=seedCommonSurface(S,seed,seedRms);
+const area=seeded.weights,areaSum=seeded.area;
+provenance.initialSurfaceSha256=createHash('sha256').update(Buffer.from(S.eta.buffer,S.eta.byteOffset,S.eta.byteLength)).digest('hex');
+writeFileSync(out+'/config.json',JSON.stringify(provenance,null,2));
 S.refreshMetric();W.pushState();W.refreshMetric();
-const start=Date.now(), interval=1/(8*frequency), samples=[], recent=[];
+const start=Date.now(), samples=[], recent=[];
+const sampleCount=Math.ceil(cycles*8),endTime=cycles/frequency;
 let steps=0,dtMin=Infinity,dtMax=0,status='running',error=null,lastProgress=start;
 let lastValidatedTime=0,minStepDepth=Infinity,maxStepCgResidual=0;
 function validateState(){
@@ -66,14 +59,14 @@ function snapshot(){
 writeFileSync(out+'/grid.json',JSON.stringify({rf:Array.from(S.rf),rc:Array.from(S.rc),nth:S.nth,dtheta:S.dth,etaIndex:'i*nth+k',etaUnits:'m'}));
 try{
  validateState();snapshot();let sample=1;
- while(W.t<cycles/frequency){
+ while(sample<=sampleCount){
  if((Date.now()-start)/1000>=wallSeconds){status='partial-wall-budget';break;}
- const target=Math.min(sample*interval,cycles/frequency);
+ const target=sample===sampleCount?endTime:sample/(8*frequency);
  W.pullState(); const dt=Math.min(W.js.stableStep(safety),target-W.t);
  if(!(dt>0&&Number.isFinite(dt)))throw Error('Invalid stable dt '+dt);
  W.step(dt);validateState();steps++;dtMin=Math.min(dtMin,dt);dtMax=Math.max(dtMax,dt);
  if(steps===100||Date.now()-lastProgress>=60000){const elapsed=(Date.now()-start)/1000;console.log(JSON.stringify({type:'progress',cycles:W.t*frequency,steps,elapsedSeconds:elapsed,projectedTotalSeconds:elapsed*cycles/(W.t*frequency)}));lastProgress=Date.now();}
- if(W.t>=target-1e-13){const row=snapshot();sample++;
+ if(W.t>=target-4*Number.EPSILON*Math.max(1,target)){const row=snapshot();sample++;
  if(sample%64===1){const elapsed=(Date.now()-start)/1000;console.log(JSON.stringify({cycles:row.driveCycles,rms:row.rms,steps,elapsedSeconds:elapsed,projectedTotalSeconds:elapsed*cycles/row.driveCycles}));}
  }
  }

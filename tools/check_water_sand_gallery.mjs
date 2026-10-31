@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {selectPhasePair,pointField,renderPanel} from './render_water_sand_gallery.mjs';
+const config={cycles:2,frequency:56,seedRms:1e-7,commit:'fixture-sha',run:'fixture-run',options:{nr:2,nth:8,h:0.005,R:0.01,accel:4.903325,g:9.80665,contact:'free'}};
+const summary={status:'completed-horizon'},grid={nth:8,rf:[0,0.005,0.01],rc:[0.0025,0.0075]};
+const raw=Array.from({length:17},(_,j)=>({time:j/(8*56),eta:Array.from({length:16},(_,k)=>(j+1)*(k+1)*1e-8)}));
+const selected=selectPhasePair(config,summary,raw,2);
+assert.deepEqual(selected.selected[0].eta,raw[8].eta);assert.deepEqual(selected.selected[1].eta,raw[16].eta);
+assert.notDeepEqual(selected.selected[1].eta,selected.selected[0].eta.map(x=>-x));
+assert.equal(selected.selected[0].cycle,1);assert.equal(selected.selected[1].cycle,2);
+assert.equal(selected.selected[0].time,1/56);assert.equal(selected.selected[1].time,2/56);
+const bad=structuredClone(raw);bad[9].eta[2]=null;assert.throws(()=>selectPhasePair(config,summary,bad,2),/finite/);
+assert.throws(()=>selectPhasePair(config,summary,raw,3),/available/);
+const missing=structuredClone(raw);missing.splice(7,1);assert.throws(()=>selectPhasePair(config,summary,missing,2));
+const p=pointField(grid,config.options,raw[8].eta,{count:100,seed:41});
+assert.deepEqual(p,pointField(grid,config.options,raw[8].eta,{count:100,seed:41}));
+assert.notDeepEqual(p,pointField(grid,config.options,raw[8].eta,{count:100,seed:42}));
+for(const point of p){assert.equal(point.eta,raw[8].eta[point.cell]);assert.ok(point.x**2+point.y**2<=1+1e-14);}
+const record={label:'Fixture & water',config,summary,grid};
+const svg=renderPanel(record,selected.selected[0],0,4e-6,{count:100,seed:41});
+assert.equal(svg,renderPanel(record,selected.selected[0],0,4e-6,{count:100,seed:41}));
+assert.match(svg,/Fixture &amp; water/);assert.match(svg,/Actual cycle 1/);assert.match(svg,/not grains or a photograph/);
+assert.match(svg,/phase opposition is unverified/);assert.match(svg,/pair scale/);
+console.log('Water illustration checks passed: actual temporal frames, finite-field refusals, deterministic sampling, exact cell-value mapping, and explicit illustration labels.');

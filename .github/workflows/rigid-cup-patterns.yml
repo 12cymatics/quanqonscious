@@ -1,11 +1,5 @@
 name: rigid cup full Navier-Stokes patterns
 on:
-  push:
-    branches: [claude/rigid-cup-c1-reconstruction-20261030]
-    paths:
-      - tools/report_navier_stokes_patterns.mjs
-      - tools/report_rigid_cup_reference.mjs
-      - .github/workflows/rigid-cup-patterns.yml
   workflow_dispatch:
 permissions:
   contents: read

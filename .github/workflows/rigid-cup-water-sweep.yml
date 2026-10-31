@@ -1,0 +1,161 @@
+name: rigid cup water variation batch
+on:
+  push:
+    branches: [claude/rigid-cup-c1-reconstruction-20261030]
+    paths:
+      - tools/pattern_case.mjs
+      - tools/check_pattern_case.mjs
+      - tools/report_navier_stokes_patterns.mjs
+      - tools/render_water_sand_gallery.mjs
+      - tools/check_water_sand_gallery.mjs
+      - tools/summarize_water_sweep.mjs
+      - .github/workflows/rigid-cup-water-sweep.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check_pattern_case.mjs
+      - run: node tools/check_pattern_samples.mjs
+      - run: node tools/check_water_sand_gallery.mjs
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: sh dns/build-wasm-cell3d.sh
+      - run: |
+          for contact in free pinned; do
+            PATTERN_CONTACT="$contact" PATTERN_OUT="smoke-$contact" node tools/report_navier_stokes_patterns.mjs
+            PATTERN_ARTIFACT="smoke-$contact" node tools/audit_navier_stokes_patterns.mjs
+            mv ns-pattern-audit "smoke-audit-$contact"
+          done
+        env:
+          PATTERN_VOLUME_ML: '1.5'
+          PATTERN_CYCLES: '0.125'
+          PATTERN_NR: '6'
+          PATTERN_NTH: '16'
+          PATTERN_NZ: '4'
+          PATTERN_WALL_SECONDS: '60'
+          PATTERN_EXPECTED_RUN: ${{ github.run_id }}
+          PATTERN_EXPECTED_COMMIT: ${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: water-sweep-control-gates
+          path: |
+            smoke-*/
+            ns-pattern-audit/
+          retention-days: 7
+  historical-gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check_water_sand_gallery.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: old-half-g
+          run-id: 41147436690
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rigid-cup-full-ns-patterns
+          path: old-one-g
+          run-id: 41152145632
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: node tools/render_water_sand_gallery.mjs
+      - run: sudo apt-get update && sudo apt-get install -y inkscape
+      - run: |
+          for file in water-sand-gallery/*.svg; do
+            inkscape "$file" --export-type=png --export-filename="${file%.svg}.png"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: historical-water-sand-illustrations
+          path: water-sand-gallery/
+          retention-days: 7
+  sweep:
+    needs: controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        volume: ['1.5', '2.5']
+        accel: ['0.5', '1']
+        contact: [free, pinned]
+    env:
+      PATTERN_VOLUME_ML: ${{ matrix.volume }}
+      PATTERN_ACCEL_G: ${{ matrix.accel }}
+      PATTERN_CONTACT: ${{ matrix.contact }}
+      PATTERN_HZ: '56'
+      PATTERN_CYCLES: '72'
+      PATTERN_WALL_SECONDS: '3600'
+      PATTERN_SEED: '1729'
+      PATTERN_SEED_RMS_M: '0.0000001'
+      PATTERN_OUT: case-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: sh dns/build-wasm-cell3d.sh
+      - run: node tools/report_navier_stokes_patterns.mjs
+      - run: node tools/audit_navier_stokes_patterns.mjs
+        if: always()
+        env:
+          PATTERN_ARTIFACT: case-output
+          PATTERN_EXPECTED_RUN: ${{ github.run_id }}
+          PATTERN_EXPECTED_COMMIT: ${{ github.sha }}
+      - run: node tools/render_water_sand_gallery.mjs case-output
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: water-case-v${{ matrix.volume }}-a${{ matrix.accel }}-${{ matrix.contact }}
+          path: |
+            case-output/
+            ns-pattern-audit/
+            water-sand-gallery/
+          retention-days: 7
+  report:
+    needs: [controls, sweep]
+    if: always() && needs.controls.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: water-case-*
+          path: all-cases
+      - run: node tools/summarize_water_sweep.mjs
+        if: always()
+      - run: sudo apt-get update && sudo apt-get install -y inkscape
+        if: always()
+      - run: inkscape water-sweep-report/gallery.svg --export-type=png --export-filename=water-sweep-report/gallery.png
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: water-variation-all-outcomes
+          path: water-sweep-report/
+          retention-days: 7
