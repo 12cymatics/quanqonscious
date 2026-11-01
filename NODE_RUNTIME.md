@@ -26,6 +26,6 @@ Official references:
 - https://nodejs.org/en/blog/release/v26.13.0
 - https://github.com/actions/setup-node/tree/v7
 
-The dormant eight-case sweep and unrelated PyPI workflow retain their prior
-Node 22 setup pending separate workflow-upload authorization. Neither is run
-by this migration.
+The dormant eight-case sweep also selects Node 26 and remains manual-only.
+The unrelated PyPI workflow retains its prior Node 22 setup and is outside
+this simulator migration. Neither workflow is run by this migration.
