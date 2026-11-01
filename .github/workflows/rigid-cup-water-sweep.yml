@@ -13,9 +13,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - run: node tools/check_pattern_case.mjs
       - run: node tools/check_pattern_samples.mjs
       - run: node tools/check_water_sand_gallery.mjs
@@ -49,9 +51,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - run: node tools/check_water_sand_gallery.mjs
       - uses: actions/download-artifact@v4
         with:
@@ -100,9 +104,11 @@ jobs:
       PATTERN_OUT: case-output
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - run: sudo apt-get update && sudo apt-get install -y clang lld
       - run: sh dns/build-wasm-cell3d.sh
       - run: node tools/report_navier_stokes_patterns.mjs
@@ -130,9 +136,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - uses: actions/download-artifact@v4
         with:
           pattern: water-case-*
