@@ -161,9 +161,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     - name: Boundary kernel
       run: node boundary/boundarykernel.test.js
     - name: Faraday kernel (sliced out of cymatic.html)
@@ -182,9 +184,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     # lean_provenance.json is checked in for the same reason
     # faraday/reference.json is: it is the record of what `lake build SutraWS`
     # actually proved, so CI can hold the page to it without a mathlib build.
@@ -197,9 +201,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     - name: Nonlinear three-dimensional cell solver
       run: node dns/check-cell3d.mjs
     - name: Free-surface Navier-Stokes solver
@@ -210,9 +216,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     # clang is on the runner image; wasm-ld comes from lld, which is not always.
     # The module needs no Emscripten and no sysroot -- it has no libc surface at
     # all -- so this is the whole toolchain.
@@ -242,9 +250,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     - name: WebAssembly toolchain
       run: sudo apt-get update && sudo apt-get install -y clang lld
     - name: Unpack the committed zip outside the checkout
@@ -265,9 +275,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
-        node-version: "22"
+        node-version-file: .nvmrc
+        package-manager-cache: false
+    - run: node tools/check_node_runtime.mjs
     - name: Page loads, draws, and its Floquet panel agrees with the solver
       run: node dns/check-page.mjs
       env:

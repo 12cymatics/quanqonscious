@@ -26,6 +26,25 @@ Faraday drew. Two solvers and a page that draws them.
 Everything here runs on `node` and a browser. There is nothing to install: no
 npm packages, no build step, no compiler.
 
+## Node 26 runtime update
+
+Terminal execution and build/test commands use Node 26.13.0 LTS, pinned
+in the included `.nvmrc`. With nvm installed, run `nvm install` then `nvm use`
+from this extracted folder. No npm installation is needed for the simulator.
+For a small full nonlinear C++/WASM terminal demonstration:
+
+```sh
+node dns/run-cell3d.mjs --engine cpp --nr 6 --nth 8 --nz 4 --m 2 --periods 0.02 --frames 1 --width 21
+```
+
+This is a short numerical demonstration, not a converged pattern prediction.
+The modal view is not the Navier–Stokes solver; select a Navier–Stokes mode to
+use the fluid solver in the browser. The C1 moving-surface reconstruction repair
+is included in the JavaScript and freshly rebuilt WASM. Full continuum pattern
+convergence and experimental photo matching remain unestablished.
+The browser entrypoint still works without Node; Node 26 is for terminal,
+build and test execution. See `NODE_RUNTIME.md` for the runtime policy.
+
 ## Playback update — 22 October 2026
 
 Pause/resume in the modal view now resumes from the frozen simulation time,

@@ -3,6 +3,10 @@ on:
   push:
     branches: [claude/rigid-cup-c1-reconstruction-20261030]
     paths:
+      - .nvmrc
+      - package.json
+      - package-lock.json
+      - tools/check_node_runtime.mjs
       - dns/**
       - faraday/**
       - faraday-cell/**
@@ -22,9 +26,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
+      - run: node tools/check_pattern_case.mjs
+      - run: node tools/check_pattern_samples.mjs
+      - run: node tools/check_water_sand_gallery.mjs
+      - run: node tools/check_water_common_window.mjs
       - run: node tools/check_cell3d_reconstruction.mjs
       - run: node tools/check_cell3d_reconstruction_mutations.mjs
   continuum:
@@ -32,9 +42,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - run: node dns/check-cell3d.mjs 2>&1 | tee cell3d-convergence.log
       - uses: actions/upload-artifact@v4
         if: always()
@@ -46,11 +58,28 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       - run: sudo apt-get update && sudo apt-get install -y clang lld
       - run: sh dns/build-wasm-cell3d.sh
+      - run: |
+          for contact in free pinned; do
+            PATTERN_CONTACT="$contact" PATTERN_OUT="node26-smoke-$contact" node tools/report_navier_stokes_patterns.mjs
+            PATTERN_ARTIFACT="node26-smoke-$contact" node tools/audit_navier_stokes_patterns.mjs
+            mv ns-pattern-audit "node26-smoke-audit-$contact"
+          done
+        env:
+          PATTERN_VOLUME_ML: '1.5'
+          PATTERN_CYCLES: '0.125'
+          PATTERN_NR: '6'
+          PATTERN_NTH: '16'
+          PATTERN_NZ: '4'
+          PATTERN_WALL_SECONDS: '60'
+          PATTERN_EXPECTED_RUN: ${{ github.run_id }}
+          PATTERN_EXPECTED_COMMIT: ${{ github.sha }}
       - run: node dns/check-cell3d-wasm.mjs
       - run: node dns/check-cell3d-pool.mjs
       - run: node dns/check-page.mjs
@@ -64,14 +93,21 @@ jobs:
           mkdir -p "$dest"
           unzip -q faraday-cell.zip -d "$dest"
           cd "$dest/faraday-cell"
+          node tools/check_node_runtime.mjs
           node run-checks.mjs
         env:
           CHROME: /usr/bin/google-chrome
+      - run: |
+          printf 'Source commit: %s\nNode: %s\nWorkflow run: %s\nAll preceding integration and unpacked suites passed.\nContinuum/focused jobs have separate outcomes in this run.\nNo experimental pattern-match or exact continuum claim.\n' "$GITHUB_SHA" "$(node --version)" "$GITHUB_RUN_ID" > simulator-build-info.txt
+          sha256sum faraday-cell.zip >> simulator-build-info.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rigid-cup-built-artifacts
           path: |
+            simulator-build-info.txt
+            node26-smoke-*/
+            node26-smoke-audit-*/
             dns/faraday_cell3d.wasm
             faraday-cell/
             faraday-cell.zip

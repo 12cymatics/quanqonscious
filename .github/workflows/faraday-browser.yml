@@ -33,9 +33,11 @@ jobs:
       FARADAY_BROWSER: ${{ matrix.browser }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node tools/check_node_runtime.mjs
       # The browser smoke test is a transient Node-only check: it does not build a
       # package or commit new files, so we use a throwaway install instead of a
       # checked-in package.json. Playwright is pinned to the tested runtime version

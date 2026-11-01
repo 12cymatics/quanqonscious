@@ -83,6 +83,9 @@ export const ZIP_EPOCH = Date.UTC(2026, 0, 1)/1000;
    check-zip.mjs asserts every path here resolves and that the suite list below
    covers every suite the checkout has. */
 export const MANIFEST = [
+  '.nvmrc',
+  'NODE_RUNTIME.md',
+  'tools/check_node_runtime.mjs',
   'cymatic.html',
 
   'faraday/kernel.js',
