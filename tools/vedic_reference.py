@@ -66,6 +66,14 @@ def log_ratio_exceeds(a, b, threshold=F(1, 1000)):
         k += 1
 
 
+def inverse(p):
+    return [sum((p[i] if (i >> k) & 1 else -p[i]) for i in range(16)) / 16 for k in range(4)]
+
+
+def inject(p, k, d):
+    return [p[i] + d if (i >> k) & 1 else p[i] - d for i in range(16)]
+
+
 def set_b(p, s):
     return [((p[0] + p[1]) - (p[14] + p[15])) * s,
             ((p[0] + p[2]) - (p[13] + p[15])) * s,
@@ -411,7 +419,8 @@ def compose(psi, active, mode, t):
 
     The supplied operands are exact input data, not results read from the
     JavaScript kernel. Each record is the field returned by this oracle's own
-    formula calculation. No GRVQ, MSTVQ, or Maya equivalence is claimed here.
+    formula calculation, with the in-formula GRVQ feeds of S1, S5, S9 and S14.
+    No equivalence of the distributed GRVQ feeds, MSTVQ or Maya is claimed here.
     """
     ordered = sorted(active, key=lambda item: item["id"])
     ids = [item["id"] for item in ordered]

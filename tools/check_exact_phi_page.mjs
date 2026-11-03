@@ -1197,8 +1197,7 @@ try {
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
-  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), from0: Q.eq(r.s, Q.mul(r.to, Q.mk(BigInt(r.k), BigInt(r.n)))), k: r.k, n: r.n })),
-                                 formula: KERNEL_VIEW.formula, dur: DISPLAY.dur })`);
+  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), k: r.k, n: r.n })), dur: DISPLAY.dur })`);
   await setGlide(1);
   ok(rg.ok && rg.rows.length === 29 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3) && rg.dur === 1000,
      'a glide changed mid-way goes on from where each strength stands over the new number of steps, still one step a second', JSON.stringify(rg));
@@ -1216,21 +1215,19 @@ try {
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
     const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
     const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    let magKeeps = null, rotKeeps = null, shareKeeps = null;
+    let magKeeps = null, rotKeeps = null;
     try {
       const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
-      const B0 = st(L.afterFormulaShare), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
+      const B0 = st(L.afterMSTVQCoupling), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
       const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
       const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
       rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
-      const dF = st(L.formula.delta), part = q(L.formulaPart);
-      shareKeeps = same(st(L.input).map((x, i) => K.storeQ(Q.add(x, Q.mul(dF[i], part)))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             magKeeps, rotKeeps, shareKeeps,
+             magKeeps, rotKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
              records: Array.isArray(L.sutraRecord) && L.activeSutras.map(s => s.id).join(',') === '${ALL_29_IDS}' &&
                L.activeSutras.every(s => BigInt(s.strength.n) > 0n && BigInt(s.strength.d) > 0n) &&
