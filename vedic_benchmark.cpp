@@ -150,7 +150,7 @@ int main() {
     std::cout << "─────────────────────────────────────────────────\n";
 
     for (int n = 1; n <= 12; ++n) {
-        auto conv = S13_Sopantya::golden_ratio_convergent(n);
+        auto conv = ContinuedFractions::golden_ratio_convergent(n);
         double approx = static_cast<double>(conv.numerator) / static_cast<double>(conv.denominator);
         std::cout << std::setw(2) << n << "   "
                   << std::setw(5) << conv.numerator << "/" << std::setw(4) << std::left << conv.denominator

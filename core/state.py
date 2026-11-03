@@ -20,6 +20,7 @@ import hashlib
 import math
 
 from .lattice import ToroidalHypercube, LatticePoint
+from .exact_codec import digest_integer, fraction_text
 
 # CRITICAL: math module FORBIDDEN - violates exact arithmetic
 # All operations must use Fraction and Vedic sutra functions ONLY
@@ -126,7 +127,6 @@ class RationalComplex:
         return RationalComplex(self.real, -self.imag)
 
     def norm_squared(self) -> Fraction:
-        """Compute |z|² = a² + b² (exact)."""
         return self.real * self.real + self.imag * self.imag
 
     def norm(self) -> float:
@@ -349,8 +349,11 @@ class FieldState:
     # Aggregate observables
 
     def total_norm_squared(self) -> Fraction:
-        """Compute total ∑|Ψ|² (exact)."""
-        return sum(val.norm_squared() for val in self._psi.values())
+        total = Fraction(0)
+        for value in self._psi.values():
+            for part in (value.real, value.imag):
+                total += part * part
+        return total
 
     def max_amplitude(self) -> Fraction:
         """
@@ -512,49 +515,21 @@ def _self_test():
     assert not state.validate_bounded(Fraction(3))
 
 
-# ---------------------------------------------------------------------------
-# Canonical state digest
-# ---------------------------------------------------------------------------
-#
-# One hash function, used by every consumer that needs to say "this is the
-# same state". There used to be two: StateCheckpoint._compute_hash walked
-# every site and returned 64 hex characters, while OperatorTrace._state_hash
-# hashed a 1-in-(N/100) SAMPLE of sites and truncated to 16. They therefore
-# disagreed on every state, which is why TraceReplayer.replay -- which
-# compares one against the other -- could not pass on any input at all.
-#
-# The sampling version was also the weaker check on its own terms: on a 64
-# lattice it looked at 100 sites and would not have noticed an operator that
-# changed any of the rest.
-
-
 def _safe_fraction_repr(value: Fraction) -> str:
-    """Stringify a rational, degrading only for values too large to print.
-
-    The 4096-bit guard bounds the cost of `str()` on a rational whose
-    denominator has grown without limit. Above it the value is represented by
-    its float magnitude, so two states differing only beyond that point hash
-    alike -- an accepted, bounded loss, applied identically everywhere because
-    every caller reaches this one function.
-    """
-    if value.numerator.bit_length() > 4096 or value.denominator.bit_length() > 4096:
-        return f"{float(value):.12e}"
-    return str(value)
+    return fraction_text(value)
 
 
 def state_digest(state: "FieldState") -> str:
-    """Deterministic SHA-256 over the whole field.
-
-    Every occupied site in sorted-coordinate order, then the total norm. No
-    sampling and no truncation: two states hash alike exactly when they agree
-    at every site.
-    """
-    data = []
-    for coords in sorted(state._psi.keys()):
-        val = state._psi[coords]
-        data.append((coords, _safe_fraction_repr(val.real), _safe_fraction_repr(val.imag)))
-    data.append(('_norm', _safe_fraction_repr(state.total_norm_squared())))
-    return hashlib.sha256(str(data).encode()).hexdigest()
+    digest = hashlib.sha256(b"quanqonscious.field.exact.v2")
+    digest_integer(digest, len(state.lattice.shape))
+    for dimension in state.lattice.shape:
+        digest_integer(digest, dimension)
+    for point in state.lattice.iterate_all():
+        value = state.get(point)
+        for part in (value.real, value.imag):
+            digest_integer(digest, part.numerator)
+            digest_integer(digest, part.denominator)
+    return digest.hexdigest()
 
 
 if __name__ == "__main__":
