@@ -29,8 +29,9 @@
                         the energy exactly; ZPE adds only its source; the
                         TGCR geometry recomputed by walking faces
      step export        an exported step replays bit for bit from its file
-     strengths          a step from the seed runs each formula at its
-                        setting
+     the formula        calculated once at the settings, put in over the
+                        glide in equal shares, then none applied; the
+                        energy then moves only by storage
      glide              each strength rises in equal steps from where it
                         stood to its setting over the glide, then holds
      modes              the mode identities decide and pass
@@ -77,6 +78,16 @@ const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fro
   geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
 const S = x => ({ n: x.n.toString(), d: x.d.toString() });
+const modelRun = (act, mode, glide = 10) => {
+  let formula = null, ramp = [], k = 0;
+  return (eng, p) => {
+    if (!formula) formula = K.formulaOf(eng.psi, act, mode, K.timeOf(eng.frame));
+    const rs = K.rampStep(ramp, act, glide); ramp = rs.ramp;
+    const next = K.step(eng, p, rs.active, mode, formula, k < glide ? Q.mk(1n, BigInt(glide)) : Q.ZERO);
+    if (k < glide) k++;
+    return next;
+  };
+};
 const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
 const sameQ = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
 const energyQ = p => p.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
@@ -312,10 +323,10 @@ section('the statements each formula carries');
   const cited = page ? new Set([...page[1].matchAll(/'([^']+)'/g)].map(m => m[1])) : new Set();
   const missing = [...names].filter(n => !cited.has(n));
   ok(page && missing.length === 0, 'every statement decided is cited by the sutra channel', missing.join(', '));
-  /* a run: each step's formulas, on the field they act on */
   const act = [2, 9, 12, 22, 29].map(id => ({ id, strength: Q.HALF }));
+  const go = modelRun(act, 'SERIES');
   let eng = K.initEngine(), runOk = true;
-  for (let s = 0; s < 6; s++) { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), act, 'SERIES');
+  for (let s = 0; s < 6; s++) { eng = go(eng, PARAMS({ vortex: Q.ONE }));
     for (const a of act) if (!K.formulaClaims(a.id, eng.psi, a.strength).ok) runOk = false; }
   ok(runOk, 'every statement holds for S2, S9, S12, S22, S29 on six steps of a run, at the live strength');
 }
@@ -340,12 +351,13 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
     if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
   ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x their alpha to lambda_0, 1, 2, 3 of their result and change no other lambda');
-  /* the other active sutras' GRVQ feeds, and the MSTVQ feedback, in a step */
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
+  const go = modelRun(act, 'SERIES');
   let eng = K.initEngine();
-  for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
-  const L = eng.last;
+  for (let s = 0; s < 3; s++) eng = go(eng, p);
+  const L = K.formulaOf(eng.psi, act, 'SERIES', K.timeOf(eng.frame)), tenth = Q.mk(1n, 10n);
+  const nxt = K.step(eng, p, act, 'SERIES', L, tenth);
   let shares = L.grvqRecord.length === 3, x = L.afterS;
   for (const g of L.grvqRecord) {
     const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
@@ -362,11 +374,11 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   ok(sameQ(fb.map(K.storeQ), L.afterB) && sameQ(L.mstvq.B, B),
      "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
   const trace = Q.add(Q.add(T[0], T[1]), T[2]);
-  ok(Q.eq(eng.tgcrKappa, K.storeQ(Q.add(L.tgcrKappaIn, Q.mul(trace, Q.mk(1n, 500n))))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
-     'the TGCR stiffness kappa moves by tr T / 500, and tr T = -|B|^2 / 2 (stress_trace)');
-  const setters = L.sutraRecord.filter(r => r.B).map(r => r.id);
+  ok(Q.eq(nxt.tgcrKappa, K.storeQ(Q.add(eng.tgcrKappa, Q.mul(Q.mul(trace, Q.mk(1n, 500n)), tenth)))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
+     'the TGCR stiffness kappa moves by tr T / 500 times the share of the formula put in, and tr T = -|B|^2 / 2 (stress_trace)');
+  const setters = L.record.filter(r => r.B).map(r => r.id);
   ok(setters.length === 1 && setters[0] === 3, 'of the active sutras only S3 sets MSTVQ B in the core (S2, S3 and S29 do)');
-  const gc = K.grvqClaims(L.sutraRecord.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
+  const gc = K.grvqClaims(L.record.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
   ok(gc.ok && gc.results.length === 3 * 4, `the coupling statements hold on all four feeds (${gc.results.length} decided)`);
 }
 
@@ -374,11 +386,12 @@ section('the stages of the real field');
 {
   const p = PARAMS({ vortex: Q.mk(3n, 2n), zpeSource: X.fromQ(Q.mk(5n, 4n)) });
   const act = [{ id: 9, strength: Q.HALF }, { id: 29, strength: Q.HALF }];
+  const go = modelRun(act, 'SERIES');
   let eng = K.initEngine();
-  for (let s = 0; s < 4; s++) eng = K.step(eng, p, act, 'SERIES');
+  for (let s = 0; s < 4; s++) eng = go(eng, p);
   const L = eng.last, id = x => x;
   const eq = (a, b) => Q.eq(energyQ(a), energyQ(b));
-  ok(eq(K.edgeRotate(L.afterB, L.ctx.magTau, id), L.afterB), 'the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy exactly (rot_pair_energy)');
+  ok(eq(K.edgeRotate(L.afterF, L.ctx.magTau, id), L.afterF), 'the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy exactly (rot_pair_energy)');
   ok(eq(K.complementRotate(L.afterG, K.mstvqTau(L.wheeler, p)), L.afterG), 'the MSTVQ stage keeps the energy exactly');
   ok(eq(K.edgeRotate(L.afterM, K.tgcrTau(L.afterM, p), id), L.afterM), 'the TGCR stage keeps the energy exactly');
   const zr = K.complementRotate(L.afterT, K.zpeTau(L.wheeler, p));
@@ -427,8 +440,9 @@ section('step export');
 {
   for (const [ids, mode, strength, drive, vortex] of EXPORT_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength }));
+    const go = modelRun(active, mode);
     let eng = K.initEngine();
-    for (let s = 0; s < 2; s++) eng = K.step(eng, PARAMS({ zpeSource: X.fromQ(Q.mk(drive)), vortex }), active, mode);
+    for (let s = 0; s < 2; s++) eng = go(eng, PARAMS({ zpeSource: X.fromQ(Q.mk(drive)), vortex }));
     const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
       dielectric: eng.dielectric.map(K.serializeQ), tgcrKappa: K.serializeQ(eng.tgcrKappa),
       mayaPhase: K.serializeQ(eng.mayaPhase), mayaErr: K.serializeQ(eng.mayaErr),
@@ -438,11 +452,13 @@ section('step export');
     try {
       const fromA = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
       const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
-      const act = L.activeSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+      const actOf = list => list.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+      const act = actOf(L.activeSutras), FF = L.formula;
+      const formula = K.formulaOf(FF.input.map(fromQ), actOf(FF.activeSutras), FF.composition, fromQ(FF.time));
       const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ),
                               energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
                               mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
-                              magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition);
+                              magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition, formula, fromQ(L.formulaPart));
       same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
              JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
              JSON.stringify(K.serializeQ(replay.tgcrKappa)) === JSON.stringify(file.tgcrKappa) &&
@@ -458,16 +474,35 @@ section('step export');
   }
 }
 
-section('strengths');
+section('the formula');
 {
   const red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
   const eqF = (q, [n, d]) => q.n === n && q.d === d;
   const tg = [{ id: 9, strength: Q.mk(3n, 10n) }];
-  let e = K.initEngine(), stepsOk = true;
-  for (let s2 = 1; s2 <= 4; s2++) { e = K.step(e, PARAMS(), tg, 'SERIES');
-    const al = red(9n * 3n, 435n * 10n);
-    if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, [3n, 10n]) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
-  ok(stepsOk, 'a step from the seed runs each formula at its setting from the first step: alpha = id/435 x setting');
+  const f = K.formulaOf(K.initState(), tg, 'SERIES', K.timeOf(0));
+  ok(f.active.length === 1 && eqF(f.active[0].strength, [3n, 10n]) && f.record.length === 1 && eqF(f.record[0].alpha, red(9n * 3n, 435n * 10n)) &&
+     sameQ(f.delta, f.afterB.map((x, i) => Q.sub(x, K.initState()[i]))),
+     'the formula runs each sutra at its setting, alpha = id/435 x setting, and its change is the field after it less the field it was calculated from');
+  const quartet = [2, 6, 23, 26].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(quartet, 'PARALLEL'), p = PARAMS({ vortex: Q.ONE });
+  let e = K.initEngine(), first = null, shareOk = true, sameF = true, heldOk = true, parts = [];
+  for (let s = 1; s <= 14; s++) {
+    e = go(e, p);
+    const L = e.last;
+    if (!first) first = L.formula;
+    if (L.formula !== first) sameF = false;
+    parts.push(Q.toString(L.part));
+    if (!(Q.eq(L.part, s <= 10 ? Q.mk(1n, 10n) : Q.ZERO) && sameQ(L.afterF, L.input.map((x, i) => K.storeQ(Q.add(x, Q.mul(first.delta[i], L.part))))))) shareOk = false;
+    if (s > 10) {
+      const eps = Q.mk(1n, 1n << 128n), n = 2 * L.stepError.stores;
+      let hi = Q.ONE, lo = Q.ONE;
+      for (let j = 0; j < n; j++) { hi = Q.mul(hi, Q.add(Q.ONE, eps)); lo = Q.mul(lo, Q.sub(Q.ONE, eps)); }
+      const r = Q.div(L.eFinal, L.e0);
+      if (!(Q.cmp(r, lo) >= 0 && Q.cmp(r, hi) <= 0)) heldOk = false;
+    }
+  }
+  ok(sameF && shareOk, 'the formula is calculated once and put in over the glide in equal shares of 1/10, then none of it is applied', parts.join(' '));
+  ok(heldOk, 'after the glide, with no drive, each step moves the energy of the field only by storage: within (1 +- 2^-128)^(2 x stores)');
 }
 
 section('glide');
@@ -608,9 +643,10 @@ section('magnetism memory');
   const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
   const within = (got, want) => Q.cmp(Q.abs(Q.sub(got, want)), Q.mul(Q.abs(want), Q.mk(1n, 1n << 127n))) <= 0;
   let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
+  const go = modelRun(act, 'PARALLEL');
   for (let s = 0; s < 40; s++) {
     const prev = eng;
-    eng = K.step(eng, base, act, 'PARALLEL');
+    eng = go(eng, base);
     const L = eng.last, rOut = eng.psi.map(x => Q.mul(x, x));
     const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
     edges.forEach(([v, a, h], e) => {
@@ -659,7 +695,7 @@ section('no parameter is ignored');
 {
   const base = PARAMS();
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
-  const run = p => { let e = K.initEngine(); for (let s = 0; s < 6; s++) e = K.step(e, p, act, 'PARALLEL'); return e; };
+  const run = p => { const go = modelRun(act, 'PARALLEL'); let e = K.initEngine(); for (let s = 0; s < 6; s++) e = go(e, p); return e; };
   const ref = run(base), key = e => JSON.stringify(K.serializeState(e.psi)) + JSON.stringify(e.dielectric.map(K.serializeQ));
   ok(key(run({ ...base, vortex: Q.ONE })) !== key(ref), 'vortex omega changes the field');
   ok(key(run({ ...base, zpeSource: X.ONE })) !== key(ref), 'the drive changes the field');
@@ -747,9 +783,10 @@ section('the engine on the torus');
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(act, 'PARALLEL');
   let eng = K.initEngine(), runAgree = true, runLaws = true, nonzero = false;
   for (let s = 0; s < 40; s++) {
-    eng = K.step(eng, params, act, 'PARALLEL');
+    eng = go(eng, params);
     const g = read(eng.magA, eng.magChi), t = K.magData(eng.magA, eng.magChi).torus;
     if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow) && t.balanced)) runAgree = false;
     if (!lawsHold(g)) runLaws = false;
@@ -813,9 +850,10 @@ section('the sources of the fields around the construct');
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(act, 'PARALLEL');
   let eng = K.initEngine(), runOk = true, live = 0;
   for (let s = 0; s < 30; s++) {
-    eng = K.step(eng, params, act, 'PARALLEL');
+    eng = go(eng, params);
     const sd = K.sourcesData(eng.magA, eng.dielectric);
     if (!(sd.kirchhoff && sd.neutral && eqv(sd.current, walkJ(K.curlA(eng.magA))) && eqv(sd.charge, lap(eng.dielectric)) && inflow(sd.current).every(Q.isZero))) runOk = false;
     if (sd.current.some(x => !Q.isZero(x)) && sd.charge.some(x => !Q.isZero(x))) live++;

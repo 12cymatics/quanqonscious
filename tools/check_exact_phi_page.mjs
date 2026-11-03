@@ -16,10 +16,11 @@
                         PAUSE / RUN reaches the worker, and the worker runs
                         toward exactly the set and composition the control
                         chose
-     the pace           one step a second, each drawn in order; a formula
-                        switched on rises to its strength over the glide's
-                        steps (10 unless changed), then holds while the run
-                        goes on
+     the pace           one step a second, each drawn in order; the
+                        formula, calculated once when a sutra is switched
+                        on or a setting changed, goes in over the glide's
+                        steps (10 unless changed), then none is applied
+                        while the run goes on
      the surface        is drawn, every point finite and in front of the
                         camera
      no clamping        the colour formula runs past 255 and each channel goes
@@ -327,14 +328,14 @@ try {
              want: Object.keys(p).map(Number).sort((a, b) => a - b).map(id => { const to = Q.mk(BigInt(p[id]), 100n);
                return [id, Q.toString(Q.mul(to, Q.mk(BigInt(Math.min(f, 5)), 5n))), Q.toString(to), Math.min(f, 5), 5]; }) };
   })()`);
-  ok(gl.ok && gl.cert && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`${gl.want.length} of ${gl.want.length} rising`),
-     `at a glide of 5, step ${gl.f} runs each formula at ${gl.f}/5 of its setting, and the glide row says so (${gl.row})`, JSON.stringify(gl));
+  ok(gl.ok && gl.cert && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`formula ${gl.f}/5 in · ${gl.want.length} of ${gl.want.length} rising`),
+     `at a glide of 5, step ${gl.f} has put in ${gl.f}/5 of the formula, each sutra at ${gl.f}/5 of its setting, and the glide row says so (${gl.row})`, JSON.stringify(gl));
   await waitFor(`KERNEL_VIEW.state.frame >= 6`, 30000);
   const hd0 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, rising: RAMP_VIEW.rising, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)), row: glideWords() })`);
   await sleep(3000);
   const hd1 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)) })`);
-  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('all 3 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
-     `past the glide each formula is held at its setting and the run goes on (step ${hd0.f} to ${hd1.f} in 3 s)`, JSON.stringify({ hd0, hd1 }));
+  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('formula in, none applied now · all 3 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
+     `past the glide the formula is in, no formula is applied, each sutra is shown at its setting and the run goes on (step ${hd0.f} to ${hd1.f} in 3 s)`, JSON.stringify({ hd0, hd1 }));
   await setGlide(1);
 
   section('every control reaches the kernel');
@@ -1024,10 +1025,11 @@ try {
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
-  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), k: r.k, n: r.n })), dur: DISPLAY.dur })`);
+  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), from0: Q.eq(r.s, Q.mul(r.to, Q.mk(BigInt(r.k), BigInt(r.n)))), k: r.k, n: r.n })),
+                                 formula: KERNEL_VIEW.formula, dur: DISPLAY.dur })`);
   await setGlide(1);
-  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3) && rg.dur === 1000,
-     'a glide changed mid-way goes on from where each strength stands over the new number of steps, still one step a second', JSON.stringify(rg));
+  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.from0) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
+     'a glide changed mid-way calculates the formula again from the field as it stands and puts it in from 0 over the new number of steps, still one step a second', JSON.stringify(rg));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1041,30 +1043,33 @@ try {
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
     const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
     const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    let magKeeps = null, rotKeeps = null;
+    let magKeeps = null, rotKeeps = null, shareKeeps = null;
     try {
       const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
-      const B0 = st(L.afterMSTVQCoupling), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
+      const B0 = st(L.afterFormulaShare), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
       const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
       const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
       rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
+      const dF = st(L.formula.delta), part = q(L.formulaPart);
+      shareKeeps = same(st(L.input).map((x, i) => K.storeQ(Q.add(x, Q.mul(dF[i], part)))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             magKeeps, rotKeeps,
+             magKeeps, rotKeeps, shareKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
-             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
+             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.formula.activeSutras.length * (L.formula.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.formula.activeSutras.length + ' ' + L.formula.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/5' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(gotStep && st.schema === 'vedic-step-export/6' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError,
      'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
-  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
+  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per sutra in the formula', JSON.stringify({ lambda: st.lambda, records: st.records }));
+  ok(st.shareKeeps === true, 'the step export carries the formula: its change is its field less the field it was calculated from, and the step put in exactly its share of it', JSON.stringify({ shareKeeps: st.shareKeeps }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
   await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
   const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_formula_audit_'))`, 300000);
