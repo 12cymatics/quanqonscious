@@ -16,10 +16,11 @@
                         PAUSE / RUN reaches the worker, and the worker runs
                         toward exactly the set and composition the control
                         chose
-     the pace           one step a second, each drawn in order; a formula
-                        switched on rises to its strength over the glide's
-                        steps (10 unless changed), then holds while the run
-                        goes on
+     the pace           one step a second, each drawn in order; the
+                        formula, calculated once when a sutra is switched
+                        on or a setting changed, goes in over the glide's
+                        steps (10 unless changed), then none is applied
+                        while the run goes on
      the surface        is drawn, every point finite and in front of the
                         camera
      no clamping        the colour formula runs past 255 and each channel goes
@@ -327,14 +328,14 @@ try {
              want: Object.keys(p).map(Number).sort((a, b) => a - b).map(id => { const to = Q.mk(BigInt(p[id]), 100n);
                return [id, Q.toString(Q.mul(to, Q.mk(BigInt(Math.min(f, 5)), 5n))), Q.toString(to), Math.min(f, 5), 5]; }) };
   })()`);
-  ok(gl.ok && gl.cert && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`${gl.want.length} of ${gl.want.length} rising`),
-     `at a glide of 5, step ${gl.f} runs each formula at ${gl.f}/5 of its setting, and the glide row says so (${gl.row})`, JSON.stringify(gl));
+  ok(gl.ok && gl.cert && JSON.stringify(gl.rows) === JSON.stringify(gl.want) && gl.f < 5 && gl.rising === gl.want.length && gl.row.startsWith(`formula ${gl.f}/5 in · ${gl.want.length} of ${gl.want.length} rising`),
+     `at a glide of 5, step ${gl.f} has put in ${gl.f}/5 of the formula, each sutra at ${gl.f}/5 of its setting, and the glide row says so (${gl.row})`, JSON.stringify(gl));
   await waitFor(`KERNEL_VIEW.state.frame >= 6`, 30000);
   const hd0 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, rising: RAMP_VIEW.rising, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)), row: glideWords() })`);
   await sleep(3000);
   const hd1 = await evaluate(`({ f: KERNEL_VIEW.state.frame, ok: RAMP_VIEW.ok, held: RAMP_VIEW.rows.length === 3 && RAMP_VIEW.rows.every(r => Q.eq(r.s, r.to)) })`);
-  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('all 3 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
-     `past the glide each formula is held at its setting and the run goes on (step ${hd0.f} to ${hd1.f} in 3 s)`, JSON.stringify({ hd0, hd1 }));
+  ok(hd0.ok && hd0.held && hd0.rising === 0 && hd0.row.startsWith('formula in, none applied now · all 3 held') && hd1.ok && hd1.held && hd1.f - hd0.f >= 2,
+     `past the glide the formula is in, no formula is applied, each sutra is shown at its setting and the run goes on (step ${hd0.f} to ${hd1.f} in 3 s)`, JSON.stringify({ hd0, hd1 }));
   await setGlide(1);
 
   section('every control reaches the kernel');
@@ -348,7 +349,7 @@ try {
        `applied=${got} set=${s.active} comp=${s.comp} halted=${s.halted}`);
   };
   const presets = await evaluate(`Object.entries(PRESETS).map(([id, p]) => [id, p.comp, Object.keys(p.set).filter(k => p.set[k] > 0).map(Number).sort((a, b) => a - b).join(',')])`);
-  ok(presets.length === 12, `${presets.length} presets`);
+  ok(presets.length === 13, `${presets.length} presets`);
   const titles = await evaluate(`Object.keys(PRESETS).map(id => [id, document.getElementById(id).title === presetTitle(PRESETS[id])])`);
   ok(titles.every(([, a]) => a), 'each preset button\'s title is built from its definition', JSON.stringify(titles.filter(([, a]) => !a)));
   const whites = [];
@@ -433,7 +434,7 @@ try {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
     updateDynamoHud();
     return { maya: s.maya, dynamo: s.dynamo, n, contiguous: H.frame.every((f, i) => f === i),
-             flux: document.getElementById('dyn-flux').textContent, wantFlux: fmtE(FAITHFUL.qNum(d.fluxEnergy)),
+             flux: document.getElementById('dyn-flux').textContent, wantFlux: FAITHFUL.aSci(A4.fromQ(d.fluxEnergy), 1),
              phaseRow: document.getElementById('maya-phase').textContent, wantPhase: FAITHFUL.qNum(d.phase).toFixed(5),
              line: document.getElementById('dynLine').textContent, last: shownStep(), closed: d.closed };
   })()`);
@@ -742,14 +743,16 @@ try {
     worstP = Math.max(worstP, Math.abs(HZ.pB[g] / (dot(B, B) / 2) - 1)); nP++;
   }
   ok(worstP < 1e-4, `the stored pressure at ${nP} nodes spread over the grid is |B|^2 / 2 with B Biot-Savart's integrated here (haze_pressure_nonneg, haze_stress_trace; worst ${worstP.toExponential(1)})`);
-  let lo = Infinity, hi = -Infinity;
-  for (const p of HZ.pB) if (p > 0) { const L = Math.log(p); if (L < lo) lo = L; if (L > hi) hi = L; }
-  let tBad = 0, tMin = Infinity, tMax = -Infinity, gBad = 0, gWide = 0;
-  for (let g = 0; g < NH; g++) {
-    const t = HZ.g[g * 4 + 3], want = Math.fround(HZ.pB[g] > 0 && hi > lo ? (Math.log(HZ.pB[g]) - lo) / (hi - lo) : 0);
-    if (t !== want || !(t >= 0 && t <= 1)) tBad++;
-    tMin = Math.min(tMin, t); tMax = Math.max(tMax, t);
-  }
+  const { lo, hi, tBad, tMin, tMax } = await evaluate(`(() => { const pB = FIELDS.cur.pB, hz = FIELDS.cur.haze; let lo = Infinity, hi = -Infinity;
+    for (const p of pB) if (p > 0) { const L = Math.log(p); if (L < lo) lo = L; if (L > hi) hi = L; }
+    let tBad = 0, tMin = Infinity, tMax = -Infinity;
+    for (let g = 0; g < pB.length; g++) {
+      const t = hz[g * 4 + 3], want = Math.fround(pB[g] > 0 && hi > lo ? (Math.log(pB[g]) - lo) / (hi - lo) : 0);
+      if (t !== want || !(t >= 0 && t <= 1)) tBad++;
+      tMin = Math.min(tMin, t); tMax = Math.max(tMax, t);
+    }
+    return { lo, hi, tBad, tMin, tMax }; })()`);
+  let gBad = 0, gWide = 0;
   for (let k = 0; k < HN; k++) for (let j = 0; j < HN; j++) for (let i = 0; i < HN; i++) {
     const g = (k * HN + j) * HN + i, at = [i, j, k], st = [1, HN, HN * HN];
     for (let c = 0; c < 3; c++) {
@@ -760,7 +763,7 @@ try {
     }
   }
   ok(lo === HZ.range[0] && hi === HZ.range[1] && tBad === 0 && tMin === 0 && tMax === 1,
-     `every node's place in the log range of the stored pressures is in [0, 1], taken again here bit for bit, the range's ends attained (plot_mem, plot_log_mono)`, `${tBad} differ; range ${HZ.range} against ${lo}, ${hi}`);
+     `every node's place in the log range of the stored pressures is in [0, 1], taken again bit for bit with the browser's own Math.log, the range's ends attained (plot_mem, plot_log_mono)`, `${tBad} differ; range ${HZ.range} against ${lo}, ${hi}`);
   ok(gBad === 0 && gWide === 0, `every difference along every axis at every node is the stored places' central difference inside and one-sided on the faces, bit for bit, within 1/2 and 1 a step (haze_central_le, haze_side_le)`, `${gBad} differ, ${gWide} too wide`);
   const f16 = x => { if (x === 0) return 0; const a = Math.abs(x); let e = Math.floor(Math.log2(a)); if (Math.pow(2, e) > a) e--; if (Math.pow(2, e + 1) <= a) e++;
     const q = Math.pow(2, Math.max(e, -14) - 10), r = a / q, f = Math.floor(r), n = r - f > 0.5 || (r - f === 0.5 && f % 2 === 1) ? f + 1 : f; return Math.sign(x) * n * q; };
@@ -1022,10 +1025,11 @@ try {
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
-  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), k: r.k, n: r.n })), dur: DISPLAY.dur })`);
+  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), from0: Q.eq(r.s, Q.mul(r.to, Q.mk(BigInt(r.k), BigInt(r.n)))), k: r.k, n: r.n })),
+                                 formula: KERNEL_VIEW.formula, dur: DISPLAY.dur })`);
   await setGlide(1);
-  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3) && rg.dur === 1000,
-     'a glide changed mid-way goes on from where each strength stands over the new number of steps, still one step a second', JSON.stringify(rg));
+  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.from0) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
+     'a glide changed mid-way calculates the formula again from the field as it stands and puts it in from 0 over the new number of steps, still one step a second', JSON.stringify(rg));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1039,30 +1043,33 @@ try {
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
     const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
     const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    let magKeeps = null, rotKeeps = null;
+    let magKeeps = null, rotKeeps = null, shareKeeps = null;
     try {
       const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
-      const B0 = st(L.afterMSTVQCoupling), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
+      const B0 = st(L.afterFormulaShare), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
       const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
       const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
       rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
+      const dF = st(L.formula.delta), part = q(L.formulaPart);
+      shareKeeps = same(st(L.input).map((x, i) => K.storeQ(Q.add(x, Q.mul(dF[i], part)))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             magKeeps, rotKeeps,
+             magKeeps, rotKeeps, shareKeeps,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
-             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.activeSutras.length * (L.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.activeSutras.length + ' ' + L.composition : 'none'),
+             records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.formula.activeSutras.length * (L.formula.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.formula.activeSutras.length + ' ' + L.formula.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/5' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(gotStep && st.schema === 'vedic-step-export/6' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError,
      'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
-  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per formula applied', JSON.stringify({ lambda: st.lambda, records: st.records }));
+  ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per sutra in the formula', JSON.stringify({ lambda: st.lambda, records: st.records }));
+  ok(st.shareKeeps === true, 'the step export carries the formula: its change is its field less the field it was calculated from, and the step put in exactly its share of it', JSON.stringify({ shareKeeps: st.shareKeeps }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
   await evaluate(`document.getElementById('btn-exact-operator-audit').click()`);
   const gotAudit = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_formula_audit_'))`, 300000);
