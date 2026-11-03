@@ -185,7 +185,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
     <p class="note">Every live step requires all 29 sūtras, at α = id/435 × strength × composition gain, with unrounded rational arithmetic. S13 refuses a zero denominator; source-defined piecewise branches in S6, S19 and S25 remain explicit. GRVQ and MSTVQ currently update a λ register and report its values. Their connection to the complete original evolving system remains unresolved. A completed formula calculation does not establish complete coupling or validate the inherited model parameters.</p>
     <div class="row"><span class="k">λ₀ λ₁ λ₂ λ₃</span><span class="v" id="cp-lambda">–</span></div>
-    <div class="row"><span class="k">GRVQ δλ this step</span><span class="v" id="cp-grvq">–</span></div>
+    <div class="row"><span class="k">GRVQ δλ in the formula</span><span class="v" id="cp-grvq">–</span></div>
     <div class="row"><span class="k">MSTVQ</span><span class="v" id="cp-mstvq">–</span></div>
     <div class="row"><span class="k">formula statements</span><span class="v" id="cp-claims">–</span></div>
   </div>
@@ -197,7 +197,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>COMPOSITION</h5>
-    <p class="note">How the active sūtras combine in one step. SERIES composes them in order, PARALLEL adds their separate displacements, CONCURRENT runs them forward then back at half strength.</p>
+    <p class="note">How the active sūtras combine in the formula. SERIES composes them in order, PARALLEL adds their separate displacements, CONCURRENT runs them forward then back at half strength.</p>
     <div class="ctrls" id="comp-ctrls" style="margin-top:0">
       <button type="button" data-comp="SERIES" class="active">SERIES</button>
       <button type="button" data-comp="PARALLEL">PARALLEL</button>
@@ -207,6 +207,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="section">
     <h5>PRESETS</h5>
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
+      <button type="button" id="pre-quartet">✦ QUARTET</button>
       <button type="button" id="pre-damper">⏚ DAMPER</button>
       <button type="button" id="pre-inductor">🧲 INDUCTOR</button>
       <button type="button" id="pre-dynamo">⚙ DYNAMO</button>
@@ -261,7 +262,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PACE</h5>
-    <p class="note">One step a second. A formula you switch on or change reaches its strength in this many steps, then holds it while the run goes on.</p>
+    <p class="note">One step a second. The formula, calculated once when you switch a sūtra on or change the settings, goes in over this many steps in equal shares; after that no formula is applied and only the stages run.</p>
     <div class="amp-row"><span>Glide (steps)</span><input type="range" min="1" max="120" value="10" id="amp-glide"><span id="amp-glide-v">10</span></div>
   </div>
   <div class="section">
@@ -270,7 +271,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="amp-row"><span>Zoom</span><input type="range" min="10" max="600" value="100" id="amp-zoom"><span id="amp-zoom-v">1.00</span></div>
     <div class="amp-row"><span>Field→R</span><input type="range" min="0" max="200" value="60" id="amp-field"><span id="amp-field-v">60</span></div>
     <div class="amp-row"><span>Field→r</span><input type="range" min="0" max="100" value="35" id="amp-tube"><span id="amp-tube-v">35</span></div>
-    <div class="amp-row"><span>Field→Y</span><input type="range" min="0" max="100" value="45" id="amp-ydisp"><span id="amp-ydisp-v">45</span></div>
+    <div class="amp-row"><span>Dielectric→Y</span><input type="range" min="0" max="100" value="45" id="amp-ydisp"><span id="amp-ydisp-v">45</span></div>
     <div class="amp-row"><span>∇twist</span><input type="range" min="0" max="50" value="8" id="amp-gtwist"><span id="amp-gtwist-v">0.08</span></div>
     <div class="amp-row"><span>∇ripple</span><input type="range" min="0" max="50" value="8" id="amp-gripple"><span id="amp-gripple-v">8</span></div>
     <div class="amp-row"><span>Vortex</span><input type="range" min="0" max="50" value="10" id="amp-vortex"><span id="amp-vortex-v">1.0</span></div>
@@ -1148,12 +1149,12 @@ const KERNEL_FACTORY = () => {
   const applySutra = (id, psi, arg, ctx = {}) => {
     const a = sutraArgs(id, arg), gain = ctx.gain || Q.ONE, al = alphaOf(id, a, gain);
     const k = GRVQ_K[id];
-    const lam = k === undefined ? null : (ctx.lam ? ctx.lam.slice() : inverseL(psi));
-    const grvq = k === undefined ? null : { k, lambda: lam, delta: Q.mul(grvqDelta(lam, k, ctx.t || Q.ZERO), gain) };
-    if (grvq && ctx.lam) ctx.lam[k] = storeOrZero(Q.add(ctx.lam[k], grvq.delta));
+    const lam = k === undefined ? null : inverseL(psi);
+    const grvq = k === undefined ? null : { k, lambda: lam, delta: Q.mul(grvqDelta(lam, k, ctx.t || Q.ZERO), al) };
     const out = vedicField(id, psi, a, al);
-    if (ctx.record) ctx.record.push({ id, alpha: al, grvq, B: out.B || null, info: out, dE: Q.sub(energyR(out.p), energyR(psi)) });
-    return out.p;
+    const next = grvq ? injectLambda(out.p, grvq.k, grvq.delta) : out.p;
+    if (ctx.record) ctx.record.push({ id, alpha: al, grvq, B: out.B || null, info: out, dE: Q.sub(energyR(next), energyR(psi)) });
+    return next;
   };
   const argsFor = (s,scale) => sutraArgs(s.id,s.args!==undefined?s.args:s.strength);
   const gainOf = s => s.gain || Q.ONE;
@@ -1182,23 +1183,25 @@ const KERNEL_FACTORY = () => {
     }
     throw new RangeError(`Unsupported sutra mode: ${mode}`);
   };
-  const distributedGRVQ = (lam, active, t, record) => {
-    const list = active.slice().sort((a, b) => a.id - b.id), invN = Q.mk(1n, BigInt(Math.max(1, list.length)));
+  const distributedGRVQ = (psi, active, t, keep, record) => {
+    const list = active.slice().sort((a, b) => a.id - b.id);
+    let out = psi;
     for (const s of list) {
       if (GRVQ_K[s.id] !== undefined) continue;
-      const k = (s.id - 1) % 4, at = lam.slice(), delta = Q.mul(Q.mul(grvqDelta(at, k, t), invN), gainOf(s));
-      lam[k] = storeOrZero(Q.add(lam[k], delta));
-      if (record) record.push({ id: s.id, k, lambda: at, delta });
+      const k = (s.id - 1) % 4, lam = inverseL(out), delta = Q.mul(grvqDelta(lam, k, t), alphaOf(s.id, argsFor(s), gainOf(s)));
+      out = keep(injectLambda(out, k, delta));
+      if (record) record.push({ id: s.id, k, lambda: lam, delta });
     }
-    return lam;
+    return out;
   };
-  const distributedMSTVQ = (psi, active, lam) => {
+  const distributedMSTVQ = (psi, active, keep) => {
     const s1 = active.find(x => x.id === 1);
     const a1 = s1 ? Q.abs(alphaOf(1, argsFor(s1), gainOf(s1))) : Q.ZERO;
     const B = mstvqB(psi, a1), T = stressOf(B);
-    for (let k = 0; k < 3; k++) lam[k] = storeOrZero(Q.add(lam[k], Q.mul(T[k][k], MSTVQ_FEED)));
+    let out = psi;
+    for (let k = 0; k < 3; k++) out = injectLambda(out, k, Q.mul(T[k][k], MSTVQ_FEED));
     const trace = Q.add(Q.add(T[0][0], T[1][1]), T[2][2]);
-    return { B, T, trace, strength: a1 };
+    return { psi: keep(out), B, T, trace, strength: a1 };
   };
   const initDielectric = () => Array.from({length:16},(_,v)=>{
     const k=hw(v)-2;
@@ -1223,7 +1226,6 @@ const KERNEL_FACTORY = () => {
     const dielectric=[],magnetic=[],omega=[],dielectricTrace=[],magneticTrace=[],omegaTrace=[];
     const dielectricScaleQ=rationalA4(p.dielectricScale,"dielectricScale");
     const appliedHQ=rationalA4(p.appliedH,"appliedH");
-    const gammaQ=rationalA4(p.gammaW,"gammaW");
     for(let v=0;v<16;v++){
       const k=hw(v)-2;
       const k2=Q.mk(BigInt(k*k));
@@ -1231,7 +1233,7 @@ const KERNEL_FACTORY = () => {
       const dielectricBaseQ=Q.mul(dielectricScaleQ,field[v]);
       const d=A4.scaleQ(A4.TWO_PHI,dielectricBaseQ);
       const hQ=Q.mul(Q.mul(dielectricBaseQ,magneticWeightQ),appliedHQ);
-      const omQ=Q.mul(gammaQ,hQ);
+      const omQ=hQ;
       dielectric[v]=d;magnetic[v]=A4.fromQ(hQ);omega[v]=A4.fromQ(omQ);
       dielectricTrace[v]=dielectricBaseQ;magneticTrace[v]=hQ;omegaTrace[v]=omQ;
     }
@@ -1536,6 +1538,10 @@ const KERNEL_FACTORY = () => {
   const activeLoad = active => active.reduce((s,x)=>Q.add(s,x.strength),Q.ZERO);
   const exactGeometry = (psi,w,p) => {
     const out=[];
+    const fieldMax=psi.reduce((a,x)=>Q.cmp(Q.abs(x),a)>0?Q.abs(x):a,Q.ZERO);
+    const dielMax=w.dielectricTrace.reduce((a,x)=>Q.cmp(Q.abs(x),a)>0?Q.abs(x):a,Q.ZERO);
+    if(fieldMax.n===0n)throw new RangeError('the field is zero at every vertex: there is no largest to take a share of');
+    if(dielMax.n===0n)throw new RangeError('the dielectric is zero at every vertex: there is no largest to take a share of');
     for(let v=0;v<16;v++){
       const sx=A4.fromQ(Q.mk((v&1)?1n:-1n));
       const sy=A4.fromQ(Q.mk((v&2)?1n:-1n));
@@ -1543,17 +1549,17 @@ const KERNEL_FACTORY = () => {
       const s3=A4.fromQ(Q.mk((v&8)?1n:-1n));
       let x=A4.add(sx,A4.mul(s2,A4.INV_SQRT2));
       let y=A4.add(sy,A4.mul(s3,A4.INV_SQRT2));
-      let z=A4.fromQ(Q.mk(BigInt(hw(v)-2)));
-      const compression=A4.inv(A4.add(A4.ONE,A4.mul(p.geoD,w.dielectric[v])));
-      z=A4.mul(z,compression);
-      const radial=A4.add(A4.ONE,A4.div(A4.mul(p.geoM,w.magnetic[v]),A4.add(A4.ONE,A4.mul(z,z))));
+      const fieldShare=Q.div(psi[v],fieldMax);
+      const dielectricShare=Q.div(w.dielectricTrace[v],dielMax);
+      const z=A4.fromQ(Q.mul(Q.mk(BigInt(hw(v)-2)),dielectricShare));
+      const radial=A4.fromQ(Q.add(Q.ONE,fieldShare));
       x=A4.mul(x,radial);y=A4.mul(y,radial);
       let t=A4.mul(p.geoP,w.omega[v]);
       if(hw(v)<2)t=A4.neg(t);
       const t2=A4.mul(t,t),den=A4.add(A4.ONE,t2),c=A4.div(A4.sub(A4.ONE,t2),den),s=A4.div(A4.scaleQ(t,Q.TWO),den);
       const xr=A4.sub(A4.mul(c,x),A4.mul(s,y));
       const yr=A4.add(A4.mul(s,x),A4.mul(c,y));
-      out[v]={x:xr,y:yr,z,dielectric:w.dielectric[v],magnetic:w.magnetic[v],omega:w.omega[v]};
+      out[v]={x:xr,y:yr,z,fieldShare,dielectricShare,dielectric:w.dielectric[v],magnetic:w.magnetic[v],omega:w.omega[v]};
     }
     return out;
   };
@@ -1563,7 +1569,6 @@ const KERNEL_FACTORY = () => {
     const w = computeWheeler(f,par);
     const sQ = rationalA4(par.dielectricScale,"dielectricScale");
     const hQ = rationalA4(par.appliedH,"appliedH");
-    const gQ = rationalA4(par.gammaW,"gammaW");
     const dQ = rationalA4(par.geoD,"geoD");
     const pQ = rationalA4(par.geoP,"geoP");
     const R = [];
@@ -1590,7 +1595,7 @@ const KERNEL_FACTORY = () => {
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k));
       const mag=Q.mul(Q.mul(Q.mul(sQ,f[v]),Q.div(k2,Q.add(Q.ONE,k2))),hQ);
-      if(!A4.eq(w.omega[v],A4.fromQ(Q.mul(gQ,mag)))) t4=false;
+      if(!A4.eq(w.omega[v],A4.fromQ(mag))) t4=false;
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
 
@@ -1658,7 +1663,7 @@ const KERNEL_FACTORY = () => {
     const afterT=applyTGCR(afterM,params,keep);
     progress('ZPE field update');
     const afterZ=keep(applyZPE(afterT,W,params));
-    return {afterS,afterD:afterS,afterB:afterS,afterG,afterM,afterT,afterZ,record,grvqRecord,mstvq:ms,lambdaReg:lam};
+    return {afterF,afterG,afterM,afterT,afterZ};
   };
   const initEngine = () => {
     const psi=initState();
@@ -1700,7 +1705,7 @@ const KERNEL_FACTORY = () => {
     const W=computeWheeler(dielectricNext,params);
     const eIn=energy(input);
     const run=makeKeep();
-    const st=stagesFrom(input,active,mode,W,params,run.keep,ctx);
+    const st=stagesFrom(input,formula,part,W,params,run.keep,ctx);
     const ledger=run.ledger;
     const psi=st.afterZ;
     if(progress)progress({stage:'magnetic memory and diagnostics',phase:'started'});
@@ -1708,7 +1713,7 @@ const KERNEL_FACTORY = () => {
     const eFinal=energy(psi);
     const rhoOut=rhoHat(psi);
     const mag=magInduct(engine.magA,engine.magChi,input,psi,rhoOut,params);
-    const tgcrKappa=storeQ(Q.add(engine.tgcrKappa,Q.mul(st.mstvq.trace,TGCR_KAPPA_FEED)));
+    const tgcrKappa=storeQ(Q.add(engine.tgcrKappa,Q.mul(formula.kappaFeed,part)));
     return {
       psi,dielectric,energyLedger:eFinal,frame:engine.frame+1,tgcrKappa,
       mayaPhase:maya.next,mayaErr:maya.err,magA:mag.A,magChi:mag.chi,
@@ -2027,14 +2032,14 @@ const KERNEL_FACTORY = () => {
       const t=Q.mk(-3n,7n),[u,w]=rotPair(Q.mk(5n),Q.mk(-2n,3n),t);
       assert("pair rotation keeps the pair's energy",Q.eq(Q.add(Q.mul(u,u),Q.mul(w,w)),Q.add(Q.mk(25n),Q.mk(4n,9n))));
     }
-    const p={dt:A4.fromQ(Q.mk(1n,64n)),dielectricScale:A4.fromQ(Q.mk(1n,8n)),coherence:Q.mk(1n,4n),gammaW:A4.fromQ(Q.mk(424923n,10000n)),appliedH:A4.fromQ(Q.mk(1n,64n)),mstvq:A4.fromQ(Q.mk(1n,128n)),tgcr:A4.fromQ(Q.mk(1n,256n)),zpe:A4.fromQ(Q.mk(1n,512n)),zpeSource:A4.ZERO,geoD:A4.fromQ(Q.mk(1n,16n)),geoM:A4.fromQ(Q.mk(1n,8n)),geoP:A4.fromQ(Q.mk(1n,128n)),polarisation:Q.ONE,vortex:Q.ONE};
+    const p={dt:A4.fromQ(Q.mk(1n,64n)),dielectricScale:A4.fromQ(Q.mk(1n,8n)),coherence:Q.mk(1n,4n),appliedH:A4.fromQ(Q.mk(1n,64n)),mstvq:A4.fromQ(Q.mk(1n,128n)),tgcr:A4.fromQ(Q.mk(1n,256n)),zpe:A4.fromQ(Q.mk(1n,512n)),zpeSource:A4.ZERO,geoD:A4.fromQ(Q.mk(1n,16n)),geoM:A4.fromQ(Q.mk(1n,8n)),geoP:A4.fromQ(Q.mk(1n,128n)),polarisation:Q.ONE,vortex:Q.ONE};
     const dfield=initDielectric();const w=computeWheeler(dfield,p);for(let v=0;v<16;v++)if(hw(v)===2)assert(`Wheeler inertial-plane M=0 v${v}`,A4.isZero(w.magnetic[v]));
-    const nine=[{id:9,strength:Q.mk(1n,10n)}],one=step(initEngine(),p,nine,"SERIES");
+    const e0=initEngine(),nine=[{id:9,strength:Q.mk(1n,10n)}],f9=formulaOf(e0.psi,nine,"SERIES",timeOf(0)),one=step(e0,p,nine,"SERIES",f9,Q.ONE);
     assert("a step runs and its stages are recorded",one.last.sutraRecord.length===1&&one.last.grvqRecord.length===0);
     assert("GRVQ claims on S9's feedback",grvqClaims(one.last.sutraRecord.map(r=>r.grvq),one.last.time).ok);
     assert("MSTVQ stress claims",mstvqClaims(one.last.mstvq).ok);
     assert("stage claims",stageClaims(one.last,p).ok);
-    const exactRun=stagesFrom(one.last.input,one.last.active,"SERIES",one.last.wheeler,p,x=>x,one.last.ctx);
+    const exactRun=stagesFrom(one.last.input,one.last.formula,one.last.part,one.last.wheeler,p,x=>x,one.last.ctx);
     let dist=Q.ZERO;
     exactRun.afterZ.forEach((z,v)=>{dist=Q.add(dist,Q.abs(Q.sub(z,one.last.afterZ[v])));});
     assert("step error within its ledger",Q.cmp(dist,one.last.stepError.delta)<=0);
@@ -2121,10 +2126,14 @@ const KERNEL_FACTORY = () => {
       stepError: {delta:serializeQ(last.stepError.delta),stores:last.stepError.stores},
       lambdaIn: last.lambdaIn.map(serializeQ),
       lambdaOut: last.lambdaOut.map(serializeQ),
-      lambdaRegister: last.lambdaReg.map(serializeQ),
-      afterSutraCore: serializeState(last.afterS),
-      afterDistributedGRVQ: serializeState(last.afterD),
-      afterMSTVQCoupling: serializeState(last.afterB),
+      formula: { input: serializeState(last.formula.input), time: serializeQ(last.formula.time), composition: last.formula.mode,
+                 activeSutras: last.formula.active.map(x => ({id:x.id,strength:serializeQ(x.strength),args:x.args?x.args.map(serializeQ):null})),
+                 afterSutraCore: serializeState(last.formula.afterS), afterDistributedGRVQ: serializeState(last.formula.afterD),
+                 afterMSTVQCoupling: serializeState(last.formula.afterB), delta: serializeState(last.formula.delta),
+                 kappaFeed: serializeQ(last.formula.kappaFeed),
+                 stepError: {delta:serializeQ(last.formula.stepError.delta),stores:last.formula.stepError.stores} },
+      formulaPart: serializeQ(last.part),
+      afterFormulaShare: serializeState(last.afterF),
       afterMagnetism: serializeState(last.afterG),
       afterMSTVQ: serializeState(last.afterM),
       afterTGCR: serializeState(last.afterT),
@@ -2134,7 +2143,7 @@ const KERNEL_FACTORY = () => {
       mstvq: serializeExact(last.mstvq),
       tgcr: serializeExact(last.tgcr),
       energyBefore: serializeQ(last.e0),
-      energyAfterSutraCore: serializeQ(last.eS),
+      energyAfterFormulaShare: serializeQ(last.eF),
       energyStored: serializeQ(last.eFinal),
       dielectricDrift: serializeQ(last.dielectricDrift),
       wheeler: serializeExact(last.wheeler),
@@ -2447,7 +2456,7 @@ const LEAN_PROVED = Object.freeze({
 const VISUAL_CERTIFICATE = {
   channels: {
     amplitude: {
-      draws: 'R, r, yOff and the gradient terms from |Psi|^2 of each stored state, moving between steps in a straight line',
+      draws: 'R, r and the gradient terms from |Psi|^2 of each stored state, moving between steps in a straight line',
       theorems: ['cell_bijective', 'cube_edge_iff_torus_edge', 'node_theta', 'node_phi',
                  'MI_mode', 'node_reproduction', 'interpolant_unique',
                  'parseval_coeffs', 'parseval_grid', 'store_err_le', 'store_err_le_stored',
@@ -2468,9 +2477,9 @@ const VISUAL_CERTIFICATE = {
       holds: () => !!KERNEL_VIEW.couplings && KERNEL_VIEW.couplings.ok === true
     },
     wheeler: {
-      draws: 'dielectric compression, magnetic dilation, precession rotation, ' +
+      draws: 'the height of each layer as its share of the largest dielectric, dielectric compression of the tube, magnetic dilation, precession rotation, ' +
              'the WHEELER surface terms and colour, and the inertial layer',
-      theorems: [...LEAN_PROVED.wheelerChecked, 'real_node_reproduction',
+      theorems: [...LEAN_PROVED.wheelerChecked, 'real_node_reproduction', 'share_abs_le',
                  'centBal_abs_le', 'goldenVortex_eq_alpha_centBal', 'goldenVortex_abs_le',
                  'zeta_pow', 'fieldDistortion_mem', 'etherPressure_abs_le', 'counterspace_abs_le',
                  'inertiaEnvelope_vertex', 'inertiaEnvelope_vertex_eq_one_iff',
@@ -2533,12 +2542,12 @@ const VISUAL_CERTIFICATE = {
       holds: () => FIELDS.ok && DYNAMO_VIEW.ok
     },
     ramp: {
-      draws: 'the glide row and the strengths in the computation line: each formula at the strength the step ran it with, rising in equal steps from where it stood to its setting over the glide, then held there while the run goes on',
+      draws: 'the glide row and the strengths in the computation line: the formula calculated once at the set strengths and put in over the glide in equal shares, each sutra shown at the share of its setting put in so far, rising from 0 to its setting, then held there while no formula is applied',
       theorems: ['ramp_zero', 'ramp_steady', 'ramp_end', 'ramp_hold', 'ramp_share', 'ramp_eq_lerp', 'ramp_between', 'ramp_unit', 'ramp_mono', 'ramp_pos', 'ramp_restart'],
       holds: () => RAMP_VIEW.ok
     },
     sutra: {
-      draws: 'each active sutra: its v18.24 formula and type, the energy it changed the field by on the step shown, and the statements about it decided on the live field at its strength and operands',
+      draws: 'each active sutra: its v18.24 formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
       theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'ext_euclid_step', 'bezout_identity', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
       holds: () => SUTRA_CERT.ok
     }
@@ -3074,7 +3083,6 @@ function kernelParams() {
     dt: A4.fromQ(Q.mk(1n, 64n)),
     dielectricScale: A4.fromQ(Q.mul(ampD, Q.mk(1n, 8n))),
     coherence: Q.mk(1n, 4n),
-    gammaW: A4.fromQ(Q.mk(424923n, 10000n)),
     appliedH: A4.fromQ(Q.mul(ampB, Q.mk(1n, 64n))),
     mstvq: A4.fromQ(Q.mk(1n, 128n)),
     tgcr: A4.fromQ(Q.mk(1n, 256n)),
@@ -3109,8 +3117,15 @@ function workerSource(handler) {
   return 'const KERNEL = (' + KERNEL_FACTORY.toString() + ')();\n' + handler;
 }
 const KERNEL_WORKER_HANDLER = `
-let engine = KERNEL.initEngine(), ramp = [];
+let engine = KERNEL.initEngine(), ramp = [], formula = null, formulaKey = '', glideK = 0;
 let config = null, halted = null, scheduled = false, wanted = false;
+function formulaKeyOf(m) {
+  return m.active.map(a => a.id + ':' + (a.args || [a.strength]).map(q => q.n + '/' + q.d).join(',')).join('|') + '#' + m.composition + '#' + m.glide;
+}
+function newFormula(m) {
+  formula = KERNEL.formulaOf(engine.psi, m.active, m.composition, KERNEL.timeOf(engine.frame));
+  formulaKey = formulaKeyOf(m); glideK = 0; ramp = [];
+}
 function post(msg) { self.postMessage(msg); }
 function postState(ms) {
   const L = engine.last;
@@ -3126,6 +3141,7 @@ function postState(ms) {
          strengths: L ? L.active.map(a => ({ id: a.id, strength: a.strength })) : [],
          sutraDE: L ? Object.values(L.sutraRecord.reduce((m, r) => { const p = m[r.id]; m[r.id] = { id: r.id, dE: p ? KERNEL.Q.add(p.dE, r.dE) : r.dE }; return m; }, {})) : [],
          ramp: ramp.map(r => ({ id: r.id, from: r.from, to: r.to, k: r.k, n: r.n })),
+         formula: formula && config ? { k: glideK, n: config.glide } : null,
          dyn: dynamoOf(engine) });
 }
 function couplingsOf(L) {
@@ -3166,13 +3182,21 @@ function tick() {
     return;
   }
   engine = next; ramp = rs.ramp;
+  if (glideK < config.glide) glideK++;
   postState(performance.now() - t0);
 }
 self.onmessage = e => {
   const m = e.data;
   if (m.type === 'config') {
     config = m; halted = null;
-    if (m.reset) { engine = KERNEL.initEngine(); ramp = []; wanted = false; postState(0); }
+    try {
+      if (m.reset) { engine = KERNEL.initEngine(); wanted = false; newFormula(m); postState(0); }
+      else if (!formula || formulaKeyOf(m) !== formulaKey) newFormula(m);
+    } catch (err) {
+      halted = { name: err.name || 'Error', message: String(err.message || err) };
+      post({ type: 'halted', version: m.version, epoch: m.epoch, frame: engine.frame, reason: halted });
+      return;
+    }
     schedule();
   }
   else if (m.type === 'next') { wanted = true; schedule(); }
@@ -3421,6 +3445,7 @@ function applyKernelState(m) {
     KERNEL_VIEW.appliedVersion = m.version; KERNEL_VIEW.appliedEpoch = m.epoch; KERNEL_VIEW.stateAt = m.at;
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedSet = m.setIds; KERNEL_VIEW.appliedComposition = m.composition;
     rampView(m.ramp, m.strengths);
+    KERNEL_VIEW.formula = m.formula;
     KERNEL_VIEW.sutraDE = new Map((m.sutraDE || []).map(x => [x.id, x.dE]));
     updateFormulaDisplay();
     KERNEL_VIEW.couplings = m.couplings; KERNEL_VIEW.lambda = m.lambda; KERNEL_VIEW.tgcr = m.tgcr;
@@ -3508,16 +3533,16 @@ function projectState() {
 }
 const WHEELER_CHANNEL = {
   D: new Float64Array(16), M: new Float64Array(16), W: new Float64Array(16),
-  magneticWeight: new Float64Array(16), kSigned: new Float64Array(16),
+  magneticWeight: new Float64Array(16), kSigned: new Float64Array(16), Z: new Float64Array(16),
   gD: new Float64Array(FIELD_TH * FIELD_PH), gM: new Float64Array(FIELD_TH * FIELD_PH),
   gW: new Float64Array(FIELD_TH * FIELD_PH), gK: new Float64Array(FIELD_TH * FIELD_PH),
-  gKs: new Float64Array(FIELD_TH * FIELD_PH),
+  gKs: new Float64Array(FIELD_TH * FIELD_PH), gZ: new Float64Array(FIELD_TH * FIELD_PH),
   wMax: 0, wZero: true, audit: null, surface: null, node: null, ok: false, why: 'no state yet',
   geoD: 0, geoM: 0, geoP: 0
 };
 function wheelerInputKey(dielectric, params) {
   return dielectric.map(q => q.n + '/' + q.d).join(',') + '|' +
-         ['dielectricScale', 'appliedH', 'gammaW', 'geoD', 'geoM', 'geoP'].map(k => {
+         ['dielectricScale', 'appliedH', 'geoD', 'geoM', 'geoP'].map(k => {
            const x = params[k]; return [x.a, x.b, x.c, x.d].map(q => q.n + '/' + q.d).join(':');
          }).join('|');
 }
@@ -3533,7 +3558,7 @@ function refreshWheelerChannel(dielectric, params) {
   }
   const withhold = why => {
     C5.ok = false; C5.why = why;
-    C5.gD.fill(0); C5.gM.fill(0); C5.gW.fill(0); C5.gK.fill(0); C5.gKs.fill(0);
+    C5.gD.fill(0); C5.gM.fill(0); C5.gW.fill(0); C5.gK.fill(0); C5.gKs.fill(0); C5.gZ.fill(0);
     C5.wMax = 0;
   };
   if (!dielectric || !params) { withhold('no state yet'); return; }
@@ -3543,7 +3568,10 @@ function refreshWheelerChannel(dielectric, params) {
   if (!C5.audit.ok) { withhold('wheelerAudit: ' + C5.audit.results.filter(r => !r.ok).map(r => r.name).join(', ')); return; }
   if (!C5.surface.ok) { withhold('surfaceAudit: ' + C5.surface.problems.join(', ')); return; }
   C5.geoD = aN(params.geoD); C5.geoM = aN(params.geoM); C5.geoP = aN(params.geoP);
+  const dielMax = w.dielectricTrace.reduce((a, x) => Q.cmp(Q.abs(x), a) > 0 ? Q.abs(x) : a, Q.ZERO);
+  if (dielMax.n === 0n) { withhold('the dielectric is zero at every vertex: there is no largest to take a share of'); return; }
   for (let v = 0; v < 16; v++) {
+    C5.Z[v] = FAITHFUL.qNum(Q.mul(Q.mk(BigInt(KERNEL.hw(v) - 2), 2n), Q.div(w.dielectricTrace[v], dielMax)));
     C5.D[v] = aN(w.dielectric[v]);
     C5.M[v] = aN(w.magnetic[v]);
     C5.W[v] = aN(w.omega[v]) * (KERNEL.hw(v) < 2 ? -1 : 1);
@@ -3551,8 +3579,8 @@ function refreshWheelerChannel(dielectric, params) {
     C5.kSigned[v] = k;
     C5.magneticWeight[v] = (k * k) / (1 + k * k);
   }
-  const chans = [C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned];
-  const grids = [C5.gD, C5.gM, C5.gW, C5.gK, C5.gKs];
+  const chans = [C5.D, C5.M, C5.W, C5.magneticWeight, C5.kSigned, C5.Z];
+  const grids = [C5.gD, C5.gM, C5.gW, C5.gK, C5.gKs, C5.gZ];
   for (let q = 0; q < chans.length; q++) {
     const re = new Float64Array(16), im = new Float64Array(16);
     for (let k = 0; k < 16; k++) re[k] = chans[q][k];
@@ -3907,7 +3935,6 @@ function projectTorus() {
       if (ampOn) {
         R += fv * AMP.field;
         r += fv * AMP.tube;
-        yOff += fv * AMP.yDisp;
         const dGth = bw(DISPLAY_FIELD, sb + 4) * mayaM - fv, dGph = bw(DISPLAY_FIELD, sb + 8) * mayaM - fv;
         phiShift += dGth * AMP.gradTwist * 3;
         r += abs(dGph) * AMP.gradRipple;
@@ -3919,9 +3946,9 @@ function projectTorus() {
         const aw = AMP.wheeler;
         kS = sKs;
         const compression = 1 / (1 + C5.geoD * sD);
-        const z = sKs * compression;
+        const z = bw(C5.gZ, sb);
         r *= (1 + (compression - 1) * 0.5 * aw);
-        yOff += z * 6.0 * aw;
+        yOff += z * AMP.yDisp;
         const radial = 1 + C5.geoM * sM / (1 + z * z);
         R *= radial;
         r += (1 - sK) * 11.0 * aw;
@@ -4965,9 +4992,10 @@ function glideWords() {
   if (!st) return '–';
   if (!(VISUAL_CERTIFICATE._last && VISUAL_CERTIFICATE._last.ramp)) return 'withheld: ' + (R.why || 'the glide certificate does not hold');
   if (!R.rows.length) return st.frame === 0 ? 'on the seed' : 'no sūtra running';
-  const pct = q => (100 * FAITHFUL.qNum(q)).toFixed(1).replace(/\.0$/, '') + '%';
+  const pct = q => (100 * FAITHFUL.qNum(q)).toFixed(1).replace(/\.0$/, '') + '%', F = KERNEL_VIEW.formula;
+  const share = F ? (F.k < F.n ? `formula ${F.k}/${F.n} in · ` : 'formula in, none applied now · ') : '';
   const head = R.rising ? `${R.rising} of ${R.rows.length} rising · ` : `all ${R.rows.length} held · `;
-  return head + R.rows.map(r => `S${r.id} ${pct(r.s)}` + (r.rising ? ` → ${pct(r.to)} (${r.k}/${r.n})` : '')).join(' · ');
+  return share + head + R.rows.map(r => `S${r.id} ${pct(r.s)}` + (r.rising ? ` → ${pct(r.to)} (${r.k}/${r.n})` : '')).join(' · ');
 }
 function updateCouplingsHud() {
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
@@ -4978,7 +5006,7 @@ function updateCouplingsHud() {
   if (C && L && ok) {
     set('cp-lambda', L.map(x => sg(num(x))).join('  '));
     const by = [0, 1, 2, 3].map(k => C.grvq.filter(g => g.k === k).reduce((s, g) => s + num(g.delta), 0));
-    set('cp-grvq', C.grvq.length ? by.map(sg).join('  ') + ` · ${C.grvq.length} feed${C.grvq.length === 1 ? '' : 's'}` : 'no GRVQ feed this step');
+    set('cp-grvq', C.grvq.length ? by.map(sg).join('  ') + ` · ${C.grvq.length} feed${C.grvq.length === 1 ? '' : 's'}` : 'no GRVQ feed in the formula');
     set('cp-mstvq', `B ${C.mstvq.B.map(x => sg(num(x))).join(' ')} · tr T ${sg(num(C.mstvq.trace))}` + (C.sutraB ? ` · last set by S${C.sutraB.id}` : ''));
   } else { set('cp-lambda', 'withheld'); set('cp-grvq', C ? 'a coupling statement fails: ' + C.claims.filter(c => !c.ok).map(c => c.name).join(', ') : '–'); set('cp-mstvq', '–'); }
   if (T && VORTEX_VIEW.ok) {
@@ -5225,10 +5253,10 @@ function updateFormulaDisplay() {
   try { p = kernelParams(); } catch (err) { el.textContent = 'parameters refused: ' + err.message; return; }
   el.innerHTML =
     `<b style="color:#d4af37">Ψ ← store ∘ ZPE ∘ TGCR ∘ MSTVQ ∘ MAG ∘ ${COMPOSITION_LABEL[COMPOSITION]}</b>[${escHtml(list || 'no sūtra active')}](Ψ)<br>` +
-    `dielectric q ← evolve(q) + χ·|Ψ|²/8, then Wheeler: D = 2φ·s·q, M = D·k²/(1+k²)·B, ω = γ_W·M<br>` +
+    `dielectric q ← evolve(q) + χ·|Ψ|²/8, then Wheeler: D = 2φ·s·q, M = D·k²/(1+k²)·B, ω = M<br>` +
     `MAG: Ψ_v ← e^{iθ_v}Ψ_v, tan(θ_v/2) = dt·(∇·A + mean B²); then A ← (499/500)A − (1/10)d⁰Δ|Ψ|² + ω·vortex·share<br>` +
     `Maya: φ ← φ + β(φ)/500 five times, β = (φ_g/e) sin φ − (e/π) φ³; drawn field × M = 1 + β/(20(1+|β|))<br>` +
-    `s = ${escHtml(Q.toString(p.dielectricScale.a))} · B = ${escHtml(Q.toString(p.appliedH.a))} · γ_W = ${escHtml(Q.toString(p.gammaW.a))} · dt = ${escHtml(Q.toString(p.dt.a))}<br>` +
+    `s = ${escHtml(Q.toString(p.dielectricScale.a))} · B = ${escHtml(Q.toString(p.appliedH.a))} · dt =${escHtml(Q.toString(p.dt.a))}<br>` +
     `ω = ${escHtml(Q.toString(p.vortex))} · drive = ${escHtml(Q.toString(p.zpeSource.a))} · χ = ${escHtml(Q.toString(p.polarisation))}<br>` +
     `rational formulas and storage are unrounded; named constants, full coupling and Maya exactness remain unresolved`;
 }
@@ -5418,6 +5446,8 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
   pushConfig('composition → ' + COMPOSITION_LABEL[COMPOSITION]);
 }));
 const PRESETS = {
+  'pre-quartet': { comp: 'PARALLEL', set: { 2: 100, 6: 100, 23: 100, 26: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'One formula from four sutras whose changes to the seed field point in different directions (the largest cosine between any two of them is 0.40): S2 reflects every vertex about half the base, S6 drives each edge ratio toward its target, S23 moves complement pairs toward tens and S26 pulls every vertex toward the flag over its portion, all from the same state. The formula goes in over the glide; after that only the stages run and the energy of the field holds.' },
   'pre-damper': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
     purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state.' },
   'pre-inductor': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
@@ -5429,7 +5459,7 @@ const PRESETS = {
   'pre-capacitor': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
     purpose: 'S4, S5 and S26 with the polarisation at 3, so the field charges the dielectric.' },
   'pre-balancer': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha each time, while S9 diffuses the field.' },
+    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha, while S9 diffuses the field.' },
   'pre-checksum': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
     purpose: 'Casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once, with S9 diffusing the field over the hypercube.' },
   'pre-lock': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
@@ -5444,7 +5474,7 @@ const PRESETS = {
     purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.' }
 };
 
-const DEFAULT_PRESET = 'pre-damper';
+const DEFAULT_PRESET = 'pre-quartet';
 function presetTitle(p) {
   const ops = Object.entries(p.set).map(([i, v]) => `S${i}(${v})`).join(' ');
   const knobs = [`vortex ω ${(p.omega / 10).toFixed(1)}`, p.drive ? `drive ${(p.drive / 4).toFixed(2)}` : '', p.chi !== 10 ? `χ ${(p.chi / 10).toFixed(1)}` : ''].filter(Boolean).join(', ');

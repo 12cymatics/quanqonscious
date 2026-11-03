@@ -394,8 +394,16 @@ def field(sid, psi, a, al):
     return p
 
 
+GRVQ_K = {1: 0, 5: 1, 9: 2, 14: 3}
+
+
 def sutra(sid, psi, a, gain, t):
-    return field(sid, psi, a, F(sid, 435) * a[0] * gain)
+    al = F(sid, 435) * a[0] * gain
+    out = field(sid, psi, a, al)
+    if sid in GRVQ_K:
+        k = GRVQ_K[sid]
+        out = inject(out, k, grvq(inverse(psi), k, t) * al)
+    return out
 
 
 def compose(psi, active, mode, t):
