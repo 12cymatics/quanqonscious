@@ -41,8 +41,9 @@ jobs:
           python -m pip freeze --all > ci-results/grvq-exact-assets/dependencies.txt
       - name: Check new and extended Python modules
         run: |
-          python -m flake8 grvq_canonical.py grvq_exact_assets.py tools/check_grvq_exact_asset_gates.py \
-            tests/test_grvq_canonical.py tests/test_grvq_exact_assets.py \
+          python -m flake8 grvq_canonical.py grvq_exact_assets.py grvq_book_chain.py grvq_q4_hodge.py \
+            tools/check_grvq_exact_asset_gates.py tests/test_grvq_canonical.py tests/test_grvq_exact_assets.py \
+            tests/test_grvq_book_chain.py tests/test_grvq_q4_hodge.py tests/test_grvq_exact_asset_continuation.py \
             vedic_trainer/vedic/kernel/k2_field.py vedic_trainer/vedic/kernel/q4_complex.py \
             vedic_trainer/vedic/kernel/wht.py vedic_trainer/vedic/kernel/tests/test_exact_asset_extensions.py \
             --select=E9,F63,F7,F82 --show-source --statistics
@@ -51,6 +52,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/vedic_trainer
         run: |
           python -m pytest tests/test_grvq_canonical.py tests/test_grvq_exact_assets.py \
+            tests/test_grvq_book_chain.py tests/test_grvq_q4_hodge.py tests/test_grvq_exact_asset_continuation.py \
             tests/test_vedic_book.py tests/test_vedic_field.py tests/test_vedic_trace.py tests/test_invariants.py \
             vedic_trainer/vedic/kernel/tests \
             --junitxml=ci-results/grvq-exact-assets/pytest.xml

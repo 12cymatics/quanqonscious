@@ -31,6 +31,7 @@ class Mutation:
     before: str
     after: str
     test: str
+    test_file: str = TEST_FILE
 
 
 MUTATIONS = (
@@ -76,6 +77,34 @@ MUTATIONS = (
         'return _ExactReprPrinter({"order": "none"}).doprint(value)',
         "return sp.srepr(value)",
         "test_symbolic_receipts_preserve_large_exact_coefficient_atoms",
+    ),
+    Mutation(
+        "omitted_anti_self_dual_strength", "grvq_q4_hodge.py",
+        "source_strength_squared = _norm_squared(source_plus) + _norm_squared(source_minus)",
+        "source_strength_squared = _norm_squared(source_plus)",
+        "test_anti_self_dual_field_remains_active_in_source_strength",
+        "tests/test_grvq_q4_hodge.py",
+    ),
+    Mutation(
+        "omitted_source_minus_normalization", "grvq_q4_hodge.py",
+        'source_minus = tuple(value / 6 for value in split["minus_triple"])',
+        'source_minus = tuple(value for value in split["minus_triple"])',
+        "test_hodge_keeps_both_chiralities_and_source_normalization",
+        "tests/test_grvq_exact_asset_continuation.py",
+    ),
+    Mutation(
+        "omitted_final_book_stage", "grvq_book_chain.py",
+        "for index, stage in enumerate(prepared, 1):",
+        "for index, stage in enumerate(prepared[:-1], 1):",
+        "test_full_chain_retains_every_computed_stage_and_sequential_state[laplacian_polynomial]",
+        "tests/test_grvq_book_chain.py",
+    ),
+    Mutation(
+        "restarted_book_stage_from_initial_state", "grvq_book_chain.py",
+        "record = _execute_stage(stage, current, mapping, index, completed)",
+        "record = _execute_stage(stage, initial_values, mapping, index, completed)",
+        "test_full_chain_retains_every_computed_stage_and_sequential_state[laplacian_polynomial]",
+        "tests/test_grvq_book_chain.py",
     ),
 )
 
@@ -140,7 +169,7 @@ def main(argv=None):
     output.mkdir(parents=True, exist_ok=True)
     before = source_manifest()
     summary = {"source_before": before, "runs": [], "working_source_unchanged": False}
-    targets = [f"{TEST_FILE}::{mutation.test}" for mutation in MUTATIONS]
+    targets = [f"{mutation.test_file}::{mutation.test}" for mutation in MUTATIONS]
     try:
         with tempfile.TemporaryDirectory(prefix="grvq-exact-gates-") as temporary:
             directory = Path(temporary)
@@ -161,7 +190,7 @@ def main(argv=None):
                                                     changed.splitlines(keepends=True),
                                                     fromfile=mutation.path, tofile=mutation.path))
                 (output / f"{mutation.name}.patch").write_text(patch, encoding="utf-8")
-                result = run_gate(copy, [f"{TEST_FILE}::{mutation.test}"], mutation.name, output, True)
+                result = run_gate(copy, [f"{mutation.test_file}::{mutation.test}"], mutation.name, output, True)
                 result["mutated_path"] = mutation.path
                 result["mutated_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
                 summary["runs"].append(result)

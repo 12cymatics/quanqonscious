@@ -14,9 +14,12 @@ equations listed below.
 | Three specified field sutras | `evaluate_field_sutra` | Increment plus field amplitude; deficiency times radial term; complete double sum over explicit indexed components |
 | Existing 29 arithmetic applications | `evaluate_book_sutra` | Actual calls to `vedic_book.evaluate`, with explicit operands and every returned coefficient |
 | Existing authored graph polynomial | `apply_book_sutra_q4` | Every power and coefficient used by `vedic_field.FieldBinding.apply_graph`, on all 16 Q4 vertices |
+| Existing exact edge rotations | `execute_book_q4` | Separate ordered and matched maps, every coefficient, all 64 directed Q4 adjacency occurrences |
+| Complete sequential book/Q4 execution | `execute_all_book_q4` | Explicit stages 1 through 29, with the full incoming and outgoing state retained at every stage |
 | Algebraic coefficient fields | `divide_k2`, `divide_c4`; field-class `inverse` methods | All rational coordinates in the original Q2, K2, and C4 fields |
 | Complete four-cube cochains | `q4_diagnostics`; kernel `d0`, `d1`, `d2`, `d3` | 16 vertices, 32 edges, 24 faces, 8 cubes, and 1 four-cell, with signed boundaries |
 | Complete Walsh diagnostics | `q4_diagnostics`; kernel `walsh_transform_exact`, `walsh_inverse_exact` | All 16 characters and exact reconstruction |
+| Six-component Euclidean Hodge diagnostics | `evaluate_hodge6`, `evaluate_q4_hodge` | Both chiralities, exact reconstruction, all 24 input faces and all 16 local bivectors, with the source's declared averaging factors |
 
 The integration is a source-checkout interface. Run it from the repository root;
 these root modules are not installed as console entry points by the existing
@@ -138,12 +141,122 @@ JSON
 ```
 
 Supported operation names are `canonical_field`, `field_sutra`, `book_sutra`,
-`book_q4`, `q4`, `k2_divide`, and `c4_divide`. Integers remain integers;
+`book_q4`, `book_q4_transition`, `book_q4_chain`, `hodge6`, `q4_hodge`, `q4`,
+`k2_divide`, and `c4_divide`. Integers remain integers;
 `{"rational":[numerator,denominator]}` denotes an exact rational and
 `{"constant":"pi"}` denotes exact pi. A complete cochain mapping is encoded
 as `{"cochain":[[cell_key,value],...]}`, where each cell key is an integer list.
 Duplicate cells, missing cells, floats, and invalid domains cause a nonzero exit
 with an error; they do not yield substitute results.
+
+## Complete authored book/Q4 transitions
+
+The continuation makes the other two existing `FieldBinding` maps callable
+without changing their equations. `execute_book_q4` requires a named mapping:
+
+| Mapping | Existing calculation and order |
+| --- | --- |
+| `laplacian_polynomial` | The full polynomial above, every power and coefficient |
+| `ordered_edge_rotations` | Every coefficient, then vertex order, then adjacency order |
+| `matched_edge_rotations` | Every coefficient, then the existing greedy first-fit matching order |
+
+Both rotation maps apply the source equation
+
+\[
+(u,v)\mapsto\left(\frac{(1-t^2)u-2tv}{1+t^2},
+                  \frac{2tu+(1-t^2)v}{1+t^2}\right),
+\qquad t=s\,c_m.
+\]
+
+The lower-index vertex is the first component of each pair. There are 64
+adjacency occurrences per coefficient: each of Q4's 32 undirected edges occurs
+twice in the source. Both occurrences are executed and recorded. The two maps
+have different orders on overlapping edges, so selecting matching changes the
+declared map. It is not a transparent substitute for ordered rotation.
+
+`execute_all_book_q4(stages, values, mapping=...)` requires exactly 29 stage
+mappings in IDs 1 through 29 order. Each contains exactly `sutra_id`, `operands`,
+and `strength`. Every operand mapping must be supplied explicitly. Optional
+operands already declared by the selected book function are resolved from that
+function's signature and recorded, together with the names resolved by default.
+No example preset is selected by the API.
+
+The complete input structure is checked before stage execution. Each stage then
+executes the actual book arithmetic and selected field map. Its full output
+becomes the next stage's input. Heterogeneous arithmetic operands remain those
+explicitly supplied for that stage; the system does not infer them from the
+previous arithmetic result. There is no stage fusion, early termination,
+coefficient omission, or state compression.
+
+The returned `.value` is the final sixteen-component rational state. Its receipt
+retains every full incoming and outgoing state, actual arithmetic value, complete
+coefficient tuple, strength, mapping identity, edge order, and squared norm. A
+`BookQ4StageError` identifies a failed stage and chains the original exception;
+it carries the completed stage records and the current field input. The JSON
+command reports these as an error and exits nonzero. It never reports partial
+execution as a successful 29-stage result.
+
+For rational states the reported norm is `sum(value**2 for value in state)`.
+The rotation paths check exact equality of this norm before and after the
+transition. The polynomial path records its actual change and makes no
+conservation claim. A norm equality alone cannot establish execution: identity
+would also preserve it, so tests additionally check nontrivial expected outputs,
+complete edge multiplicity, stage order, and the full sequence of states.
+
+The source of these maps is `vedic_field.py`, as retained at candidate
+`0f70360be1880ad91d9aad7e6cbbd5745a2ca0cd`. They remain authored book-to-field
+constructions. This complete 29-book sequence does not supply the separate
+canonical GRVQ geodesic evolution or the missing 26 field-coupled formulas.
+
+## Exact Hodge calculation recovered from the existing source
+
+The Hodge calculation is traced to
+[the preserved v18.24 source](https://github.com/12cymatics/quanqonscious/blob/9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1/vedic_v18.24_full_kernel.html),
+specifically `MAGFIELD.hodgeSD`, `MAGFIELD.hodgeASD`, and its face aggregation.
+That surrounding visualizer is explicitly a floating-point presentation path.
+The new module implements its stated Hodge equations over exact rational inputs;
+it does not claim that the surrounding visualizer has become exact.
+
+The signature is Euclidean `(+,+,+,+)`, orientation `(0,1,2,3)`, and component
+order is `(01,02,03,12,13,23)`. For `F=(a,b,c,d,e,f)`:
+
+\[
+\star F=(f,-e,d,c,-b,a),\qquad
+F_+=\frac{F+\star F}{2},\qquad F_-=\frac{F-\star F}{2}.
+\]
+
+Both six-component halves and the original input are retained. The associated
+triples are
+
+\[
+P=\left(\frac{a+f}{2},\frac{b-e}{2},\frac{c+d}{2}\right),\quad
+M=\left(\frac{a-f}{2},\frac{b+e}{2},\frac{c-d}{2}\right).
+\]
+
+Reconstruction uses all six retained values:
+
+\[
+F=(P_1+M_1,\ P_2+M_2,\ P_3+M_3,\ P_3-M_3,\ M_2-P_2,\ P_1-M_1).
+\]
+
+For complete Q4 face input, each of the sixteen vertices obtains each incident
+face by clearing its two active axis bits. Both source triples are divided by
+six, exactly as the archived source specifies. Their squared combined strength
+is `sum(F_ab**2)/72`; strength itself is retained as an exact symbolic square
+root. The source mean pressure is `sum(all_24_face_values**2)/48`, using its
+explicit simulation permeability of one. Neither this scale nor the Euclidean
+signature is substituted for the missing GRVQ spacetime metric or a physical
+permeability.
+
+`q4_diagnostics(..., plaquette_cochain=faces)` now also includes this full Hodge
+record, alongside the existing coboundaries. The independent entry points
+`evaluate_hodge6` and `evaluate_q4_hodge` return the same source-defined
+calculations without requiring an unrelated scalar vertex field.
+
+The continuation checks every basis bivector, nonzero anchors, both dualities,
+orthogonality, reconstruction, all vertex/face incidences, and the declared
+normalizations. These are executable checks, not a new formal proof or a
+validation of the physical interpretation.
 
 ## Norms, topology, and full-state diagnostics
 
@@ -190,14 +303,16 @@ the existing arithmetic, field, trace, invariant, and kernel regressions, and
 uploads the JUnit reports and dependency inventory. Existing aggregate Python,
 JavaScript, and package workflows remain active.
 
-`tools/check_grvq_exact_asset_gates.py` separately injects seven defects, one per
+`tools/check_grvq_exact_asset_gates.py` separately injects eleven defects, one per
 fresh disposable copy: omitted modulation, omitted final graph coefficient,
 reversed second coboundary, a lost Walsh mode, wrong norm in K2 division, and
-silent float coercion, and decimal-printing failure for a valid symbolic
-coefficient. Each must produce an assertion failure, with no
+silent float coercion, decimal-printing failure for a valid symbolic
+coefficient, omitted anti-self-dual strength, omitted source normalization,
+an omitted final book stage, and restarting each stage from the initial field.
+Each must produce an assertion failure, with no
 collection errors or skipped tests. Unchanged copies must pass before and
 afterward, and every tracked working-source hash must remain identical. These
-seven checks establish the rejection behavior of their named gates; other test
+eleven checks establish the rejection behavior of their named gates; other test
 cases are not claimed to have individual mutation evidence.
 
 Tests for this task run in GitHub. Local activity is restricted to source

@@ -22,6 +22,8 @@ from sympy.printing.repr import ReprPrinter
 
 from core.exact_codec import encode_exact
 import grvq_canonical
+import grvq_book_chain
+import grvq_q4_hodge
 import vedic_book
 from vedic_field import FieldBinding
 from vedic_trainer.vedic.kernel import k2_field, q4_complex, wht
@@ -235,6 +237,96 @@ def apply_book_sutra_q4(sutra_id, operands, values, *, strength):
     )
 
 
+def _book_mapping_sources(mapping, entrypoint, sutra_ids):
+    methods = {
+        "laplacian_polynomial": ("FieldBinding.apply_graph", "laplacian_rows"),
+        "ordered_edge_rotations": ("FieldBinding.rotate_graph", "rotate_fraction_channels"),
+        "matched_edge_rotations": ("FieldBinding.rotate_matched", "rotate_matched_fraction_channels",
+                                   "edge_matchings", "cayley_parts"),
+    }
+    return {
+        "grvq_book_chain.py": (entrypoint, "_mapping", "_values", "_fraction", "_preflight_stage",
+                               "_prepare_stage", "_operand_value", "_execute_stage"),
+        "vedic_book.py": ("evaluate",) + tuple(vedic_book.OPERATIONS[sid - 1].__name__ for sid in sutra_ids),
+        "vedic_field.py": ("FieldBinding.from_parameters", "FieldBinding.metadata", "frozen_operand",
+                           "exact_field_value", "as_fraction") + methods[mapping],
+        "vedic_trainer/vedic/kernel/q4_complex.py": ("neighbours", "toggle"),
+    }
+
+
+def execute_book_q4(sutra_id, operands, values, *, strength, mapping):
+    """Execute the explicitly selected existing authored map, retaining its state.
+
+    Ordered edge rotations and matched edge rotations are separate maps. Both
+    retain every coefficient and every directed Q4 adjacency occurrence.
+    """
+    result = grvq_book_chain.execute_book_q4(sutra_id, operands, values,
+                                            strength=strength, mapping=mapping)
+    return _execution(
+        "authored_book_q4_transition", result["after"],
+        {"sutra_id": result["sutra_id"], "operands": result["operands"],
+         "values": result["before"], "strength": result["strength"], "mapping": mapping},
+        {"transition": result,
+         "norm_scope": "Exact rational sum of squares; not physical GRVQ energy",
+         "canonical_field_coupling": "Existing authored arithmetic-to-Q4 construction"},
+        _book_mapping_sources(mapping, "execute_book_q4", (result["sutra_id"],)),
+        "execute_book_q4",
+    )
+
+
+def execute_all_book_q4(stages, values, *, mapping):
+    """Execute all 29 existing book applications sequentially on full Q4 states.
+
+    Every stage requires its explicit id, operand mapping and strength. The
+    field output feeds the next stage; arithmetic operands retain their stated
+    domains. The full per-stage records are retained in the execution receipt.
+    """
+    result = grvq_book_chain.execute_all_book_q4(stages, values, mapping=mapping)
+    actual_stages = result["stages"]
+    inputs = tuple({"sutra_id": stage["sutra_id"], "operands": stage["operands"],
+                    "strength": stage["strength"]} for stage in actual_stages)
+    return _execution(
+        "authored_complete_29_book_q4_sequence", result["final_values"],
+        {"stages": inputs, "values": result["initial_values"], "mapping": mapping},
+        {"stages": actual_stages, "stage_count": len(actual_stages),
+         "execution_order": tuple(stage["sutra_id"] for stage in actual_stages),
+         "state_recording": "Every full incoming and outgoing sixteen-component state",
+         "norm_scope": "Exact rational sum of squares; not physical GRVQ energy",
+         "canonical_field_coupling": "Existing authored book/Q4 sequence; missing canonical field sutras remain unresolved"},
+        _book_mapping_sources(mapping, "execute_all_book_q4", tuple(stage["sutra_id"] for stage in actual_stages)),
+        "execute_all_book_q4",
+    )
+
+
+def evaluate_hodge6(values):
+    """Compute the full source-defined Euclidean bivector split and reconstruction."""
+    result = grvq_q4_hodge.split_hodge6(values)
+    return _execution(
+        "exact_euclidean_six_component_hodge", result,
+        {"values": result["input6"]},
+        {"metric_scope": "Euclidean (+,+,+,+), orientation (0,1,2,3); not the unspecified GRVQ spacetime metric",
+         "state_recording": "Original six components, both chiralities, and exact reconstruction"},
+        {"grvq_q4_hodge.py": ("hodge_star6", "split_hodge6"),
+         "vedic_trainer/vedic/kernel/q4_complex.py": ("_rational",)},
+        "evaluate_hodge6",
+    )
+
+
+def evaluate_q4_hodge(plaquette_cochain):
+    """Retain all 24 faces, all 16 local bivectors, and both source-averaged triples."""
+    result = grvq_q4_hodge.q4_hodge_diagnostics(plaquette_cochain)
+    return _execution(
+        "exact_q4_euclidean_hodge_diagnostics", result,
+        {"plaquette_cochain": result["plaquette_cochain"]},
+        {"metric_scope": "Euclidean (+,+,+,+), orientation (0,1,2,3); not the unspecified GRVQ spacetime metric",
+         "source_normalization": "Both source triples divided by six; source pressure uses simulation permeability one",
+         "physical_permeability_claim": "None; the source simulation scale is retained explicitly"},
+        {"grvq_q4_hodge.py": ("hodge_star6", "split_hodge6", "q4_hodge_diagnostics"),
+         "vedic_trainer/vedic/kernel/q4_complex.py": ("plaquettes", "_check_cells", "_rational")},
+        "evaluate_q4_hodge",
+    )
+
+
 def q4_diagnostics(values, *, edge_cochain=None, plaquette_cochain=None, cube_cochain=None):
     """Compute complete rational Q4 diagnostics, retaining every supplied cell.
 
@@ -266,11 +358,18 @@ def q4_diagnostics(values, *, edge_cochain=None, plaquette_cochain=None, cube_co
         inputs["plaquette_cochain"] = dict(plaquette_cochain)
         result["plaquette_coboundary"] = flux
         result["plaquette_double_coboundary"] = q4_complex.d3(flux)
+        result["plaquette_hodge"] = grvq_q4_hodge.q4_hodge_diagnostics(plaquette_cochain)
         invoked_cochain_functions.extend(("d2", "d3"))
     if cube_cochain is not None:
         inputs["cube_cochain"] = dict(cube_cochain)
         result["cube_coboundary"] = q4_complex.d3(cube_cochain)
         invoked_cochain_functions.append("d3")
+    implementations = {
+        "vedic_trainer/vedic/kernel/q4_complex.py": tuple(dict.fromkeys(invoked_cochain_functions)),
+        "vedic_trainer/vedic/kernel/wht.py": ("walsh_transform_exact", "walsh_inverse_exact"),
+    }
+    if plaquette_cochain is not None:
+        implementations["grvq_q4_hodge.py"] = ("hodge_star6", "split_hodge6", "q4_hodge_diagnostics")
     return _execution(
         "complete_rational_q4_diagnostics", result, inputs,
         {"cell_counts": (len(values), len(q4_complex.edges()), len(q4_complex.plaquettes()),
@@ -279,8 +378,7 @@ def q4_diagnostics(values, *, edge_cochain=None, plaquette_cochain=None, cube_co
          "walsh_convention": "Unnormalized sixteen-character transform; inverse divides by sixteen",
          "state_reduction": "None; all sixteen input values and coefficients are retained",
          "physical_curvature_claim": "None; coboundaries of the explicitly supplied cochains are reported"},
-        {"vedic_trainer/vedic/kernel/q4_complex.py": tuple(dict.fromkeys(invoked_cochain_functions)),
-         "vedic_trainer/vedic/kernel/wht.py": ("walsh_transform_exact", "walsh_inverse_exact")},
+        implementations,
         "q4_diagnostics",
     )
 
@@ -371,6 +469,10 @@ def execute_request(request):
         "field_sutra": evaluate_field_sutra,
         "book_sutra": evaluate_book_sutra,
         "book_q4": apply_book_sutra_q4,
+        "book_q4_transition": execute_book_q4,
+        "book_q4_chain": execute_all_book_q4,
+        "hodge6": evaluate_hodge6,
+        "q4_hodge": evaluate_q4_hodge,
         "q4": q4_diagnostics,
         "k2_divide": divide_k2,
         "c4_divide": divide_c4,
@@ -393,6 +495,18 @@ def main(argv=None):
                 request = json.load(source)
         result = execute_request(request)
         print(json.dumps(result.receipt, indent=2, ensure_ascii=False))
+    except grvq_book_chain.BookQ4StageError as error:
+        cause = error.__cause__
+        failure = {
+            "error": type(error).__name__, "message": str(error),
+            "stage_index": error.stage_index, "sutra_id": error.sutra_id,
+            "phase": error.phase, "mapping": error.mapping,
+            "cause": {"type": type(cause).__name__, "message": str(cause)},
+            "input_values": _encode(error.input_values),
+            "completed_stages": _encode(error.completed_stages),
+        }
+        print(json.dumps(failure, ensure_ascii=False), file=sys.stderr)
+        return 1
     except (TypeError, ValueError, ArithmeticError, OSError,
             grvq_canonical.UnresolvedGRVQModelError) as error:
         print(json.dumps({"error": type(error).__name__, "message": str(error)}), file=sys.stderr)
