@@ -1273,6 +1273,14 @@ const SENTENCES = String.raw`(() => {
     }
   return out; })()`;
 
+/* setFreq() only marks the state dirty; the next animation frame recomputes it. A
+   reading taken straight after the call can be the old state's, so wait for the
+   recomputed one: the response is exactly half the drive. */
+async function driveAt(page, hz){
+  await page.eval(`setFreq(${hz}), true`);
+  await page.waitFor(`state.responseHz === ${hz/2}`, 15000, `the state recomputed at ${hz} Hz`);
+}
+
 async function checkCleanProse(page, removed, fullSentences){
   section('the clean build shows no sentences');
   ok(fullSentences.length > 0,
@@ -1308,12 +1316,12 @@ async function checkCleanProse(page, removed, fullSentences){
      'the startup box shows a failure by its name alone, with the reason in the console',
      JSON.stringify({ ...dom, reasons: reasons.slice(0, 3).map(t => t.slice(0, 160)) }));
   /* the warnings: a state the kernel warns about, where the full page shows its warning */
-  await page.eval(`setFreq(5000), true`);
+  await driveAt(page, 5000);
   const w = await page.json(`({ n: state.warnings.length,
     box: document.getElementById('warnBox').textContent, sentences: ${SENTENCES} })`);
   ok(w.n > 0 && w.box === '' && w.sentences.length === 0,
      'at 5000 Hz the kernel warns, and the clean page shows no warning', JSON.stringify(w));
-  await page.eval(`setFreq(111), true`);
+  await driveAt(page, 111);
 }
 
 try {
@@ -1337,9 +1345,9 @@ try {
   await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
   await checkSolverThreads(single, ', in the single-file build, from file://');
-  await single.eval(`setFreq(5000), true`);
+  await driveAt(single, 5000);
   const fullSentences = await single.json(SENTENCES);
-  await single.eval(`setFreq(111), true`);
+  await driveAt(single, 111);
 
   /* The same page with its comments and its sentences taken out, by
      faraday/build-clean.mjs. faraday/check-clean.mjs holds its scripts to the full
