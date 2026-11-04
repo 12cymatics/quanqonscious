@@ -558,6 +558,16 @@ async function checkPage(url, name, expectInline, clean = false){
   ok(page.logErrors.filter(t => !fontOnly(t)).length === 0,
      'no resource failed to load but the webfont',
      page.logErrors.filter(t => !fontOnly(t)).join(' | ').slice(0, 400));
+  if (clean){
+    /* Read here, after the load and the Floquet run and before any section below
+       breaks something on purpose: a lost GPU context or a killed thread is a
+       failure the box is right to show. */
+    const st = await page.json(`(s => ({ hidden: s.hidden, text: s.textContent,
+      drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed }))(document.getElementById('startupStatus'))`);
+    ok(st.hidden && st.text === '' && st.drawn && !st.failed,
+       'the clean page drew, and its startup box is there, empty and hidden, with no failure to show',
+       JSON.stringify(st));
+  }
 
   await page.shot(join(tmpdir(), `check-page-${name.replace(/\W+/g, '-')}.png`));
   return page;
@@ -1286,10 +1296,17 @@ async function checkCleanProse(page, removed, fullSentences){
      'the note, the footer and the subtitle are not in the page', JSON.stringify(dom));
   ok(dom.anchors > 0 && dom.titles === 0, 'the frequency anchors are there, without tooltips',
      JSON.stringify(dom));
-  ok(!dom.noscript && dom.startup && dom.startup.hidden && dom.startup.text === ''
-     && dom.drawn && !dom.failed,
-     'the page drew, and its startup box is there, empty and hidden, with no failure to show',
-     JSON.stringify(dom));
+  /* By now the sections above have lost the GPU context and killed threads on purpose,
+     so the box may be showing a failure. It shows it by name only, and the reason went
+     to the console rather than nowhere. */
+  const reasons = page.console.filter(t => /^error/.test(t));
+  console.log(`       startup box ${JSON.stringify(dom.startup)}; reasons logged: `
+    + JSON.stringify(reasons.slice(0, 3).map(t => t.slice(0, 160))));
+  ok(!dom.noscript && dom.startup
+     && (dom.failed ? !dom.startup.hidden && dom.startup.text === 'simulation error' && reasons.length > 0
+                    : dom.startup.hidden && dom.startup.text === ''),
+     'the startup box shows a failure by its name alone, with the reason in the console',
+     JSON.stringify({ ...dom, reasons: reasons.slice(0, 3).map(t => t.slice(0, 160)) }));
   /* the warnings: a state the kernel warns about, where the full page shows its warning */
   await page.eval(`setFreq(5000), true`);
   const w = await page.json(`({ n: state.warnings.length,
