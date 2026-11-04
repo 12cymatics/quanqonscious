@@ -45,7 +45,7 @@ BASIS_EXPECTED = (
 )
 
 
-@pytest.mark.parametrize("index,expected", enumerate(BASIS_EXPECTED))
+@pytest.mark.parametrize("index,expected", tuple(enumerate(BASIS_EXPECTED)))
 def test_every_bivector_basis_has_the_declared_oriented_image(index, expected):
     field = tuple(Q(int(position == index)) for position in range(6))
     star, plus_twice, minus_twice = expected
@@ -172,7 +172,10 @@ def test_each_face_value_is_retained_and_used_at_four_vertices():
             incidence_counts[face] += 1
             assert value == cochain[face]
         assert local["source_strength_squared"] == sum((value ** 2 for value in local["local_bivector6"]), Q(0)) / 72
-        assert local["source_strength"] ** 2 == sp.Rational(local["source_strength_squared"].numerator, local["source_strength_squared"].denominator)
+        assert local["source_strength"] ** 2 == sp.Rational(
+            local["source_strength_squared"].numerator,
+            local["source_strength_squared"].denominator,
+        )
     assert set(incidence_counts.values()) == {4}
     assert sum((local["source_strength_squared"] for local in result["vertices"]), Q(0)) == square_sum / 18
 

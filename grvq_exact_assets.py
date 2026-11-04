@@ -260,8 +260,9 @@ def execute_book_q4(sutra_id, operands, values, *, strength, mapping):
     Ordered edge rotations and matched edge rotations are separate maps. Both
     retain every coefficient and every directed Q4 adjacency occurrence.
     """
-    result = grvq_book_chain.execute_book_q4(sutra_id, operands, values,
-                                            strength=strength, mapping=mapping)
+    result = grvq_book_chain.execute_book_q4(
+        sutra_id, operands, values, strength=strength, mapping=mapping,
+    )
     return _execution(
         "authored_book_q4_transition", result["after"],
         {"sutra_id": result["sutra_id"], "operands": result["operands"],
@@ -399,8 +400,9 @@ def divide_k2(numerator, denominator):
         {"field": "Q(sqrt(2),i)", "denominator_hermitian_norm": right.hermitian_norm(),
          "hermitian_norm_codomain": "Q(sqrt(2))", "denominator_total_norm": right.total_norm(),
          "total_norm_codomain": "Q", "quotient_times_denominator": quotient * right},
-        {"vedic_trainer/vedic/kernel/k2_field.py": ("K2.__truediv__", "K2.inverse",
-                                                  "K2.hermitian_norm", "K2.total_norm")},
+        {"vedic_trainer/vedic/kernel/k2_field.py": (
+            "K2.__truediv__", "K2.inverse", "K2.hermitian_norm", "K2.total_norm",
+        )},
         "divide_k2",
     )
 

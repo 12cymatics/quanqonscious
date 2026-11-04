@@ -124,8 +124,10 @@ def test_hodge_keeps_both_chiralities_and_source_normalization():
 def test_hodge_cli_and_existing_full_q4_diagnostics_execute_same_faces():
     faces = {cell: Fraction(index - 11, 3) for index, cell in enumerate(assets.q4_complex.plaquettes())}
     request = {"operation": "q4_hodge", "arguments": {
-        "plaquette_cochain": {"cochain": [[list(cell), {"rational": [value.numerator, value.denominator]}]
-                                         for cell, value in faces.items()]},
+        "plaquette_cochain": {"cochain": [
+            [list(cell), {"rational": [value.numerator, value.denominator]}]
+            for cell, value in faces.items()
+        ]},
     }}
     direct = assets.evaluate_q4_hodge(faces)
     assert assets.execute_request(request).value == direct.value

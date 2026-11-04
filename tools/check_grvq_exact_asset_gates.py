@@ -186,9 +186,10 @@ def main(argv=None):
                     raise RuntimeError(f"{mutation.name}: expected exactly one source anchor")
                 changed = original.replace(mutation.before, mutation.after, 1)
                 path.write_text(changed, encoding="utf-8")
-                patch = "".join(difflib.unified_diff(original.splitlines(keepends=True),
-                                                    changed.splitlines(keepends=True),
-                                                    fromfile=mutation.path, tofile=mutation.path))
+                patch = "".join(difflib.unified_diff(
+                    original.splitlines(keepends=True), changed.splitlines(keepends=True),
+                    fromfile=mutation.path, tofile=mutation.path,
+                ))
                 (output / f"{mutation.name}.patch").write_text(patch, encoding="utf-8")
                 result = run_gate(copy, [f"{mutation.test_file}::{mutation.test}"], mutation.name, output, True)
                 result["mutated_path"] = mutation.path

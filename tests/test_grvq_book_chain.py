@@ -153,8 +153,9 @@ def test_full_chain_retains_every_computed_stage_and_sequential_state(mapping, m
         else:
             expected_edges = ordered_edges() if mapping == "ordered_edge_rotations" else \
                 tuple(edge for group in independent_matchings() for edge in group)
-            assert record["edge_order"] == tuple((m, left, right) for m in range(len(coefficients))
-                                                  for left, right in expected_edges)
+            assert record["edge_order"] == tuple(
+                (m, left, right) for m in range(len(coefficients)) for left, right in expected_edges
+            )
             assert record["norm_squared_change"] == 0
     assert execution["final_values"] == expected
     assert any(record["before"] != record["after"] for record in execution["stages"])

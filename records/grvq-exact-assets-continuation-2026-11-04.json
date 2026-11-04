@@ -75,6 +75,17 @@
     "limit": "This records inspected source coverage, not proof that no other authoritative file exists. The referenced Mac remained offline. No missing formula was inferred from a title, count, proof badge or assistant claim."
   },
   "execution_state": "implemented_pending_github_validation; no implementation tests run locally",
+  "worker_handoff": "Both implementation workers and the independent source reviewer completed their assigned work before candidate e65a4bda17d7a3e10cbb15aac40162df48fa1a63. No pending worker writes remain. Root owns subsequent integration corrections to the delivered paths.",
+  "preceding_validation": {
+    "commit": "e65a4bda17d7a3e10cbb15aac40162df48fa1a63",
+    "python_passed": 3845,
+    "focused_passed": 2976,
+    "package_passed": 2888,
+    "deliberate_defects_rejected": 11,
+    "unchanged_controls_before_and_after": 15,
+    "pending_aggregate_jobs_at_followup": "Existing SutraWS and unpacked distribution jobs were still running",
+    "followup": "GitHub reported a deprecated non-Collection test parametrization and formatting diagnostics. The six Hodge basis cases are now supplied as a tuple; continuation-line formatting is corrected. Every assertion and calculation is retained. The resulting commit requires its own GitHub evidence."
+  },
   "validation_evidence_location": "PR174 records commit-specific GitHub runs and artifacts after this pre-run source record. This record itself does not assert their outcome.",
   "remaining_model_status": "The missing 26 field-coupled formulas, four parameter couplings, metric/evolution/geodesic/boundary data and deformulation/indexed-component definitions remain unresolved unless source search establishes them."
 }
