@@ -37,7 +37,7 @@
 19. [Ādyamādyenāntyamantyena](#sub-sutra-us3-ādyamādyenāntyamantyena) - First by first, last by last
 20. [Kevalaih Saptakam Guṇyāt](#sub-sutra-us4-kevalaih-saptakam-guṇyāt) - Multiply by 7
 21. [Veṣṭanam](#sub-sutra-us5-veṣṭanam) - Osculation method
-22. [Yāvadūnam Tāvadūnam](#sub-sutra-us6-yāvadūnam-tāvadūnam) - Deficiency squared
+22. [Yāvadūnaṃ Tāvadūnam](#sub-sutra-us6-yāvadūnaṃ-tāvadūnam) - Cubing near a base
 23. [Yāvadūnam Tāvadūnīkṛtya](#sub-sutra-us7-yāvadūnam-tāvadūnīkṛtya) - Extended deficiency
 24. [Antyayordaśake'pi](#sub-sutra-us8-antyayordaśakepi) - Last digits sum to 10
 25. [Antyayoreva](#sub-sutra-us9-antyayoreva) - Only last terms
@@ -1253,21 +1253,23 @@ Result: PASS ✓
 **Transliteration:** Śiṣyate Śeṣasaṁjñaḥ
 **English:** "The remainder remains constant"
 
-**Namespace:** `US2_Shishyate` (Lines 1681-1750)
+**Namespace:** `US2_Shishyate`
 
-### Mathematical Principle
+### What the book uses it for
 
-**Cycle detection in modular sequences** (Floyd's algorithm).
+Bharati Krishna Tirthaji, *Vedic Mathematics*, 1992 edition (the edition `vedic_book.py` cites):
 
-### Applications
+1. **p. 19, successive division.** 65 divided by 2, 4, 8, 16, 32 and 64 gives quotients 32, 16, 8, 4, 2, 1. The quotients shrink in proportion; the remainder stays 1.
+2. **p. 57, a divisor whose leading coefficient is not 1.** Divide the divisor by that coefficient, run Parāvartya on the result, then divide the quotient by the coefficient at the end. "The R always remains constant." Worked examples:
+   - (−4x³ − 7x² + 9x − 12) ÷ (2x − 4): Q = −2x² − 7½x − 10½, R = −54
+   - (3x² − x − 5) ÷ (3x − 7): Q = x + 2, R = 9
 
-1. Recurring decimal period detection
-2. Modular sequence analysis
-3. PRNG period finding
+### Functions
 
-### Algorithm
-
-Floyd's tortoise-and-hare with slow/fast pointers.
+| Function | Book use |
+|----------|----------|
+| `successive_division(dividend, divisors)` | p. 19. Refuses with `std::domain_error` when the remainders differ. |
+| `divide_by_reduced_divisor(dividend, divisor)` | p. 57. Coefficients lowest degree first; returns the reduced divisor, the quotient before and after dividing back, and R. |
 
 ---
 
@@ -1343,27 +1345,31 @@ To test if 343 is divisible by 7:
 
 ---
 
-## SUB-SUTRA US6: Yāvadūnam Tāvadūnum
+## SUB-SUTRA US6: Yāvadūnaṃ Tāvadūnam
 
 **Sanskrit:** यावदूनं तावदूनं
-**Transliteration:** Yāvadūnam Tāvadūnum
-**English:** "Deficiency squared"
+**Transliteration:** Yāvadūnaṃ Tāvadūnam
+**English:** "Whatever the deficiency, lessen by that much"
 
-**Namespace:** `US6_Yavadunam_Squared` (Lines 1927-1968)
+**Namespace:** `US6_Yavadunam_Tavadunam`
 
-### Mathematical Principle
+### What the book uses it for
 
-**Squaring using deficiency squared**.
+Cubing a number near a base (1992 edition). p. xliii names it for 9989³; pp. 288–289 work 13 more cubes.
 
 ### Algorithm
 
+With d the amount by which n falls short of the base:
+
 ```
-(base - d)² = base(base - 2d) + d²
+n³ = (n − 2d) | 3d² | −d³
 ```
+
+`cube_by_deficiency(n, base)` returns the three parts and their value, (n − 2d)·base² + 3d²·base − d³. This equals n³ for any positive base, below or above it.
 
 ### Example
 
-97² = 100×(100-6) + 9 = 9400 + 9 = 9409
+9989³, base 10000, d = 11: 9967 | 363 | −1331 = 996,703,628,669 (p. xliii)
 
 ---
 

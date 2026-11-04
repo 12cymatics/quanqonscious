@@ -683,6 +683,17 @@ def us2_constant_remainder(dividend, divisors):
     return pairs
 
 
+def us2_reduced_divisor(dividend, divisor):
+    divisor = [Fraction(c) for c in divisor]
+    if len(divisor) < 2 or divisor[0] == 0:
+        raise ValueError("the divisor needs degree at least one and a non-zero leading coefficient")
+    if len(dividend) < len(divisor):
+        raise ValueError("the dividend's degree is below the divisor's")
+    lead = divisor[0]
+    reduced_quotient, remainder = s4_polynomial_divide(dividend, [c / lead for c in divisor])
+    return tuple(c / lead for c in reduced_quotient), remainder
+
+
 def us4_sevenths(n):
     _require_int(n)
     if not 0 < n < 7:

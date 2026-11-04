@@ -136,3 +136,21 @@ jobs:
         name: python-ci-results
         path: ci-results/
         retention-days: 14
+
+  vedic-cpp:
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Boost headers for vedic_sutras_complete.hpp
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libboost-dev
+    - name: Compile and run the sutra header's C++ tests
+      run: |
+        set -e
+        for f in tests/test_vedic_book_cpp.cpp test_all_29_sutras.cpp test_vedic_sutras.cpp vedic_capability_profile.cpp; do
+          out="$RUNNER_TEMP/$(basename "$f" .cpp)"
+          g++ -std=c++17 -O2 -Wall -Werror -o "$out" "$f"
+          "$out"
+        done

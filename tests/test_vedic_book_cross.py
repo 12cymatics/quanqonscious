@@ -103,6 +103,10 @@ def test_us1_working_bases_agree(a, c):
 
 def test_us2_us4_us5_us6_us8_agree():
     assert b.shishyate(65, [2, 4, 8, 16, 32, 64]).value == T.us2_constant_remainder(65, [2, 4, 8, 16, 32, 64])
+    for dividend, divisor in [((-4, -7, 9, -12), (2, -4)), ((3, -1, -5), (3, -7)), ((2, 5, -3, 0, 7), (5, -2, 1))]:
+        quotient, remainder = b.shishyate_divisor(tuple(reversed(dividend)), tuple(reversed(divisor))).value
+        tq, tr = T.us2_reduced_divisor(dividend, divisor)
+        assert tuple(q(v) for v in reversed(quotient)) == tq and tuple(q(v) for v in reversed(remainder)) == tr
     for n in range(1, 7):
         assert b.kevalaih(n).value == T.us4_sevenths(n)
     for d in (7, 13, 19, 21, 37):

@@ -23,6 +23,24 @@ int main() {
     assert(S1_Ekadhikena::divide_by_nine_ender(BigInt(19), 18).recurring.size() == 18);
     assert(S1_Ekadhikena::divide_recurring(BigInt(1), BigInt(19), 18).recurring.size() == 18);
     assert(S13_Sopantya::test());
+    {
+        auto chain = US2_Shishyate::successive_division(BigInt(65),
+            {BigInt(2), BigInt(4), BigInt(8), BigInt(16), BigInt(32), BigInt(64)});
+        assert(chain.remainder == 1);
+        assert((chain.quotients == std::vector<BigInt>{BigInt(32), BigInt(16), BigInt(8), BigInt(4), BigInt(2), BigInt(1)}));
+        auto first = US2_Shishyate::divide_by_reduced_divisor(
+            {Rational(-12), Rational(9), Rational(-7), Rational(-4)}, {Rational(-4), Rational(2)});
+        assert((first.reduced_quotient == std::vector<Rational>{Rational(-21), Rational(-15), Rational(-4)}));
+        assert((first.quotient == std::vector<Rational>{Rational(-21, 2), Rational(-15, 2), Rational(-2)}));
+        assert((first.remainder == std::vector<Rational>{Rational(-54)}));
+        auto second = US2_Shishyate::divide_by_reduced_divisor(
+            {Rational(-5), Rational(-1), Rational(3)}, {Rational(-7), Rational(3)});
+        assert((second.quotient == std::vector<Rational>{Rational(2), Rational(1)}));
+        assert((second.remainder == std::vector<Rational>{Rational(9)}));
+        auto cube = US6_Yavadunam_Tavadunam::cube_by_deficiency(BigInt(9989), BigInt(10000));
+        assert(cube.result == BigInt("996703628669"));
+        assert(cube.left == 9967 && cube.middle == 363 && cube.right == -1331);
+    }
     assert(S12_Sesanyankena::test());
     for (int d : {3, 7, 11, 13, 17, 19, 27, 101, 1009}) {
         auto computed = S12_Sesanyankena::remainder_digits(BigInt(d));
