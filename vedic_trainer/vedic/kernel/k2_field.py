@@ -31,13 +31,16 @@ canonical runtime extension is
 
 and φ = (1 + √5)/2 lives there exactly — not as a Fibonacci convergent.
 
-No floats anywhere. Every coordinate is a ``Fraction``.
+Every arithmetic coordinate is a ``Fraction``. Exact constructors reject
+floating-point inputs; the explicitly named ``to_float`` renderers are the
+only conversion out of the exact field.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import math
 from fractions import Fraction
+from numbers import Rational
 from typing import Tuple
 
 __all__ = [
@@ -56,6 +59,13 @@ _SQRT2_F = math.sqrt(2.0)
 _SQRT5_F = math.sqrt(5.0)
 
 
+def _rational_coordinate(value: object, name: str) -> Fraction:
+    """Accept rational-domain values without importing a floating-point state."""
+    if isinstance(value, bool) or not isinstance(value, Rational):
+        raise TypeError(f"{name} must be an exact rational (integer or Fraction)")
+    return Fraction(int(value.numerator), int(value.denominator))
+
+
 @dataclass(frozen=True)
 class Q2:
     """a + b√2 with a, b ∈ ℚ."""
@@ -64,8 +74,8 @@ class Q2:
     b: Fraction = Fraction(0)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "a", Fraction(self.a))
-        object.__setattr__(self, "b", Fraction(self.b))
+        object.__setattr__(self, "a", _rational_coordinate(self.a, "Q2.a"))
+        object.__setattr__(self, "b", _rational_coordinate(self.b, "Q2.b"))
 
     def to_float(self) -> float:
         """Render to IEEE-754. THE boundary: nothing upstream may call this.
@@ -91,6 +101,19 @@ class Q2:
         return Q2(self.a * o.a + 2 * self.b * o.b,
                   self.a * o.b + self.b * o.a)
 
+    def inverse(self) -> "Q2":
+        """Return (a − b√2)/(a² − 2b²); zero has no field inverse."""
+        if self.is_zero():
+            raise ZeroDivisionError("cannot invert zero in Q2")
+        denominator = self.norm()
+        return Q2(self.a / denominator, -self.b / denominator)
+
+    def __truediv__(self, o: "Q2") -> "Q2":
+        """Divide two Q2 elements in the original coefficient field."""
+        if not isinstance(o, Q2):
+            return NotImplemented
+        return self * o.inverse()
+
     def conj2(self) -> "Q2":
         """σ₂: √2 ↦ −√2."""
         return Q2(self.a, -self.b)
@@ -101,6 +124,9 @@ class Q2:
 
     def is_rational(self) -> bool:
         return self.b == 0
+
+    def is_zero(self) -> bool:
+        return self.a == 0 and self.b == 0
 
     def __repr__(self) -> str:
         return f"Q2({self.a}, {self.b})"
@@ -118,14 +144,19 @@ class K2:
     re: Q2 = Q2()
     im: Q2 = Q2()
 
-    @staticmethod
-    def from_coords(a, b, c, d) -> "K2":
-        """The blueprint's four reduced rational coordinates."""
-        return K2(Q2(Fraction(a), Fraction(b)), Q2(Fraction(c), Fraction(d)))
+    def __post_init__(self) -> None:
+        if not isinstance(self.re, Q2) or not isinstance(self.im, Q2):
+            raise TypeError("K2.re and K2.im must be Q2 elements")
 
     @staticmethod
-    def from_rational(q) -> "K2":
-        return K2(Q2(Fraction(q), Fraction(0)), Q2())
+    def from_coords(a: int | Fraction, b: int | Fraction, c: int | Fraction, d: int | Fraction) -> "K2":
+        """The blueprint's four reduced rational coordinates."""
+        return K2(Q2(a, b), Q2(c, d))
+
+    @staticmethod
+    def from_rational(q: int | Fraction) -> "K2":
+        """Embed an exact rational, rejecting floating-point inputs."""
+        return K2(Q2(q, Fraction(0)), Q2())
 
     def coords(self) -> Tuple[Fraction, Fraction, Fraction, Fraction]:
         return (self.re.a, self.re.b, self.im.a, self.im.b)
@@ -143,6 +174,23 @@ class K2:
         # (x + iy)(u + iv) = (xu − yv) + i(xv + yu)
         return K2(self.re * o.re - self.im * o.im,
                   self.re * o.im + self.im * o.re)
+
+    def inverse(self) -> "K2":
+        """Return z†/H(z), retaining the Q2-valued Hermitian denominator.
+
+        The rational total norm is a separate quantity and is not used in
+        place of H(z).
+        """
+        if self.is_zero():
+            raise ZeroDivisionError("cannot invert zero in K2")
+        inverse_h = self.hermitian_norm().inverse()
+        return K2(self.re * inverse_h, -self.im * inverse_h)
+
+    def __truediv__(self, o: "K2") -> "K2":
+        """Divide two K2 elements without a projection to rational scalars."""
+        if not isinstance(o, K2):
+            return NotImplemented
+        return self * o.inverse()
 
     # -- the two independent involutions --------------------------------
 
@@ -202,6 +250,10 @@ class C4:
     u: K2 = K2()
     v: K2 = K2()
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.u, K2) or not isinstance(self.v, K2):
+            raise TypeError("C4.u and C4.v must be K2 elements")
+
     def to_float(self) -> complex:
         """Render to a complex float. See Q2.to_float -- this is the boundary."""
         return (complex(self.u.re.to_float(), self.u.im.to_float())
@@ -212,7 +264,8 @@ class C4:
         return C4(z, K2())
 
     @staticmethod
-    def from_rational(q) -> "C4":
+    def from_rational(q: int | Fraction) -> "C4":
+        """Embed an exact rational through K2's strict domain boundary."""
         return C4(K2.from_rational(q), K2())
 
     def __add__(self, o: "C4") -> "C4":
@@ -230,6 +283,20 @@ class C4:
         return C4(self.u * o.u + five * self.v * o.v,
                   self.u * o.v + self.v * o.u)
 
+    def inverse(self) -> "C4":
+        """Return (u − v√5)/(u² − 5v²), with denominator inverted in K2."""
+        if self.is_zero():
+            raise ZeroDivisionError("cannot invert zero in C4")
+        denominator = self.u * self.u - K2.from_rational(5) * self.v * self.v
+        inverse_denominator = denominator.inverse()
+        return C4(self.u * inverse_denominator, -self.v * inverse_denominator)
+
+    def __truediv__(self, o: "C4") -> "C4":
+        """Divide two C4 elements with every field coordinate retained."""
+        if not isinstance(o, C4):
+            return NotImplemented
+        return self * o.inverse()
+
     def conj5(self) -> "C4":
         """√5 ↦ −√5."""
         return C4(self.u, -self.v)
@@ -237,6 +304,9 @@ class C4:
     def is_in_k2(self) -> bool:
         """True when the √5 part vanishes, i.e. the value really lives in K2."""
         return self.v.is_zero()
+
+    def is_zero(self) -> bool:
+        return self.u.is_zero() and self.v.is_zero()
 
     def __repr__(self) -> str:
         return f"C4({self.u!r} + {self.v!r}·√5)"
