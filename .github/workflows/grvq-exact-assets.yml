@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "claude/integrate-grvq-exact-assets-*"
       - "codex/create-github-repository-for-pcfe-v3.0"
   pull_request:
     branches: ["**"]

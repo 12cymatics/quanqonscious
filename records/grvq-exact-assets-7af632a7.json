@@ -54,7 +54,24 @@
   },
   "protected_work": "Existing adoption records, instruction files, unrelated modules, and remote default branch remain outside this task's write assignments.",
   "implementation_status": "candidate_implemented; full-model equations remain explicitly unresolved",
-  "verification_status": "GitHub tests pending; source inspection and diff review only",
+  "verification_status": "Commit-specific GitHub evidence is recorded below. No local implementation tests and no full-engine certification.",
+  "candidate_source_integrity": {
+    "commit": "ea53e9f288b563513c15bd67ff4a4d003ba0e78e",
+    "tree": "9206d6013f885ab7593330babc6fb6d72e5c4721",
+    "changed_paths": 13,
+    "all_changed_blob_ids_matched_local_source": true,
+    "dropped_upstream_files": [],
+    "unplanned_upstream_blob_changes": []
+  },
+  "github_measurements": {
+    "commit": "ea53e9f288b563513c15bd67ff4a4d003ba0e78e",
+    "package_job": "https://github.com/12cymatics/quanqonscious/actions/runs/41830846259/job/126577328459",
+    "package_collected": 2888,
+    "package_passed": 2888,
+    "exact_asset_extension_tests": 154,
+    "documentation_gate": "Initial run rejected old README totals; README updated from these measurements",
+    "other_workflows": "Pending at this record update"
+  },
   "baseline_checks": {
     "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
     "python_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674517",
