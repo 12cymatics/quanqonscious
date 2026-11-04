@@ -14,7 +14,8 @@
    the way it read it before. The page also ships three blocks of JavaScript to its worker
    threads as template literals -- the Floquet worker, the 3-D solver's worker and its row
    workers -- each recognised by the `].join('\n;\n')` that assembles it, and the comments
-   inside those are removed too, as code.
+   inside those are removed too, as code. So are the comments in the two GLSL programs the
+   GPU renderer compiles, which also travel as template literals.
 
    PROSE. The sentences the page shows are taken out of it, and nothing a control, a reading
    or a unit needs: the subtitle under the title, the startup box's sentences, the paragraph
@@ -58,10 +59,11 @@ function cut(out, src, i, j, spansLines){
 }
 
 /* JavaScript with its comments removed. `src` is code; the result is the same code, token
-   for token. Returns { out, comments, workerBodies }: the number of comments removed, and
-   how many worker bodies were found and stripped as code. */
+   for token. Returns { out, comments, workerBodies, shaders, glsl }: the JavaScript comments
+   removed, how many worker bodies were found and stripped as code, and how many GPU
+   shader programs were found and how many GLSL comments came out of them. */
 export function stripJs(src){
-  let out = '', i = 0, comments = 0, workerBodies = 0;
+  let out = '', i = 0, comments = 0, workerBodies = 0, shaders = 0, glsl = 0;
   const n = src.length;
   /* the last significant character or word emitted, to tell a regex from a division */
   let last = '', lastWord = '';
@@ -171,6 +173,16 @@ export function stripJs(src){
         const inner = stripJs(text.slice(1, -1));
         comments += inner.comments;
         workerBodies++;
+        shaders += inner.shaders; glsl += inner.glsl;
+        text = '`' + inner.out + '`';
+      }
+      /* a GPU shader: a template literal that is a GLSL program */
+      else if (text.startsWith('`#version ')){
+        if (text.includes('${')) throw new Error(
+          `the shader ending at ${t.end} interpolates; its text is not plain GLSL`);
+        const inner = stripGlsl(text.slice(1, -1));
+        glsl += inner.comments;
+        shaders++;
         text = '`' + inner.out + '`';
       }
       emit(text); i = t.end;
@@ -186,7 +198,31 @@ export function stripJs(src){
     if (/\s/.test(c)) out += c; else emit(c);
     i++;
   }
-  return { out, comments, workerBodies };
+  return { out, comments, workerBodies, shaders, glsl };
+}
+
+/* GLSL with its comments removed. GLSL has no string literals, so every // and every /*
+   in a shader begins a comment. */
+export function stripGlsl(src){
+  let out = '', i = 0, comments = 0;
+  while (i < src.length){
+    if (src[i] === '/' && src[i + 1] === '/'){
+      let j = i + 2;
+      while (j < src.length && src[j] !== '\n') j++;
+      [out, i] = cut(out, src, i, j, false);
+      comments++;
+      continue;
+    }
+    if (src[i] === '/' && src[i + 1] === '*'){
+      const e = src.indexOf('*/', i + 2);
+      if (e < 0) throw new Error(`unterminated GLSL comment at ${i}`);
+      [out, i] = cut(out, src, i, e + 2, src.slice(i, e).includes('\n'));
+      comments++;
+      continue;
+    }
+    out += src[i]; i++;
+  }
+  return { out, comments };
 }
 
 /* CSS with its comments removed; strings are left alone. */
@@ -217,7 +253,7 @@ export function stripCss(src){
    would carry data, not code, and is left as it is; this page has none. */
 export function stripPage(html){
   let out = '', i = 0;
-  const counts = { html: 0, css: 0, js: 0, workerBodies: 0, scripts: 0, styles: 0 };
+  const counts = { html: 0, css: 0, js: 0, glsl: 0, workerBodies: 0, shaders: 0, scripts: 0, styles: 0 };
   const lower = html.toLowerCase();
   while (i < html.length){
     if (html.startsWith('<!--', i)){
@@ -241,6 +277,7 @@ export function stripPage(html){
         else {
           const r = stripJs(body);
           counts.js += r.comments; counts.workerBodies += r.workerBodies; counts.scripts++;
+          counts.shaders += r.shaders; counts.glsl += r.glsl;
           stripped = r.out;
         }
       } else {
@@ -368,6 +405,8 @@ export function buildClean(source){
   const r = stripPage(applyProse(source === undefined ? buildStandalone() : source));
   if (r.counts.workerBodies !== 3) throw new Error(
     `build-clean: ${r.counts.workerBodies} worker bodies found where the page builds three.`);
+  if (r.counts.shaders !== 2) throw new Error(
+    `build-clean: ${r.counts.shaders} GPU shaders found where the page compiles two.`);
   return r;
 }
 
@@ -380,6 +419,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const r = buildClean();
   writeFileSync(out, r.out);
   console.log(`wrote ${out}  ${(r.out.length/1024).toFixed(1)} KB; removed ${r.counts.js} JavaScript, `
-    + `${r.counts.css} CSS and ${r.counts.html} HTML comments, ${r.counts.workerBodies} worker bodies `
-    + `stripped as code`);
+    + `${r.counts.glsl} GLSL, ${r.counts.css} CSS and ${r.counts.html} HTML comments; `
+    + `${r.counts.workerBodies} worker bodies and ${r.counts.shaders} shaders stripped as code`);
 }

@@ -70,7 +70,7 @@ const isWorkerBody = (toks, i) => toks[i].type.label === 'template'
   && toks[i + 4] && toks[i + 4].value === 'join';
 
 const before = scriptsOf(edited), after = scriptsOf(html);
-let workerBodies = 0, commentsBefore = 0;
+let workerBodies = 0, commentsBefore = 0, shaders = 0, glslBefore = 0;
 
 check('the clean page has the same scripts, in the same order, with the same attributes', () => {
   eq(after.length, before.length, 'script count');
@@ -90,6 +90,18 @@ check('every script gives acorn the same tokens as the page it came from, and no
         `script ${s}, token ${i}: ${x.type.label} became ${y.type.label} near `
         + JSON.stringify(b.body.slice(x.start, x.start + 60)));
       const worker = isWorkerBody(tb, i) && isWorkerBody(ta, i);
+      if (x.type.label === 'template' && String(x.value).startsWith('#version ')){
+        /* a GPU shader is GLSL the page ships as text. GLSL has no string literals, so
+           a pattern is an exact reference here: every block and line comment it finds is
+           one. The two must read as the same words, and the clean one carry no comment. */
+        const glslComments = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+        glslBefore += (x.value.match(glslComments) || []).length;
+        const words = t => t.replace(glslComments, ' ').split(/\s+/).filter(Boolean).join(' ');
+        if (/\/\*|\/\//.test(y.value)) throw new Error(`a comment is left in a clean shader`);
+        eq(words(y.value), words(x.value), 'a shader, comments aside');
+        shaders++;
+        continue;
+      }
       if (x.value === y.value && !worker) continue;
       if (!worker) throw new Error(
         `script ${s}, token ${i} (${x.type.label}): ${JSON.stringify(String(x.value).slice(0, 60))} `
@@ -109,13 +121,17 @@ check('every script gives acorn the same tokens as the page it came from, and no
   });
 });
 
-check('the page builds three worker bodies, and no other token differs', () => {
+check('the page builds three worker bodies and two shaders, and no other token differs', () => {
   eq(workerBodies, 3, 'worker bodies read by acorn');
   eq(clean.counts.workerBodies, 3, 'worker bodies the builder found');
+  eq(shaders, 2, 'shaders read');
+  eq(clean.counts.shaders, 2, 'shaders the builder found');
 });
 
-check('the builder removed exactly the comments acorn counts', () => {
+check('the builder removed exactly the comments acorn and the GLSL pattern count', () => {
   eq(clean.counts.js, commentsBefore, 'JavaScript comments removed');
+  eq(clean.counts.glsl, glslBefore, 'GLSL comments removed');
+  if (glslBefore === 0) throw new Error('the shaders had no comment to remove, so this checked nothing');
 });
 
 check('every clean script compiles', () => {
@@ -127,6 +143,18 @@ check('no HTML or CSS comment is left', () => {
   eq(markup.includes('<!--'), false, 'an HTML comment in the markup');
   const styles = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]);
   eq(styles.some(c => c.includes('/*')), false, 'a CSS comment in a <style>');
+});
+
+check('no comment marker is left anywhere in the file, outside the two encoded modules', () => {
+  /* The compiled WebAssembly travels as base64, whose alphabet has '/' in it, so a '//'
+     there is data. Everywhere else in this page none of the three markers occurs at all:
+     not in a string, a URL or a pattern either. */
+  const modules = html.match(/_BASE64 = "[A-Za-z0-9+/=]+"/g) || [];
+  eq(modules.length, 2, 'encoded modules found');
+  let rest = html;
+  for (const m of modules) rest = rest.replace(m, '');
+  const left = ['/*', '*/', '//', '<!--'].filter(t => rest.includes(t));
+  eq(left.length, 0, `markers left (${left.join(' ')})`);
 });
 
 check('the markup and the style are the page\'s, less their comments', () => {
