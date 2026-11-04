@@ -226,6 +226,37 @@ def test_large_rationals_remain_unbounded_by_decimal_serialization():
     assert len(json.dumps(execution.receipt)) > 20000
 
 
+@pytest.mark.parametrize("rational_denominator", [False, True])
+def test_symbolic_receipts_preserve_large_exact_coefficient_atoms(rational_denominator):
+    # Gamma is a permitted exact input even when its literal occurrence is
+    # multiplied by sin(0). Keeping that literal factor must not impose a
+    # decimal-printing bound on the coefficient.
+    numerator = 2 ** 20000 + 1
+    denominator = numerator + 2 if rational_denominator else 1
+    try:
+        execution = assets.evaluate_canonical_field(
+            0, 0, 0, parameters={"gamma": Fraction(numerator, denominator)},
+        )
+    except ValueError as error:
+        raise AssertionError("The receipt rejected a permitted exact coefficient during serialization") from error
+    assert execution.value == sp.Rational(19999999700000001, 2)
+    literal = execution.receipt["details"]["literal_expression"]["srepr"]
+    expected_atom = (f"Rational({hex(numerator)}, {hex(denominator)})" if rational_denominator
+                     else f"Integer({hex(numerator)})")
+    assert expected_atom in literal
+    assert decode_exact(execution.receipt["inputs"]["parameters"]["gamma"]) == Fraction(numerator, denominator)
+
+
+def test_symbolic_receipts_preserve_function_arguments_and_symbol_assumptions():
+    symbol = sp.Symbol("x", real=True)
+    argument = sp.Add(symbol, sp.Rational(1, 3), evaluate=False)
+    expression = sp.sin(argument, evaluate=False)
+    assert assets._encode(expression) == {
+        "$exact": "symbolic",
+        "srepr": "sin(Add(Symbol('x', real=True), Rational(0x1, 0x3)))",
+    }
+
+
 def test_json_entrypoint_executes_real_arithmetic(monkeypatch, capsys):
     request = {"operation": "book_sutra", "arguments": {
         "sutra_id": 2, "operands": {"a": {"rational": [2, 3]}, "b": 9, "base": 10},

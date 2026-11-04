@@ -71,6 +71,12 @@ MUTATIONS = (
         "q = sp.Rational(value)",
         "test_exact_asset_boundaries_reject_inexact_or_coerced_values",
     ),
+    Mutation(
+        "decimal_limit_in_symbolic_receipts", "grvq_exact_assets.py",
+        'return _ExactReprPrinter({"order": "none"}).doprint(value)',
+        "return sp.srepr(value)",
+        "test_symbolic_receipts_preserve_large_exact_coefficient_atoms",
+    ),
 )
 
 

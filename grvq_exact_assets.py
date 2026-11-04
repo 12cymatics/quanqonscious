@@ -18,6 +18,7 @@ import sys
 from typing import Any
 
 import sympy as sp
+from sympy.printing.repr import ReprPrinter
 
 from core.exact_codec import encode_exact
 import grvq_canonical
@@ -42,6 +43,25 @@ class AssetExecution:
     receipt: dict
 
 
+class _ExactReprPrinter(ReprPrinter):
+    """Keep symbolic integer atoms exact without decimal conversion limits."""
+
+    def _print_Integer(self, expression):
+        return f"Integer({hex(int(expression.p))})"
+
+    def _print_Rational(self, expression):
+        return f"Rational({hex(int(expression.p))}, {hex(int(expression.q))})"
+
+    def _print_int(self, value):
+        return repr(value) if isinstance(value, bool) else hex(value)
+
+
+def _exact_srepr(value):
+    # Preserve the literal argument order and the inherited symbol assumptions.
+    # This emits a representation; no incoming string is parsed or evaluated.
+    return _ExactReprPrinter({"order": "none"}).doprint(value)
+
+
 def _encode(value):
     """Encode exact values without decimal conversion or evaluating strings."""
     if isinstance(value, sp.Rational):
@@ -49,7 +69,7 @@ def _encode(value):
     if isinstance(value, sp.Basic):
         if value.atoms(sp.Float):
             raise TypeError("A symbolic execution result contains binary floating-point data")
-        return {"$exact": "symbolic", "srepr": sp.srepr(value)}
+        return {"$exact": "symbolic", "srepr": _exact_srepr(value)}
     if isinstance(value, k2_field.Q2):
         return {"$exact": "Q2", "coordinates": _encode((value.a, value.b))}
     if isinstance(value, k2_field.K2):

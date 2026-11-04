@@ -176,8 +176,11 @@ five-dimensional projection is not substituted for the full state.
 A receipt includes explicit inputs, exact outputs, the named calculation,
 domain and mapping details, implementation file hashes, SymPy version, and a
 digest of the receipt. Integers and rationals use the shared hexadecimal exact
-codec, avoiding decimal digit limits. Symbolic results are recorded as SymPy
-structural representations; incoming expression strings are never evaluated.
+codec, avoiding decimal digit limits. Symbolic results use structural SymPy
+representations with hexadecimal integer literals inside their Integer and
+Rational nodes. This also preserves coefficients above the interpreter's
+decimal-printing limit inside unevaluated formulas, while retaining literal
+argument order and symbol assumptions. Incoming expression strings are never evaluated.
 The hashes identify bytes and bind the record. They do not prove a physical
 model or certify unexecuted functions.
 
@@ -187,13 +190,14 @@ the existing arithmetic, field, trace, invariant, and kernel regressions, and
 uploads the JUnit reports and dependency inventory. Existing aggregate Python,
 JavaScript, and package workflows remain active.
 
-`tools/check_grvq_exact_asset_gates.py` separately injects six defects, one per
+`tools/check_grvq_exact_asset_gates.py` separately injects seven defects, one per
 fresh disposable copy: omitted modulation, omitted final graph coefficient,
 reversed second coboundary, a lost Walsh mode, wrong norm in K2 division, and
-silent float coercion. Each must produce an assertion failure, with no
+silent float coercion, and decimal-printing failure for a valid symbolic
+coefficient. Each must produce an assertion failure, with no
 collection errors or skipped tests. Unchanged copies must pass before and
 afterward, and every tracked working-source hash must remain identical. These
-six checks establish the rejection behavior of their named gates; other test
+seven checks establish the rejection behavior of their named gates; other test
 cases are not claimed to have individual mutation evidence.
 
 Tests for this task run in GitHub. Local activity is restricted to source
