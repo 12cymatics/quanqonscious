@@ -1,0 +1,6 @@
+Open index.html in a full desktop browser. It contains the simulator and embedded solvers.
+Do not open it in a static attachment or Files preview.
+No installation or server is needed for index.html.
+The source page cymatic.html requires a local HTTP server.
+The nonlinear Navier-Stokes solver is not real-time at its strict accuracy grid.
+See README.md for modes, tests and numerical limitations.

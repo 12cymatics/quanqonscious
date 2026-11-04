@@ -287,6 +287,10 @@ theorem walk_measure_total (α wp wn : ℚ) (h : wp + wn ≠ 0) :
     α + (1 - α) * (wp / (wp + wn)) + (1 - α) * (wn / (wp + wn)) = 1 := by
   field_simp; ring
 
+theorem walk_measure_total_split (α : ℚ) :
+    α + (1 - α) * (1 / 2) + (1 - α) * (1 / 2) = 1 := by
+  ring
+
 theorem median_minimises_l1 (a b c d x : ℝ) (hab : a ≤ b) (hbc : b ≤ c) (hcd : c ≤ d) :
     |a - b| + |b - b| + |c - b| + |d - b| ≤ |a - x| + |b - x| + |c - x| + |d - x| := by
   have e1 : d - a ≤ |a - x| + |d - x| := by

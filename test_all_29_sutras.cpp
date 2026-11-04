@@ -233,19 +233,19 @@ static void part_one() {
         bool ok = true;
         for (long n = -50; n <= 200; ++n) {
             BigInt b(n);
-            ok = ok && S12_Sesanyankena::divisible_by_2(b)  == (n % 2 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_3(b)  == (n % 3 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_4(b)  == (n % 4 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_5(b)  == (n % 5 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_8(b)  == (n % 8 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_9(b)  == (n % 9 == 0);
-            ok = ok && S12_Sesanyankena::divisible_by_11(b) == (n % 11 == 0);
+            ok = ok && Divisibility::divisible_by_2(b)  == (n % 2 == 0);
+            ok = ok && Divisibility::divisible_by_3(b)  == (n % 3 == 0);
+            ok = ok && Divisibility::divisible_by_4(b)  == (n % 4 == 0);
+            ok = ok && Divisibility::divisible_by_5(b)  == (n % 5 == 0);
+            ok = ok && Divisibility::divisible_by_8(b)  == (n % 8 == 0);
+            ok = ok && Divisibility::divisible_by_9(b)  == (n % 9 == 0);
+            ok = ok && Divisibility::divisible_by_11(b) == (n % 11 == 0);
         }
         check(ok, "S12 seven divisibility rules over -50..200 (1757 checks)");
         // 7^128 mod 13, computed by repeated squaring here as the reference.
         BigInt ref = 1, base = 7;
         for (int i = 0; i < 128; ++i) ref = (ref * base) % 13;
-        check(S12_Sesanyankena::mod_pow(BigInt(7), BigInt(128), BigInt(13)) == ref,
+        check(Divisibility::mod_pow(BigInt(7), BigInt(128), BigInt(13)) == ref,
               "S12 mod_pow(7,128,13)");
     }
 
@@ -253,17 +253,17 @@ static void part_one() {
     {
         // [3;7,15,1] -> 355/113, the classic pi convergent.
         std::vector<BigInt> cf{BigInt(3), BigInt(7), BigInt(15), BigInt(1)};
-        auto c = S13_Sopantya::nth_convergent(cf, 3);
+        auto c = ContinuedFractions::nth_convergent(cf, 3);
         check(c.numerator == 355 && c.denominator == 113, "S13 [3;7,15,1] == 355/113");
         // [3;7,15,1] and [3;7,16] are the two forms of the same rational;
         // to_continued_fraction returns the canonical one, so the round-trip
         // is asserted on the VALUE rather than on one chosen spelling.
-        auto back = S13_Sopantya::to_continued_fraction(Rational(BigInt(355), BigInt(113)));
-        auto rebuilt = S13_Sopantya::nth_convergent(back, back.size() - 1);
+        auto back = ContinuedFractions::to_continued_fraction(Rational(BigInt(355), BigInt(113)));
+        auto rebuilt = ContinuedFractions::nth_convergent(back, back.size() - 1);
         check(rebuilt.numerator == 355 && rebuilt.denominator == 113,
               "S13 355/113 continued fraction round-trips by value");
         // all-ones continued fraction gives consecutive Fibonacci ratios.
-        auto g = S13_Sopantya::golden_ratio_convergent(9);
+        auto g = ContinuedFractions::golden_ratio_convergent(9);
         check(g.numerator == 89 && g.denominator == 55, "S13 golden convergent 89/55");
     }
 
@@ -293,15 +293,15 @@ static void part_one() {
 
     // S16 Gunaka Samuccayah -- the factors of the sum.
     {
-        auto f = S16_Gunakasamuccaya::prime_factorize(BigInt(360));  // 2^3 * 3^2 * 5
+        auto f = IntegerFactors::prime_factorize(BigInt(360));  // 2^3 * 3^2 * 5
         BigInt rebuilt = 1;
         for (const auto& pf : f) rebuilt *= util::power(pf.prime, pf.exponent);
         check(rebuilt == 360 && f.size() == 3, "S16 prime_factorize(360) rebuilds to 360");
-        check(S16_Gunakasamuccaya::verify_gcd(BigInt(12), BigInt(18), BigInt(6)),
+        check(IntegerFactors::verify_gcd(BigInt(12), BigInt(18), BigInt(6)),
               "S16 verify_gcd(12,18,6)");
-        check(S16_Gunakasamuccaya::verify_lcm(BigInt(12), BigInt(18), BigInt(36)),
+        check(IntegerFactors::verify_lcm(BigInt(12), BigInt(18), BigInt(36)),
               "S16 verify_lcm(12,18,36)");
-        check(S16_Gunakasamuccaya::verify_gcd_lcm_identity(BigInt(12), BigInt(18)),
+        check(IntegerFactors::verify_gcd_lcm_identity(BigInt(12), BigInt(18)),
               "S16 gcd*lcm == a*b");
     }
 
@@ -337,15 +337,15 @@ static void part_one() {
         bool ok = true;
         for (long n : {0L, 1L, 13L, 143L, 999999L}) {
             BigInt b(n);
-            ok = ok && US4_Kevalaih::multiply_by_7(b) == b * 7;
-            ok = ok && US4_Kevalaih::multiply_by_7_shift(b) == b * 7;
+            ok = ok && ComplementProducts::multiply_by_7(b) == b * 7;
+            ok = ok && ComplementProducts::multiply_by_7_shift(b) == b * 7;
         }
         check(ok, "US4 both multiply_by_7 routes == n*7");
         // multiply_by_complement(n,k) is 10n - (10-k)n, which is n*k -- the
         // complement route to an ordinary small multiplication, not n*(10^k-2).
         bool okc = true;
         for (long n : {0L, 7L, 76L, 12345L}) for (int k = 1; k <= 9; ++k)
-            okc = okc && US4_Kevalaih::multiply_by_complement(BigInt(n), k) == BigInt(n) * k;
+            okc = okc && ComplementProducts::multiply_by_complement(BigInt(n), k) == BigInt(n) * k;
         check(okc, "US4 multiply_by_complement(n,k) == n*k, 36 cases");
     }
 
@@ -457,8 +457,8 @@ static void part_two() {
                && US8_Antyayor::multiply_sum_to_ten(a, b).product == truth;
         check(ok, "S3 + S2 + US8 agree on 43*47");
         BigInt c("76");
-        check(US4_Kevalaih::multiply_by_complement(c, 7) == S3_Urdhva::multiply(c, BigInt(7)).product
-              && US4_Kevalaih::multiply_by_7(c) == S3_Urdhva::multiply(c, BigInt(7)).product,
+        check(ComplementProducts::multiply_by_complement(c, 7) == S3_Urdhva::multiply(c, BigInt(7)).product
+              && ComplementProducts::multiply_by_7(c) == S3_Urdhva::multiply(c, BigInt(7)).product,
               "US4 complement route and multiply_by_7 both == S3 Urdhva on 76*7");
     }
 
@@ -495,7 +495,7 @@ static void part_two() {
         bool ok = true;
         auto osc = US5_Vestanam::find_positive_osculator(BigInt(11));
         for (long n = 1; n <= 400; ++n)
-            ok = ok && S12_Sesanyankena::divisible_by_11(BigInt(n))
+            ok = ok && Divisibility::divisible_by_11(BigInt(n))
                     == US5_Vestanam::divisibility_by_osculation(BigInt(n), BigInt(11), *osc, true);
         check(ok, "S12 digit rule == US5 osculation for 11, over 400 values");
     }
@@ -505,7 +505,7 @@ static void part_two() {
         bool ok = true;
         for (long n = 0; n <= 300; ++n) {
             auto d = S4_Paravartya::divide(BigInt(n), BigInt(9));
-            ok = ok && ((d.remainder == 0) == S12_Sesanyankena::divisible_by_9(BigInt(n)));
+            ok = ok && ((d.remainder == 0) == Divisibility::divisible_by_9(BigInt(n)));
         }
         check(ok, "S4 zero remainder <=> S12 divisible_by_9, over 301 values");
     }
@@ -515,8 +515,8 @@ static void part_two() {
         bool ok = true;
         struct { long a, b; } ps[] = {{12,18}, {360,84}, {17,5}, {100,75}, {64,48}};
         for (auto& p : ps) {
-            auto fa = S16_Gunakasamuccaya::prime_factorize(BigInt(p.a));
-            auto fb = S16_Gunakasamuccaya::prime_factorize(BigInt(p.b));
+            auto fa = IntegerFactors::prime_factorize(BigInt(p.a));
+            auto fb = IntegerFactors::prime_factorize(BigInt(p.b));
             BigInt g = 1;
             for (const auto& x : fa) for (const auto& y : fb)
                 if (x.prime == y.prime)
@@ -561,7 +561,7 @@ static void part_two() {
     // Continued fractions (S13) and proportion (US1): a convergent scaled by its
     // own denominator must return the numerator.
     {
-        auto c = S13_Sopantya::nth_convergent(
+        auto c = ContinuedFractions::nth_convergent(
             {BigInt(3), BigInt(7), BigInt(15), BigInt(1)}, 3);
         Rational conv(c.numerator, c.denominator);
         check(US1_Anurupyena::scale(conv, Rational(c.denominator)) == Rational(c.numerator),
@@ -588,7 +588,7 @@ static void part_two() {
         for (long d : {7L, 11L, 13L, 19L, 21L}) {
             auto r = S1_Ekadhikena::divide_recurring(BigInt(1), BigInt(d), 200);
             BigInt k(static_cast<long>(r.recurring.size()));
-            ok = ok && S12_Sesanyankena::mod_pow(BigInt(10), k, BigInt(d)) == 1;
+            ok = ok && Divisibility::mod_pow(BigInt(10), k, BigInt(d)) == 1;
         }
         check(ok, "S1 period length k satisfies 10^k == 1 mod d, via S12 mod_pow, 5 denominators");
     }

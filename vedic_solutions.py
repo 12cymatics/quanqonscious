@@ -61,22 +61,7 @@ def _apply_sutra_parallel_points(
     chunk_size: int,
     executor,
 ) -> FieldState:
-    points = list(state.lattice.iterate_all())
-    chunks = [points[i:i + chunk_size] for i in range(0, len(points), chunk_size)]
-
-    def process(chunk: List[LatticePoint]) -> List[Tuple[Tuple[int, ...], object]]:
-        results = []
-        for point in chunk:
-            old_val = state.get(point)
-            new_val = sutra.sutra_transform(old_val, point.coords, state, context)
-            results.append((point.coords, new_val))
-        return results
-
-    new_state = state.copy()
-    futures = [executor.submit(process, chunk) for chunk in chunks]
-    for future in futures:
-        for coords, value in future.result():
-            new_state.set_by_coords(coords, value)
+    new_state = sutra.apply_parallel(state, context, executor, chunk_size)
 
     invariants, passed = sutra.check_invariants(new_state, context)
     if not passed:
@@ -127,25 +112,17 @@ def _apply_sutra_pipeline_parallel_array(
 
     height, width = field.shape
     y_splits, x_splits = splits
-    y_edges = np.linspace(0, height, y_splits + 1, dtype=int)
-    x_edges = np.linspace(0, width, x_splits + 1, dtype=int)
-
-    tiles = []
-    tile_meta = []
-    for yi in range(y_splits):
-        for xi in range(x_splits):
-            y0, y1 = y_edges[yi], y_edges[yi + 1]
-            x0, x1 = x_edges[xi], x_edges[xi + 1]
-            tile = _extract_tile(field, y0, y1, x0, x1, halo)
-            tiles.append(tile)
-            tile_meta.append((y0, y1, x0, x1))
-
-    result = np.zeros_like(field)
+    if y_splits < 1 or x_splits < 1 or y_splits > height or x_splits > width:
+        raise ValueError("Parallel splits must partition nonempty rows and columns")
+    if halo < 0:
+        raise ValueError("The halo cannot be negative")
+    chunk_size = (height * width + y_splits * x_splits - 1) // (y_splits * x_splits)
+    context = OperatorContext(dt=_fraction_from_float(time_step), mode=ArithmeticMode.EXACT)
+    state = _field_to_state(field, ArithmeticMode.EXACT)
     with ProcessPoolExecutor() as executor:
-        outputs = executor.map(_tile_pipeline_worker, [(tile, time_step, halo) for tile in tiles])
-        for (y0, y1, x0, x1), processed in zip(tile_meta, outputs):
-            result[y0:y1, x0:x1] = processed
-    return result
+        for sutra in get_all_sutras():
+            state = _apply_sutra_parallel_points(state, sutra, context, chunk_size, executor)
+    return _state_to_field(state)
 
 
 class VedicPDESuite:

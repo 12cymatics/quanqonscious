@@ -1278,10 +1278,17 @@ async function checkCleanProse(page, removed, fullSentences){
     note: !!document.getElementById('dnsNote'), footer: !!document.querySelector('footer'),
     subtitle: !!document.querySelector('header p'),
     titles: [...document.querySelectorAll('#anchors button')].filter(b => b.hasAttribute('title')).length,
-    anchors: document.querySelectorAll('#anchors button').length })`);
+    anchors: document.querySelectorAll('#anchors button').length,
+    noscript: !!document.querySelector('noscript'),
+    startup: (s => s && { hidden: s.hidden, text: s.textContent })(document.getElementById('startupStatus')),
+    drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed })`);
   ok(!dom.note && !dom.footer && !dom.subtitle,
      'the note, the footer and the subtitle are not in the page', JSON.stringify(dom));
   ok(dom.anchors > 0 && dom.titles === 0, 'the frequency anchors are there, without tooltips',
+     JSON.stringify(dom));
+  ok(!dom.noscript && dom.startup && dom.startup.hidden && dom.startup.text === ''
+     && dom.drawn && !dom.failed,
+     'the page drew, and its startup box is there, empty and hidden, with no failure to show',
      JSON.stringify(dom));
   /* the warnings: a state the kernel warns about, where the full page shows its warning */
   await page.eval(`setFreq(5000), true`);

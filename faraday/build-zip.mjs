@@ -93,6 +93,8 @@ export const MANIFEST = [
   'faraday/build-clean.mjs',
   'faraday/build-zip.mjs',
   'faraday/check-kernel.mjs',
+  'faraday/check-playback.mjs',
+  'faraday/check-startup.mjs',
   'faraday/check-standalone.mjs',
   'faraday/check-clean.mjs',
   'faraday/check-zip.mjs',
@@ -137,6 +139,8 @@ export const MANIFEST = [
    skipping, which is correct, so run-checks says up front which suite that is
    instead of leaving the reader to read a stack trace. */
 export const SUITES = [
+  { name: 'faraday/check-startup.mjs', file: 'faraday/check-startup.mjs' },
+  { name: 'faraday/check-playback.mjs',     file: 'faraday/check-playback.mjs' },
   { name: 'faraday/check-kernel.mjs',       file: 'faraday/check-kernel.mjs' },
   { name: 'faraday/check-standalone.mjs',   file: 'faraday/check-standalone.mjs' },
   { name: 'faraday/check-clean.mjs',        file: 'faraday/check-clean.mjs' },
@@ -246,7 +250,10 @@ export function stage(dir){
   }
 
   writeFileSync(join(top, 'README.md'), readFileSync(resolve(REPO, 'faraday/zip-README.md')));
-  writeFileSync(join(top, 'faraday-cell-standalone.html'), buildStandalone());
+  const standalone = buildStandalone();
+  writeFileSync(join(top, 'faraday-cell-standalone.html'), standalone);
+  writeFileSync(join(top, 'index.html'), standalone);
+  writeFileSync(join(top, 'START-HERE.txt'), 'Open index.html in a full desktop browser. It contains the simulator and embedded solvers.\nDo not open it in a static attachment or Files preview.\nNo installation or server is needed for index.html.\nThe source page cymatic.html requires a local HTTP server.\nThe nonlinear Navier-Stokes solver is not real-time at its strict accuracy grid.\nSee README.md for modes, tests and numerical limitations.\n');
   writeFileSync(join(top, 'run-checks.mjs'), runChecksSource());
   for (const p of bundleFiles(top))
     chmodSync(join(top, p), EXECUTABLE.has(p) ? 0o755 : 0o644);
@@ -324,5 +331,5 @@ if (import.meta.url === `file://${process.argv[1]}`){
     console.log(`wrote ${relative(REPO, r.zip.outfile)}  ${(r.zip.bytes/1024).toFixed(1)} KB`);
   }
   console.log(`      ${MANIFEST.length} files from the checkout, plus README.md, `
-              + `faraday-cell-standalone.html and run-checks.mjs`);
+              + `index.html, START-HERE.txt, faraday-cell-standalone.html and run-checks.mjs`);
 }

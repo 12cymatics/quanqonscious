@@ -146,7 +146,7 @@ const top = stage(join(work, 'staged'));
     return out;
   };
   const got = walk(top).sort();
-  const want = [...MANIFEST, 'README.md', 'faraday-cell-standalone.html',
+  const want = [...MANIFEST, 'README.md', 'faraday-cell-standalone.html', 'index.html', 'START-HERE.txt',
                 'run-checks.mjs'].sort();
   const extra = got.filter(p => !want.includes(p));
   const absent = want.filter(p => !got.includes(p));
@@ -163,6 +163,10 @@ const top = stage(join(work, 'staged'));
   const built = buildStandalone();
   ok(readFileSync(join(top, 'faraday-cell-standalone.html'), 'utf8') === built,
      'the standalone page in the tree is a fresh build of the checkout');
+  ok(readFileSync(join(top, 'index.html'), 'utf8') === built,
+     'index.html is the complete standalone simulator, not a redirect');
+  ok(readFileSync(join(top, 'START-HERE.txt'), 'utf8').includes('Open index.html'),
+     'the folder explains its launch entrypoint');
   ok(readFileSync(join(top, 'run-checks.mjs'), 'utf8') === runChecksSource(),
      'the runner in the tree is generated from SUITES');
   ok((statSync(join(top, 'run-checks.mjs')).mode & 0o111) !== 0,
@@ -178,7 +182,7 @@ const built = buildZip(zipPath);
      `${(built.bytes/1024).toFixed(1)} KB`);
   const list = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
     .split('\n').filter(Boolean).filter(p => !p.endsWith('/'));
-  const want = [...MANIFEST, 'README.md', 'faraday-cell-standalone.html', 'run-checks.mjs']
+  const want = [...MANIFEST, 'README.md', 'faraday-cell-standalone.html', 'index.html', 'START-HERE.txt', 'run-checks.mjs']
     .map(p => `${TOP}/${p}`).sort();
   ok(JSON.stringify(list.sort()) === JSON.stringify(want),
      `the zip holds exactly those ${want.length} files under ${TOP}/`,

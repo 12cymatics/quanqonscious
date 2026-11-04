@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "observed_source": "supplied v5 package before this repair",
+  "baseline_repository": "12cymatics/quanqonscious",
+  "baseline_commit": "7109cdc4e5068f89ee3b4c475f1f712607b65098",
+  "observed_files": {
+    "VALIDATION.json": "cde9a4f0be9b8ae878542952e71877c5fa057da236d91538ed9cb2aa0ecb99cd",
+    "MIGRATION.md": "1ae2f23e8fcdee1730e596ce61fbb495fee0295f19cd1828920af71d9fbfa55e",
+    "ACTIVATION.md": "5bf04c260fabb9f25ff1b0239340f7f5dc41bef8b24d8e0a08176ae202fe3af9",
+    "test_validation_identity.py": "9ec913f989b95ad9b3544b5ab53bca1209095167b445b261670d71d76885a5b7",
+    "README.txt": "418c0ec6f9ce387066795f4912f0b8dfb3eba101067674d28dd13e0b843ccf03",
+    "policy.yaml": "53bfcf2ce421374c2f79c1575c5082bc4eef253ee11001151318650b957e1fd9",
+    "project-memory.template.yaml": "5b7d2d9d5d96865d05343c37faec6085c846ac2e754c84d3b153f23a18ca2d9e",
+    "GEOMETRIC-STRUCTURE.md": "6faabfe48b9ddbecb402c0859615a6b649d091fe56be60ef88e8082044cf8805",
+    "FOUNDATION_REGISTER.template.yaml": "306a657bc2fd637fa257d20b9a898e6330af0bfc148817d628f486f6e101166a",
+    "readiness.template.json": "b0bbfa7cc18ee8945a8c0e1d5989c7f0b1b163775c22762f21ddf8cb21ee9bcc",
+    "AGENTS.md": "cb9df4eea8dbd0ef8c21096cf796d564199a96fae6b1948a95c7cd886d9bab18",
+    "validate_readiness.py": "8bc9b7ee2ef07ffd924f8647c94ea57b1d6a625ae9ad0515dff89d3053325016",
+    "OPERATIONS_README.md": "284f987ac08e1769ab7933e49e7789c17df70f94cac855b1b09267a1b50e6cd4",
+    "test_readiness.py": "88e02e7c4113b081c4034e60e000f22549ae99aa21aecdc165e92ad14a67610a",
+    "validation_identity.py": "b42ec48a798816d0f0fd9e041b50d818efbd309976ee695e9b661b381d8c7807",
+    "PROJECT_MEMORY.md": "15976128b20ae11f0c67bbf09d42c6d751743d5f69f99f92b422b43738d4e27f",
+    "CUSTOM-INSTRUCTIONS.txt": "748ad7611d47949af9a73521ac547ff4ea0add0eddf09cb2b75843afbbda8967",
+    "discovery-receipt.template.yaml": "c9e4cad30f3a6e5f194f92db16bf5e27b56b84458bb6a66430ec9f2160b13fb9",
+    "READINESS-TESTS.txt": "9c1e52da4dd737f7d4c1966aeb08b08ab19131c15703903f1dbc7e041abedced",
+    "RESEARCH-AND-TRUST.md": "48d002935d04551a289dd048a4716ed5964f0b8f210c0dd7c0c0f4ea0a859f03",
+    "validate_contracts.py": "0c70322eb1a9f7d9010fa8ddff025453245320abe836f36e3f166a6b7f99de64",
+    "SHA256.json": "60cc0b343df9fb4c92d43dc98a250be230800fec28b361cd2caabc2012ff2083",
+    "DOMAIN-EVIDENCE.md": "4d8a0b79447d2e269831fc6dbbf9dfbbeeb5b3503fecec4971954d54a4ba32cb",
+    "BEHAVIOURAL_EVALUATION.md": "90d7e53a00dacddbd446b0963c76cd0bb682c0ea9c5ea495c1c9f79393ea2953",
+    "memory-claim.example.json": "dc39cbdf4eeb3b86b970e5dcf562ed8f9391869c4e03804befa9dd0f368ac0b4",
+    "OPERATING_PROCEDURES.md": "c0f387968d4269871555e774c0e36abf0986701e1d857c1c3189280442f8284f",
+    "INTEGRITY_RULES.md": "c4dec413785745e0f67fd93050531f3995ff121c7ab9929f54deab6439b195a1",
+    "REVISION-NOTES.md": "ef0ab9aa60b85252b055af548d398a727fafd03c5d8da3265d49f6c2cfdf9e69",
+    "MATHEMATICAL_FOUNDATION.md": "34ec360e78562c1cd321c7d199a264f12261341dcb84fcad28f4efffe7009722",
+    "workflows/instruction-contracts.yml.template": "cc871874c5ced932f71fab796bcfb53cb6b192e5b78f84a6f792c164a47e384b",
+    "reviews/VALIDATION-METHODS-AUDIT.md": "20bb0cf4321a9662f580bef6240947dbd727343e4e7130d9083a84fd35c7b514",
+    "reviews/reproduce_contract_holes.py": "b1657f90e3558aeb07473afbe11e8b85b92d2551167236a8076b6f5c5bd71181",
+    "reviews/v5_opaque_evidence_repro.py": "40e18e4d0177ea4b9ce82761c60db80ee5e7c87ec7fb7e0cd0c0d08e2bbf068e",
+    "reviews/V2-REPRODUCTIONS.json": "a630a34376d9c6fa4b4f08a1129f64697f0cb8cee278916997b47ea676b7780b",
+    "reviews/V5-OPAQUE-EVIDENCE.json": "323886d0426b63618076e89588a7c3060e77fcedd4b372878a44efbe5dd00b55",
+    "reviews/AGENT-METHODS-AUDIT.md": "b3acad7d546969677f18905c94db5c43ceb378b7fd99ad713dcfecb57177da7b",
+    "reviews/V5-GEOMETRY-VALIDATION.md": "2fba7cccaa1d54b7ff3a055ef3e3c9adfb04b4538d7559316ea218ad632516ea",
+    "reviews/V5-AGENT-METHODS.md": "215428f0d310ca7111750fc44efbe764c2b110927816fc0a1af47bd53b0bfb58",
+    "geometry/q4-source-inspection.json": "2af98f370b66d656889860594950c37aeb37ad9f9861a4b1ff81514ea3ad5ade",
+    "geometry/verify_structures.py": "0c4534497a50dc7b11d3cb31e5855a6720709817ab27372d487f90ae2d2591d2",
+    "geometry/RETRIEVAL-BENCHMARKS.md": "f6ade5cd4334d9b4f8a19c675d7e1b43202e34d85027a3e49003d19a4bb0cc74",
+    "geometry/STRUCTURAL-CHECKS.json": "9314877c9aa5d6d0b6841ccc7bf161ac4e03d356e6263706532a507264e1679e",
+    "geometry/RETRIEVAL-RESEARCH.md": "025e8dd9494b01bd5bce1740662c80c1c4baff4437ff09e194e4bbd13c91f65b",
+    "geometry/INDEX-AND-FOLDER-GUIDE.md": "c848a1f612fbe25765ca45db5d0caf9816cc380e672df80713a0aaddc930bcf0",
+    "geometry/COMPUTE-INSTRUCTIONS.md": "8ef116e87c24745fdfe424fac398614ff8a70ae1bd53c69de01cba57ac90785f",
+    "geometry/COMPUTE-RESEARCH.md": "a37ab2fbf4808c717dc97bd94ca24f7c2dec194ef46f45dc82b2a57d829588f2",
+    "geometry/geometry-index.template.json": "1f10ff2a0ff35bca5a8e32f4dac18b38fa72734a37e2383ec842590aad9848da",
+    "geometry/RETRIEVAL-INSTRUCTIONS.md": "c6c0428c85123013d010d76c030cca6a20fb3fca57b0a711ae65b25d3ceb8b24",
+    "geometry/DEVICE-CAPABILITY-MATRIX.md": "18b974bf0dcd192abdbb510b857e7e3182aa083eca57007a29f0dcf326f49e29",
+    "projects/CYMATICA-FARADAY.md": "ec116b176ae50c62cafcdcda85cc52dfc055a26ee0f39796ac4a787c6bc0519a",
+    "projects/MONETISATION.md": "6fb1c8169fc624d50ce41eed3e523a76e8509fdc49ac2e19bcccc733ecc08186",
+    "projects/ETERNAL.md": "7dbec13e01964beb924a9f064b2dfd48e27a8aa652e66952f9590a96335db195",
+    "projects/SITES.md": "ec7f80b169f246a196742c4ae203297a0508e51a5d487ff4b7470fe0237ca8ce"
+  },
+  "prior_manifest_mismatches": [
+    {
+      "path": "AGENTS.md",
+      "recorded_sha256": "9170aaa9f25cf4f259a351cd5980aa7786b539f0cfd19ddd7419d3500b38c43a",
+      "observed_sha256": "cb9df4eea8dbd0ef8c21096cf796d564199a96fae6b1948a95c7cd886d9bab18"
+    },
+    {
+      "path": "BEHAVIOURAL_EVALUATION.md",
+      "recorded_sha256": "ca196d65cb23a6085bcfeec1d8f98cb6f5110e94b5ee1bba298db5f1bb2f4426",
+      "observed_sha256": "90d7e53a00dacddbd446b0963c76cd0bb682c0ea9c5ea495c1c9f79393ea2953"
+    },
+    {
+      "path": "CUSTOM-INSTRUCTIONS.txt",
+      "recorded_sha256": "b4aee2a68d50fa31f6b990ac0e82da75ed57b7496d74e27da03e95ff9717789f",
+      "observed_sha256": "748ad7611d47949af9a73521ac547ff4ea0add0eddf09cb2b75843afbbda8967"
+    },
+    {
+      "path": "FOUNDATION_REGISTER.template.yaml",
+      "recorded_sha256": "104ef7991e3609328bdc5844399397500d1ad79a50cfe1b41082cf239e4ccba7",
+      "observed_sha256": "306a657bc2fd637fa257d20b9a898e6330af0bfc148817d628f486f6e101166a"
+    },
+    {
+      "path": "GEOMETRIC-STRUCTURE.md",
+      "recorded_sha256": "8326528fb67b5c39026d8e1b4109646aebe65896d64acb50eb32ffa46ce5d273",
+      "observed_sha256": "6faabfe48b9ddbecb402c0859615a6b649d091fe56be60ef88e8082044cf8805"
+    },
+    {
+      "path": "INTEGRITY_RULES.md",
+      "recorded_sha256": "9ef05628acdd58d8001d84932ef8e6c958b098eb2b260d36e6b06d1b535e9372",
+      "observed_sha256": "c4dec413785745e0f67fd93050531f3995ff121c7ab9929f54deab6439b195a1"
+    },
+    {
+      "path": "MATHEMATICAL_FOUNDATION.md",
+      "recorded_sha256": "b7de13395b4886dae6d01c4af39ea62aa8d3a038ae73e16cb693f2a9529f9ffb",
+      "observed_sha256": "34ec360e78562c1cd321c7d199a264f12261341dcb84fcad28f4efffe7009722"
+    },
+    {
+      "path": "OPERATING_PROCEDURES.md",
+      "recorded_sha256": "be890b6d63ba763569bb2674e7c8fb493d6e60b850f8b205f13d37402e595ef6",
+      "observed_sha256": "c0f387968d4269871555e774c0e36abf0986701e1d857c1c3189280442f8284f"
+    },
+    {
+      "path": "PROJECT_MEMORY.md",
+      "recorded_sha256": "17a409e79edb063a93e18eb83df58e6984a48e555580d7881267bec242ddf3ee",
+      "observed_sha256": "15976128b20ae11f0c67bbf09d42c6d751743d5f69f99f92b422b43738d4e27f"
+    },
+    {
+      "path": "README.txt",
+      "recorded_sha256": "041d27098150711b541ae868752288f409e240e74d9afcf2afa65608b0a70321",
+      "observed_sha256": "418c0ec6f9ce387066795f4912f0b8dfb3eba101067674d28dd13e0b843ccf03"
+    },
+    {
+      "path": "REVISION-NOTES.md",
+      "recorded_sha256": "aac04450a3271be38f44e3475fc52e189b4feb5a7172ddd8c813ad31522b30b2",
+      "observed_sha256": "ef0ab9aa60b85252b055af548d398a727fafd03c5d8da3265d49f6c2cfdf9e69"
+    },
+    {
+      "path": "geometry/COMPUTE-INSTRUCTIONS.md",
+      "recorded_sha256": "397582bcc8f9b6e54098dd69374c72416e72a8b4730bedaf5d4f43763f78bbaf",
+      "observed_sha256": "8ef116e87c24745fdfe424fac398614ff8a70ae1bd53c69de01cba57ac90785f"
+    },
+    {
+      "path": "geometry/COMPUTE-RESEARCH.md",
+      "recorded_sha256": "b4438379164d68fdecd3f488cc48badbb416dacc5d17e399612f17181741d252",
+      "observed_sha256": "a37ab2fbf4808c717dc97bd94ca24f7c2dec194ef46f45dc82b2a57d829588f2"
+    },
+    {
+      "path": "geometry/DEVICE-CAPABILITY-MATRIX.md",
+      "recorded_sha256": "05b87321a5c8fbcbd9b3e44cbd2b0527364f2efb25f2484f9e2dbd8c9572f81b",
+      "observed_sha256": "18b974bf0dcd192abdbb510b857e7e3182aa083eca57007a29f0dcf326f49e29"
+    },
+    {
+      "path": "geometry/RETRIEVAL-BENCHMARKS.md",
+      "recorded_sha256": "c9698373efdc27962f96f90b5be8327e32a64cc5b31cb78422ae0315334eca59",
+      "observed_sha256": "f6ade5cd4334d9b4f8a19c675d7e1b43202e34d85027a3e49003d19a4bb0cc74"
+    },
+    {
+      "path": "geometry/RETRIEVAL-INSTRUCTIONS.md",
+      "recorded_sha256": "6c68073eaeb6acd023100e402e9c8d87ba1075d3940fe72053c4a7f789ba68f2",
+      "observed_sha256": "c6c0428c85123013d010d76c030cca6a20fb3fca57b0a711ae65b25d3ceb8b24"
+    },
+    {
+      "path": "geometry/RETRIEVAL-RESEARCH.md",
+      "recorded_sha256": "31d82c02f5c670299d50c05d2a5c05627545087b0004704e826b473c6ce75400",
+      "observed_sha256": "025e8dd9494b01bd5bce1740662c80c1c4baff4437ff09e194e4bbd13c91f65b"
+    },
+    {
+      "path": "projects/CYMATICA-FARADAY.md",
+      "recorded_sha256": "782bf07d1d8562868646ba7889ccdea585a02815643328375052e151a4387f7e",
+      "observed_sha256": "ec116b176ae50c62cafcdcda85cc52dfc055a26ee0f39796ac4a787c6bc0519a"
+    },
+    {
+      "path": "projects/ETERNAL.md",
+      "recorded_sha256": "525d4b6ad53cf132f51e4032824908d4d79de60ea467bec340916bd2b77e8c01",
+      "observed_sha256": "7dbec13e01964beb924a9f064b2dfd48e27a8aa652e66952f9590a96335db195"
+    },
+    {
+      "path": "projects/SITES.md",
+      "recorded_sha256": "871c10b020a26835433c10e56e75b5edbfe70ad94f65ce07a31d0aec9de9b66a",
+      "observed_sha256": "ec7f80b169f246a196742c4ae203297a0508e51a5d487ff4b7470fe0237ca8ce"
+    },
+    {
+      "path": "reviews/AGENT-METHODS-AUDIT.md",
+      "recorded_sha256": "1402a0e423b7801d1a2b48382a3726087e911c51419dddd691422fe197da204e",
+      "observed_sha256": "b3acad7d546969677f18905c94db5c43ceb378b7fd99ad713dcfecb57177da7b"
+    },
+    {
+      "path": "reviews/V5-AGENT-METHODS.md",
+      "recorded_sha256": "59c22540e75c22f83e637453c5460d0f09d7d3ecae636383e100d8018b6dd94c",
+      "observed_sha256": "215428f0d310ca7111750fc44efbe764c2b110927816fc0a1af47bd53b0bfb58"
+    },
+    {
+      "path": "reviews/V5-GEOMETRY-VALIDATION.md",
+      "recorded_sha256": "6074ece3dc211e05552cb6478a14ce435fd1fbd52593f0f44644b0ef5303cba7",
+      "observed_sha256": "2fba7cccaa1d54b7ff3a055ef3e3c9adfb04b4538d7559316ea218ad632516ea"
+    },
+    {
+      "path": "reviews/VALIDATION-METHODS-AUDIT.md",
+      "recorded_sha256": "0c6794c296f5e1bed1c663eef451d90417c7598d393f5c111423da87521740fc",
+      "observed_sha256": "20bb0cf4321a9662f580bef6240947dbd727343e4e7130d9083a84fd35c7b514"
+    },
+    {
+      "path": "validate_readiness.py",
+      "recorded_sha256": "682b7b01cba8e7bc0344a473c55418be1937a73030dec60f999070551ae814be",
+      "observed_sha256": "8bc9b7ee2ef07ffd924f8647c94ea57b1d6a625ae9ad0515dff89d3053325016"
+    }
+  ],
+  "previously_unrecorded_files": [
+    "test_validation_identity.py",
+    "validation_identity.py"
+  ],
+  "editor_and_cause_of_preexisting_changes": "not_established",
+  "repair_authorization": "User request to fix all reported validation, instruction, source-binding, ownership and handoff defects; tests on GitHub in quanqonscious.",
+  "prior_bytes_preserved_at": "baseline_commit and previous-SHA256.json; all initial package bytes retained in that commit"
+}

@@ -16,11 +16,12 @@
   - S4 Paravartya: Division for equation solving
   - S7 Sankalana: Addition/subtraction elimination
   - S9 Calana-Kalana: Exact polynomial differentiation
-  - S13 Sopantya: Continued fractions for exact constants
   - US11 Lopana-Sthapana: Gaussian elimination for linear systems
 """
 
 from fractions import Fraction
+
+from vedic_book import sopantya
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Dict, Callable
 import sys
@@ -81,21 +82,22 @@ class VedicExact:
             return [Fraction(0)]
         return [Fraction(i) * coeffs[i] for i in range(1, len(coeffs))]
 
+    S13_sopantya = staticmethod(sopantya)
+
     @staticmethod
-    def S13_sopantya_convergent(a: List[int], depth: int) -> Tuple[Fraction, Fraction]:
+    def continued_fraction_convergent(a: List[int], depth: int) -> Tuple[Fraction, Fraction]:
         """
-        Sopantya: Continued fraction convergent
         Returns (p_n, q_n) for [a_0; a_1, a_2, ...]
         Exact rational approximations to constants
         """
-        if depth == 0 or not a:
-            return (Fraction(a[0] if a else 0), Fraction(1))
+        if not a or not 1 <= depth <= len(a):
+            raise ValueError("The continued fraction does not contain the requested depth")
 
         # Build convergents iteratively
         p_prev, p_curr = Fraction(1), Fraction(a[0])
         q_prev, q_curr = Fraction(0), Fraction(1)
 
-        for i in range(1, min(depth, len(a))):
+        for i in range(1, depth):
             p_new = Fraction(a[i]) * p_curr + p_prev
             q_new = Fraction(a[i]) * q_curr + q_prev
             p_prev, p_curr = p_curr, p_new
@@ -527,14 +529,14 @@ class ExactConstants:
         """√2 = [1; 2, 2, 2, ...] continued fraction"""
         # √2 = 1 + 1/(2 + 1/(2 + 1/(2 + ...)))
         cf = [1] + [2] * depth
-        return VedicExact.S13_sopantya_convergent(cf, depth)[0] / \
-               VedicExact.S13_sopantya_convergent(cf, depth)[1]
+        return VedicExact.continued_fraction_convergent(cf, depth)[0] / \
+               VedicExact.continued_fraction_convergent(cf, depth)[1]
 
     @staticmethod
     def phi(depth: int = 20) -> Fraction:
         """φ = [1; 1, 1, 1, ...] golden ratio"""
         cf = [1] * (depth + 1)
-        p, q = VedicExact.S13_sopantya_convergent(cf, depth)
+        p, q = VedicExact.continued_fraction_convergent(cf, depth)
         return p / q
 
     @staticmethod
@@ -544,7 +546,7 @@ class ExactConstants:
         cf = [2]
         for k in range(1, depth):
             cf.extend([1, 2*k, 1])
-        p, q = VedicExact.S13_sopantya_convergent(cf[:depth], depth)
+        p, q = VedicExact.continued_fraction_convergent(cf[:depth], depth)
         return p / q
 
     @staticmethod

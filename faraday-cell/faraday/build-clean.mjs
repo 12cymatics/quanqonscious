@@ -17,13 +17,15 @@
    inside those are removed too, as code.
 
    PROSE. The sentences the page shows are taken out of it, and nothing a control, a reading
-   or a unit needs: the subtitle under the title, the Navier-Stokes panel's opening paragraph
-   and its notes, the footer, the warnings, the export notes, the source note beside the
+   or a unit needs: the subtitle under the title, the startup box's sentences, the paragraph
+   for a browser without JavaScript, the Navier-Stokes panel's opening paragraph and its
+   notes, the footer, the warnings, the export notes, the source note beside the
    acceleration, the flicker-fusion clause on the overlay, the inspector's sentences, the grid
    placeholder and the anchors' tooltips. A failure the page used to explain in a sentence is
-   shown by its name -- "solver failed", "did not run", "export failed", "GPU unavailable",
-   "drawing paused" -- with its reason in the browser console. The kernel still computes its
-   warnings and the solvers still throw their reasons; the page no longer shows them.
+   shown by its name -- "simulation error", "solver failed", "did not run", "export failed",
+   "GPU unavailable", "drawing paused" -- with its reason in the browser console. The kernel
+   still computes its warnings and the solvers still throw their reasons; the page no longer
+   shows them.
 
    faraday/check-clean.mjs reads every script of the result back with acorn, an independent
    parser, and requires the same tokens as the page it came from with no comment among them.
@@ -263,6 +265,14 @@ export const PROSE_EDITS = [
   ['the subtitle under the title',
    "\n  <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,\n"
    + "  circular quartz cells · surface responds at <b>f/2</b></p>", ''],
+  ['the startup box\'s sentence before the page runs; the box stays, hidden until a failure',
+   "<div id=\"startupStatus\" role=\"status\" style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>",
+   "<div id=\"startupStatus\" role=\"status\" hidden style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\"></div>"],
+  ['the paragraph for a browser without JavaScript', "\n<noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>", ''],
+  ['the startup failure\'s sentence', "    status.textContent = 'Simulation error: ' + String(error && error.message || error)\n      + '. No substitute simulation has been loaded. Reload after resolving this error.';",
+   "    console.error(error);\n    status.textContent = 'simulation error';\n    status.hidden = false;"],
+  ['the sentence once the canvas draws', "\n    const status = document.getElementById('startupStatus');\n    status.textContent = 'Canvas rendering started. The active model is identified under surface drawn from. Nonlinear Navier\u2013Stokes physical time can advance much more slowly than wall time.';\n    status.style.color = 'var(--grn)';", ''],
+  ['the sentence while the page starts', "\ndocument.getElementById('startupStatus').textContent = 'Starting the simulator\u2026';", ''],
   ['the Navier-Stokes panel\'s opening paragraph',
    "\n  <p>The deck above decides onset from a damped Mathieu form — one amplitude equation, with\n"
    + "  all the viscous damping folded into a single rate γ. This solves the incompressible\n"
@@ -332,7 +342,8 @@ export const PROSE_EDITS = [
    anywhere in the built page. Held separately from the edits so that a check of the
    output does not merely restate the edit that produced it. */
 export const REMOVED_PROSE = [
-  'Sheldrake &amp; Sheldrake 2017', 'The deck above decides onset', 'Layers are kept separate',
+  'Sheldrake &amp; Sheldrake 2017', 'Not started. Open index.html', 'This simulator requires JavaScript',
+  'No substitute simulation has been loaded', 'Canvas rendering started', 'Starting the simulator', 'The deck above decides onset', 'Layers are kept separate',
   'Choose CPU to draw there', 'GPU unavailable: ', 'no atlas for this diameter',
   'Higher atmospheric pressure favoured', 'above flicker fusion', 'saves through the viewer',
   'saving unavailable in this view', "'saves to disk'", "'export failed: '",

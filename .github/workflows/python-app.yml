@@ -12,6 +12,7 @@ name: Python application
 # branch. The pattern below matches javascript.yml and submit-pypi.yml, which
 # gate every pull request regardless of base.
 on:
+  workflow_dispatch:
   push:
     branches: [ "codex/create-github-repository-for-pcfe-v3.0" ]
   pull_request:
@@ -24,9 +25,10 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     # The step name said 3.11 and the step installed 3.10. `python-version`
     # was given twice and the second wins silently, so for the life of this
     # file the name asserted one version and the runner used another --
@@ -35,9 +37,11 @@ jobs:
     # because that is what CI has been executing; changing the version is a
     # behaviour change, not a documentation fix.
     - name: Set up Python 3.10
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.10"
+        cache: pip
+        cache-dependency-path: .github/workflows/python-app.yml
     # The CUDA toolkit step that stood here could never resolve: it asked for
     # `Jimver/cuda-toolkit@v0` and that action publishes only v0.2.x tags, no
     # v0 major tag, so the job died in "Prepare all required actions" before a
@@ -65,10 +69,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest
-        pip install numpy scipy sympy mpmath matplotlib pandas Pillow pydantic pyyaml
-        pip install --index-url https://download.pytorch.org/whl/cpu torch
-        pip install cirq-core cudaq
+        python -m pip install flake8 pytest
+        python -m pip install numpy scipy sympy mpmath matplotlib pandas Pillow pydantic pyyaml
+        python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+        python -m pip install cirq-core cudaq
         # vedic_trainer's training and evaluation stack, at the exact pins in
         # vedic_trainer/requirements.txt. Bare `pytest` here collects that
         # package's tests, and its trainer, scorer and held-out tests import
@@ -76,7 +80,7 @@ jobs:
         # job fails at collection; guarding those imports instead would let
         # the training path go untested again, which is how its crashes went
         # unseen. torch and numpy are left to the lines above.
-        pip install transformers==5.19.0 tokenizers==0.23.3 huggingface-hub==2.2.0 \
+        python -m pip install transformers==5.19.0 tokenizers==0.23.3 huggingface-hub==2.2.0 \
                     safetensors==0.8.0 peft==0.21.2 datasets==5.1.0 accelerate==1.15.0
     # 63 of these tests are vedic_trainer/vedic/external/tests/test_lean_props.py,
     # which compile rendered identities with the real `lean` binary and fail with
@@ -97,18 +101,38 @@ jobs:
     - name: Verify Lean matches the pin
       run: |
         set -eu
-        lean --version
-        EXPECTED="$(cut -d: -f2 < lean-toolchain | tr -d 'v')"
-        lean --version | grep -q "version ${EXPECTED}" || {
-          echo "lean --version does not match ./lean-toolchain (${EXPECTED})"
+        EXPECTED="$(cat lean-toolchain)"
+        EXPECTED="${EXPECTED##*:}"
+        EXPECTED="${EXPECTED#v}"
+        ACTUAL="$(lean --version)"
+        echo "$ACTUAL"
+        VERSION="$(printf '%s\n' "$ACTUAL" | awk '{print $3}')"
+        VERSION="${VERSION%,}"
+        [ "$VERSION" = "$EXPECTED" ] || {
+          echo "Expected Lean ${EXPECTED}, found ${VERSION}"
           exit 1
         }
+    - name: Check installed dependencies
+      run: python -m pip check
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest
+        python -m pytest --junitxml=ci-results/pytest.xml
+    - name: Record installed dependencies
+      if: ${{ always() }}
+      run: |
+        mkdir -p ci-results
+        python --version > ci-results/python-version.txt
+        python -m pip freeze --all > ci-results/installed-dependencies.txt
+    - name: Upload test and dependency reports
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: python-ci-results
+        path: ci-results/
+        retention-days: 14

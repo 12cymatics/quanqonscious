@@ -1,0 +1,23 @@
+{
+  "example_only": true,
+  "schema_status": "illustrative_not_validated_by_existing_checker",
+  "claim_id": "example:reported-backend",
+  "statement": "Another worker reported that a candidate used GPU numerical compute. This example does not describe an actual run.",
+  "epistemic_status": "reported",
+  "reported_by": "synthetic-worker",
+  "source_reference": null,
+  "source_revision": null,
+  "source_sha256": null,
+  "event_time": null,
+  "observed_at": null,
+  "applies_to_revision": null,
+  "observed_environment": null,
+  "supersedes": null,
+  "supersession_reason": null,
+  "revalidate_when": [
+    "candidate changes",
+    "backend configuration changes",
+    "before a performance or completion claim"
+  ],
+  "required_verification": "Inspect actual numerical compute path and revision-bound execution evidence; rendering activity alone is insufficient."
+}

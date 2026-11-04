@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "component": "collaboration readiness and handoff validation",
+  "signed_contract_schema": 2,
+  "readiness_record_schema": 3,
+  "coordination_registry_schema": 1,
+  "worker_handoff_schema": 1,
+  "execution_evidence_authority": "GitHub Actions runs and uploaded raw logs for the exact checkout commit",
+  "workflow": ".github/workflows/collaboration-readiness.yml",
+  "required_existing_workflows": [
+    ".github/workflows/python-app.yml",
+    ".github/workflows/javascript.yml",
+    ".github/workflows/submit-pypi.yml"
+  ],
+  "historical_results": "provenance/previous-VALIDATION.json",
+  "historical_manifest": "provenance/previous-SHA256.json",
+  "initial_hash_reconciliation": "provenance/before-repair.json",
+  "mathematical_acceptance_requires": [
+    "actual user-defined equation and component inventory",
+    "actual source and external-input bytes",
+    "foundation register and geometry index matching signed requirements",
+    "execution of the bound actual implementation and domain assertions"
+  ],
+  "scientific_results_for_quanqonscious": "No full exact untransformed cup or full GRVQ compliance is attested by package tests."
+}

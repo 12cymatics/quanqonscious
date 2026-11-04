@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "template",
+  "project": null,
+  "user_goal": null,
+  "scope": null,
+  "task_state": "not_started",
+  "source": {
+    "location": null,
+    "revision": null,
+    "dirty_state": "unknown",
+    "inspected_at": null
+  },
+  "installed_build": {
+    "revision": null,
+    "artifact": null,
+    "evidence": null
+  },
+  "candidate_build": {
+    "revision": null,
+    "artifact": null,
+    "sha256": null
+  },
+  "inputs": [],
+  "foundation_records": [],
+  "claims": [],
+  "ownership": {
+    "integrator": null,
+    "assignments": []
+  },
+  "changes": [],
+  "checks": [],
+  "active_operations": [],
+  "blockers": [],
+  "approvals": [],
+  "next_action": null,
+  "completion_criterion": null,
+  "updated_at": null
+}

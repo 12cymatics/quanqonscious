@@ -4,31 +4,25 @@ import Mathlib.Tactic
 # R4 singularity controller
 
 `step` in `vedic_v18.51.1_exact_phi.html` ends with the R4 controller. It is
-dormant unless the step would raise the energy above the target
-`T = max(E_in, ceiling)`. Then it first recomputes the step with every sutra
-strength multiplied by `σ ∈ [0,1]` (`r4_reinforced_mem_unit_interval`), and if
-the energy is still above `T` it applies the R4 gate
+dormant unless the step is a blow-up: a state it stores rises above
+`L = max(2 E_in, C)`, more than double its start and above the seed energy
+`C`, past what storage alone can add (`energy_allowance`). Then it recomputes
+the step with every strength multiplied by `σ ∈ [0,1]`
+(`r4_reinforced_mem_unit_interval`), stops every stored state that rises above
+`L` with the R4 gate
 
     g_v = a_v + b_v ε,   a_v = s4/(s4+q_v^4),   b_v = q_v^4/(s4+q_v^4),
 
 on the dielectric field `q`, averaged across complement pairs, with the largest
-`ε` on a `2^-32` grid whose exact gated energy is at most `T`.
+`ε` on a `2^-32` grid whose exact gated energy is at most `T = max(E_in, C)`,
+and gates the step's end to `T` the same way.
 
-This file proves what that construction rests on:
-
-* the weights are non-negative and sum to one (`gate_weights_nonneg`,
-  `gate_weights_sum`, `pair_avg_weights`), so every gate factor lies in `[0,1]`
-  (`gate_factor_mem`) and so does their mean, which the R4 channel draws
-  (`mean_gate_mem`);
-* the gated energy is the quadratic the controller bisects
-  (`gate_energy_poly`), its coefficients are non-negative
-  (`gate_poly_coeffs_nonneg`), so it is non-decreasing in `ε ≥ 0`
-  (`gate_energy_mono`) and every grid point below an accepted one is accepted
-  too (`bisection_below`);
-* the controller's output energy never exceeds `T` once the gate is certified
-  (`controlled_le`), equals the uncontrolled energy when it is dormant
-  (`controlled_dormant`), and `T` is at least both the step's starting energy
-  and the ceiling (`target_ge`).
+The weights are non-negative and sum to one, so every gate factor and their
+mean lie in `[0,1]`; the gated energy is the quadratic the controller bisects,
+non-decreasing in `ε ≥ 0`. A dormant step ends at most `L`, a stopped one at
+most `T ≤ L`, so a run ends step `n` at most `2^n max(E_0, C)`
+(`run_le_pow_two`): the energy can at most double per step, and no step can
+take it further.
 -/
 
 namespace SutraWS
@@ -102,21 +96,51 @@ theorem bisection_below (A B C lo x T : ℝ) (hA : 0 ≤ A) (hB : 0 ≤ B) (hx0 
     (hx : x ≤ lo) (hlo : A * lo ^ 2 + B * lo + C ≤ T) : A * x ^ 2 + B * x + C ≤ T :=
   le_trans (gate_energy_mono A B C x lo hA hB hx0 hx) hlo
 
-/-- The controller's three outcomes: dormant, σ-braked, gated. -/
-noncomputable def controlled (eU eB eG T : ℝ) : ℝ := if eU ≤ T then eU else if eB ≤ T then eB else eG
+noncomputable def controlled (eU eR eG L T : ℝ) : ℝ := if eU ≤ L then eU else if eR ≤ T then eR else eG
 
-theorem controlled_le (eU eB eG T : ℝ) (hG : eG ≤ T) : controlled eU eB eG T ≤ T := by
+theorem controlled_dormant (eU eR eG L T : ℝ) (h : eU ≤ L) : controlled eU eR eG L T = eU := by
+  simp [controlled, h]
+
+theorem controlled_stopped_le (eU eR eG L T : ℝ) (h : ¬ eU ≤ L) (hG : eG ≤ T) :
+    controlled eU eR eG L T ≤ T := by
   unfold controlled
-  split_ifs with h1 h2
-  · exact h1
+  rw [if_neg h]
+  split_ifs with h2
   · exact h2
   · exact hG
 
-theorem controlled_dormant (eU eB eG T : ℝ) (h : eU ≤ T) : controlled eU eB eG T = eU := by
-  simp [controlled, h]
+theorem controlled_le (eU eR eG L T : ℝ) (hG : eG ≤ T) (hTL : T ≤ L) : controlled eU eR eG L T ≤ L := by
+  by_cases h : eU ≤ L
+  · rw [controlled_dormant eU eR eG L T h]; exact h
+  · exact le_trans (controlled_stopped_le eU eR eG L T h hG) hTL
 
 theorem target_ge (eIn C : ℝ) : eIn ≤ max eIn C ∧ C ≤ max eIn C :=
   ⟨le_max_left _ _, le_max_right _ _⟩
+
+theorem target_le_level (eIn C : ℝ) (h : 0 ≤ eIn) : max eIn C ≤ max (2 * eIn) C :=
+  max_le_max (by linarith) le_rfl
+
+theorem level_le_double (eIn C : ℝ) (h : 0 ≤ C) : max (2 * eIn) C ≤ 2 * max eIn C := by
+  rcases le_total eIn C with hc | hc
+  · rw [max_eq_right hc]
+    exact max_le (by linarith) (by linarith)
+  · rw [max_eq_left hc]
+    exact max_le le_rfl (by linarith)
+
+theorem run_le_pow_two (E : ℕ → ℝ) (C : ℝ) (hC : 0 ≤ C)
+    (h : ∀ n, E (n + 1) ≤ max (2 * E n) C) : ∀ n, E n ≤ 2 ^ n * max (E 0) C := by
+  intro n
+  induction n with
+  | zero => simp
+  | succ k ih =>
+    have hM : C ≤ max (E 0) C := le_max_right _ _
+    have hp : (1 : ℝ) ≤ 2 ^ k := one_le_pow_of_one_le (by norm_num) k
+    calc E (k + 1) ≤ max (2 * E k) C := h k
+      _ ≤ max (2 * (2 ^ k * max (E 0) C)) C := max_le_max (by linarith) le_rfl
+      _ ≤ 2 ^ (k + 1) * max (E 0) C := by
+          apply max_le
+          · rw [pow_succ]; linarith
+          · rw [pow_succ]; nlinarith
 
 end R4Controller
 end SutraWS

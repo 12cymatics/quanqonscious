@@ -1,0 +1,83 @@
+{
+  "schema_version": 3,
+  "kind": "template",
+  "task_state": "not_started",
+  "deliverable_kind": "software",
+  "subject_revision": null,
+  "completion_criterion": null,
+  "blockers": [],
+  "active_operations": [],
+  "ownership": {
+    "integrator": null,
+    "assignments": []
+  },
+  "gates": [
+    {
+      "id": "actual_runtime_validation",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "authorization_before_publication",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "exact_unpacked_deliverable",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "existing_aggregate_checks",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "foundation_traceability",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "mathematical_integrity",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "remote_revision_and_ci",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "source_and_input_provenance",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    },
+    {
+      "id": "targeted_regressions",
+      "applicable": null,
+      "outcome": "not_run",
+      "reason": "Applicability and project evidence not assessed",
+      "evidence": []
+    }
+  ],
+  "domain": "general",
+  "mathematical_claims": false,
+  "contract_sha256": null,
+  "contract_generation": null
+}

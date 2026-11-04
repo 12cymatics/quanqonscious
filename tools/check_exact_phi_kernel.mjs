@@ -23,20 +23,19 @@
      statements         every statement the sutra channel decides holds on
                         the corpus and on a run
      couplings          lambda is inverse psi; each GRVQ feed moves exactly
-                        its lambda; the 1/N shares; MSTVQ's feedback; kappa
+                        its lambda by GRVQ x its sutra's alpha; MSTVQ's
+                        feedback; kappa
      stages             the magnetism, MSTVQ, TGCR and ZPE rotations keep
                         the energy exactly; ZPE adds only its source; the
                         TGCR geometry recomputed by walking faces
-     R4                 every step ends at or below T + d(T+1) + d^2;
-                        dormant, braked and gated all seen; a step past what
-                        the gate can contain stops at once and says where
-     step export        an exported step replays bit for bit from its file,
-                        its ramp with it
-     ramp               every strength the step runs is the ramp's, against
-                        the same rule in bare BigInt fractions; ALL ON stops
-                        where its title says
+     step export        an exported step replays bit for bit from its file
+     the formula        calculated once at the settings, put in over the
+                        glide in equal shares, then none applied; the
+                        energy then moves only by storage
+     glide              each strength rises in equal steps from where it
+                        stood to its setting over the glide, then holds
      modes              the mode identities decide and pass
-     Maya, magnetism, torus, sources, parameters, gate weights, presets
+     Maya, magnetism, torus, sources, parameters
 
    Run: node tools/check_exact_phi_kernel.mjs
 */
@@ -74,11 +73,21 @@ const rnd = bits => {
 const euclid = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) [a, b] = [b, a % b]; return a; };
 const X = A4;
 const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-  gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+  appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
   tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
-  r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+  geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
 const S = x => ({ n: x.n.toString(), d: x.d.toString() });
+const modelRun = (act, mode, glide = 10) => {
+  let formula = null, ramp = [], k = 0;
+  return (eng, p) => {
+    if (!formula) formula = K.formulaOf(eng.psi, act, mode, K.timeOf(eng.frame));
+    const rs = K.rampStep(ramp, act, glide); ramp = rs.ramp;
+    const next = K.step(eng, p, rs.active, mode, formula, k < glide ? Q.mk(1n, BigInt(glide)) : Q.ZERO);
+    if (k < glide) k++;
+    return next;
+  };
+};
 const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
 const sameQ = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
 const energyQ = p => p.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
@@ -207,7 +216,7 @@ section('the 29 v18.24 formulas against an independent transcription');
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
      `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times): ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
-  const want = { 'a zero base vertex (S6)': '6', 'a zero complement numerator (S13)': '13', 'a zero root (S19)': '19', 'a zero half-sum (S25)': '25', 'lambda_0 = lambda_2 = 0 (GRVQ)': '5' };
+  const want = {};
   for (const [name, id] of Object.entries(want))
     ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
   const unexpected = Object.entries(refusals).filter(([n]) => !(n in want)).map(([n, s]) => `${n}: S${[...s].join(',S')}`);
@@ -314,10 +323,10 @@ section('the statements each formula carries');
   const cited = page ? new Set([...page[1].matchAll(/'([^']+)'/g)].map(m => m[1])) : new Set();
   const missing = [...names].filter(n => !cited.has(n));
   ok(page && missing.length === 0, 'every statement decided is cited by the sutra channel', missing.join(', '));
-  /* a run: each step's formulas, on the field they act on */
   const act = [2, 9, 12, 22, 29].map(id => ({ id, strength: Q.HALF }));
+  const go = modelRun(act, 'SERIES');
   let eng = K.initEngine(), runOk = true;
-  for (let s = 0; s < 6; s++) { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), act, 'SERIES');
+  for (let s = 0; s < 6; s++) { eng = go(eng, PARAMS({ vortex: Q.ONE }));
     for (const a of act) if (!K.formulaClaims(a.id, eng.psi, a.strength).ok) runOk = false; }
   ok(runOk, 'every statement holds for S2, S9, S12, S22, S29 on six steps of a run, at the live strength');
 }
@@ -332,32 +341,32 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
      "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
      'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
-  /* S1, S5, S9, S14: the field formula, then GRVQ's increment on lambda_0..3 */
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
-    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [];
+    const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], al = Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain);
     const out = K.applySutra(id, seedS, Q.HALF, { t, gain, record: rec });
-    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain)).p;
-    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), gain);
+    const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), al).p;
+    const d = Q.mul(K.grvqDelta(inv(seedS), k, t), al);
     const lam = inv(out), lamF = inv(field);
     if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
   }
-  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x gain to lambda_0, 1, 2, 3 of their result and change no other lambda');
-  /* the other active sutras' 1/N shares, and the MSTVQ feedback, in a step */
+  ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x their alpha to lambda_0, 1, 2, 3 of their result and change no other lambda');
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
-  let eng = K.rampedEngine(K.initEngine(), act);
-  for (let s = 0; s < 3; s++) eng = K.step(eng, p, act, 'SERIES');
-  const L = eng.last;
-  const N = BigInt(act.length);
+  const go = modelRun(act, 'SERIES');
+  let eng = K.initEngine();
+  for (let s = 0; s < 3; s++) eng = go(eng, p);
+  const L = K.formulaOf(eng.psi, act, 'SERIES', K.timeOf(eng.frame)), tenth = Q.mk(1n, 10n);
+  const nxt = K.step(eng, p, act, 'SERIES', L, tenth);
   let shares = L.grvqRecord.length === 3, x = L.afterS;
   for (const g of L.grvqRecord) {
-    const k = (g.id - 1) % 4, want = Q.mul(Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mk(1n, N)), L.r4.engaged ? L.r4.sigma : Q.ONE);
+    const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
+    const want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mul(Q.mk(BigInt(g.id), 435n), s.strength));
     if (g.k !== k || !Q.eq(g.delta, want)) shares = false;
     x = K.injectLambda(x, k, g.delta).map(K.storeQ);
   }
-  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ / N to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
-  const a1 = Q.mul(Q.mul(Q.mk(1n, 435n), act[0].strength), L.r4.engaged ? L.r4.sigma : Q.ONE);
+  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ x its alpha to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
+  const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
   const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
   const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
   let fb = L.afterD;
@@ -365,11 +374,11 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   ok(sameQ(fb.map(K.storeQ), L.afterB) && sameQ(L.mstvq.B, B),
      "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
   const trace = Q.add(Q.add(T[0], T[1]), T[2]);
-  ok(Q.eq(eng.tgcrKappa, K.storeQ(Q.add(L.tgcrKappaIn, Q.mul(trace, Q.mk(1n, 500n))))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
-     'the TGCR stiffness kappa moves by tr T / 500, and tr T = -|B|^2 / 2 (stress_trace)');
-  const setters = L.sutraRecord.filter(r => r.B).map(r => r.id);
+  ok(Q.eq(nxt.tgcrKappa, K.storeQ(Q.add(eng.tgcrKappa, Q.mul(Q.mul(trace, Q.mk(1n, 500n)), tenth)))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
+     'the TGCR stiffness kappa moves by tr T / 500 times the share of the formula put in, and tr T = -|B|^2 / 2 (stress_trace)');
+  const setters = L.record.filter(r => r.B).map(r => r.id);
   ok(setters.length === 1 && setters[0] === 3, 'of the active sutras only S3 sets MSTVQ B in the core (S2, S3 and S29 do)');
-  const gc = K.grvqClaims(L.sutraRecord.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
+  const gc = K.grvqClaims(L.record.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
   ok(gc.ok && gc.results.length === 3 * 4, `the coupling statements hold on all four feeds (${gc.results.length} decided)`);
 }
 
@@ -377,11 +386,12 @@ section('the stages of the real field');
 {
   const p = PARAMS({ vortex: Q.mk(3n, 2n), zpeSource: X.fromQ(Q.mk(5n, 4n)) });
   const act = [{ id: 9, strength: Q.HALF }, { id: 29, strength: Q.HALF }];
+  const go = modelRun(act, 'SERIES');
   let eng = K.initEngine();
-  for (let s = 0; s < 4; s++) eng = K.step(eng, p, act, 'SERIES');
+  for (let s = 0; s < 4; s++) eng = go(eng, p);
   const L = eng.last, id = x => x;
   const eq = (a, b) => Q.eq(energyQ(a), energyQ(b));
-  ok(eq(K.edgeRotate(L.afterB, L.ctx.magTau, id), L.afterB), 'the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy exactly (rot_pair_energy)');
+  ok(eq(K.edgeRotate(L.afterF, L.ctx.magTau, id), L.afterF), 'the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy exactly (rot_pair_energy)');
   ok(eq(K.complementRotate(L.afterG, K.mstvqTau(L.wheeler, p)), L.afterG), 'the MSTVQ stage keeps the energy exactly');
   ok(eq(K.edgeRotate(L.afterM, K.tgcrTau(L.afterM, p), id), L.afterM), 'the TGCR stage keeps the energy exactly');
   const zr = K.complementRotate(L.afterT, K.zpeTau(L.wheeler, p));
@@ -424,137 +434,127 @@ section('the stages of the real field');
   ok(sc.ok, `the stage statements hold (${sc.results.map(r => r.name).join(', ')})`);
 }
 
-const R4_CASES = [['3,9,11,25,29', 'SERIES', 4, Q.TWO, 0n], ['1,5,9,22', 'PARALLEL', 4, Q.TWO, 0n],
-                  ['2,5,12,22,29', 'PARALLEL', 4, Q.TWO, 0n], ['2,23', 'PARALLEL', 4, Q.mk(1n, 10n), 0n],
-                  ['7,12', 'SERIES', 4, Q.TWO, 4n]];
-section('R4 singularity controller');
-{
-  const seen = { dormant: 0, braked: 0, gated: 0 };
-  for (const [ids, mode, n, r, drive] of R4_CASES) {
-    const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    const p = PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)) });
-    let eng = K.rampedEngine(K.initEngine(), active), held = true, why = '';
-    for (let s = 0; s < n; s++) {
-      const eIn = K.energy(eng.psi), ceiling = eng.ceiling;
-      const T = Q.cmp(eIn, ceiling) > 0 ? eIn : ceiling;
-      eng = K.step(eng, p, active, mode);
-      const L = eng.last, d = L.stepError.delta;
-      const bound = Q.add(T, Q.add(Q.mul(T, d), Q.add(d, Q.mul(d, d))));
-      const eOut = K.energy(eng.psi);
-      if (Q.cmp(eOut, bound) > 0) { held = false; why = `step ${s + 1} ends above T + d(T+1) + d^2`; }
-      if (!Q.eq(eOut, eng.energyLedger) || !Q.eq(eOut, energyQ(eng.psi))) { held = false; why = `step ${s + 1} ledger is not the state's energy`; }
-      if (L.r4.gate) {
-        seen.gated++;
-        const g = L.r4.gate.meanGate;
-        if (Q.sign(g) < 0 || Q.cmp(g, Q.ONE) > 0) { held = false; why = 'mean gate outside [0, 1]'; }
-      } else if (L.r4.engaged) seen.braked++;
-      else seen.dormant++;
-    }
-    ok(held, `${mode} ${ids} at r = ${Q.toString(r)}, drive ${drive}: ${n} steps end at or below T + d(T+1) + d^2`, why);
-  }
-  ok(seen.dormant > 0 && seen.braked > 0 && seen.gated > 0,
-     `the controller was seen dormant (${seen.dormant}), braking only (${seen.braked}) and gating (${seen.gated})`);
-  /* past what the gate can contain: stop at once, and say where */
-  const all = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.ONE }));
-  const t0 = Date.now();
-  let msg = '', name = '';
-  try { K.step(K.rampedEngine(K.initEngine(), all), PARAMS(), all, 'SERIES'); } catch (e) { msg = e.message; name = e.name; }
-  const ms = Date.now() - t0;
-  ok(name === 'R4Uncontained' && /S15/.test(msg) && ms < 5000,
-     `all 29 at full strength: R4 stops the step in ${ms} ms and names where it left containment`, msg.slice(0, 160));
-  /* the bound it stops at is its own gate's: a_min^(2 x 257) E > T */
-  const eng0 = K.initEngine(), p0 = PARAMS();
-  const dn = K.evolveDielectric(eng0.dielectric, all, p0, K.energyShare(K.rhoHat(eng0.psi)));
-  const ab = K.gateABField(dn, K.r4Scale(dn, all, K.Q.ZERO));
-  ok(ab.every(g => Q.sign(g.a) > 0 && Q.cmp(g.a, Q.ONE) <= 0), 'every gate weight a_v lies in (0, 1], so a_v^257 is the least a gate can leave of a vertex');
-}
-
+const EXPORT_CASES = [['9,11,29', 'PARALLEL', Q.ONE, 0n, Q.ONE], ['3,9,11,25,29', 'SYMMETRIC_CONCURRENT', Q.mk(3n, 10n), 1n, Q.TWO],
+                      ['1', 'SERIES', Q.HALF, 0n, Q.ONE]];
 section('step export');
 {
-  const tested = { dormant: 0, braked: 0, gated: 0 };
-  for (const [ids, mode, n, r, drive] of R4_CASES) {
-    const active = ids.split(',').map(Number).map(id => ({ id, strength: Q.mk(1n, 2n) }));
-    let eng = K.rampedEngine(K.initEngine(), active);
-    for (let s = 0; s < n; s++) {
-      eng = K.step(eng, PARAMS({ r4R: r, zpeSource: X.fromQ(Q.mk(drive)), vortex: Q.ONE }), active, mode);
-      if (s === 0) continue;
-      const branch = eng.last.r4.gate ? 'gated' : eng.last.r4.engaged ? 'braked' : 'dormant';
-      if (tested[branch]) continue;
-      tested[branch]++;
-      const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
-        dielectric: eng.dielectric.map(K.serializeQ), ceiling: K.serializeQ(eng.ceiling), tgcrKappa: K.serializeQ(eng.tgcrKappa),
-        mayaPhase: K.serializeQ(eng.mayaPhase), mayaErr: K.serializeQ(eng.mayaErr),
-        magA: eng.magA.map(K.serializeQ), magChi: eng.magChi.map(K.serializeQ) }));
-      const L = file.last, where = `${branch} step (${mode} ${ids}, step ${s + 1})`;
-      let same = false, why = '';
-      try {
-        const fromA = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
-        const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
-        const act = L.setSutras.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
-        const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ), ceiling: fromQ(file.ceiling),
-                                energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
-                                mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
-                                magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ),
-                                ramp: L.rampIn.map(r => ({ id: r.id, from: fromQ(r.from), to: fromQ(r.to), k: r.k, rest: r.rest.map(fromQ) })) }, p, act, L.composition);
-        same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
-               JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
-               JSON.stringify(K.serializeQ(replay.tgcrKappa)) === JSON.stringify(file.tgcrKappa) &&
-               JSON.stringify(replay.magA.map(K.serializeQ)) === JSON.stringify(file.magA) &&
-               JSON.stringify(replay.magChi.map(K.serializeQ)) === JSON.stringify(file.magChi) &&
-               JSON.stringify(K.serializeLast(replay.last)) === JSON.stringify(L);
-        if (!same) why = 'the replay differs from the file';
-      } catch (e) { why = e.message; }
-      ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
-      ok(L.stagesRun === (eng.last.r4.engaged ? 'sigma-braked' : 'uncontrolled'), `${where}: names the run its stage states come from (${L.stagesRun})`);
-      ok(L.magnetismIn.closed && L.tgcr.cubeFlux.every(x => x.n === '0'), `${where}: the flux it starts from and the vortex curvature it ends with close on every cube`);
-      ok(L.lambdaIn.length === 4 && L.lambdaOut.length === 4 && L.sutraRecord.length === active.length * (mode === 'SYMMETRIC_CONCURRENT' ? 2 : 1),
-         `${where}: carries lambda in and out and one record per formula applied`);
-    }
+  for (const [ids, mode, strength, drive, vortex] of EXPORT_CASES) {
+    const active = ids.split(',').map(Number).map(id => ({ id, strength }));
+    const go = modelRun(active, mode);
+    let eng = K.initEngine();
+    for (let s = 0; s < 2; s++) eng = go(eng, PARAMS({ zpeSource: X.fromQ(Q.mk(drive)), vortex }));
+    const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
+      dielectric: eng.dielectric.map(K.serializeQ), tgcrKappa: K.serializeQ(eng.tgcrKappa),
+      mayaPhase: K.serializeQ(eng.mayaPhase), mayaErr: K.serializeQ(eng.mayaErr),
+      magA: eng.magA.map(K.serializeQ), magChi: eng.magChi.map(K.serializeQ) }));
+    const L = file.last, where = `${mode} ${ids}, step 2`;
+    let same = false, why = '';
+    try {
+      const fromA = o => A4.mk(fromQ(o.a), fromQ(o.b), fromQ(o.c), fromQ(o.d));
+      const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
+      const actOf = list => list.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
+      const act = actOf(L.activeSutras), FF = L.formula;
+      const formula = K.formulaOf(FF.input.map(fromQ), actOf(FF.activeSutras), FF.composition, fromQ(FF.time));
+      const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ),
+                              energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
+                              mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
+                              magA: L.magAIn.map(fromQ), magChi: L.magChiIn.map(fromQ) }, p, act, L.composition, formula, fromQ(L.formulaPart));
+      same = JSON.stringify(K.serializeState(replay.psi)) === JSON.stringify(file.psi) &&
+             JSON.stringify(replay.dielectric.map(K.serializeQ)) === JSON.stringify(file.dielectric) &&
+             JSON.stringify(K.serializeQ(replay.tgcrKappa)) === JSON.stringify(file.tgcrKappa) &&
+             JSON.stringify(replay.magA.map(K.serializeQ)) === JSON.stringify(file.magA) &&
+             JSON.stringify(replay.magChi.map(K.serializeQ)) === JSON.stringify(file.magChi) &&
+             JSON.stringify(K.serializeLast(replay.last)) === JSON.stringify(L);
+      if (!same) why = 'the replay differs from the file';
+    } catch (e) { why = e.message; }
+    ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
+    ok(L.magnetismIn.closed && L.tgcr.cubeFlux.every(x => x.n === '0'), `${where}: the flux it starts from and the vortex curvature it ends with close on every cube`);
+    ok(L.lambdaIn.length === 4 && L.lambdaOut.length === 4 && L.sutraRecord.length === active.length * (mode === 'SYMMETRIC_CONCURRENT' ? 2 : 1),
+       `${where}: carries lambda in and out and one record per formula applied`);
   }
-  ok(tested.dormant && tested.braked && tested.gated, `exports were replayed from all three R4 branches (dormant ${tested.dormant}, braked ${tested.braked}, gated ${tested.gated})`);
 }
 
-section('the strength ramp');
+section('the formula');
 {
-  const N = BigInt(K.RAMP_STEPS), red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
-  const at = (fn, fd, tn, td, k) => red(fn * td * N + (tn * fd - fn * td) * BigInt(Math.min(k, K.RAMP_STEPS)), fd * td * N);
+  const red = (n, d) => { const g = euclid(n, d) || 1n; return [n / g, d / g]; };
   const eqF = (q, [n, d]) => q.n === n && q.d === d;
-  ok(K.RAMP_STEPS === 180, 'a ramp is 180 steps, 60 s at 3 steps a second');
-  let r = [], good = true, why = '';
-  const plan = [[1, [{ id: 9, strength: Q.mk(3n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [90, [{ id: 9, strength: Q.mk(1n, 10n) }, { id: 22, strength: Q.mk(1n, 2n) }]], [200, [{ id: 22, strength: Q.mk(1n, 2n) }]]];
-  const ref = { 9: { f: [0n, 1n], t: [3n, 10n], k: 0 }, 22: { f: [0n, 1n], t: [1n, 2n], k: 0 } };
-  let targets = plan[0][1];
-  for (let step = 1; step <= 420; step++) {
-    const change = plan.find(p => p[0] === step && step > 1);
-    if (change) {
-      targets = change[1];
-      for (const id of [9, 22]) { const t = targets.find(x => x.id === id), want = t ? [t.strength.n, t.strength.d] : [0n, 1n], R0 = ref[id];
-        if (R0 && !(R0.t[0] === want[0] && R0.t[1] === want[1])) ref[id] = { f: at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), t: want, k: 0 }; }
-    }
-    for (const id of Object.keys(ref)) ref[id].k++;
-    const x = K.rampStep(r, targets); r = x.ramp;
-    for (const id of [9, 22]) {
-      const R0 = ref[id], want = at(R0.f[0], R0.f[1], R0.t[0], R0.t[1], R0.k), got = x.active.find(a => a.id === id);
-      if (want[0] === 0n ? got !== undefined : !(got && eqF(got.strength, want) && eqF(got.args[0], want))) { good = false; why = `S${id} at step ${step}`; }
+  const tg = [{ id: 9, strength: Q.mk(3n, 10n) }];
+  const f = K.formulaOf(K.initState(), tg, 'SERIES', K.timeOf(0));
+  ok(f.active.length === 1 && eqF(f.active[0].strength, [3n, 10n]) && f.record.length === 1 && eqF(f.record[0].alpha, red(9n * 3n, 435n * 10n)) &&
+     sameQ(f.delta, f.afterB.map((x, i) => Q.sub(x, K.initState()[i]))),
+     'the formula runs each sutra at its setting, alpha = id/435 x setting, and its change is the field after it less the field it was calculated from');
+  const quartet = [2, 6, 23, 26].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(quartet, 'PARALLEL'), p = PARAMS({ vortex: Q.ONE });
+  let e = K.initEngine(), first = null, shareOk = true, sameF = true, heldOk = true, parts = [];
+  for (let s = 1; s <= 14; s++) {
+    e = go(e, p);
+    const L = e.last;
+    if (!first) first = L.formula;
+    if (L.formula !== first) sameF = false;
+    parts.push(Q.toString(L.part));
+    if (!(Q.eq(L.part, s <= 10 ? Q.mk(1n, 10n) : Q.ZERO) && sameQ(L.afterF, L.input.map((x, i) => K.storeQ(Q.add(x, Q.mul(first.delta[i], L.part))))))) shareOk = false;
+    if (s > 10) {
+      const eps = Q.mk(1n, 1n << 128n), n = 2 * L.stepError.stores;
+      let hi = Q.ONE, lo = Q.ONE;
+      for (let j = 0; j < n; j++) { hi = Q.mul(hi, Q.add(Q.ONE, eps)); lo = Q.mul(lo, Q.sub(Q.ONE, eps)); }
+      const r = Q.div(L.eFinal, L.e0);
+      if (!(Q.cmp(r, lo) >= 0 && Q.cmp(r, hi) <= 0)) heldOk = false;
     }
   }
-  ok(good && r.length === 1 && r[0].id === 22 && r[0].k === K.RAMP_STEPS,
-     'over 420 steps -- on, changed at step 90 from where it stood, off at step 200 -- every strength is the BigInt rule, run at exactly that strength, and a formula ramped off is gone', why);
-  const tg = [{ id: 9, strength: Q.mk(3n, 10n) }];
-  let e = K.initEngine(), stepsOk = true;
-  for (let s2 = 1; s2 <= 4; s2++) { e = K.step(e, PARAMS(), tg, 'SERIES');
-    const sig = e.last.r4.engaged ? e.last.r4.sigma : Q.ONE, al = red(9n * 3n * BigInt(s2) * sig.n, 435n * 10n * N * sig.d);
-    if (!(e.last.active.length === 1 && eqF(e.last.active[0].strength, red(3n * BigInt(s2), 10n * N)) && e.last.sutraRecord.length === 1 && eqF(e.last.sutraRecord[0].alpha, al))) stepsOk = false; }
-  ok(stepsOk, 'a step from the seed runs each formula at its ramped strength: alpha = id/435 x setting x k/180 at step k, times sigma where R4 brakes');
-  const allHalf = Array.from({ length: 29 }, (_, i) => ({ id: i + 1, strength: Q.mk(1n, 2n) }));
-  const refusal = mode => { let eng = K.initEngine();
-    for (let s2 = 1; s2 <= 3; s2++) { try { eng = K.step(eng, PARAMS({ vortex: Q.ONE }), allHalf, mode); } catch (err) { return { step: s2, name: err.name, msg: err.message }; } }
-    return { step: 0 }; };
-  const rs = refusal('SERIES'), rc = refusal('SYMMETRIC_CONCURRENT'), rp = refusal('PARALLEL');
-  const title = HTML.split("document.getElementById('btn-all').title = '")[1].split("';")[0];
-  ok(rs.step === 1 && rs.name === 'R4Uncontained' && rc.step === 1 && rc.name === 'R4Uncontained' && rp.step === 2 && /GRVQ/.test(rp.msg) && /divides by zero/.test(rp.msg) &&
-     /SERIES and CONCURRENT R4 cannot contain even the first step of the ramp, at 1\/360/.test(title) && /PARALLEL the second step\\'s GRVQ walk measure divides by zero/.test(title),
-     'ALL ON from the seed stops where its title says: the first step in SERIES and CONCURRENT, the second in PARALLEL', JSON.stringify({ rs, rc, rp }).slice(0, 300));
+  ok(sameF && shareOk, 'the formula is calculated once and put in over the glide in equal shares of 1/10, then none of it is applied', parts.join(' '));
+  ok(heldOk, 'after the glide, with no drive, each step moves the energy of the field only by storage: within (1 +- 2^-128)^(2 x stores)');
+}
+
+section('glide');
+{
+  const red = (n, d) => { if (d < 0n) { n = -n; d = -d; } const g = euclid(n, d) || 1n; return [n / g, d / g]; };
+  const F = (n, d = 1n) => red(n, d);
+  const add = ([a, b], [c, d]) => red(a * d + c * b, b * d), sub = ([a, b], [c, d]) => red(a * d - c * b, b * d), mul = ([a, b], [c, d]) => red(a * c, b * d);
+  const eqF = (q, [n, d]) => q.n === n && q.d === d;
+  const at = (from, to, k, n) => add(from, mul(sub(to, from), F(BigInt(Math.min(k, n)), BigInt(n))));
+  const s9 = q => [{ id: 9, strength: q }];
+  let r = [], up = true;
+  const seen = [];
+  for (let j = 1; j <= 12; j++) {
+    const x = K.rampStep(r, s9(Q.mk(1n, 2n)), 10); r = x.ramp;
+    const want = at(F(0n), F(1n, 2n), j, 10);
+    seen.push(x.active.length ? Q.toString(x.active[0].strength) : 'none');
+    if (!(x.active.length === 1 && x.active[0].id === 9 && eqF(x.active[0].strength, want) && eqF(x.active[0].args[0], want))) up = false;
+  }
+  ok(up, 'switched on, a formula rises from 0 by the same share each step, reaches its setting at the end of the glide and holds it (ramp_steady, ramp_end, ramp_hold)', seen.join(' '));
+  r = [];
+  for (let j = 0; j < 5; j++) r = K.rampStep(r, s9(Q.mk(1n, 2n)), 10).ramp;
+  const ch = K.rampStep(r, s9(Q.mk(1n, 10n)), 10);
+  ok(ch.active.length === 1 && eqF(ch.active[0].strength, at(F(1n, 4n), F(1n, 10n), 1, 10)),
+     'a setting changed mid-glide glides on from where the strength stood (ramp_zero, ramp_restart)', Q.toString(ch.active[0].strength));
+  let d = ch.ramp, down = [];
+  for (let j = 1; j <= 10; j++) { const x = K.rampStep(d, [], 10); d = x.ramp; down.push(x.active.length); }
+  ok(down.slice(0, 9).every(n => n === 1) && down[9] === 0 && d.length === 0,
+     'a formula switched off glides down to nothing over the glide and is then gone', down.join(','));
+  r = [];
+  for (let j = 0; j < 4; j++) r = K.rampStep(r, s9(Q.mk(1n, 2n)), 10).ramp;
+  const re = [];
+  for (let j = 1; j <= 5; j++) { const x = K.rampStep(r, s9(Q.mk(1n, 2n)), 4); r = x.ramp; re.push(x.active[0].strength); }
+  ok(re.every((q, i) => eqF(q, at(F(1n, 5n), F(1n, 2n), i + 1, 4))),
+     'a glide length changed mid-glide goes on from where the strength stood, over the new number of steps', re.map(Q.toString).join(' '));
+  r = [];
+  for (let j = 0; j < 12; j++) r = K.rampStep(r, s9(Q.mk(3n, 10n)), 10).ramp;
+  const held = [];
+  for (let j = 0; j < 3; j++) { const x = K.rampStep(r, s9(Q.mk(3n, 10n)), 25); r = x.ramp; held.push(x.active[0].strength); }
+  ok(held.every(q => eqF(q, F(3n, 10n))), 'a formula held at its setting stays there exactly when the glide length changes', held.map(Q.toString).join(' '));
+  r = [];
+  const s2 = radix => [{ id: 2, strength: Q.mk(1n, 2n), args: [Q.mk(1n, 2n), Q.mk(BigInt(radix))] }];
+  for (let j = 0; j < 3; j++) r = K.rampStep(r, s2(10), 10).ramp;
+  const op = K.rampStep(r, s2(12), 10);
+  ok(eqF(op.active[0].strength, at(F(0n), F(1n, 2n), 4, 10)) && op.active[0].args[1].n === 12n,
+     'an operand changed mid-glide applies at once and the strength glides on', `${Q.toString(op.active[0].strength)} radix ${op.active[0].args[1].n}`);
+  const mix = K.rampStep([], [{ id: 29, strength: Q.ONE }, { id: 3, strength: Q.ONE }, { id: 11, strength: Q.ONE }], 3);
+  ok(mix.active.map(a => a.id).join(',') === '3,11,29' && mix.active.every(a => eqF(a.strength, F(1n, 3n))),
+     'the formulas run in id order, each at its share of the glide', mix.active.map(a => `S${a.id}·${Q.toString(a.strength)}`).join(' '));
+  const throws = f => { try { f(); return false; } catch { return true; } };
+  ok(throws(() => K.rampStep([], s9(Q.ONE), 0)) && throws(() => K.rampStep([], s9(Q.ONE), 1.5)) &&
+     throws(() => K.rampStep([], [...s9(Q.ONE), ...s9(Q.HALF)], 10)) && throws(() => K.rampStep([], s9(Q.mk(3n, 2n)), 10)),
+     'a glide that is not a whole number of steps of at least 1, a formula set twice, or a strength outside [0, 1] is refused');
 }
 
 section('series / parallel / concurrent');
@@ -636,16 +636,17 @@ section('Maya coherence flow');
 
 section('magnetism memory');
 {
-  const base = PARAMS({ zpeSource: X.ONE, vortex: Q.mk(3n, 2n) });
-  const act = [3, 9, 11, 25, 29].map(id => ({ id, strength: Q.mk(1n, 2n) }));
+  const base = PARAMS({ vortex: Q.ONE });
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
   const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
   const edges = []; for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) edges.push([v, a, v | (1 << a)]);
   const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
   const within = (got, want) => Q.cmp(Q.abs(Q.sub(got, want)), Q.mul(Q.abs(want), Q.mk(1n, 1n << 127n))) <= 0;
   let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
+  const go = modelRun(act, 'PARALLEL');
   for (let s = 0; s < 40; s++) {
     const prev = eng;
-    eng = K.step(eng, base, act, 'SERIES');
+    eng = go(eng, base);
     const L = eng.last, rOut = eng.psi.map(x => Q.mul(x, x));
     const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
     edges.forEach(([v, a, h], e) => {
@@ -693,8 +694,8 @@ section('magnetism memory');
 section('no parameter is ignored');
 {
   const base = PARAMS();
-  const act = [3, 9, 22].map(id => ({ id, strength: Q.mk(1n, 2n) }));
-  const run = p => { let e = K.initEngine(); for (let s = 0; s < 6; s++) e = K.step(e, p, act, 'SERIES'); return e; };
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const run = p => { const go = modelRun(act, 'PARALLEL'); let e = K.initEngine(); for (let s = 0; s < 6; s++) e = go(e, p); return e; };
   const ref = run(base), key = e => JSON.stringify(K.serializeState(e.psi)) + JSON.stringify(e.dielectric.map(K.serializeQ));
   ok(key(run({ ...base, vortex: Q.ONE })) !== key(ref), 'vortex omega changes the field');
   ok(key(run({ ...base, zpeSource: X.ONE })) !== key(ref), 'the drive changes the field');
@@ -774,23 +775,24 @@ section('the engine on the torus');
   ok(agree, 'the kernel\'s hole, tube and cell fluxes and its edge flows are the gate\'s own circulations on 40 potentials', where);
   ok(laws, 'from one loop to the next the flux steps by exactly the circulation of the cells between (hole_flux_step_y/z, tube_flux_step_x/w)');
   ok(balanced, 'the kernel decides all eight strip balances on each of them (cube_strip)');
-  /* and on a run: the dynamo preset, every step */
+  /* and on a run: the damper preset, every step */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
-    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ONE,
-    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
-    polarisation: Q.ONE, vortex: Q.TWO };
-  const act = [3, 9, 11, 25, 29].map(id => ({ id, strength: Q.mk(3n, 10n) }));
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ONE };
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(act, 'PARALLEL');
   let eng = K.initEngine(), runAgree = true, runLaws = true, nonzero = false;
   for (let s = 0; s < 40; s++) {
-    eng = K.step(eng, params, act, 'SYMMETRIC_CONCURRENT');
+    eng = go(eng, params);
     const g = read(eng.magA, eng.magChi), t = K.magData(eng.magA, eng.magChi).torus;
     if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow) && t.balanced)) runAgree = false;
     if (!lawsHold(g)) runLaws = false;
     if (g.hole.some(x => !Q.isZero(x)) && g.cells.some(r => r.some(x => !Q.isZero(x)))) nonzero = true;
   }
-  ok(runAgree && runLaws && nonzero, 'on 40 steps of the dynamo preset the torus fluxes are the gate\'s, every balance holds, and the loops and cells carry flux');
+  ok(runAgree && runLaws && nonzero, 'on 40 steps of the damper preset the torus fluxes are the gate\'s, every balance holds, and the loops and cells carry flux');
 }
 
 
@@ -840,68 +842,24 @@ section('the sources of the fields around the construct');
   ok(rSame, 'each vertex\'s charge is the dielectric there less its four neighbours\', summed (rho = (d0)^T d0 q, charge_laplacian), on 40 dielectrics');
   ok(neutral, 'the charges sum to zero (charge_neutral, recomputed)');
   ok(flags, 'sourcesData gives exactly these, and decides both laws true, on 40 potentials and dielectrics');
-  /* and on a run: the dynamo preset's sources are the gate's and not empty */
+  /* and on a run: the damper preset's sources are the gate's and not empty */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
-    gammaW: X.fromQ(Q.mk(424923n, 10000n)), appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
-    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ONE,
-    r4R: Q.TWO, geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
-    polarisation: Q.ONE, vortex: Q.TWO };
-  const act = [3, 9, 11, 25, 29].map(id => ({ id, strength: Q.mk(3n, 10n) }));
+    appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
+    tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
+    geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
+    polarisation: Q.ONE, vortex: Q.ONE };
+  const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const go = modelRun(act, 'PARALLEL');
   let eng = K.initEngine(), runOk = true, live = 0;
   for (let s = 0; s < 30; s++) {
-    eng = K.step(eng, params, act, 'SYMMETRIC_CONCURRENT');
+    eng = go(eng, params);
     const sd = K.sourcesData(eng.magA, eng.dielectric);
     if (!(sd.kirchhoff && sd.neutral && eqv(sd.current, walkJ(K.curlA(eng.magA))) && eqv(sd.charge, lap(eng.dielectric)) && inflow(sd.current).every(Q.isZero))) runOk = false;
     if (sd.current.some(x => !Q.isZero(x)) && sd.charge.some(x => !Q.isZero(x))) live++;
   }
-  ok(runOk && live === 30, `on 30 steps of the dynamo preset the sources are the gate's, both laws hold, and current and charge are both present (${live}/30 steps)`);
+  ok(runOk && live === 30, `on 30 steps of the damper preset the sources are the gate's, both laws hold, and current and charge are both present (${live}/30 steps)`);
 }
-
-
-section('the presets do what their titles say');
-{
-  const { Worker } = await import('node:worker_threads');
-  const ps = HTML.indexOf('const PRESETS = {'), pe = HTML.indexOf('\n};', ps);
-  const PRESETS = new Function('return ' + HTML.slice(ps + 'const PRESETS = '.length, pe + 2))();
-  const ids = Object.keys(PRESETS);
-  const kernelSrc = HTML.slice(start, end);
-  const groups = [[], [], [], []];
-  ids.forEach((id, i) => groups[i % 4].push([id, PRESETS[id]]));
-  const results = Object.assign({}, ...(await Promise.all(groups.filter(g => g.length).map(g => new Promise((res, rej) => {
-    const w = new Worker(join(ROOT, 'tools', 'preset_worker.cjs'), { workerData: { src: kernelSrc, presets: g, steps: 600 } });
-    w.on('message', res); w.on('error', rej);
-  })))));
-  const num = v => v.includes('/') ? Number(v.split('/')[0]) / Number(v.split('/')[1]) : Number(v);
-  const metric = (d, m) => m === 'late' ? d.late.join(' ') : m.includes('/') ? d[m.split('/')[0]] / d[m.split('/')[1]] : d[m];
-  const holds = (d, c) => { const x = metric(d, c.m);
-    if (c.eq !== undefined) return typeof x === 'string' ? x === c.eq : x === num(c.eq);
-    if (c.lt !== undefined) return x < num(c.lt); if (c.gt !== undefined) return x > num(c.gt);
-    if (c.ge !== undefined) return x >= num(c.ge); if (c.le !== undefined) return x <= num(c.le); return false; };
-  const bound = c => c.eq ?? c.lt ?? c.gt ?? c.ge ?? c.le;
-  const names = (text, b) => new RegExp('(^|[^0-9/.])' + b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^0-9/])').test(text);
-  ok(ids.length === 12 && ids.every(id => PRESETS[id].claims.length >= 2 && PRESETS[id].claims.every(c => typeof bound(c) === 'string' && names(c.text, bound(c)))),
-     `${ids.length} presets, each with at least two measured statements, each statement's text naming the bound it is checked against`);
-  ok(HTML.includes(`const DEFAULT_PRESET = '`) && ids.includes(HTML.split(`const DEFAULT_PRESET = '`)[1].split(`'`)[0]), 'the page starts on one of them');
-  for (const id of ids) {
-    const d = results[id], p = PRESETS[id];
-    if (!d || d.halted) { ok(false, `${id}: runs 600 steps from the seed`, d && JSON.stringify(d.halted)); continue; }
-    const bad = p.claims.filter(c => !holds(d, c)).map(c => `${c.m} = ${metric(d, c.m)} against ${bound(c)}`);
-    ok(bad.length === 0, `${id}: ${p.claims.map(c => c.text).join('; ')} (${Math.round(d.ms)} ms a step)`, bad.join('; '));
-  }
-}
-
-
-section('R4 gate weights');
-{
-  /* stored a_v, b_v = 1 - a_v: in [0, 1] and summing to 1 (store_mem_unit) */
-  const field = K.initDielectric();
-  let good = true;
-  for (const s4 of [Q.mk(1n, 1000n), Q.ONE, Q.mk(77n, 3n)]) for (const w of K.gateABField(field, s4))
-    if (!(Q.sign(w.a) >= 0 && Q.sign(w.b) >= 0 && Q.eq(Q.add(w.a, w.b), Q.ONE) && Q.cmp(w.a, Q.ONE) <= 0)) good = false;
-  ok(good, 'the gate weights lie in [0, 1] and sum to 1 at three scales');
-}
-
 
 
 console.log(`\n${pass} passed, ${failures.length} failed`);

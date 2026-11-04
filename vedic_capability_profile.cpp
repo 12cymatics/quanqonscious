@@ -110,10 +110,10 @@ static void profile_universal_multipliers() {
                   "single-digit multiplier only"};
         for (long n = 0; n <= 500; ++n) for (int k = 1; k <= 9; ++k) {
             ++p.swept; ++p.applicable;
-            if (US4_Kevalaih::multiply_by_complement(BigInt(n), k) == BigInt(n) * k) ++p.correct;
+            if (ComplementProducts::multiply_by_complement(BigInt(n), k) == BigInt(n) * k) ++p.correct;
         }
         BigInt n(12345);
-        p.ns = bench([&]{ SINK += (unsigned long long)(US4_Kevalaih::multiply_by_complement(n, 7) % 1000003); }, 20000);
+        p.ns = bench([&]{ SINK += (unsigned long long)(ComplementProducts::multiply_by_complement(n, 7) % 1000003); }, 20000);
         profiles.push_back(p);
     }
 }
@@ -157,15 +157,15 @@ static void profile_divisibility() {
                   "these seven divisors only"};
         for (long n = -300; n <= 300; ++n) {
             BigInt b(n);
-            const bool got[] = {S12_Sesanyankena::divisible_by_2(b), S12_Sesanyankena::divisible_by_3(b),
-                                S12_Sesanyankena::divisible_by_4(b), S12_Sesanyankena::divisible_by_5(b),
-                                S12_Sesanyankena::divisible_by_8(b), S12_Sesanyankena::divisible_by_9(b),
-                                S12_Sesanyankena::divisible_by_11(b)};
+            const bool got[] = {Divisibility::divisible_by_2(b), Divisibility::divisible_by_3(b),
+                                Divisibility::divisible_by_4(b), Divisibility::divisible_by_5(b),
+                                Divisibility::divisible_by_8(b), Divisibility::divisible_by_9(b),
+                                Divisibility::divisible_by_11(b)};
             const long ds[] = {2, 3, 4, 5, 8, 9, 11};
             for (int i = 0; i < 7; ++i) { ++p.swept; ++p.applicable; if (got[i] == (n % ds[i] == 0)) ++p.correct; }
         }
         BigInt n(123456789);
-        p.ns = bench([&]{ SINK += S12_Sesanyankena::divisible_by_11(n) ? 1 : 0; }, 200000);
+        p.ns = bench([&]{ SINK += Divisibility::divisible_by_11(n) ? 1 : 0; }, 200000);
         profiles.push_back(p);
     }
     // US5 Vestanam -- needs an osculator, which exists only when gcd(d,10)=1.
@@ -304,12 +304,12 @@ static void profile_algebra() {
         for (long n = 1; n <= 60; ++n) for (long d = 1; d <= 20; ++d) {
             ++p.swept; ++p.applicable;
             Rational r(n, d);
-            auto cf = S13_Sopantya::to_continued_fraction(r);
-            auto back = S13_Sopantya::nth_convergent(cf, cf.size() - 1);
+            auto cf = ContinuedFractions::to_continued_fraction(r);
+            auto back = ContinuedFractions::nth_convergent(cf, cf.size() - 1);
             if (Rational(back.numerator, back.denominator) == r) ++p.correct;
         }
         Rational r(355, 113);
-        p.ns = bench([&]{ SINK += S13_Sopantya::to_continued_fraction(r).size(); }, 20000);
+        p.ns = bench([&]{ SINK += ContinuedFractions::to_continued_fraction(r).size(); }, 20000);
         profiles.push_back(p);
     }
     // S16 Gunakasamuccaya -- prime factorisation, universal but superlinear.
@@ -321,7 +321,7 @@ static void profile_algebra() {
             BigInt rebuilt = 1;
             bool sound = true;
             BigInt prev = 0;
-            for (const auto& f : S16_Gunakasamuccaya::prime_factorize(BigInt(n))) {
+            for (const auto& f : IntegerFactors::prime_factorize(BigInt(n))) {
                 rebuilt *= util::power(f.prime, f.exponent);
                 // Reconstruction ALONE is blind: a composite reported as one
                 // prime still multiplies back to n. Each factor must actually
@@ -337,7 +337,7 @@ static void profile_algebra() {
             if (sound && rebuilt == n) ++p.correct;
         }
         BigInt n(360);
-        p.ns = bench([&]{ SINK += S16_Gunakasamuccaya::prime_factorize(n).size(); }, 20000);
+        p.ns = bench([&]{ SINK += IntegerFactors::prime_factorize(n).size(); }, 20000);
         profiles.push_back(p);
     }
     // US12 Vilokanam -- pattern recognition. Its ability is to REFUSE correctly.
