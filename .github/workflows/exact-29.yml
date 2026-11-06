@@ -1,0 +1,95 @@
+name: exact 29 formulation
+
+on:
+  push:
+    branches:
+      - codex/create-github-repository-for-pcfe-v3.0
+      - 'claude/exact-29-sutra-calculation-*'
+  pull_request:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  corrected-coefficients:
+    name: corrected coefficient identities
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Exact Hodge coefficients, storage, domains and defect sensitivity
+        run: node tools/check_exact_coefficients.mjs
+
+  complete-formulation:
+    name: full formulation completeness
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # This must stay red while the exact named constants, source domains
+      # and coupled assembly remain unresolved. Passing the arithmetic
+      # identity job above does not satisfy the complete formulation claim.
+      - name: Every full-formulation obligation must be resolved
+        run: node tools/check_exact_coefficients.mjs --require-complete
+
+  full-29:
+    name: complete all 29 (${{ matrix.composition }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        composition: [SERIES, PARALLEL, SYMMETRIC_CONCURRENT]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # A finite wall-clock budget bounds runner use. Timeout is a failed
+      # calculation; no lower strength, reduced set or rounding substitutes.
+      - name: Complete production step and independent Fraction composition
+        env:
+          EXACT29_REPORT_DIR: artifacts/exact29
+        run: timeout --signal=TERM --kill-after=10s 480s node tools/check_exact_phi_kernel.mjs --full-29=${{ matrix.composition }}
+      - name: Preserve exact input and the last completed calculation stage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact29-${{ matrix.composition }}
+          path: artifacts/exact29/
+          if-no-files-found: error
+
+  browser-all-29:
+    name: live browser all 29
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Real worker must complete all 29 before browser claims pass
+        run: timeout --signal=TERM --kill-after=10s 600s node tools/check_exact_phi_page.mjs
+      - name: Preserve browser completion or failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact29-browser
+          path: artifacts/exact29-browser/
+          if-no-files-found: error
