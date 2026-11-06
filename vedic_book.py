@@ -41,7 +41,7 @@ SUTRAS = (
     Sutra(15, "Gunitasamuccayah", "product_coefficient_sum", (76, 81, 82, 83, 84, 85)),
     Sutra(16, "Gunakasamuccayah", "factor_product_derivative", (175, 176, 177, 178)),
     Sutra(17, "Anurupyena", "working_base_product", (17, 18, 19, 20, 21, 22)),
-    Sutra(18, "Sisyate Sesasamjnah", "constant_remainders", (19,)),
+    Sutra(18, "Sisyate Sesasamjnah", "constant_remainders", (19, 57)),
     Sutra(19, "Adyamadyenantyamantyena", "complementary_binomial_factor", (74, 75)),
     Sutra(20, "Kevalaih Saptakam Gunyat", "sevenths_repetend", (202,)),
     Sutra(21, "Vestanam", "osculation", (259, 260, 261, 262, 265, 266)),
@@ -318,6 +318,18 @@ def shishyate(dividend, divisors):
     if len({r for q, r in pairs}) != 1:
         raise ValueError("These divisions do not have a constant remainder")
     return evaluation(18, pairs, tuple(v for pair in pairs for v in pair))
+
+
+def shishyate_divisor(dividend, divisor):
+    dividend, divisor = coefficients(dividend), coefficients(divisor)
+    if len(divisor) < 2 or divisor[-1] == 0:
+        raise ValueError("The divisor needs degree at least one and a nonzero leading coefficient")
+    if len(dividend) < len(divisor):
+        raise ValueError("The dividend's degree is below the divisor's")
+    lead = divisor[-1]
+    reduced_quotient, remainder = paravartya(dividend, tuple(c / lead for c in divisor)).value
+    quotient = tuple(c / lead for c in reduced_quotient)
+    return evaluation(18, (quotient, remainder), quotient + remainder)
 
 
 def adyam(quadratic, factor):

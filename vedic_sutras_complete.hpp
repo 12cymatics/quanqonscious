@@ -1802,67 +1802,74 @@ namespace US1_Anurupyena {
 
 namespace US2_Shishyate {
 
-    // Cycle detection in sequence using Floyd's algorithm
-    struct CycleInfo {
-        bool has_cycle;
-        size_t cycle_start;   // Index where cycle begins
-        size_t cycle_length;
+    struct SuccessiveDivision {
+        std::vector<BigInt> divisors;
+        std::vector<BigInt> quotients;
+        BigInt remainder;
     };
 
-    // Detect cycle in modular sequence: f(x) = (ax + b) mod m
-    inline CycleInfo detect_linear_cycle(
-        const BigInt& a, const BigInt& b, const BigInt& m,
-        const BigInt& start, size_t max_iterations = 10000
-    ) {
-        CycleInfo result = {false, 0, 0};
-
-        auto next = [&](const BigInt& x) -> BigInt {
-            return (a * x + b) % m;
-        };
-
-        // Floyd's tortoise and hare
-        BigInt slow = start;
-        BigInt fast = start;
-
-        size_t iterations = 0;
-        do {
-            slow = next(slow);
-            fast = next(next(fast));
-            iterations++;
-        } while (slow != fast && iterations < max_iterations);
-
-        if (iterations >= max_iterations) {
-            return result;
+    inline SuccessiveDivision successive_division(const BigInt& dividend, const std::vector<BigInt>& divisors) {
+        if (divisors.empty()) throw std::invalid_argument("Shishyate needs at least one divisor");
+        SuccessiveDivision result;
+        result.divisors = divisors;
+        for (size_t i = 0; i < divisors.size(); ++i) {
+            const BigInt& d = divisors[i];
+            if (d <= 0) throw std::domain_error("Shishyate divides by positive divisors");
+            BigInt q = dividend / d, r = dividend % d;
+            if (r < 0) { r += d; q -= 1; }
+            if (i > 0 && r != result.remainder)
+                throw std::domain_error("the remainders do not remain constant");
+            result.remainder = r;
+            result.quotients.push_back(q);
         }
-
-        result.has_cycle = true;
-
-        // Find cycle start
-        slow = start;
-        result.cycle_start = 0;
-        while (slow != fast) {
-            slow = next(slow);
-            fast = next(fast);
-            result.cycle_start++;
-        }
-
-        // Find cycle length
-        result.cycle_length = 1;
-        fast = next(slow);
-        while (fast != slow) {
-            fast = next(fast);
-            result.cycle_length++;
-        }
-
         return result;
     }
 
-    // Test: x_{n+1} = (3x_n + 1) mod 7 starting at 1
+    struct ReducedDivision {
+        Rational leading;
+        std::vector<Rational> reduced_divisor;
+        std::vector<Rational> reduced_quotient;
+        std::vector<Rational> quotient;
+        std::vector<Rational> remainder;
+    };
+
+    inline ReducedDivision divide_by_reduced_divisor(const std::vector<Rational>& dividend,
+                                                     const std::vector<Rational>& divisor) {
+        if (divisor.size() < 2) throw std::invalid_argument("the divisor needs degree at least one");
+        if (divisor.back() == 0) throw std::domain_error("the divisor's leading coefficient is zero");
+        if (dividend.size() < divisor.size())
+            throw std::invalid_argument("the dividend's degree is below the divisor's");
+        ReducedDivision result;
+        result.leading = divisor.back();
+        for (const auto& c : divisor) result.reduced_divisor.push_back(c / result.leading);
+        const size_t n = divisor.size() - 1;
+        std::vector<Rational> transposed(n);
+        for (size_t j = 0; j < n; ++j) transposed[j] = -result.reduced_divisor[j];
+        std::vector<Rational> work = dividend;
+        const size_t terms = dividend.size() - n;
+        result.reduced_quotient.assign(terms, Rational(0));
+        for (size_t k = terms; k-- > 0;) {
+            const Rational q = work[k + n];
+            result.reduced_quotient[k] = q;
+            for (size_t j = 0; j < n; ++j) work[k + j] += q * transposed[j];
+        }
+        result.remainder.assign(work.begin(), work.begin() + n);
+        for (const auto& q : result.reduced_quotient) result.quotient.push_back(q / result.leading);
+        return result;
+    }
+
     inline bool test() {
-        auto result = detect_linear_cycle(
-            BigInt(3), BigInt(1), BigInt(7), BigInt(1)
-        );
-        return result.has_cycle && result.cycle_length > 0;
+        auto p19 = successive_division(BigInt(65), {BigInt(2), BigInt(4), BigInt(8), BigInt(16), BigInt(32), BigInt(64)});
+        auto a = divide_by_reduced_divisor({Rational(-12), Rational(9), Rational(-7), Rational(-4)},
+                                           {Rational(-4), Rational(2)});
+        auto b = divide_by_reduced_divisor({Rational(-5), Rational(-1), Rational(3)},
+                                           {Rational(-7), Rational(3)});
+        return p19.remainder == 1
+            && p19.quotients == std::vector<BigInt>{BigInt(32), BigInt(16), BigInt(8), BigInt(4), BigInt(2), BigInt(1)}
+            && a.quotient == std::vector<Rational>{Rational(-21, 2), Rational(-15, 2), Rational(-2)}
+            && a.remainder == std::vector<Rational>{Rational(-54)}
+            && b.quotient == std::vector<Rational>{Rational(2), Rational(1)}
+            && b.remainder == std::vector<Rational>{Rational(9)};
     }
 
 } // namespace US2_Shishyate
@@ -2077,47 +2084,39 @@ namespace US5_Vestanam {
 } // namespace US5_Vestanam
 
 // =============================================================================
-// SUB-SUTRA US6: Yāvadūnam Tāvadūnam (Deficiency Squared)
+// SUB-SUTRA US6: Yāvadūnaṃ Tāvadūnam (Cubing near a base)
 // =============================================================================
 
-namespace US6_Yavadunam_Squared {
+namespace US6_Yavadunam_Tavadunam {
 
-    // Square using deficiency: (base - d)² = base² - 2×base×d + d²
-    // Or more directly: (base - d)² = base×(base - 2d) + d²
-    struct DeficiencySquare {
+    struct DeficiencyCube {
         BigInt result;
         BigInt base;
         BigInt deficiency;
-        BigInt first_term;   // base × (base - 2d)
-        BigInt second_term;  // d²
+        BigInt left;
+        BigInt middle;
+        BigInt right;
     };
 
-    inline DeficiencySquare square_by_deficiency(const BigInt& n, const BigInt& base) {
-        DeficiencySquare result;
+    inline DeficiencyCube cube_by_deficiency(const BigInt& n, const BigInt& base) {
+        if (base <= 0) throw std::domain_error("the base must be positive");
+        DeficiencyCube result;
         result.base = base;
         result.deficiency = base - n;
-
-        result.first_term = base * (base - BigInt(2) * result.deficiency);
-        result.second_term = result.deficiency * result.deficiency;
-        result.result = result.first_term + result.second_term;
-
+        result.left = n - 2 * result.deficiency;
+        result.middle = 3 * result.deficiency * result.deficiency;
+        result.right = -(result.deficiency * result.deficiency * result.deficiency);
+        result.result = (result.left * base + result.middle) * base + result.right;
         return result;
     }
 
-    // Auto-detect base version
-    inline DeficiencySquare square_by_deficiency(const BigInt& n) {
-        size_t digits = util::digit_count(n);
-        BigInt base = util::pow10(digits);
-        return square_by_deficiency(n, base);
-    }
-
-    // Test: 97² = 100×(100-6) + 9 = 9400 + 9 = 9409
     inline bool test() {
-        auto result = square_by_deficiency(BigInt(97), BigInt(100));
-        return result.result == 9409;
+        auto r = cube_by_deficiency(BigInt(9989), BigInt(10000));
+        return r.result == BigInt("996703628669") && r.deficiency == 11
+            && r.left == 9967 && r.middle == 363 && r.right == -1331;
     }
 
-} // namespace US6_Yavadunam_Squared
+} // namespace US6_Yavadunam_Tavadunam
 
 // =============================================================================
 // SUB-SUTRA US7: Yāvadūnam Tāvadūnīkṛtya Vargaṁ ca Yojayet
@@ -2678,7 +2677,7 @@ namespace tests {
         results.push_back({"US3_Adyam", US3_Adyam::test()});
         results.push_back({"US4_Kevalaih", US4_Kevalaih::test()});
         results.push_back({"US5_Vestanam", US5_Vestanam::test()});
-        results.push_back({"US6_Yavadunam_Squared", US6_Yavadunam_Squared::test()});
+        results.push_back({"US6_Yavadunam_Tavadunam", US6_Yavadunam_Tavadunam::test()});
         results.push_back({"US7_Yavadunam_Extended", US7_Yavadunam_Extended::test()});
         results.push_back({"US8_Antyayor", US8_Antyayor::test()});
         results.push_back({"US9_Antyayoreva", US9_Antyayoreva::test()});
