@@ -176,7 +176,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
       <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
     </div>
     <div class="fld">
-      <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180</span> mV</span></div>
+      <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
       <input type="range" id="a" min="0" max="1000" step="1" value="229">
       <span class="lab" id="accLab" style="text-align:right"></span>
     </div>
@@ -8591,7 +8591,8 @@ const mvFromSlider = v => Math.pow(10, MV_MIN_LOG + (v/1000)*MV_SPAN_LOG);
 const sliderFromMv = mv => 1000*(Math.log10(mv) - MV_MIN_LOG)/MV_SPAN_LOG;
 $('a').addEventListener('input', e => {
   amp = mvFromSlider(+e.target.value);
-  $('av').textContent = amp >= 1000 ? (amp/1000).toFixed(2) + ' k' : amp.toFixed(0);
+  /* volts from 1000 mV up: this read "1.41 k mV", a kilo-millivolt, which is a volt */
+  $('av').textContent = amp >= 1000 ? (amp/1000).toFixed(2) + ' V' : amp.toFixed(0) + ' mV';
   dirty = true;
 });
 bind('t', 'tv', v => temp = v);

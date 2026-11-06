@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "task": "integrate-grvq-exact-assets-7af632a7",
+  "authorization": "User approved implementing the assessed reusable GRVQ assets with 'Ok do it'.",
+  "repository": "12cymatics/quanqonscious",
+  "base_commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
+  "candidate_branch": "claude/integrate-grvq-exact-assets-7af632a7",
+  "workspace": "isolated selected-source snapshot; remote commits must retain the complete upstream base tree",
+  "task_integrator": "/root",
+  "write_assignments": [
+    {
+      "owner": "/root/canonical_asset_review",
+      "paths": ["grvq_canonical.py", "tests/test_grvq_canonical.py"],
+      "scope": "Literal exact scalar ansatz, ten-parameter inventory, the three supplied field-coupled operations, and explicit undefined full-model obligations"
+    },
+    {
+      "owner": "/root/archived_code_assets",
+      "paths": [
+        "vedic_trainer/vedic/kernel/k2_field.py",
+        "vedic_trainer/vedic/kernel/q4_complex.py",
+        "vedic_trainer/vedic/kernel/wht.py",
+        "vedic_trainer/vedic/kernel/tests/test_exact_asset_extensions.py"
+      ],
+      "scope": "Strict exact input boundaries, field inverses, complete four-cube coboundaries, and all sixteen Walsh coefficients"
+    },
+    {
+      "owner": "/root",
+      "paths": ["grvq_exact_assets.py", "tests/test_grvq_exact_assets.py", "tools/check_grvq_exact_asset_gates.py", ".github/workflows/grvq-exact-assets.yml", "GRVQ_EXACT_ASSET_INTEGRATION.md", "records/grvq-exact-assets-7af632a7.json", "vedic_trainer/scripts/verify_counts.py", "vedic_trainer/README.md"],
+      "scope": "Executable integration, provenance, GitHub validation, disposable mutation checks, documentation, and task coordination"
+    }
+  ],
+  "validation_policy": "Run implementation tests in GitHub only. Local inspection, source hashing, and diff review are permitted. Preserve the existing full pytest and invariant gates.",
+  "instruction_inventory": [
+    {"source": "Current user instructions", "scope": "All work and delegated work", "precedence": "Full equation and functional integrity overrides conflicting older project guidance"},
+    {"source": "AGENTS.md", "scope": "Repository tree", "loaded": true, "bytes_at_base": 3149},
+    {"source": "CLAUDE.md", "scope": "Repository guidance for Claude; reviewed as additional project constraints", "loaded": true, "bytes_at_base": 48294},
+    {"source": "CODEX_OPENAI_MATH.md", "scope": "Formal mathematics work; no formal proof claim is made by this integration", "loaded": true},
+    {"source": "PROJECT_COLLABORATION.json", "scope": "Historical adoption identity; preserved without reassigning its registry writer", "loaded": true},
+    {"source": "collaboration-readiness/AGENTS.md", "scope": "Only collaboration-readiness subtree; this task does not write there", "loaded": false}
+  ],
+  "codex_discovery_observation": {
+    "global_and_ancestor_instruction_files": "None found in the inspected environment above the isolated repository",
+    "project_doc_max_bytes_override": "Not observed; default 32768-byte budget",
+    "root_agents_within_default_budget": true,
+    "automatic_runtime_loading": "Not independently verified; relevant files were read explicitly",
+    "shared_adoption_prose_byte_equal": true,
+    "shared_adoption_prose_sha256": "cada7108598ab1645b90f2a76cfff4eb0b053d31d85d3cff2f5dce072df06d7d"
+  },
+  "canonical_contract": {
+    "generation": "collab-2026-10-23.2",
+    "expected_sha256": "2b4b0fcc309edf4e40b698dd8866ed00b207cab07e4e4468b0676c56279f74f8",
+    "status": "unavailable; hash and complete imported instructions not verified",
+    "observations": "Referenced contract was not recovered from available project files or searches; the referenced Mac was offline. User was informed. No content of the missing contract is inferred."
+  },
+  "protected_work": "Existing adoption records, instruction files, unrelated modules, and remote default branch remain outside this task's write assignments.",
+  "implementation_status": "candidate_implemented; full-model equations remain explicitly unresolved",
+  "verification_status": "Commit-specific GitHub evidence is recorded below. No local implementation tests and no full-engine certification.",
+  "candidate_source_integrity": {
+    "commit": "ea53e9f288b563513c15bd67ff4a4d003ba0e78e",
+    "tree": "9206d6013f885ab7593330babc6fb6d72e5c4721",
+    "changed_paths": 13,
+    "all_changed_blob_ids_matched_local_source": true,
+    "dropped_upstream_files": [],
+    "unplanned_upstream_blob_changes": []
+  },
+  "github_measurements": {
+    "commit": "ea53e9f288b563513c15bd67ff4a4d003ba0e78e",
+    "package_job": "https://github.com/12cymatics/quanqonscious/actions/runs/41830846259/job/126577328459",
+    "package_collected": 2888,
+    "package_passed": 2888,
+    "exact_asset_extension_tests": 154,
+    "documentation_gate": "Initial run rejected old README totals; README updated from these measurements",
+    "other_workflows": "Pending at this record update"
+  },
+  "baseline_checks": {
+    "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
+    "python_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674517",
+    "javascript_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674649",
+    "package_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674535",
+    "observed_conclusions": "success"
+  }
+}

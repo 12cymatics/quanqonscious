@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task": "continue-grvq-exact-assets-2026-11-04",
+  "authorization": "User instructed 'Why have you stopped' and 'Keep on working' after PR174; continue source-grounded reusable calculations and their integration.",
+  "repository": "12cymatics/quanqonscious",
+  "parent_candidate": "0f70360be1880ad91d9aad7e6cbbd5745a2ca0cd",
+  "candidate_branch": "claude/integrate-grvq-exact-assets-7af632a7",
+  "task_integrator": "/root",
+  "scope": "Complete sequential execution of the existing 29 book applications with explicit operands and full Q4 stage states; expose existing ordered/matched edge maps separately; implement the recovered complete six-component Euclidean Hodge diagnostic without replacing the canonical field or inferring continuum physics.",
+  "write_assignments": [
+    {
+      "owner": "/root/exact_integration_path",
+      "paths": [
+        "grvq_book_chain.py",
+        "tests/test_grvq_book_chain.py"
+      ],
+      "scope": "Exact existing three field mappings and mandatory sequential 29-stage trace, preserving all coefficients, edge multiplicities, full states and failure causes"
+    },
+    {
+      "owner": "/root/repository_equations",
+      "paths": [
+        "grvq_q4_hodge.py",
+        "tests/test_grvq_q4_hodge.py"
+      ],
+      "scope": "Full six-component Hodge star/split/reconstruction and complete 24-face Q4 local diagnostic with recorded source 1/6 convention"
+    },
+    {
+      "owner": "/root",
+      "paths": [
+        "grvq_exact_assets.py",
+        "tests/test_grvq_exact_asset_continuation.py",
+        "tools/check_grvq_exact_asset_gates.py",
+        ".github/workflows/grvq-exact-assets.yml",
+        "GRVQ_EXACT_ASSET_INTEGRATION.md",
+        "records/grvq-exact-assets-continuation-2026-11-04.json"
+      ],
+      "scope": "API and CLI integration, provenance, independent integration checks, GitHub CI, source search record, documentation"
+    }
+  ],
+  "instruction_precedence": "Current user full-equation/functional-integrity directives override conflicting older project text. Existing root AGENTS/CLAUDE scope and provenance remain as inventoried in records/grvq-exact-assets-7af632a7.json.",
+  "validation_policy": "Implementation tests only in GitHub. Local source reading, editing, hashing and diff review allowed. Preserve all existing aggregate checks and assertions.",
+  "canonical_contract": {
+    "generation": "collab-2026-10-23.2",
+    "expected_sha256": "2b4b0fcc309edf4e40b698dd8866ed00b207cab07e4e4468b0676c56279f74f8",
+    "status": "Unavailable as recorded previously; device inventory on 2026-11-04 still reports the referenced Mac offline. Contents and hash not verified."
+  },
+  "source_pins": [
+    {
+      "commit": "0f70360be1880ad91d9aad7e6cbbd5745a2ca0cd",
+      "paths": [
+        "vedic_book.py",
+        "vedic_field.py"
+      ],
+      "authority": "Existing authored arithmetic-to-field mappings; not the missing canonical GRVQ geodesic chain"
+    },
+    {
+      "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
+      "paths": [
+        "vedic_v18.24_full_kernel.html"
+      ],
+      "authority": "Existing explicit Euclidean Hodge star/signs and per-vertex averaged SU(2) triples; not the unspecified GRVQ metric"
+    }
+  ],
+  "loaded_skills": [
+    {"name": "openai-library:library", "scope": "Read-only discovery of saved project sources", "precedence": "Workflow guidance below current user directives"},
+    {"name": "personal-context:personal-context", "scope": "Retrieve prior task context and equation-source leads; retrieved assistant claims do not establish mathematical authority", "precedence": "Retrieval guidance below current user directives"},
+    {"name": "google-drive:google-drive", "scope": "Read-only delegated source search in connected project documents", "precedence": "Workflow guidance below current user directives"}
+  ],
+  "instruction_scope_check": "Pinned remote tree contains root AGENTS.md, root CLAUDE.md and collaboration-readiness/AGENTS.md. No deeper instructions apply to this continuation's write paths. Root AGENTS is 3149 bytes; CLAUDE was manually reviewed as recorded in the preceding task, not claimed automatically loaded.",
+  "source_discovery": {
+    "repository": "Inspected newer PR170 and PR172 source and archived GRVQ texts. Recovered the full Hodge formula from the existing pinned v18.24 source. No inspected source supplies the missing 26 canonical field formulas or full metric/evolution.",
+    "related_work": "PR170 retains a separate 29-operator vertex formulation with unresolved full-step completion; PR172 adds an explicit reduced-divisor arithmetic variant. Those branches were not modified or silently imported.",
+    "library": "Read Exact_Kernel_Evolution_Blueprint_2026-07-31.docx and retrieved sutraws PDFs. The blueprint distinguishes operational exact algebra from incomplete GRVQ/Maya/evolution; an older quantum field snippet uses coordinate caps and fallbacks and does not establish canonical couplings.",
+    "drive": "Read Grvq, Sutras 1-6, Sutras 7-16, Sutras Rcoq, Sutras quantum, Sutra linkage mapping, related H2 source and newer sutra file snapshots. Their arithmetic, alternative fields, fixed matrices and circuit phases do not define the missing canonical equations. Concurrent November 4 source files were left untouched.",
+    "limit": "This records inspected source coverage, not proof that no other authoritative file exists. The referenced Mac remained offline. No missing formula was inferred from a title, count, proof badge or assistant claim."
+  },
+  "execution_state": "implemented_pending_github_validation; no implementation tests run locally",
+  "worker_handoff": "Both implementation workers and the independent source reviewer completed their assigned work before candidate e65a4bda17d7a3e10cbb15aac40162df48fa1a63. No pending worker writes remain. Root owns subsequent integration corrections to the delivered paths.",
+  "preceding_validation": {
+    "commit": "e65a4bda17d7a3e10cbb15aac40162df48fa1a63",
+    "python_passed": 3845,
+    "focused_passed": 2976,
+    "package_passed": 2888,
+    "deliberate_defects_rejected": 11,
+    "unchanged_controls_before_and_after": 15,
+    "pending_aggregate_jobs_at_followup": "Existing SutraWS and unpacked distribution jobs were still running",
+    "followup": "GitHub reported a deprecated non-Collection test parametrization and formatting diagnostics. The six Hodge basis cases are now supplied as a tuple; continuation-line formatting is corrected. Every assertion and calculation is retained. The resulting commit requires its own GitHub evidence."
+  },
+  "validation_evidence_location": "PR174 records commit-specific GitHub runs and artifacts after this pre-run source record. This record itself does not assert their outcome.",
+  "remaining_model_status": "The missing 26 field-coupled formulas, four parameter couplings, metric/evolution/geodesic/boundary data and deformulation/indexed-component definitions remain unresolved unless source search establishes them."
+}
