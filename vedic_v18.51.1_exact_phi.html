@@ -46,7 +46,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 .row .k{color:#555;flex-shrink:0}.row .v{color:#aaa;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 .section{margin-top:10px;padding-top:8px;border-top:1px solid #181830}
 .section h5{color:#888;font-size:8px;letter-spacing:1px;margin-bottom:6px}
-.section p.note{color:#555;font-size:7px;margin:2px 0 6px;line-height:1.35}
 #formula-display{margin-top:4px;padding:6px;background:#0a0a16;border:1px solid #181830;font-size:7px;color:#888;min-height:40px;max-height:140px;overflow-y:auto;line-height:1.4;word-break:break-word}
 #mode-identities{font-size:7px;color:#666;min-height:20px;max-height:140px;overflow-y:auto;line-height:1.4}
 #mode-identities .ok{color:#6FD3C7}#mode-identities .bad{color:#E4572E}
@@ -122,7 +121,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   #left h3{padding-left:44px;padding-top:72px}
   #right h4{font-size:11px}
   .section h5{font-size:10px}
-  .section p.note{font-size:9px}
   #formula-display,#mode-identities{font-size:9px}
   .ctrls button{font-size:10px;padding:7px 10px}
   #preset-ctrls button{font-size:9.5px;padding:6px 8px}
@@ -182,7 +180,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
-    <p class="note">The formula is calculated once, from the field as it stands, when you switch a sūtra on or change the settings: each active sūtra applies its formula at α = id/435 × strength, exactly, then GRVQ and the MSTVQ coupling. It goes in over the glide in equal shares, a tenth a step at the glide of 10, and after that no formula is applied while the stages run. λ is the field's four axis modes (λₖ = Σᵢ ±ψᵢ/16), and GRVQ feeds it: S1, S5, S9 and S14 add GRVQ's δλ to λ₀…λ₃ and every other active sūtra adds it to λ₍id−1 mod 4₎, each times its own α, by moving Ψ along that axis. MSTVQ's stress T adds to λ the same way and to the TGCR stiffness κ. S2, S3 and S29 set MSTVQ's B. S15 is Guṇitasamuccayaḥ as the book states it: for each axis the sum of the coefficients of the Ūrdhva product of the two halves is the product of their sums, so its residual is zero and it verifies the field rather than moving it. Where a formula meets a zero divisor or a log of zero it leaves that pair as it is, and nothing stops.</p>
     <div class="row"><span class="k">λ₀ λ₁ λ₂ λ₃</span><span class="v" id="cp-lambda">–</span></div>
     <div class="row"><span class="k">GRVQ δλ in the formula</span><span class="v" id="cp-grvq">–</span></div>
     <div class="row"><span class="k">MSTVQ</span><span class="v" id="cp-mstvq">–</span></div>
@@ -190,13 +187,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>TGCR VORTEX</h5>
-    <p class="note">TGCR: the bond current v = ω ψ_tail ψ_head on the 32 edges, its curvature F = d¹v on the 24 faces, split at each vertex into self-dual and anti-self-dual parts. The surface twists by each vertex's F∧F density |F₊|² − |F₋|² as a share of the largest, and each edge's two values rotate by dt·tgcr·v.</p>
     <div class="row"><span class="k">F∧F · |F|²</span><span class="v" id="tg-pontryagin">–</span></div>
     <div class="row"><span class="k">energy · stiffness</span><span class="v" id="tg-energy">–</span></div>
   </div>
   <div class="section">
     <h5>COMPOSITION</h5>
-    <p class="note">How the active sūtras combine in the formula. SERIES composes them in order, PARALLEL adds their separate displacements, CONCURRENT runs them forward then back at half strength.</p>
     <div class="ctrls" id="comp-ctrls" style="margin-top:0">
       <button type="button" data-comp="SERIES" class="active">SERIES</button>
       <button type="button" data-comp="PARALLEL">PARALLEL</button>
@@ -223,13 +218,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>WHEELER DIELECTRIC · MAGNETISM</h5>
-    <p class="note">Kernel parameters: they change the step itself.</p>
     <div class="amp-row"><span>dielectric s</span><input type="range" min="1" max="50" value="10" id="amp-dielectric"><span id="amp-dielectric-v">1.0</span></div>
     <div class="amp-row"><span>B field</span><input type="range" min="0" max="50" value="10" id="amp-bfield"><span id="amp-bfield-v">1.0</span></div>
   </div>
   <div class="section">
     <h5>DYNAMO · MAGNETISM MEMORY</h5>
-    <p class="note">The vector potential on the 32 edges remembers the field. Each step it keeps 499/500 of itself and gains Faraday induction from the change in the field, −(1/10)·d⁰(Δψ), plus the TGCR vortex ω steered along each edge by that edge's share of the field's energy. Its flux B = d¹A builds on the 24 faces, and each edge rotates its two vertex values by dt·A. The drive feeds the inertial layer; polarisation χ lets the field's energy shape the dielectric.</p>
     <div class="amp-row"><span>vortex ω</span><input type="range" min="-60" max="60" value="0" id="amp-omega"><span id="amp-omega-v">0.0</span></div>
     <div class="amp-row"><span>drive</span><input type="range" min="0" max="40" value="0" id="amp-drive"><span id="amp-drive-v">0.00</span></div>
     <div class="amp-row"><span>polarise χ</span><input type="range" min="0" max="30" value="10" id="amp-polar"><span id="amp-polar-v">1.0</span></div>
@@ -240,11 +233,9 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">along the tube</span><span class="v" id="dyn-tube">–</span></div>
     <div class="row"><span class="k">strip balances</span><span class="v" id="dyn-strips">–</span></div>
     <div class="row"><span class="k">surface from the flux</span><span class="v" id="dyn-shape">–</span></div>
-    <p class="note" id="lattice-legend">FLUX MAP (left of the picture): the torus cut open, θ to the right and φ up. On it the hypercube is a 4×4 lattice: its 16 vertices are the white dots, sized by |ψ|². Each line is the potential A on one of its 32 edges, <span style="color:#ffc238">amber</span> flowing towards +θ or +φ, <span style="color:#38dbff">cyan</span> against, the arrow its way, the width its strength. Each row of edges is a loop once round the torus: the band along it and the value at its right are the flux through the hole there. Each column is a loop once round the tube, its flux on top. The arc in each square is the flux through that cell, <span style="color:#ff57a8">rose</span> turning counter-clockwise in (θ, φ), <span style="color:#5cff85">green</span> clockwise. Pink bursts are reconnections. From one loop to the next, the flux steps by exactly the flux through the four cells between them: the strip balances, marked =. LATTICE draws the same on the surface.</p>
   </div>
   <div class="section">
     <h5>FIELDS AROUND THE CONSTRUCT</h5>
-    <p class="note">The construct's magnetism and its dielectric act on the space around it. Each edge carries the lattice current J = (d¹)ᵀB, the flux of the three faces round it (Ampère on the hypercube), and the current is conserved at every vertex. Each vertex carries the charge of the dielectric field, its graph Laplacian (Gauss), and the charges sum to zero. Placed where the surface puts them, they give the magnetic field by Biot–Savart and the electric field by Coulomb. The magnetism is seen as the pressure it exerts across its own field, p = |B|²/2: a medium whose index rises with that pressure fills the space round the construct, and everything is seen through it, bent toward the higher pressure the way heat over a hot car's paint moves what is behind it, with the medium itself a faint glow where the pressure along the line of sight is high. Across the equatorial plane, the glow is the energy density, its hue blue where the magnetic energy stands higher in its own range and orange where the electric does. The forces are I u × B on the middle of each piece of current, from the rest of the construct, and the electric force on each charge from the others, which cancel in sum. Each field is placed against its own range; nothing in the model ties their units together.</p>
     <div class="row"><span class="k">lattice current</span><span class="v" id="fld-current">–</span></div>
     <div class="row"><span class="k">dielectric charge</span><span class="v" id="fld-charge">–</span></div>
     <div class="row"><span class="k">magnetic pressure</span><span class="v" id="fld-haze">–</span></div>
@@ -253,7 +244,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>MAYA · COHERENCE FLOW</h5>
-    <p class="note">Maya: dφ/dμ = β/μ, β = (φ_g/e)·sin φ − (e/π)·φ³, five Euler sub-steps of 1/500 a step from φ₀ = 1/16. The phase flows onto the one stable coherence layer φ* and settles there. M = observed / true scales the field where it is drawn, never the field itself; on the layer M = 1.</p>
     <div class="row"><span class="k">phase φ</span><span class="v" id="maya-phase">–</span></div>
     <div class="row"><span class="k">β(φ)</span><span class="v" id="maya-beta">–</span></div>
     <div class="row"><span class="k">layer φ*</span><span class="v" id="maya-layer">–</span></div>
@@ -261,12 +251,10 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PACE</h5>
-    <p class="note">One step a second. The formula, calculated once when you switch a sūtra on or change the settings, goes in over this many steps in equal shares; after that no formula is applied and only the stages run.</p>
     <div class="amp-row"><span>Glide (steps)</span><input type="range" min="1" max="120" value="10" id="amp-glide"><span id="amp-glide-v">10</span></div>
   </div>
   <div class="section">
     <h5>DRAWING GAINS</h5>
-    <p class="note">How strongly each certified channel moves the surface, at the scale its formula gives it. They change the picture, never the state.</p>
     <div class="amp-row"><span>Zoom</span><input type="range" min="10" max="600" value="100" id="amp-zoom"><span id="amp-zoom-v">1.00</span></div>
     <div class="amp-row"><span>Field→R</span><input type="range" min="0" max="200" value="60" id="amp-field"><span id="amp-field-v">60</span></div>
     <div class="amp-row"><span>Field→r</span><input type="range" min="0" max="100" value="35" id="amp-tube"><span id="amp-tube-v">35</span></div>
@@ -2126,8 +2114,6 @@ function verifyVersionIntegrity() {
   return { ok: problems.length === 0, version: VERSION.string, problems };
 }
 
-
-
 const FAITHFUL = (() => {
   const Qc = KERNEL.Q, A4c = KERNEL.A4, C4c = KERNEL.C4;
   const R2 = Math.SQRT2, R5 = Math.sqrt(5), R10 = Math.sqrt(10);
@@ -2553,8 +2539,8 @@ const CQuad = Object.freeze({
 
 const KConsts = (() => {
   const half = Q.mk(1n, 2n);
-  const s2o2 = Quad.mk(Q.ZERO, half); 
-  const zeta = CQuad.mk(s2o2, s2o2);  
+  const s2o2 = Quad.mk(Q.ZERO, half);
+  const zeta = CQuad.mk(s2o2, s2o2);
   const _cache = [CQuad.ONE];
   const powZeta = k => {
     const kk = ((k % 8) + 8) % 8;
@@ -4738,8 +4724,7 @@ function buildPanel() {
   });
   const leg = document.createElement('div');
   leg.style.cssText = 'padding:4px;border-top:1px solid #222;font-size:5.5px;color:#555;line-height:1.3';
-  leg.innerHTML = `<b style="color:#666">ORDER</b>: SERIES and CONCURRENT apply the active sūtras in id order. Click a name to toggle it at 50%; the slider sets 0–100%; ΔE is the energy each formula changed the field by in the one calculation of the formula; the blue rows are the sūtra's own operands. `
-    + `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
+  leg.innerHTML = `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
   list.appendChild(leg);
 }
 function syncRow(s) {
