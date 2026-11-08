@@ -79,17 +79,6 @@ EXTERNAL = {
     # tree. The bit-exact protocol is written against it.
     "vedic_v18.16_strict_kernel.html",
 }
-# `vedic_v18.24_full_kernel.html` used to sit in EXTERNAL too, described as
-# living on the user's machine. It does not: it is TRACKED AT THE WORK-TREE
-# ROOT, and so is `vedic_v18.51.1_exact_phi.html`. The exemption was written
-# from a false premise and then prevented that premise from ever being
-# checked — the entry short-circuits `resolves()`, so the gate never looked.
-#
-# The guard that should have caught it, `test_no_external_entry_actually_
-# exists_in_the_repo`, looked in the wrong place: it tested `REPO / p`, where
-# REPO is this package, so it asked whether `vedic_trainer/vedic_v18.24_...`
-# existed rather than whether anything by that name was tracked at all. It
-# now resolves against the work tree, which is where the file is.
 
 # Paths named *because they no longer exist*. Two kinds of document need to
 # do this. ABLATION_RESULTS.md withdraws the figures measured on the synthetic
@@ -253,8 +242,7 @@ def test_no_external_entry_actually_exists_in_the_repo():
 
     This checked `REPO / p` — this *package* — while the files it exempted sit
     at the work-tree root one level up. So it asked a question whose answer was
-    always no, and `vedic_v18.24_full_kernel.html` stayed exempt for the whole
-    life of the file while being tracked in the repository the entire time.
+    always no.
 
     A guard that looks in the wrong directory is worse than no guard: it reads
     as coverage. It resolves against ROOT_TRACKED and the work tree now.

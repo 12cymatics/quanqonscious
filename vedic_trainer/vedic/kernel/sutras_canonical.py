@@ -8,9 +8,7 @@ Nine, not twenty-nine. ``STRICT_SUTRA_KERNEL`` dispatches on
 ids of the same class the *only* difference is the scalar
 α(n) = (n/435)·(strength/100).
 
-That is faithful to upstream — ``test_upstream_agreement.py`` matches the real
-JavaScript on 6,380 of 6,380 triples, and upstream is nine maps too. It is
-recorded here because nothing said it, and "the 29 sutras, canonically
+It is recorded here because nothing said it, and "the 29 sutras, canonically
 defined" (which is how this line read) invites the opposite reading.
 
 ``test_sutras_canonical.py::test_the_twenty_nine_ids_are_nine_distinct_maps``
@@ -22,20 +20,14 @@ repository**: ``vedic/kernel/z2_primitives.py`` is 29 distinct functions
 cases over the C4/K2(√5) extension, and ``vedic_sutras_complete.hpp`` has 29
 C++ implementations. This module is not those, and does not claim to be.
 
-Source of truth
----------------
-Ported from ``vedic_v18.24_full_kernel.html`` (tracked at the repository
-root, despite several documents having said it was not):
-
-* ``§12Z VERTEX-FIELD SUTRA OPERATORS``  (line 5544) — the seven operator types
-* ``STRICT_SUTRA_KERNEL``                (line 6527) — the exact, float-free path
-* ``SUTRA_KIND``                         (line 3558) — the id → kind dispatch
-* ``ALPHA.computeQ``                     — the α weight
-* ``§12Y STRUCTURAL SINGULARITY SUPPRESSION`` — the identity guarantee
-
-``STRICT_SUTRA_KERNEL`` is the canonical path (line 5449:
-``psi' = STRICT_SUTRA_KERNEL_i(psi, alpha_i)``). The ``SUTRAS[].evolve()``
-bodies are the float-contaminated display path and are NOT the definition.
+Contents
+--------
+* the seven operator types
+* ``STRICT_SUTRA_KERNEL`` — the exact, float-free path,
+  ``psi' = STRICT_SUTRA_KERNEL_i(psi, alpha_i)``
+* ``SUTRA_KIND`` — the id → kind dispatch
+* ``ALPHA.computeQ`` — the α weight
+* §12Y structural singularity suppression — the identity guarantee
 
 Substrate
 ---------
@@ -89,7 +81,7 @@ FULL_MASK: int = 0b1111
 
 BIT_WIDTH: int = 4
 
-# id → kind, transcribed from SUTRA_KIND (vedic_v18.24_full_kernel.html:3558).
+# id → kind.
 # Index 0 is unused so that SUTRA_KIND[id] reads naturally with 1-based ids.
 SUTRA_KIND: Tuple[str, ...] = (
     "",
