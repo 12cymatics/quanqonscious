@@ -65,6 +65,7 @@ LAYERS: dict[str, list[str]] = {
     "Composition": ["vedic/kernel/tests/test_composition.py"],
     "Canonical 29": ["vedic/kernel/tests/test_sutras_canonical.py"],
     "Blueprint gates": ["vedic/kernel/tests/test_blueprint_gates.py"],
+    "Exact asset extensions": ["vedic/kernel/tests/test_exact_asset_extensions.py"],
     "Kernel (torch)": ["vedic/kernel/tests/test_torch_buffers.py"],
     "External sidecar": ["vedic/external/tests"],
     "Script validity": ["vedic/kernel/tests/test_scripts_are_valid.py"],

@@ -268,10 +268,11 @@ function seedFor(c){
 const { srv, port } = await serve(REPO);
 const browser = await Browser.launch();
 const built = join(tmpdir(), 'cymatic-standalone-checkpage.html');
+const cleanBuilt = join(tmpdir(), 'cymatic-clean-checkpage.html');
 let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
 
-async function checkPage(url, name, expectInline){
+async function checkPage(url, name, expectInline, clean = false){
   section(`${name}  (${url.replace(/^http:\/\/127\.0\.0\.1:\d+/, '')})`);
   const page = await Page.open(browser, url);
   await page.waitFor('typeof state === "object" && state !== null', 30000,
@@ -370,9 +371,14 @@ async function checkPage(url, name, expectInline){
      cells['azimuthal mode m']);
   ok(cells['contact line'] === c.contact,
      'the contact line shown is the one the control selects', cells['contact line']);
-  ok(/sized to the mode when you press run/.test(cells['grid']),
-     'before a run the panel says the grid is sized to the mode, rather than '
-     + 'naming one it has not measured', cells['grid']);
+  if (clean)
+    ok(cells['grid'] === '—',
+       'before a run the clean panel shows no grid, rather than naming one it has not '
+       + 'measured', cells['grid']);
+  else
+    ok(/sized to the mode when you press run/.test(cells['grid']),
+       'before a run the panel says the grid is sized to the mode, rather than '
+       + 'naming one it has not measured', cells['grid']);
 
   /* 5. inline versus fetched solver source */
   const tags = await page.json(`[...document.querySelectorAll('script')].map(t => ({
@@ -412,13 +418,15 @@ async function checkPage(url, name, expectInline){
   await page.eval(`document.getElementById('dnsRun').click(), true`);
   const secs = await page.waitFor(
     `document.getElementById('dnsOut').innerHTML !== '' `
-    + `|| /did not run/.test(document.getElementById('dnsNote').textContent)`,
+    + `|| /did not run/.test((document.getElementById('dnsNote') || {}).textContent)`,
     420000, 'the Floquet solve to finish');
   const res = await page.json(`(() => {
     const o = {};
     for (const d of document.querySelectorAll('#dnsOut > div'))
       o[d.querySelector('.k').textContent] = d.querySelector('.v').textContent;
-    return { cells: o, note: document.getElementById('dnsNote').textContent,
+    /* the clean build has no note: a refusal there is the verdict cell's */
+    const n = document.getElementById('dnsNote');
+    return { cells: o, note: n ? n.textContent : (o.verdict || ''),
              btn: document.getElementById('dnsRun').textContent }; })()`);
   ok(!/did not run/.test(res.note), 'the worker ran rather than refusing', res.note.slice(0, 200));
   ok(res.btn === 'run', 'the button returns to rest afterwards', res.btn);
@@ -520,6 +528,23 @@ async function checkPage(url, name, expectInline){
   rel(after, Math.round(s.freq) + 40, 3,
       'moving the drive moves the box the panel would solve', `${before} then ${after}`);
 
+  /* 7b. the drive amplitude reads in the unit it is in. Above 1000 mV it read "1.41 k mV", a
+     kilo-millivolt; it is a volt. The slider is logarithmic, so these four positions are 32 mV,
+     180 mV, 1.41 V and 63.10 V, and the page is put back where it was. */
+  const ampRead = await page.json(`(() => {
+    const a = document.getElementById('a'), was = a.value, out = [];
+    for (const v of [0, 229, 500, 1000]){
+      a.value = String(v); a.dispatchEvent(new Event('input', { bubbles: true }));
+      out.push(document.getElementById('av').parentElement.textContent.trim());
+    }
+    a.value = was; a.dispatchEvent(new Event('input', { bubbles: true }));
+    out.push(document.getElementById('av').parentElement.textContent.trim());
+    return out;
+  })()`);
+  ok(JSON.stringify(ampRead) === JSON.stringify(['32 mV', '180 mV', '1.41 V', '63.10 V', '180 mV']),
+     'the drive amplitude reads in millivolts below a volt and in volts above, never "k mV", '
+     + 'and goes back to 180 mV', JSON.stringify(ampRead));
+
   /* 8. nothing threw
      The font stylesheet is the one allowed failure: it is a remote Google
      Fonts request, this suite runs with no network by design, and a missing
@@ -533,6 +558,16 @@ async function checkPage(url, name, expectInline){
   ok(page.logErrors.filter(t => !fontOnly(t)).length === 0,
      'no resource failed to load but the webfont',
      page.logErrors.filter(t => !fontOnly(t)).join(' | ').slice(0, 400));
+  if (clean){
+    /* Read here, after the load and the Floquet run and before any section below
+       breaks something on purpose: a lost GPU context or a killed thread is a
+       failure the box is right to show. */
+    const st = await page.json(`(s => ({ hidden: s.hidden, text: s.textContent,
+      drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed }))(document.getElementById('startupStatus'))`);
+    ok(st.hidden && st.text === '' && st.drawn && !st.failed,
+       'the clean page drew, and its startup box is there, empty and hidden, with no failure to show',
+       JSON.stringify(st));
+  }
 
   await page.shot(join(tmpdir(), `check-page-${name.replace(/\W+/g, '-')}.png`));
   return page;
@@ -1226,6 +1261,69 @@ async function checkCppEngine(page, inlined){
   await page.shot(join(tmpdir(), `check-page-cpp${inlined ? '-inline' : ''}.png`));
 }
 
+/* Sentences on screen: a run of visible text, between the page's own '·' separators, of
+   eight words or more. Every label and reading the page shows is shorter than that; the
+   full page's notes, warnings and footer are not. */
+const SENTENCES = String.raw`(() => {
+  const out = [];
+  for (const line of document.body.innerText.split('\n'))
+    for (const seg of line.split('·')){
+      const words = seg.trim().split(/\s+/).filter(w => /[A-Za-z]{2,}/.test(w));
+      if (words.length >= 8) out.push(seg.trim());
+    }
+  return out; })()`;
+
+/* setFreq() only marks the state dirty; the next animation frame recomputes it. A
+   reading taken straight after the call can be the old state's, so wait for the
+   recomputed one: the response is exactly half the drive. */
+async function driveAt(page, hz){
+  await page.eval(`setFreq(${hz}), true`);
+  await page.waitFor(`state.responseHz === ${hz/2}`, 15000, `the state recomputed at ${hz} Hz`);
+}
+
+async function checkCleanProse(page, removed, fullSentences){
+  section('the clean build shows no sentences');
+  ok(fullSentences.length > 0,
+     'the sentence test finds sentences on the full single-file page, so it can see one',
+     `${fullSentences.length} found there`);
+  const now = await page.json(SENTENCES);
+  ok(now.length === 0, 'no sentence is on the clean page after its runs',
+     JSON.stringify(now.slice(0, 3)));
+  const text = await page.json('document.body.innerText');
+  const left = removed.map(t => t.replace(/&amp;/g, '&')).filter(t => text.includes(t));
+  ok(left.length === 0, 'none of the removed sentences is on screen', JSON.stringify(left));
+  const dom = await page.json(`({
+    note: !!document.getElementById('dnsNote'), footer: !!document.querySelector('footer'),
+    subtitle: !!document.querySelector('header p'),
+    titles: [...document.querySelectorAll('#anchors button')].filter(b => b.hasAttribute('title')).length,
+    anchors: document.querySelectorAll('#anchors button').length,
+    noscript: !!document.querySelector('noscript'),
+    startup: (s => s && { hidden: s.hidden, text: s.textContent })(document.getElementById('startupStatus')),
+    drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed })`);
+  ok(!dom.note && !dom.footer && !dom.subtitle,
+     'the note, the footer and the subtitle are not in the page', JSON.stringify(dom));
+  ok(dom.anchors > 0 && dom.titles === 0, 'the frequency anchors are there, without tooltips',
+     JSON.stringify(dom));
+  /* By now the sections above have lost the GPU context and killed threads on purpose,
+     so the box may be showing a failure. It shows it by name only, and the reason went
+     to the console rather than nowhere. */
+  const reasons = page.console.filter(t => /^error/.test(t));
+  console.log(`       startup box ${JSON.stringify(dom.startup)}; reasons logged: `
+    + JSON.stringify(reasons.slice(0, 3).map(t => t.slice(0, 160))));
+  ok(!dom.noscript && dom.startup
+     && (dom.failed ? !dom.startup.hidden && dom.startup.text === 'simulation error' && reasons.length > 0
+                    : dom.startup.hidden && dom.startup.text === ''),
+     'the startup box shows a failure by its name alone, with the reason in the console',
+     JSON.stringify({ ...dom, reasons: reasons.slice(0, 3).map(t => t.slice(0, 160)) }));
+  /* the warnings: a state the kernel warns about, where the full page shows its warning */
+  await driveAt(page, 5000);
+  const w = await page.json(`({ n: state.warnings.length,
+    box: document.getElementById('warnBox').textContent, sentences: ${SENTENCES} })`);
+  ok(w.n > 0 && w.box === '' && w.sentences.length === 0,
+     'at 5000 Hz the kernel warns, and the clean page shows no warning', JSON.stringify(w));
+  await driveAt(page, 111);
+}
+
 try {
   const first = await checkPage(`http://127.0.0.1:${port}/cymatic.html`, 'the checkout page', false);
   await checkGpuRender(first, '');
@@ -1247,10 +1345,26 @@ try {
   await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
   await checkSolverThreads(single, ', in the single-file build, from file://');
+  await driveAt(single, 5000);
+  const fullSentences = await single.json(SENTENCES);
+  await driveAt(single, 111);
+
+  /* The same page with its comments and its sentences taken out, by
+     faraday/build-clean.mjs. faraday/check-clean.mjs holds its scripts to the full
+     build's token for token; this holds the running page to the same numbers. */
+  const { buildClean, REMOVED_PROSE } = await import(join(REPO, 'faraday', 'build-clean.mjs'));
+  writeFileSync(cleanBuilt, buildClean().out);
+  const clean = await checkPage(`file://${cleanBuilt}`, 'the clean single-file build', true, true);
+  await checkGpuRender(clean, ', in the clean build');
+  await checkSolverDraws(clean);
+  await checkCppEngine(clean, true);
+  await checkSolverThreads(clean, ', in the clean build, from file://');
+  await checkCleanProse(clean, REMOVED_PROSE, fullSentences);
 } finally {
   browser.close();
   srv.close();
   try { rmSync(built, { force: true }); } catch {}
+  try { rmSync(cleanBuilt, { force: true }); } catch {}
 }
 
 console.log('\n' + '-'.repeat(66));

@@ -314,12 +314,39 @@ static void part_one() {
         check(p.first == 40 && p.second == 60, "US1 100 split 2:3 -> 40/60");
     }
 
-    // US2 Shishyate Sheshasamjnah -- cycle detection in x -> a*x + b mod m.
+    // US2 Shishyate Sheshasamjnah -- the remainder remains constant (book pp. 19, 57).
     {
-        auto c = US2_Shishyate::detect_linear_cycle(BigInt(1), BigInt(1), BigInt(7), BigInt(0));
-        check(c.has_cycle && c.cycle_length == 7, "US2 x+1 mod 7 has cycle length 7");
-        auto d = US2_Shishyate::detect_linear_cycle(BigInt(0), BigInt(3), BigInt(10), BigInt(5));
-        check(d.has_cycle && d.cycle_length == 1, "US2 constant map cycles at length 1");
+        auto s = US2_Shishyate::successive_division(BigInt(65),
+            {BigInt(2), BigInt(4), BigInt(8), BigInt(16), BigInt(32), BigInt(64)});
+        check(s.remainder == 1 && s.quotients == std::vector<BigInt>{BigInt(32), BigInt(16), BigInt(8),
+                                                                     BigInt(4), BigInt(2), BigInt(1)},
+              "US2 p.19: 65 by 2, 4, 8, 16, 32, 64 -> quotients 32 .. 1, remainder 1 each time");
+        bool refused = false;
+        try { US2_Shishyate::successive_division(BigInt(65), {BigInt(2), BigInt(3)}); }
+        catch (const std::domain_error&) { refused = true; }
+        check(refused, "US2 refuses 65 by 2 and 3, whose remainders 1 and 2 differ");
+        std::vector<Rational> n1{Rational(-12), Rational(9), Rational(-7), Rational(-4)}, d1{Rational(-4), Rational(2)};
+        auto a = US2_Shishyate::divide_by_reduced_divisor(n1, d1);
+        check(a.quotient == std::vector<Rational>{Rational(-21, 2), Rational(-15, 2), Rational(-2)}
+              && a.remainder == std::vector<Rational>{Rational(-54)},
+              "US2 p.57: (-4x^3 - 7x^2 + 9x - 12) / (2x - 4) -> Q = -2x^2 - 7 1/2 x - 10 1/2, R = -54");
+        std::vector<Rational> n2{Rational(-5), Rational(-1), Rational(3)}, d2{Rational(-7), Rational(3)};
+        auto b = US2_Shishyate::divide_by_reduced_divisor(n2, d2);
+        check(b.quotient == std::vector<Rational>{Rational(2), Rational(1)}
+              && b.remainder == std::vector<Rational>{Rational(9)},
+              "US2 p.57: (3x^2 - x - 5) / (3x - 7) -> Q = x + 2, R = 9");
+        bool whole = true;
+        const std::vector<std::pair<std::vector<Rational>, std::vector<Rational>>> cases{
+            {n1, d1}, {n2, d2},
+            {{Rational(7), Rational(0), Rational(-3), Rational(5), Rational(2)}, {Rational(1), Rational(-2), Rational(5)}},
+            {{Rational(1, 3), Rational(-4), Rational(9, 2)}, {Rational(-3, 4), Rational(-6)}}};
+        for (const auto& [num, den] : cases) {
+            auto r = US2_Shishyate::divide_by_reduced_divisor(num, den);
+            auto back = ref_poly_mul(den, r.quotient);
+            for (size_t i = 0; i < r.remainder.size(); ++i) back[i] += r.remainder[i];
+            whole = whole && back == num && r.remainder.size() + 1 == den.size();
+        }
+        check(whole, "US2 p.57 method: divisor x Q + R gives back the dividend on 4 divisions, 2 of them the book's");
     }
 
     // US3 Adyamadyenantyamantyena -- first by first, last by last.
@@ -361,15 +388,22 @@ static void part_one() {
               "US5 osculation rejects 20");
     }
 
-    // US6 / US7 Yavadunam variants -- squaring near a base.
+    // US6 Yavadunam Tavadunam -- cubing near a base (book p. xliii, pp. 288-289); US7 -- squaring near a base.
     {
+        auto x = US6_Yavadunam_Tavadunam::cube_by_deficiency(BigInt(9989), BigInt(10000));
+        check(x.result == BigInt("996703628669") && x.deficiency == 11 && x.left == 9967
+              && x.middle == 363 && x.right == -1331,
+              "US6 p.xliii: 9989^3 = 9967 | 363 | -1331 = 996,703,628,669");
         bool ok6 = true, ok7 = true;
         for (const char* s : {"98", "103", "9997", "12"}) {
             BigInt n(s);
-            ok6 = ok6 && US6_Yavadunam_Squared::square_by_deficiency(n).result == n * n;
             ok7 = ok7 && US7_Yavadunam_Extended::square_extended(n, BigInt(100)).result == n * n;
         }
-        check(ok6, "US6 square_by_deficiency == n*n on 4 values");
+        for (const auto& [n, base] : std::vector<std::pair<BigInt, BigInt>>{
+                 {BigInt(98), BigInt(100)}, {BigInt(103), BigInt(100)}, {BigInt(9997), BigInt(10000)},
+                 {BigInt(12), BigInt(10)}, {BigInt(994), BigInt(1000)}, {BigInt(1006), BigInt(1000)}})
+            ok6 = ok6 && US6_Yavadunam_Tavadunam::cube_by_deficiency(n, base).result == n * n * n;
+        check(ok6, "US6 cube_by_deficiency == n^3 on 6 values, below and above their bases");
         check(ok7, "US7 square_extended base 100 == n*n on 4 values");
     }
 
@@ -462,17 +496,19 @@ static void part_two() {
               "US4 complement route and multiply_by_7 both == S3 Urdhva on 76*7");
     }
 
-    // Three squaring sutras against each other.
+    // Two squaring sutras against each other, and the cube against square times n.
     {
-        bool ok = true;
+        bool ok = true, cube = true;
         for (const char* s : {"98", "103", "9997"}) {
             BigInt n(s);
             ok = ok && S10_Yavadunam::square(n).square
-                    == US6_Yavadunam_Squared::square_by_deficiency(n).result;
-            ok = ok && S10_Yavadunam::square(n).square
                     == US7_Yavadunam_Extended::square_extended(n, BigInt(100)).result;
+            BigInt base = util::pow10(util::digit_count(n));
+            cube = cube && US6_Yavadunam_Tavadunam::cube_by_deficiency(n, base).result
+                    == S3_Urdhva::multiply(S10_Yavadunam::square(n).square, n).product;
         }
-        check(ok, "S10 + US6 + US7 agree on three squarings");
+        check(ok, "S10 + US7 agree on three squarings");
+        check(cube, "US6 cube == S3 Urdhva (S10 square x n) on three values");
     }
 
     // Completing the square (S8) and calculus (S9) reach the vertex by wholly

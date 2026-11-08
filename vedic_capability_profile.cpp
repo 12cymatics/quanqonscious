@@ -120,7 +120,7 @@ static void profile_universal_multipliers() {
 
 static void profile_squarers() {
     struct Case { const char* id; const char* name; int which; };
-    Case cases[] = {{"S10", "Yavadunam", 0}, {"US6", "Yavadunam Squared", 1}, {"US7", "Yavadunam Extended", 2}};
+    Case cases[] = {{"S10", "Yavadunam", 0}, {"US7", "Yavadunam Extended", 2}};
     for (auto& c : cases) {
         Profile p{c.id, c.name, "n near a power of ten", 0, 0, 0, 0, true, ""};
         long worst = 0;
@@ -129,7 +129,6 @@ static void profile_squarers() {
             BigInt bn(n), truth = bn * bn;
             bool ok = false, applied = true;
             if (c.which == 0)      ok = (S10_Yavadunam::square(bn).square == truth);
-            else if (c.which == 1) ok = (US6_Yavadunam_Squared::square_by_deficiency(bn).result == truth);
             else {
                 // BOTH sides of the base. 10^digits(n) is always ABOVE n, so a
                 // sweep using only that never enters the above-base branch --
@@ -146,6 +145,25 @@ static void profile_squarers() {
                 : "first disagreement at n = " + std::to_string(worst);
         BigInt n(9997);
         p.ns = bench([&]{ SINK += (unsigned long long)(S10_Yavadunam::square(n).square % 1000003); }, 20000);
+        profiles.push_back(p);
+    }
+    {
+        Profile p{"US6", "Yavadunam Tavadunam", "n^3 near a power of ten, both sides", 0, 0, 0, 0, true, ""};
+        long worst = 0;
+        for (long n = 2; n <= 400; ++n) {
+            BigInt bn(n), truth = bn * bn * bn;
+            BigInt hi = util::power(BigInt(10), std::to_string(n).size());
+            BigInt lo = util::power(BigInt(10), std::to_string(n).size() - 1);
+            for (const BigInt& base : {hi, lo}) {
+                ++p.swept; ++p.applicable;
+                if (US6_Yavadunam_Tavadunam::cube_by_deficiency(bn, base).result == truth) ++p.correct; else worst = n;
+            }
+        }
+        p.limit = (p.correct == p.applicable)
+                ? "(n - 2d) | 3d^2 | -d^3 exact for every n swept, below and above its base"
+                : "first disagreement at n = " + std::to_string(worst);
+        BigInt n(9989), base(10000);
+        p.ns = bench([&]{ SINK += (unsigned long long)(US6_Yavadunam_Tavadunam::cube_by_deficiency(n, base).result % 1000003); }, 20000);
         profiles.push_back(p);
     }
 }
@@ -365,8 +383,8 @@ static void profile_algebra() {
 // ---------------------------------------------- equations, systems, identities
 //
 // These ten were absent from the first sweep. Several of them are not
-// calculators at all -- S15 and US13 are VERIFIERS, US12 and US2 are
-// DETECTORS. A verifier's ability is measured on both arms: it must say yes
+// calculators at all -- S15 and US13 are VERIFIERS, US12 is a
+// DETECTOR. A verifier's ability is measured on both arms: it must say yes
 // to a true identity and no to a corrupted one. Counting only the yes arm
 // would score a function that returns true unconditionally at 100%.
 
@@ -614,29 +632,49 @@ static void profile_detectors_and_verifiers() {
         p.ns = bench([&]{ SINK += US13_Gunitasamuccaya_Samuccayagunitah::verify_consistency(a, b).consistent; }, 20000);
         profiles.push_back(p);
     }
-    // US2 Shishyate -- DETECTOR: finds the cycle in a modular sequence.
     {
-        Profile p{"US2", "Shishyate Sheshasamjnah", "cycle length in x -> (ax+b) mod m", 0, 0, 0, 0, true,
-                  "Floyd's algorithm; gives up after 10000 steps, and says so rather than guessing"};
-        for (long a = 0; a <= 12; ++a) for (long b = 0; b <= 12; ++b) for (long m = 2; m <= 20; ++m) {
+        Profile p{"US2", "Shishyate (p.19 chain)", "n by 2, 4, 8, 16, 32, 64, n in [-300, 300]", 0, 0, 0, 0, true, ""};
+        const std::vector<BigInt> chain{BigInt(2), BigInt(4), BigInt(8), BigInt(16), BigInt(32), BigInt(64)};
+        long refused = 0;
+        for (long n = -300; n <= 300; ++n) {
             ++p.swept;
-            auto got = US2_Shishyate::detect_linear_cycle(BigInt(a), BigInt(b), BigInt(m), BigInt(1));
-            if (!got.has_cycle) continue;
-            ++p.applicable;
-            // Independent reference: walk the sequence keeping a seen-map.
-            // Any map over a finite state space finds the true rho shape;
-            // it shares no code with Floyd's two-pointer method.
-            std::vector<long> order(m, -1);
-            long x = 1 % m, step = 0, start = -1, len = -1;
-            while (true) {
-                if (order[x] >= 0) { start = order[x]; len = step - order[x]; break; }
-                order[x] = step++;
-                x = (a * x + b) % m;
+            std::vector<long> q, r;
+            for (long d : {2L, 4L, 8L, 16L, 32L, 64L}) { long rr = ((n % d) + d) % d; r.push_back(rr); q.push_back((n - rr) / d); }
+            const bool constant = std::all_of(r.begin(), r.end(), [&](long x) { return x == r[0]; });
+            try {
+                auto got = US2_Shishyate::successive_division(BigInt(n), chain);
+                ++p.applicable;
+                bool ok = constant && got.remainder == r[0] && got.quotients.size() == q.size();
+                for (size_t i = 0; ok && i < q.size(); ++i) ok = got.quotients[i] == q[i];
+                if (ok) ++p.correct;
+            } catch (const std::domain_error&) {
+                if (constant) ++p.applicable; else ++refused;
             }
-            if ((long)got.cycle_start == start && (long)got.cycle_length == len) ++p.correct;
         }
-        p.ns = bench([&]{ SINK += US2_Shishyate::detect_linear_cycle(
-            BigInt(3), BigInt(1), BigInt(7), BigInt(1)).cycle_length; }, 5000);
+        p.limit = "the remainder stays constant for " + std::to_string(p.applicable) + " of " + std::to_string(p.swept)
+                + " dividends; the other " + std::to_string(refused) + " are refused, each checked to have differing remainders";
+        p.ns = bench([&]{ SINK += (unsigned long long)US2_Shishyate::successive_division(BigInt(65), chain).remainder; }, 5000);
+        profiles.push_back(p);
+    }
+    {
+        Profile p{"US2", "Shishyate (p.57 divisor)", "cubic by ax + b, |coefficients| <= 2, a != 0", 0, 0, 0, 0, true,
+                  "divisor reduced to monic, Paravartya, quotient divided back: R is the true remainder in every case"};
+        for (long c0 = -2; c0 <= 2; ++c0) for (long c1 = -2; c1 <= 2; ++c1) for (long c2 = -2; c2 <= 2; ++c2)
+        for (long c3 = -2; c3 <= 2; ++c3) for (long a = -2; a <= 2; ++a) for (long b = -2; b <= 2; ++b) {
+            if (a == 0) continue;
+            ++p.swept;
+            const std::vector<Rational> num{Rational(c0), Rational(c1), Rational(c2), Rational(c3)};
+            const std::vector<Rational> den{Rational(b), Rational(a)};
+            auto got = US2_Shishyate::divide_by_reduced_divisor(num, den);
+            ++p.applicable;
+            std::vector<Rational> back(num.size(), Rational(0));
+            for (size_t i = 0; i < got.quotient.size(); ++i) for (size_t j = 0; j < den.size(); ++j)
+                back[i + j] += got.quotient[i] * den[j];
+            for (size_t i = 0; i < got.remainder.size(); ++i) back[i] += got.remainder[i];
+            if (back == num && got.remainder.size() == 1) ++p.correct;
+        }
+        const std::vector<Rational> n1{Rational(-12), Rational(9), Rational(-7), Rational(-4)}, d1{Rational(-4), Rational(2)};
+        p.ns = bench([&]{ SINK += (unsigned long long)US2_Shishyate::divide_by_reduced_divisor(n1, d1).quotient.size(); }, 5000);
         profiles.push_back(p);
     }
 }

@@ -171,6 +171,12 @@ jobs:
       run: node faraday/check-kernel.mjs
     - name: Single-file build is self-contained
       run: node faraday/check-standalone.mjs
+    - name: acorn, the independent parser the comment-free build is read back with
+      run: npm install --prefix "$RUNNER_TEMP/tok" --no-save --no-package-lock acorn@8.18.0
+    - name: The comment-free single-file build is the same program, token for token
+      run: node faraday/check-clean.mjs
+      env:
+        ACORN: ${{ runner.temp }}/tok/node_modules/acorn
     - name: The committed faraday-cell bundle is what the sources build today
       run: node faraday/check-bundle.mjs
     - name: Exact coupled benchmark (residuals zero over Q)
@@ -255,11 +261,14 @@ jobs:
         unzip -q faraday-cell.zip -d "$dest"
         test -f "$dest/faraday-cell/run-checks.mjs"
         echo "UNPACKED=$dest/faraday-cell" >> "$GITHUB_ENV"
+    - name: acorn, for faraday/check-clean.mjs
+      run: npm install --prefix "$RUNNER_TEMP/tok" --no-save --no-package-lock acorn@8.18.0
     - name: Every suite, from the unpack, by the unpack's own runner
       working-directory: ${{ env.UNPACKED }}
       run: node run-checks.mjs
       env:
         CHROME: /usr/bin/google-chrome
+        ACORN: ${{ runner.temp }}/tok/node_modules/acorn
 
   page:
     name: cymatic.html in a browser

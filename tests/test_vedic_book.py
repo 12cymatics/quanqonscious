@@ -156,6 +156,18 @@ def test_nines_and_coefficient_sum_identities():
 
 def test_subsutra_book_cases():
     assert b.shishyate(65, [2, 4, 8, 16, 32, 64]).value == ((32, 1), (16, 1), (8, 1), (4, 1), (2, 1), (1, 1))
+    assert b.shishyate_divisor([-12, 9, -7, -4], [-4, 2]).value == ((sp.Rational(-21, 2), sp.Rational(-15, 2), -2), (-54,))
+    assert b.shishyate_divisor([-5, -1, 3], [-7, 3]).value == ((2, 1), (9,))
+    for dividend, divisor in [([-12, 9, -7, -4], [-4, 2]), ([-5, -1, 3], [-7, 3]), ([7, 0, -3, 5, 2], [1, -2, 5])]:
+        quotient, remainder = b.shishyate_divisor(dividend, divisor).value
+        assert remainder == b.paravartya(dividend, divisor).value[1]
+        rebuilt = list(b.crosswise(divisor, quotient))
+        for i, r in enumerate(remainder):
+            rebuilt[i] += r
+        assert tuple(rebuilt) == tuple(dividend)
+    for dividend, divisor in [([1, 2], [3]), ([1, 2, 3], [4, 0]), ([1], [1, 2])]:
+        with pytest.raises(ValueError):
+            b.shishyate_divisor(dividend, divisor)
     assert b.adyam([2, 5, 2], [2, 1]).value == (1, 2)
     for n in range(1, 7):
         digits = b.kevalaih(n).value
