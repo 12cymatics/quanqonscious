@@ -83,7 +83,7 @@ text.
 | Blueprint gates  | yes         | 35 tests               |
 | Exact asset extensions | yes   | 154 tests              |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 201 tests              |
+| External sidecar | yes         | 200 tests              |
 | Script validity  | yes         | 66 tests               |
 | Withdrawn numbers | yes        | 28 tests               |
 | Documented paths | yes         | 119 tests               |
@@ -119,7 +119,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2888 tests are collected and 2888 pass. **Nothing is skipped**, here or in
+2849 tests are collected and 2849 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
