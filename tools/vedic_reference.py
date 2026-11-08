@@ -26,6 +26,18 @@ def store(x):
     return F(m, 1 << k) if k >= 0 else F(m << -k)
 
 
+def mean_abs(xs):
+    return sum((abs(x) for x in xs), F(0)) / len(xs)
+
+
+def proportionate(num, mag):
+    if mag != 0:
+        return num / mag
+    if num != 0:
+        raise ZeroDivisionError("a nonzero term over a zero magnitude")
+    return num
+
+
 def popcount(i):
     return bin(i).count("1")
 
@@ -115,8 +127,8 @@ def grvq(lam, k, t):
     s6 = curr * [PHI, PHI_INV, -PHI, -PHI_INV][cyc] * F(7, 10)
     opp = lam[(k + 2) % 4]
     s14 = -curr * F(2, 5) / (opp * opp + 1)
-    s15 = (prev * nxt - curr * curr) * F(4, 5)
-    s28 = (prev * prev - nxt * nxt) / 1000
+    s15 = proportionate((prev * nxt - curr * curr) * F(4, 5), mean_abs(lam))
+    s28 = (abs(prev) - abs(nxt)) / 1000
     s29 = (sum(lam) / 4 - curr) * F(9, 10) / 20
     return s9 + s7 + s10 + s6 + s14 + s15 + s28 + s29
 
@@ -135,7 +147,8 @@ def field(sid, psi, a, al):
         B = radix_power_above(m, int(a[1]))
         p = [x + ((B - x) - x) * al for x in psi]
     elif sid == 3:
-        conv = [sum(psi[j] * psi[i ^ j] for j in range(16)) / a[1] for i in range(16)]
+        m = mean_abs(psi)
+        conv = [proportionate(sum(psi[j] * psi[i ^ j] for j in range(16)) / a[1], m) for i in range(16)]
         p = [x + (conv[i] - x) * al for i, x in enumerate(psi)]
     elif sid == 4:
         layers = [[x for i, x in enumerate(psi) if popcount(i) == h] for h in range(5)]
@@ -175,7 +188,7 @@ def field(sid, psi, a, al):
                     continue
                 S = (p[base] + p[base | m]) / 2
                 A = (p[base] - p[base | m]) / 2
-                dl = store((S * S - A * A) * A * al)
+                dl = store(proportionate((S * S - A * A) * A, S * S + A * A) * al)
                 p[base] = (S + dl) + (A - dl)
                 p[base | m] = (S + dl) - (A - dl)
     elif sid == 8:
@@ -231,7 +244,7 @@ def field(sid, psi, a, al):
     elif sid == 16:
         for i in range(8):
             j = i ^ 15
-            A, B = abs(p[i].numerator), abs(p[j].numerator)
+            A, B = iabs_floor(p[i]), iabs_floor(p[j])
             r0, r1, s0, s1, t0, t1 = A, B, 1, 0, 0, 1
             while r1 > 0:
                 q = r0 // r1
@@ -241,10 +254,10 @@ def field(sid, psi, a, al):
             if r0 > 1:
                 p[i] = p[i] + (p[i] / r0 - p[i]) * al
                 p[j] = p[j] + (p[j] / r0 - p[j]) * al
-            else:
+            elif A > 0 and B > 0:
                 vi, vj = p[i], p[j]
-                p[i] = vi + al * t0 * vj
-                p[j] = vj + al * s0 * vi
+                p[i] = vi + al * F(t0, A) * vj
+                p[j] = vj + al * F(s0, B) * vi
     elif sid == 17:
         for i in range(16):
             g = sum((p[j] - p[i] for j in nbrs(i)), F(0))
@@ -267,10 +280,8 @@ def field(sid, psi, a, al):
                 p[j] -= corr
             else:
                 ai, aj = abs(vi), abs(vj)
-                if ai == 0 or aj == 0:
-                    continue
-                ratio = ai / aj if ai > aj else aj / ai
-                scale = al * (ratio - a[1]) * a[2]
+                spread = ai - a[1] * aj if ai > aj else aj - a[1] * ai
+                scale = al * spread * a[2]
                 if ai > aj:
                     p[i] -= scale
                     p[j] += scale
@@ -372,7 +383,7 @@ def field(sid, psi, a, al):
             for j in nbrs(i):
                 if j <= i:
                     continue
-                dl = store(al * (p[i] * p[i] - p[j] * p[j]) * a[1])
+                dl = store(al * (abs(p[i]) - abs(p[j])) * a[1])
                 p[i] -= dl
                 p[j] += dl
     elif sid == 29:
