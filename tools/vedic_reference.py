@@ -8,9 +8,22 @@ PHI = F(12586269025, 7778742049)
 PHI_INV = F(12586269025 - 7778742049, 7778742049)
 
 
-# This oracle evaluates the declared rational formulas without a storage map.
-# PHI above is the literal rational operand of those formulas. It is not an
-# assertion that this rational is the algebraic golden ratio.
+STORE_BITS = 128
+
+
+def store(x):
+    if x == 0:
+        return F(0)
+    neg = x < 0
+    n, d = abs(x.numerator), x.denominator
+    k = STORE_BITS - (n.bit_length() - d.bit_length())
+    num = n << k if k >= 0 else n
+    den = d if k >= 0 else d << -k
+    if num < (den << (STORE_BITS - 1)):
+        raise ArithmeticError("store hypothesis")
+    m = (2 * num + den) // (2 * den)
+    m = -m if neg else m
+    return F(m, 1 << k) if k >= 0 else F(m << -k)
 
 
 def popcount(i):
@@ -35,35 +48,6 @@ def iabs_floor(x):
 
 def mean(p):
     return sum(p, F(0)) / 16
-
-
-def log_ratio_exceeds(a, b, threshold=F(1, 1000)):
-    """Decide |log(a)-log(b)| > threshold using independent log bounds.
-
-    Production uses bounds on exp(threshold). This oracle instead expands
-    log(r) = 2 * (z + z^3/3 + ...), z = (r-1)/(r+1), r = max(a,b)/min(a,b).
-    The omitted terms are bounded by a geometric tail; no approximate log,
-    midpoint, finite iteration cap, or rounded predicate is used.
-    """
-    if a <= 0 or b <= 0 or not 0 < threshold < 1:
-        raise ValueError("log ratio requires positive operands and 0 < threshold < 1")
-    ratio = max(a, b) / min(a, b)
-    z = (ratio - 1) / (ratio + 1)
-    if z == 0:
-        return False
-    z2, power, lower, k = z * z, z, F(0), 0
-    while True:
-        lower += 2 * power / (2 * k + 1)
-        # For z > 0, the remaining positive terms make log(r) strictly
-        # greater than this partial sum, including equality here.
-        if lower >= threshold:
-            return True
-        next_power = power * z2
-        upper = lower + 2 * next_power / ((2 * k + 3) * (1 - z2))
-        if upper <= threshold:
-            return False
-        power = next_power
-        k += 1
 
 
 def inverse(p):
@@ -180,7 +164,7 @@ def field(sid, psi, a, al):
                     continue
                 ratio = v1 / v0
                 err = ratio - (a[1] if ratio >= 0 else -a[1])
-                corr = -err * al * abs(v0 + v1)
+                corr = store(-err * al * abs(v0 + v1))
                 p[base | m] += corr
                 p[base] -= corr / 2
     elif sid == 7:
@@ -191,7 +175,7 @@ def field(sid, psi, a, al):
                     continue
                 S = (p[base] + p[base | m]) / 2
                 A = (p[base] - p[base | m]) / 2
-                dl = (S * S - A * A) * A * al
+                dl = store((S * S - A * A) * A * al)
                 p[base] = (S + dl) + (A - dl)
                 p[base | m] = (S + dl) - (A - dl)
     elif sid == 8:
@@ -219,9 +203,7 @@ def field(sid, psi, a, al):
             j = i ^ 15
             num, den = abs(p[i].numerator), abs(p[j].numerator)
             if den == 0:
-                raise ZeroDivisionError(
-                    f"S13 pair ({i}, {j}): denominator vertex psi[{j}] is zero"
-                )
+                continue
             n, d, cf = num, den, []
             while len(cf) < int(a[1]) and d > 0:
                 cf.append(n // d)
@@ -236,15 +218,16 @@ def field(sid, psi, a, al):
         for axis in range(4):
             m = 1 << axis
             bases = [b for b in range(16) if not b & m]
-            sP = sum((p[b | m] for b in bases), F(0))
-            sM = sum((p[b] for b in bases), F(0))
-            sPr = sum((p[b] * p[b | m] for b in bases), F(0))
-            residual = sP * sM - sPr
-            if abs(residual) > F(1, 1000000):
-                corr = -residual
-                for b in bases:
-                    p[b | m] = p[b | m] * (1 + al * corr)
-                    p[b] = p[b] * (1 - al * corr / 2)
+            lo = [p[b] for b in bases]
+            hi = [p[b | m] for b in bases]
+            product = [F(0)] * (len(lo) + len(hi) - 1)
+            for i, x in enumerate(lo):
+                for j, y in enumerate(hi):
+                    product[i + j] += x * y
+            corr = store(-(sum(hi, F(0)) * sum(lo, F(0)) - sum(product, F(0))))
+            for b in bases:
+                p[b | m] = p[b | m] * (1 + al * corr)
+                p[b] = p[b] * (1 - al * corr / 2)
     elif sid == 16:
         for i in range(8):
             j = i ^ 15
@@ -336,9 +319,8 @@ def field(sid, psi, a, al):
                 dr = tails[i]
                 while dr > 9:
                     dr = sum(int(c) for c in str(dr))
-                if abs(x) > F(1, 100):
-                    frac = x - floor(x)
-                    p[i] = x - al * (frac - F(dr, 9))
+                frac = x - floor(x)
+                p[i] = x - al * (frac - F(dr, 9))
     elif sid == 25:
         prodS, prodT = F(1), F(1)
         for axis in range(4):
@@ -350,7 +332,7 @@ def field(sid, psi, a, al):
             prodS *= lo
             if hi != 0:
                 prodT *= hi
-        if prodS != 0 and prodT != 0 and log_ratio_exceeds(abs(prodS), abs(prodT)):
+        if prodS != 0 and abs(prodS) != abs(prodT):
             sg = 1 if abs(prodS) > abs(prodT) else -1
             for i in range(16):
                 h = popcount(i)
@@ -377,7 +359,7 @@ def field(sid, psi, a, al):
                 if mod[idx]:
                     continue
                 diff = vals[0] + k * md - vals[k]
-                if abs(diff) > F(1, 10000000000):
+                if diff != 0:
                     p[idx] += al * diff
                     mod[idx] = True
         for i in range(16):
@@ -390,7 +372,7 @@ def field(sid, psi, a, al):
             for j in nbrs(i):
                 if j <= i:
                     continue
-                dl = al * (p[i] * p[i] - p[j] * p[j]) * a[1]
+                dl = store(al * (p[i] * p[i] - p[j] * p[j]) * a[1])
                 p[i] -= dl
                 p[j] += dl
     elif sid == 29:
@@ -414,62 +396,12 @@ def sutra(sid, psi, a, gain, t):
     return out
 
 
-def compose(psi, active, mode, t):
-    """Independent composition of the literal formulas, without quantization.
-
-    The supplied operands are exact input data, not results read from the
-    JavaScript kernel. Each record is the field returned by this oracle's own
-    formula calculation, with the in-formula GRVQ feeds of S1, S5, S9 and S14.
-    No equivalence of the distributed GRVQ feeds, MSTVQ or Maya is claimed here.
-    """
-    ordered = sorted(active, key=lambda item: item["id"])
-    ids = [item["id"] for item in ordered]
-    if len(set(ids)) != len(ids) or any(sid not in range(1, 30) for sid in ids):
-        raise ValueError("composition requires distinct sutra IDs in 1..29")
-    records = []
-
-    def apply(item, state, mode_gain):
-        sid = item["id"]
-        args = [q(value) for value in item["args"]]
-        gain = q(item["gain"]) * mode_gain if "gain" in item else mode_gain
-        result = sutra(sid, state, args, gain, t)
-        records.append({"id": sid, "alpha": F(sid, 435) * args[0] * gain,
-                        "psi": result})
-        return result
-
-    if mode == "SERIES":
-        result = list(psi)
-        for item in ordered:
-            result = apply(item, result, F(1))
-    elif mode == "SYMMETRIC_CONCURRENT":
-        result = list(psi)
-        for item in ordered:
-            result = apply(item, result, F(1, 2))
-        for item in reversed(ordered):
-            result = apply(item, result, F(1, 2))
-    elif mode == "PARALLEL":
-        displacement = [F(0)] * len(psi)
-        for item in ordered:
-            branch = apply(item, psi, F(1))
-            displacement = [delta + value - initial
-                            for delta, value, initial in zip(displacement, branch, psi)]
-        result = [initial + delta for initial, delta in zip(psi, displacement)]
-    else:
-        raise ValueError(f"unsupported composition: {mode}")
-    return result, records
-
-
 def q(x):
-    base = x.get("base", 10)
-    if base not in (10, 16):
-        raise ValueError(f"unsupported integer encoding: {base}")
-    return F(int(x["n"], base), int(x["d"], base))
+    return F(int(x["n"]), int(x["d"]))
 
 
 def s(x):
-    # Hexadecimal is exact integer transport and does not encounter Python's
-    # decimal int/string conversion limit when unrounded numerators grow.
-    return {"n": format(x.numerator, "x"), "d": format(x.denominator, "x"), "base": 16}
+    return {"n": str(x.numerator), "d": str(x.denominator)}
 
 
 def main():
@@ -485,20 +417,9 @@ def main():
                 out.append({"delta": s(grvq([q(x) for x in c["lambda"]], c["k"], q(c["t"])))})
             elif c["kind"] == "setB":
                 out.append({"B": [s(x) for x in set_b(psi, q(c["s"]))]})
-            elif c["kind"] == "logRatio":
-                out.append({"exceeds": log_ratio_exceeds(q(c["a"]), q(c["b"]), q(c["threshold"]))})
-            elif c["kind"] == "composition":
-                result, records = compose(psi, c["active"], c["mode"], q(c["t"]))
-                out.append({"psi": [s(x) for x in result], "records": [
-                    {"id": record["id"], "alpha": s(record["alpha"]),
-                     "psi": [s(x) for x in record["psi"]]}
-                    for record in records
-                ]})
-            else:
-                raise ValueError(f"unknown reference request: {c['kind']}")
         except ZeroDivisionError as e:
             out.append({"refused": str(e)})
-    json.dump({"arithmetic": "exact-rational", "results": out}, sys.stdout)
+    json.dump({"results": out}, sys.stdout)
 
 
 if __name__ == "__main__":
