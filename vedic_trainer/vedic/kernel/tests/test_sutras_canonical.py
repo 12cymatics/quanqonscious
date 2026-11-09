@@ -1,7 +1,7 @@
 """The 29 canonical sutras — completeness, structure, and the §12Y guarantee.
 
 Every assertion here traces to the Vedic protocol v4.0 or to
-``sutras_canonical.py`` (STRICT_SUTRA_KERNEL, SUTRA_KIND, ALPHA.computeQ,
+``sutras_canonical.py`` (apply_sutra, SUTRA_KIND, ALPHA.computeQ,
 §12Y).
 
 What this file replaced
@@ -888,7 +888,7 @@ def _same_map(i: int, j: int) -> bool:
 def test_the_twenty_nine_ids_are_nine_distinct_maps() -> None:
     """The 29 are not 29 formulas, and this says so in a place that runs.
 
-    `STRICT_SUTRA_KERNEL` dispatches on `SUTRA_KIND[id]` through seven
+    `apply_sutra` dispatches on `SUTRA_KIND[id]` through seven
     templates. Two of them branch internally — REFL on `id == 5`, PERM on
     `axis = (id+1) & 3` — so the seven become nine. Every other difference
     between two ids of the same kind is the scalar α, and nothing else.

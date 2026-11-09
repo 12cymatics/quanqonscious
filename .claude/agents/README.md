@@ -25,12 +25,12 @@ seven line-count figures were wrong when measured (`primarysutra.py` listed at
 out: **run the documented command verbatim, and measure every number.**
 
 **`regeneration-tester`.** `tests/test_documented_paths.py` carried
-`vedic_v18.24_full_kernel.html` in its `EXTERNAL` exemption list on the premise
+a root-level HTML page in its `EXTERNAL` exemption list on the premise
 that the file lived only on a developer's machine. The file is tracked at the
 work-tree root. Worse, the guard written for exactly that mistake,
 `test_no_external_entry_actually_exists_in_the_repo`, checked `REPO / p` where
 `REPO` is the *package* directory — asking whether
-`vedic_trainer/vedic_v18.24_…` existed rather than whether anything by that
+`vedic_trainer/<that name>` existed rather than whether anything by that
 name was tracked at all. A declared exemption short-circuits resolution, so the
 one check that would have noticed never looked. The rule: **a gate you have not
 seen go red under its own defect is not known to work.**

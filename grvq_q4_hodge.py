@@ -5,11 +5,11 @@ and the metric signature is (+, +, +, +). These are the geometry declared by
 the preserved vertex source, not a definition of the missing GRVQ spacetime
 metric. Both chiralities and all six input coordinates remain available.
 
-Source: vedic_v18.24_full_kernel.html at
-9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1, its Hodge matrices and the complete
-per-vertex magnetic diagnostic. That diagnostic divides both triples by six
-and uses the normalized pressure sum(face**2)/(2*24). These conventions are
-retained explicitly; they do not supply a physical permeability or units.
+Source: the Hodge tables HODGE_SD and HODGE_ASD of vedic_v18.51.1_exact_phi.html,
+whose self-dual and anti-self-dual triples are (F + *F)/2 and (F - *F)/2 under
+the star below. The per-vertex diagnostic divides both triples by six and uses
+the normalized pressure sum(face**2)/(2*24). These conventions are stated
+explicitly; they do not supply a physical permeability or units.
 """
 from __future__ import annotations
 
@@ -25,13 +25,8 @@ AXIS_PAIRS = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
 SIGNATURE = (1, 1, 1, 1)
 ORIENTATION = (0, 1, 2, 3)
 SOURCE = {
-    "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
-    "path": "vedic_v18.24_full_kernel.html",
-    "url": (
-        "https://github.com/12cymatics/quanqonscious/blob/"
-        "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1/"
-        "vedic_v18.24_full_kernel.html"
-    ),
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "tables": ("HODGE_SD", "HODGE_ASD"),
     "geometry": "Euclidean four-space with orientation (0, 1, 2, 3)",
     "metric_authority": "The preserved vertex diagnostic; the GRVQ metric remains unspecified",
     "pressure_units": "Normalized simulation quantity; no physical permeability is inferred",

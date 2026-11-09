@@ -12,7 +12,7 @@ package exposes:
   their definitions; `vedic/kernel/z2_primitives.py` holds the unweighted
   Z₂⁴ primitives the residuals and generators are built from, and is *not*
   the 29. **`sutras_canonical.py` holds nine distinct maps, not twenty-nine**:
-  `STRICT_SUTRA_KERNEL` dispatches through seven kind templates, two of which
+  `apply_sutra` dispatches through seven kind templates, two of which
   branch internally (REFL on `id == 5`, PERM on `axis = (id+1) & 3`), and
   between two ids of one class the only difference is the scalar
   α(n) = (n/435)·(strength/100). That is faithful — upstream is nine maps too,
