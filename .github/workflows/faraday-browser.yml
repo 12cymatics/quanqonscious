@@ -23,7 +23,12 @@ permissions:
   contents: read
 jobs:
   browser:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: when that label moved to Ubuntu 26.04, both jobs
+    # failed at `playwright install` -- "Playwright does not support chromium on
+    # ubuntu26.04-x64" -- before any check ran. Playwright 1.56.1, the runtime this
+    # matrix is tested with, lists host platforms up to ubuntu24.04 and no later.
+    # Move this and the Playwright pin together.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
