@@ -1,6 +1,6 @@
 'use strict';
 /* Nonlinear free-surface Navier-Stokes in a circular cell, in three dimensions,
-   with every azimuthal mode present and coupled.
+   with every grid-resolved azimuthal mode present and coupled.
 
    WHAT THIS SOLVES. The incompressible Navier-Stokes equations for a liquid
    layer in a cylinder of radius R over a floor at z = 0, under gravity
@@ -309,7 +309,8 @@ function suggestCell3DGrid(o){
   const k = requireFinitePositive(o.k, 'k'), R = requireFinitePositive(o.R, 'R');
   const h = requireFinitePositive(o.h, 'h'), rho = requireFinitePositive(o.rho, 'rho');
   const nu = requireFinitePositive(o.nu, 'nu'), gamma = requireFinitePositive(o.gamma, 'gamma');
-  const g = o.g === undefined ? CELL3D_G0 : requireFinitePositive(o.g, 'g');
+  const g = o.g === undefined ? CELL3D_G0 : requireFinite(o.g, 'g');
+  if (g < 0) throw new RangeError('g must be non-negative.');
   const accel = o.accel === undefined ? 0 : requireFinite(o.accel, 'accel');
   const omegaResponse = requireFinitePositive(o.omegaResponse, 'omegaResponse');
   const omegaDrive = requireFinitePositive(o.omegaDrive, 'omegaDrive');
@@ -416,7 +417,8 @@ class FaradayCell3D {
     this.rho = requireFinitePositive(o.rho, 'rho');
     this.nu = requireFinitePositive(o.nu, 'nu');
     this.gamma = requireFinitePositive(o.gamma, 'gamma');
-    this.g = o.g === undefined ? CELL3D_G0 : requireFinitePositive(o.g, 'g');
+    this.g = o.g === undefined ? CELL3D_G0 : requireFinite(o.g, 'g');
+    if (this.g < 0) throw new RangeError('g must be non-negative.');
     this.accel = o.accel === undefined ? 0 : requireFinite(o.accel, 'accel');
     this.omegaD = o.omegaD === undefined ? 0 : requireFinite(o.omegaD, 'omegaD');
     this.contact = o.contact === undefined ? 'free' : o.contact;
@@ -950,7 +952,7 @@ class FaradayCell3D {
      approximately so -- and exactness is the whole point: it is what makes
      divergence(gradient(.)) symmetric, and a symmetric negative definite
      operator is the only kind conjugate gradients is entitled to converge on. */
-  gradient(q, gu, gv, gw){
+  gradient(q, gu, gv, gw, surfaceP = null){
     const nr = this.nr, nth = this.nth, nz = this.nz, dth = this.dth;
     const rf = this.rf, rc = this.rc, drc = this.drc, dsc = this.dsc,
           drf = this.drf, dsf = this.dsf;
@@ -1005,6 +1007,15 @@ class FaradayCell3D {
        definite and the projection still removes the divergence, so gates 1 and 2 passed
        either way -- but the vertical component then returned B H rather than B, smaller than
        the physical gradient by a factor of H, 333 on this cell. */
+    // The prescribed pressure contributes to the same slope-transposed flux as
+    // the interior pressure, including horizontal components on a sloping top.
+    if (surfaceP !== null){
+      if (surfaceP.length !== this.NE) throw new RangeError(
+        'surfaceP must contain one pressure value per free-surface cell.');
+      for (let i = 0; i < nr; i++)
+        for (let k = 0; k < nth; k++)
+          gw[(i*nth + k)*nw + nz] -= surfaceP[i*nth + k]*rc[i]*drc[i]*dth;
+    }
     const Hdr = this.Hdr, Hdth = this.Hdth, sfa = this.sf;
     for (let i = 0; i < nr; i++){
       const ri = rc[i];
@@ -2800,12 +2811,17 @@ class FaradayCell3D {
   }
   /* ---- the free surface's pressure, and the time step ------------------- */
 
-  /* The pressure the free surface carries, at every pressure column: the hydrostatic
+  /* The reduced pressure the free surface carries, at every pressure column: the hydrostatic
      response of the displaced elevation to the instantaneous gravity, the capillary term
      with the FULL mean curvature rather than its linearisation, and the viscous normal
      stress with the full rate-of-strain contraction against the true normal.
 
-         p_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)/|n|^2
+         q = p - p_atm + rho g_eff (z - h)
+         q_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)
+
+     Here n is the UNIT outward normal, E is the rate-of-strain tensor, and
+     kappa = div(grad eta / sqrt(1 + |grad eta|^2)). The reduced-pressure
+     gradient absorbs the spatially uniform downward gravity term in momentum.
 
      This is the same expression `surfacePressure` carries in dns/faraday-disc.js, whose two
      right-hand terms are that solver's flat-surface linearisations of these: `surfaceLaplacian`
@@ -2850,9 +2866,10 @@ class FaradayCell3D {
         on the surface oscillator, stable for omega dt < 2 rather than merely less unstable
         than forward Euler.
 
-     The predictor carries the viscous and advective terms in full. Gravity does not appear in
-     it: this pressure is the total one, and the whole of gravity's effect on the interior is
-     the hydrostatic head the surface value carries. */
+     The predictor carries the viscous and advective terms in full. The pressure
+     solve carries q = p - p_atm + rho g_eff (z - h), not total pressure p.
+     The downward body force -g_eff z_hat is absorbed into grad(q), and its
+     free-surface value therefore includes rho g_eff eta. */
   step(dt){
     this.stepBegin(dt);
     this.stepExplicit();
@@ -2928,19 +2945,15 @@ class FaradayCell3D {
     this.divergence(u, v, this.om, this._div);
     const scale = rho/dt;
     for (let c = 0; c < this._div.length; c++) this._div[c] *= scale;
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++)
-        this._div[this.ip(i, k, nz - 1)] -= this.rc[i]*this.drc[i]*this.dth
-          *this._ps[this.ie(i, k)]/(this.H[this.ie(i, k)]*this.dsf[nz]);
     this.p.fill(0);
+    // G(q,q_s) = G(q,0) + G(0,q_s); both parts use the physical gradient.
+    this.gradient(this.p, this._gu, this._gv, this._gw, this._ps);
+    this.omegaOf(this._gu, this._gv, this._gw, this._gom);
+    this.divergence(this._gu, this._gv, this._gom, this._q);
+    for (let c = 0; c < this._div.length; c++) this._div[c] -= this._q[c];
     this.solveP(this._div, 1e-11, 400*(nr + nth + nz));
 
-    this.gradient(this.p, this._gu, this._gv, this._gw);
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++){
-        const e = this.ie(i, k);
-        this._gw[this.iw(i, k, nz)] += this._ps[e]/(this.H[e]*this.dsf[nz]);
-      }
+    this.gradient(this.p, this._gu, this._gv, this._gw, this._ps);
 
     const s2 = dt/rho;
     for (let i = 1; i < nr; i++)
