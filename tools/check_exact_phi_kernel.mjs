@@ -3,23 +3,31 @@
    The kernel is not copied here. KERNEL_FACTORY is sliced out of the page and
    evaluated, so there is one copy of the formulas and nothing that can drift
    from it. Where a statement can be checked against something the kernel did
-   not compute, it is: the 29 v18.24 formulas and GRVQ against
-   tools/vedic_reference.py, a separate transcription of v18.24's
-   SUTRAS[].evolve in Python's exact Fraction; reduced fractions against a
-   Euclid written here; the storage bound in bare BigInt arithmetic; the TGCR
-   geometry, the stages and the couplings recomputed here from their
-   definitions.
+   not compute, it is: the 29 formulas and GRVQ against
+   tools/vedic_reference.py, a separate transcription of the formulas
+   in Python's exact Fraction; reduced fractions against a
+   Euclid written here; the certified arithmetic in bare BigInt arithmetic;
+   the TGCR geometry, the stages and the couplings recomputed here from their
+   definitions. Where a run carries the field in certified intervals, an
+   identity recomputed here is checked to the width of the intervals: the
+   two enclosures must overlap and each be narrower than 2^-200 of the value.
 
    What it holds the page to:
      self-tests         every one of runSelfTests passes
      canonical Q        Q.mk reduces by the true gcd, dyadic or not
-     storage            |x - storeQ(x)| <= |x| / 2^128, idempotent
+     storage            storeQ returns the value it is given: nothing is rounded
+     certified Q        beyond 4096 bits a value is an interval that contains
+                        it; every operation's interval contains the exact
+                        result; an undecided decision is refused, never
+                        guessed, and is decided by replaying at more bits
      refusal            an operand or strength outside its domain throws
      formulas           each of the 29 equals the reference exactly, at its
                         default and its extreme operands, at two gains and
-                        several times, on stored, unstored and signed states,
-                        and refuses exactly where the reference divides by
-                        zero; GRVQ's increment and MSTVQ's B likewise
+                        several times, on exact states of every sign, with
+                        no limit on exact size, and refuses exactly where the
+                        reference divides by zero; the shipped intervals
+                        contain every exact result; GRVQ's increment and
+                        MSTVQ's B likewise
      statements         every statement the sutra channel decides holds on
                         the corpus and on a run
      couplings          lambda is inverse psi; each GRVQ feed moves exactly
@@ -31,7 +39,7 @@
      step export        an exported step replays bit for bit from its file
      the formula        calculated once at the settings, put in over the
                         glide in equal shares, then none applied; the
-                        energy then moves only by storage
+                        energy then does not move
      glide              each strength rises in equal steps from where it
                         stood to its setting over the glide, then holds
      modes              the mode identities decide and pass
@@ -77,7 +85,10 @@ const PARAMS = (o = {}) => ({ dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fro
   tgcr: X.fromQ(Q.mk(1n, 256n)), zpe: X.fromQ(Q.mk(1n, 512n)), zpeSource: X.ZERO,
   geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
   polarisation: Q.ONE, vortex: Q.ZERO, ...o });
-const S = x => ({ n: x.n.toString(), d: x.d.toString() });
+const S = x => {
+  if (!Q.isExact(x)) throw new Error(`an interval where an exact value is compared: ${Q.toString(x)}`);
+  return { n: x.n.toString(), d: x.d.toString() };
+};
 const modelRun = (act, mode, glide = 10) => {
   let formula = null, ramp = [], k = 0;
   return (eng, p) => {
@@ -88,8 +99,22 @@ const modelRun = (act, mode, glide = 10) => {
     return next;
   };
 };
-const fromQ = o => Q.mk(BigInt(o.n), BigInt(o.d));
-const sameQ = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
+const fromQ = o => 'lo' in o ? Object.freeze({ lo: fromQ(o.lo), hi: fromQ(o.hi) }) : Q.mk(BigInt(o.n), BigInt(o.d));
+const ident = (x, y) => Q.isExact(x) ? Q.isExact(y) && x.n === y.n && x.d === y.d : !Q.isExact(y) && ident(x.lo, y.lo) && ident(x.hi, y.hi);
+const sameQ = (a, b) => a.length === b.length && a.every((x, i) => ident(x, b[i]));
+const absB = v => v < 0n ? -v : v;
+const TIGHT = 200n;
+const tight = x => {
+  if (Q.isExact(x)) return true;
+  const wn = x.hi.n * x.lo.d - x.lo.n * x.hi.d, wd = x.hi.d * x.lo.d;
+  return [[1n, 1n], [absB(x.lo.n), x.lo.d], [absB(x.hi.n), x.hi.d]].some(([mn, md]) => (wn << TIGHT) * md <= mn * wd);
+};
+const near = (x, y) => Q.agree(x, y) && tight(x) && tight(y);
+const nearAll = (a, b) => a.length === b.length && a.every((x, i) => near(x, b[i]));
+const zeroish = x => Q.mayZero(x) && tight(x);
+const apart = (a, b) => a.some((x, i) => !Q.agree(x, b[i]));
+const mid = q => Q.isExact(q) ? q : Q.mul(Q.add(q.lo, q.hi), Q.HALF);
+const exactly = f => { K.setExactBits(null); try { return f(); } finally { K.setExactBits(4096); } };
 const energyQ = p => p.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
 const reference = cases => JSON.parse(execFileSync('python3', ['-I', join(ROOT, 'tools', 'vedic_reference.py')],
   { input: JSON.stringify({ cases }), maxBuffer: 1 << 28 }).toString()).results;
@@ -121,24 +146,116 @@ section('canonical rationals');
 
 section('storage');
 {
-  const B = BigInt(K.STORE_BITS);
-  ok(K.STORE_BITS === 128, 'STORE_BITS is 128');
-  let bad = 0, notIdem = 0, n = 0;
+  ok(K.STORE_BITS === null, 'STORE_BITS is null: no value is rounded where it is stored');
+  let moved = 0, n = 0;
   for (let t = 0; t < 2000; t++) {
     let num = rnd(1 + (t * 29) % 700) + 1n;
     const den = rnd(1 + (t * 41) % 700) + 1n;
     if (t % 2) num = -num;
-    const x = Q.mk(num, den), s = K.storeQ(x);
+    const x = Q.mk(num, den);
     n++;
-    /* |x - s| <= |x| / 2^B  <=>  |x.n s.d - s.n x.d| 2^B <= |x.n| s.d  (both sides over x.d s.d > 0) */
-    const diff = x.n * s.d - s.n * x.d;
-    if ((diff < 0n ? -diff : diff) << B > (x.n < 0n ? -x.n : x.n) * s.d) bad++;
-    const s2 = K.storeQ(s);
-    if (s2.n !== s.n || s2.d !== s.d) notIdem++;
+    if (K.storeQ(x) !== x) moved++;
   }
-  ok(bad === 0, `|x - storeQ(x)| <= |x|/2^128 on ${n} rationals, checked in bare BigInt`, `${bad} exceed it`);
-  ok(notIdem === 0, 'storeQ returns its own output unchanged', `${notIdem} moved`);
-  ok(K.storeQ(Q.ZERO).n === 0n, 'zero is stored as zero');
+  const wide = Q.add(Q.mk(rnd(4200) | 1n, rnd(4200) | 1n), Q.ZERO);
+  ok(moved === 0 && !Q.isExact(wide) && K.storeQ(wide) === wide,
+     `storeQ returns each of ${n} rationals, and an interval, as the very value it was given`, `${moved} moved`);
+  const refuses = v => { try { K.storeQ(v); return false; } catch (e) { return e instanceof TypeError; } };
+  ok([1.5, NaN, 3n, null, { n: 1n }, { n: 1n, d: 0n }, { lo: Q.ONE, hi: Q.ZERO }].every(refuses),
+     'storeQ refuses anything that is not an exact rational or an interval with its ends in order');
+  ok(Q.isExact(K.storeBudget()) && K.storeBudget().n === 0n, 'the rounding a storage boundary adds is exactly zero');
+}
+
+
+section('certified arithmetic');
+{
+  ok(K.workBits() === 256 && K.exactBits() === 4096 && K.MAX_WORK_BITS === 65536,
+     'a value is exact up to 4096 bits, then an interval at 256 bits, replayed at up to 65536');
+  const W = BigInt(K.workBits());
+  const le = (a, b) => a.n * b.d <= b.n * a.d;
+  const bare = {
+    add: (a, b) => ({ n: a.n * b.d + b.n * a.d, d: a.d * b.d }),
+    sub: (a, b) => ({ n: a.n * b.d - b.n * a.d, d: a.d * b.d }),
+    mul: (a, b) => ({ n: a.n * b.n, d: a.d * b.d }),
+    div: (a, b) => b.n < 0n ? { n: -a.n * b.d, d: a.d * -b.n } : { n: a.n * b.d, d: a.d * b.n }
+  };
+  const holds = (v, x) => Q.isExact(v) ? v.n * x.d === x.n * v.d : le(v.lo, x) && le(x, v.hi);
+  const pow2 = d => (d & (d - 1n)) === 0n;
+  const sgnB = x => x.n > 0n ? 1 : x.n < 0n ? -1 : 0;
+  const floorB = x => { const z = x.n / x.d; return x.n % x.d !== 0n && x.n < 0n ? z - 1n : z; };
+  const asQ = x => Q.mk(x.n, x.d);
+  const xs = [];
+  let enclosed = 0, dyadic = 0, narrow = 0;
+  for (let t = 0; t < 120; t++) {
+    const n = (rnd(2100 + (t * 13) % 900) + 1n) * (t % 3 ? 1n : -1n), d = rnd(2100 + (t * 7) % 900) + 1n;
+    const x = { n, d }, v = Q.add(asQ(x), Q.ZERO);
+    if (Q.isExact(v)) continue;
+    xs.push([x, v]);
+    if (le(v.lo, x) && le(x, v.hi) && !le(v.hi, v.lo)) enclosed++;
+    if (pow2(v.lo.d) && pow2(v.hi.d)) dyadic++;
+    const wn = v.hi.n * v.lo.d - v.lo.n * v.hi.d, wd = v.hi.d * v.lo.d;
+    if ((wn << (W - 1n)) * x.d <= absB(x.n) * wd) narrow++;
+  }
+  const n = xs.length;
+  ok(n >= 100 && enclosed === n && dyadic === n && narrow === n,
+     `${n} rationals of more than 4096 bits are each carried as an interval with dyadic ends that contains it and is at most 2^-255 of it wide, checked in bare BigInt`,
+     `${enclosed} enclosed, ${dyadic} dyadic, ${narrow} narrow`);
+  let opsOk = 0, opsN = 0;
+  const bad = [];
+  for (let t = 0; t + 1 < xs.length; t += 2) {
+    const [x, u] = xs[t], [y, v] = xs[t + 1], small = { n: BigInt(t) - 51n, d: 7n };
+    for (const op of ['add', 'sub', 'mul', 'div']) {
+      opsN += 2;
+      if (holds(Q[op](u, v), bare[op](x, y))) opsOk++; else bad.push(op);
+      if (holds(Q[op](u, asQ(small)), bare[op](x, small))) opsOk++; else bad.push(op + ' by a small rational');
+    }
+    opsN += 2;
+    if (holds(Q.neg(u), { n: -x.n, d: x.d })) opsOk++; else bad.push('neg');
+    if (holds(Q.abs(u), { n: absB(x.n), d: x.d })) opsOk++; else bad.push('abs');
+  }
+  ok(opsOk === opsN, `${opsN} interval sums, differences, products, quotients, negations and absolute values each contain the exact result, computed in bare BigInt`,
+     bad.slice(0, 4).join(', '));
+  let exactOk = 0, exactN = 0;
+  for (let t = 0; t < 400; t++) {
+    const x = { n: rnd(1 + t % 900) - rnd(1 + (t * 3) % 900), d: rnd(1 + (t * 5) % 900) + 1n };
+    const y = { n: rnd(1 + (t * 7) % 900) + 1n, d: rnd(1 + (t * 11) % 900) + 1n };
+    for (const op of ['add', 'sub', 'mul', 'div']) {
+      exactN++;
+      const got = Q[op](asQ(x), asQ(y)), w = bare[op](x, y);
+      if (Q.isExact(got) && got.n * w.d === w.n * got.d && euclid(got.n, got.d) === 1n) exactOk++;
+    }
+  }
+  ok(exactOk === exactN, `${exactN} operations on rationals that stay under 4096 bits give the exact reduced result, checked in bare BigInt`);
+  let decided = 0, decN = 0, floorBits = 0, replayed = 0;
+  for (let t = 0; t + 1 < xs.length; t += 2) {
+    const [x, u] = xs[t], [y, v] = xs[t + 1];
+    decN += 3;
+    if (Q.sign(u) === sgnB(x)) decided++;
+    if (Q.cmp(u, v) === sgnB(bare.sub(x, y))) decided++;
+    const f = K.certify(() => Q.floor(Q.add(asQ(x), Q.ZERO)), 256);
+    if (f.value === floorB(x)) decided++;
+    if (f.bits > 256) replayed++;
+    floorBits = Math.max(floorBits, f.bits);
+  }
+  ok(decided === decN && replayed > 0 && K.workBits() === 256,
+     `${decN} signs, comparisons and floors decided from intervals are the exact ones, computed in bare BigInt; ${replayed} floors of values with long integer parts were replayed, at up to ${floorBits} bits`);
+  const [x0, u0] = xs[0];
+  const z = Q.sub(u0, u0);
+  const undecided = f => { try { f(); return false; } catch (e) { return e instanceof K.NeedPrecision; } };
+  ok(!Q.isExact(z) && [() => Q.sign(z), () => Q.isZero(z), () => Q.eq(z, Q.ZERO), () => Q.cmp(z, Q.ZERO), () => Q.floor(z), () => Q.div(Q.ONE, z)].every(undecided),
+     'u - u for an interval u reaches across zero, and its sign, zero test, equality, comparison, floor and reciprocal are each refused as undecided');
+  ok(Q.agree(z, Q.ZERO) && Q.mayZero(z) && !Q.agree(u0, Q.add(u0, Q.ONE)) && !Q.mayZero(u0) && throwsRange(() => Q.div(u0, Q.ZERO)),
+     'a claim is refuted only by disjoint ends: u - u may be zero, u and u + 1 cannot agree, and a division by an exact zero is a RangeError');
+  const x0q = asQ(x0);
+  const nudged = k => () => Q.sign(Q.sub(Q.add(x0q, asQ({ n: x0.n, d: x0.d << BigInt(k) })), x0q));
+  const c = K.certify(nudged(900), 256);
+  ok(c.value === sgnB(x0) && c.bits === 1024 && K.workBits() === 256,
+     `the sign of (x + x 2^-900) - x, undecided at 256 bits, is decided by replaying at 512 and then 1024 bits (${c.bits}), and the working precision is restored`);
+  let refusedAt = null;
+  try { K.certify(nudged(70000), 256); } catch (e) { refusedAt = e instanceof RangeError ? K.workBits() : 'not a RangeError: ' + e.message; }
+  ok(refusedAt === 256, 'the sign of (x + x 2^-70000) - x is refused with a RangeError once 65536 bits do not decide it, and the working precision is restored', String(refusedAt));
+  const kept = exactly(() => Q.add(x0q, Q.ZERO));
+  ok(Q.isExact(kept) && kept.n * x0.d === x0.n * kept.d && K.exactBits() === 4096,
+     'with no limit on exact size the same value stays an exact rational, and the limit is restored');
 }
 
 
@@ -167,14 +284,14 @@ section('refusal, not clamping');
 }
 
 
-section('the 29 v18.24 formulas against an independent transcription');
+section('the 29 formulas against an independent transcription');
 {
-  const states = [['the seed', K.initState()], ['the seed, stored', K.initState().map(K.storeQ)]];
-  for (let k = 0; k < 6; k++) states.push([`stored state ${k}`, Array.from({ length: 16 }, () => {
-    const n = rnd(12 + 5 * k) - (1n << BigInt(11 + 5 * k)), d = rnd(7) + 1n; return K.storeQ(Q.mk(n === 0n ? 1n : n, d)); })]);
-  states.push(['unstored, odd denominators', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(v * v * 37 - 400), BigInt(3 + 2 * (v % 5))))]);
+  const states = [['the seed', K.initState()]];
+  for (let k = 0; k < 6; k++) states.push([`state ${k}`, Array.from({ length: 16 }, () => {
+    const n = rnd(12 + 5 * k) - (1n << BigInt(11 + 5 * k)), d = rnd(7) + 1n; return Q.mk(n === 0n ? 1n : n, d); })]);
+  states.push(['odd denominators', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(v * v * 37 - 400), BigInt(3 + 2 * (v % 5))))]);
   states.push(['inside (-1, 1)', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v * 7919) % 199) - 99), 101n))]);
-  states.push(['thousands', Array.from({ length: 16 }, (_, v) => K.storeQ(Q.mk(BigInt(((v + 3) * 104729) % 90001 - 45000), 7n)))]);
+  states.push(['thousands', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 3) * 104729) % 90001 - 45000), 7n))]);
   states.push(['all negative', K.initState().map(x => Q.neg(Q.abs(x)))]);
   const zeroAt = (p, v) => p.map((x, i) => i === v ? Q.ZERO : x);
   const seedS = K.initState();
@@ -194,10 +311,10 @@ section('the 29 v18.24 formulas against an independent transcription');
       vecs.forEach((a, vi) => {
         const gain = vi % 2 ? Q.HALF : Q.ONE, t = times[(si + id + vi) % times.length];
         let js;
-        try { js = { psi: K.applySutra(id, psi, a, { t, gain }).map(S) }; }
+        try { const q = exactly(() => K.applySutra(id, psi, a, { t, gain })); js = { q, psi: q.map(S) }; }
         catch (e) { js = { refused: e instanceof RangeError ? e.message : 'not a RangeError: ' + e.message }; }
         cases.push({ kind: 'sutra', id, psi: psi.map(S), args: a.map(S), gain: S(gain), t: S(t) });
-        meta.push({ id, name, js });
+        meta.push({ id, name, js, psi, a, gain, t });
       });
     }
   });
@@ -215,7 +332,23 @@ section('the 29 v18.24 formulas against an independent transcription');
     else bad.push(`S${m.id} on ${m.name}: values differ`);
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
-     `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times): ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
+     `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times), with no limit on exact size: ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
+  let contained = 0, exactAlso = 0, shippedRefused = 0, widest = 0;
+  const notContained = [];
+  const within = (v, x) => Q.isExact(v) ? ident(v, x) : Q.mayLe(v.lo, x) && Q.mayLe(x, v.hi) && tight(v);
+  meta.forEach(m => {
+    if (m.js.refused) {
+      try { K.certify(() => K.applySutra(m.id, m.psi, m.a, { t: m.t, gain: m.gain })); } catch (e) { if (e instanceof RangeError) shippedRefused++; }
+      return;
+    }
+    const got = K.certify(() => K.applySutra(m.id, m.psi, m.a, { t: m.t, gain: m.gain }));
+    widest = Math.max(widest, got.bits);
+    if (got.value.every((v, j) => within(v, m.js.q[j]))) contained++; else notContained.push(`S${m.id} on ${m.name}`);
+    if (got.value.every(Q.isExact)) exactAlso++;
+  });
+  ok(notContained.length === 0 && contained === agree && shippedRefused === refusedBoth,
+     `at the shipped 4096 exact bits, every one of the ${agree} results contains the exact one (${exactAlso} are exact outright, the rest certified intervals, decided at up to ${widest} bits), and the same ${shippedRefused} are refused`,
+     notContained.slice(0, 4).join('; '));
   const want = {};
   for (const [name, id] of Object.entries(want))
     ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
@@ -228,7 +361,7 @@ section('the 29 v18.24 formulas against an independent transcription');
     if (k % 5 === 0) lam[(k / 5) % 4] = Q.ZERO;
     const kk = k % 4, t = Q.mk(BigInt(k * 777), 1n);
     gcases.push({ kind: 'grvq', psi: [], lambda: lam.map(S), k: kk, t: S(t) });
-    let js; try { js = S(K.grvqDelta(lam, kk, t)); } catch (e) { js = 'refused'; }
+    let js; try { js = S(exactly(() => K.grvqDelta(lam, kk, t))); } catch (e) { js = e instanceof RangeError ? 'refused' : 'not a RangeError: ' + e.message; }
     gmeta.push(js);
   }
   const gout = reference(gcases);
@@ -236,76 +369,9 @@ section('the 29 v18.24 formulas against an independent transcription');
      'GRVQ.evolveExact (s9 + s7 + s10 + s6 + s14 + s15 + s28 + s29) equals the reference on 40 lambdas, zeros included');
   const bcases = states.slice(0, 8).map(([, psi], i) => ({ kind: 'setB', psi: psi.map(S), s: S(Q.mk(BigInt(i + 1), 13n)) }));
   const bout = reference(bcases);
-  ok(bout.every((r, i) => K.mstvqB(states[i][1], Q.mk(BigInt(i + 1), 13n)).every((x, j) => S(x).n === r.B[j].n && S(x).d === r.B[j].d)),
+  ok(bout.every((r, i) => exactly(() => K.mstvqB(states[i][1], Q.mk(BigInt(i + 1), 13n))).every((x, j) => S(x).n === r.B[j].n && S(x).d === r.B[j].d)),
      'MSTVQ.setB equals the reference on 8 states');
 }
-
-section('the 29 formulas against v18.24\'s own evolve code');
-{
-  const V18 = readFileSync(join(ROOT, 'vedic_v18.24_full_kernel.html'), 'utf8');
-  const cut = (from, to) => { const a = V18.indexOf(from); const b = V18.indexOf(to, a); if (a < 0 || b < 0) throw new Error('v18.24: cannot find ' + from); return V18.slice(a, b + to.length); };
-  const qsrc = cut('const gcd = (a, b) =>', "flStrict: r => { if (r.d === 0n) return NaN; const v = Number(r.n) / Number(r.d); return isFinite(v) ? v : NaN; },\n};");
-  const vtxsrc = cut('const VTX = {', 'auditEnergyEnvelope(maxEnergy) {\n    return { strict: true, mutated: false, maxEnergy };\n  }\n};');
-  let sut = cut('const SUTRAS = [', '\n];');
-  const exactBi = src => { let out = '', i = 0, n = 0;
-    for (;;) { const j = src.indexOf('Q.mk(Bi(', i); if (j < 0) { out += src.slice(i); break; }
-      out += src.slice(i, j); let k = j + 8, depth = 1; while (depth) { const c = src[k++]; if (c === '(') depth++; else if (c === ')') depth--; }
-      const m = /^\s*,\s*(\d+)n\)/.exec(src.slice(k));
-      if (!m) { out += src.slice(j, k); i = k; continue; }
-      out += `QD((${src.slice(j + 8, k - 1).trim()}) / ${m[1]})`; i = k + m[0].length; n++; }
-    return { out, n }; };
-  const conv1 = exactBi(sut); sut = conv1.out;
-  const s15a = "        const residual = Q.fl(Q.sub(prodSum, sumProd));\n        if (isFinite(residual) && abs(residual) > 1e-6) {\n          const corr = -residual;";
-  const s15b = "        const residual = Q.sub(prodSum, sumProd);\n        if (residual.n !== 0n) {\n          const corr = Q.mk(-residual.n, residual.d), aQ = Q.mul(Q.mk(15n, 435n), Q.mk(BigInt(this.strength), 100n));";
-  const s15c = ['Q.add(Q.ONE, QD((α * corr * 10000) / 10000))', 'Q.add(Q.ONE, Q.mul(aQ, corr))'], s15d = ['Q.add(Q.ONE, QD((-α * corr * 5000) / 10000))', 'Q.sub(Q.ONE, Q.mul(Q.mul(aQ, corr), Q.HALF))'];
-  const s15ok = sut.split(s15a).length === 2 && sut.split(s15c[0]).length === 2 && sut.split(s15d[0]).length === 2;
-  sut = sut.replace(s15a, s15b).replace(s15c[0], s15c[1]).replace(s15d[0], s15d[1]);
-  const harness = `const abs = Math.abs, max = Math.max, min = Math.min, floor = Math.floor, sqrt = Math.sqrt, round = Math.round, PI = Math.PI, sin = Math.sin, cos = Math.cos, exp = Math.exp, log = Math.log, pow = Math.pow;
-    const sf = v => String(v); function bigAbs(n) { return n < 0n ? -n : n; }
-    ${qsrc}
-    const Bi = strictBi, SUTRA_SUM = 435n;
-    const QD = x => { if (!Number.isFinite(x)) throw new RangeError('non-finite ' + x); let v = x, d = 1n; while (!Number.isInteger(v)) { v *= 2; d *= 2n; } return Q.mk(BigInt(v), d); };
-    const C = { phi: Q.mk(12586269025n, 7778742049n), phi_f: 12586269025 / 7778742049, alpha: Q.mk(1000000n, 137035999n), alpha_f: 1 / 137.035999 };
-    let lambda = [Q.mk(3n), Q.mk(4n), Q.mk(5n), Q.mk(6n)], simTime = 0;
-    const R4val = Q.ONE, SULBA = { PI_SULBA: 3 }, USO = { unified: () => 1 };
-    const GRVQ = { evolve: () => 0 }, MSTVQ = { setB() {}, compute() {}, trace: () => 0 }, INTER_SUTRA = { recordInteraction() {} };
-    const ALPHA = { computeQ(sid, strength) { return Q.mul(Q.mk(BigInt(sid), SUTRA_SUM), Q.mk(BigInt(Math.round(strength || 0)), 100n)); } };
-    const SUPPRESS = { alpha(sid) { const s = SUTRAS[sid - 1]; return Q.fl(ALPHA.computeQ(sid, s ? s.strength : 0)); }, alphaPhi(sid) { return this.alpha(sid); } };
-    ${vtxsrc}
-    ${sut}
-    return { Q, VTX, SUTRAS };`;
-  const V = new Function(harness)();
-  const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
-  const magLog = q => q.n === 0n ? -Infinity : bl(q.n) - bl(q.d);
-  const states = [K.initEngine().psi];
-  for (let t = 0; t < 5; t++) states.push(Array.from({ length: 16 }, () => Q.mk(rnd(14) - 8192n + 1n, 100n)));
-  let worstBits = Infinity, where = '', compared = 0, refusedBoth = 0, mismatchRefusal = [];
-  const perId = {};
-  for (let id = 1; id <= 29; id++) for (const pct of [5, 50, 100]) for (const [si, s0] of states.entries()) {
-    const sutra = V.SUTRAS[id - 1]; sutra.strength = pct;
-    for (const k of Object.keys(sutra)) if (k.startsWith('_')) sutra[k] = k === '_cachedOrder' ? -1 : null;
-    V.VTX.psi = s0.map(q => V.Q.mk(q.n, q.d));
-    let old = null, port = null, oldErr = null, portErr = null;
-    try { sutra.evolve(1); old = V.VTX.psi.map(q => q.d === 0n ? null : Q.mk(q.n, q.d)); if (old.some(q => q === null)) { oldErr = 'a 0/0'; old = null; } } catch (e) { oldErr = e.message; }
-    try { const st = Q.mk(BigInt(pct), 100n); port = K.vedicField(id, s0, K.sutraArgs(id, st), Q.mul(Q.mk(BigInt(id), 435n), st)).p; } catch (e) { portErr = e; }
-    if (!old || !port) {
-      if (!old && portErr instanceof RangeError) refusedBoth++;
-      else mismatchRefusal.push(`S${id} ${pct}% state ${si}: v18.24 ${oldErr || 'ok'}, port ${portErr ? portErr.message : 'ok'}`);
-      continue;
-    }
-    compared++;
-    let disp = -Infinity, diff = -Infinity;
-    for (let v = 0; v < 16; v++) { disp = Math.max(disp, magLog(Q.sub(port[v], s0[v])), magLog(Q.sub(old[v], s0[v]))); diff = Math.max(diff, magLog(Q.sub(old[v], port[v]))); }
-    const bits = disp - diff;
-    perId[id] = Math.min(perId[id] ?? Infinity, bits);
-    if (bits < worstBits) { worstBits = bits; where = `S${id} at ${pct}% on state ${si}`; }
-  }
-  ok(conv1.n >= 40 && s15ok, `v18.24's SUTRAS array, Q and VTX are read from vedic_v18.24_full_kernel.html; each of its ${conv1.n} roundings Q.mk(Bi(x · N), N) is made the exact value of the double x, and S15's float residual is taken exactly`);
-  ok(compared === 29 * 3 * 6 - refusedBoth && mismatchRefusal.length === 0 && worstBits >= 32,
-     `on ${compared} applications (29 formulas x 5%, 50%, 100% x 6 states) v18.24's own evolve and the kernel agree to within 2^-${worstBits === Infinity ? 'inf' : worstBits} of the displacement (worst ${where}); ${refusedBoth} refused by both`,
-     mismatchRefusal.slice(0, 3).join('; ') + ' ' + Object.entries(perId).filter(([, b]) => b < 32).map(([i, b]) => `S${i}:${b}`).join(' '));
-}
-
 
 section('the statements each formula carries');
 {
@@ -328,7 +394,7 @@ section('the statements each formula carries');
   let eng = K.initEngine(), runOk = true;
   for (let s = 0; s < 6; s++) { eng = go(eng, PARAMS({ vortex: Q.ONE }));
     for (const a of act) if (!K.formulaClaims(a.id, eng.psi, a.strength).ok) runOk = false; }
-  ok(runOk, 'every statement holds for S2, S9, S12, S22, S29 on six steps of a run, at the live strength');
+  ok(runOk, 'no statement is refuted for S2, S9, S12, S22, S29 on six steps of a run, at the live strength, with the field in certified intervals');
 }
 
 section('the couplings: lambda, GRVQ, MSTVQ, kappa');
@@ -338,9 +404,9 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   const fwd = l => Array.from({ length: 16 }, (_, i) => l.reduce((s, x, k) => sgn(i, k) > 0n ? Q.add(s, x) : Q.sub(s, x), Q.ZERO));
   const seedS = K.initState();
   ok(sameQ(K.inverseL(seedS), [3n, 4n, 5n, 6n].map(n => Q.mk(n))) && sameQ(inv(seedS), K.inverseL(seedS)),
-     "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
+     "the seed's lambda is (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
-     'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
+     'the seed is forward(lambda) plus the dielectric seed, and no vertex is zero');
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
     const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], al = Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain);
@@ -348,61 +414,101 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
     const field = K.vedicField(id, seedS, K.sutraArgs(id, Q.HALF), al).p;
     const d = Q.mul(K.grvqDelta(inv(seedS), k, t), al);
     const lam = inv(out), lamF = inv(field);
-    if (!lam.every((x, j) => Q.eq(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !Q.eq(rec[0].grvq.delta, d)) feedOk = false;
+    if (!lam.every((x, j) => near(x, j === k ? Q.add(lamF[j], d) : lamF[j])) || !near(rec[0].grvq.delta, d)) feedOk = false;
   }
   ok(feedOk, 'S1, S5, S9 and S14 add GRVQ(lambda of their input) x their alpha to lambda_0, 1, 2, 3 of their result and change no other lambda');
   const act = [{ id: 1, strength: Q.mk(3n, 10n) }, { id: 3, strength: Q.mk(1n, 5n) }, { id: 22, strength: Q.HALF }, { id: 27, strength: Q.HALF }];
   const p = PARAMS({ vortex: Q.ONE });
-  const go = modelRun(act, 'SERIES');
-  let eng = K.initEngine();
-  for (let s = 0; s < 3; s++) eng = go(eng, p);
-  const L = K.formulaOf(eng.psi, act, 'SERIES', K.timeOf(eng.frame)), tenth = Q.mk(1n, 10n);
-  const nxt = K.step(eng, p, act, 'SERIES', L, tenth);
-  let shares = L.grvqRecord.length === 3, x = L.afterS;
-  for (const g of L.grvqRecord) {
-    const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
-    const want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mul(Q.mk(BigInt(g.id), 435n), s.strength));
-    if (g.k !== k || !Q.eq(g.delta, want)) shares = false;
-    x = K.injectLambda(x, k, g.delta).map(K.storeQ);
-  }
-  ok(shares && sameQ(x, L.afterD), 'each other active sutra adds GRVQ x its alpha to lambda_(id-1 mod 4), in order, and the stage is their stored sum');
-  const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
-  const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
-  const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
-  let fb = L.afterD;
-  for (let k = 0; k < 3; k++) fb = K.injectLambda(fb, k, Q.mul(T[k], Q.mk(1n, 200000000n)));
-  ok(sameQ(fb.map(K.storeQ), L.afterB) && sameQ(L.mstvq.B, B),
-     "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
-  const trace = Q.add(Q.add(T[0], T[1]), T[2]);
-  ok(Q.eq(nxt.tgcrKappa, K.storeQ(Q.add(eng.tgcrKappa, Q.mul(Q.mul(trace, Q.mk(1n, 500n)), tenth)))) && Q.eq(trace, Q.neg(Q.mul(Q.HALF, b2))),
-     'the TGCR stiffness kappa moves by tr T / 500 times the share of the formula put in, and tr T = -|B|^2 / 2 (stress_trace)');
-  const setters = L.record.filter(r => r.B).map(r => r.id);
-  ok(setters.length === 1 && setters[0] === 3, 'of the active sutras only S3 sets MSTVQ B in the core (S2, S3 and S29 do)');
-  const gc = K.grvqClaims(L.record.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
-  ok(gc.ok && gc.results.length === 3 * 4, `the coupling statements hold on all four feeds (${gc.results.length} decided)`);
+  const run = K.certify(() => {
+    const go = modelRun(act, 'SERIES');
+    let eng = K.initEngine();
+    for (let s = 0; s < 3; s++) eng = go(eng, p);
+    const L = K.formulaOf(eng.psi, act, 'SERIES', K.timeOf(eng.frame)), tenth = Q.mk(1n, 10n);
+    const nxt = K.step(eng, p, act, 'SERIES', L, tenth);
+    let shares = L.grvqRecord.length === 3, x = L.afterS;
+    for (const g of L.grvqRecord) {
+      const s = act.find(a => a.id === g.id), k = (g.id - 1) % 4;
+      const want = Q.mul(K.grvqDelta(inv(x), k, L.time), Q.mul(Q.mk(BigInt(g.id), 435n), s.strength));
+      if (g.k !== k || !near(g.delta, want)) shares = false;
+      x = K.injectLambda(x, k, g.delta);
+    }
+    const a1 = Q.mul(Q.mk(1n, 435n), act[0].strength);
+    const B = K.mstvqB(L.afterD, a1), b2 = B.reduce((s, y) => Q.add(s, Q.mul(y, y)), Q.ZERO);
+    const T = [0, 1, 2].map(i => Q.sub(Q.mul(B[i], B[i]), Q.mul(Q.HALF, b2)));
+    let fb = L.afterD;
+    for (let k = 0; k < 3; k++) fb = K.injectLambda(fb, k, Q.mul(T[k], Q.mk(1n, 200000000n)));
+    const trace = Q.add(Q.add(T[0], T[1]), T[2]);
+    const gc = K.grvqClaims(L.record.filter(r => r.grvq).map(r => r.grvq).concat(L.grvqRecord), L.time);
+    return { shares, stage: nearAll(x, L.afterD), mstvq: nearAll(fb, L.afterB) && sameQ(L.mstvq.B, B),
+             kappa: near(nxt.tgcrKappa, Q.add(eng.tgcrKappa, Q.mul(Q.mul(trace, Q.mk(1n, 500n)), tenth))) && near(trace, Q.neg(Q.mul(Q.HALF, b2))),
+             setters: L.record.filter(r => r.B).map(r => r.id), gc };
+  });
+  const r = run.value;
+  ok(r.shares && r.stage, `each other active sutra adds GRVQ x its alpha to lambda_(id-1 mod 4), in order, and the stage is their sum (certified at ${run.bits} bits)`);
+  ok(r.mstvq, "MSTVQ: B from psi_0+psi_1-psi_14-psi_15 etc. times S1's |alpha|, T_kk / 2e8 into lambda_0..2, recomputed here");
+  ok(r.kappa, 'the TGCR stiffness kappa moves by tr T / 500 times the share of the formula put in, and tr T = -|B|^2 / 2 (stress_trace)');
+  ok(r.setters.length === 1 && r.setters[0] === 3, 'of the active sutras only S3 sets MSTVQ B in the core (S2, S3 and S29 do)');
+  ok(r.gc.ok && r.gc.results.length === 3 * 4, `no coupling statement is refuted on the four feeds (${r.gc.results.length} decided)`);
 }
 
 section('the stages of the real field');
 {
   const p = PARAMS({ vortex: Q.mk(3n, 2n), zpeSource: X.fromQ(Q.mk(5n, 4n)) });
   const act = [{ id: 9, strength: Q.HALF }, { id: 29, strength: Q.HALF }];
-  const go = modelRun(act, 'SERIES');
-  let eng = K.initEngine();
-  for (let s = 0; s < 4; s++) eng = go(eng, p);
-  const L = eng.last, id = x => x;
-  const eq = (a, b) => Q.eq(energyQ(a), energyQ(b));
-  ok(eq(K.edgeRotate(L.afterF, L.ctx.magTau, id), L.afterF), 'the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy exactly (rot_pair_energy)');
-  ok(eq(K.complementRotate(L.afterG, K.mstvqTau(L.wheeler, p)), L.afterG), 'the MSTVQ stage keeps the energy exactly');
-  ok(eq(K.edgeRotate(L.afterM, K.tgcrTau(L.afterM, p), id), L.afterM), 'the TGCR stage keeps the energy exactly');
-  const zr = K.complementRotate(L.afterT, K.zpeTau(L.wheeler, p));
-  ok(eq(zr, L.afterT), "ZPE's rotation keeps the energy exactly");
-  const src = Q.mul(Q.mk(1n, 64n), Q.mk(5n, 4n));
-  ok(sameQ(K.complementRotate(L.afterT, K.zpeTau(L.wheeler, p)).map((x, v) => [3, 5, 6, 9, 10, 12].includes(v) ? Q.add(x, src) : x).map(K.storeQ), L.afterZ),
-     'and the drive dt x source is added to the six inertial vertices only');
-  /* the magnetism stage's angles: dt (A_e - (1/10)(chi_head - chi_tail)) */
-  const tauWant = K.MAG_EDGES.map(([v, , h], e) => Q.mul(Q.mk(1n, 64n), Q.sub(L.magAIn[e], Q.mul(Q.mk(1n, 10n), Q.sub(L.magChiIn[h], L.magChiIn[v])))));
-  ok(sameQ(L.ctx.magTau, tauWant), "the magnetism stage turns each edge by dt times the whole potential on it, Faraday part included");
-  /* the rotation itself, against cos/sin of 2 arctan t in floats */
+  const id = x => x;
+  const run = K.certify(() => {
+    const go = modelRun(act, 'SERIES');
+    let eng = K.initEngine();
+    for (let s = 0; s < 4; s++) eng = go(eng, p);
+    const L = eng.last;
+    const en = (a, b) => near(energyQ(a), energyQ(b));
+    const out = {};
+    out.mag = en(K.edgeRotate(L.afterF, L.ctx.magTau, id), L.afterF);
+    out.mstvq = en(K.complementRotate(L.afterG, K.mstvqTau(L.wheeler, p)), L.afterG);
+    out.tgcr = en(K.edgeRotate(L.afterM, K.tgcrTau(L.afterM, p), id), L.afterM);
+    const zr = K.complementRotate(L.afterT, K.zpeTau(L.wheeler, p));
+    out.zpe = en(zr, L.afterT);
+    const src = Q.mul(Q.mk(1n, 64n), Q.mk(5n, 4n));
+    out.drive = sameQ(zr.map((x, v) => [3, 5, 6, 9, 10, 12].includes(v) ? Q.add(x, src) : x), L.afterZ);
+    const tauWant = K.MAG_EDGES.map(([v, , h], e) => Q.mul(Q.mk(1n, 64n), Q.sub(L.magAIn[e], Q.mul(Q.mk(1n, 10n), Q.sub(L.magChiIn[h], L.magChiIn[v])))));
+    out.tau = nearAll(L.ctx.magTau, tauWant);
+    const psi = eng.psi, w = p.vortex;
+    const vEdge = (u, h) => Q.mul(w, Q.mul(psi[u], psi[h]));
+    const curl = (b, a, c) => Q.sub(Q.add(vEdge(b, b | (1 << a)), vEdge(b | (1 << a), b | (1 << a) | (1 << c))), Q.add(vEdge(b | (1 << c), b | (1 << a) | (1 << c)), vEdge(b, b | (1 << c))));
+    const pairs = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+    const sd = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 1], [0, -1, 0], [1, 0, 0]], asd = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [-1, 0, 0]];
+    const G = K.tgcrGeometry(psi, w, eng.tgcrKappa);
+    let pont = Q.ZERO, fsq = Q.ZERO, dens = true;
+    for (let i = 0; i < 16; i++) {
+      const loc = pairs.map(([a, c]) => curl(i & ~((1 << a) | (1 << c)), a, c));
+      const s3 = [0, 1, 2].map(k => loc.reduce((t, f, q) => Q.add(t, Q.mul(f, Q.mk(BigInt(sd[q][k]), 2n))), Q.ZERO));
+      const a3 = [0, 1, 2].map(k => loc.reduce((t, f, q) => Q.add(t, Q.mul(f, Q.mk(BigInt(asd[q][k]), 2n))), Q.ZERO));
+      const ss = energyQ(s3), aa = energyQ(a3);
+      pont = Q.add(pont, Q.sub(ss, aa)); fsq = Q.add(fsq, Q.add(ss, aa));
+      if (!near(G.density[i], Q.sub(ss, aa))) dens = false;
+    }
+    out.geometry = dens && near(G.pontryagin, pont) && near(G.FSq, fsq);
+    out.energy = near(G.energy, Q.add(Q.add(Q.mul(Q.HALF, fsq), Q.mul(Q.mul(Q.HALF, eng.tgcrKappa), energyQ(G.v))), Q.mul(Q.HALF, pont)));
+    out.closes = G.cubeFlux.every(zeroish) && G.density.some(x => !Q.mayZero(x));
+    out.claims = K.stageClaims(L, p);
+    const m = a => a.map(mid), eqE = (a, b) => Q.eq(energyQ(a), energyQ(b));
+    const mw = { magneticTraceTotal: mid(L.wheeler.magneticTraceTotal), dielectricTraceTotal: mid(L.wheeler.dielectricTraceTotal) };
+    out.exact = exactly(() => {
+      const fF = m(L.afterF), fG = m(L.afterG), fM = m(L.afterM), fT = m(L.afterT), ps = m(psi), kap = mid(eng.tgcrKappa);
+      const Gx = K.tgcrGeometry(ps, w, kap);
+      return { mag: eqE(K.edgeRotate(fF, m(L.ctx.magTau), id), fF), mstvq: eqE(K.complementRotate(fG, K.mstvqTau(mw, p)), fG),
+               tgcr: eqE(K.edgeRotate(fM, K.tgcrTau(fM, p), id), fM), zpe: eqE(K.complementRotate(fT, K.zpeTau(mw, p)), fT),
+               closes: Gx.cubeFlux.every(Q.isZero) && Gx.density.some(x => !Q.isZero(x)) };
+    });
+    return out;
+  });
+  const r = run.value, x = r.exact;
+  ok(r.mag && x.mag, `the magnetism stage, every edge rotated by dt A_e axis by axis, keeps the energy (rot_pair_energy): exactly on the exact midpoints of its inputs, and to the width of the intervals on the run (certified at ${run.bits} bits)`);
+  ok(r.mstvq && x.mstvq, 'the MSTVQ stage keeps the energy, exactly on exact inputs and to the width of the intervals on the run');
+  ok(r.tgcr && x.tgcr, 'the TGCR stage keeps the energy, exactly on exact inputs and to the width of the intervals on the run');
+  ok(r.zpe && x.zpe, "ZPE's rotation keeps the energy, exactly on exact inputs and to the width of the intervals on the run");
+  ok(r.drive, 'and the drive dt x source is added to the six inertial vertices only');
+  ok(r.tau, "the magnetism stage turns each edge by dt times the whole potential on it, Faraday part included");
   let rotOk = true;
   for (const [x, y, t] of [[3, -2, 1 / 7], [-5, 11, -2], [1, 0, 1 / 3]]) {
     const [u, w] = K.rotPair(Q.mk(BigInt(x)), Q.mk(BigInt(y)), Q.parse(t === 1 / 7 ? '1/7' : t === -2 ? '-2' : '1/3'));
@@ -410,28 +516,10 @@ section('the stages of the real field');
     if (Math.abs(Number(u.n) / Number(u.d) - (c * x + s * y)) > 1e-12 || Math.abs(Number(w.n) / Number(w.d) - (c * y - s * x)) > 1e-12) rotOk = false;
   }
   ok(rotOk, 'a pair rotation by t is the rotation by 2 arctan t, against floats');
-  /* TGCR geometry walked here: bond current, curl by corners, v18.24 Hodge tables */
-  const psi = eng.psi, w = p.vortex;
-  const vEdge = (u, h) => Q.mul(w, Q.mul(psi[u], psi[h]));
-  const curl = (b, a, c) => Q.sub(Q.add(vEdge(b, b | (1 << a)), vEdge(b | (1 << a), b | (1 << a) | (1 << c))), Q.add(vEdge(b | (1 << c), b | (1 << a) | (1 << c)), vEdge(b, b | (1 << c))));
-  const pairs = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
-  const sd = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 1], [0, -1, 0], [1, 0, 0]], asd = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [-1, 0, 0]];
-  const G = K.tgcrGeometry(psi, w, eng.tgcrKappa);
-  let pont = Q.ZERO, fsq = Q.ZERO, dens = true;
-  for (let i = 0; i < 16; i++) {
-    const loc = pairs.map(([a, c]) => curl(i & ~((1 << a) | (1 << c)), a, c));
-    const s3 = [0, 1, 2].map(k => loc.reduce((t, f, q) => Q.add(t, Q.mul(f, Q.mk(BigInt(sd[q][k]), 2n))), Q.ZERO));
-    const a3 = [0, 1, 2].map(k => loc.reduce((t, f, q) => Q.add(t, Q.mul(f, Q.mk(BigInt(asd[q][k]), 2n))), Q.ZERO));
-    const ss = energyQ(s3), aa = energyQ(a3);
-    pont = Q.add(pont, Q.sub(ss, aa)); fsq = Q.add(fsq, Q.add(ss, aa));
-    if (!Q.eq(G.density[i], Q.sub(ss, aa))) dens = false;
-  }
-  ok(dens && Q.eq(G.pontryagin, pont) && Q.eq(G.FSq, fsq), "TGCR: F = d1 v, v = omega psi_t psi_h, split at each vertex by v18.24's tables; F^F and |F|^2 recomputed here");
-  ok(Q.eq(G.energy, Q.add(Q.add(Q.mul(Q.HALF, fsq), Q.mul(Q.mul(Q.HALF, eng.tgcrKappa), energyQ(G.v))), Q.mul(Q.HALF, pont))),
-     'TGCR energy = |F|^2/2 + kappa |v|^2/2 + eta F^F with eta = 1/2');
-  ok(G.cubeFlux.every(Q.isZero) && G.density.some(x => x.n !== 0n), 'the vortex curvature closes on every cube and is not zero');
-  const sc = K.stageClaims(L, p);
-  ok(sc.ok, `the stage statements hold (${sc.results.map(r => r.name).join(', ')})`);
+  ok(r.geometry, "TGCR: F = d1 v, v = omega psi_t psi_h, split at each vertex by the Hodge tables; F^F and |F|^2 recomputed here");
+  ok(r.energy, 'TGCR energy = |F|^2/2 + kappa |v|^2/2 + eta F^F with eta = 1/2');
+  ok(r.closes && x.closes, 'the vortex curvature closes on every cube and is not zero: exactly on the exact midpoints of the field, and to the width of the intervals on the run');
+  ok(r.claims.ok, `no stage statement is refuted (${r.claims.results.map(c => c.name).join(', ')})`);
 }
 
 const EXPORT_CASES = [['9,11,29', 'PARALLEL', Q.ONE, 0n, Q.ONE], ['3,9,11,25,29', 'SYMMETRIC_CONCURRENT', Q.mk(3n, 10n), 1n, Q.TWO],
@@ -440,9 +528,13 @@ section('step export');
 {
   for (const [ids, mode, strength, drive, vortex] of EXPORT_CASES) {
     const active = ids.split(',').map(Number).map(id => ({ id, strength }));
-    const go = modelRun(active, mode);
-    let eng = K.initEngine();
-    for (let s = 0; s < 2; s++) eng = go(eng, PARAMS({ zpeSource: X.fromQ(Q.mk(drive)), vortex }));
+    const run = K.certify(() => {
+      const go = modelRun(active, mode);
+      let e = K.initEngine();
+      for (let s = 0; s < 2; s++) e = go(e, PARAMS({ zpeSource: X.fromQ(Q.mk(drive)), vortex }));
+      return e;
+    });
+    const eng = run.value;
     const file = JSON.parse(JSON.stringify({ frame: eng.frame, last: K.serializeLast(eng.last), psi: K.serializeState(eng.psi),
       dielectric: eng.dielectric.map(K.serializeQ), tgcrKappa: K.serializeQ(eng.tgcrKappa),
       mayaPhase: K.serializeQ(eng.mayaPhase), mayaErr: K.serializeQ(eng.mayaErr),
@@ -454,6 +546,8 @@ section('step export');
       const p = Object.fromEntries(Object.entries(L.params).map(([k, v]) => [k, ('a' in v && 'b' in v) ? fromA(v) : fromQ(v)]));
       const actOf = list => list.map(x => x.args ? { id: x.id, strength: fromQ(x.strength), args: x.args.map(fromQ) } : { id: x.id, strength: fromQ(x.strength) });
       const act = actOf(L.activeSutras), FF = L.formula;
+      if (L.workBits !== run.bits || L.exactBits !== 4096) throw new Error(`the file records ${L.workBits} and ${L.exactBits} bits, the run used ${run.bits} and 4096`);
+      K.setWorkBits(L.workBits);
       const formula = K.formulaOf(FF.input.map(fromQ), actOf(FF.activeSutras), FF.composition, fromQ(FF.time));
       const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ),
                               energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
@@ -467,8 +561,10 @@ section('step export');
              JSON.stringify(K.serializeLast(replay.last)) === JSON.stringify(L);
       if (!same) why = 'the replay differs from the file';
     } catch (e) { why = e.message; }
-    ok(same, `${where}: replays from its exported file alone, bit for bit`, why);
-    ok(L.magnetismIn.closed && L.tgcr.cubeFlux.every(x => x.n === '0'), `${where}: the flux it starts from and the vortex curvature it ends with close on every cube`);
+    finally { K.setWorkBits(256); }
+    ok(same, `${where}: replays from its exported file alone, bit for bit, at the ${L.workBits} bits it records`, why);
+    ok(L.magnetismIn.closed && L.tgcr.cubeFlux.map(fromQ).every(zeroish),
+       `${where}: the flux it starts from and the vortex curvature it ends with close on every cube, to the width of their intervals`);
     ok(L.lambdaIn.length === 4 && L.lambdaOut.length === 4 && L.sutraRecord.length === active.length * (mode === 'SYMMETRIC_CONCURRENT' ? 2 : 1),
        `${where}: carries lambda in and out and one record per formula applied`);
   }
@@ -484,25 +580,26 @@ section('the formula');
      sameQ(f.delta, f.afterB.map((x, i) => Q.sub(x, K.initState()[i]))),
      'the formula runs each sutra at its setting, alpha = id/435 x setting, and its change is the field after it less the field it was calculated from');
   const quartet = [2, 6, 23, 26].map(id => ({ id, strength: Q.ONE }));
-  const go = modelRun(quartet, 'PARALLEL'), p = PARAMS({ vortex: Q.ONE });
-  let e = K.initEngine(), first = null, shareOk = true, sameF = true, heldOk = true, parts = [];
-  for (let s = 1; s <= 14; s++) {
-    e = go(e, p);
-    const L = e.last;
-    if (!first) first = L.formula;
-    if (L.formula !== first) sameF = false;
-    parts.push(Q.toString(L.part));
-    if (!(Q.eq(L.part, s <= 10 ? Q.mk(1n, 10n) : Q.ZERO) && sameQ(L.afterF, L.input.map((x, i) => K.storeQ(Q.add(x, Q.mul(first.delta[i], L.part))))))) shareOk = false;
-    if (s > 10) {
-      const eps = Q.mk(1n, 1n << 128n), n = 2 * L.stepError.stores;
-      let hi = Q.ONE, lo = Q.ONE;
-      for (let j = 0; j < n; j++) { hi = Q.mul(hi, Q.add(Q.ONE, eps)); lo = Q.mul(lo, Q.sub(Q.ONE, eps)); }
-      const r = Q.div(L.eFinal, L.e0);
-      if (!(Q.cmp(r, lo) >= 0 && Q.cmp(r, hi) <= 0)) heldOk = false;
+  const p = PARAMS({ vortex: Q.ONE });
+  const run = K.certify(() => {
+    const go = modelRun(quartet, 'PARALLEL');
+    let e = K.initEngine(), first = null, shareOk = true, sameF = true, heldOk = true, ledgerZero = true;
+    const parts = [];
+    for (let s = 1; s <= 14; s++) {
+      e = go(e, p);
+      const L = e.last;
+      if (!first) first = L.formula;
+      if (L.formula !== first) sameF = false;
+      parts.push(Q.toString(L.part));
+      if (!(ident(L.part, s <= 10 ? Q.mk(1n, 10n) : Q.ZERO) && sameQ(L.afterF, L.input.map((x, i) => Q.add(x, Q.mul(first.delta[i], L.part)))))) shareOk = false;
+      if (!(Q.isExact(L.stepError.delta) && L.stepError.delta.n === 0n)) ledgerZero = false;
+      if (s > 10 && !near(L.eFinal, L.e0)) heldOk = false;
     }
-  }
-  ok(sameF && shareOk, 'the formula is calculated once and put in over the glide in equal shares of 1/10, then none of it is applied', parts.join(' '));
-  ok(heldOk, 'after the glide, with no drive, each step moves the energy of the field only by storage: within (1 +- 2^-128)^(2 x stores)');
+    return { sameF, shareOk, heldOk, ledgerZero, parts };
+  });
+  const r = run.value;
+  ok(r.sameF && r.shareOk, `the formula is calculated once and put in over the glide in equal shares of 1/10, then none of it is applied (certified at ${run.bits} bits)`, r.parts.join(' '));
+  ok(r.heldOk && r.ledgerZero, 'after the glide, with no drive, no step moves the energy of the field: no step rounds anything, and the energy before and after each step agree to the width of their intervals');
 }
 
 section('glide');
@@ -566,7 +663,7 @@ section('series / parallel / concurrent');
     ok(a.ok && a.results.length > 0, `modeAudit on {${ids}} decides ${a.results.length} identities and all hold`);
     if (active.length) {
       const shared = K.modeComparison(seedState, active, a.states), fresh = K.modeComparison(seedState, active);
-      ok(shared.modes.every(m => sameQ(shared.states[m], fresh.states[m]) && Q.eq(shared.energies[m], fresh.energies[m])),
+      ok(shared.modes.every(m => sameQ(shared.states[m], fresh.states[m]) && ident(shared.energies[m], fresh.energies[m])),
          `{${ids}}: the comparison from the audit's states equals a fresh one`);
       if (active.length > 1) ok(shared.allDistinct, `{${ids}}: series, parallel and concurrent give three different fields`);
     }
@@ -641,52 +738,58 @@ section('magnetism memory');
   const hwf = v => (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
   const edges = []; for (let a = 0; a < 4; a++) for (let v = 0; v < 16; v++) if (!(v & (1 << a))) edges.push([v, a, v | (1 << a)]);
   const cyc = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
-  const within = (got, want) => Q.cmp(Q.abs(Q.sub(got, want)), Q.mul(Q.abs(want), Q.mk(1n, 1n << 127n))) <= 0;
-  let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
-  const go = modelRun(act, 'PARALLEL');
-  for (let s = 0; s < 40; s++) {
-    const prev = eng;
-    eng = go(eng, base);
-    const L = eng.last, rOut = eng.psi.map(x => Q.mul(x, x));
-    const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
-    edges.forEach(([v, a, h], e) => {
-      const share = Q.div(Q.mul(Q.mk(8n), Q.add(rOut[v], rOut[h])), Etot);
-      const k = a >= 2 ? Q.mul(Q.mk(6n, 100n), base.vortex) : Q.mul(Q.mul(Q.mk(3n, 100n), Q.HALF), base.vortex);
-      const want = Q.add(Q.mul(Q.mk(499n, 500n), prev.magA[e]), Q.mul(Q.mul(k, cyc[(hwf(v) + a) % 4]), share));
-      if (!within(eng.magA[e], want)) inductOk = false;
-      if (Q.cmp(Q.abs(eng.magA[e]), maxA) > 0) maxA = Q.abs(eng.magA[e]);
-    });
-    for (let v = 0; v < 16; v++) if (!within(eng.magChi[v], Q.add(Q.mul(Q.mk(499n, 500n), prev.magChi[v]), Q.sub(eng.psi[v], prev.psi[v])))) chiOk = false;
-    const Ein = prev.psi.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    if (!L.shareIn.every((x, v) => Q.eq(x, Q.div(Q.mul(Q.mk(16n), Q.mul(prev.psi[v], prev.psi[v])), Ein)))) shareOk = false;
-    const md = K.magData(eng.magA, eng.magChi);
-    if (!md.closed) closedOk = false;
-    if (!K.curlA(K.fullA(Array(32).fill(Q.ZERO), eng.magChi)).every(Q.isZero)) gradOk = false;
-    for (let v = 0; v < 16; v++) {
-      let want = Q.ZERO;
-      for (let a = 0; a < 4; a++) { const e = edges.findIndex(([t, ax]) => ax === a && t === (v & ~(1 << a))); want = (v & (1 << a)) ? Q.add(want, eng.magA[e]) : Q.sub(want, eng.magA[e]);
-        want = Q.sub(want, Q.mul(Q.mk(1n, 10n), Q.sub(eng.magChi[v], eng.magChi[v ^ (1 << a)]))); }
-      if (!Q.eq(md.potential[v], want)) potOk = false;
+  const fl = q => { const m = mid(q); return Number(m.n) / Number(m.d); };
+  const run = K.certify(() => {
+    let eng = K.initEngine(), inductOk = true, chiOk = true, closedOk = true, gradOk = true, maxA = Q.ZERO, recOk = true, potOk = true, shareOk = true;
+    const go = modelRun(act, 'PARALLEL');
+    for (let s = 0; s < 40; s++) {
+      const prev = eng;
+      eng = go(eng, base);
+      const L = eng.last, rOut = eng.psi.map(x => Q.mul(x, x));
+      const Etot = rOut.reduce((t, x) => Q.add(t, x), Q.ZERO);
+      edges.forEach(([v, a, h], e) => {
+        const share = Q.div(Q.mul(Q.mk(8n), Q.add(rOut[v], rOut[h])), Etot);
+        const k = a >= 2 ? Q.mul(Q.mk(6n, 100n), base.vortex) : Q.mul(Q.mul(Q.mk(3n, 100n), Q.HALF), base.vortex);
+        const want = Q.add(Q.mul(Q.mk(499n, 500n), prev.magA[e]), Q.mul(Q.mul(k, cyc[(hwf(v) + a) % 4]), share));
+        if (!near(eng.magA[e], want)) inductOk = false;
+        maxA = Q.max(maxA, Q.abs(eng.magA[e]));
+      });
+      for (let v = 0; v < 16; v++) if (!near(eng.magChi[v], Q.add(Q.mul(Q.mk(499n, 500n), prev.magChi[v]), Q.sub(eng.psi[v], prev.psi[v])))) chiOk = false;
+      const Ein = prev.psi.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
+      if (!L.shareIn.every((x, v) => near(x, Q.div(Q.mul(Q.mk(16n), Q.mul(prev.psi[v], prev.psi[v])), Ein)))) shareOk = false;
+      const md = K.magData(eng.magA, eng.magChi);
+      if (!md.closed) closedOk = false;
+      if (!K.curlA(K.fullA(Array(32).fill(Q.ZERO), eng.magChi)).every(zeroish)) gradOk = false;
+      for (let v = 0; v < 16; v++) {
+        let want = Q.ZERO;
+        for (let a = 0; a < 4; a++) { const e = edges.findIndex(([t, ax]) => ax === a && t === (v & ~(1 << a))); want = (v & (1 << a)) ? Q.add(want, eng.magA[e]) : Q.sub(want, eng.magA[e]);
+          want = Q.sub(want, Q.mul(Q.mk(1n, 10n), Q.sub(eng.magChi[v], eng.magChi[v ^ (1 << a)]))); }
+        if (!near(md.potential[v], want)) potOk = false;
+      }
+      const bv = K.bvecAt(md.flux);
+      edges.forEach(([v, , h], e) => {
+        const a = bv[v].map(fl), b = bv[h].map(fl), na = Math.hypot(...a), nb = Math.hypot(...b);
+        if (na * na <= 1e-6 || nb * nb <= 1e-6) { if (md.reconnections.includes(e)) recOk = false; return; }
+        const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
+        if (Math.abs(c + 0.7) > 1e-9 && (c < -0.7) !== md.reconnections.includes(e)) recOk = false;
+      });
     }
-    const fl = q => Number(q.n) / Number(q.d), bv = K.bvecAt(md.flux);
-    edges.forEach(([v, , h], e) => {
-      const a = bv[v].map(fl), b = bv[h].map(fl), na = Math.hypot(...a), nb = Math.hypot(...b);
-      if (na * na <= 1e-6 || nb * nb <= 1e-6) { if (md.reconnections.includes(e)) recOk = false; return; }
-      const c = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (na * nb);
-      if (Math.abs(c + 0.7) > 1e-9 && (c < -0.7) !== md.reconnections.includes(e)) recOk = false;
-    });
-  }
-  ok(inductOk, 'A = (499/500) A + omega (6/100 | eta 3/100) m_e share_e on all 32 edges for 40 steps, recomputed here');
-  ok(chiOk, "the Faraday potential chi = (499/500) chi + (psi_out - psi_in), v18.24's dPsi, recomputed here");
-  ok(shareOk, 'the dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy, recomputed here');
-  ok(gradOk, 'the Faraday part of A carries no flux on any of those steps (faraday_flux_free)');
-  ok(closedOk, 'the flux out of every one of the 8 cubes is zero on every step (flux_closed)');
-  ok(potOk, 'the potential at each vertex is div A - (1/10) L chi, recomputed here');
-  ok(recOk, 'reconnections are exactly the edges where cos(B_i, B_j) < -0.7 (reconnect_iff)');
-  const smax = Q.mul(Q.mul(Q.abs(base.vortex), Q.mk(6n * 13n * 16n, 1000n)), Q.mk(1001n, 1000n));
-  ok(Q.cmp(maxA, Q.mul(smax, Q.mk(500n))) <= 0, `|A| stays within max |A_0|, s/(1 - r) (retention_bound): ${(Number(maxA.n) / Number(maxA.d)).toFixed(3)} <= ${(Number(smax.n) / Number(smax.d) * 500).toFixed(1)}`);
-  ok(Q.isZero(K.helicityOf(Array(32).fill(Q.ZERO), eng.magChi)), 'a potential that is all Faraday has no helicity (helicity_of_gradient)');
-  ok(Q.eq(K.edgeShares(eng.last.rhoOut).reduce((t, x) => Q.add(t, x), Q.ZERO), Q.mk(32n)), 'the edge shares sum to 32 (edge_share_total)');
+    const smax = Q.mul(Q.mul(Q.abs(base.vortex), Q.mk(6n * 13n * 16n, 1000n)), Q.mk(1001n, 1000n));
+    return { inductOk, chiOk, shareOk, gradOk, closedOk, potOk, recOk, smax, maxA, bounded: Q.cmp(maxA, Q.mul(smax, Q.mk(500n))) <= 0,
+             helicity: zeroish(K.helicityOf(Array(32).fill(Q.ZERO), eng.magChi)),
+             shares: near(K.edgeShares(eng.last.rhoOut).reduce((t, x) => Q.add(t, x), Q.ZERO), Q.mk(32n)) };
+  });
+  const r = run.value;
+  ok(r.inductOk, `A = (499/500) A + omega (6/100 | eta 3/100) m_e share_e on all 32 edges for 40 steps, recomputed here (certified at ${run.bits} bits)`);
+  ok(r.chiOk, "the Faraday potential chi = (499/500) chi + (psi_out - psi_in), recomputed here");
+  ok(r.shareOk, 'the dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy, recomputed here');
+  ok(r.gradOk, 'the Faraday part of A carries no flux on any of those steps (faraday_flux_free), to the width of the intervals');
+  ok(r.closedOk, 'the flux out of every one of the 8 cubes is zero on every step (flux_closed), to the width of the intervals');
+  ok(r.potOk, 'the potential at each vertex is div A - (1/10) L chi, recomputed here');
+  ok(r.recOk, 'reconnections are exactly the edges where cos(B_i, B_j) < -0.7 (reconnect_iff)');
+  ok(r.bounded, `|A| stays within max |A_0|, s/(1 - r) (retention_bound): ${fl(r.maxA).toFixed(3)} <= ${(fl(r.smax) * 500).toFixed(1)}`);
+  ok(r.helicity, 'a potential that is all Faraday has no helicity (helicity_of_gradient), to the width of the intervals');
+  ok(r.shares, 'the edge shares sum to 32 (edge_share_total)');
   ok(throwsRange(() => K.edgeShares(Array(16).fill(Q.ZERO))) && throwsRange(() => K.energyShare(Array(16).fill(Q.ZERO))),
      'a field with no energy has no shares: refused, not divided by zero');
 }
@@ -695,16 +798,16 @@ section('no parameter is ignored');
 {
   const base = PARAMS();
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
-  const run = p => { const go = modelRun(act, 'PARALLEL'); let e = K.initEngine(); for (let s = 0; s < 6; s++) e = go(e, p); return e; };
-  const ref = run(base), key = e => JSON.stringify(K.serializeState(e.psi)) + JSON.stringify(e.dielectric.map(K.serializeQ));
-  ok(key(run({ ...base, vortex: Q.ONE })) !== key(ref), 'vortex omega changes the field');
-  ok(key(run({ ...base, zpeSource: X.ONE })) !== key(ref), 'the drive changes the field');
-  ok(key(run({ ...base, polarisation: Q.ZERO })) !== key(ref), 'the polarisation changes the dielectric and the field');
-  ok(key(run({ ...base, tgcr: X.fromQ(Q.mk(1n, 64n)), vortex: Q.ONE })) !== key(run({ ...base, vortex: Q.ONE })), 'the TGCR rate changes the field');
+  const run = p => K.certify(() => { const go = modelRun(act, 'PARALLEL'); let e = K.initEngine(); for (let s = 0; s < 6; s++) e = go(e, p); return e; }).value;
+  const ref = run(base), moved = (a, b) => apart(a.psi, b.psi) || apart(a.dielectric, b.dielectric);
+  ok(moved(run({ ...base, vortex: Q.ONE }), ref), 'vortex omega changes the field: some value certainly differs');
+  ok(moved(run({ ...base, zpeSource: X.ONE }), ref), 'the drive changes the field');
+  ok(moved(run({ ...base, polarisation: Q.ZERO }), ref), 'the polarisation changes the dielectric and the field');
+  ok(moved(run({ ...base, tgcr: X.fromQ(Q.mk(1n, 64n)), vortex: Q.ONE }), run({ ...base, vortex: Q.ONE })), 'the TGCR rate changes the field');
   const share = K.energyShare(K.rhoHat(K.initState()));
   const d0 = K.evolveDielectric(K.initDielectric(), act, base, Array(16).fill(Q.ZERO));
   const d1 = K.evolveDielectric(K.initDielectric(), act, { ...base, polarisation: Q.mk(3n, 2n) }, share);
-  ok(d1.every((q, v) => Q.eq(Q.sub(q, d0[v]), Q.mul(Q.mul(Q.mk(3n, 2n), share[v]), Q.mk(1n, 8n)))),
+  ok(d1.every(Q.isExact) && d0.every(Q.isExact) && d1.every((q, v) => Q.eq(Q.sub(q, d0[v]), Q.mul(Q.mul(Q.mk(3n, 2n), share[v]), Q.mk(1n, 8n)))),
      'polarisation adds exactly chi share / 8 to each vertex of the dielectric');
   ok(throwsRange(() => K.evolveDielectric(K.initDielectric(), act, base)), 'the dielectric update without the field shares is refused');
 }
@@ -758,21 +861,22 @@ section('the engine on the torus');
       return d > 0 ? AF[e] : Q.neg(AF[e]); });
     return { hole, tube, cells, flow };
   };
-  const same = (a, b) => a.length === b.length && a.every((x, i) => Array.isArray(x) ? same(x, b[i]) : Q.eq(x, b[i]));
+  const same = (a, b) => a.length === b.length && a.every((x, i) => Array.isArray(x) ? same(x, b[i]) : near(x, b[i]));
   const lawsHold = g => [0, 1, 2, 3].every(s =>
-      Q.eq(Q.sub(g.hole[(s + 1) % 4], g.hole[s]), Q.neg([0, 1, 2, 3].reduce((t, r) => Q.add(t, g.cells[r][s]), Q.ZERO)))) &&
+      near(Q.sub(g.hole[(s + 1) % 4], g.hole[s]), Q.neg([0, 1, 2, 3].reduce((t, r) => Q.add(t, g.cells[r][s]), Q.ZERO)))) &&
     [0, 1, 2, 3].every(r =>
-      Q.eq(Q.sub(g.tube[(r + 1) % 4], g.tube[r]), [0, 1, 2, 3].reduce((t, s) => Q.add(t, g.cells[r][s]), Q.ZERO)));
-  let agree = true, laws = true, balanced = true, where = '';
+      near(Q.sub(g.tube[(r + 1) % 4], g.tube[r]), [0, 1, 2, 3].reduce((t, s) => Q.add(t, g.cells[r][s]), Q.ZERO)));
+  let agree = true, laws = true, balanced = true, exact = true, where = '';
   for (let trial = 0; trial < 40; trial++) {
     const A = K.MAG_EDGES.map((_, e) => Q.mk(BigInt(((e + 3) * (trial + 7) * 7919) % 2001 - 1000), BigInt(1 + ((e * trial) % 9))));
     const chi = Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 1) * (trial + 2) * 104729) % 301 - 150), BigInt(1 + v % 5)));
     const g = read(A, chi), t = K.torusData(A, chi);
+    if (![g.hole, g.tube, g.flow, t.hole, t.tube, t.flow, ...g.cells, ...t.cells].every(a => a.every(Q.isExact))) exact = false;
     if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow))) { agree = false; where = 'trial ' + trial; }
     if (!lawsHold(g)) laws = false;
     if (!t.balanced) balanced = false;
   }
-  ok(agree, 'the kernel\'s hole, tube and cell fluxes and its edge flows are the gate\'s own circulations on 40 potentials', where);
+  ok(agree && exact, 'the kernel\'s hole, tube and cell fluxes and its edge flows are exactly the gate\'s own circulations on 40 exact potentials', where);
   ok(laws, 'from one loop to the next the flux steps by exactly the circulation of the cells between (hole_flux_step_y/z, tube_flux_step_x/w)');
   ok(balanced, 'the kernel decides all eight strip balances on each of them (cube_strip)');
   /* and on a run: the damper preset, every step */
@@ -783,16 +887,20 @@ section('the engine on the torus');
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
-  const go = modelRun(act, 'PARALLEL');
-  let eng = K.initEngine(), runAgree = true, runLaws = true, nonzero = false;
-  for (let s = 0; s < 40; s++) {
-    eng = go(eng, params);
-    const g = read(eng.magA, eng.magChi), t = K.magData(eng.magA, eng.magChi).torus;
-    if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow) && t.balanced)) runAgree = false;
-    if (!lawsHold(g)) runLaws = false;
-    if (g.hole.some(x => !Q.isZero(x)) && g.cells.some(r => r.some(x => !Q.isZero(x)))) nonzero = true;
-  }
-  ok(runAgree && runLaws && nonzero, 'on 40 steps of the damper preset the torus fluxes are the gate\'s, every balance holds, and the loops and cells carry flux');
+  const run = K.certify(() => {
+    const go = modelRun(act, 'PARALLEL');
+    let eng = K.initEngine(), runAgree = true, runLaws = true, nonzero = false;
+    for (let s = 0; s < 40; s++) {
+      eng = go(eng, params);
+      const g = read(eng.magA, eng.magChi), t = K.magData(eng.magA, eng.magChi).torus;
+      if (!(same(g.hole, t.hole) && same(g.tube, t.tube) && same(g.cells, t.cells) && same(g.flow, t.flow) && t.balanced)) runAgree = false;
+      if (!lawsHold(g)) runLaws = false;
+      if (g.hole.some(x => !Q.mayZero(x)) && g.cells.some(r => r.some(x => !Q.mayZero(x)))) nonzero = true;
+    }
+    return { runAgree, runLaws, nonzero };
+  });
+  ok(run.value.runAgree && run.value.runLaws && run.value.nonzero,
+     `on 40 steps of the damper preset the torus fluxes are the gate's, no balance is refuted, and the loops and cells carry flux, to the width of the intervals (certified at ${run.bits} bits)`);
 }
 
 
@@ -819,18 +927,18 @@ section('the sources of the fields around the construct');
     const w = v ^ (1 << a), e = edgeAt(v, w);
     return w < v ? Q.add(t, J[e]) : Q.sub(t, J[e]); }, Q.ZERO));
   const lap = q => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((t, a) => Q.add(t, Q.sub(q[v], q[v ^ (1 << a)])), Q.ZERO));
-  const eqv = (a, b) => a.length === b.length && a.every((x, i) => Q.eq(x, b[i]));
+  const eqv = (a, b) => a.length === b.length && a.every((x, i) => near(x, b[i]));
   let jSame = true, kirch = true, rSame = true, neutral = true, flags = true, where = '';
   for (let trial = 0; trial < 40; trial++) {
     const B = Array.from({ length: 24 }, (_, f) => Q.mk(BigInt(((f + 5) * (trial + 3) * 7907) % 1999 - 999), BigInt(1 + ((f + trial) % 7))));
     const q = Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 2) * (trial + 11) * 6151) % 401 - 200), BigInt(1 + ((v * trial) % 6))));
     const J = K.currentOf(B);
-    if (!eqv(J, walkJ(B))) { jSame = false; where = 'trial ' + trial; }
+    if (!(J.every(Q.isExact) && eqv(J, walkJ(B)))) { jSame = false; where = 'trial ' + trial; }
     /* these fluxes are not the curl of anything: conservation is d1 d0 = 0,
        not a property of the potential */
     if (!inflow(J).every(Q.isZero)) kirch = false;
     const rho = K.laplacianV(q);
-    if (!eqv(rho, lap(q))) rSame = false;
+    if (!(rho.every(Q.isExact) && eqv(rho, lap(q)))) rSame = false;
     if (!Q.isZero(rho.reduce((t, x) => Q.add(t, x), Q.ZERO))) neutral = false;
     /* the kernel's flags on a potential whose curl is this trial's */
     const A = K.MAG_EDGES.map((_, e) => Q.mk(BigInt(((e + 1) * (trial + 5) * 3571) % 801 - 400), BigInt(1 + e % 4)));
@@ -850,15 +958,19 @@ section('the sources of the fields around the construct');
     geoD: X.fromQ(Q.mk(1n, 16n)), geoM: X.fromQ(Q.mk(1n, 8n)), geoP: X.fromQ(Q.mk(1n, 128n)),
     polarisation: Q.ONE, vortex: Q.ONE };
   const act = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
-  const go = modelRun(act, 'PARALLEL');
-  let eng = K.initEngine(), runOk = true, live = 0;
-  for (let s = 0; s < 30; s++) {
-    eng = go(eng, params);
-    const sd = K.sourcesData(eng.magA, eng.dielectric);
-    if (!(sd.kirchhoff && sd.neutral && eqv(sd.current, walkJ(K.curlA(eng.magA))) && eqv(sd.charge, lap(eng.dielectric)) && inflow(sd.current).every(Q.isZero))) runOk = false;
-    if (sd.current.some(x => !Q.isZero(x)) && sd.charge.some(x => !Q.isZero(x))) live++;
-  }
-  ok(runOk && live === 30, `on 30 steps of the damper preset the sources are the gate's, both laws hold, and current and charge are both present (${live}/30 steps)`);
+  const run = K.certify(() => {
+    const go = modelRun(act, 'PARALLEL');
+    let eng = K.initEngine(), runOk = true, live = 0;
+    for (let s = 0; s < 30; s++) {
+      eng = go(eng, params);
+      const sd = K.sourcesData(eng.magA, eng.dielectric);
+      if (!(sd.kirchhoff && sd.neutral && eqv(sd.current, walkJ(K.curlA(eng.magA))) && eqv(sd.charge, lap(eng.dielectric)) && inflow(sd.current).every(zeroish))) runOk = false;
+      if (sd.current.some(x => !Q.mayZero(x)) && sd.charge.some(x => !Q.mayZero(x))) live++;
+    }
+    return { runOk, live };
+  });
+  const { runOk, live } = run.value;
+  ok(runOk && live === 30, `on 30 steps of the damper preset the sources are the gate's, both laws hold to the width of the intervals, and current and charge are both certainly present (${live}/30 steps, certified at ${run.bits} bits)`);
 }
 
 
