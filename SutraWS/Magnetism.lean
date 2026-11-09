@@ -4,7 +4,7 @@ import Mathlib.Tactic
 /-!
 # The magnetism memory on the tesseract
 
-v18.24's magnetic engine (§4b), made exact and given memory that feeds back:
+The simulator's magnetic engine, made exact and given memory that feeds back:
 
 * the vector potential lives on the 32 edges and the flux `B = d¹A` on the 24
   faces (`DECComplex.lean`);
@@ -25,7 +25,7 @@ so its zero flux is exact rather than a cancellation of stored values.
 * `retention_bound` — with retention `r < 1` and sources at most `s` the
   memory never exceeds `max |A₀| (s / (1 − r))`: it cannot run away;
 * `pressure_nonneg` — the magnetic pressure at a vertex is nonnegative;
-* `reconnect_iff` — v18.24's reconnection test `cos∠(B_i, B_j) < −0.7` holds
+* `reconnect_iff` — the reconnection test `cos∠(B_i, B_j) < −0.7` holds
   exactly when `B_i·B_j < 0` and `(B_i·B_j)² > 0.49 |B_i|² |B_j|²`, which is how
   the runtime decides it, without square roots;
 * `edge_share_total` — the edge shares `8 (ρ_t + ρ_h) / E` sum to the number of

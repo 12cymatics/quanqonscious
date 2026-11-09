@@ -1879,7 +1879,7 @@ const KERNEL_FACTORY = () => {
       case 13: claim('convergent_det', out.convergents.every(c => bigAbs(c.p * c.qPrev - c.pPrev * c.q) === 1n)); break;
       case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.mayLe(Q.abs(x), Q.abs(psiIn[i])))); break;
       case 15: {
-        let ok = out.urdhva.length === 4;
+        let ok = out.urdhva.length === 4, book = out.urdhva.length === 4;
         for (let axis = 0; axis < 4; axis++) {
           const mask = 1 << axis, bases = [...Array(16).keys()].filter(b => !(b & mask));
           const sP = sumR(bases.map(b => psiIn[b | mask])), sM = sumR(bases.map(b => psiIn[b]));
@@ -1888,11 +1888,15 @@ const KERNEL_FACTORY = () => {
           for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(psiIn[b], psiIn[c | mask]));
           if (!Q.agree(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
           const u = out.urdhva[axis];
-          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross)) || !Q.agree(u.scProduct, u.scFactors)) ok = false;
+          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross))) ok = false;
+          if (!u || !Q.agree(u.scProduct, u.scFactors)) book = false;
         }
-        claim('gunita_residual_cross', ok && sameR(psiIn, p)); break;
+        claim('gunita_residual_cross', ok);
+        claim('gunita_samuccaya', book && sameR(psiIn, p)); break;
       }
-      case 16: claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n))); break;
+      case 16:
+        claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n)));
+        claim('bezout_partial_fraction', out.bezout.every(r => r.g !== 1n || r.a === 0n || r.b === 0n || Q.eq(Q.add(Q.mk(r.t, r.a), Q.mk(r.s, r.b)), Q.mk(1n, r.a * r.b)))); break;
       case 18: {
         const mA = BigInt(argInt(a[1]));
         claim('crt_residue_step', psiIn.every((x, i) => { const v = absFloor(x), r = BigInt(hw(i)) % mA; return (v + (r - v % mA + mA) % mA) % mA === r; })); break;
@@ -2621,7 +2625,7 @@ const VISUAL_CERTIFICATE = {
     },
     sutra: {
       draws: 'each active sutra: its formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
-      theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'ext_euclid_step', 'bezout_identity', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
+      theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'gunita_samuccaya', 'ext_euclid_step', 'bezout_identity', 'bezout_partial_fraction', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
       holds: () => SUTRA_CERT.ok
     }
   },
@@ -2666,12 +2670,12 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '23395fc36ee9b826b3a33c6e7b9d55d73ca7e4de0c0e38c2c67bd3fc6e70819d',
+  leanCorpusSha256: 'c060496ada6f92353850adc3f8abe7162fade6379c5d384b8feb10e1da028304',
   leanToolchain: 'leanprover/lean4:v4.10.0',
-  leanTheorems: 2487,
+  leanTheorems: 2489,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FieldLines.olean','SutraWS/FieldsAround.olean','SutraWS/FluxSurface.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/PressureHaze.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/StrengthRamp.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/VedicFormulas.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2487,
+  leanAxiomsKernelChecked: 2489,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',

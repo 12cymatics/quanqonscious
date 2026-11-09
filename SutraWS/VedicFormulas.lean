@@ -5,10 +5,10 @@ import Mathlib.Data.Int.GCD
 import Mathlib.Tactic
 
 /-!
-# The 29 v18.24 sutra formulas on the real vertex field
+# The 29 sutra formulas on the real vertex field
 
 The statements the runtime decides, on the live field and the live operands,
-for each of the 29 `SUTRAS[].evolve` formulas of `vedic_v18.24_full_kernel.html`,
+for each of the 29 sutra formulas of `vedic_v18.51.1_exact_phi.html`,
 for the GRVQ coupling into `λ = inverse Ψ`, for the MSTVQ stress tensor and for
 the rotation stages of the real field.
 -/
@@ -169,6 +169,21 @@ theorem gunita_residual_cross (x y : Fin 8 → ℚ) :
   rw [← Finset.add_sum_erase _ _ (mem_univ b)]
   ring
 
+theorem gunita_samuccaya (x y : Fin 8 → ℚ) :
+    (∑ k : Fin 15, ∑ i : Fin 8, ∑ j : Fin 8, if i.val + j.val = k.val then x i * y j else 0)
+      = (∑ i, x i) * (∑ j, y j) := by
+  rw [Finset.sum_mul_sum, Finset.sum_comm]
+  refine Finset.sum_congr rfl (fun i _ => ?_)
+  rw [Finset.sum_comm]
+  refine Finset.sum_congr rfl (fun j _ => ?_)
+  have hk : i.val + j.val < 15 := by have := i.isLt; have := j.isLt; omega
+  rw [Finset.sum_eq_single (⟨i.val + j.val, hk⟩ : Fin 15)]
+  · simp
+  · intro k _ hne
+    exact if_neg (fun h => hne (Fin.ext h.symm))
+  · intro h
+    exact absurd (Finset.mem_univ _) h
+
 theorem ext_euclid_step (a b r0 r1 s0 s1 t0 t1 q : ℤ) (h0 : s0 * a + t0 * b = r0) (h1 : s1 * a + t1 * b = r1) :
     (s0 - q * s1) * a + (t0 - q * t1) * b = r0 - q * r1 := by
   rw [← h0, ← h1]; ring
@@ -179,6 +194,14 @@ theorem bezout_identity (a b s t g : ℤ) (h : s * a + t * b = g) (ha : g ∣ a)
   have h2 : (Int.gcd a b : ℤ) ∣ g := by
     rw [← h]; exact dvd_add (dvd_mul_of_dvd_right Int.gcd_dvd_left _) (dvd_mul_of_dvd_right Int.gcd_dvd_right _)
   exact Int.dvd_antisymm hg (Int.natCast_nonneg _) h1 h2
+
+theorem bezout_partial_fraction (a b s t : ℤ) (ha : a ≠ 0) (hb : b ≠ 0) (h : s * a + t * b = 1) :
+    (t : ℚ) / a + (s : ℚ) / b = 1 / ((a : ℚ) * b) := by
+  have ha' : (a : ℚ) ≠ 0 := by exact_mod_cast ha
+  have hb' : (b : ℚ) ≠ 0 := by exact_mod_cast hb
+  have h' : (s : ℚ) * a + (t : ℚ) * b = 1 := by exact_mod_cast h
+  field_simp
+  linarith [h']
 
 theorem crt_residue_step (v r m : ℤ) (_hm : 0 < m) (hr0 : 0 ≤ r) (hrm : r < m) :
     (v + (r - v % m + m) % m) % m = r := by
@@ -273,9 +296,9 @@ theorem flag_is_max (ψ : ℕ → ℚ) (l : List ℕ) (acc : ℕ × ℚ) :
     · exact h2 i hi
 
 theorem ap_endpoints (a0 a1 a2 a3 a4 : ℚ) :
-    let md := ((a1 - a0) + (a2 - a1) + (a3 - a2) + (a4 - a3)) / 4
-    a0 + 0 * md - a0 = 0 ∧ a0 + 4 * md - a4 = 0 := by
-  intro md; simp only [md]; constructor <;> ring
+    let md := (a4 - a0) / 4
+    ((a1 - a0) + (a2 - a1) + (a3 - a2) + (a4 - a3)) / 4 = md ∧ a0 + 0 * md = a0 ∧ a0 + 4 * md = a4 := by
+  intro md; simp only [md]; refine ⟨by ring, by ring, by ring⟩
 
 theorem purana_uniform_fixed (c w : ℚ) : c + (((c + c) / 2 + (c + c) / 2 + (c + c) / 2 + (c + c) / 2) / 4 - c) * w = c := by
   ring
