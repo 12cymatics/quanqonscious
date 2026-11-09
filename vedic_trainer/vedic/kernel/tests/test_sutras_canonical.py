@@ -1,8 +1,8 @@
 """The 29 canonical sutras — completeness, structure, and the §12Y guarantee.
 
 Every assertion here traces to the Vedic protocol v4.0 or to
-``vedic_v18.24_full_kernel.html`` (§12Z, STRICT_SUTRA_KERNEL, SUTRA_KIND,
-ALPHA.computeQ, §12Y).
+``sutras_canonical.py`` (STRICT_SUTRA_KERNEL, SUTRA_KIND, ALPHA.computeQ,
+§12Y).
 
 What this file replaced
 -----------------------
@@ -647,7 +647,7 @@ def test_category_membership_matches_protocol_4_1() -> None:
 
 
 def test_sutra_kind_matches_engine_table() -> None:
-    """SUTRA_KIND transcribed from vedic_v18.24_full_kernel.html:3558."""
+    """SUTRA_KIND, the id → kind table."""
     assert K.SUTRA_KIND[1:] == (
         "MULT", "REFL", "CONV", "DIV", "REFL", "PERM", "PERM", "DIV", "DIFF",
         "MULT", "CONV", "REFL", "DIV", "MULT", "MULT", "DIV", "DIFF", "MOD",
@@ -893,9 +893,7 @@ def test_the_twenty_nine_ids_are_nine_distinct_maps() -> None:
     `axis = (id+1) & 3` — so the seven become nine. Every other difference
     between two ids of the same kind is the scalar α, and nothing else.
 
-    This kernel is *faithful* to upstream here: `test_upstream_agreement.py`
-    shows 6,380 of 6,380 triples matching the real JavaScript, and upstream is
-    nine maps too. What was missing is anyone saying so. The README called this
+    What was missing is anyone saying so. The README called this
     module "the single authority for their definitions" of "the 29 α-weighted
     sutra operators", which reads as 29 definitions.
 

@@ -46,7 +46,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 .row .k{color:#555;flex-shrink:0}.row .v{color:#aaa;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 .section{margin-top:10px;padding-top:8px;border-top:1px solid #181830}
 .section h5{color:#888;font-size:8px;letter-spacing:1px;margin-bottom:6px}
-.section p.note{color:#555;font-size:7px;margin:2px 0 6px;line-height:1.35}
 #formula-display{margin-top:4px;padding:6px;background:#0a0a16;border:1px solid #181830;font-size:7px;color:#888;min-height:40px;max-height:140px;overflow-y:auto;line-height:1.4;word-break:break-word}
 #mode-identities{font-size:7px;color:#666;min-height:20px;max-height:140px;overflow-y:auto;line-height:1.4}
 #mode-identities .ok{color:#6FD3C7}#mode-identities .bad{color:#E4572E}
@@ -122,7 +121,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   #left h3{padding-left:44px;padding-top:72px}
   #right h4{font-size:11px}
   .section h5{font-size:10px}
-  .section p.note{font-size:9px}
   #formula-display,#mode-identities{font-size:9px}
   .ctrls button{font-size:10px;padding:7px 10px}
   #preset-ctrls button{font-size:9.5px;padding:6px 8px}
@@ -135,7 +133,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
 <body>
 <div id="wrap">
 <div id="left" class="collapsed">
-  <h3>29 SŪTRA · v18.24 FORMULAS</h3>
+  <h3>29 SŪTRA · FORMULAS</h3>
   <div id="sutra-list"></div>
   <div id="routing-wrap">
     <div class="rt-title">EVENT LOG</div>
@@ -182,7 +180,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
-    <p class="note">The formula is calculated once, from the field as it stands, when you switch a sūtra on or change the settings: each active sūtra applies its v18.24 formula at α = id/435 × strength, exactly, then GRVQ and the MSTVQ coupling. It goes in over the glide in equal shares, and after that no formula is applied while the stages run. λ is the field's four axis modes (λₖ = Σᵢ ±ψᵢ/16), and GRVQ feeds it: S1, S5, S9 and S14 add GRVQ's δλ to λ₀…λ₃ and every other active sūtra adds it to λ₍id−1 mod 4₎, each times its own α, by moving Ψ along that axis. MSTVQ's stress T adds to λ the same way and to the TGCR stiffness κ. S2, S3 and S29 set MSTVQ's B. Where a formula meets a zero divisor or a log of zero it does what v18.24 does there, or borrows that rule from another sūtra, and nothing stops.</p>
     <div class="row"><span class="k">λ₀ λ₁ λ₂ λ₃</span><span class="v" id="cp-lambda">–</span></div>
     <div class="row"><span class="k">GRVQ δλ in the formula</span><span class="v" id="cp-grvq">–</span></div>
     <div class="row"><span class="k">MSTVQ</span><span class="v" id="cp-mstvq">–</span></div>
@@ -190,13 +187,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>TGCR VORTEX</h5>
-    <p class="note">v18.24's TGCR: the bond current v = ω ψ_tail ψ_head on the 32 edges, its curvature F = d¹v on the 24 faces, split at each vertex into self-dual and anti-self-dual parts. The surface twists by each vertex's F∧F density |F₊|² − |F₋|² as a share of the largest, and each edge's two values rotate by dt·tgcr·v.</p>
     <div class="row"><span class="k">F∧F · |F|²</span><span class="v" id="tg-pontryagin">–</span></div>
     <div class="row"><span class="k">energy · stiffness</span><span class="v" id="tg-energy">–</span></div>
   </div>
   <div class="section">
     <h5>COMPOSITION</h5>
-    <p class="note">How the active sūtras combine in the formula. SERIES composes them in order, PARALLEL adds their separate displacements, CONCURRENT runs them forward then back at half strength.</p>
     <div class="ctrls" id="comp-ctrls" style="margin-top:0">
       <button type="button" data-comp="SERIES" class="active">SERIES</button>
       <button type="button" data-comp="PARALLEL">PARALLEL</button>
@@ -223,13 +218,11 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>WHEELER DIELECTRIC · MAGNETISM</h5>
-    <p class="note">Kernel parameters: they change the step itself.</p>
     <div class="amp-row"><span>dielectric s</span><input type="range" min="1" max="50" value="10" id="amp-dielectric"><span id="amp-dielectric-v">1.0</span></div>
     <div class="amp-row"><span>B field</span><input type="range" min="0" max="50" value="10" id="amp-bfield"><span id="amp-bfield-v">1.0</span></div>
   </div>
   <div class="section">
     <h5>DYNAMO · MAGNETISM MEMORY</h5>
-    <p class="note">The vector potential on the 32 edges remembers the field. Each step it keeps 499/500 of itself and gains Faraday induction from the change in the field, −(1/10)·d⁰(Δψ) as in v18.24, plus the TGCR vortex ω steered along each edge by that edge's share of the field's energy. Its flux B = d¹A builds on the 24 faces, and each edge rotates its two vertex values by dt·A. The drive feeds the inertial layer; polarisation χ lets the field's energy shape the dielectric.</p>
     <div class="amp-row"><span>vortex ω</span><input type="range" min="-60" max="60" value="0" id="amp-omega"><span id="amp-omega-v">0.0</span></div>
     <div class="amp-row"><span>drive</span><input type="range" min="0" max="40" value="0" id="amp-drive"><span id="amp-drive-v">0.00</span></div>
     <div class="amp-row"><span>polarise χ</span><input type="range" min="0" max="30" value="10" id="amp-polar"><span id="amp-polar-v">1.0</span></div>
@@ -240,11 +233,9 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">along the tube</span><span class="v" id="dyn-tube">–</span></div>
     <div class="row"><span class="k">strip balances</span><span class="v" id="dyn-strips">–</span></div>
     <div class="row"><span class="k">surface from the flux</span><span class="v" id="dyn-shape">–</span></div>
-    <p class="note" id="lattice-legend">FLUX MAP (left of the picture): the torus cut open, θ to the right and φ up. On it the hypercube is a 4×4 lattice: its 16 vertices are the white dots, sized by |ψ|². Each line is the potential A on one of its 32 edges, <span style="color:#ffc238">amber</span> flowing towards +θ or +φ, <span style="color:#38dbff">cyan</span> against, the arrow its way, the width its strength. Each row of edges is a loop once round the torus: the band along it and the value at its right are the flux through the hole there. Each column is a loop once round the tube, its flux on top. The arc in each square is the flux through that cell, <span style="color:#ff57a8">rose</span> turning counter-clockwise in (θ, φ), <span style="color:#5cff85">green</span> clockwise. Pink bursts are reconnections. From one loop to the next, the flux steps by exactly the flux through the four cells between them: the strip balances, marked =. LATTICE draws the same on the surface.</p>
   </div>
   <div class="section">
     <h5>FIELDS AROUND THE CONSTRUCT</h5>
-    <p class="note">The construct's magnetism and its dielectric act on the space around it. Each edge carries the lattice current J = (d¹)ᵀB, the flux of the three faces round it (Ampère on the hypercube), and the current is conserved at every vertex. Each vertex carries the charge of the dielectric field, its graph Laplacian (Gauss), and the charges sum to zero. Placed where the surface puts them, they give the magnetic field by Biot–Savart and the electric field by Coulomb. The magnetism is seen as the pressure it exerts across its own field, p = |B|²/2: a medium whose index rises with that pressure fills the space round the construct, and everything is seen through it, bent toward the higher pressure the way heat over a hot car's paint moves what is behind it, with the medium itself a faint glow where the pressure along the line of sight is high. Across the equatorial plane, the glow is the energy density, its hue blue where the magnetic energy stands higher in its own range and orange where the electric does. The forces are I u × B on the middle of each piece of current, from the rest of the construct, and the electric force on each charge from the others, which cancel in sum. Each field is placed against its own range; nothing in the model ties their units together.</p>
     <div class="row"><span class="k">lattice current</span><span class="v" id="fld-current">–</span></div>
     <div class="row"><span class="k">dielectric charge</span><span class="v" id="fld-charge">–</span></div>
     <div class="row"><span class="k">magnetic pressure</span><span class="v" id="fld-haze">–</span></div>
@@ -253,7 +244,6 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>MAYA · COHERENCE FLOW</h5>
-    <p class="note">v18.24's Maya: dφ/dμ = β/μ, β = (φ_g/e)·sin φ − (e/π)·φ³, five Euler sub-steps of 1/500 a step from φ₀ = 1/16. The phase flows onto the one stable coherence layer φ* and settles there. M = observed / true scales the field where it is drawn, never the field itself; on the layer M = 1.</p>
     <div class="row"><span class="k">phase φ</span><span class="v" id="maya-phase">–</span></div>
     <div class="row"><span class="k">β(φ)</span><span class="v" id="maya-beta">–</span></div>
     <div class="row"><span class="k">layer φ*</span><span class="v" id="maya-layer">–</span></div>
@@ -261,12 +251,10 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   </div>
   <div class="section">
     <h5>PACE</h5>
-    <p class="note">One step a second. The formula, calculated once when you switch a sūtra on or change the settings, goes in over this many steps in equal shares; after that no formula is applied and only the stages run.</p>
     <div class="amp-row"><span>Glide (steps)</span><input type="range" min="1" max="120" value="10" id="amp-glide"><span id="amp-glide-v">10</span></div>
   </div>
   <div class="section">
     <h5>DRAWING GAINS</h5>
-    <p class="note">How strongly each certified channel moves the surface, at the scale its formula gives it. They change the picture, never the state.</p>
     <div class="amp-row"><span>Zoom</span><input type="range" min="10" max="600" value="100" id="amp-zoom"><span id="amp-zoom-v">1.00</span></div>
     <div class="amp-row"><span>Field→R</span><input type="range" min="0" max="200" value="60" id="amp-field"><span id="amp-field-v">60</span></div>
     <div class="amp-row"><span>Field→r</span><input type="range" min="0" max="100" value="35" id="amp-tube"><span id="amp-tube-v">35</span></div>
@@ -652,6 +640,12 @@ const KERNEL_FACTORY = () => {
   const inverseL = psi => [0, 1, 2, 3].map(k => Q.mul(psi.reduce((s, p, i) => vtxSign(i, k) > 0n ? Q.add(s, p) : Q.sub(s, p), Q.ZERO), Q.SIXTEENTH));
   const injectLambda = (psi, k, d) => psi.map((p, i) => vtxSign(i, k) > 0n ? Q.add(p, d) : Q.sub(p, d));
   const meanR = psi => Q.mul(psi.reduce((s, p) => Q.add(s, p), Q.ZERO), Q.SIXTEENTH);
+  const meanAbsR = xs => Q.div(xs.reduce((s, x) => Q.add(s, Q.abs(x)), Q.ZERO), Q.mk(BigInt(xs.length)));
+  const proportionate = (num, mag) => {
+    if (mag.n !== 0n) return Q.div(num, mag);
+    if (num.n !== 0n) throw new RangeError('a nonzero term over a zero magnitude');
+    return num;
+  };
   const energyR = psi => psi.reduce((s, p) => Q.add(s, Q.mul(p, p)), Q.ZERO);
   const radixAbove = (m, rad) => { let B = Q.mk(rad), k = 1; while (Q.cmp(m, B) >= 0) { B = Q.mul(B, Q.mk(rad)); k++; } return { B, order: k }; };
   const digitalRoot10 = n => { let d = n; while (d > 9n) { let s = 0n; while (d > 0n) { s += d % 10n; d /= 10n; } d = s; } return d; };
@@ -692,13 +686,13 @@ const KERNEL_FACTORY = () => {
     return Q.mul(Q.mul(lam[k], factor), Q.mk(7n, 10n));
   };
   const betaFunction = (lam, k) => { const o = lam[(k + 2) % 4]; return Q.mul(Q.neg(lam[k]), Q.div(Q.mk(2n, 5n), Q.add(Q.mul(o, o), Q.ONE))); };
-  const gammaCoupling = (lam, k) => Q.mul(Q.sub(Q.mul(lamAt(lam, k - 1), lamAt(lam, k + 1)), Q.mul(lam[k], lam[k])), Q.mk(4n, 5n));
+  const gammaCoupling = (lam, k) => proportionate(Q.mul(Q.sub(Q.mul(lamAt(lam, k - 1), lamAt(lam, k + 1)), Q.mul(lam[k], lam[k])), Q.mk(4n, 5n)), meanAbsR(lam));
   const regularize = (lam, k) => Q.mul(Q.sub(Q.mul(lam.reduce((s, x) => Q.add(s, x), Q.ZERO), Q.QUARTER), lam[k]), Q.mk(9n, 10n));
   const grvqTerms = (lam, k, t) => {
     const prev = lamAt(lam, k - 1), next = lamAt(lam, k + 1);
     return { s9: Q.mul(grvqLaplacian(lam, k), Q.mk(1n, 20n)), s7: Q.mul(ricciTerm(lam, k), Q.mk(1n, 40n)),
              s10: vacuumTerm(lam, k), s6: quantumTerm(lam, k, t), s14: betaFunction(lam, k), s15: gammaCoupling(lam, k),
-             s28: Q.mul(Q.sub(Q.mul(prev, prev), Q.mul(next, next)), Q.mk(1n, 1000n)), s29: Q.mul(regularize(lam, k), Q.mk(1n, 20n)) };
+             s28: Q.mul(Q.sub(Q.abs(prev), Q.abs(next)), Q.mk(1n, 1000n)), s29: Q.mul(regularize(lam, k), Q.mk(1n, 20n)) };
   };
   const grvqDelta = (lam, k, t) => Object.values(grvqTerms(lam, k, t)).reduce((a, b) => Q.add(a, b), Q.ZERO);
   const mstvqB = (p, s) => [Q.mul(Q.sub(Q.add(p[0], p[1]), Q.add(p[14], p[15])), s),
@@ -716,7 +710,7 @@ const KERNEL_FACTORY = () => {
     1:  [{name:'axis', role:'the edge to the previous: Ψ_{i⊕2^axis}', def:Q.ZERO, lo:0, hi:3, int:true},
          {name:'one', role:'"one more": the + 1 in |Ψ_nb|² + 1', def:Q.ONE, lo:1/16, hi:8}],
     2:  [{name:'radix', role:'"all from 9, last from 10": the base B = radix^order', def:Q.mk(10n), lo:2, hi:16, int:true}],
-    3:  [{name:'divisor', role:'the 1/N of the crosswise (XOR) convolution', def:Q.mk(16n), lo:1, hi:64}],
+    3:  [{name:'divisor', role:'the 1/N of the crosswise (XOR) convolution, taken per mean |Ψ|', def:Q.mk(16n), lo:1, hi:64}],
     4:  [{name:'quarters', role:'r = hw/quarters in σ = r/(1 + r)', def:Q.mk(4n), lo:1, hi:16}],
     5:  [],
     6:  [{name:'ratio', role:'the proportion each edge ratio is driven to', def:PHI_Q, lo:1, hi:4}],
@@ -746,7 +740,7 @@ const KERNEL_FACTORY = () => {
          {name:'gradient', role:'the gradient push on the inertial layer', def:Q.mk(1n,20n), lo:1/128, hi:1}],
     26: [{name:'portion', role:'the flag portion Ψ_flag / portion', def:Q.mk(16n), lo:1, hi:64}],
     27: [],
-    28: [{name:'rate', role:'the share of the difference of squares moved', def:Q.mk(1n,20n), lo:1/128, hi:1}],
+    28: [{name:'rate', role:'the share moved of the difference of squares over the sum of magnitudes', def:Q.mk(1n,20n), lo:1/128, hi:1}],
     29: [{name:'weight', role:'the conservation weight 29/145', def:Q.mk(1n,5n), lo:1/16, hi:1}]
   });
   const qOfDouble = x => {
@@ -804,7 +798,8 @@ const KERNEL_FACTORY = () => {
         return { p, B: mstvqB(p, Q.mul(al, Q.mk(1n, 10n))), base: B, order };
       }
       case 3: {
-        const conv = Array.from({ length: 16 }, (_, i) => { let s = Q.ZERO; for (let j = 0; j < 16; j++) s = Q.add(s, Q.mul(psi[j], psi[i ^ j])); return Q.div(s, a[1]); });
+        const m = meanAbsR(psi);
+        const conv = Array.from({ length: 16 }, (_, i) => { let s = Q.ZERO; for (let j = 0; j < 16; j++) s = Q.add(s, Q.mul(psi[j], psi[i ^ j])); return proportionate(Q.div(s, a[1]), m); });
         for (let i = 0; i < 16; i++) p[i] = pull(psi[i], conv[i], al);
         return { p, B: mstvqB(p, Q.mul(al, Q.mk(1n, 100n))), conv };
       }
@@ -849,7 +844,7 @@ const KERNEL_FACTORY = () => {
             if (base & mask) continue;
             const i0 = base, i1 = base | mask;
             const S = Q.mul(Q.add(p[i0], p[i1]), Q.HALF), A = Q.mul(Q.sub(p[i0], p[i1]), Q.HALF);
-            const delta = storeQ(Q.mul(Q.mul(Q.sub(Q.mul(S, S), Q.mul(A, A)), A), al));
+            const delta = storeQ(Q.mul(proportionate(Q.mul(Q.sub(Q.mul(S, S), Q.mul(A, A)), A), Q.add(Q.mul(S, S), Q.mul(A, A))), al));
             const nS = Q.add(S, delta), nA = Q.sub(A, delta);
             p[i0] = Q.add(nS, nA); p[i1] = Q.sub(nS, nA);
           }
@@ -914,36 +909,38 @@ const KERNEL_FACTORY = () => {
         return { p, convergents: conv };
       }
       case 15: {
+        const urdhva = [];
         for (let axis = 0; axis < 4; axis++) {
-          const mask = 1 << axis;
-          let sP = Q.ZERO, sM = Q.ZERO, sPr = Q.ZERO;
-          for (let base = 0; base < 16; base++) {
-            if (base & mask) continue;
-            sM = Q.add(sM, p[base]); sP = Q.add(sP, p[base | mask]); sPr = Q.add(sPr, Q.mul(p[base], p[base | mask]));
-          }
-          const corr = storeQ(Q.neg(Q.sub(Q.mul(sP, sM), sPr)));
+          const mask = 1 << axis, lo = [], hi = [];
+          for (let base = 0; base < 16; base++) if (!(base & mask)) { lo.push(p[base]); hi.push(p[base | mask]); }
+          const product = Array(lo.length + hi.length - 1).fill(Q.ZERO);
+          for (let i = 0; i < lo.length; i++) for (let j = 0; j < hi.length; j++) product[i + j] = Q.add(product[i + j], Q.mul(lo[i], hi[j]));
+          const sM = lo.reduce((t, x) => Q.add(t, x), Q.ZERO), sP = hi.reduce((t, x) => Q.add(t, x), Q.ZERO);
+          const scProduct = product.reduce((t, x) => Q.add(t, x), Q.ZERO), scFactors = Q.mul(sP, sM);
+          const corr = Q.neg(Q.sub(scFactors, scProduct));
           for (let base = 0; base < 16; base++) {
             if (base & mask) continue;
             p[base | mask] = Q.mul(p[base | mask], Q.add(Q.ONE, Q.mul(al, corr)));
             p[base] = Q.mul(p[base], Q.sub(Q.ONE, Q.mul(Q.mul(al, corr), Q.HALF)));
           }
+          urdhva.push({ axis, product, scProduct, scFactors });
         }
-        return { p };
+        return { p, urdhva };
       }
       case 16: {
         const rows = [];
         for (let pi = 0; pi < 8; pi++) {
-          const pj = pi ^ 15, A = bigAbs(p[pi].n), Bn = bigAbs(p[pj].n);
+          const pj = pi ^ 15, A = absFloor(p[pi]), Bn = absFloor(p[pj]);
           let r0 = A, r1 = Bn, s0 = 1n, s1 = 0n, t0 = 0n, t1 = 1n;
           while (r1 > 0n) { const q = r0 / r1; [r0, r1] = [r1, r0 - q * r1]; [s0, s1] = [s1, s0 - q * s1]; [t0, t1] = [t1, t0 - q * t1]; }
           rows.push({ pair: [pi, pj], a: A, b: Bn, g: r0, s: s0, t: t0 });
           if (r0 > 1n) {
             const g = Q.mk(r0);
             p[pi] = pull(p[pi], Q.div(p[pi], g), al); p[pj] = pull(p[pj], Q.div(p[pj], g), al);
-          } else {
+          } else if (A > 0n && Bn > 0n) {
             const vi = p[pi], vj = p[pj];
-            p[pi] = Q.add(vi, Q.mul(Q.mul(al, Q.mk(t0)), vj));
-            p[pj] = Q.add(vj, Q.mul(Q.mul(al, Q.mk(s0)), vi));
+            p[pi] = Q.add(vi, Q.mul(Q.mul(al, Q.mk(t0, A)), vj));
+            p[pj] = Q.add(vj, Q.mul(Q.mul(al, Q.mk(s0, Bn)), vi));
           }
         }
         return { p, bezout: rows };
@@ -973,8 +970,7 @@ const KERNEL_FACTORY = () => {
             p[i] = Q.add(p[i], corr); p[j] = Q.sub(p[j], corr);
           } else {
             const ai = Q.abs(vi), aj = Q.abs(vj), big = Q.cmp(ai, aj) > 0;
-            if ((big ? aj : ai).n === 0n) continue;
-            const ratio = big ? Q.div(ai, aj) : Q.div(aj, ai), scale = Q.mul(Q.mul(al, Q.sub(ratio, a[1])), a[2]);
+            const spread = big ? Q.sub(ai, Q.mul(a[1], aj)) : Q.sub(aj, Q.mul(a[1], ai)), scale = Q.mul(Q.mul(al, spread), a[2]);
             if (big) { p[i] = Q.sub(p[i], scale); p[j] = Q.add(p[j], scale); }
             else { p[j] = Q.sub(p[j], scale); p[i] = Q.add(p[i], scale); }
           }
@@ -1079,7 +1075,7 @@ const KERNEL_FACTORY = () => {
       case 28: {
         for (let i = 0; i < 16; i++) for (const j of NEIGHBORS(i)) {
           if (j <= i) continue;
-          const delta = storeQ(Q.mul(Q.mul(al, Q.sub(Q.mul(p[i], p[i]), Q.mul(p[j], p[j]))), a[1]));
+          const delta = storeQ(Q.mul(Q.mul(al, Q.sub(Q.abs(p[i]), Q.abs(p[j]))), a[1]));
           p[i] = Q.sub(p[i], delta); p[j] = Q.add(p[j], delta);
         }
         return { p };
@@ -1702,7 +1698,7 @@ const KERNEL_FACTORY = () => {
         else claim('yavadunam_magnifies', p.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[i])) >= 0));
         break;
       }
-      case 3: claim('xor_conv_sum', Q.eq(sumR(out.conv), Q.div(Q.mul(sumR(psiIn), sumR(psiIn)), a[1]))); break;
+      case 3: claim('xor_conv_sum', Q.eq(sumR(out.conv), proportionate(Q.div(Q.mul(sumR(psiIn), sumR(psiIn)), a[1]), meanAbsR(psiIn)))); break;
       case 4: {
         const c = out.layers;
         claim('horner_eval', psiIn.every((x, i) => {
@@ -1736,18 +1732,18 @@ const KERNEL_FACTORY = () => {
       case 13: claim('convergent_det', out.convergents.every(c => bigAbs(c.p * c.qPrev - c.pPrev * c.q) === 1n)); break;
       case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[i])) <= 0)); break;
       case 15: {
-        const cur = psiIn.slice(); let ok = true;
+        let ok = out.urdhva.length === 4;
         for (let axis = 0; axis < 4; axis++) {
           const mask = 1 << axis, bases = [...Array(16).keys()].filter(b => !(b & mask));
-          const sP = sumR(bases.map(b => cur[b | mask])), sM = sumR(bases.map(b => cur[b]));
-          const res = Q.sub(Q.mul(sP, sM), sumR(bases.map(b => Q.mul(cur[b], cur[b | mask]))));
+          const sP = sumR(bases.map(b => psiIn[b | mask])), sM = sumR(bases.map(b => psiIn[b]));
+          const pointwise = sumR(bases.map(b => Q.mul(psiIn[b], psiIn[b | mask])));
           let cross = Q.ZERO;
-          for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(cur[b], cur[c | mask]));
-          if (!Q.eq(res, cross)) ok = false;
-          const corr = storeQ(Q.neg(res));
-          for (const b of bases) { cur[b | mask] = Q.mul(cur[b | mask], Q.add(Q.ONE, Q.mul(al, corr))); cur[b] = Q.mul(cur[b], Q.sub(Q.ONE, Q.mul(Q.mul(al, corr), Q.HALF))); }
+          for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(psiIn[b], psiIn[c | mask]));
+          if (!Q.eq(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
+          const u = out.urdhva[axis];
+          if (!u || !Q.eq(u.scProduct, Q.add(pointwise, cross)) || !Q.eq(u.scProduct, u.scFactors)) ok = false;
         }
-        claim('gunita_residual_cross', ok && sameR(cur, p)); break;
+        claim('gunita_residual_cross', ok && sameR(psiIn, p)); break;
       }
       case 16: claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n))); break;
       case 18: {
@@ -1919,7 +1915,7 @@ const KERNEL_FACTORY = () => {
       assert("floor of "+Q.toString(q),(()=>{const f=floorQ(q);return Q.cmp(Q.mk(f),q)<=0&&Q.cmp(q,Q.mk(f+1n))<0;})());
     const psi=initState();
     assert("seed has no zero vertex",psi.every(q=>q.n!==0n));
-    assert("λ of the seed's forward part is v18.24's (3, 4, 5, 6)",inverseL(forwardL(LAMBDA0)).every((q,k)=>Q.eq(q,LAMBDA0[k])));
+    assert("λ of the seed's forward part is (3, 4, 5, 6)",inverseL(forwardL(LAMBDA0)).every((q,k)=>Q.eq(q,LAMBDA0[k])));
     assert("injecting δ on axis k moves λ_k by δ and nothing else",(()=>{const l=inverseL(psi),d=Q.mk(5n,3n),l2=inverseL(injectLambda(psi,2,d));return l2.every((q,k)=>Q.eq(q,k===2?Q.add(l[k],d):l[k]));})());
     for(let id=1;id<=29;id++){
       const fc=formulaClaims(id,psi,Q.ONE);
@@ -2123,8 +2119,6 @@ function verifyVersionIntegrity() {
     problems.push('leanMirror does not match VERSION.string');
   return { ok: problems.length === 0, version: VERSION.string, problems };
 }
-
-
 
 const FAITHFUL = (() => {
   const Qc = KERNEL.Q, A4c = KERNEL.A4, C4c = KERNEL.C4;
@@ -2453,7 +2447,7 @@ const VISUAL_CERTIFICATE = {
       holds: () => RAMP_VIEW.ok
     },
     sutra: {
-      draws: 'each active sutra: its v18.24 formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
+      draws: 'each active sutra: its formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
       theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'ext_euclid_step', 'bezout_identity', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
       holds: () => SUTRA_CERT.ok
     }
@@ -2511,12 +2505,12 @@ const PROVENANCE = Object.freeze({
   wheelerTheorems: 7,
   wheelerRuntimeDecided: true,
   scopeNote: 'Certificates are mathematical statements about this program: exact arithmetic identities, matrix properties, incidence closure, determinism, certificate consistency. They are not physical validation of any named operator.',
-  storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex, as in v18.24. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7, S15 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
-  mayaScopeNote: 'Maya is the v18.24 coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
+  storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
+  mayaScopeNote: 'Maya is the coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The formula is the 29 v18.24 SUTRAS[].evolve formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths from the field as it stands when a sutra is switched on or a setting changed. One step a second, it goes in over the number of steps the Glide control sets, 10 unless changed, in equal shares, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. A preset or RESET starts again from the seed; in place where v18.24 updates in place, with their literal constants as operands (defaults v18.24 own). Not changed: no 1/10000 rounding, no float reads, no magnitude caps or isFinite gates. A float test standing for nonzero (S15 > 1e-6, S25 > 0.001, S27 > 1e-10) is decided exactly as nonzero; a magnitude cap (GRVQ |dlambda| < 5, S24 |psi| > 0.01) is removed. Nothing stops the run at a zero. Where a formula would divide by zero or take a log of zero it does what v18.24 does there: S6 skips a pair whose base vertex is zero, S19 leaves a pair with a zero root as it is, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product. S13 borrows the rule of S6 and leaves a pair whose denominator vertex is zero as it is. Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves, as v18.24 walkMeasure does (walk_measure_total_split). GRVQ feeds lambda, the four axis modes of psi: S1, S5, S9 and S14 add GRVQ to lambda_0..3 of their result and every other active sutra adds it to lambda_(id-1 mod 4), each times its own alpha, by moving psi along that axis (inverse_inject). v18.24 adds it at weight 1 and 1/N under the cap above and takes lambda from psi again at the end of every frame, so there it never moves psi; applied every step at those weights it ran the field to 2^125367 by step 10 of DAMPER. S1 strength sets the MSTVQ stress feedback T_kk / 2e8 into lambda the same way and T trace / 500 into the TGCR stiffness kappa; S2, S3 and S29 set MSTVQ B. Each formula carries decided statements (SutraWS/VedicFormulas.lean); a computable formula still may grow without bound: S15 alone at full strength measured x2^283 in its one application from the seed and x2^530 with GRVQ and the MSTVQ coupling, the whole formula. The seed is v18.24 lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The formula is the 29 sutra formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths from the field as it stands when a sutra is switched on or a setting changed. One step a second, it goes in over the number of steps the Glide control sets, 10 unless changed, in equal shares, a tenth a step at 10, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. A preset or RESET starts again from the seed. Formulas that update in place do so with their literal constants as operands. No float reads, no magnitude caps or isFinite gates; a test for nonzero is decided exactly. Nothing stops the run at a zero: S6 skips a pair whose base vertex is zero, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product, S13 leaves a pair whose denominator vertex is zero as it is, S16 leaves a complement pair as it is when an integer part is zero and the gcd is 1, since 1/(ab) then has no partial fractions. Every quadratic or cubic term is taken proportionately (Anurupyena): divided by the magnitude it scales with, so each formula moves the field by a bounded multiple of the field itself: S3 by the mean |psi|, S7 by S^2 + A^2, S19 by the smaller root (alpha rate (|big| - ratio |small|)), S28 and the GRVQ s28 term by |a| + |b|, which divides the difference of squares exactly into |a| - |b|, and the GRVQ s15 term by the mean |lambda|; where that magnitude is zero the term itself is zero. S16 runs extended Euclid on the integer parts of each complement pair: a gcd above 1 is divided out, and a coprime pair is coupled by the partial fractions t/a + s/b = 1/(ab). Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves (walk_measure_total_split). GRVQ feeds lambda, the four axis modes of psi: S1, S5, S9 and S14 add GRVQ to lambda_0..3 of their result and every other active sutra adds it to lambda_(id-1 mod 4), each times its own alpha, by moving psi along that axis (inverse_inject). S1 strength sets the MSTVQ stress feedback T_kk / 2e8 into lambda the same way and T trace / 500 into the TGCR stiffness kappa; S2, S3 and S29 set MSTVQ B. S15 is Gunitasamuccayah as R. K. Thakur, Advanced Vedic Mathematics (2019), chapter 10, states it: the product of the sums of the coefficients in the factors equals the sum of the coefficients in the product, and the book uses it to verify a product. For each axis S15 forms the Urdhva (vertically and crosswise) product of the field on the lower and upper half; its correction is the difference of the two sides, which is zero, so it verifies the field and leaves it as it is. The statement it decides on the live field is that the product of the half-sums less the vertex-by-vertex products is the crosswise sum (gunita_residual_cross), and that the Urdhva product sums to both. Each formula carries decided statements. The seed is lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
-  dynamoScopeNote: 'The magnetism memory is v18.24 section 4b made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in) as in v18.24, kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential acts as v18.24 transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
+  dynamoScopeNote: 'The magnetism memory, made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in), kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
   wheelerScopeNote: 'The Wheeler statements are compiled by lake build into SutraWS/WheelerGeometry.olean and are also re-decided at runtime by wheelerAudit() over the page arithmetic, on the stored dielectric field of the state being drawn. The WHEELER surface terms (balance, golden vortex, field distortion, ether pressure, counterspace) are bounded in SutraWS/WheelerSurface.lean, their inertial plane is the kernel layer k = 0, and sqrt3 and pi enter at the float boundary; WHEELER.surfaceAudit decides the vortex/balance identity exactly. The projection channel (SutraWS/Projection.lean) keeps every point in front of the camera whatever their size.'
 });
@@ -2551,8 +2545,8 @@ const CQuad = Object.freeze({
 
 const KConsts = (() => {
   const half = Q.mk(1n, 2n);
-  const s2o2 = Quad.mk(Q.ZERO, half); 
-  const zeta = CQuad.mk(s2o2, s2o2);  
+  const s2o2 = Quad.mk(Q.ZERO, half);
+  const zeta = CQuad.mk(s2o2, s2o2);
   const _cache = [CQuad.ONE];
   const powZeta = k => {
     const kk = ((k % 8) + 8) % 8;
@@ -2900,11 +2894,11 @@ function updateFaithfulBadge() {
 const SUTRAS = [
   { id:1,  name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α·Ψₙ/(Ψₙ² + one)), n = i⊕2^axis, in place · GRVQ feeds λ₀' },
   { id:2,  name:'Nikhilam', sk:'निखिलं', guide:'REFLECTIVE · Ψᵢ ← Ψᵢ + α·(B − 2Ψᵢ), B = radix^order, the first power above max(1, max|Ψ|) · sets MSTVQ B' },
-  { id:3,  name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'CONVOLUTIVE · Ψᵢ pulled by α to Σⱼ ΨⱼΨ_{i⊕j}/divisor, the crosswise (XOR) convolution · sets MSTVQ B' },
+  { id:3,  name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'CONVOLUTIVE · Ψᵢ pulled by α to Σⱼ ΨⱼΨ_{i⊕j}/(divisor·mean|Ψ|), the crosswise (XOR) convolution taken proportionately · sets MSTVQ B' },
   { id:4,  name:'Parāvartya Yojayet', sk:'परावर्त्य', guide:'DIVISIVE · Horner of the Hamming-layer means at σ = r/(1+r), r = hw/quarters; Ψᵢ pulled to it by α' },
   { id:5,  name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', guide:'REFLECTIVE · complement pairs pulled by α to Ψᵢ = −Ψ_{i⊕15}: each pair sum × (1 − 2α) · GRVQ feeds λ₁' },
   { id:6,  name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'PERMUTATIVE · each edge ratio Ψ₁/Ψ₀ driven to ±ratio by −α·err·|Ψ₀+Ψ₁|, in place · refuses Ψ₀ = 0' },
-  { id:7,  name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'PERMUTATIVE · each edge: S = (Ψ₀+Ψ₁)/2, A = (Ψ₀−Ψ₁)/2, δ = α(S²−A²)A; S += δ, A −= δ, in place' },
+  { id:7,  name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'PERMUTATIVE · each edge: S = (Ψ₀+Ψ₁)/2, A = (Ψ₀−Ψ₁)/2, δ = α(S²−A²)A/(S²+A²); S += δ, A −= δ, in place' },
   { id:8,  name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'DIVISIVE · Ψᵢ pulled by α·pull to the mean of its four completed squares ½(Ψᵢ+Ψⱼ), in place' },
   { id:9,  name:'Calana-Kalanābhyām', sk:'चलन', guide:'DIFFUSIVE · Ψ ← Ψ + αΔΨ, the graph Laplacian of the tesseract · GRVQ feeds λ₂' },
   { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α((B − |Ψᵢ|)/B)²), B = radix^order above max(1, |mean|)' },
@@ -2912,11 +2906,11 @@ const SUTRAS = [
   { id:12, name:'Veṣṭanaṃ', sk:'वेष्टनम्', guide:'REFLECTIVE · Ψᵢ pulled by α to ± its digital root 1 + (|⌊Ψᵢ⌋| − 1) mod modulus' },
   { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its numerators (terms) · refuses a zero' },
   { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 − α/(|Ψₙ| + one)), n = i⊕2^axis, in place · GRVQ feeds λ₃' },
-  { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'MULTIPLICATIVE · per axis the residual (Σ₊)(Σ₋) − ΣΨ₊Ψ₋ scales Ψ₊ by 1 − α·res and Ψ₋ by 1 + α·res/2' },
-  { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on each complement pair\'s numerators: gcd > 1 divided out, else Bézout cross-coupling' },
+  { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'MULTIPLICATIVE · per axis the residual (Σ₊)(Σ₋) − Σ(Ūrdhva product of Ψ₋ and Ψ₊) scales Ψ₊ by 1 − α·res and Ψ₋ by 1 + α·res/2; by Guṇitasamuccaya the product of the sums is the sum of the product, so res = 0 and the field is verified, not moved' },
+  { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on the integer parts a, b of each complement pair, sa + tb = g: g > 1 divided out, else the partial fractions t/a, s/b of 1/(ab) cross-couple the pair' },
   { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', guide:'DIFFUSIVE · Ψᵢ += α·proportion·Σⱼ(Ψⱼ − Ψᵢ)/4 over its four neighbours, in place' },
   { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', guide:'MODULAR · |⌊Ψᵢ⌋| moved by α toward the residues of its Hamming weight mod modA (and modB)' },
-  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', guide:'DIVISIVE · Vieta on complement pairs: the root ratio |Ψᵢ/Ψⱼ| driven to ratio at rate · refuses a zero root' },
+  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', guide:'DIVISIVE · Vieta on complement pairs: α·rate·(|big| − ratio·|small|), the root ratio |big/small| − ratio taken proportionately, moved from the larger root to the smaller' },
   { id:20, name:'Vilokanam', sk:'विलोकनम्', guide:'MODULAR · Ψᵢ moved by α toward the nearest multiple of base of |⌊Ψᵢ⌋|' },
   { id:21, name:'Guṇitasamuccayah Samuccayaguṇitaḥ', sk:'गुणितसमुच्चयः', guide:'MODULAR · osculation: last digit × osculator + the rest, Ψᵢ moved by α toward divisibility by modulus' },
   { id:22, name:'Dvandvayogaḥ', sk:'द्वन्द्वयोगः', guide:'REFLECTIVE · Ψᵢ pulled by α to (Ψᵢ + Ψ_{i⊕15})/2, in place' },
@@ -2925,7 +2919,7 @@ const SUTRAS = [
   { id:25, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'CONVOLUTIVE · ∏ of the axis half-sums S vs T: layers pushed by layer·(hw−2), the inertial layer by gradient·∇ · refuses a zero half-sum' },
   { id:26, name:'Dhvajāṅka', sk:'ध्वजाङ्क', guide:'PERMUTATIVE · every vertex but the flag (the largest |Ψ|) pulled by α to Ψ_flag/portion' },
   { id:27, name:'Gunitasamuccayah', sk:'गुणितसमुच्चयः', guide:'DIFFUSIVE · four Hamming paths driven to arithmetic progressions; the rest pulled by α/2 to their neighbours' },
-  { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', guide:'DIFFUSIVE · each edge moves α·rate·(Ψᵢ² − Ψⱼ²) from Ψᵢ to Ψⱼ, keeping the sum exactly' },
+  { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', guide:'DIFFUSIVE · each edge moves α·rate·(Ψᵢ² − Ψⱼ²)/(|Ψᵢ| + |Ψⱼ|) = α·rate·(|Ψᵢ| − |Ψⱼ|) from Ψᵢ to Ψⱼ, keeping the sum exactly' },
   { id:29, name:'Conservation', sk:'संरक्षण', guide:'CONSERVATION · Ψ pulled by α·weight to its mean, keeping the mean exactly · sets MSTVQ B' }
 ];
 function parseStrengthPercentQ(raw) {
@@ -4736,8 +4730,7 @@ function buildPanel() {
   });
   const leg = document.createElement('div');
   leg.style.cssText = 'padding:4px;border-top:1px solid #222;font-size:5.5px;color:#555;line-height:1.3';
-  leg.innerHTML = `<b style="color:#666">ORDER</b>: SERIES and CONCURRENT apply the active sūtras in id order. Click a name to toggle it at 50%; the slider sets 0–100%; ΔE is the energy each formula changed the field by in the one calculation of the formula; the blue rows are the sūtra's own operands. `
-    + `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
+  leg.innerHTML = `<span style="color:#d4af37">MULT</span> <span style="color:#4a90d9">REFL</span> <span style="color:#44ddaa">CONV</span> <span style="color:#ff6644">DIV</span> <span style="color:#aa88ff">DIFF</span> <span style="color:#ff44aa">PERM</span> <span style="color:#88ccff">MOD</span>`;
   list.appendChild(leg);
 }
 function syncRow(s) {
@@ -5365,7 +5358,6 @@ const PRESETS = {
     purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.' }
 };
 
-const DEFAULT_PRESET = 'pre-quartet';
 function presetTitle(p) {
   const ops = Object.entries(p.set).map(([i, v]) => `S${i}(${v})`).join(' ');
   const knobs = [`vortex ω ${(p.omega / 10).toFixed(1)}`, p.drive ? `drive ${(p.drive / 4).toFixed(2)}` : '', p.chi !== 10 ? `χ ${(p.chi / 10).toFixed(1)}` : ''].filter(Boolean).join(', ');
@@ -5473,7 +5465,7 @@ const PROOF_RUN = {
       return;
     }
     const corpus = m.result.corpus;
-    LOG.add(`formula audit complete in ${Date.now() - this.started} ms — the 29 v18.24 formulas, exact`, 'on');
+    LOG.add(`formula audit complete in ${Date.now() - this.started} ms — the 29 formulas, exact`, 'on');
     let cells = 0, held = 0, refused = 0;
     for (const entry of corpus) for (const rec of entry.sutras) {
       cells++;
@@ -5910,7 +5902,7 @@ if (!window._VERSION_INTEGRITY.ok) console.error('VERSION MISMATCH:', window._VE
 const conformance = leanConformance();
 LOG.add(`runtime/lean conformance ${conformance.passed}/${conformance.total}${conformance.failed.length ? ' FAILED: ' + conformance.failed.join('; ') : ''}`,
         conformance.failed.length ? 'off' : 'sys');
-if (startWorkers()) applyPreset(DEFAULT_PRESET);
+if (startWorkers()) { SUTRAS.forEach(s => setSutraStrengthExact(s, '50')); syncPanel(); pushConfig('ALL ON — all 29 sūtras at 50%, calculated once from the seed and glided in', true); }
 startFieldWorker();
 renderModeIdentities();
 requestAnimationFrame(frame);

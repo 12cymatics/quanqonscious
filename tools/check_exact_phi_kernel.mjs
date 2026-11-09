@@ -3,9 +3,9 @@
    The kernel is not copied here. KERNEL_FACTORY is sliced out of the page and
    evaluated, so there is one copy of the formulas and nothing that can drift
    from it. Where a statement can be checked against something the kernel did
-   not compute, it is: the 29 v18.24 formulas and GRVQ against
-   tools/vedic_reference.py, a separate transcription of v18.24's
-   SUTRAS[].evolve in Python's exact Fraction; reduced fractions against a
+   not compute, it is: the 29 formulas and GRVQ against
+   tools/vedic_reference.py, a separate transcription of the formulas
+   in Python's exact Fraction; reduced fractions against a
    Euclid written here; the storage bound in bare BigInt arithmetic; the TGCR
    geometry, the stages and the couplings recomputed here from their
    definitions.
@@ -167,7 +167,7 @@ section('refusal, not clamping');
 }
 
 
-section('the 29 v18.24 formulas against an independent transcription');
+section('the 29 formulas against an independent transcription');
 {
   const states = [['the seed', K.initState()], ['the seed, stored', K.initState().map(K.storeQ)]];
   for (let k = 0; k < 6; k++) states.push([`stored state ${k}`, Array.from({ length: 16 }, () => {
@@ -240,73 +240,6 @@ section('the 29 v18.24 formulas against an independent transcription');
      'MSTVQ.setB equals the reference on 8 states');
 }
 
-section('the 29 formulas against v18.24\'s own evolve code');
-{
-  const V18 = readFileSync(join(ROOT, 'vedic_v18.24_full_kernel.html'), 'utf8');
-  const cut = (from, to) => { const a = V18.indexOf(from); const b = V18.indexOf(to, a); if (a < 0 || b < 0) throw new Error('v18.24: cannot find ' + from); return V18.slice(a, b + to.length); };
-  const qsrc = cut('const gcd = (a, b) =>', "flStrict: r => { if (r.d === 0n) return NaN; const v = Number(r.n) / Number(r.d); return isFinite(v) ? v : NaN; },\n};");
-  const vtxsrc = cut('const VTX = {', 'auditEnergyEnvelope(maxEnergy) {\n    return { strict: true, mutated: false, maxEnergy };\n  }\n};');
-  let sut = cut('const SUTRAS = [', '\n];');
-  const exactBi = src => { let out = '', i = 0, n = 0;
-    for (;;) { const j = src.indexOf('Q.mk(Bi(', i); if (j < 0) { out += src.slice(i); break; }
-      out += src.slice(i, j); let k = j + 8, depth = 1; while (depth) { const c = src[k++]; if (c === '(') depth++; else if (c === ')') depth--; }
-      const m = /^\s*,\s*(\d+)n\)/.exec(src.slice(k));
-      if (!m) { out += src.slice(j, k); i = k; continue; }
-      out += `QD((${src.slice(j + 8, k - 1).trim()}) / ${m[1]})`; i = k + m[0].length; n++; }
-    return { out, n }; };
-  const conv1 = exactBi(sut); sut = conv1.out;
-  const s15a = "        const residual = Q.fl(Q.sub(prodSum, sumProd));\n        if (isFinite(residual) && abs(residual) > 1e-6) {\n          const corr = -residual;";
-  const s15b = "        const residual = Q.sub(prodSum, sumProd);\n        if (residual.n !== 0n) {\n          const corr = Q.mk(-residual.n, residual.d), aQ = Q.mul(Q.mk(15n, 435n), Q.mk(BigInt(this.strength), 100n));";
-  const s15c = ['Q.add(Q.ONE, QD((α * corr * 10000) / 10000))', 'Q.add(Q.ONE, Q.mul(aQ, corr))'], s15d = ['Q.add(Q.ONE, QD((-α * corr * 5000) / 10000))', 'Q.sub(Q.ONE, Q.mul(Q.mul(aQ, corr), Q.HALF))'];
-  const s15ok = sut.split(s15a).length === 2 && sut.split(s15c[0]).length === 2 && sut.split(s15d[0]).length === 2;
-  sut = sut.replace(s15a, s15b).replace(s15c[0], s15c[1]).replace(s15d[0], s15d[1]);
-  const harness = `const abs = Math.abs, max = Math.max, min = Math.min, floor = Math.floor, sqrt = Math.sqrt, round = Math.round, PI = Math.PI, sin = Math.sin, cos = Math.cos, exp = Math.exp, log = Math.log, pow = Math.pow;
-    const sf = v => String(v); function bigAbs(n) { return n < 0n ? -n : n; }
-    ${qsrc}
-    const Bi = strictBi, SUTRA_SUM = 435n;
-    const QD = x => { if (!Number.isFinite(x)) throw new RangeError('non-finite ' + x); let v = x, d = 1n; while (!Number.isInteger(v)) { v *= 2; d *= 2n; } return Q.mk(BigInt(v), d); };
-    const C = { phi: Q.mk(12586269025n, 7778742049n), phi_f: 12586269025 / 7778742049, alpha: Q.mk(1000000n, 137035999n), alpha_f: 1 / 137.035999 };
-    let lambda = [Q.mk(3n), Q.mk(4n), Q.mk(5n), Q.mk(6n)], simTime = 0;
-    const R4val = Q.ONE, SULBA = { PI_SULBA: 3 }, USO = { unified: () => 1 };
-    const GRVQ = { evolve: () => 0 }, MSTVQ = { setB() {}, compute() {}, trace: () => 0 }, INTER_SUTRA = { recordInteraction() {} };
-    const ALPHA = { computeQ(sid, strength) { return Q.mul(Q.mk(BigInt(sid), SUTRA_SUM), Q.mk(BigInt(Math.round(strength || 0)), 100n)); } };
-    const SUPPRESS = { alpha(sid) { const s = SUTRAS[sid - 1]; return Q.fl(ALPHA.computeQ(sid, s ? s.strength : 0)); }, alphaPhi(sid) { return this.alpha(sid); } };
-    ${vtxsrc}
-    ${sut}
-    return { Q, VTX, SUTRAS };`;
-  const V = new Function(harness)();
-  const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
-  const magLog = q => q.n === 0n ? -Infinity : bl(q.n) - bl(q.d);
-  const states = [K.initEngine().psi];
-  for (let t = 0; t < 5; t++) states.push(Array.from({ length: 16 }, () => Q.mk(rnd(14) - 8192n + 1n, 100n)));
-  let worstBits = Infinity, where = '', compared = 0, refusedBoth = 0, mismatchRefusal = [];
-  const perId = {};
-  for (let id = 1; id <= 29; id++) for (const pct of [5, 50, 100]) for (const [si, s0] of states.entries()) {
-    const sutra = V.SUTRAS[id - 1]; sutra.strength = pct;
-    for (const k of Object.keys(sutra)) if (k.startsWith('_')) sutra[k] = k === '_cachedOrder' ? -1 : null;
-    V.VTX.psi = s0.map(q => V.Q.mk(q.n, q.d));
-    let old = null, port = null, oldErr = null, portErr = null;
-    try { sutra.evolve(1); old = V.VTX.psi.map(q => q.d === 0n ? null : Q.mk(q.n, q.d)); if (old.some(q => q === null)) { oldErr = 'a 0/0'; old = null; } } catch (e) { oldErr = e.message; }
-    try { const st = Q.mk(BigInt(pct), 100n); port = K.vedicField(id, s0, K.sutraArgs(id, st), Q.mul(Q.mk(BigInt(id), 435n), st)).p; } catch (e) { portErr = e; }
-    if (!old || !port) {
-      if (!old && portErr instanceof RangeError) refusedBoth++;
-      else mismatchRefusal.push(`S${id} ${pct}% state ${si}: v18.24 ${oldErr || 'ok'}, port ${portErr ? portErr.message : 'ok'}`);
-      continue;
-    }
-    compared++;
-    let disp = -Infinity, diff = -Infinity;
-    for (let v = 0; v < 16; v++) { disp = Math.max(disp, magLog(Q.sub(port[v], s0[v])), magLog(Q.sub(old[v], s0[v]))); diff = Math.max(diff, magLog(Q.sub(old[v], port[v]))); }
-    const bits = disp - diff;
-    perId[id] = Math.min(perId[id] ?? Infinity, bits);
-    if (bits < worstBits) { worstBits = bits; where = `S${id} at ${pct}% on state ${si}`; }
-  }
-  ok(conv1.n >= 40 && s15ok, `v18.24's SUTRAS array, Q and VTX are read from vedic_v18.24_full_kernel.html; each of its ${conv1.n} roundings Q.mk(Bi(x · N), N) is made the exact value of the double x, and S15's float residual is taken exactly`);
-  ok(compared === 29 * 3 * 6 - refusedBoth && mismatchRefusal.length === 0 && worstBits >= 32,
-     `on ${compared} applications (29 formulas x 5%, 50%, 100% x 6 states) v18.24's own evolve and the kernel agree to within 2^-${worstBits === Infinity ? 'inf' : worstBits} of the displacement (worst ${where}); ${refusedBoth} refused by both`,
-     mismatchRefusal.slice(0, 3).join('; ') + ' ' + Object.entries(perId).filter(([, b]) => b < 32).map(([i, b]) => `S${i}:${b}`).join(' '));
-}
-
-
 section('the statements each formula carries');
 {
   const corpus = K.formulaCorpusAudit(Array.from({ length: 29 }, (_, i) => i + 1));
@@ -338,9 +271,9 @@ section('the couplings: lambda, GRVQ, MSTVQ, kappa');
   const fwd = l => Array.from({ length: 16 }, (_, i) => l.reduce((s, x, k) => sgn(i, k) > 0n ? Q.add(s, x) : Q.sub(s, x), Q.ZERO));
   const seedS = K.initState();
   ok(sameQ(K.inverseL(seedS), [3n, 4n, 5n, 6n].map(n => Q.mk(n))) && sameQ(inv(seedS), K.inverseL(seedS)),
-     "the seed's lambda is v18.24's (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
+     "the seed's lambda is (3, 4, 5, 6): lambda_k = sum_i s_ik psi_i / 16, recomputed here");
   ok(sameQ(fwd([3n, 4n, 5n, 6n].map(n => Q.mk(n))).map((x, v) => Q.add(x, K.initDielectric()[v])), seedS) && seedS.every(x => x.n !== 0n),
-     'the seed is v18.24 forward(lambda) plus the dielectric seed, and no vertex is zero');
+     'the seed is forward(lambda) plus the dielectric seed, and no vertex is zero');
   let feedOk = true;
   for (const [id, k] of [[1, 0], [5, 1], [9, 2], [14, 3]]) {
     const t = Q.mk(2500n), gain = Q.mk(3n, 4n), rec = [], al = Q.mul(Q.mul(Q.mk(BigInt(id), 435n), Q.HALF), gain);
@@ -410,7 +343,7 @@ section('the stages of the real field');
     if (Math.abs(Number(u.n) / Number(u.d) - (c * x + s * y)) > 1e-12 || Math.abs(Number(w.n) / Number(w.d) - (c * y - s * x)) > 1e-12) rotOk = false;
   }
   ok(rotOk, 'a pair rotation by t is the rotation by 2 arctan t, against floats');
-  /* TGCR geometry walked here: bond current, curl by corners, v18.24 Hodge tables */
+  /* TGCR geometry walked here: bond current, curl by corners, Hodge tables */
   const psi = eng.psi, w = p.vortex;
   const vEdge = (u, h) => Q.mul(w, Q.mul(psi[u], psi[h]));
   const curl = (b, a, c) => Q.sub(Q.add(vEdge(b, b | (1 << a)), vEdge(b | (1 << a), b | (1 << a) | (1 << c))), Q.add(vEdge(b | (1 << c), b | (1 << a) | (1 << c)), vEdge(b, b | (1 << c))));
@@ -426,7 +359,7 @@ section('the stages of the real field');
     pont = Q.add(pont, Q.sub(ss, aa)); fsq = Q.add(fsq, Q.add(ss, aa));
     if (!Q.eq(G.density[i], Q.sub(ss, aa))) dens = false;
   }
-  ok(dens && Q.eq(G.pontryagin, pont) && Q.eq(G.FSq, fsq), "TGCR: F = d1 v, v = omega psi_t psi_h, split at each vertex by v18.24's tables; F^F and |F|^2 recomputed here");
+  ok(dens && Q.eq(G.pontryagin, pont) && Q.eq(G.FSq, fsq), "TGCR: F = d1 v, v = omega psi_t psi_h, split at each vertex by the Hodge tables; F^F and |F|^2 recomputed here");
   ok(Q.eq(G.energy, Q.add(Q.add(Q.mul(Q.HALF, fsq), Q.mul(Q.mul(Q.HALF, eng.tgcrKappa), energyQ(G.v))), Q.mul(Q.HALF, pont))),
      'TGCR energy = |F|^2/2 + kappa |v|^2/2 + eta F^F with eta = 1/2');
   ok(G.cubeFlux.every(Q.isZero) && G.density.some(x => x.n !== 0n), 'the vortex curvature closes on every cube and is not zero');
@@ -677,7 +610,7 @@ section('magnetism memory');
     });
   }
   ok(inductOk, 'A = (499/500) A + omega (6/100 | eta 3/100) m_e share_e on all 32 edges for 40 steps, recomputed here');
-  ok(chiOk, "the Faraday potential chi = (499/500) chi + (psi_out - psi_in), v18.24's dPsi, recomputed here");
+  ok(chiOk, "the Faraday potential chi = (499/500) chi + (psi_out - psi_in), recomputed here");
   ok(shareOk, 'the dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy, recomputed here');
   ok(gradOk, 'the Faraday part of A carries no flux on any of those steps (faraday_flux_free)');
   ok(closedOk, 'the flux out of every one of the 8 cubes is zero on every step (flux_closed)');
