@@ -8,22 +8,8 @@ PHI = F(12586269025, 7778742049)
 PHI_INV = F(12586269025 - 7778742049, 7778742049)
 
 
-STORE_BITS = 128
-
-
 def store(x):
-    if x == 0:
-        return F(0)
-    neg = x < 0
-    n, d = abs(x.numerator), x.denominator
-    k = STORE_BITS - (n.bit_length() - d.bit_length())
-    num = n << k if k >= 0 else n
-    den = d if k >= 0 else d << -k
-    if num < (den << (STORE_BITS - 1)):
-        raise ArithmeticError("store hypothesis")
-    m = (2 * num + den) // (2 * den)
-    m = -m if neg else m
-    return F(m, 1 << k) if k >= 0 else F(m << -k)
+    return x
 
 
 def mean_abs(xs):
@@ -214,13 +200,15 @@ def field(sid, psi, a, al):
     elif sid == 13:
         for i in range(8):
             j = i ^ 15
-            num, den = abs(p[i].numerator), abs(p[j].numerator)
-            if den == 0:
+            if p[j] == 0:
                 continue
-            n, d, cf = num, den, []
-            while len(cf) < int(a[1]) and d > 0:
-                cf.append(n // d)
-                n, d = d, n % d
+            x, cf = abs(p[i] / p[j]), []
+            while len(cf) < int(a[1]):
+                f = x.numerator // x.denominator
+                cf.append(f)
+                if x == f:
+                    break
+                x = 1 / (x - f)
             p0, p1, q0, q1 = 1, cf[0], 0, 1
             for ak in cf[1:]:
                 p0, p1, q0, q1 = p1, ak * p1 + p0, q1, ak * q1 + q0
