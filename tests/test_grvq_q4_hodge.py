@@ -1,6 +1,9 @@
 """Independent coordinates and complete cell bases for the Euclidean Hodge asset."""
+import json
+import re
 from decimal import Decimal
 from fractions import Fraction as Q
+from pathlib import Path
 
 import pytest
 import sympy as sp
@@ -137,8 +140,8 @@ def test_all_vertices_keep_source_six_face_mean_and_normalized_pressure():
     assert result["signature"] == (1, 1, 1, 1)
     assert result["orientation"] == (0, 1, 2, 3)
     assert result["axis_pairs"] == PAIRS
-    assert result["source"]["commit"] == "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1"
-    assert result["source"]["path"] == "vedic_v18.24_full_kernel.html"
+    assert result["source"]["path"] == "vedic_v18.51.1_exact_phi.html"
+    assert result["source"]["tables"] == ("HODGE_SD", "HODGE_ASD")
     for local in result["vertices"]:
         assert local["local_bivector6"] == ANCHOR
         assert local["source_plus_triple"] == (Q(-5, 12), Q(-7, 12), Q(-1, 12))
@@ -261,3 +264,19 @@ def test_extra_faces_are_rejected_without_discarding_them():
     cochain[(16, 0, 1)] = Q(0)
     with pytest.raises(ValueError, match="invalid cells"):
         q4_hodge_diagnostics(cochain)
+
+
+def test_the_split_is_the_simulator_kernels_hodge_tables():
+    page = (Path(__file__).resolve().parents[1] / "vedic_v18.51.1_exact_phi.html").read_text(encoding="utf-8")
+
+    def table(name):
+        found = re.search(r"const " + name + r" = (\[\[[-0-9,\[\]]*\]\])\.map\(r => r\.map\(c => Q\.mk\(BigInt\(c\), 2n\)\)\);", page)
+        assert found, f"{name} is not in the page"
+        return [tuple(Q(c, 2) for c in row) for row in json.loads(found.group(1))]
+
+    self_dual, anti_self_dual = table("HODGE_SD"), table("HODGE_ASD")
+    assert len(self_dual) == len(anti_self_dual) == 6
+    for face in range(6):
+        split = split_hodge6([Q(int(i == face)) for i in range(6)])
+        assert split["plus_triple"] == self_dual[face], face
+        assert split["minus_triple"] == anti_self_dual[face], face

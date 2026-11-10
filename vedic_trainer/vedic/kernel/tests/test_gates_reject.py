@@ -275,8 +275,7 @@ def test_path_gate_refuses_an_ambiguous_bare_filename(monkeypatch):
     assert DP.resolves("lone.py", "README.md")
 
 
-def test_path_gate_honours_only_declared_externals():
-    assert DP.is_live(sorted(DP.EXTERNAL)[0], "README.md")
+def test_path_gate_rejects_a_file_kept_outside_the_repository():
     assert not DP.is_live("someones_kernel.html", "README.md")
 
 

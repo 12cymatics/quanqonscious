@@ -1578,6 +1578,272 @@ const KERNEL_FACTORY = () => {
     const t2 = Q.mul(t, t), den = Q.add(Q.ONE, t2), c = Q.div(Q.sub(Q.ONE, t2), den), s = Q.div(Q.mul(Q.TWO, t), den);
     return [Q.add(Q.mul(c, x), Q.mul(s, y)), Q.sub(Q.mul(c, y), Q.mul(s, x))];
   };
+  const BOOK = (() => {
+    const Z = R.ZERO, I = R.ONE, z = v => R.mk(BigInt(v));
+    const refuse = why => { throw new RangeError(why); };
+    const int = x => x.d === 1n ? x.n : refuse('an integer is required');
+    const seq = xs => Array.isArray(xs) && xs.length ? xs : refuse('a nonempty coefficient sequence is required');
+    const sum = xs => xs.reduce((s, x) => R.add(s, x), Z);
+    const isZ = x => x.n === 0n;
+    const absZ = v => v < 0n ? -v : v;
+    const gcdZ = (a, b) => { a = absZ(a); b = absZ(b); while (b) [a, b] = [b, a % b]; return a; };
+    const modZ = (a, m) => ((a % m) + m) % m;
+    const floorZ = (a, m) => (a - modZ(a, m)) / m;
+    const invMod = (a, m) => {
+      let r0 = modZ(a, m), r1 = m, s0 = 1n, s1 = 0n;
+      while (r1) { const k = r0 / r1; [r0, r1] = [r1, r0 - k * r1]; [s0, s1] = [s1, s0 - k * s1]; }
+      return r0 === 1n ? modZ(s0, m) : refuse('the base is not invertible modulo the divisor');
+    };
+    const isqrtZ = n => { if (n < 2n) return n; let x = 1n << BigInt((n.toString(2).length + 1) >> 1); for (;;) { const y = (x + n / x) >> 1n; if (y >= x) return x; x = y; } };
+    const sqrtR = x => {
+      if (x.n < 0n) return null;
+      const a = isqrtZ(x.n), b = isqrtZ(x.d);
+      return a * a === x.n && b * b === x.d ? R.mk(a, b) : null;
+    };
+    const cross = (a, b) => {
+      seq(a); seq(b);
+      return Array.from({ length: a.length + b.length - 1 }, (_, k) => {
+        let s = Z;
+        for (let i = 0; i < a.length; i++) if (k - i >= 0 && k - i < b.length) s = R.add(s, R.mul(a[i], b[k - i]));
+        return s;
+      });
+    };
+    const derivative = p => { seq(p); const out = p.slice(1).map((c, i) => R.mul(z(i + 1), c)); return out.length ? out : [Z]; };
+    const divide = (dividend, divisor) => {
+      seq(dividend); seq(divisor);
+      const lead = divisor[divisor.length - 1];
+      if (isZ(lead)) refuse('the leading divisor coefficient must be nonzero');
+      if (dividend.length < divisor.length) return { quotient: [Z], remainder: dividend.slice() };
+      const rem = dividend.slice(), quotient = Array(dividend.length - divisor.length + 1).fill(Z);
+      for (let k = quotient.length - 1; k >= 0; k--) {
+        quotient[k] = R.div(rem[k + divisor.length - 1], lead);
+        for (let j = 0; j < divisor.length; j++) rem[k + j] = R.sub(rem[k + j], R.mul(divisor[j], quotient[k]));
+      }
+      if (rem.slice(divisor.length - 1).some(c => !isZ(c))) refuse('polynomial division did not eliminate the leading terms');
+      const remainder = rem.slice(0, divisor.length - 1);
+      return { quotient, remainder: remainder.length ? remainder : [Z] };
+    };
+    const deficiencySquare = ({ n, base }) => {
+      if (R.sign(base) <= 0) refuse('the base must be positive');
+      const d = R.sub(base, n);
+      return [d, R.mul(R.sub(n, d), base), R.mul(d, d)];
+    };
+    const coefficientSum = ({ factors }) => {
+      if (!Array.isArray(factors) || !factors.length) refuse('at least one polynomial factor is required');
+      let result = [I], total = I;
+      for (const f of factors) { result = cross(result, f); total = R.mul(total, sum(f)); }
+      if (!R.eq(sum(result), total)) refuse('the coefficient-sum identity failed');
+      return result;
+    };
+    const methods = [
+      ({ denominator }) => {
+        const den = int(denominator);
+        if (den < 9n || den % 10n !== 9n) refuse('the denominator must be positive and end in 9');
+        const m = (den + 1n) / 10n, rev = [];
+        let digit = 1n, carry = 0n;
+        for (;;) {
+          rev.push(digit);
+          const v = m * digit + carry; carry = v / 10n; digit = v % 10n;
+          if (digit === 1n && carry === 0n) return rev.reverse().map(d => R.mk(d));
+        }
+      },
+      ({ a, b, base }) => {
+        if (R.sign(base) <= 0) refuse('the base must be positive');
+        const da = R.sub(base, a), db = R.sub(base, b);
+        return [da, db, R.mul(R.sub(a, db), base), R.mul(da, db)];
+      },
+      ({ a, b }) => cross(a, b),
+      ({ dividend, divisor }) => {
+        if (seq(dividend).length < seq(divisor).length) { if (isZ(divisor[divisor.length - 1])) refuse('the leading divisor coefficient must be nonzero'); return [Z, ...dividend]; }
+        const r = divide(dividend, divisor);
+        return [...r.quotient, ...r.remainder];
+      },
+      ({ a, b, c, d }) => {
+        const ab = R.mul(a, b), cd = R.mul(c, d);
+        if (!R.eq(ab, cd)) refuse('the independent-term products must be equal');
+        return [ab, cd, R.sub(R.add(a, b), R.add(c, d))];
+      },
+      ({ a, b, c, d, e, f }) => {
+        const det = R.sub(R.mul(a, e), R.mul(b, d));
+        if (isZ(det)) refuse('a unique solution requires independent equations');
+        if (R.eq(R.mul(b, f), R.mul(e, c)) && (!isZ(b) || !isZ(e))) return [det, Z, !isZ(b) ? R.div(c, b) : R.div(f, e)];
+        if (R.eq(R.mul(a, f), R.mul(d, c)) && (!isZ(a) || !isZ(d))) return [det, !isZ(a) ? R.div(c, a) : R.div(f, d), Z];
+        return refuse('neither coefficient column is proportional to the right-hand side');
+      },
+      ({ a, b, c, d }) => {
+        const s = R.add(a, b), m = R.sub(a, b);
+        if (isZ(s) || isZ(m)) refuse('the symmetric system must have a unique solution');
+        const total = R.div(R.add(c, d), s), diff = R.div(R.sub(c, d), m);
+        return [total, diff, R.mul(R.add(total, diff), R.HALF), R.mul(R.sub(total, diff), R.HALF)];
+      },
+      ({ a, b, c }) => {
+        if (isZ(a)) refuse('the quadratic coefficient must be nonzero');
+        return [a, R.neg(R.div(b, R.mul(R.TWO, a))), R.sub(c, R.div(R.mul(b, b), R.mul(R.FOUR, a)))];
+      },
+      ({ p }) => derivative(p),
+      deficiencySquare,
+      ({ a, b, total }) => {
+        const n = R.mul(R.sub(a, b), R.HALF), n2 = R.mul(n, n);
+        return [R.mul(R.add(a, b), R.HALF), n, R.TWO, R.mul(z(12), n2), R.sub(R.mul(R.TWO, R.mul(n2, n2)), total)];
+      },
+      ({ denominator }) => {
+        const den = int(denominator);
+        if (den <= 1n || gcdZ(den, 10n) !== 1n) refuse('the denominator must exceed one and be coprime to ten');
+        const last = modZ(-invMod(den, 10n), 10n), digits = [];
+        let rem = 1n;
+        for (;;) { rem = (10n * rem) % den; digits.push(R.mk((rem * last) % 10n)); if (rem === 1n) return digits; }
+      },
+      ({ first, difference }) => {
+        if (seq(first).length !== 2 || seq(difference).length !== 2) refuse('supply ascending constant and linear coefficients');
+        const [a0, a1] = first, [d0, d1] = difference;
+        if (isZ(a1) && isZ(d1)) refuse('at least one denominator factor must depend on the variable');
+        for (let k = 0; k < 4; k++)
+          if (isZ(R.add(a0, R.mul(z(k), d0))) && isZ(R.add(a1, R.mul(z(k), d1)))) refuse('a denominator factor is identically zero');
+        return [d0, d1, R.add(R.mul(z(3), a0), R.mul(z(7), d0)), R.add(R.mul(z(3), a1), R.mul(z(7), d1))];
+      },
+      ({ n, places }) => {
+        const v = int(n), p = int(places);
+        if (p < 1n) refuse('at least one nine is required');
+        const base = 10n ** p;
+        return [R.mk((v - 1n) * base), R.mk(base - v)];
+      },
+      coefficientSum,
+      ({ factors }) => {
+        if (!Array.isArray(factors) || !factors.length) refuse('at least one polynomial factor is required');
+        factors.forEach(seq);
+        const result = Array(Math.max(1, factors.reduce((s, f) => s + f.length - 1, 0))).fill(Z);
+        factors.forEach((f, i) => {
+          let term = derivative(f);
+          factors.forEach((g, j) => { if (i !== j) term = cross(term, g); });
+          term.forEach((c, k) => { if (!isZ(c)) result[k] = R.add(result[k], c); });
+        });
+        return result;
+      },
+      ({ a, b, reference_base, ratio }) => {
+        if (R.sign(reference_base) <= 0 || R.sign(ratio) <= 0) refuse('the reference base and ratio must be positive');
+        const base = R.mul(reference_base, ratio), da = R.sub(base, a), db = R.sub(base, b);
+        return [ratio, da, db, R.mul(R.sub(a, db), ratio), R.mul(da, db)];
+      },
+      ({ dividend, divisors }) => {
+        const v = int(dividend), ds = seq(divisors).map(int);
+        if (ds.some(d => d <= 0n)) refuse('positive divisors are required');
+        const pairs = ds.map(d => [floorZ(v, d), modZ(v, d)]);
+        if (pairs.some(p => p[1] !== pairs[0][1])) refuse('these divisions do not have a constant remainder');
+        return pairs.flat().map(x => R.mk(x));
+      },
+      ({ quadratic, factor }) => {
+        if (seq(quadratic).length !== 3 || seq(factor).length !== 2) refuse('a quadratic and a binomial are required');
+        const [c, b, a] = quadratic, [q, p] = factor;
+        if (isZ(a) || isZ(p) || isZ(q)) refuse('first and last factor coefficients must be nonzero');
+        const result = [R.div(c, q), R.div(a, p)], back = cross([q, p], result);
+        if (!(R.eq(back[0], c) && R.eq(back[1], b) && R.eq(back[2], a))) refuse('the supplied binomial is not a factor');
+        return [q, p, ...result];
+      },
+      ({ numerator }) => {
+        const v = int(numerator);
+        if (v < 1n || v > 6n) refuse('a proper positive seventh requires a numerator from one to six');
+        return (v * 143n * 999n).toString().padStart(6, '0').split('').map(d => R.mk(BigInt(d)));
+      },
+      ({ n, divisor }) => {
+        const v = int(n), d = int(divisor);
+        if (v < 0n || d <= 1n || gcdZ(d, 10n) !== 1n) refuse('use n >= 0 and a divisor > 1 coprime to ten');
+        const positive = invMod(10n, d), negative = d - positive;
+        const chains = [x => x / 10n + positive * (x % 10n), x => absZ(x / 10n - negative * (x % 10n))].map(step => {
+          const chain = [v];
+          for (let x = v; ;) { const y = step(x); if (y >= x) return chain; chain.push(y); x = y; }
+        });
+        const divisible = chains[0][chains[0].length - 1] % d === 0n;
+        if (divisible !== (chains[1][chains[1].length - 1] % d === 0n)) refuse('positive and negative osculation disagree');
+        return [positive, negative, ...chains[0], ...chains[1]].map(x => R.mk(x));
+      },
+      ({ n, base }) => {
+        if (R.sign(base) <= 0) refuse('the base must be positive');
+        const d = R.sub(base, n);
+        return [d, R.sub(n, R.mul(R.TWO, d)), R.mul(z(3), R.mul(d, d)), R.neg(R.mul(d, R.mul(d, d)))];
+      },
+      deficiencySquare,
+      ({ a, b }) => {
+        const x = int(a), y = int(b);
+        if (x >= 0n && y >= 0n) {
+          const len = (x > y ? x : y).toString().length;
+          for (let k = 1; k <= len; k++) {
+            const base = 10n ** BigInt(k), pa = x / base, da = x % base, pb = y / base, db = y % base;
+            if (pa === pb && da + db === base) return [R.mk(pa * (pa + 1n)), R.mk(da * db)];
+          }
+        }
+        return refuse('equal nonnegative prefixes and last parts totalling a power of ten are required');
+      },
+      ({ a, b, common, numerator_last, denominator_last }) => {
+        seq(common);
+        if (seq(a).length !== 2 || seq(b).length !== 2) refuse('linear ratio factors are required');
+        const d = numerator_last, e = denominator_last, bc = cross(b, common);
+        bc[0] = R.add(bc[0], e);
+        if (b.every(isZ) || bc.every(isZ)) refuse('a denominator is identically zero');
+        return [d, e, R.sub(R.mul(d, b[0]), R.mul(e, a[0])), R.sub(R.mul(d, b[1]), R.mul(e, a[1]))];
+      },
+      ({ a, b }) => cross(a, b),
+      ({ a, b, c, xy, yz, zx }) => {
+        if (isZ(a)) refuse('this x-retaining application requires a nonzero x-squared coefficient');
+        const dy = sqrtR(R.sub(R.mul(xy, xy), R.mul(R.FOUR, R.mul(a, b)))), dz = sqrtR(R.sub(R.mul(zx, zx), R.mul(R.FOUR, R.mul(a, c))));
+        if (!dy || !dz) refuse('the retained binary quadratics must factor over the rationals');
+        const two = R.mul(R.TWO, a);
+        for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+          const p = R.div(R.add(xy, R.mul(z(sy), dy)), two), q = R.div(R.add(zx, R.mul(z(sz), dz)), two);
+          const r = R.sub(xy, R.mul(a, p)), s = R.sub(zx, R.mul(a, q));
+          if (R.eq(R.add(R.mul(p, s), R.mul(q, r)), yz)) return [I, p, q, a, r, s];
+        }
+        return refuse('the retained factors do not reconstruct the yz coefficient');
+      },
+      ({ total, split, numerator = [Z, I], denominator = [I, Z], sign = I }) => {
+        if (seq(numerator).length !== 2 || seq(denominator).length !== 2) refuse('supply ascending constant and linear coefficients');
+        const sg = int(sign);
+        if ((sg !== 1n && sg !== -1n) || isZ(split)) refuse('a nonzero observed ratio and sign +1 or -1 are required');
+        const other = R.div(sign, split);
+        if (!R.eq(R.add(split, other), total)) refuse('the observed reciprocal pair does not equal the right-hand side');
+        if (numerator.every(isZ) || denominator.every(isZ)) refuse('both reciprocal ratio factors must be nonzero polynomials');
+        return [total, split, other, ...numerator, ...denominator];
+      },
+      coefficientSum
+    ];
+    const f = (n, d = 1) => R.mk(BigInt(n), BigInt(d)), l = xs => xs.map(v => f(v));
+    const EXAMPLES = Object.freeze([null,
+      { denominator: f(19) }, { a: f(98), b: f(97), base: f(100) }, { a: l([3, 2, 1]), b: l([6, 5, 4]) },
+      { dividend: l([1, 2, 1]), divisor: l([1, 1]) }, { a: f(7), b: f(9), c: f(3), d: f(21) },
+      { a: f(6), b: f(7), c: f(8), d: f(19), e: f(14), f: f(16) }, { a: f(45), b: f(-23), c: f(113), d: f(-91) },
+      { a: f(1), b: f(-5), c: f(6) }, { p: l([6, -5, 1]) }, { n: f(97), base: f(100) }, { a: f(7), b: f(5), total: f(706) },
+      { denominator: f(7) }, { first: l([2, 1]), difference: l([1, 0]) }, { n: f(123), places: f(3) },
+      { factors: [l([7, 1]), l([9, 1])] }, { factors: [l([1, 1]), l([2, 1]), l([3, 1])] },
+      { a: f(49), b: f(49), reference_base: f(100), ratio: f(1, 2) }, { dividend: f(65), divisors: l([2, 4, 8, 16, 32, 64]) },
+      { quadratic: l([2, 5, 2]), factor: l([2, 1]) }, { numerator: f(1) }, { n: f(343), divisor: f(7) },
+      { n: f(9989), base: f(10000) }, { n: f(103), base: f(100) }, { a: f(43), b: f(47) },
+      { a: l([1, 1]), b: l([3, 1]), common: l([0, 1]), numerator_last: f(1), denominator_last: f(3) },
+      { a: l([7, 1]), b: l([9, 1]) }, { a: f(2), b: f(6), c: f(3), xy: f(7), yz: f(11), zx: f(7) },
+      { total: f(17, 4), split: f(4) }, { factors: [l([1, 1]), l([2, 1]), l([3, 1])] }]);
+    const terms = (id, operands) => {
+      if (!Number.isInteger(id) || id < 1 || id > 29) refuse('the sutra id must be between one and twenty-nine');
+      return Object.freeze(methods[id - 1](operands === undefined ? EXAMPLES[id] : operands));
+    };
+    const MATCHINGS = (() => {
+      const matchings = [], used = [];
+      for (let i = 0; i < 16; i++) for (const j of NEIGHBORS(i)) {
+        const edge = [Math.min(i, j), Math.max(i, j)];
+        let at = used.findIndex(s => !s.has(edge[0]) && !s.has(edge[1]));
+        if (at < 0) { matchings.push([]); used.push(new Set()); at = matchings.length - 1; }
+        matchings[at].push(edge); used[at].add(edge[0]); used[at].add(edge[1]);
+      }
+      return Object.freeze(matchings.map(m => Object.freeze(m)));
+    })();
+    const rotate = (psi, coefficients, strength) => {
+      const p = psi.slice();
+      for (const c of coefficients) {
+        const t = Q.neg(Q.mul(strength, c));
+        for (const matching of MATCHINGS) for (const [u, v] of matching) [p[u], p[v]] = rotPair(p[u], p[v], t);
+      }
+      return p;
+    };
+    const apply = (id, psi, strength, operands) => rotate(psi, terms(id, operands), strength);
+    return Object.freeze({ terms, rotate, apply, EXAMPLES, MATCHINGS });
+  })();
   const edgeRotate = (psi, tau, keep = x => x) => {
     let p = psi;
     for (let ax = 0; ax < 4; ax++) {
@@ -1879,7 +2145,7 @@ const KERNEL_FACTORY = () => {
       case 13: claim('convergent_det', out.convergents.every(c => bigAbs(c.p * c.qPrev - c.pPrev * c.q) === 1n)); break;
       case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.mayLe(Q.abs(x), Q.abs(psiIn[i])))); break;
       case 15: {
-        let ok = out.urdhva.length === 4;
+        let ok = out.urdhva.length === 4, book = out.urdhva.length === 4;
         for (let axis = 0; axis < 4; axis++) {
           const mask = 1 << axis, bases = [...Array(16).keys()].filter(b => !(b & mask));
           const sP = sumR(bases.map(b => psiIn[b | mask])), sM = sumR(bases.map(b => psiIn[b]));
@@ -1888,11 +2154,15 @@ const KERNEL_FACTORY = () => {
           for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(psiIn[b], psiIn[c | mask]));
           if (!Q.agree(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
           const u = out.urdhva[axis];
-          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross)) || !Q.agree(u.scProduct, u.scFactors)) ok = false;
+          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross))) ok = false;
+          if (!u || !Q.agree(u.scProduct, u.scFactors)) book = false;
         }
-        claim('gunita_residual_cross', ok && sameR(psiIn, p)); break;
+        claim('gunita_residual_cross', ok);
+        claim('gunita_samuccaya', book && sameR(psiIn, p)); break;
       }
-      case 16: claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n))); break;
+      case 16:
+        claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n)));
+        claim('bezout_partial_fraction', out.bezout.every(r => r.g !== 1n || r.a === 0n || r.b === 0n || Q.eq(Q.add(Q.mk(r.t, r.a), Q.mk(r.s, r.b)), Q.mk(1n, r.a * r.b)))); break;
       case 18: {
         const mA = BigInt(argInt(a[1]));
         claim('crt_residue_step', psiIn.every((x, i) => { const v = absFloor(x), r = BigInt(hw(i)) % mA; return (v + (r - v % mA + mA) % mA) % mA === r; })); break;
@@ -2244,7 +2514,7 @@ const KERNEL_FACTORY = () => {
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
     initState,initEngine,step,formulaOf,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
-    hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley,certify,NeedPrecision,workBits,setWorkBits,exactBits,setExactBits,MAX_WORK_BITS});
+    hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley,BOOK,certify,NeedPrecision,workBits,setWorkBits,exactBits,setExactBits,MAX_WORK_BITS});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2621,7 +2891,7 @@ const VISUAL_CERTIFICATE = {
     },
     sutra: {
       draws: 'each active sutra: its formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
-      theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'ext_euclid_step', 'bezout_identity', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
+      theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'gunita_samuccaya', 'ext_euclid_step', 'bezout_identity', 'bezout_partial_fraction', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
       holds: () => SUTRA_CERT.ok
     }
   },
@@ -2666,12 +2936,12 @@ function leanConformance() {
 const PROVENANCE = Object.freeze({
   version: VERSION.string,
   sourceFile: VERSION.sourceFile,
-  leanCorpusSha256: '23395fc36ee9b826b3a33c6e7b9d55d73ca7e4de0c0e38c2c67bd3fc6e70819d',
+  leanCorpusSha256: 'c060496ada6f92353850adc3f8abe7162fade6379c5d384b8feb10e1da028304',
   leanToolchain: 'leanprover/lean4:v4.10.0',
-  leanTheorems: 2487,
+  leanTheorems: 2489,
   leanSorryCount: 0,
   leanOleans: ['SutraWS.olean','SutraWS/AxiomAudit.olean','SutraWS/Contracts.olean','SutraWS/DECComplex.olean','SutraWS/DisplayMap.olean','SutraWS/ErrorBudget.olean','SutraWS/Exhaustive.olean','SutraWS/FieldLines.olean','SutraWS/FieldsAround.olean','SutraWS/FluxSurface.olean','SutraWS/FractionalPower.olean','SutraWS/Interpolation.olean','SutraWS/Interval.olean','SutraWS/Magnetism.olean','SutraWS/MayaFlow.olean','SutraWS/NonExpansive.olean','SutraWS/PressureHaze.olean','SutraWS/Projection.olean','SutraWS/Proofs.olean','SutraWS/R4Controller.olean','SutraWS/RenderCertificates.olean','SutraWS/State.olean','SutraWS/StoredPrecision.olean','SutraWS/StrengthRamp.olean','SutraWS/Sutra.olean','SutraWS/SutraSemantics.olean','SutraWS/TorusLattice.olean','SutraWS/VedicFormulas.olean','SutraWS/Vertex.olean','SutraWS/VertexProofs.olean','SutraWS/WheelerGeometry.olean','SutraWS/WheelerSurface.olean'],
-  leanAxiomsKernelChecked: 2487,
+  leanAxiomsKernelChecked: 2489,
   leanAxiomsCompilerTrusted: 0,
   leanAxiomsUsed: ['Classical.choice','Quot.sound','propext'],
   wheelerLeanSource: 'SutraWS/WheelerGeometry.lean',
@@ -3078,7 +3348,7 @@ const SUTRAS = [
   { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α((B − |Ψᵢ|)/B)²), B = radix^order above max(1, |mean|)' },
   { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', guide:'CONVOLUTIVE · Ψᵢ pulled by α to (its Hamming-layer mean + the whole mean)/2' },
   { id:12, name:'Veṣṭanaṃ', sk:'वेष्टनम्', guide:'REFLECTIVE · Ψᵢ pulled by α to ± its digital root 1 + (|⌊Ψᵢ⌋| − 1) mod modulus' },
-  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its numerators (terms) · refuses a zero' },
+  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its ratio |Ψᵢ/Ψ_{i⊕15}| (terms) · refuses a zero' },
   { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 − α/(|Ψₙ| + one)), n = i⊕2^axis, in place · GRVQ feeds λ₃' },
   { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'MULTIPLICATIVE · per axis the residual (Σ₊)(Σ₋) − Σ(Ūrdhva product of Ψ₋ and Ψ₊) scales Ψ₊ by 1 − α·res and Ψ₋ by 1 + α·res/2; by Guṇitasamuccaya the product of the sums is the sum of the product, so res = 0 and the field is verified, not moved' },
   { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on the integer parts a, b of each complement pair, sa + tb = g: g > 1 divided out, else the partial fractions t/a, s/b of 1/(ab) cross-couple the pair' },

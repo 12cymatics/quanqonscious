@@ -54,11 +54,10 @@
       "authority": "Existing authored arithmetic-to-field mappings; not the missing canonical GRVQ geodesic chain"
     },
     {
-      "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
       "paths": [
-        "vedic_v18.24_full_kernel.html"
+        "vedic_v18.51.1_exact_phi.html"
       ],
-      "authority": "Existing explicit Euclidean Hodge star/signs and per-vertex averaged SU(2) triples; not the unspecified GRVQ metric"
+      "authority": "The kernel's Hodge tables HODGE_SD and HODGE_ASD, the Euclidean self-dual and anti-self-dual split; not the unspecified GRVQ metric"
     }
   ],
   "loaded_skills": [
@@ -68,7 +67,7 @@
   ],
   "instruction_scope_check": "Pinned remote tree contains root AGENTS.md, root CLAUDE.md and collaboration-readiness/AGENTS.md. No deeper instructions apply to this continuation's write paths. Root AGENTS is 3149 bytes; CLAUDE was manually reviewed as recorded in the preceding task, not claimed automatically loaded.",
   "source_discovery": {
-    "repository": "Inspected newer PR170 and PR172 source and archived GRVQ texts. Recovered the full Hodge formula from the existing pinned v18.24 source. No inspected source supplies the missing 26 canonical field formulas or full metric/evolution.",
+    "repository": "Inspected newer PR170 and PR172 source and archived GRVQ texts. The Hodge split is the simulator kernel's HODGE_SD and HODGE_ASD tables. No inspected source supplies the missing 26 canonical field formulas or full metric/evolution.",
     "related_work": "PR170 retains a separate 29-operator vertex formulation with unresolved full-step completion; PR172 adds an explicit reduced-divisor arithmetic variant. Those branches were not modified or silently imported.",
     "library": "Read Exact_Kernel_Evolution_Blueprint_2026-07-31.docx and retrieved sutraws PDFs. The blueprint distinguishes operational exact algebra from incomplete GRVQ/Maya/evolution; an older quantum field snippet uses coordinate caps and fallbacks and does not establish canonical couplings.",
     "drive": "Read Grvq, Sutras 1-6, Sutras 7-16, Sutras Rcoq, Sutras quantum, Sutra linkage mapping, related H2 source and newer sutra file snapshots. Their arithmetic, alternative fields, fixed matrices and circuit phases do not define the missing canonical equations. Concurrent November 4 source files were left untouched.",

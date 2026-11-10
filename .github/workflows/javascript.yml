@@ -183,6 +183,10 @@ jobs:
       run: node fsi/check-coupled-affine.mjs
     - name: Exact sutra kernel of vedic_v18.51.1_exact_phi.html (sliced out of the page)
       run: node tools/check_exact_phi_kernel.mjs
+    - name: sympy, which the book's Python transcription is written in
+      run: python3 -m pip install sympy==1.14.0
+    - name: The 29 book methods in the page's kernel, against vedic_book.py and vedic_field.py
+      run: node tools/check_exact_phi_book.mjs
 
   lean-citations:
     name: lean citations
@@ -252,6 +256,11 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Exact book arithmetic dependency
+      run: python -m pip install sympy==1.14.0
     - name: WebAssembly toolchain
       run: sudo apt-get update && sudo apt-get install -y clang lld
     - name: Unpack the committed zip outside the checkout

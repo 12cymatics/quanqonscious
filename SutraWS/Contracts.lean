@@ -6,7 +6,7 @@ import SutraWS.SutraSemantics
 # The α → 0 identity-collapse guarantee
 
 The v18 kernel states this as a structural claim
-(`vedic_v18.24_full_kernel.html:5520-5534`, §12Y "STRUCTURAL SINGULARITY SUPPRESSION"):
+(§12Y "STRUCTURAL SINGULARITY SUPPRESSION"):
 
 ```
 STRUCTURAL GUARANTEE: every operator type collapses to identity when α→0:
@@ -65,7 +65,7 @@ def driftStep (α : ℚ) (G : Psi → Psi) (P : Psi) : Psi :=
 @[simp] theorem driftStep_zero (G : Psi → Psi) (P : Psi) : driftStep 0 G P = P := by
   funext i; simp [driftStep]
 
-/-- The seven operator classes of §12Z (`vedic_v18.24_full_kernel.html:5540-5551`), plus the
+/-- The seven operator classes of §12Z, plus the
 `CONSERVATION` shape named in the §12Y guarantee banner. -/
 inductive Family
   | multiplicative | reflective | convolutive | divisive

@@ -3,7 +3,7 @@ import SutraWS.Vertex
 /-!
 # Invariants of the v18 vertex substrate
 
-The v18 banner (`vedic_v18.24_full_kernel.html:5479`, `simulation v18:232`) advertises the
+The v18 banner (`simulation v18:232`) advertises the
 substrate as a Hadamard duality `Ψ[16] ↔ λ[4]` on Z₂⁴ in exact ℚ, and the runtime harness
 `CONTRACTS` (`simulation v18:486-540`) checks energy and complement behaviour numerically, in
 floats, every 120 cycles. The theorems below are the exact algebraic facts those float checks

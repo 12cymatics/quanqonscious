@@ -300,8 +300,21 @@ export function stripPage(html){
    failure is cut to the failure's name, and the reason goes to the browser console. */
 export const PROSE_EDITS = [
   ['the subtitle under the title',
-   "\n  <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,\n"
-   + "  circular quartz cells · surface responds at <b>f/2</b></p>", ''],
+   "\n  <p>General circular-cell experiment · SI physical inputs · optional Sheldrake &amp; Sheldrake 2017 comparison</p>", ''],
+  ['the example-input explanation',
+   'Initial values are editable examples, not measurements.', 'Editable examples · not measurements'],
+  ['the general physical-input explanation',
+   'Drive: g + a cos(2π f t). Kinematic viscosity is μ/ρ. Initial displacement: (amplitude/depth) × depth × Jₘ(jₘ,₁ r/R) cos(mθ); initial velocity is zero.',
+   'g + a cos(2π f t) · ν = μ/ρ · η₀ = (amplitude/depth) h Jₘ(jₘ,₁ r/R) cos(mθ) · u₀ = 0'],
+  ['the model scope explanation',
+   'One incompressible Newtonian liquid in a rigid circular cylinder; a single-valued free surface; pinned contact line with no-slip floor and wall. Free contact is available only for modal diagnostics. No air dynamics, overturning, contact-angle hysteresis or deformable vessel. Finite numerical discretization, not an exact continuum solution.',
+   'Incompressible Newtonian liquid · rigid cylinder · graph surface · pinned rim · no-slip floor and wall · free contact: modal diagnostics only · no gas or overturning · no contact hysteresis or vessel deformation · finite discretization'],
+  ['the initial nonlinear pending explanation',
+   '>Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.</div>',
+   '>Nonlinear solver pending · press Run</div>'],
+  ['the live nonlinear pending explanation',
+   "solverRequested ? 'Nonlinear solver starting; no replacement surface is displayed.' : 'Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.'",
+   "solverRequested ? 'Nonlinear solver starting' : 'Nonlinear solver pending · press Run'"],
   ['the startup box\'s sentence before the page runs; the box stays, hidden until a failure',
    "<div id=\"startupStatus\" role=\"status\" style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>",
    "<div id=\"startupStatus\" role=\"status\" hidden style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\"></div>"],
@@ -332,12 +345,7 @@ export const PROSE_EDITS = [
    + "         + `reported in its place.`);",
    "console.error(err); $('dnsOut').innerHTML = cell('verdict', '<b>did not run</b>');"],
   ['the footer',
-   "<footer>\n  <b>Layers are kept separate.</b> Fold labels are the paper's printed classifications.\n"
-   + "  Contrast / centre-bias / ring / texture figures are image descriptors measured from the\n"
-   + "  rendered PDF panels — renderer hints, never the authors' measurements. Bessel modes and\n"
-   + "  water properties are theory, used for diagnostics and outside the atlas.<br>\n"
-   + "  Amplitude stays in apparatus mV: the paper gives no mV→acceleration transfer function, so\n"
-   + "  none is invented. Surface tension is IAPWS R1-76; viscosity is the Vogel–Andrade fit, not IAPWS.\n"
+   "<footer>\n  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The reference reconstruction and modal diagnostic are separate visual models. Image normalization does not alter the solver field. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.\n"
    + "</footer>\n", ''],
   ['the warnings',
    "  $('warnBox').innerHTML = s.warnings.map(w =>\n"
@@ -380,7 +388,10 @@ export const PROSE_EDITS = [
    output does not merely restate the edit that produced it. */
 export const REMOVED_PROSE = [
   'Sheldrake &amp; Sheldrake 2017', 'Not started. Open index.html', 'This simulator requires JavaScript',
-  'No substitute simulation has been loaded', 'Canvas rendering started', 'Starting the simulator', 'The deck above decides onset', 'Layers are kept separate',
+  'No substitute simulation has been loaded', 'Canvas rendering started', 'Starting the simulator', 'The deck above decides onset', 'General nonlinear experiments use the entered SI properties',
+  'Initial values are editable examples', 'Kinematic viscosity is μ/ρ',
+  'One incompressible Newtonian liquid in a rigid circular cylinder',
+  'Set the experiment inputs and press Run 3D solver',
   'Choose CPU to draw there', 'GPU unavailable: ', 'no atlas for this diameter',
   'Higher atmospheric pressure favoured', 'above flicker fusion', 'saves through the viewer',
   'saving unavailable in this view', "'saves to disk'", "'export failed: '",
