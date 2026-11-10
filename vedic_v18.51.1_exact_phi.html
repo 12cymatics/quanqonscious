@@ -3082,7 +3082,7 @@ const SUTRAS = [
   { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α((B − |Ψᵢ|)/B)²), B = radix^order above max(1, |mean|)' },
   { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', guide:'CONVOLUTIVE · Ψᵢ pulled by α to (its Hamming-layer mean + the whole mean)/2' },
   { id:12, name:'Veṣṭanaṃ', sk:'वेष्टनम्', guide:'REFLECTIVE · Ψᵢ pulled by α to ± its digital root 1 + (|⌊Ψᵢ⌋| − 1) mod modulus' },
-  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its numerators (terms) · refuses a zero' },
+  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its ratio |Ψᵢ/Ψ_{i⊕15}| (terms) · refuses a zero' },
   { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 − α/(|Ψₙ| + one)), n = i⊕2^axis, in place · GRVQ feeds λ₃' },
   { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'MULTIPLICATIVE · per axis the residual (Σ₊)(Σ₋) − Σ(Ūrdhva product of Ψ₋ and Ψ₊) scales Ψ₊ by 1 − α·res and Ψ₋ by 1 + α·res/2; by Guṇitasamuccaya the product of the sums is the sum of the product, so res = 0 and the field is verified, not moved' },
   { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on the integer parts a, b of each complement pair, sa + tb = g: g > 1 divided out, else the partial fractions t/a, s/b of 1/(ab) cross-couple the pair' },
