@@ -51,16 +51,19 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const HTML = readFileSync(join(ROOT, 'vedic_v18.51.1_exact_phi.html'), 'utf8');
+const PAGE = join(ROOT, 'vedic_v18.51.1_exact_phi.html');
+const HTML = readFileSync(PAGE, 'utf8');
 const start = HTML.indexOf('const KERNEL_FACTORY = () => {');
 const end = HTML.indexOf('\nconst KERNEL = KERNEL_FACTORY();');
 if (start < 0 || end < 0 || end < start) {
   console.error('FAIL -- KERNEL_FACTORY could not be located in the page');
   process.exit(1);
 }
-const K = new Function(HTML.slice(start, end) + '\nreturn KERNEL_FACTORY();')();
+const K = new vm.Script(HTML.slice(start, end) + '\nKERNEL_FACTORY();',
+  { filename: PAGE, lineOffset: HTML.slice(0, start).split('\n').length - 1 }).runInThisContext();
 const { Q, A4 } = K;
 
 let pass = 0;

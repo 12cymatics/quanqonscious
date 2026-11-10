@@ -2,16 +2,6 @@
 
 The fixtures below are compared against the kernel that wrote them.
 
-## The Z₂⁴ primitives against `vedic_v18.16_strict_kernel.html` — unrun
-
-The Fraction kernel in `vedic/kernel/z2_primitives.py` and the JavaScript
-kernel inside the v18.16 simulator are two independent implementations of the
-**same** exact-rational algorithm. (This paragraph named `sutras_exact.py` for
-as long as that file had been renamed.) **v18.16 is genuinely not in this
-repository**, so this comparison remains unrun. Bit-exact
-means: given the same seed and the same `n` random Ψ inputs, both
-implementations produce the same JSON file byte-for-byte.
-
 ## Fixture format (exact ℚ)
 
 `fixtures/psi_inputs.json`:
@@ -43,7 +33,7 @@ exercised on both sides of the boundary. 32 inputs × 3 samples = 96 records.
 are a second, separate reference covering the α-weighted operators in
 `vedic/kernel/sutras_canonical.py`: 8 inputs × 29 sutras × 3 strengths = 696
 records. They are written by `scripts/build_canonical_fixtures.py` and are
-checked by the same gate. Unlike the v18.16 fixtures they are produced by the
+checked by the same gate. Like the primitive fixtures they are produced by the
 kernel they are compared against, so they detect **drift, not error** — see
 the README's falsification criterion 3 for what that distinction buys.
 
@@ -53,39 +43,9 @@ the README's falsification criterion 3 for what that distinction buys.
 python scripts/build_fixtures.py --seed 0xC0DEC0DE --n 32 --out fixtures
 ```
 
-## Hooking the v18.16 simulator
-
-The simulator HTML must expose a single JavaScript function on the
-window object:
-
-```js
-window.exportFixtures = function(seed, n) {
-    // Run the same deterministic-random Ψ generation as
-    // scripts/build_fixtures.py:_random_q16:
-    //   for v in 0..15:
-    //     den = rng.nextInt(1, denom_max=1000);
-    //     num = rng.nextInt(-denom_max, +denom_max);
-    //     psi[v] = Fraction(num, den);
-    // Then compute every sutra output and every conservation residual
-    // (using the same trace_sum samples 0, 435, 7·435 as in
-    // scripts/build_fixtures.py).
-    //
-    // Return { psi_inputs, sutra_outputs, conservation_residuals }
-    // with the same JSON schema as fixtures/*.json.
-};
-```
-
-The seeded RNG must be deterministic and identical to Python's
-`random.Random(seed).randint(...)` *or* an equivalent Mersenne Twister
-implementation seeded the same way. If the simulator uses a different
-RNG, drive it from a pre-computed list of (num, den) pairs that match
-Python's output (the simulator's recorder has an "input table" mode
-documented in its UI).
-
 ## Verification
 
-Once `fixtures/*.json` is populated either by `build_fixtures.py` or by
-`export_simulator_fixtures.py`, run:
+Once `fixtures/*.json` is populated by `build_fixtures.py`, run:
 
 ```bash
 python scripts/verify_bit_exact.py
@@ -95,10 +55,9 @@ It exits 0 if the ℚ kernel reproduces every fixture record exactly, and
 prints what it checked: 32 inputs, 32 sutra records, 96 conservation records,
 then 8 inputs and 696 canonical-29 records. An unchecked fixture key is
 itself a failure — the gate refuses to run at all against a missing reference
-rather than rebuilding one from the code under test. If
-the simulator export disagrees with `build_fixtures.py`, the simulator
-has a bug; if the Python kernel disagrees with both, the kernel has a
-bug. Either way: stop, fix, restart.
+rather than rebuilding one from the code under test. If the Python kernel
+disagrees with a committed fixture, it has drifted: stop, find which changed
+and why, and only then regenerate.
 
 ## Why exact ℚ matters for the LLM trainer
 
