@@ -119,7 +119,7 @@ const apart = (a, b) => a.some((x, i) => !Q.agree(x, b[i]));
 const mid = q => Q.isExact(q) ? q : Q.mul(Q.add(q.lo, q.hi), Q.HALF);
 const exactly = f => { K.setExactBits(null); try { return f(); } finally { K.setExactBits(4096); } };
 const energyQ = p => p.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
-const reference = cases => JSON.parse(execFileSync('python3', ['-I', join(ROOT, 'tools', 'vedic_reference.py')],
+const reference = cases => JSON.parse(execFileSync('python3', [join(ROOT, 'tools', 'vedic_reference.py')],
   { input: JSON.stringify({ cases }), maxBuffer: 1 << 28 }).toString()).results;
 
 section('self-tests');
