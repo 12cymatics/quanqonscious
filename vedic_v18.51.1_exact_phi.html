@@ -1842,7 +1842,48 @@ const KERNEL_FACTORY = () => {
       return p;
     };
     const apply = (id, psi, strength, operands) => rotate(psi, terms(id, operands), strength);
-    return Object.freeze({ terms, rotate, apply, EXAMPLES, MATCHINGS });
+    const operandsOf = (id, psi) => {
+      if (!Number.isInteger(id) || id < 1 || id > 29) refuse('the sutra id must be between one and twenty-nine');
+      if (!Array.isArray(psi) || psi.length !== 16) refuse('the field has sixteen vertices');
+      const w = psi.map(x => Q.floor(x)), m = w.map(absZ);
+      const Zr = v => R.mk(w[v]), N = n => R.mk(n), pick = vs => vs.map(Zr);
+      const digits = n => (n > 1n ? n : 1n).toString().length;
+      const base = n => N(10n ** BigInt(digits(n)));
+      const top = m[0] > m[15] ? m[0] : m[15];
+      switch (id) {
+        case 1: return { denominator: N(10n * m[0] + 9n) };
+        case 2: return { a: Zr(0), b: Zr(15), base: base(top) };
+        case 3: return { a: pick([0, 1, 2, 3, 4, 5, 6, 7]), b: pick([8, 9, 10, 11, 12, 13, 14, 15]) };
+        case 4: return { dividend: pick([0, 1, 2, 3, 4, 5, 6, 7]), divisor: [Zr(15), I] };
+        case 5: return { a: Zr(0), b: N(w[1] * w[15]), c: Zr(1), d: N(w[0] * w[15]) };
+        case 6: return { a: Zr(0), b: Zr(1), c: N(w[15] * w[1]), d: Zr(2), e: Zr(3), f: N(w[15] * w[3]) };
+        case 7: return { a: Zr(0), b: Zr(1), c: Zr(2), d: Zr(3) };
+        case 8: return { a: Zr(0), b: Zr(1), c: Zr(2) };
+        case 9: return { p: w.map(N) };
+        case 10: return { n: Zr(0), base: base(m[0]) };
+        case 11: return { a: Zr(0), b: Zr(15), total: Zr(1) };
+        case 12: return { denominator: N(10n * m[0] + 7n) };
+        case 13: return { first: pick([0, 1]), difference: pick([2, 3]) };
+        case 14: return { n: Zr(0), places: N(BigInt(digits(m[0]))) };
+        case 15: return { factors: [0, 1, 2, 3].map(v => pick([v, v ^ 15])) };
+        case 16: return { factors: [0, 1, 2].map(v => pick([v, v ^ 15])) };
+        case 17: return { a: Zr(0), b: Zr(15), reference_base: base(top), ratio: R.mk(BigInt((top > 1n ? top : 1n).toString()[0]) + 1n, 10n) };
+        case 18: return { dividend: Zr(0), divisors: [N(m[15] + 1n)] };
+        case 19: return { quadratic: [N(w[0] * w[2]), N(w[0] * w[3] + w[1] * w[2]), N(w[1] * w[3])], factor: pick([0, 1]) };
+        case 20: return { numerator: N(1n + m[0] % 6n) };
+        case 21: return { n: N(m[0]), divisor: N(10n * m[15] + 7n) };
+        case 22: return { n: Zr(0), base: base(m[0]) };
+        case 23: return { n: Zr(15), base: base(m[15]) };
+        case 24: { const d = 1n + m[15] % 9n; return { a: N(10n * m[0] + d), b: N(10n * m[0] + 10n - d) }; }
+        case 25: return { a: pick([0, 1]), b: pick([2, 3]), common: pick([4, 5]), numerator_last: Zr(6), denominator_last: Zr(7) };
+        case 26: return { a: pick([0, 1, 2, 3]), b: pick([4, 5, 6, 7]) };
+        case 27: return { a: Zr(0), b: N(w[1] * w[3]), c: N(w[2] * w[4]), xy: N(w[3] + w[0] * w[1]), yz: N(w[1] * w[4] + w[2] * w[3]), zx: N(w[4] + w[0] * w[2]) };
+        case 28: return { total: w[0] === 0n ? Z : R.add(Zr(0), R.div(I, Zr(0))), split: Zr(0) };
+        default: return { factors: [0, 1, 2, 3, 4, 5, 6, 7].map(v => pick([v, v ^ 15])) };
+      }
+    };
+    const fromField = (id, psi, strength) => rotate(psi, terms(id, operandsOf(id, psi)), strength);
+    return Object.freeze({ terms, rotate, apply, operandsOf, fromField, EXAMPLES, MATCHINGS });
   })();
   const edgeRotate = (psi, tau, keep = x => x) => {
     let p = psi;
