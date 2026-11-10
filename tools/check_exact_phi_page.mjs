@@ -482,7 +482,8 @@ try {
   const tor = await evaluate(`new Promise(res => {
     const id = 1e9 + Math.floor(Math.random() * 1e6);
     EXPORT_WAIT.set(id, m => {
-      const P = m.payload, q = x => Q.mk(BigInt(x.n), BigInt(x.d)), A = P.magA.map(q), chi = P.magChi.map(q);
+      const q = x => 'lo' in x ? Object.freeze({ lo: q(x.lo), hi: q(x.hi) }) : Q.mk(BigInt(x.n), BigInt(x.d));
+      const P = m.payload, A = P.magA.map(q), chi = P.magChi.map(q);
       const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
       const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
       const step4 = (a, b) => (b - a + 4) % 4 === 1 ? 1 : -1;
@@ -1041,33 +1042,39 @@ try {
   await evaluate(`document.getElementById('btn-export').click()`);
   const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
-    const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
-    const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    let magKeeps = null, rotKeeps = null, shareKeeps = null;
+    const q = x => 'lo' in x ? Object.freeze({ lo: q(x.lo), hi: q(x.hi) }) : Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
+    const ident = (x, y) => Q.isExact(x) ? Q.isExact(y) && x.n === y.n && x.d === y.d : !Q.isExact(y) && ident(x.lo, y.lo) && ident(x.hi, y.hi);
+    const tight = x => { if (Q.isExact(x)) return true; const wn = x.hi.n * x.lo.d - x.lo.n * x.hi.d, wd = x.hi.d * x.lo.d, ab = v => v < 0n ? -v : v;
+      return [[1n, 1n], [ab(x.lo.n), x.lo.d], [ab(x.hi.n), x.hi.d]].some(([mn, md]) => (wn << 200n) * md <= mn * wd); };
+    const near = (x, y) => Q.agree(x, y) && tight(x) && tight(y);
+    let magKeeps = null, rotKeeps = null, shareKeeps = null, bits = null;
+    const K = KERNEL, was = K.workBits();
     try {
-      const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
+      bits = L.workBits;
+      K.setWorkBits(bits);
+      const P = KERNEL_VIEW.params, same = (x, y) => x.length === y.length && x.every((v, i) => ident(v, y[i]));
       const B0 = st(L.afterFormulaShare), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
       const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
-      const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-      magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
-      rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
+      magKeeps = same(K.edgeRotate(B0, tau), G) && near(en(G), en(B0));
+      rotKeeps = same(K.edgeRotate(M, tT), T) && near(en(T), en(M));
       const dF = st(L.formula.delta), part = q(L.formulaPart);
-      shareKeeps = same(st(L.input).map((x, i) => K.storeQ(Q.add(x, Q.mul(dF[i], part)))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
+      shareKeeps = same(st(L.input).map((x, i) => Q.add(x, Q.mul(dF[i], part))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
+    finally { K.setWorkBits(was); }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             magKeeps, rotKeeps, shareKeeps,
+             magKeeps, rotKeeps, shareKeeps, bits, exactBits: L.exactBits, storeBits: L.storeBits,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
              records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.formula.activeSutras.length * (L.formula.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.formula.activeSutras.length + ' ' + L.formula.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/6' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
-  ok(st.params && st.dielectricIn && st.stepError,
-     'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
-  ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
+  ok(gotStep && st.schema === 'vedic-step-export/7' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(st.params && st.dielectricIn && st.stepError && Number.isInteger(st.bits) && st.bits >= 256 && st.exactBits === 4096 && st.storeBits === null,
+     'the step export carries its parameters, starting dielectric, error budget and the precision it was certified at', JSON.stringify(st));
+  ok(st.magKeeps === true && st.rotKeeps === true, `the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit at the ${st.bits} bits the step records, and each rotation keeps the energy to the width of the intervals (rot_pair_energy)`, JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
   ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per sutra in the formula', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.shareKeeps === true, 'the step export carries the formula: its change is its field less the field it was calculated from, and the step put in exactly its share of it', JSON.stringify({ shareKeeps: st.shareKeeps }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
