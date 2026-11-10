@@ -30,6 +30,9 @@
 
    Run: node dns/check-page.mjs
    Env: CHROME=/path/to/chrome  overrides binary discovery.
+   PAGE_GATE_STANDALONE_TRANSPORT=http explicitly runs the same standalone and
+   clean-build assertions over loopback HTTP when browser policy blocks file://.
+   It does not validate file://; the default remains file and refuses on denial.
 */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -43,6 +46,10 @@ import { createRequire } from 'node:module';
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, '..');
 const require = createRequire(import.meta.url);
+const STANDALONE_TRANSPORT = process.env.PAGE_GATE_STANDALONE_TRANSPORT || 'file';
+if (!['file','http'].includes(STANDALONE_TRANSPORT))
+  throw new Error('PAGE_GATE_STANDALONE_TRANSPORT must be file or http');
+const generatedPages = new Map();
 
 let pass = 0; const failures = [];
 function ok(cond, label, detail){
@@ -85,6 +92,10 @@ const HTML_TYPE = 'text/html';
 function serve(root){
   const srv = createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]);
+    if (generatedPages.has(rel)){
+      res.writeHead(200, { 'Content-Type': HTML_TYPE });
+      return res.end(generatedPages.get(rel));
+    }
     const p = join(root, normalize(rel).replace(/^(\.\.[/\\])+/, ''));
     /* The browser asks for /favicon.ico unprompted. Answering 204 keeps the
        harness from manufacturing a resource error the page did not cause. */
@@ -182,7 +193,9 @@ class Page {
     await page.cmd('Runtime.enable');
     await page.cmd('Log.enable');
     await page.cmd('Page.enable');
-    await page.cmd('Page.navigate', { url });
+    const navigation = await page.cmd('Page.navigate', { url });
+    if (navigation.errorText) throw new Error(
+      `check-page: navigation to ${url} failed: ${navigation.errorText}. No page assertions ran for this URL.`);
     return page;
   }
   constructor(browser, sessionId){
@@ -269,14 +282,83 @@ const { srv, port } = await serve(REPO);
 const browser = await Browser.launch();
 const built = join(tmpdir(), 'cymatic-standalone-checkpage.html');
 const cleanBuilt = join(tmpdir(), 'cymatic-clean-checkpage.html');
+const generatedUrl = (path, file) => STANDALONE_TRANSPORT === 'file'
+  ? `file://${file}` : `http://127.0.0.1:${port}${path}`;
+console.log(`standalone/clean transport: ${STANDALONE_TRANSPORT}`
+  + (STANDALONE_TRANSPORT === 'http' ? ' (explicit HTTP scope; file:// is not validated)' : ''));
 let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
+
+async function checkGeneralPending(page){
+  const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
+    rim, useSolver, solverRequested, have: CELL3D.clocks().have,
+    comparePaper, signature: state.visualSignature,
+    empty: [ETA, IMF, NX, NY].every(a => a.every(v => v === 0)),
+    overlay: getComputedStyle(document.getElementById('solverOverlay')).display !== 'none' })`);
+  ok(pending.experimentMode === 'general' && pending.experiment,
+     'the default experiment uses independent physical inputs', JSON.stringify(pending));
+  ok(pending.rim === 'pinned' && pending.useSolver,
+     'the default surface is the nonlinear solver with a pinned rim', JSON.stringify(pending));
+  ok(!pending.solverRequested && !pending.have && pending.empty && pending.overlay,
+     'before an explicit run no worker frame or substitute modal surface is displayed', JSON.stringify(pending));
+  ok(!pending.comparePaper && pending.signature === null,
+     'the pending nonlinear field has no reference-atlas texture or comparator enabled', JSON.stringify(pending));
+  const exportError = await page.eval(`(async () => {
+    try { await exportImage(129, () => {}); return ''; }
+    catch (e){ return e.message; }
+  })()`, true);
+  ok(/No nonlinear solver frame/.test(exportError),
+     'export refuses a nonlinear run without a frame instead of exporting a modal substitute', exportError);
+
+  const physical = await page.json(`(() => {
+    globalThis.__savedPhysicalInputs = [...document.querySelectorAll('#generalInputs input')]
+      .map(e => [e.id, e.value]);
+    globalThis.__savedPhysicalFrequency = freq;
+    for (const [id, value] of [['expDiameter',35],['expDepth',5],['expRho',1100],
+      ['expMu',.0022],['expSigma',.05],['expGravity',1.62],['expAccel',.3]])
+      document.getElementById(id).value = String(value);
+    document.getElementById('expAccel').dispatchEvent(new Event('change', {bubbles:true}));
+    setFreq(23.75); recompute();
+    return { diameter: state.cellDiameterMm, depth: state.depthMm, rho: state.water.rho,
+      nu: state.water.nu, sigma: state.water.sigma, gravity: state.gravity,
+      acceleration: state.accelAssumed, frequency: freq, error: document.getElementById('experimentError').textContent };
+  })()`);
+  for (const [key, want] of Object.entries({diameter:35, depth:5, rho:1100,
+    nu:.0022/1100, sigma:.05, gravity:1.62, acceleration:.3, frequency:23.75}))
+    rel(physical[key], want, 14, `general ${key} reaches the physical configuration without preset clamping`);
+  ok(physical.error === '', 'valid independent SI inputs are accepted', physical.error);
+  const invalid = await page.json(`(() => {
+    const e = document.getElementById('expRho'); e.value = '-1';
+    e.dispatchEvent(new Event('change', {bubbles:true}));
+    setFreq(24.25);
+    document.getElementById('runSolver').click();
+    return {input:e.value, accepted:generalInput.rho, error:document.getElementById('experimentError').textContent,
+      requested:solverRequested, have:CELL3D.clocks().have};
+  })()`);
+  ok(invalid.input === '-1' && invalid.accepted === 1100 && invalid.error.length > 0
+     && !invalid.requested && !invalid.have,
+     'an invalid density still prevents a run after editing frequency, with no clamp or replacement value', JSON.stringify(invalid));
+  await page.eval(`for (const [id,value] of __savedPhysicalInputs) document.getElementById(id).value = value;
+    document.getElementById('expRho').dispatchEvent(new Event('change', {bubbles:true}));
+    setFreq(__savedPhysicalFrequency); recompute(); true`);
+}
 
 async function checkPage(url, name, expectInline, clean = false){
   section(`${name}  (${url.replace(/^http:\/\/127\.0\.0\.1:\d+/, '')})`);
   const page = await Page.open(browser, url);
-  await page.waitFor('typeof state === "object" && state !== null', 30000,
-                     'the renderer to resolve a state');
+  try {
+    await page.waitFor('typeof state === "object" && state !== null', 30000,
+                       'the renderer to resolve a state');
+  } catch (error){
+    throw new Error(`${error.message}\nBrowser exceptions: ${JSON.stringify(page.errors)}\n`
+      + `Resource failures: ${JSON.stringify(page.logErrors)}\nConsole: ${JSON.stringify(page.console)}`);
+  }
+
+  await checkGeneralPending(page);
+  /* The retained Floquet and modal drawing fixtures explicitly select their
+     reference apparatus and free linear contact condition. Those diagnostics
+     are separate from the default pinned nonlinear experiment. */
+  await selectReferenceModal(page);
 
   /* 1. the page declares its own character set */
   const cs = await page.json(`{
@@ -573,6 +655,16 @@ async function checkPage(url, name, expectInline, clean = false){
   return page;
 }
 
+async function selectReferenceModal(page){
+  await page.eval(`document.getElementById('configurationMode').value = 'reference';
+    document.getElementById('configurationMode').dispatchEvent(new Event('change', {bubbles:true}));
+    document.querySelector('#srcSeg [data-s="modal"]').click();
+    document.querySelector('#rimSeg [data-r="free"]').click();
+    document.getElementById('comparePaper').checked=true;
+    document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true}));
+    recompute(); true`);
+}
+
 /* ---- the solver actually draws, which loading the page does not prove -------
    Everything above establishes that the page comes up and logs nothing. This turns
    the surface source over to dns/faraday-cell3d.js, waits for the worker's first
@@ -590,11 +682,15 @@ async function checkSolverDraws(page){
   const before = await page.json('({ src: document.querySelector("#srcSeg [data-s=\'modal\']")'
     + '.getAttribute("aria-pressed"), useSolver })');
   ok(before.src === 'true' && before.useSolver === false,
-     'the page starts on the modal superposition, so the solver is opt-in and nothing '
-     + 'about the existing picture changed by adding it',
+     'the preceding diagnostic fixture explicitly selected modal superposition',
      JSON.stringify(before));
 
-  await page.eval('document.querySelector("#srcSeg [data-s=\'dns\']").click()');
+  await selectGeneralSolverFixture(page,'dns');
+  const selected = await page.json(`({ requested:solverRequested, have:CELL3D.clocks().have,
+    empty:ETA.every(v => v === 0), rim })`);
+  ok(!selected.requested && !selected.have && selected.empty && selected.rim === 'pinned',
+     'selecting a nonlinear engine clears the modal raster and waits for an explicit run', JSON.stringify(selected));
+  await page.eval('document.getElementById("runSolver").click()');
   const waited = await page.waitFor('CELL3D.clocks().have === true', 60000,
                                     "the worker's first frame");
   const c = await page.json('CELL3D.clocks()');
@@ -607,37 +703,29 @@ async function checkSolverDraws(page){
      'and it advanced the physics clock, so the solver is integrating and not idling',
      `${c.stepsDone} steps, t = ${c.physT}`);
 
-  /* THE GRID IS THE ONE THE SEEDED MODE NEEDS. The page's controls are read back and the
-     whole chain is run again HERE, in node, from the kernel: the operating point resolved,
-     the nearest mode taken with its OWN wavenumber -- or, pinned, the zero of J_m nearest its
-     scale -- and sized by suggestCell3DGrid. The page ran its solver on exactly that grid.
-     This is what fails if the page sizes from anything else: the drive's wavenumber, which
-     is what it used to pass, gives no grid at all at this point. */
+  /* Recompute the first pinned J_m root and the grid from the independent SI
+     controls in node. The seed is an explicit initial condition; no modal or
+     paper prediction supplies the nonlinear configuration. */
   {
     const K = require(join(REPO, 'faraday', 'kernel.js'));
     const C3 = require(join(REPO, 'dns', 'faraday-cell3d.js'));
-    const ctl = await page.json('({ cellKey, freq, amp, temp, depth, rim, tSec: simT, '
-      + 'tfeSec: tfeOf() })');
-    const st = K.resolvePatternState({ cellKey: ctl.cellKey, f: ctl.freq, amplitudeMv: ctl.amp,
-      tempC: ctl.temp, depthMm: ctl.depth, rim: ctl.rim, tSec: ctl.tSec, tfeSec: ctl.tfeSec,
-      driveR: 0 });
-    const mode = st.nearestTheoryModes[0], R = st.cellDiameterMm*5e-4;
-    const pinned = ctl.rim === 'pinned';
-    const kTest = pinned ? K.jZeroNear(mode.m, mode.k*R)/R : mode.k;
-    const want = C3.suggestCell3DGrid({ m: mode.m, k: kTest, R, h: ctl.depth*1e-3,
-      rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma, g: 9.80665,
-      accel: st.accelAssumed, contact: pinned ? 'pinned' : 'free',
-      omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*ctl.freq,
+    const ctl = await page.json('({ ...generalInput, freq, rim })');
+    const m = ctl.seedMode, R = ctl.diameterMm/2000;
+    const kTest = K.jZeroNear(m,Math.max(.02,m-2))/R;
+    const want = C3.suggestCell3DGrid({ m, k: kTest, R, h: ctl.depthMm/1000,
+      rho: ctl.rho, nu: ctl.mu/ctl.rho, gamma: ctl.sigma, g: ctl.gravity,
+      accel: ctl.acceleration, contact: 'pinned',
+      omegaResponse: 2*Math.PI*ctl.freq, omegaDrive: 2*Math.PI*ctl.freq,
       besselJ: K.besselJ });
     const run = await page.json('(() => { const r = CELL3D.lastRun(); return r && r.opts; })()');
     const same = !want.unreachable && run && run.nr === want.nr && run.nth === want.nth
       && run.nz === want.nz && run.rStretch === want.rStretch && run.zStretch === want.zStretch;
-    console.log(`       sized for m = ${mode.m}, kR = ${(kTest*R).toFixed(3)}: `
+    console.log(`       sized for m = ${m}, kR = ${(kTest*R).toFixed(3)}: `
       + `${want.nr} x ${want.nth} x ${want.nz}, surface operator `
       + `${(want.err*100).toFixed(2)}%, thinnest Stokes layer ${want.thinnest.toFixed(2)} cells`);
     ok(same && want.err <= 0.01 && want.thinnest >= 2
        && c.grid.err === want.err && c.grid.thinnest === want.thinnest,
-       'the solver runs on the grid the nearest mode needs, recomputed here from the page\'s '
+       'the solver runs on the grid the explicit pinned seed needs, recomputed here from the page\'s '
        + 'controls: within 1% on the surface operator and two cells in every Stokes layer',
        JSON.stringify({ run, want: { nr: want.nr, nth: want.nth, nz: want.nz,
          rStretch: want.rStretch, zStretch: want.zStretch, err: want.err }, grid: c.grid }));
@@ -675,7 +763,7 @@ async function checkSolverDraws(page){
      `${cmp.rel.toExponential(3)} relative over ${cmp.n} pixels`);
 
   const deck = await page.eval('document.getElementById("ro").textContent');
-  ok(/3-D Navier-Stokes solver/.test(deck),
+  ok(/3D nonlinear free-surface Navier[–-]Stokes/.test(deck),
      'and the deck says so, so what is drawn and what is claimed cannot disagree',
      deck.slice(0, 160));
   ok(/physics clock/.test(deck) && /wall clock/.test(deck) && /slower than real time/.test(deck),
@@ -686,11 +774,148 @@ async function checkSolverDraws(page){
   ok(/JavaScript/.test(deck),
      'the deck names the engine that answered, not the one that was asked for',
      deck.slice(0, 200));
-  ok(/sized for\s*m \d+, kR [\d.]+.*surface operator [\d.]+%.*Stokes layer/.test(deck),
+  ok(/sized for\s*initial m \d+, kR [\d.]+.*surface operator [\d.]+%.*Stokes layer/.test(deck),
      'and it states what the grid was sized to: the mode, its surface-operator error and '
      + 'its thinnest Stokes layer', deck.slice(0, 400));
 
   await page.shot(join(tmpdir(), 'check-page-solver.png'));
+  await checkSolverExport(page);
+}
+
+async function selectGeneralSolverFixture(page,engine){
+  await page.eval(`(() => {
+    // Retain the preceding diagnostic's fluid and geometry as explicit numerical
+    // test inputs. They are not claimed to be measured apparatus calibration.
+    if (experimentMode !== 'general'){
+      const values={expDiameter:state.cellDiameterMm,expDepth:state.depthMm,
+        expRho:state.water.rho,expMu:state.water.mu,expSigma:state.water.sigma,
+        expGravity:state.gravity,expAccel:state.accelAssumed,
+        expSeedM:state.nearestTheoryModes[0].m,expSeedFraction:.0001};
+      document.getElementById('configurationMode').value='general';
+      document.getElementById('configurationMode').dispatchEvent(new Event('change',{bubbles:true}));
+      for(const [id,value] of Object.entries(values)) document.getElementById(id).value=String(value);
+      document.getElementById('expAccel').dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    document.querySelector('#rimSeg [data-r="pinned"]').click();
+    document.querySelector('#srcSeg [data-s="${engine}"]').click();
+    document.getElementById('comparePaper').checked=false;
+    document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
+    return true;
+  })()`);
+}
+
+/* Export must sample the actual frozen solver frame. Reconstruct the height
+   image from that frame independently at every covered export pixel: a modal
+   export can have plausible metadata and still cannot satisfy this comparison. */
+async function checkSolverExport(page, changeControls = false){
+  const result = await page.eval(`(async () => {
+    const originalSnapshot = CELL3D.snapshot, originalView = view, originalFrequency = freq;
+    let frozen = null, snapshots = 0, changed = false;
+    CELL3D.snapshot = () => { snapshots++; frozen = originalSnapshot(); return frozen; };
+    try {
+      view = 'height';
+      const size = 129, exported = await exportImage(size, message => {
+        if (${JSON.stringify(changeControls)} && !changed && message === 'painting'){
+          changed = true; setFreq(originalFrequency + 1); view = 'optical';
+        }
+      });
+      const pixels = exported.canvas.getContext('2d').getImageData(0,0,size,size).data;
+      const cc = (size-1)/2, radius = cc-3, values = new Float64Array(size*size);
+      let scale = 0, count = 0, mismatch = 0;
+      for (let y=0;y<size;y++) for (let x=0;x<size;x++){
+        const dx=x-cc, dy=y-cc, r=Math.hypot(dx,dy);
+        if (r>radius) continue;
+        const value=frozen.at(r/radius,Math.atan2(dy,dx)).Re;
+        values[y*size+x]=value; scale=Math.max(scale,Math.abs(value)); count++;
+      }
+      for (let y=0;y<size;y++) for (let x=0;x<size;x++){
+        const r=Math.hypot(x-cc,y-cc); if(r>radius) continue;
+        const h=values[y*size+x]/scale, coverage=Math.min(1,radius-r+.5);
+        const rgb=h>=0?[8+70*h,12+190*h,18+220*h]:[8-224*h,12-128*h,18-78*h];
+        const expected=new Uint8ClampedArray(rgb.map((v,j)=>tone([5,7,10][j]+(v-[5,7,10][j])*coverage)));
+        for(let j=0;j<3;j++) if(pixels[(y*size+x)*4+j]!==expected[j]) mismatch++;
+      }
+      return {snapshots,count,mismatch,scale,modes:exported.modes,source:exported.source,
+        changed,label:exported.label,originalFrequency,
+        sameProvenance:JSON.stringify(exported.source)===JSON.stringify(frozen.provenance)};
+    } finally { CELL3D.snapshot=originalSnapshot; view=originalView;
+      if (changed){ setFreq(originalFrequency); recompute(); }
+    }
+  })()`, true);
+  ok(result.snapshots === 1 && result.count > 10000 && result.scale > 0,
+     'export freezes one real nonzero nonlinear frame and samples the full covered image', JSON.stringify(result));
+  ok(result.mismatch === 0,
+     'every covered height-export pixel matches the actual solver snapshot, without modal substitution', `${result.mismatch} mismatched channels`);
+  ok(result.modes === 0 && result.sameProvenance && result.source.steps > 0
+     && result.source.parameters.contact === 'pinned'
+     && result.source.model === 'nonlinear-incompressible-free-surface-navier-stokes',
+     'export identifies its nonlinear frame, integration step, physical parameters and pinned rim', JSON.stringify(result.source));
+  ok(result.label.view === 'height' && result.label.frequencyHz === result.originalFrequency
+     && result.label.model === 'navier-stokes'
+     && (!changeControls || result.changed),
+     changeControls ? 'export keeps its captured field, view and filename labels when controls change during rendering'
+       : 'export labels describe the captured nonlinear field and view', JSON.stringify(result.label));
+}
+
+async function checkGeneralSolver(page){
+  section('a nonlinear run from independent SI inputs and an explicit pinned seed');
+  await page.eval(`document.getElementById('configurationMode').value='general';
+    document.getElementById('configurationMode').dispatchEvent(new Event('change',{bubbles:true}));
+    document.querySelector('#srcSeg [data-s="dnscpp"]').click();
+    document.querySelector('#thrSeg [data-t="1"]').click();
+    for(const [id,value] of [['expDiameter',35],['expDepth',5],['expRho',1100],
+      ['expMu',.022],['expSigma',.05],['expGravity',1.62],['expAccel',.3],
+      ['expSeedM',2],['expSeedFraction',.0001]])
+      document.getElementById(id).value=String(value);
+    document.getElementById('expAccel').dispatchEvent(new Event('change',{bubbles:true}));
+    setFreq(23.75); document.getElementById('runSolver').click(); true`);
+  await page.waitFor('CELL3D.clocks().have || !!CELL3D.clocks().err',90000,
+    'a frame from the independent SI experiment');
+  const run=await page.json(`({clocks:CELL3D.clocks(),opts:CELL3D.lastRun()&&CELL3D.lastRun().opts,
+    modes:state.states.length,signature:state.visualSignature})`);
+  ok(run.clocks.have && !run.clocks.err && run.clocks.stepsDone>0 && run.clocks.engine==='cpp',
+    'the independent SI experiment advances real nonlinear physics in the requested engine',JSON.stringify(run.clocks));
+  if(!run.clocks.have || run.clocks.err) return;
+  for(const [key,want] of Object.entries({R:.0175,h:.005,rho:1100,nu:.022/1100,
+    gamma:.05,g:1.62,accel:.3,omegaD:2*Math.PI*23.75}))
+    rel(run.opts[key],want,14,`the worker receives independently specified ${key}`);
+  ok(run.opts.contact==='pinned' && run.modes===0 && run.signature===null,
+    'the general nonlinear run uses its pinned boundary without modal selection or atlas shaping',JSON.stringify(run));
+  ok(run.clocks.grid.err<=.01 && run.clocks.grid.thinnest>=2,
+    'the general run satisfies the original measured grid-resolution gates',JSON.stringify(run.clocks.grid));
+  const comparison=await page.json(`(() => {
+    const before=CELL3D.lastRun();
+    document.getElementById('comparePaper').checked=true;
+    document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
+    const unchanged=CELL3D.lastRun()===before && CELL3D.clocks().have && state.visualSignature===null;
+    document.getElementById('comparePaper').checked=false;
+    document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
+    return {unchanged,modes:state.states.length};
+  })()`);
+  ok(comparison.unchanged && comparison.modes===0,
+    'enabling the optional paper comparator leaves the general solver run and field source unchanged',JSON.stringify(comparison));
+  const replay=await replayMatches(page);
+  ok(replay.steps>0 && replay.differ===0,
+    'the general C++ frame exactly matches a one-thread JavaScript replay of its actual SI problem',JSON.stringify(replay));
+  await checkSolverExport(page, true);
+  await page.eval(`document.getElementById('expSeedFraction').value='0';
+    document.getElementById('expSeedFraction').dispatchEvent(new Event('change',{bubbles:true}));
+    document.getElementById('runSolver').click(); true`);
+  await page.waitFor('CELL3D.clocks().have || !!CELL3D.clocks().err',90000,
+    'the exactly flat initial-condition run');
+  const flat=await page.eval(`(async()=>{
+    recompute(); const clocks=CELL3D.clocks();
+    if(clocks.err || !clocks.have) return {clocks};
+    const frame=CELL3D.lastFrame(), snapshot=CELL3D.snapshot();
+    const exported=await exportImage(129,()=>{});
+    return {clocks,flat:frame.eta.every(v=>v===0),raster:ETA.every(v=>v===0),
+      sample:snapshot.at(.5,.7).Re,normalized:CELL3D.etaAtPixel(.5,.7),
+      exported:exported.source.model==='nonlinear-incompressible-free-surface-navier-stokes'};
+  })()`,true);
+  ok(flat.clocks.have && !flat.clocks.err && flat.clocks.stepsDone>0 && flat.flat && flat.raster
+     && flat.sample===0 && flat.normalized===0 && flat.exported,
+    'an exactly zero seed stays physically flat and renders/exports without a synthetic amplitude floor',JSON.stringify(flat));
+  await page.eval('CELL3D.stop(); true');
 }
 
 /* The surface drawn on the GPU, held to the CPU's bytes.
@@ -1021,7 +1246,7 @@ async function checkGpuRender(page, label){
   await checkGpuContextRecovery(page, label);
 }
 
-/* S11 on the page: the solver's explicit terms over several threads, and the answer the same
+/* The solver's explicit terms over several threads, and the answer the same
    to the bit as one thread's.
    .
    dns/check-cell3d-pool.mjs holds the pool to step() over node's worker threads. This asks the
@@ -1039,8 +1264,7 @@ async function replayMatches(page){
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = run.eta0[i*S.nth + k];
     S.refreshMetric();
-    const dt = S.stableStep();
-    for (let n = 0; n < f.steps; n++) S.step(dt);
+    for (let n = 0; n < f.steps; n++) S.step(S.stableStep());
     let differ = 0;
     for (let e = 0; e < S.eta.length; e++) if (!Object.is(S.eta[e], f.eta[e])) differ++;
     return { steps: f.steps, differ, n: S.eta.length };
@@ -1193,7 +1417,8 @@ async function checkCppEngine(page, inlined){
              : 'the served checkout does not, and fetches them instead',
      JSON.stringify(has));
 
-  await page.eval('document.querySelector("#srcSeg [data-s=\'dnscpp\']").click()');
+  await selectGeneralSolverFixture(page,'dnscpp');
+  await page.eval('document.getElementById("runSolver").click()');
   const waited = await page.waitFor(
     'CELL3D.clocks().have === true && CELL3D.clocks().engine === "cpp"', 90000,
     "the C++ worker's first frame");
@@ -1249,7 +1474,8 @@ async function checkCppEngine(page, inlined){
      the same worker, and a slice already in flight from the C++ run would
      otherwise be counted into the new one -- which is what the generation stamp on
      every message exists to prevent. */
-  await page.eval('document.querySelector("#srcSeg [data-s=\'dns\']").click()');
+  await page.eval(`document.querySelector('#srcSeg [data-s="dns"]').click();
+    document.getElementById('runSolver').click(); true`);
   await page.waitFor('CELL3D.clocks().have === true && CELL3D.clocks().engine === "js"',
                      90000, 'the JavaScript worker after switching back');
   const back = await page.json('CELL3D.clocks()');
@@ -1283,6 +1509,7 @@ async function driveAt(page, hz){
 
 async function checkCleanProse(page, removed, fullSentences){
   section('the clean build shows no sentences');
+  await selectReferenceModal(page);
   ok(fullSentences.length > 0,
      'the sentence test finds sentences on the full single-file page, so it can see one',
      `${fullSentences.length} found there`);
@@ -1338,13 +1565,16 @@ try {
           await first.json('String(GPU_SURFACE.error)'));
   await first.eval('document.querySelector("#engSeg [data-e=\'cpu\']").click()');
   await checkCppEngine(first, false);
+  await checkGeneralSolver(first);
 
   const { buildStandalone } = await import(join(REPO, 'faraday', 'build-standalone.mjs'));
-  writeFileSync(built, buildStandalone());
-  const single = await checkPage(`file://${built}`, 'the single-file build', true);
+  const singleHtml=buildStandalone();
+  writeFileSync(built, singleHtml); generatedPages.set('/__standalone__.html',singleHtml);
+  const single = await checkPage(generatedUrl('/__standalone__.html',built), 'the single-file build', true);
   await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
-  await checkSolverThreads(single, ', in the single-file build, from file://');
+  await checkSolverThreads(single, `, in the single-file build, over ${STANDALONE_TRANSPORT}`);
+  await selectReferenceModal(single);
   await driveAt(single, 5000);
   const fullSentences = await single.json(SENTENCES);
   await driveAt(single, 111);
@@ -1353,12 +1583,13 @@ try {
      faraday/build-clean.mjs. faraday/check-clean.mjs holds its scripts to the full
      build's token for token; this holds the running page to the same numbers. */
   const { buildClean, REMOVED_PROSE } = await import(join(REPO, 'faraday', 'build-clean.mjs'));
-  writeFileSync(cleanBuilt, buildClean().out);
-  const clean = await checkPage(`file://${cleanBuilt}`, 'the clean single-file build', true, true);
+  const cleanHtml=buildClean().out;
+  writeFileSync(cleanBuilt, cleanHtml); generatedPages.set('/__clean__.html',cleanHtml);
+  const clean = await checkPage(generatedUrl('/__clean__.html',cleanBuilt), 'the clean single-file build', true, true);
   await checkGpuRender(clean, ', in the clean build');
   await checkSolverDraws(clean);
   await checkCppEngine(clean, true);
-  await checkSolverThreads(clean, ', in the clean build, from file://');
+  await checkSolverThreads(clean, `, in the clean build, over ${STANDALONE_TRANSPORT}`);
   await checkCleanProse(clean, REMOVED_PROSE, fullSentences);
 } finally {
   browser.close();

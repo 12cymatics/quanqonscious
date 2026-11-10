@@ -74,7 +74,7 @@ const CELL3D_WASM_EXPORTS = [
   'cell3d_init', 'cell3d_ptr', 'cell3d_len', 'cell3d_error', 'cell3d_errorI',
   'cell3d_errorK', 'cell3d_clearError', 'cell3d_arenaUsed',
   'cell3d_refreshMetric',
-  'cell3d_divergence', 'cell3d_gradient', 'cell3d_omegaOf', 'cell3d_applyL',
+  'cell3d_divergence', 'cell3d_gradient', 'cell3d_gradientSurface', 'cell3d_omegaOf', 'cell3d_applyL',
   'cell3d_applyPreconditioner', 'cell3d_solveP', 'cell3d_cgIters',
   'cell3d_cgResidual', 'cell3d_omegaFromW', 'cell3d_wFromOmega',
   'cell3d_maxDivergence',
@@ -271,9 +271,20 @@ class FaradayCell3DWasm {
     return this.views[out];
   }
 
-  gradient(q = 'p'){
-    this.inst.exports.cell3d_gradient(this.at(q), this.at('gu'), this.at('gv'),
-                                      this.at('gw'));
+  gradient(q = 'p', surfaceP = null){
+    const qPtr = this.at(q);
+    if (this.views[q].length !== this.js.NP) throw new RangeError(
+      'q must contain one pressure value per volume cell.');
+    if (surfaceP === null){
+      this.inst.exports.cell3d_gradient(qPtr, this.at('gu'), this.at('gv'),
+                                        this.at('gw'));
+    } else {
+      const surfacePtr = this.at(surfaceP);
+      if (this.views[surfaceP].length !== this.js.NE) throw new RangeError(
+        'surfaceP must contain one pressure value per free-surface cell.');
+      this.inst.exports.cell3d_gradientSurface(qPtr, surfacePtr,
+        this.at('gu'), this.at('gv'), this.at('gw'));
+    }
     return [this.views.gu, this.views.gv, this.views.gw];
   }
 
