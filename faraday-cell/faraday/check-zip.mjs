@@ -63,7 +63,7 @@ section('1. the manifest describes the checkout');
   const found = [];
   for (const d of dirs)
     for (const f of readdirSync(resolve(REPO, d)))
-      if (/^check-.*\.mjs$/.test(f) || /\.test\.js$/.test(f)) found.push(`${d}/${f}`);
+      if (/^check-.*\.(mjs|py)$/.test(f) || /\.test\.js$/.test(f)) found.push(`${d}/${f}`);
   /* Two gates travel in the zip and are deliberately not in its runner, and each
      says why rather than being implied. This one, run from inside an unpack, would
      build a zip of the unpack and unpack that, without end. check-bundle.mjs
@@ -115,7 +115,7 @@ section('1. the manifest describes the checkout');
   const should = [];
   for (const d of dirs)
     for (const f of readdirSync(resolve(REPO, d)))
-      if (/\.(mjs|js|html|json|md|cpp|wasm|sh)$/.test(f)) should.push(`${d}/${f}`);
+      if (/\.(mjs|js|html|json|md|cpp|wasm|sh|py)$/.test(f)) should.push(`${d}/${f}`);
   const omitted = should.filter(p => !carried.has(p) && !EXCLUDED.has(p));
   ok(omitted.length === 0,
      `all ${should.length} source files in ${dirs.join('/, ')}/ travel in the zip`,

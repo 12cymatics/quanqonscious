@@ -11,6 +11,9 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
+#generalInputs label{display:grid;grid-template-columns:1fr 100px;gap:6px;font-size:10px;align-items:center}
+#generalInputs input,select{background:var(--panel2);color:var(--ink);border:1px solid var(--edge2);padding:4px;font:inherit;min-width:0}
 body{margin:0;background:var(--void);color:var(--ink);
   font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.5;
   font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
@@ -113,8 +116,7 @@ footer b{color:var(--ink2);font-weight:500}
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>Sheldrake &amp; Sheldrake 2017 · <b>600 panels</b> · vertically vibrated deionized water,
-  circular quartz cells · surface responds at <b>f/2</b></p>
+  <p>General circular-cell experiment · SI physical inputs · optional Sheldrake &amp; Sheldrake 2017 comparison</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -146,9 +148,10 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 
 <div class="rig">
   <div class="stage">
+    <div id="solverOverlay" role="status" style="position:absolute;inset:0;z-index:3;background:#080d13;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;line-height:1.8">Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.</div>
     <canvas id="c" width="381" height="381"></canvas>
     <canvas id="cgl" width="381" height="381" style="display:none"></canvas>
-    <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">55.5</b> Hz<br>
+    <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">not started</b><span id="oRunit"></span><br>
       cell ⌀ <b id="oD">24.25</b> mm<br>
       <span class="ph" id="oPh"></span><span id="oPhT">phase I</span></div>
     <div class="ov tr">empirical <b id="oFold">10</b>-fold<br>
@@ -160,7 +163,26 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 
   <div class="deck">
     <div class="fld">
-      <span class="lab">cell diameter</span>
+      <label class="lab" for="configurationMode">experiment configuration</label>
+      <select id="configurationMode"><option value="general">General SI inputs</option><option value="reference">2017 apparatus reconstruction</option></select>
+      <span style="font-size:10px;color:var(--ink2)">Initial values are editable examples, not measurements.</span>
+    </div>
+    <div id="generalInputs" style="display:grid;gap:7px">
+      <label>Diameter (mm) <input id="expDiameter" type="number" min="0" step="any" value="30"></label>
+      <label>Depth (mm) <input id="expDepth" type="number" min="0" step="any" value="4"></label>
+      <label>Density ρ (kg/m³) <input id="expRho" type="number" min="0" step="any" value="1000"></label>
+      <label>Dynamic viscosity μ (Pa·s) <input id="expMu" type="number" min="0" step="any" value="0.001"></label>
+      <label>Surface tension γ (N/m) <input id="expSigma" type="number" min="0" step="any" value="0.0728"></label>
+      <label>Gravity (m/s²) <input id="expGravity" type="number" min="0" step="any" value="9.80665"></label>
+      <label>Peak acceleration (m/s²) <input id="expAccel" type="number" min="0" step="any" value="7"></label>
+      <label>Initial azimuthal order m <input id="expSeedM" type="number" min="0" step="1" value="2"></label>
+      <label>Initial amplitude / depth <input id="expSeedFraction" type="number" min="0" step="any" value="0.0001"></label>
+      <span style="font-size:10px;color:var(--ink2)">Drive: g + a cos(2π f t). Kinematic viscosity is μ/ρ. Initial displacement: (amplitude/depth) × depth × Jₘ(jₘ,₁ r/R) cos(mθ); initial velocity is zero.</span>
+    </div>
+    <div id="experimentError" role="alert" style="color:var(--red)"></div>
+    <div class="fld" style="font-size:10px;color:var(--ink2)">One incompressible Newtonian liquid in a rigid circular cylinder; a single-valued free surface; pinned contact line with no-slip floor and wall. Free contact is available only for modal diagnostics. No air dynamics, overturning, contact-angle hysteresis or deformable vessel. Finite numerical discretization, not an exact continuum solution.</div>
+    <div class="fld" data-reference-control hidden>
+      <span class="lab">reference cell diameter</span>
       <div class="seg" id="cellSeg">
         <button data-c="small" aria-pressed="false">10.00</button>
         <button data-c="medium" aria-pressed="true">24.25</button>
@@ -169,38 +191,38 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
     </div>
     <div class="fld">
       <div class="top"><span class="lab">drive frequency</span>
-        <span class="v"><input id="fnum" type="number" min="50" max="5000" step="1" value="111"
+        <span class="v"><input id="fnum" type="number" min="0" step="any" value="111"
           style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
           font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px"> Hz</span></div>
       <input type="range" id="f" min="50" max="5000" step="1" value="111">
       <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
     </div>
-    <div class="fld">
-      <div class="top"><span class="lab">drive amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
+    <div class="fld" data-reference-control hidden>
+      <div class="top"><span class="lab">reference apparatus amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
       <input type="range" id="a" min="0" max="1000" step="1" value="229">
       <span class="lab" id="accLab" style="text-align:right"></span>
     </div>
-    <div class="fld">
-      <div class="top"><span class="lab">temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
+    <div class="fld" data-reference-control hidden>
+      <div class="top"><span class="lab">water temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
       <input type="range" id="t" min="5" max="30" step="1" value="20">
     </div>
-    <div class="fld">
+    <div class="fld" data-reference-control hidden>
       <div class="top"><span class="lab">depth</span><span class="v"><span id="hv">3.0</span> mm</span></div>
       <input type="range" id="h" min="1" max="10" step="0.1" value="3">
     </div>
     <div class="fld">
       <span class="lab">contact line</span>
       <div class="seg" id="rimSeg">
-        <button data-r="free" aria-pressed="true">free</button>
-        <button data-r="pinned" aria-pressed="false">pinned</button>
+        <button data-r="free" aria-pressed="false">free (modal only)</button>
+        <button data-r="pinned" aria-pressed="true">pinned</button>
       </div>
     </div>
     <div class="fld">
       <span class="lab">render</span>
       <div class="seg" id="viewSeg">
-        <button data-v="sand" aria-pressed="true">sand</button>
+        <button data-v="sand" aria-pressed="false" disabled>sand (modal only)</button>
         <button data-v="optical" aria-pressed="false">optical</button>
-        <button data-v="height" aria-pressed="false">height</button>
+        <button data-v="height" aria-pressed="true">height</button>
         <button data-v="nodal" aria-pressed="false">nodal</button>
       </div>
     </div>
@@ -215,18 +237,19 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
     <div class="fld">
       <span class="lab">surface</span>
       <div class="seg" id="srcSeg">
-        <button data-s="modal" aria-pressed="true">modal sum</button>
-        <button data-s="dns" aria-pressed="false">Navier-Stokes</button>
-        <button data-s="dnscpp" aria-pressed="false">N-S in C++</button>
+        <button data-s="modal" aria-pressed="false">modal diagnostic</button>
+        <button data-s="dns" aria-pressed="true">3D N-S (JS)</button>
+        <button data-s="dnscpp" aria-pressed="false">3D N-S (C++)</button>
       </div>
     </div>
     <div class="fld">
+      <button class="btn" id="runSolver">Run 3D solver</button>
       <span class="lab">solver threads</span>
       <!-- filled at load from navigator.hardwareConcurrency: see CELL3D_CORES -->
       <div class="seg" id="thrSeg"></div>
     </div>
     <div class="fld">
-      <span class="lab">photographed phase</span>
+      <span class="lab">modal display phase</span>
       <div class="seg" id="phaseSeg">
         <button data-p="1" aria-pressed="true">phase I</button>
         <button data-p="-1" aria-pressed="false">phase II</button>
@@ -238,9 +261,9 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
       <input type="range" id="ag" min="0.15" max="2.4" step="0.01" value="1.15">
     </div>
     <div style="display:flex;gap:5px">
-      <button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button>
-      <button class="btn" id="play" aria-pressed="true" style="flex:1">running</button>
-      <button class="btn" id="reset" style="flex:1">re-excite</button>
+      <button class="btn" id="sprinkleBtn" disabled title="Modal sand visualization only" style="flex:1">re-sprinkle</button>
+      <button class="btn" id="play" disabled title="Modal playback only; nonlinear frames use solver time" aria-pressed="true" style="flex:1">running</button>
+      <button class="btn" id="reset" disabled title="Modal re-excitation only; use Run to restart the nonlinear solver" style="flex:1">re-excite</button>
     </div>
     <div class="fld">
       <span class="lab">image export</span>
@@ -258,7 +281,8 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 </div>
 
-<div class="atlas">
+<label style="display:block;padding:10px"><input type="checkbox" id="comparePaper"> Compare with the 2017 atlas (display only) <select id="referenceCell"><option value="medium">24.25 mm</option><option value="small">10.00 mm</option><option value="large">49.50 mm</option></select></label>
+<div class="atlas" id="referenceAtlas" hidden>
   <div class="atlas-hd">
     <span class="lab">printed fold classification · 1 Hz steps · <span id="atlasWho">24.25 mm, 3 day-replicates</span></span>
     <span class="legend" id="legend"></span>
@@ -287,12 +311,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   <p id="dnsNote"></p>
 </div>
 <footer>
-  <b>Layers are kept separate.</b> Fold labels are the paper's printed classifications.
-  Contrast / centre-bias / ring / texture figures are image descriptors measured from the
-  rendered PDF panels — renderer hints, never the authors' measurements. Bessel modes and
-  water properties are theory, used for diagnostics and outside the atlas.<br>
-  Amplitude stays in apparatus mV: the paper gives no mV→acceleration transfer function, so
-  none is invented. Surface tension is IAPWS R1-76; viscosity is the Vogel–Andrade fit, not IAPWS.
+  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The reference reconstruction and modal diagnostic are separate visual models. Image normalization does not alter the solver field. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
 </footer>
 </div>
 <script src="faraday/kernel.js"></script>
@@ -451,13 +470,20 @@ function buildSurface(state){
    solver path below so there is ONE copy and the two cannot drift. Everything here reads
    the six rasters and writes PGX/PGY; nothing in it knows where the rasters came from. */
 function finishSurface(state){
-  let mx = 1e-9, gx = 1e-9;
+  let mx = useSolver ? 0 : 1e-9, gx = useSolver ? 0 : 1e-9;
   for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){
     mx = Math.max(mx, Math.abs(ETA[i]));
     gx = Math.max(gx, Math.hypot(NX[i], NY[i]));
   }
-  const inv = 1/mx, ginv = 1/gx;
+  const inv = mx > 0 ? 1/mx : 1, ginv = gx > 0 ? 1/gx : 1;
 
+  if (useSolver){
+    for (let i = 0; i < NSZ; i++){
+      ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv;
+      IMF[i] = GIX[i] = GIY[i] = PGX[i] = PGY[i] = 0;
+    }
+    state.transport = null; FIELD_GEN++; return;
+  }
   const tc = transportCoefficients(state.damping, state.wavelength);
   const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
   let dmax = 1e-9;
@@ -570,7 +596,7 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'sand';
+let view = 'height';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -639,9 +665,10 @@ function renderSurface(state){
 function renderSurfaceCpu(state, rawOut){
   renderRnd = mulberry32(RENDER_SEED);
 
-  const k = phaseSign*state.expression;
+  const k = useSolver ? 1 : phaseSign*state.expression;
   const vs = state.visualSignature;
-  const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+  const measuredContrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+  const contrast = measuredContrast === 0 ? 1 : measuredContrast;
   const tex = vs ? vs.textureConc : 0;
   const SLOPE = 0.8;
   if (view === 'sand') binGrains();
@@ -740,9 +767,10 @@ const GPU_SURFACE = (() => {
     if (!gl) throw new Error('the GPU renderer was asked to draw before it started'
       + (err ? `, and it could not start: ${err}` : '.'));
     if (!gl.ready) throw new Error(gl.lostReason || 'The GPU context is not ready; choose GPU again after restoration.');
-    const k = phaseSign*st.expression;
+    const k = useSolver ? 1 : phaseSign*st.expression;
     const vs = st.visualSignature;
-    const contrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+    const measuredContrast = vs ? vs.contrast : fieldRms(ETA, COVER);
+    const contrast = measuredContrast === 0 ? 1 : measuredContrast;
     const tex = vs ? vs.textureConc : 0;
     if (fieldGen !== FIELD_GEN){ gl.uploadField(ETA, NX, NY); fieldGen = FIELD_GEN; }
     if (view === 'sand'){ binGrains(); gl.uploadBins(BIN); }
@@ -842,7 +870,10 @@ function drawAtlas(cellKey, f){
     + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
 })();
 
-let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
+let experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
+let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
+let problemKey = null, resolutionKey = null, solverRequested = false;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
 let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
 let dnsShowInput = null;
@@ -869,23 +900,76 @@ function tfeOf(){
 }
 
 function recompute(){
-  state = resolvePatternState({ cellKey, f: freq, amplitudeMv: amp, tempC: temp,
-                                depthMm: depth, rim, tSec: simT, tfeSec: tfeOf(),
-
-                                driveR: 0 });
-  /* The solver path when it is on AND has posted a frame. Until the first frame
-     arrives the modal surface is drawn, and the deck says which one you are looking
-     at -- it never shows one and labels it the other. */
-  if (!(useSolver && CELL3D.build(state))) buildSurface(state);
+  for (const id of ['play','reset','sprinkleBtn']) $(id).disabled = useSolver;
+  $('play').textContent = useSolver ? 'modal playback' : running ? 'running' : 'paused';
+  const experiment = experimentMode === 'general'
+    ? { ...generalInput, frequencyHz: freq, contact: rim } : null;
+  const inputs = { cellKey, f: freq, amplitudeMv: amp, tempC: temp, depthMm: depth, rim, driveR: 0, experiment };
+  const key = JSON.stringify([inputs, useSolver]);
+  if (key !== resolutionKey){
+    state = useSolver && experiment ? FARADAY_KERNEL.resolveExperimentState(experiment)
+      : resolvePatternState({ ...inputs, tSec: simT, tfeSec: tfeOf() });
+    resolutionKey = key;
+  }
+  state.expression = useSolver || experiment ? 1 : amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf()));
+  const nextKey = JSON.stringify([state.cellDiameterMm, state.depthMm, state.water,
+    state.gravity, state.accelAssumed, freq, rim, state.experiment?.seedMode, state.experiment?.seedFraction]);
+  if (problemKey !== null && problemKey !== nextKey){
+    CELL3D.reset(); solverRequested = false;
+  }
+  problemKey = nextKey;
+  if (useSolver){
+    state.visualSignature = null;
+    state.expression = 1;
+    const c = CELL3D.clocks();
+    if (!c.err && c.have) CELL3D.build(state);
+    else {
+      for (const field of [ETA, IMF, NX, NY, GIX, GIY, PGX, PGY]) field.fill(0);
+      BIN.fill(0); FIELD_GEN++;
+      state.render = { drawn: 0, gatedRms: 0, gated: 0 };
+    }
+  } else buildSurface(state);
   paintDeck(); paintInspector();
-  drawAtlas(cellKey, freq);
-  if (dnsShowInput) dnsShowInput();
+  $('referenceAtlas').hidden = !comparePaper;
+  if (comparePaper) drawAtlas(referenceCell, freq);
+  if (dnsShowInput && !(useSolver && state.experiment)) dnsShowInput();
   dirty = false;
 }
+
 function paintDeck(){
   const s = state;
+  if (s.model === 'nonlinear-incompressible-free-surface-navier-stokes'){
+    const c = CELL3D.clocks(), e = s.experiment;
+    const rows = [
+      ['model', '3D nonlinear free-surface Navier–Stokes'],
+      ['geometry', `${s.cellDiameterMm} mm diameter × ${s.depthMm} mm depth`],
+      ['fluid ρ', `${e.rho} kg/m³`], ['fluid μ', `${e.mu} Pa·s`],
+      ['fluid ν = μ/ρ', `${s.water.nu} m²/s`], ['surface tension γ', `${e.sigma} N/m`],
+      ['gravity', `${e.gravity} m/s²`], ['drive frequency', `${freq} Hz`],
+      ['peak acceleration', `${e.acceleration} m/s²`],
+      ['contact line', e.contact === 'pinned' ? 'pinned; no-slip floor and wall' : 'free — nonlinear law unsupported'],
+      ['initial displacement', `J_${e.seedMode} first-root profile; amplitude ${e.seedFraction*e.depthMm/1000} m`],
+      ['initial velocity', 'zero'],
+      ['status', c.err ? `failed: ${c.err}` : c.have ? 'solver frame available' : solverRequested ? 'starting' : 'not started'],
+      ['physics clock', `${(c.physT*1000).toFixed(3)} ms`], ['wall clock', `${c.wall.toFixed(3)} s`],
+      ['ratio', c.physT > 0 ? `${c.ratio.toFixed(1)}× slower than real time · ${c.perStep.toFixed(1)} ms a step` : 'not measured'],
+      ['steps taken', `${c.stepsDone}`],
+      ['solver', c.engine === 'cpp' ? 'C++ · faraday_cell3d.wasm' : c.engine === 'js' ? 'JavaScript' : `requested ${cell3dEngine}; not running`],
+      ['solver threads', c.threads ? `${c.threads} thread${c.threads === 1 ? '' : 's'}` : 'not running'],
+      ['drawn on', renderEngine === 'gpu' ? 'GPU drawing only · WebGL2' : 'CPU · canvas 2D'],
+      ['display', 'normalized surface displacement; no reference-paper weighting'],
+      ['modal thresholds', 'not computed; select modal diagnostic separately']
+    ];
+    if (c.grid){
+      rows.push(['grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} = ${c.grid.nr*c.grid.nth*c.grid.nz} cells`]);
+      rows.push(['sized for', `initial m ${c.grid.m}, kR ${c.grid.kR.toFixed(3)}; surface operator ${(c.grid.err*100).toFixed(2)}%; ${c.grid.thinnest.toFixed(2)} cells in thinnest Stokes layer; ${Math.round(c.grid.stepsPerPeriod)} steps per drive period`]);
+    }
+    $('ro').innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd${k === 'drawn on' ? ' id="renderProcessor"' : ''}>${v}</dd>`).join('');
+    $('warnBox').textContent = e.contact === 'pinned' ? '' : 'The nonlinear free-contact-line law is not implemented. No substitute run will be started.';
+    return;
+  }
   const dc = s.driveCalibration;
-  $('accLab').innerHTML = `= ${(s.accelAssumed/9.80665).toFixed(3)} g`
+  $('accLab').innerHTML = s.experiment ? `${s.accelAssumed} m/s² · user input` : `= ${(s.accelAssumed/9.80665).toFixed(3)} g`
     + `${dc.measured ? '' : ' assumed'} `
     + `<span style="color:var(--dim)">(${dc.gPerMv} g/mV — ${dc.source})</span>`;
   $('warnBox').innerHTML = s.warnings.map(w =>
@@ -954,7 +1038,7 @@ function paintDeck(){
        if (c.err) return `<b style="color:var(--bad,#e66)">solver failed</b> `
                        + `<span class="u">${c.err}</span>`;
        if (!useSolver) return 'modal superposition <span class="u">(kernel.js)</span>';
-       if (!c.have) return '<b>modal</b> <span class="u">— solver starting…</span>';
+       if (!c.have) return solverRequested ? '<b>solver starting</b>' : '<b>not started — press Run 3D solver</b>';
        /* Which engine ANSWERED, read off the worker's own frames. The two give
           identical fields, so this is not a disclaimer about the picture -- it is
           there because the clocks below mean different things for each, and
@@ -1001,15 +1085,20 @@ function paintDeck(){
     ['σ', `${(w.sigma*1000).toFixed(2)} <span class="u">mN/m</span>`],
     ['ρ', `${w.rho.toFixed(1)} <span class="u">kg/m³</span>`],
     ['μ', `${(w.mu*1000).toFixed(3)} <span class="u">mPa·s</span>`],
-    ['TFE used', `${tfeOf().toFixed(1)} <span class="u">s</span>`]
+    ['display envelope', useSolver || s.experiment ? 'none' : `${tfeOf().toFixed(1)} <span class="u">s (assumed)</span>`]
   ];
-  $('ro').innerHTML = rows.map(([k, v]) => k === 'SEP'
+  const shownRows = s.experiment ? rows.filter(([k]) => !['plate |T| (assumed base)', '  D', '  added mass', 'wall impedance (unsourced)', '  bounded range', '  walls'].includes(k)) : rows;
+  $('ro').innerHTML = shownRows.map(([k, v]) => k === 'SEP'
     ? '<dt style="grid-column:1/-1"><div class="sep"></div></dt>'
     : `<dt>${k}</dt><dd${k === 'drawn on' ? ' id="renderProcessor"' : ''}>${v}</dd>`).join('');
 }
 function paintInspector(){
   const s = state, vs = s.visualSignature;
   const cells = [];
+  if (comparePaper){
+    const reference = atlasAt(referenceCell, freq);
+    cells.push(['2017 reference only', reference ? `${CELLS[referenceCell].d} mm, ${freq} Hz: ${reference.labels.join(' / ')}<br>Comparison labels do not enter the solver.` : 'No reference observation at this diameter/frequency.']);
+  }
   cells.push(['printed classification', s.replicates
     ? `<b>${s.selectedEmpiricalFold ?? '—'}</b>${s.selectedEmpiricalFold ? '-fold' : ''}
        <div class="reps">${s.replicates.map(l =>
@@ -1027,7 +1116,7 @@ function paintInspector(){
     cells.push(['renderer hints', `<span class="val sm">${hint.join(' · ')}</span>`, false]);
   }
   cells.push(['theory modes near f/2', `<span class="val sm">` +
-    s.nearestTheoryModes.map(m => `m${m.m} n${m.n} → ${m.hz.toFixed(1)} Hz (${(m.mismatch*100).toFixed(1)}%)`).join('<br>')
+    (s.nearestTheoryModes.length ? s.nearestTheoryModes.map(m => `m${m.m} n${m.n} → ${m.hz.toFixed(1)} Hz (${(m.mismatch*100).toFixed(1)}%)`).join('<br>') : 'not computed in nonlinear mode')
     + `</span>`, false]);
   if (s.transitionStudy) cells.push(['dedicated transition', `<b>${s.transitionStudy.states.join(' / ')}</b>-fold
     <div class="val sm">switched in ${(s.transitionStudy.switched*100).toFixed(1)}% of slow amplitude reductions.
@@ -1037,19 +1126,20 @@ function paintInspector(){
 }
 function paintOverlay(){
   const s = state;
-  $('oF').textContent = freq; $('oR').textContent = s.responseHz.toFixed(1);
-  $('oD').textContent = CELLS[cellKey].d.toFixed(2);
+  $('oF').textContent = freq; $('oR').textContent = useSolver ? 'instantaneous field' : s.responseHz.toFixed(1);
+  $('oRunit').textContent = useSolver ? '' : ' Hz';
+  $('oD').textContent = s.cellDiameterMm.toFixed(2);
   const pI = phaseSign > 0;
   $('oPh').className = 'ph' + (pI ? '' : ' two');
-  $('oPhT').textContent = pI ? 'phase I' : 'phase II';
+  $('oPhT').textContent = useSolver ? 'instantaneous field' : pI ? 'phase I' : 'phase II';
   $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
   $('oM').textContent = s.states.length ? s.states[0].m : '—';
   $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
-  $('oRisk').textContent = 'risk ' + s.transitionRisk.toFixed(2);
-  $('oExp').textContent = 'expression ' + (s.expression*100).toFixed(0) + '%'
+  $('oRisk').textContent = s.transitionRisk === null ? 'no empirical prior' : 'risk ' + s.transitionRisk.toFixed(2);
+  $('oExp').textContent = useSolver ? `solver time ${(CELL3D.clocks().physT*1000).toFixed(3)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
     + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
   const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
-  $('oMode').textContent = `J′ mode m=${m.m} n=${m.n}`;
+  $('oMode').textContent = useSolver ? `nonlinear field · pinned rim · initial m=${s.experiment?.seedMode ?? 'reference'}` : `J′ mode m=${m.m} n=${m.n}`;
 }
 
 function seg(id, apply){
@@ -1067,7 +1157,10 @@ seg('phaseSeg', b => {
   if (b.dataset.p === 'swap'){ swapping = true; }
   else { swapping = false; phaseSign = +b.dataset.p; }
 });
-seg('viewSeg', b => { view = b.dataset.v; });
+seg('viewSeg', b => {
+  if (useSolver && b.dataset.v === 'sand') throw new Error('Sand transport is available only as a modal visualization.');
+  view = b.dataset.v;
+});
 seg('engSeg', b => setRenderEngine(b.dataset.e));
 /* Switching to the solver starts it from the deck's current operating point. Switching
    back stops the worker rather than leaving it burning a core behind a picture nobody
@@ -1083,15 +1176,23 @@ seg('srcSeg', b => {
   if (want === useSolver && eng === cell3dEngine) return;
   cell3dEngine = eng;
   useSolver = want;
-  if (want) CELL3D.start(state); else CELL3D.stop();   /* start() reports its own errors */
+  CELL3D.reset(); solverRequested = false;
+  document.querySelector('#viewSeg [data-v="sand"]').disabled = want;
+  if (want && view === 'sand'){
+    view = 'height';
+    document.querySelectorAll('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === view)));
+  }
   dirty = true;
 });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
 });
 function setFreq(v){
-  freq = Math.max(50, Math.min(5000, Math.round(v)));
+  if (!Number.isFinite(v) || v <= 0){ $('experimentError').textContent = 'Frequency must be a finite positive number.'; return; }
+  freq = v;
   $('f').value = freq; $('fnum').value = freq; dirty = true;
+  if (experimentMode === 'general') commitGeneralInputs();
+  else $('experimentError').textContent = '';
 }
 $('f').addEventListener('input', e => setFreq(+e.target.value));
 $('fnum').addEventListener('change', e => setFreq(+e.target.value));
@@ -1131,6 +1232,8 @@ sc.addEventListener('click', e => {
 
 let exporting = false;
 async function exportImage(SIZE, onProgress){
+  if (useSolver && $('experimentError').textContent) throw new Error($('experimentError').textContent);
+  if (dirty) recompute();
   const exportRnd = mulberry32(EXPORT_SEED);
 
   const g = SIZE % 2 ? SIZE : SIZE + 1;
@@ -1138,9 +1241,16 @@ async function exportImage(SIZE, onProgress){
   const cc = (g - 1)/2, rr = cc - 3;
   const rsqMax = (rr + 2)*(rr + 2);
   const st = state;
+  const solverSnapshot = useSolver ? CELL3D.snapshot() : null;
+  if (solverSnapshot && view === 'sand') throw new Error('Sand transport is a modal visualization, not nonlinear fluid particle dynamics.');
 
-  const usable = st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE);
-  if (!usable.length) throw new Error('every mode is below the resolution gate even at this size');
+  const exportView = view;
+  const exportGain = solverSnapshot ? 1 : phaseSign*st.expression;
+  const exportSignature = solverSnapshot || !st.visualSignature ? null : { ...st.visualSignature };
+  const exportAgitation = agitation;
+  const exportLabel = { diameterMm: st.cellDiameterMm, frequencyHz: freq, model: solverSnapshot ? 'navier-stokes' : 'modal', view: exportView };
+  const usable = solverSnapshot ? [] : st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE);
+  if (!solverSnapshot && !usable.length) throw new Error('every mode is below the resolution gate even at this size');
 
   const tableBytes = usable.length*(2*4 + 1)*(rsqMax + 1);
   if (tableBytes > EXPORT_TABLE_BUDGET_BYTES){
@@ -1153,7 +1263,7 @@ async function exportImage(SIZE, onProgress){
       + `pattern the physics did not predict. Reduce the export size, or drive fewer modes.`);
   }
 
-  onProgress(`building ${usable.length} mode tables at ${g}`);
+  onProgress(solverSnapshot ? `sampling nonlinear solver snapshot at ${g}` : `building ${usable.length} mode tables at ${g}`);
   const tables = [];
   for (let mi = 0; mi < usable.length; mi++){
     const sMode = usable[mi], jp = sMode.radial.jp, m = sMode.m;
@@ -1194,14 +1304,14 @@ async function exportImage(SIZE, onProgress){
   const out = cx.createImageData(SIZE, SIZE);
   const op = out.data;
   const off = Math.floor((g - SIZE)/2);
-  const vs = st.visualSignature;
+  const vs = exportSignature;
   const cbias = vs ? vs.centerToMid : 1;
   let contrast = vs ? vs.contrast : null;
   // No floor. `resolvePatternState` sets expression = 0 exactly when the drive
   // is below the reported minimum, with the warning "no stable Faraday pattern
   // forms"; the 0.35 that stood here drew a 46x-amplified pattern anyway and
   // saved it as a PNG. The preview has never had a floor -- the two disagreed.
-  const gain = phaseSign*st.expression;
+  const gain = exportGain;
 
   const evalAt = (dx, dy) => {
     const q = dx*dx + dy*dy;
@@ -1209,6 +1319,7 @@ async function exportImage(SIZE, onProgress){
     const r = Math.sqrt(q);
     if (r > rr) return null;
     const th = Math.atan2(dy, dx);
+    if (solverSnapshot) return { ...solverSnapshot.at(r/rr, th), r };
     let Re = 0, Im = 0, gRx = 0, gRy = 0, gIx = 0, gIy = 0;
     for (const t of tables){
       const J = t.jr[q], dJ = t.dr[q];
@@ -1233,7 +1344,7 @@ async function exportImage(SIZE, onProgress){
   };
 
   onProgress('measuring field extent');
-  let mx = 1e-9, gmx = 1e-9, sumsq = 0, nSamp = 0;
+  let mx = solverSnapshot ? 0 : 1e-9, gmx = solverSnapshot ? 0 : 1e-9, sumsq = 0, nSamp = 0;
   for (let y = 0; y < SIZE; y++){
     for (let x = 0; x < SIZE; x++){
       const v = evalAt(x + off - cc, y + off - cc);
@@ -1243,15 +1354,16 @@ async function exportImage(SIZE, onProgress){
       sumsq += v.Re*v.Re; nSamp++;
     }
   }
-  const inv = 1/mx, ginv = 1/gmx;
+  const inv = mx > 0 ? 1/mx : 1, ginv = gmx > 0 ? 1/gmx : 1;
   if (contrast === null){
     if (!nSamp) throw new Error(
       'export: no covered pixels to measure the field contrast over');
     contrast = Math.sqrt(sumsq/nSamp)*inv;
+    if (contrast === 0) contrast = 1;
   }
 
   let sandBIN = null, sandInfo = null;
-  if (view === 'sand'){
+  if (exportView === 'sand'){
     const SCALE = rr/RR;
     onProgress('building the transport field');
     const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
@@ -1303,7 +1415,7 @@ async function exportImage(SIZE, onProgress){
     };
 
     const STEPS = 520, TOPPLE_EVERY = 8;
-    const jitter = AGIT*agitation;
+    const jitter = AGIT*exportAgitation;
     let refused = 0, toppleSweeps = 0;
     const occLive = new Float32Array(gw*gw);
     const shedSurplus = () => {
@@ -1471,10 +1583,10 @@ async function exportImage(SIZE, onProgress){
         const v = evalAt(dx, dy);
         if (v){
           const h = v.Re*inv*gain;
-          if (view === 'height'){
+          if (exportView === 'height'){
             if (h >= 0){ r0 = 8 + 70*h; g0 = 12 + 190*h; b0 = 18 + 220*h; }
             else       { r0 = 8 + 224*-h; g0 = 12 + 128*-h; b0 = 18 + 78*-h; }
-          } else if (view === 'sand'){
+          } else if (exportView === 'sand'){
 
             const n = sandBIN[y*SIZE + x];
             r0 = 14; g0 = 16; b0 = 20;
@@ -1482,7 +1594,7 @@ async function exportImage(SIZE, onProgress){
               const t = Math.min(1, n/1.35), tt = t*t*(3 - 2*t);
               r0 += (246 - r0)*tt; g0 += (234 - g0)*tt; b0 += (208 - b0)*tt;
             }
-          } else if (view === 'nodal'){
+          } else if (exportView === 'nodal'){
             const t = h/(contrast*0.9), gg = 1/(1 + t*t), bb = gg*Math.sqrt(gg);
             r0 = 9 + 232*bb; g0 = 13 + 224*bb; b0 = 18 + 200*bb;
           } else {
@@ -1520,8 +1632,9 @@ async function exportImage(SIZE, onProgress){
     throw new Error(`export produced a blank disc (${lit} lit of ${inside} sampled) — not saving it`);
 
   cx.putImageData(out, 0, 0);
-  return { canvas: cvx, modes: usable.length, litFraction: lit/Math.max(1, inside),
-           pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+  return { canvas: cvx, label: exportLabel, modes: usable.length, litFraction: lit/Math.max(1, inside),
+           pxPerWave: solverSnapshot ? null : 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+           source: solverSnapshot ? solverSnapshot.provenance : { model: 'modal-diagnostic', experiment: st.experiment },
            sand: sandInfo };
 }
 
@@ -1545,11 +1658,13 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   exporting = true;
   const btn = document.getElementById('expBtn'), note = document.getElementById('expNote');
   const t0 = performance.now();
+  const requestedSize = expSize;
   try {
-    const res = await exportImage(expSize, msg => { btn.textContent = msg; });
+    const res = await exportImage(requestedSize, msg => { btn.textContent = msg; });
     btn.textContent = 'encoding PNG';
     const blob = await new Promise(r => res.canvas.toBlob(r, 'image/png'));
-    const name = `faraday-${CELLS[cellKey].d.toFixed(2)}mm-${freq}Hz-${view}-${expSize}.png`;
+    const exportLabel = res.label;
+    const name = `faraday-${exportLabel.diameterMm.toFixed(2)}mm-${exportLabel.frequencyHz}Hz-${exportLabel.model}-${exportLabel.view}-${requestedSize}.png`;
     if (saver){ await saver.save({ filename: name, data: blob }); }
     else {
       const url = URL.createObjectURL(blob);
@@ -1557,8 +1672,8 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
-    note.textContent = `${expSize}² · ${res.modes} modes · `
-      + `${res.pxPerWave.toFixed(1)} px/λ · ${((performance.now()-t0)/1000).toFixed(1)}s`
+    note.textContent = `${requestedSize}² · ${res.modes} modes · `
+      + `${res.pxPerWave === null ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
       + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
           + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
@@ -1687,6 +1802,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     if (!state) throw new Error(
       'dns panel: the renderer has not resolved a state yet, so there is no '
       + 'cell, layer or drive to build the problem from.');
+    if (useSolver && state.experiment) throw new Error('Floquet thresholds are a separate linear diagnostic. Select modal diagnostic to configure them.');
     const w = state.water, mode = state.nearestTheoryModes[0];
     if (!mode) throw new Error(
       'dns panel: the renderer named no theory mode near f/2 for this state, so '
@@ -1696,7 +1812,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       + 'rather than mis-handling. Its radial and azimuthal momentum stay finite '
       + 'at the axis only through a cancellation that no other m needs, and the '
       + 'regularity condition the solver imposes is wrong for exactly that one.');
-    return { R: state.cellDiameterMm/2000, h: depth/1000,
+    return { R: state.cellDiameterMm/2000, h: state.depthMm/1000, g: state.gravity,
              rho: w.rho, nu: w.nu, gamma: w.sigma,
              m: mode.m, k: mode.k,
              omegaD: 2*Math.PI*freq, accel: state.accelAssumed,
@@ -1945,9 +2061,19 @@ function loop(now){
 
   if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
   else { state.phase = Math.cos(Math.PI*freq*simT);
-         state.expression = amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
+         state.expression = useSolver || state.experiment ? 1 : amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
+  const clock = CELL3D.clocks();
+  const inputError = $('experimentError').textContent;
+  const pending = useSolver && (!clock.have || clock.err || inputError);
+  $('solverOverlay').style.display = pending ? 'flex' : 'none';
+  if (pending){
+    $('solverOverlay').textContent = inputError ? `Inputs invalid: ${inputError}` : clock.err ? `Solver failed: ${clock.err}` : solverRequested ? 'Nonlinear solver starting; no replacement surface is displayed.' : 'Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.';
+    $('expBtn').disabled = true;
+    paintOverlay(); FARADAY_STARTUP.ready(); return;
+  }
+  $('expBtn').disabled = exporting;
   if (view === 'sand' && running){
-    const gain = phaseSign*state.expression;
+    const gain = useSolver ? 1 : phaseSign*state.expression;
     stepGrains(gain); stepGrains(gain); stepGrains(gain);
   }
   renderSurface(state);
@@ -1982,12 +2108,8 @@ function loop(now){
    ungated copy of that interpolation in the codebase, which is the mistake
    section 16 of the gate exists to prevent.
 
-   THE QUADRATURE IS THE SURFACE'S RATE, not a per-mode phase. The transport in
-   finishSurface needs a complex amplitude A = Re + i Im, and the modal path built
-   it from each mode's phase offset. A direct simulation has none. For any
-   oscillation the instantaneous pair (eta, -eta_t/omega) IS that amplitude: it
-   gives a standing mode an intensity pattern and no phase flux, and a travelling
-   one a flux of one sign, which is what section 17 of the gate measures.
+   The nonlinear display uses the instantaneous surface height and gradients.
+   No harmonic quadrature or prescribed subharmonic response is assumed.
 
    NO ENVELOPE. The modal path multiplies by centreBiasEnvelope, a cosmetic
    weighting that tilts a sum of eigenfunctions toward what the printed atlas
@@ -2000,7 +2122,7 @@ const CELL3D = (function(){
      `ranEngine` is read back off the worker's own messages rather than copied from
      what was asked for, so the deck reports what ran and not what was requested. */
   let gen = 0, ranEngine = null, ranThreads = 0;
-  let etaBuf = null, htBuf = null, omegaRef = 1, haveFrame = false, peakRaw = 0;
+  let etaBuf = null, htBuf = null, haveFrame = false, peakRaw = 0;
   /* S11: the workers that form the explicit terms' rows beside the solver's own thread,
      and the previous run's, kept until the new run says it is ready -- the solver may
      still be finishing a slice on them when the page asks for a new run. */
@@ -2143,6 +2265,8 @@ const CELL3D = (function(){
              if (d.gen !== gen) return;      /* a slice for a run that has ended */
              const t0 = Date.now(); let n = 0;
              while (Date.now() - t0 < sliceMs){
+               if (W) W.pullState();
+               dt = S.stableStep();
                if (pool) await pool.step(dt); else E.step(dt);
                n++;
              }
@@ -2201,29 +2325,14 @@ const CELL3D = (function(){
     return { worker: h, port: ch.port2 };
   }
 
-  /* The initial condition: the mode the deck says is nearest, at an amplitude small
-     enough to be linear. Under a drive it grows on its own; that is the point.
-     `profile(r)` is that mode's own radial shape -- J_m at the mode's own wavenumber on a
-     free contact line, and on a pinned one the kernel's superposition of free-basis
-     Bessel functions, which is what the deck names and draws. It used to be J_m at the
-     DRIVE's wavenumber whatever the mode, which is neither. */
-  function seed(S, m, profile){
-    const AMP = 1e-7, out = new Float64Array(S.nr*S.nth);
+  /* The seed specifies an initial surface displacement, not a predicted response mode. */
+  function seed(S, m, profile, amplitude = 1e-7){
+    const AMP = amplitude, out = new Float64Array(S.nr*S.nth);
     for (let i = 0; i < S.nr; i++){
       const P = profile(S.rc[i]);
       for (let j = 0; j < S.nth; j++) out[i*S.nth + j] = AMP*P*Math.cos(m*(j + 0.5)*S.dth);
     }
     return out;
-  }
-  function modeProfile(mode, R){
-    const m = mode.m;
-    if (!mode.pinned) return r => FARADAY_KERNEL.besselJ(m, mode.k*r);
-    const z = mode.pinnedZeros, a = mode.pinned.coefficients;
-    return r => {
-      let v = 0;
-      for (let n = 0; n < z.length; n++) v += a[n]*FARADAY_KERNEL.besselJ(m, z[n]*r/R);
-      return v;
-    };
   }
 
   async function start(st){
@@ -2244,37 +2353,22 @@ const CELL3D = (function(){
   }
   async function startInner(st, myGen){
     err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
-    const mode = st.nearestTheoryModes[0];
-    if (!mode) throw new Error('the kernel found no theory mode at this operating point, so '
-      + 'there is no mode to seed the solver with or to size its grid for.');
-    const m = mode.m;
-    omegaRef = 2*Math.PI*st.responseHz || 1;
-    const R = st.cellDiameterMm*5e-4, h = depth*1e-3, pinned = rim === 'pinned';
+    const e = st.experiment;
+    if (!e) throw new Error('Nonlinear runs require General SI inputs and physical acceleration; an assumed apparatus mV calibration is not accepted.');
+    if (rim !== 'pinned') throw new Error('Nonlinear free-contact dynamics require a compatible slip/contact-angle law. This simulator supports the pinned rim only.');
+    const m = e.seedMode;
+    const maxNth = 2*Math.floor(FARADAY_CELL3D.CELL3D_MAX_CELLS
+      /(2*FARADAY_CELL3D.CELL3D_SIZE_NR[0]*FARADAY_CELL3D.CELL3D_SIZE_NZ[0]));
+    if (m >= maxNth/2) throw new Error(`Initial mode m=${m} cannot be represented below the azimuthal Nyquist limit of any grid within the ${FARADAY_CELL3D.CELL3D_MAX_CELLS}-cell arena. Choose a representable initial condition; the requested mode was not changed.`);
+    const R = st.cellDiameterMm*5e-4, h = st.depthMm*1e-3, pinned = true;
     const water = { rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma };
-    /* THE GRID IS SIZED FOR THE SEEDED MODE, BY THIS SOLVER'S OWN OPERATOR, to the contract
-       the Floquet panel holds its grids to: the surface operator within 1% on the mode, and
-       at least two cells in every Stokes layer; the cheapest grid that meets both
-       (suggestCell3DGrid in dns/faraday-cell3d.js says how it is measured). Where no grid
-       the page can hold meets it, the run is refused with the numbers.
-
-       It used to be sized by the two-dimensional solver's suggestGrid, handed the drive's
-       wavenumber with the mode's order -- a profile that does not meet the wall -- so it
-       found no grid at 69 of 72 operating points measured, and a `catch {}` around it put
-       a fixed 16 x 8m x 10 grid in its place without a word. Measured with this solver's
-       own operator, that grid misstated the restoring force on the modes it ran by 4-17%.
-
-       The test function is a Laplacian eigenfunction of the cell: on a free contact line
-       the mode itself, J_m(k r); on a pinned one J_m at the zero of J_m nearest the pinned
-       mode's own scale, since the pinned mode is a superposition rather than an
-       eigenfunction, and the question is whether the grid carries a wave of that scale with
-       the surface held at zero on the wall. */
-    const kTest = pinned ? FARADAY_KERNEL.jZeroNear(m, mode.k*R)/R : mode.k;
-    if (!(kTest > 0)) throw new Error(`no zero of J_${m} near the pinned mode's scale `
-      + `kR = ${(mode.k*R).toFixed(3)} to size the grid with.`);
+    const root = FARADAY_KERNEL.jZeroNear(m, Math.max(0.02, m - 2));
+    if (!(root > 0)) throw new Error(`Could not resolve the pinned initial-condition root for m=${m}.`);
+    const kTest = root/R;
     const size = FARADAY_CELL3D.suggestCell3DGrid({
-      m, k: kTest, R, h, ...water, g: 9.80665, accel: st.accelAssumed,
+      m, k: kTest, R, h, ...water, g: st.gravity, accel: st.accelAssumed,
       contact: pinned ? 'pinned' : 'free',
-      omegaResponse: 2*Math.PI*st.responseHz, omegaDrive: 2*Math.PI*freq,
+      omegaResponse: 2*Math.PI*freq, omegaDrive: 2*Math.PI*freq,
       besselJ: FARADAY_KERNEL.besselJ });
     if (size.unreachable){
       const c = size.closest;
@@ -2292,15 +2386,14 @@ const CELL3D = (function(){
     }
     const opts = { nr: size.nr, nth: size.nth, nz: size.nz,
                    rStretch: size.rStretch, zStretch: size.zStretch,
-                   /* `depth` is the page's own slider in mm; the resolved state carries
-                      cellDiameterMm but not the depth, which cost one NaN refusal to find */
-                   R, h, ...water, g: 9.80665,
+                   R, h, ...water, g: st.gravity,
                    accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
                    contact: pinned ? 'pinned' : 'free' };
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
     grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R,
              err: size.err, thinnest: size.thinnest, stepsPerPeriod: size.stepsPerPeriod };
-    const eta0 = seed(vessel, m, modeProfile(mode, R));
+    const profile = r => FARADAY_KERNEL.besselJ(m, root*r/R);
+    const eta0 = seed(vessel, m, profile, e.seedFraction*h);
     /* Fetched on the page rather than in the worker: a worker has no `require` and
        the single-file build's base64 lives in a tag the page owns. Only for the C++
        engine -- asking for the bytes on the JavaScript path would make a page served
@@ -2363,11 +2456,35 @@ const CELL3D = (function(){
   }
 
   function stop(){ running3d = false; }
+  function reset(){
+    running3d = false; haveFrame = false; err = null; gen++;
+    etaBuf = null; htBuf = null; dirty = true;
+  }
+  function snapshot(){
+    if (err || !haveFrame || !vessel || !lastRun)
+      throw new Error(err || 'No nonlinear solver frame is available to export.');
+    const frozen = new FARADAY_CELL3D.FaradayCell3D(lastRun.opts);
+    for (let i = 0; i < frozen.nr; i++) for (let j = 0; j < frozen.nth; j++){
+      const e = frozen.ie(i, j), k = i*frozen.nth + j;
+      frozen.eta[e] = etaBuf[k]; frozen.Ht[e] = htBuf[k];
+    }
+    frozen.refreshMetric();
+    return {
+      provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes',
+        physicalTime: physT, steps: stepsDone, engine: ranEngine,
+        parameters: { ...lastRun.opts }, initialCondition: { kind: 'first-root-bessel', m: grid.m, amplitudeM: state.experiment.seedFraction*state.depthMm/1000 }, display: 'normalized surface snapshot; image size is not solver resolution' },
+      at(rho, th){
+        const r = rho*frozen.R, theta = th < 0 ? th + 2*Math.PI : th;
+        const a = frozen.etaSlopeAt(r, theta);
+        const eR = a.Hr*frozen.R, eT = rho > 0 ? a.Hth/rho : 0;
+        const c = Math.cos(theta), sn = Math.sin(theta);
+        return { Re: frozen.etaAt(r, theta), Im: 0,
+          gRx: eR*c - eT*sn, gRy: eR*sn + eT*c, gIx: 0, gIy: 0 };
+      }
+    };
+  }
 
-  /* Fill the six rasters from the solver's surface, through the gated resamplers.
-     Im is -eta_t/omega, and the gradients are taken in the NORMALISED radius the
-     modal path uses -- NX/NY are derivatives with respect to RAD, not metres --
-     so the factor of R converts the solver's per-metre slopes to that coordinate. */
+  /* Resample the actual nonlinear surface and its gradients for display. */
   function build(st){
     if (!haveFrame || !vessel) return false;
     const nth = vessel.nth;
@@ -2378,21 +2495,20 @@ const CELL3D = (function(){
         vessel.Ht[e]  = htBuf[i*nth + j];
       }
     vessel.refreshMetric();
-    const R = vessel.R, iw = 1/omegaRef;
+    const R = vessel.R;
     for (let i = 0; i < NSZ; i++){
       if (COVER[i] <= 0){ ETA[i] = IMF[i] = NX[i] = NY[i] = GIX[i] = GIY[i] = 0; continue; }
       const rho = Math.min(1, RAD[i]), th = ANG[i] < 0 ? ANG[i] + 2*Math.PI : ANG[i];
       const r = rho*R;
-      const re = vessel.etaAt(r, th), im = -vessel.etaDotAt(r, th)*iw;
-      const gE = vessel.etaSlopeAt(r, th), gT = vessel.etaDotSlopeAt(r, th);
+      const re = vessel.etaAt(r, th);
+      const gE = vessel.etaSlopeAt(r, th);
       /* polar to Cartesian, in the normalised radius: d/drho = R d/dr, and the
          azimuthal part divides by rho rather than by r for the same reason */
       const c = Math.cos(th), sn = Math.sin(th), rr = Math.max(rho, 1e-6);
       const eR = gE.Hr*R, eT = gE.Hth/rr;
-      const tR = gT.Tr*R*-iw, tT = (gT.Tth/rr)*-iw;
-      ETA[i] = re;  IMF[i] = im;
+      ETA[i] = re; IMF[i] = 0;
       NX[i]  = eR*c - eT*sn;  NY[i]  = eR*sn + eT*c;
-      GIX[i] = tR*c - tT*sn;  GIY[i] = tR*sn + tT*c;
+      GIX[i] = 0; GIY[i] = 0;
     }
     /* The raw peak over covered pixels, which is exactly what finishSurface divides
        the rasters by. Kept so a caller -- dns/check-page.mjs -- can ask what a pixel
@@ -2408,7 +2524,8 @@ const CELL3D = (function(){
   /* What the raster should hold at a pixel: the solver's own surface there, through
      the gated resampler, divided by the same peak finishSurface used. */
   function etaAtPixel(rho, th){
-    if (!vessel || !(peakRaw > 0)) return NaN;
+    if (!vessel || !haveFrame) return NaN;
+    if (peakRaw === 0) return 0;
     return vessel.etaAt(Math.min(1, rho)*vessel.R, th)/peakRaw;
   }
 
@@ -2426,11 +2543,11 @@ const CELL3D = (function(){
   const threadWorkers = () => ({ live: helpers.length, retiring: retiring.length,
                                  made: helpersMade, ended: helpersEnded,
                                  workers: helpers.map(h => h.worker) });
-  return { start, stop, build, clocks, etaAtPixel, lastFrame, threadWorkers,
+  return { start, stop, reset, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = false;
+let useSolver = true;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
@@ -2451,9 +2568,43 @@ let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
     const n = +b.dataset.t;
     if (n === cell3dThreads) return;
     cell3dThreads = n;
-    if (useSolver) CELL3D.start(state);              /* the run restarts on the new count */
+    if (useSolver && solverRequested) CELL3D.start(state);
   });
 }
+
+
+function commitGeneralInputs(){
+  try {
+    const next = { ...generalInput };
+    for (const [id, key] of [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']])
+      {
+        if ($(id).value.trim() === '') throw new RangeError(`${key} requires an explicit number.`);
+        next[key] = Number($(id).value);
+      }
+    const frequencyHz = Number($('fnum').value);
+    FARADAY_KERNEL.experimentParameters({ ...next, frequencyHz, contact: rim });
+    generalInput = next; freq = frequencyHz; $('f').value = freq;
+    $('experimentError').textContent = ''; renderError = null; dirty = true;
+    return true;
+  } catch (e){ $('experimentError').textContent = e.message; return false; }
+}
+$('generalInputs').querySelectorAll('input').forEach(input => input.addEventListener('change', commitGeneralInputs));
+$('configurationMode').addEventListener('change', e => {
+  experimentMode = e.target.value;
+  $('generalInputs').hidden = experimentMode !== 'general';
+  document.querySelectorAll('[data-reference-control]').forEach(el => { el.hidden = experimentMode !== 'reference'; });
+  $('fnum').step = 'any';
+  renderError = null;
+  dirty = true;
+});
+$('comparePaper').addEventListener('change', e => { comparePaper = e.target.checked; dirty = true; });
+$('referenceCell').addEventListener('change', e => { referenceCell = e.target.value; dirty = true; });
+$('runSolver').addEventListener('click', () => {
+  if (experimentMode === 'general' && !commitGeneralInputs()) return;
+  if ($('experimentError').textContent) return;
+  if (!useSolver){ $('experimentError').textContent = 'Select a 3D N-S engine before starting the solver.'; return; }
+  recompute(); solverRequested = true; CELL3D.start(state); dirty = true;
+});
 
 sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage

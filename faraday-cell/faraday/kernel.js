@@ -213,7 +213,7 @@ function invertKTanh(target, hM){
   return lo + (hi - lo)/2;
 }
 
-function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
+function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount, gravity = G_ACC){
 
   const zeros = jpZeros(m, basisN, m + 3.2*basisN);
   if (zeros.length < basisN)
@@ -222,7 +222,7 @@ function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
       + `would converge to the wrong values rather than fail.`);
   if (zeros.length < 2) return null;
   const k = zeros.map(z => z/R);
-  const w2 = k.map(kk => (G_ACC*kk + sigma*kk*kk*kk/rho)*Math.tanh(kk*hM));
+  const w2 = k.map(kk => (gravity*kk + sigma*kk*kk*kk/rho)*Math.tanh(kk*hM));
 
   const c = zeros.map(z => {
     const v = 2/(R*R*(1 - (m/z)*(m/z)));
@@ -273,10 +273,10 @@ function pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount){
   return { freeW2: w2, freeZeros: zeros, freeK: k, c, pinned: out };
 }
 
-function pinnedEdgeExtrapolated(m, R, sigma, rho, hM, basisN, wantCount){
+function pinnedEdgeExtrapolated(m, R, sigma, rho, hM, basisN, wantCount, gravity = G_ACC){
   if (basisN % 2) throw new Error(`pinnedEdgeExtrapolated: basisN must be even, got ${basisN}`);
-  const full = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount);
-  const half = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN/2, wantCount);
+  const full = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN, wantCount, gravity);
+  const half = pinnedEdgeSpectrum(m, R, sigma, rho, hM, basisN/2, wantCount, gravity);
   if (!full || !half) return null;
   const n = Math.min(full.pinned.length, half.pinned.length);
   for (let i = 0; i < n; i++){
@@ -552,15 +552,15 @@ function viscosity(Tc){
   return 2.414e-5*Math.pow(10, 247.8/((Tc + 273.15) - 140));
 }
 
-function omegaOf(k, sigma, rho, hM){
-  return Math.sqrt((G_ACC*k + sigma*k*k*k/rho)*Math.tanh(k*hM));
+function omegaOf(k, sigma, rho, hM, gravity = G_ACC){
+  return Math.sqrt((gravity*k + sigma*k*k*k/rho)*Math.tanh(k*hM));
 }
 
-function kOfOmega(w, sigma, rho, hM){
+function kOfOmega(w, sigma, rho, hM, gravity = G_ACC){
   let lo = 1e-9, hi = 1e8;
   for (let i = 0; i < 300; i++){
     const mid = Math.sqrt(lo*hi);
-    if (omegaOf(mid, sigma, rho, hM) < w) lo = mid; else hi = mid;
+    if (omegaOf(mid, sigma, rho, hM, gravity) < w) lo = mid; else hi = mid;
   }
   return Math.sqrt(lo*hi);
 }
@@ -793,39 +793,89 @@ function transitionRisk(prior, rec, f){
   return Math.min(1, r);
 }
 
+function experimentParameters(input){
+  if (!input || typeof input !== 'object') throw new TypeError('An experiment parameter object is required.');
+  const result = {};
+  for (const name of ['diameterMm', 'depthMm', 'rho', 'mu', 'sigma', 'frequencyHz']){
+    const value = input[name];
+    if (typeof value !== 'number' || !Number.isFinite(value) || !(value > 0))
+      throw new RangeError(`${name} must be a finite positive number.`);
+    result[name] = value;
+  }
+  for (const name of ['gravity', 'acceleration']){
+    const value = input[name];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+      throw new RangeError(`${name} must be a finite non-negative number.`);
+    result[name] = value;
+  }
+  if (!['free', 'pinned'].includes(input.contact))
+    throw new RangeError('contact must be free or pinned.');
+  result.contact = input.contact;
+  result.seedMode = input.seedMode === undefined ? 2 : input.seedMode;
+  result.seedFraction = input.seedFraction === undefined ? 0.0001 : input.seedFraction;
+  if (!Number.isSafeInteger(result.seedMode) || result.seedMode < 0)
+    throw new RangeError('seedMode must be a non-negative safe integer.');
+  if (!Number.isFinite(result.seedFraction) || result.seedFraction < 0)
+    throw new RangeError('seedFraction must be a finite non-negative number.');
+  return result;
+}
+
+function resolveExperimentState(input){
+  const experiment = experimentParameters(input);
+  return {
+    model: 'nonlinear-incompressible-free-surface-navier-stokes',
+    experiment, cellDiameterMm: experiment.diameterMm, depthMm: experiment.depthMm,
+    gravity: experiment.gravity, frequencyHz: experiment.frequencyHz,
+    accelAssumed: experiment.acceleration,
+    water: { rho: experiment.rho, mu: experiment.mu, nu: experiment.mu/experiment.rho, sigma: experiment.sigma },
+    driveCalibration: { kind: 'acceleration', source: 'user supplied physical acceleration in m/s²', measured: false },
+    states: [], nearestTheoryModes: [], warnings: [], expression: 1,
+    selectedEmpiricalFold: null, empiricalConfidence: 0, transitionRisk: null,
+    replicates: null, transitionStudy: null, visualSignature: null,
+    responseHz: null, transport: null
+  };
+}
+
 function resolvePatternState(o){
-  const { cellKey, f, amplitudeMv, tempC, depthMm, rim, tSec, tfeSec, driveR } = o;
-  const cell = CELLS[cellKey];
+  const experiment = o.experiment ? experimentParameters(o.experiment) : null;
+  const { cellKey, amplitudeMv, tempC, tSec, tfeSec, driveR } = o;
+  const f = experiment ? experiment.frequencyHz : o.f;
+  const rim = experiment ? experiment.contact : o.rim;
+  const depthMm = experiment ? experiment.depthMm : o.depthMm;
+  const cell = experiment ? { d: experiment.diameterMm, atlas: null } : CELLS[cellKey];
+  if (!cell) throw new RangeError(`Unknown reference cell: ${cellKey}`);
   const R = cell.d/2000;
-  const sigma = surfaceTension(tempC), rho = density(tempC), mu = viscosity(tempC);
+  const sigma = experiment ? experiment.sigma : surfaceTension(tempC);
+  const rho = experiment ? experiment.rho : density(tempC);
+  const mu = experiment ? experiment.mu : viscosity(tempC);
+  const gravity = experiment ? experiment.gravity : G_ACC;
+  const acceleration = experiment ? experiment.acceleration : accelOf(amplitudeMv, cellKey);
   const hM = depthMm/1000;
   const responseHz = f/2;
   const omegaTarget = 2*Math.PI*responseHz;
 
   const warnings = [];
   if (rim === 'pinned') warnings.push({ hard: false, text:
-    'Pinned contact line: solved, not approximated. The sidewall still forces the '
-    + 'J′(kR)=0 basis, so η(R)=0 cannot be met by one mode — each state below is the '
-    + 'edge-constrained superposition (Benjamin & Scott 1979; Graham-Eagle 1983), from a '
-    + '128-term secular solve Richardson-extrapolated on its measured N⁻² rate. '
-    + 'This is the fully pinned LIMIT: finite contact-line mobility and angle hysteresis '
-    + '(Kidambi 2013; Shao 2021; Chu 2026) are a different model and are not computed here.' });
-  if (cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
+    'Pinned contact line: the modal diagnostic is solved in a finite 128-term basis with Richardson extrapolation. '
+    + 'This is an approximate linear spectral calculation, not an exact continuum solution. '
+    + 'LIMIT: finite contact-line mobility and hysteresis are not computed. '
+    + 'Select 3D N-S for the separate nonlinear model.' });
+  if (!experiment && cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
-  if (!cell.atlas) warnings.push({ hard: false, text:
+  if (!experiment && !cell.atlas) warnings.push({ hard: false, text:
     'No empirical atlas for this diameter. Angular symmetry below is theory only, not observed morphology.' });
-  if (f <= 199 && amplitudeMv < MIN_MV) warnings.push({ hard: false, text:
+  if (!experiment && f <= 199 && amplitudeMv < MIN_MV) warnings.push({ hard: false, text:
     'Below the reported minimum drive: no stable Faraday pattern forms.' });
-  if (f <= 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
+  if (!experiment && f <= 199 && amplitudeMv > OVERDRIVE_MV) warnings.push({ hard: false, text:
     'Overdriven regime: the paper reports the pattern becomes distorted here.' });
 
   const nu = mu/rho;
-  const kStar = kOfOmega(omegaTarget, sigma, rho, hM);
+  const kStar = kOfOmega(omegaTarget, sigma, rho, hM, gravity);
   const xStar = kStar*R;
   const damp = dampingRate(kStar, omegaTarget, nu, hM);
   const plate = plateTransfer(kStar, 2*Math.PI*f, rho, hM);
-  if (f > 199 && amplitudeMv > OVERDRIVE_MV){
-    const aNow = accelOf(amplitudeMv, cellKey);
+  if (!experiment && f > 199 && amplitudeMv > OVERDRIVE_MV){
+    const aNow = acceleration;
     const mStar = mathieu(omegaTarget, damp.total, aNow, kStar, hM, 2*Math.PI*f);
     warnings.push({ hard: false, text:
       `${amplitudeMv.toFixed(0)} mV is outside the 55-430 mV the paper reports. That range `
@@ -851,9 +901,9 @@ function resolvePatternState(o){
   for (const m of new Set(orders)){
     const roots = jpZerosNearN(m, xStar, 1);
     if (!roots.length){ ordersWithoutMode++; continue; }
-    const k = roots[0]/R, w = omegaOf(k, sigma, rho, hM);
+    const k = roots[0]/R, w = omegaOf(k, sigma, rho, hM, gravity);
     const g = dampingRate(k, w, nu, hM);
-    orderScore.push({ m, growth: mathieu(w, g.total, accelOf(amplitudeMv, cellKey), k, hM, 2*Math.PI*f).growth });
+    orderScore.push({ m, growth: mathieu(w, g.total, acceleration, k, hM, 2*Math.PI*f).growth });
   }
   orderScore.sort((a, b) => b.growth - a.growth);
   const keptOrders = orderScore.slice(0, ANGULAR_ORDERS).map(o => o.m);
@@ -861,11 +911,11 @@ function resolvePatternState(o){
   const PINNED_BASIS = 128;
   const pinnedFor = m => {
     const want = RADIAL_ROOTS + 4;
-    const key = `${m}|${R}|${sigma}|${rho}|${hM}|${PINNED_BASIS}|${want}`;
+    const key = `${m}|${R}|${sigma}|${rho}|${hM}|${gravity}|${PINNED_BASIS}|${want}`;
     const hit = PINNED_SPECTRUM_CACHE.get(key);
     if (hit !== undefined) return hit;
     let v = null;
-    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, want); }
+    try { v = pinnedEdgeExtrapolated(m, R, sigma, rho, hM, PINNED_BASIS, want, gravity); }
     catch (e){ v = { failed: e.message }; }
     PINNED_SPECTRUM_CACHE.set(key, v); return v;
   };
@@ -887,7 +937,7 @@ function resolvePatternState(o){
 
         const kEq = pm.kEquiv;
         const g = pinnedModalDamping(sp, pm, pm.omega, nu, hM);
-        const mth = mathieuKT(pm.omega, g.total, accelOf(amplitudeMv, cellKey), pm.kTanhEff, 2*Math.PI*f);
+        const mth = mathieuKT(pm.omega, g.total, acceleration, pm.kTanhEff, 2*Math.PI*f);
         modes.push({ m, n: null, jp: null, k: kEq, hz: pm.hz,
           mismatch: Math.abs(pm.omega - omegaTarget)/omegaTarget,
           gamma: g.total, growth: mth.growth, eps: mth.eps,
@@ -898,9 +948,9 @@ function resolvePatternState(o){
       continue;
     }
     for (const z of jpZerosNearN(m, xStar, RADIAL_ROOTS)){
-      const k = z/R, w = omegaOf(k, sigma, rho, hM);
+      const k = z/R, w = omegaOf(k, sigma, rho, hM, gravity);
       const g = dampingRate(k, w, nu, hM);
-      const mth = mathieu(w, g.total, accelOf(amplitudeMv, cellKey), k, hM, 2*Math.PI*f);
+      const mth = mathieu(w, g.total, acceleration, k, hM, 2*Math.PI*f);
       modes.push({ m, n: null, jp: z, k, hz: w/(2*Math.PI),
         mismatch: Math.abs(w - omegaTarget)/omegaTarget,
         gamma: g.total, growth: mth.growth, eps: mth.eps,
@@ -1007,7 +1057,7 @@ function resolvePatternState(o){
                     saturated: survivors.length > 0 };
   }
 
-  const rec = atlasAt(cellKey, f);
+  const rec = experiment ? null : atlasAt(cellKey, f);
   const prior = foldPrior(rec);
   const risk = transitionRisk(prior, rec, f);
 
@@ -1050,7 +1100,7 @@ function resolvePatternState(o){
         + `than given an invented root.` });
       return;
     }
-    const wz = omegaOf(z/R, sigma, rho, hM);
+    const wz = omegaOf(z/R, sigma, rho, hM, gravity);
     // The free branch used to push no `phi` at all, while both sibling
     // branches set one. `cymatic.html` reads `s.phi || 0`, so every free-rim
     // atlas state ran at phase 0: sin(phi) = 0 made IMF, GIX and GIY
@@ -1100,9 +1150,9 @@ function resolvePatternState(o){
       ? `Theory only: ${unstable.length} of ${modes.length} modes have positive Mathieu `
         + `growth, all retained; the cubic overlap competition leaves `
         + `${competition ? competition.survivors.length : 0} standing. Angular symmetry is `
-        + `predicted, not observed -- the atlas stops at 199 Hz.`
+        + (experiment ? `predicted by a reduced modal diagnostic, not a nonlinear Navier–Stokes result.` : `predicted, not observed -- the atlas stops at 199 Hz.`)
       : (() => {
-          const aNow = accelOf(amplitudeMv, cellKey);
+          const aNow = acceleration;
           let aMin = Infinity, mMin = null;
           for (const t of modes)
             if (t.accelOnset > 0 && t.accelOnset < aMin){ aMin = t.accelOnset; mMin = t.m; }
@@ -1110,6 +1160,7 @@ function resolvePatternState(o){
             return `No mode reaches Faraday onset at this amplitude, and no finite threshold was `
               + `computed to compare it against. Shown are the least-damped modes, which is a `
               + `diagnostic, not a pattern.`;
+          if (experiment) return `No modal instability at this drive: ${aNow.toFixed(4)} m/s²; the lowest modal onset is ${aMin.toFixed(4)} m/s². The display shows a least-damped diagnostic, not a nonlinear solver result.`;
           const mvNeed = amplitudeMv*aMin/aNow;
           return `No mode reaches Faraday onset: the drive is ${aNow.toFixed(2)} m/s^2 against `
             + `${aMin.toFixed(2)} m/s^2 for the easiest mode here, m = ${mMin}, a ratio of `
@@ -1125,11 +1176,11 @@ function resolvePatternState(o){
     + `by construction, so this cannot be divided away.`);
   for (const s of states) s.weight /= wsum;
 
-  if (TRANSITION[f]) warnings.push({ hard: false, text:
+  if (!experiment && TRANSITION[f]) warnings.push({ hard: false, text:
     `Dedicated transition study at ${f} Hz: ${TRANSITION[f].states.join('/')}-fold competition, ` +
     `switched in ${(TRANSITION[f].switched*100).toFixed(1)}% of slow amplitude reductions. ${TRANSITION[f].note}.` });
 
-  const expression = amplitudeMv < MIN_MV ? 0 : 1 - Math.exp(-tSec/Math.max(0.15, tfeSec));
+  const expression = experiment ? 1 : amplitudeMv < MIN_MV ? 0 : 1 - Math.exp(-tSec/Math.max(0.15, tfeSec));
 
   return {
     phase: Math.cos(Math.PI*f*tSec),
@@ -1147,24 +1198,27 @@ function resolvePatternState(o){
     } : null,
     nearestTheoryModes: modes.slice(0, 4).map(t => ({ ...t,
       n: t.pinned ? t.pinned.index : radialIndexOf(t.m, t.jp) })),
-    transitionStudy: TRANSITION[f] || null,
+    transitionStudy: experiment ? null : TRANSITION[f] || null,
+    experiment, gravity, depthMm,
     water: { sigma, rho, mu, nu },
     wavenumber: kStar, wavelength, cellDiameterMm: cell.d,
     wavelengthsAcross: 2*R/wavelength,
     damping: damp, plate,
-    onset: mathieu(omegaTarget, damp.total, accelOf(amplitudeMv, cellKey), kStar, hM, 2*Math.PI*f),
-    accelAssumed: accelOf(amplitudeMv, cellKey),
-    driveCalibration: driveCalibration(cellKey),
+    onset: mathieu(omegaTarget, damp.total, acceleration, kStar, hM, 2*Math.PI*f),
+    accelAssumed: acceleration,
+    driveCalibration: experiment ? { kind: 'acceleration', measured: false, gPerMv: null, source: 'physical acceleration supplied directly in m/s²' } : driveCalibration(cellKey),
     unstableCount: unstable.length, ordersScanned: modes.length,
     growingRetained: unstable.length, competition,
     angularOrders: keptOrders.length, radialRoots: RADIAL_ROOTS,
     ordersWithoutMode,
     boundary: boundaryImpedance(2*Math.PI*R/wavelength, driveR || 0),
-    aboveAtlas: f > 199
+    aboveAtlas: experiment ? true : f > 199
   };
 }
 
 const FARADAY_KERNEL = {
+  experimentParameters,
+  resolveExperimentState,
   invertKTanh,
   dampingRateOrNull,
   viscousFreeSurfaceReOrNull,

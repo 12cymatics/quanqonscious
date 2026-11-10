@@ -14,17 +14,51 @@ startup errors rather than leaving an unexplained blank surface.
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
 server described below. Running from a folder does not itself accelerate the
-numerical solver. The default modal view and the nonlinear Navier–Stokes modes
-are distinct models, labelled explicitly; no solver or accuracy setting was
-replaced to make this package appear faster.
+numerical solver. General experiment mode uses explicit physical inputs and a
+pinned contact line. Select the nonlinear JavaScript or C++ engine and start the
+solver explicitly. Its initialization and failures remain visible; a modal image
+is not substituted while waiting for a solver frame.
 
 
-A Faraday-wave simulation of a circular cell: a 24.25 mm disc holding 3 mm of
-water, shaken vertically, forming the standing surface patterns Chladni and
-Faraday drew. Two solvers and a page that draws them.
+A nonlinear free-surface simulation of an incompressible Newtonian liquid in a
+rigid circular cell, with a pinned rim and no-slip floor and wall. Diameter,
+depth, density, viscosity, surface tension, gravity and drive acceleration are
+explicit inputs. The reference paper's apparatus presets and atlas are optional
+comparisons. They do not determine the general experiment's nonlinear physics.
 
-Everything here runs on `node` and a browser. There is nothing to install: no
-npm packages, no build step, no compiler.
+The packaged application needs a desktop browser. JavaScript checks need Node;
+the exact book-derived verification needs Python 3 and SymPy 1.14.0, and rebuilding
+the WebAssembly checks needs clang with the wasm32 target and lld. The application
+itself does not call an external API or require those verification tools.
+
+## Nonlinear model and corrections
+
+`dns/MODEL.md` specifies every bulk equation and the normal, tangential,
+kinematic, pinned-rim and solid-wall boundary conditions for the supported model.
+It distinguishes the full nonlinear equations from their finite-grid numerical
+solution. Compressible flow, a second viscous fluid, moving contact lines,
+overturning interfaces and variable material properties are not silently
+represented by this constant-property, single-liquid graph-surface model.
+
+The pressure correction now includes the prescribed free-surface pressure before
+the horizontal slope-transpose terms, in both JavaScript and C++. Previously a
+matching constant pressure could cause spurious horizontal acceleration on a
+deformed surface. `dns/check-surface-pressure.mjs` checks constant-pressure
+cancellation, pressure-gauge invariance, the pinned rim and both engines.
+
+`dns/check-book-pressure.py` uses the page-specific procedures in `vedic_book.py`
+to derive exact polynomial pressure-coordinate identities. It incorporates the
+book corrections recorded in PR #172 and independently checks them. Those
+arithmetic checks do not turn the fluid equations or pressure projection into
+sutras and do not claim physical validation.
+
+Run the focused checks from this folder:
+
+```
+node dns/check-surface-pressure.mjs
+node faraday/check-general.mjs
+python3 dns/check-book-pressure.py
+```
 
 ## Playback update — 22 October 2026
 
@@ -38,7 +72,7 @@ new physics model or a speed-up of the nonlinear solver.
 clock update with controlled timestamps, including re-excite while paused.
 It is a deterministic logic check, not a substitute for the real-browser suite.
 
-The modal view is the quick interactive starting point. The Navier–Stokes
+The modal view is an explicitly selected visualization. The Navier–Stokes
 views evolve a separate physical clock in a worker; the modal playback button
 does not pause that solver. Those views can take a long time at the strict
 accuracy grid. See the physical-time and wall-time readouts; do not expect
@@ -92,7 +126,7 @@ node dns/run-cell3d.mjs --engine cpp
 Options: `nr nth nz` (grid), `m` (azimuthal mode seeded), `rel` (seed amplitude
 as a fraction of the depth), `accel` and `freq` (the shaker; with no `freq` it
 drives at twice the mode's own frequency, which is the subharmonic resonance
-Faraday waves live on), `periods`, `frames`, `contact` (`free` or `pinned`),
+Faraday waves live on), `periods`, `frames`, `contact` (`pinned`),
 `R h rho nu gamma g`, `rStretch zStretch`, `width`, `engine` (`js` or
 `cpp`) and `threads`. An unknown option is refused rather than ignored.
 
@@ -191,8 +225,9 @@ sequence in grain order, and a parallel version would be a different algorithm.
 
 ## What this is, and what it is not
 
-What has been measured is in `dns/PLAN-cell3d.md`, stage by stage, with the
-numbers. In summary: the three-dimensional solver's discrete operators converge
+Historical measurements are in `dns/PLAN-cell3d.md`, stage by stage, with the
+numbers. They describe their recorded revisions and must not be treated as
+fresh validation of later changes. In that record the discrete operators converge
 at second order against calculus; its projection drives the divergence to the
 solve tolerance; its advection telescopes exactly and conserves energy in the
 inviscid limit; its curvature is the exact variational derivative of its own

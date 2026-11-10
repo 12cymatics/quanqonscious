@@ -642,7 +642,8 @@ void cell3d_divergence(const double* uu, const double* vv, const double* omm,
    that meet there. Without it, measured on p = A r + B z over a surface at
    eta/h = 0.4, the radial component returns 86.99 where the physical gradient is
    137.00. */
-void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
+static void gradientWithSurface(const double* q, double* ou, double* ov, double* ow,
+                                const double* surfaceP){
   for (int i = 0; i < NU; i++) ou[i] = 0.0;
   for (int i = 0; i < NV; i++) ov[i] = 0.0;
   for (int i = 0; i < NW; i++) ow[i] = 0.0;
@@ -665,6 +666,11 @@ void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
       }
     }
   }
+  // Apply boundary pressure before the slope transpose, in all three components.
+  if (surfaceP)
+    for (int i = 0; i < nr; i++)
+      for (int k = 0; k < nth; k++)
+        ow[(i*nth + k)*nw + nz] -= surfaceP[i*nth + k]*rc[i]*drc[i]*dth;
   for (int i = 0; i < nr; i++){
     const double ri = rc[i];
     for (int k = 0; k < nth; k++){
@@ -713,6 +719,15 @@ void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
       for (int j = 1; j <= nz; j++)
         ow[b + j] /= -(rc[i]*drc[i]*dth*Hc*dsf[j]);
     }
+}
+
+void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
+  gradientWithSurface(q, ou, ov, ow, 0);
+}
+
+void cell3d_gradientSurface(const double* q, const double* surfaceP,
+                            double* ou, double* ov, double* ow){
+  gradientWithSurface(q, ou, ov, ow, surfaceP);
 }
 
 /* Omega from a given (u, v, w) triple -- the same definition omegaFromW applies
@@ -2001,12 +2016,15 @@ static double gEff = CELL3D_GRAVITY_UNSET;
 void cell3d_setGravity(double g){ gEff = g; }
 double cell3d_gravity(){ return gEff; }
 
-/* The pressure the free surface carries, at every pressure column: the hydrostatic
+/* The reduced pressure the free surface carries, at every pressure column: the hydrostatic
    response of the displaced elevation to the instantaneous gravity, the capillary
    term with the FULL mean curvature rather than its linearisation, and the viscous
    normal stress with the full rate-of-strain contraction against the true normal.
 
-       p_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)
+       q = p - p_atm + rho g_eff (z - h)
+       q_s = rho g_eff eta - gamma kappa + 2 rho nu (n.E.n)
+
+   n is the unit outward normal and kappa is div(grad eta/sqrt(1+|grad eta|^2)).
 
    It is the inhomogeneous DIRICHLET value on the projection, never a force on the
    predictor -- see cell3d_step. */
@@ -2042,9 +2060,9 @@ int cell3d_surfacePressure(double* out){
       velocity at the new one is symplectic Euler on the surface oscillator, stable
       for omega dt < 2 rather than merely less unstable than forward Euler.
 
-   The predictor carries the viscous and advective terms in full. Gravity does not
-   appear in it: this pressure is the total one, and the whole of gravity's effect
-   on the interior is the hydrostatic head the surface value carries. */
+   The predictor carries the viscous and advective terms in full. The solve uses
+   q = p - p_atm + rho g_eff (z - h), not total pressure p: grad(q) absorbs the
+   downward body force, leaving rho g_eff eta in the surface value. */
 /* step() in three parts, as in the JavaScript, so the middle one's rows can be divided among
    workers (dns/cell3d-pool.js). cell3d_step is exactly the three in order. */
 int cell3d_stepBegin(double dt){
@@ -2099,20 +2117,15 @@ int cell3d_stepFinish(double dt){
   cell3d_divergence(u, v, om, divw);
   const double scale = rho/dt;
   for (int c = 0; c < NP; c++) divw[c] *= scale;
-  for (int i = 0; i < nr; i++)
-    for (int k = 0; k < nth; k++)
-      divw[ip(i, k, nz - 1)] -= rc[i]*drc[i]*dth
-        *psurf[ie(i, k)]/(H[ie(i, k)]*dsf[nz]);
   for (int c = 0; c < NP; c++) p[c] = 0.0;
+  gradientWithSurface(p, gu, gv, gw, psurf);
+  cell3d_omegaOf(gu, gv, gw, gom);
+  cell3d_divergence(gu, gv, gom, cgq);
+  for (int c = 0; c < NP; c++) divw[c] -= cgq[c];
   cell3d_solveP(divw, 1e-11, 400*(nr + nth + nz));
   if (lastError) return lastError;
 
-  cell3d_gradient(p, gu, gv, gw);
-  for (int i = 0; i < nr; i++)
-    for (int k = 0; k < nth; k++){
-      const int e = ie(i, k);
-      gw[iw(i, k, nz)] += psurf[e]/(H[e]*dsf[nz]);
-    }
+  gradientWithSurface(p, gu, gv, gw, psurf);
 
   const double s2 = dt/rho;
   for (int i = 1; i < nr; i++)

@@ -1,5 +1,5 @@
 // Build the faraday-cell bundle -- everything needed to run the simulation and
-// its suites on a machine that has node and nothing else installed.
+// its suites with Node.js and, for exact book arithmetic, Python and SymPy.
 //
 //     node faraday/build-zip.mjs            the COMMITTED pair, at the repo root:
 //                                           faraday-cell/ and faraday-cell.zip
@@ -84,6 +84,7 @@ export const ZIP_EPOCH = Date.UTC(2026, 0, 1)/1000;
    covers every suite the checkout has. */
 export const MANIFEST = [
   'cymatic.html',
+  'vedic_book.py',
 
   'faraday/kernel.js',
   'faraday/render-gl.js',
@@ -93,6 +94,7 @@ export const MANIFEST = [
   'faraday/build-clean.mjs',
   'faraday/build-zip.mjs',
   'faraday/check-kernel.mjs',
+  'faraday/check-general.mjs',
   'faraday/check-playback.mjs',
   'faraday/check-startup.mjs',
   'faraday/check-standalone.mjs',
@@ -119,6 +121,9 @@ export const MANIFEST = [
   'dns/check-dns.mjs',
   'dns/check-disc.mjs',
   'dns/check-cell3d.mjs',
+  'dns/check-surface-pressure.mjs',
+  'dns/check-book-pressure.py',
+  'dns/MODEL.md',
   'dns/check-wasm-build.mjs',
   'dns/check-cell3d-wasm.mjs',
   'dns/check-cell3d-pool.mjs',
@@ -142,6 +147,9 @@ export const SUITES = [
   { name: 'faraday/check-startup.mjs', file: 'faraday/check-startup.mjs' },
   { name: 'faraday/check-playback.mjs',     file: 'faraday/check-playback.mjs' },
   { name: 'faraday/check-kernel.mjs',       file: 'faraday/check-kernel.mjs' },
+  { name: 'faraday/check-general.mjs',      file: 'faraday/check-general.mjs' },
+  { name: 'dns/check-surface-pressure.mjs', file: 'dns/check-surface-pressure.mjs' },
+  { name: 'dns/check-book-pressure.py', file: 'dns/check-book-pressure.py', interpreter: 'python3' },
   { name: 'faraday/check-standalone.mjs',   file: 'faraday/check-standalone.mjs' },
   { name: 'faraday/check-clean.mjs',        file: 'faraday/check-clean.mjs' },
   { name: 'dns/check-dns.mjs',              file: 'dns/check-dns.mjs' },
@@ -159,7 +167,8 @@ export const SUITES = [
    added to SUITES cannot be left out of the runner. */
 export function runChecksSource(){
   const rows = SUITES.map(s => '  ' + JSON.stringify(
-    { name: s.name, file: s.file, slow: !!s.slow, browser: !!s.browser })).join(',\n');
+    { name: s.name, file: s.file, slow: !!s.slow, browser: !!s.browser,
+      interpreter: s.interpreter || null })).join(',\n');
   return `#!/usr/bin/env node
 /* Run every suite in this unpack, in one command.
  *
@@ -210,7 +219,7 @@ for (const s of run){
   const t0 = Date.now();
   /* The buffer is set rather than left at node's 1 MB: a suite whose output outgrew that
      would be killed mid-run and reported as a failure of the suite. */
-  const r = spawnSync(process.execPath, [join(HERE, s.file)],
+  const r = spawnSync(s.interpreter || process.execPath, [join(HERE, s.file)],
                       { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
                         maxBuffer: 256*1024*1024 });
   const secs = (Date.now() - t0)/1000;

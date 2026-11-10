@@ -3637,6 +3637,7 @@ section('14. step() is the composition it documents, term for term');
     const lw = new Float64Array(T.NW), aw = new Float64Array(T.NW);
     const ps = new Float64Array(T.NE), div = new Float64Array(T.NP);
     const gu = new Float64Array(T.NU), gv = new Float64Array(T.NV), gw = new Float64Array(T.NW);
+    const gom = new Float64Array(T.NW), boundaryDiv = new Float64Array(T.NP);
 
     T.omegaFromW();
     for (let i = 0; i < nr; i++)
@@ -3662,18 +3663,13 @@ section('14. step() is the composition it documents, term for term');
     T.divergence(u, v, T.om, div);
     const scale = rho/dt;
     for (let c = 0; c < div.length; c++) div[c] *= scale;
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++)
-        div[T.ip(i, k, nz - 1)] -= T.rc[i]*T.drc[i]*T.dth
-          *ps[T.ie(i, k)]/(T.H[T.ie(i, k)]*T.dsf[nz]);
     T.p.fill(0);
+    T.gradient(T.p, gu, gv, gw, ps);
+    T.omegaOf(gu, gv, gw, gom);
+    T.divergence(gu, gv, gom, boundaryDiv);
+    for (let c = 0; c < div.length; c++) div[c] -= boundaryDiv[c];
     T.solveP(div, 1e-11, 400*(nr + nth + nz));
-    T.gradient(T.p, gu, gv, gw);
-    for (let i = 0; i < nr; i++)
-      for (let k = 0; k < nth; k++){
-        const e = T.ie(i, k);
-        gw[T.iw(i, k, nz)] += ps[e]/(T.H[e]*T.dsf[nz]);
-      }
+    T.gradient(T.p, gu, gv, gw, ps);
     const s2 = dt/rho;
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++)

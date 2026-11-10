@@ -1,0 +1,32 @@
+name: Faraday physics checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  physics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact symbolic-check dependency
+        run: python -m pip install sympy==1.14.0
+      - name: Surface-pressure boundary checks
+        run: node --test dns/check-surface-pressure.mjs
+      - name: General physical input checks
+        run: node --test faraday/check-general.mjs
+      - name: Exact book and pressure identities
+        run: python dns/check-book-pressure.py
+      - name: Kernel regression checks
+        run: node faraday/check-kernel.mjs

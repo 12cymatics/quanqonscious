@@ -54,7 +54,7 @@ const DEFAULTS = {
   gamma: 0.07273614042160757, g: 9.80665,
   nr: 12, nth: 24, nz: 8,
   m: 4, rel: 0.15, accel: 0, freq: 0,
-  periods: 1, frames: 6, contact: 'free',
+  periods: 1, frames: 6, contact: 'pinned',
   rStretch: 2.2, zStretch: 2.2, width: 61,
   engine: 'js', threads: 1
 };
@@ -88,17 +88,21 @@ function parseArgs(argv){
     + `about time and nothing else.`);
   if (!(Number.isInteger(o.threads) && o.threads >= 1)) throw new Error(
     `--threads ${o.threads}: a whole number of threads, at least one.`);
-  if (o.contact !== 'free' && o.contact !== 'pinned') throw new Error(
-    `--contact ${JSON.stringify(o.contact)}: the contact line is either 'free' or `
-    + `'pinned'.`);
+  if (o.contact !== 'pinned') throw new Error(
+    `--contact ${JSON.stringify(o.contact)}: this physical run requires the pinned `
+    + `contact line. A moving contact line requires a specified wall-slip/contact-angle `
+    + `law; the legacy free-slope discretization does not provide one.`);
+  if (!(o.freq >= 0)) throw new Error('--freq must be nonnegative; zero explicitly selects twice the initial mode frequency.');
+  if (!(o.periods > 0)) throw new Error('--periods must be positive.');
+  if (!(Number.isInteger(o.frames) && o.frames >= 1)) throw new Error('--frames must be a positive integer.');
+  if (!(Number.isInteger(o.width) && o.width >= 5)) throw new Error('--width must be an integer of at least 5.');
+  if (!(Number.isInteger(o.m) && o.m >= 0 && 2*o.m < o.nth)) throw new Error('--m must be a nonnegative integer resolved below the azimuthal Nyquist limit.');
   return o;
 }
 
-/* ---- the mode -----------------------------------------------------------
-   The free-surface modes of a disc with a free contact line have J_m'(k R) = 0.
-   jpZerosNearN finds the zeros of J_m' near a given order; the first one above
-   m is the lowest radial mode of that azimuthal number. */
-const kOf = (m, R) => K.jpZerosNearN(m, m + 1.9, 1).sort((a, b) => a - b)[0]/R;
+/* The initial perturbation obeys eta(R,theta)=0. This Bessel profile is an
+   initial condition, not a modal restriction on the nonlinear evolution. */
+const kOf = (m, R) => K.jZeroNear(m, m + 1.9)/R;
 
 /* ---- an ASCII plan view of the surface ----------------------------------
    Sampled through etaAt, which is the solver's own surface at an arbitrary
@@ -156,9 +160,9 @@ async function main(){
   };
   /* The C++ engine holds the field and the JavaScript object holds the clock, the
      grid and everything deliberately not ported -- the resampler, the stability
-     limit with its tanh, the energy split. `pullState` copies the field across,
-     once a frame rather than once a step, so every number printed below comes from
-     whichever engine was asked for. */
+     limit with its tanh, the energy split. `pullState` copies the field across
+     after every step, so the next stability limit uses the current depth and
+     velocity from whichever engine was asked for. */
   const W = o.engine === 'cpp' ? new FaradayCell3DWasm(cellOpts) : null;
   const S = W ? W.js : new FaradayCell3D(cellOpts);
 
@@ -174,9 +178,11 @@ async function main(){
   const sync = W ? (() => W.pullState()) : (() => S);
 
   const L = S.stepLimits();
-  const dt = S.stableStep();
+  const stableDt = S.stableStep();
   const tEnd = o.periods*(2*Math.PI/omega);
-  const steps = Math.max(1, Math.round(tEnd/dt));
+  if (!(Number.isFinite(tEnd) && tEnd > 0)) throw new Error(
+    'the requested mode periods must give a finite positive physical duration.');
+  const initialDt = Math.min(stableDt, tEnd);
   const e0 = S.energy();
 
   console.log(`cell            R = ${mm(o.R)} mm, h = ${mm(o.h)} mm, contact ${o.contact}`);
@@ -193,23 +199,32 @@ async function main(){
   console.log(`drive           a = ${o.accel} m/s^2 at ${(omegaD/(2*Math.PI)).toFixed(4)} Hz`);
   console.log(`step limits     capillary ${sci(L.capillary)} s, viscous ${sci(L.viscous)} s, `
               + `advective ${sci(L.advective)} s, gravity ${sci(L.gravity)} s`);
-  console.log(`taking          dt = ${sci(dt)} s, ${steps} steps to t = ${sci(tEnd)} s `
+  console.log(`taking          adaptive dt, initially ${sci(initialDt)} s, to t = ${sci(tEnd)} s `
               + `(${o.periods} mode period${o.periods === 1 ? '' : 's'})`);
   console.log(`energy at t=0   kinetic ${sci(e0.kinetic)} J, hydrostatic ${sci(e0.hydrostatic)} J, `
               + `capillary ${sci(e0.capillary)} J`);
 
-  const every = Math.max(1, Math.floor(steps/Math.max(1, o.frames)));
   const wall0 = process.hrtime.bigint();
-  let shown = 0;
-  for (let n = 1; n <= steps; n++){
+  let shown = 0, steps = 0, nextFrame = 1;
+  let minDt = Infinity, maxDt = 0;
+  while (S.t < tEnd){
+    // Re-evaluate all stability bounds on the completed state, not just the
+    // initial resting liquid. Only the remaining duration shortens the step.
+    const dt = Math.min(S.stableStep(), tEnd - S.t);
+    if (!(Number.isFinite(dt) && dt > 0 && S.t + dt > S.t)) throw new Error(
+      `the current stability limit cannot advance physical time at t = ${S.t} s.`);
     await advance(dt);
-    if (n % every === 0 || n === steps){
-      sync();
+    sync();
+    steps++;
+    minDt = Math.min(minDt, dt);
+    maxDt = Math.max(maxDt, dt);
+    // Frames are spaced in physical time; adaptive steps have no fixed total.
+    if (S.t >= tEnd*(nextFrame/o.frames) || S.t >= tEnd){
       const wall = Number(process.hrtime.bigint() - wall0)/1e9;
       const { art, peak } = plan(S, o.width);
       const e = S.energy();
       console.log('');
-      console.log(`step ${n}/${steps}   t = ${sci(S.t)} s   peak |eta| = ${mm(peak)} mm `
+      console.log(`step ${steps}   t = ${sci(S.t)} / ${sci(tEnd)} s   peak |eta| = ${mm(peak)} mm `
                   + `(${(100*peak/o.h).toFixed(2)}% of h)`);
       console.log(`   energy  total ${sci(e.total)} J  (k ${sci(e.kinetic)} + h ${sci(e.hydrostatic)} `
                   + `+ c ${sci(e.capillary)})   max |div u| = ${sci(S.maxDivergence())}`);
@@ -217,11 +232,13 @@ async function main(){
                   + `${(wall/S.t).toFixed(1)}x slower than real time`);
       for (const line of art) console.log('   ' + line);
       shown++;
+      nextFrame = Math.floor((S.t/tEnd)*o.frames) + 1;
     }
   }
   const wall = Number(process.hrtime.bigint() - wall0)/1e9;
   console.log('');
   console.log(`done            ${steps} steps, ${shown} frame${shown === 1 ? '' : 's'} shown`);
+  console.log(`step range      ${sci(minDt)} to ${sci(maxDt)} s, from the evolving state`);
   console.log(`wall clock      ${wall.toFixed(3)} s for ${S.t.toFixed(6)} s of physics `
               + `= ${(wall/S.t).toFixed(1)}x slower than real time`);
   console.log(`per step        ${(1e3*wall/steps).toFixed(3)} ms`);

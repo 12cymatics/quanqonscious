@@ -18,20 +18,23 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SUITES = [
-  {"name":"faraday/check-startup.mjs","file":"faraday/check-startup.mjs","slow":false,"browser":false},
-  {"name":"faraday/check-playback.mjs","file":"faraday/check-playback.mjs","slow":false,"browser":false},
-  {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false},
-  {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false},
-  {"name":"faraday/check-clean.mjs","file":"faraday/check-clean.mjs","slow":false,"browser":false},
-  {"name":"dns/check-dns.mjs","file":"dns/check-dns.mjs","slow":false,"browser":false},
-  {"name":"dns/check-disc.mjs","file":"dns/check-disc.mjs","slow":false,"browser":false},
-  {"name":"dns/check-wasm-build.mjs","file":"dns/check-wasm-build.mjs","slow":false,"browser":false},
-  {"name":"dns/check-cell3d.mjs","file":"dns/check-cell3d.mjs","slow":true,"browser":false},
-  {"name":"dns/check-cell3d-wasm.mjs","file":"dns/check-cell3d-wasm.mjs","slow":true,"browser":false},
-  {"name":"dns/check-cell3d-pool.mjs","file":"dns/check-cell3d-pool.mjs","slow":false,"browser":false},
-  {"name":"boundary/boundarykernel.test.js","file":"boundary/boundarykernel.test.js","slow":false,"browser":false},
-  {"name":"fsi/check-coupled-affine.mjs","file":"fsi/check-coupled-affine.mjs","slow":false,"browser":false},
-  {"name":"dns/check-page.mjs","file":"dns/check-page.mjs","slow":false,"browser":true}
+  {"name":"faraday/check-startup.mjs","file":"faraday/check-startup.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-playback.mjs","file":"faraday/check-playback.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-general.mjs","file":"faraday/check-general.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-surface-pressure.mjs","file":"dns/check-surface-pressure.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-book-pressure.py","file":"dns/check-book-pressure.py","slow":false,"browser":false,"interpreter":"python3"},
+  {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-clean.mjs","file":"faraday/check-clean.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-dns.mjs","file":"dns/check-dns.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-disc.mjs","file":"dns/check-disc.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-wasm-build.mjs","file":"dns/check-wasm-build.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-cell3d.mjs","file":"dns/check-cell3d.mjs","slow":true,"browser":false,"interpreter":null},
+  {"name":"dns/check-cell3d-wasm.mjs","file":"dns/check-cell3d-wasm.mjs","slow":true,"browser":false,"interpreter":null},
+  {"name":"dns/check-cell3d-pool.mjs","file":"dns/check-cell3d-pool.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"boundary/boundarykernel.test.js","file":"boundary/boundarykernel.test.js","slow":false,"browser":false,"interpreter":null},
+  {"name":"fsi/check-coupled-affine.mjs","file":"fsi/check-coupled-affine.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-page.mjs","file":"dns/check-page.mjs","slow":false,"browser":true,"interpreter":null}
 ];
 
 const argv = process.argv.slice(2);
@@ -61,7 +64,7 @@ for (const s of run){
   const t0 = Date.now();
   /* The buffer is set rather than left at node's 1 MB: a suite whose output outgrew that
      would be killed mid-run and reported as a failure of the suite. */
-  const r = spawnSync(process.execPath, [join(HERE, s.file)],
+  const r = spawnSync(s.interpreter || process.execPath, [join(HERE, s.file)],
                       { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
                         maxBuffer: 256*1024*1024 });
   const secs = (Date.now() - t0)/1000;
