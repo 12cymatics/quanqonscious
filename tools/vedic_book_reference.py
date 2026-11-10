@@ -5,6 +5,7 @@ from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.set_int_max_str_digits(0)
 
 from vedic_book import evaluate  # noqa: E402
 from vedic_book_cases import EXAMPLE_PARAMETERS  # noqa: E402
@@ -36,8 +37,23 @@ def operands_of(sid, psi):
         return [[w[v], w[15 - v]] for v in range(count)]
 
     top = max(m[0], m[15])
+
+    def nz(v):
+        return w[v] + 1 if w[v] >= 0 else w[v] - 1
+
+    def odd(v):
+        return 2 * w[v] + 1
+
+    def even(v):
+        return 2 * w[v]
+
+    def period(d):
+        if d > 999:
+            raise ValueError("the repetend is refused above three digits")
+        return d
+
     if sid == 1:
-        return {"denominator": 10 * m[0] + 9}
+        return {"denominator": period(10 * m[0] + 9)}
     if sid == 2:
         return {"a": w[0], "b": w[15], "base": base(top)}
     if sid == 3:
@@ -47,11 +63,11 @@ def operands_of(sid, psi):
     if sid == 5:
         return {"a": w[0], "b": w[1] * w[15], "c": w[1], "d": w[0] * w[15]}
     if sid == 6:
-        return {"a": w[0], "b": w[1], "c": w[15] * w[1], "d": w[2], "e": w[3], "f": w[15] * w[3]}
+        return {"a": odd(0), "b": even(1), "c": w[15] * even(1), "d": even(2), "e": odd(3), "f": w[15] * odd(3)}
     if sid == 7:
-        return {"a": w[0], "b": w[1], "c": w[2], "d": w[3]}
+        return {"a": odd(0), "b": even(1), "c": w[2], "d": w[3]}
     if sid == 8:
-        return {"a": w[0], "b": w[1], "c": w[2]}
+        return {"a": nz(0), "b": w[1], "c": w[2]}
     if sid == 9:
         return {"p": w}
     if sid == 10:
@@ -59,9 +75,9 @@ def operands_of(sid, psi):
     if sid == 11:
         return {"a": w[0], "b": w[15], "total": w[1]}
     if sid == 12:
-        return {"denominator": 10 * m[0] + 7}
+        return {"denominator": period(10 * m[0] + 7)}
     if sid == 13:
-        return {"first": w[0:2], "difference": w[2:4]}
+        return {"first": [w[0], odd(1)], "difference": [w[2], even(3)]}
     if sid == 14:
         return {"n": w[0], "places": len(str(max(m[0], 1)))}
     if sid == 15:
@@ -74,7 +90,7 @@ def operands_of(sid, psi):
     if sid == 18:
         return {"dividend": w[0], "divisors": [m[15] + 1]}
     if sid == 19:
-        return {"quadratic": [w[0] * w[2], w[0] * w[3] + w[1] * w[2], w[1] * w[3]], "factor": w[0:2]}
+        return {"quadratic": [nz(0) * w[2], nz(0) * nz(3) + nz(1) * w[2], nz(1) * nz(3)], "factor": [nz(0), nz(1)]}
     if sid == 20:
         return {"numerator": 1 + m[0] % 6}
     if sid == 21:
@@ -87,14 +103,14 @@ def operands_of(sid, psi):
         last = 1 + m[15] % 9
         return {"a": 10 * m[0] + last, "b": 10 * m[0] + 10 - last}
     if sid == 25:
-        return {"a": w[0:2], "b": w[2:4], "common": w[4:6], "numerator_last": w[6], "denominator_last": w[7]}
+        return {"a": w[0:2], "b": [w[2], nz(3)], "common": [w[4], nz(5)], "numerator_last": w[6], "denominator_last": w[7]}
     if sid == 26:
         return {"a": w[0:4], "b": w[4:8]}
     if sid == 27:
-        return {"a": w[0], "b": w[1] * w[3], "c": w[2] * w[4], "xy": w[3] + w[0] * w[1],
-                "yz": w[1] * w[4] + w[2] * w[3], "zx": w[4] + w[0] * w[2]}
+        return {"a": nz(0), "b": w[1] * w[3], "c": w[2] * w[4], "xy": w[3] + nz(0) * w[1],
+                "yz": w[1] * w[4] + w[2] * w[3], "zx": w[4] + nz(0) * w[2]}
     if sid == 28:
-        return {"total": Fraction(0) if w[0] == 0 else w[0] + Fraction(1, w[0]), "split": w[0]}
+        return {"total": nz(0) + Fraction(1, nz(0)), "split": nz(0)}
     return {"factors": pairs(8)}
 
 

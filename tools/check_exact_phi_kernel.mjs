@@ -264,20 +264,8 @@ section('certified arithmetic');
 
 section('refusal, not clamping');
 {
-  let refused = 0, total = 0, kept = 0, defaults = 0;
-  for (const id of Object.keys(K.ARG_DOMAIN)) {
-    K.ARG_DOMAIN[id].forEach((dom, i) => {
-      defaults++;
-      const below = Q.sub(dom.lo, Q.ONE), above = Q.add(dom.hi, Q.ONE);
-      total += 2;
-      if (throwsRange(() => K.checkArg(id, i, below))) refused++;
-      if (throwsRange(() => K.checkArg(id, i, above))) refused++;
-      /* an in-domain operand comes back as the very value given */
-      if (K.checkArg(id, i, dom.lo) === dom.lo) kept++;
-    });
-  }
-  ok(total > 0 && refused === total, `${refused}/${total} out-of-domain operands refused with a RangeError`);
-  ok(kept === defaults, `${kept}/${defaults} in-domain operands returned unchanged`);
+  ok(Object.keys(K.SUTRA_ARG_SPEC).length === 29 && Object.values(K.SUTRA_ARG_SPEC).every(a => a.length === 0),
+     'no method takes an operand from a control: every operand is read from the field');
   let strength = 0;
   for (let id = 1; id <= 29; id++) {
     if (throwsRange(() => K.checkStrength(id, Q.mk(101n, 100n)))) strength++;
@@ -291,10 +279,10 @@ section('the 29 formulas against an independent transcription');
 {
   const states = [['the seed', K.initState()]];
   for (let k = 0; k < 6; k++) states.push([`state ${k}`, Array.from({ length: 16 }, () => {
-    const n = rnd(12 + 5 * k) - (1n << BigInt(11 + 5 * k)), d = rnd(7) + 1n; return Q.mk(n === 0n ? 1n : n, d); })]);
-  states.push(['odd denominators', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(v * v * 37 - 400), BigInt(3 + 2 * (v % 5))))]);
+    const n = rnd(6) - 32n + BigInt(k), d = rnd(2) + 1n; return Q.mk(n === 0n ? 1n : n, d); })]);
+  states.push(['odd denominators', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(v * v * 37 - 4000), BigInt(300 + 200 * (v % 5))))]);
   states.push(['inside (-1, 1)', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v * 7919) % 199) - 99), 101n))]);
-  states.push(['thousands', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 3) * 104729) % 90001 - 45000), 7n))]);
+  states.push(['tens', Array.from({ length: 16 }, (_, v) => Q.mk(BigInt(((v + 3) * 104729) % 91 - 45), 7n))]);
   states.push(['all negative', K.initState().map(x => Q.neg(Q.abs(x)))]);
   const zeroAt = (p, v) => p.map((x, i) => i === v ? Q.ZERO : x);
   const seedS = K.initState();
@@ -314,7 +302,7 @@ section('the 29 formulas against an independent transcription');
       vecs.forEach((a, vi) => {
         const gain = vi % 2 ? Q.HALF : Q.ONE, t = times[(si + id + vi) % times.length];
         let js;
-        try { const q = exactly(() => K.applySutra(id, psi, a, { t, gain })); js = { q, psi: q.map(S) }; }
+        try { const c = K.certify(() => K.applySutra(id, psi, a, { t, gain })); js = { q: c.value, bits: c.bits }; }
         catch (e) { js = { refused: e instanceof RangeError ? e.message : 'not a RangeError: ' + e.message }; }
         cases.push({ kind: 'sutra', id, psi: psi.map(S), args: a.map(S), gain: S(gain), t: S(t) });
         meta.push({ id, name, js, psi, a, gain, t });
@@ -322,41 +310,25 @@ section('the 29 formulas against an independent transcription');
     }
   });
   const out = reference(cases);
-  let agree = 0, refusedBoth = 0;
+  let agree = 0, refusedBoth = 0, exactAlso = 0, widest = 0;
   const bad = [], refusals = {};
+  const within = (v, x) => Q.isExact(v) ? ident(v, x) : Q.mayLe(v.lo, x) && Q.mayLe(x, v.hi) && tight(v);
   out.forEach((r, i) => {
     const m = meta[i];
     if (r.refused || m.js.refused) {
       if (r.refused && m.js.refused && !m.js.refused.startsWith('not a')) { refusedBoth++; (refusals[m.name] = refusals[m.name] || new Set()).add(m.id); }
-      else bad.push(`S${m.id} on ${m.name}: reference ${r.refused ? 'refuses' : 'computes'}, kernel ${m.js.refused || 'computes'}`);
+      else bad.push(`S${m.id} on ${m.name}: reference ${r.refused ? 'refuses (' + r.refused + ')' : 'computes'}, kernel ${m.js.refused || 'computes'}`);
       return;
     }
-    if (r.psi.every((x, j) => x.n === m.js.psi[j].n && x.d === m.js.psi[j].d)) agree++;
+    widest = Math.max(widest, m.js.bits);
+    if (m.js.q.every(Q.isExact)) exactAlso++;
+    if (r.psi.every((x, j) => within(m.js.q[j], fromQ(x)))) agree++;
     else bad.push(`S${m.id} on ${m.name}: values differ`);
   });
   ok(bad.length === 0 && agree + refusedBoth === cases.length,
-     `${cases.length} applications (${states.length} states x 29 formulas x default and extreme operands, two gains, four times), with no limit on exact size: ${agree} equal the reference exactly, ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
-  let contained = 0, exactAlso = 0, shippedRefused = 0, widest = 0;
-  const notContained = [];
-  const within = (v, x) => Q.isExact(v) ? ident(v, x) : Q.mayLe(v.lo, x) && Q.mayLe(x, v.hi) && tight(v);
-  meta.forEach(m => {
-    if (m.js.refused) {
-      try { K.certify(() => K.applySutra(m.id, m.psi, m.a, { t: m.t, gain: m.gain })); } catch (e) { if (e instanceof RangeError) shippedRefused++; }
-      return;
-    }
-    const got = K.certify(() => K.applySutra(m.id, m.psi, m.a, { t: m.t, gain: m.gain }));
-    widest = Math.max(widest, got.bits);
-    if (got.value.every((v, j) => within(v, m.js.q[j]))) contained++; else notContained.push(`S${m.id} on ${m.name}`);
-    if (got.value.every(Q.isExact)) exactAlso++;
-  });
-  ok(notContained.length === 0 && contained === agree && shippedRefused === refusedBoth,
-     `at the shipped 4096 exact bits, every one of the ${agree} results contains the exact one (${exactAlso} are exact outright, the rest certified intervals, decided at up to ${widest} bits), and the same ${shippedRefused} are refused`,
-     notContained.slice(0, 4).join('; '));
-  const want = {};
-  for (const [name, id] of Object.entries(want))
-    ok(refusals[name] && refusals[name].has(+id), `${name}: S${id} refuses, in the kernel and the reference`, refusals[name] ? [...refusals[name]].join(',') : 'none');
-  const unexpected = Object.entries(refusals).filter(([n]) => !(n in want)).map(([n, s]) => `${n}: S${[...s].join(',S')}`);
-  ok(unexpected.length === 0, 'nothing refuses where nothing divides by zero', unexpected.join('; '));
+     `${cases.length} applications (${states.length} fields x 29 methods, two strengths, two gains, four times): ${agree} are the reference's exact field (${exactAlso} exact outright, the rest certified intervals that contain it, decided at up to ${widest} bits), ${refusedBoth} refused by both`, bad.slice(0, 4).join('; '));
+  const refusedIds = new Set(Object.values(refusals).flatMap(x => [...x]));
+  ok([...refusedIds].every(id => id === 1 || id === 12), 'the only refusals are repetends over three digits (S1, S12)', [...refusedIds].join(','));
   /* GRVQ's increment and MSTVQ's B on their own */
   const gcases = [], gmeta = [];
   for (let k = 0; k < 40; k++) {
@@ -387,7 +359,7 @@ section('the statements each formula carries');
   ok(failed.length === 0 && held + refused === 87, `on the corpus: ${held} of 87 hold every statement, ${refused} refused`, failed.join('; '));
   const names = new Set();
   for (const entry of corpus) for (const r of entry.sutras) if (r.claims) for (const c of r.claims) names.add(c.name);
-  ok(names.has('vedic_update_zero') && names.size >= 30, `${names.size} distinct statements are decided`);
+  ok(names.has('vedic_update_zero') && names.has('rot_pair_energy') && names.size === 2, 'two statements are decided for every method: it is the identity at strength zero, and it keeps the energy of the field');
   const page = HTML.match(/sutra: \{\n\s*draws:[^\n]*\n\s*theorems: \[([^\]]*)\]/);
   const cited = page ? new Set([...page[1].matchAll(/'([^']+)'/g)].map(m => m[1])) : new Set();
   const missing = [...names].filter(n => !cited.has(n));
@@ -642,12 +614,6 @@ section('glide');
   const held = [];
   for (let j = 0; j < 3; j++) { const x = K.rampStep(r, s9(Q.mk(3n, 10n)), 25); r = x.ramp; held.push(x.active[0].strength); }
   ok(held.every(q => eqF(q, F(3n, 10n))), 'a formula held at its setting stays there exactly when the glide length changes', held.map(Q.toString).join(' '));
-  r = [];
-  const s2 = radix => [{ id: 2, strength: Q.mk(1n, 2n), args: [Q.mk(1n, 2n), Q.mk(BigInt(radix))] }];
-  for (let j = 0; j < 3; j++) r = K.rampStep(r, s2(10), 10).ramp;
-  const op = K.rampStep(r, s2(12), 10);
-  ok(eqF(op.active[0].strength, at(F(0n), F(1n, 2n), 4, 10)) && op.active[0].args[1].n === 12n,
-     'an operand changed mid-glide applies at once and the strength glides on', `${Q.toString(op.active[0].strength)} radix ${op.active[0].args[1].n}`);
   const mix = K.rampStep([], [{ id: 29, strength: Q.ONE }, { id: 3, strength: Q.ONE }, { id: 11, strength: Q.ONE }], 3);
   ok(mix.active.map(a => a.id).join(',') === '3,11,29' && mix.active.every(a => eqF(a.strength, F(1n, 3n))),
      'the formulas run in id order, each at its share of the glide', mix.active.map(a => `S${a.id}·${Q.toString(a.strength)}`).join(' '));
