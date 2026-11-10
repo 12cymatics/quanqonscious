@@ -156,7 +156,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <div class="row"><span class="k">calculation</span><span class="v" id="sim-ms">–</span></div>
     <div class="row"><span class="k">Σ|ψ|²</span><span class="v" id="sim-energy">–</span></div>
     <div class="row"><span class="k">glide</span><span class="v" id="sim-glide">–</span></div>
-    <div class="row"><span class="k">stored precision</span><span class="v" id="sim-store">128 bits</span></div>
+    <div class="row"><span class="k">storage</span><span class="v" id="sim-store">exact</span></div>
     <div class="row"><span class="k">composition</span><span class="v" id="sim-comp">SERIES</span></div>
     <div class="row"><span class="k">surface reach</span><span class="v" id="sim-scale">–</span></div>
     <div class="row"><span class="k">surface</span><span class="v" id="sim-surface">–</span></div>
@@ -315,7 +315,7 @@ const VERSION = Object.freeze({
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
-  stepExport:    'vedic-step-export/6',
+  stepExport:    'vedic-step-export/7',
   operatorAudit: 'vedic-operator-audit/2'
 });
 const VIEW_MOTION = Object.freeze({
@@ -355,7 +355,7 @@ const KERNEL_FACTORY = () => {
     if (x === 0n) return 0;
     return x.toString(2).length;
   };
-  const Q = Object.freeze({
+  const R = Object.freeze({
     mk(n, d = 1n) {
       if (typeof n !== "bigint" || typeof d !== "bigint") {
         throw new TypeError("Q.mk requires BigInt numerator and denominator");
@@ -372,32 +372,32 @@ const KERNEL_FACTORY = () => {
         throw new SyntaxError(`Invalid exact rational: ${s}`);
       }
       const p = s.split("/");
-      return Q.mk(BigInt(p[0]), p.length === 2 ? BigInt(p[1]) : 1n);
+      return R.mk(BigInt(p[0]), p.length === 2 ? BigInt(p[1]) : 1n);
     },
     add(x, y) {
       if (y.d === 1n) return Object.freeze({ n: x.n + y.n * x.d, d: x.d });
       if (x.d === 1n) return Object.freeze({ n: y.n + x.n * y.d, d: y.d });
-      if (x.d === y.d) return Q.mk(x.n + y.n, x.d);
+      if (x.d === y.d) return R.mk(x.n + y.n, x.d);
       const g = gcd(x.d, y.d), yl = y.d / g, xl = x.d / g;
-      return Q.mk(x.n * yl + y.n * xl, x.d * yl);
+      return R.mk(x.n * yl + y.n * xl, x.d * yl);
     },
     sub(x, y) {
       if (y.d === 1n) return Object.freeze({ n: x.n - y.n * x.d, d: x.d });
       if (x.d === 1n) return Object.freeze({ n: x.n * y.d - y.n, d: y.d });
-      if (x.d === y.d) return Q.mk(x.n - y.n, x.d);
+      if (x.d === y.d) return R.mk(x.n - y.n, x.d);
       const g = gcd(x.d, y.d), yl = y.d / g, xl = x.d / g;
-      return Q.mk(x.n * yl - y.n * xl, x.d * yl);
+      return R.mk(x.n * yl - y.n * xl, x.d * yl);
     },
     mul(x, y) {
       if (y.d === 1n) {
         if (y.n === 1n) return x;
-        if (y.n === 0n) return Q.ZERO;
+        if (y.n === 0n) return R.ZERO;
         const g = gcd(y.n < 0n ? -y.n : y.n, x.d);
         return Object.freeze({ n: x.n * (y.n / g), d: x.d / g });
       }
       if (x.d === 1n) {
         if (x.n === 1n) return y;
-        if (x.n === 0n) return Q.ZERO;
+        if (x.n === 0n) return R.ZERO;
         const g = gcd(x.n < 0n ? -x.n : x.n, y.d);
         return Object.freeze({ n: (x.n / g) * y.n, d: y.d / g });
       }
@@ -407,10 +407,10 @@ const KERNEL_FACTORY = () => {
     },
     div(x, y) {
       if (y.n === 0n) throw new RangeError("Q division by zero");
-      return Q.mk(x.n * y.d, x.d * y.n);
+      return R.mk(x.n * y.d, x.d * y.n);
     },
-    neg(x) { return Q.mk(-x.n, x.d); },
-    abs(x) { return x.n < 0n ? Q.neg(x) : x; },
+    neg(x) { return R.mk(-x.n, x.d); },
+    abs(x) { return x.n < 0n ? R.neg(x) : x; },
     cmp(x, y) {
       const z = x.n * y.d - y.n * x.d;
       return z < 0n ? -1 : z > 0n ? 1 : 0;
@@ -420,13 +420,13 @@ const KERNEL_FACTORY = () => {
     isZero(x) { return x.n === 0n; },
     pow(x, k) {
       if (!Number.isInteger(k) || k < 0) throw new RangeError("Q.pow exponent must be a nonnegative integer index");
-      let r = Q.ONE;
+      let r = R.ONE;
       let b = x;
       let e = k;
       while (e > 0) {
-        if (e & 1) r = Q.mul(r, b);
+        if (e & 1) r = R.mul(r, b);
         e >>= 1;
-        if (e) b = Q.mul(b, b);
+        if (e) b = R.mul(b, b);
       }
       return r;
     },
@@ -440,18 +440,171 @@ const KERNEL_FACTORY = () => {
     QUARTER: Object.freeze({ n: 1n, d: 4n }),
     SIXTEENTH: Object.freeze({ n: 1n, d: 16n })
   });
-  const STORE_BITS = 128;
+  let WORK_BITS = 256;
+  let EXACT_BITS = 4096;
+  const MAX_WORK_BITS = 1 << 16;
+  class NeedPrecision extends Error {
+    constructor(what) {
+      super(`${what} is not decided at ${WORK_BITS} bits`);
+      this.name = 'NeedPrecision'; this.what = what; this.bits = WORK_BITS;
+    }
+  }
+  const isIv = x => x.lo !== undefined;
+  const floorR = x => { const z = x.n / x.d; return (x.n % x.d !== 0n && x.n < 0n) ? z - 1n : z; };
+  const floorDivZ = (x, y) => { const z = x / y; return (x % y !== 0n && (x < 0n) !== (y < 0n)) ? z - 1n : z; };
+  const dyadicAt = (q, up) => {
+    if (q.n === 0n) return q;
+    const k = WORK_BITS - (bitLength(q.n) - bitLength(q.d));
+    const num = k >= 0 ? q.n << BigInt(k) : q.n, den = k >= 0 ? q.d : q.d << BigInt(-k);
+    const m = up ? -floorDivZ(-num, den) : floorDivZ(num, den);
+    return k >= 0 ? R.mk(m, 1n << BigInt(k)) : R.mk(m << BigInt(-k), 1n);
+  };
+  const ivOf = (lo, hi) => R.eq(lo, hi) ? lo : Object.freeze({ lo, hi });
+  const rounded = (lo, hi) => ivOf(dyadicAt(lo, false), dyadicAt(hi, true));
+  const settle = r => bitLength(r.n) + bitLength(r.d) <= EXACT_BITS ? r : rounded(r, r);
+  const loOf = x => isIv(x) ? x.lo : x, hiOf = x => isIv(x) ? x.hi : x;
+  const isExactR = q => !!q && typeof q.n === 'bigint' && typeof q.d === 'bigint' && q.d > 0n;
+  const Q = Object.freeze({
+    mk: R.mk,
+    parse: R.parse,
+    add(x, y) {
+      if (!isIv(x) && !isIv(y)) return settle(R.add(x, y));
+      return rounded(R.add(loOf(x), loOf(y)), R.add(hiOf(x), hiOf(y)));
+    },
+    sub(x, y) {
+      if (!isIv(x) && !isIv(y)) return settle(R.sub(x, y));
+      return rounded(R.sub(loOf(x), hiOf(y)), R.sub(hiOf(x), loOf(y)));
+    },
+    mul(x, y) {
+      if (!isIv(x) && !isIv(y)) return settle(R.mul(x, y));
+      if ((!isIv(x) && x.n === 0n) || (!isIv(y) && y.n === 0n)) return R.ZERO;
+      const p = [R.mul(loOf(x), loOf(y)), R.mul(loOf(x), hiOf(y)), R.mul(hiOf(x), loOf(y)), R.mul(hiOf(x), hiOf(y))];
+      let lo = p[0], hi = p[0];
+      for (const v of p) { if (R.cmp(v, lo) < 0) lo = v; if (R.cmp(v, hi) > 0) hi = v; }
+      return rounded(lo, hi);
+    },
+    div(x, y) {
+      if (!isIv(y)) {
+        if (y.n === 0n) throw new RangeError("Q division by zero");
+        return isIv(x) ? Q.mul(x, R.div(R.ONE, y)) : settle(R.div(x, y));
+      }
+      if (R.sign(y.lo) <= 0 && R.sign(y.hi) >= 0) throw new NeedPrecision('the sign of a divisor');
+      return Q.mul(x, rounded(R.div(R.ONE, y.hi), R.div(R.ONE, y.lo)));
+    },
+    neg(x) { return isIv(x) ? Object.freeze({ lo: R.neg(x.hi), hi: R.neg(x.lo) }) : R.neg(x); },
+    abs(x) {
+      if (!isIv(x)) return R.abs(x);
+      if (R.sign(x.lo) >= 0) return x;
+      if (R.sign(x.hi) <= 0) return Q.neg(x);
+      return Object.freeze({ lo: R.ZERO, hi: R.cmp(R.neg(x.lo), x.hi) > 0 ? R.neg(x.lo) : x.hi });
+    },
+    sign(x) {
+      if (!isIv(x)) return R.sign(x);
+      if (R.sign(x.lo) > 0) return 1;
+      if (R.sign(x.hi) < 0) return -1;
+      throw new NeedPrecision('the sign of a value');
+    },
+    cmp(x, y) {
+      if (!isIv(x) && !isIv(y)) return R.cmp(x, y);
+      if (R.cmp(hiOf(x), loOf(y)) < 0) return -1;
+      if (R.cmp(loOf(x), hiOf(y)) > 0) return 1;
+      throw new NeedPrecision('a comparison');
+    },
+    eq(x, y) {
+      if (x === y) return true;
+      if (!isIv(x) && !isIv(y)) return R.eq(x, y);
+      if (R.cmp(hiOf(x), loOf(y)) < 0 || R.cmp(loOf(x), hiOf(y)) > 0) return false;
+      throw new NeedPrecision('an equality');
+    },
+    agree(x, y) {
+      if (x === y) return true;
+      if (!isIv(x) && !isIv(y)) return R.eq(x, y);
+      return !(R.cmp(hiOf(x), loOf(y)) < 0 || R.cmp(loOf(x), hiOf(y)) > 0);
+    },
+    mayLt(x, y) { return !isIv(x) && !isIv(y) ? R.cmp(x, y) < 0 : R.cmp(loOf(x), hiOf(y)) < 0; },
+    mayLe(x, y) { return !isIv(x) && !isIv(y) ? R.cmp(x, y) <= 0 : R.cmp(loOf(x), hiOf(y)) <= 0; },
+    mayZero(x) { return Q.agree(x, R.ZERO); },
+    isZero(x) {
+      if (!isIv(x)) return x.n === 0n;
+      if (R.sign(x.lo) > 0 || R.sign(x.hi) < 0) return false;
+      throw new NeedPrecision('a zero test');
+    },
+    floor(x) {
+      if (!isIv(x)) return floorR(x);
+      const a = floorR(x.lo), b = floorR(x.hi);
+      if (a === b) return a;
+      throw new NeedPrecision('a floor');
+    },
+    min(x, y) {
+      if (!isIv(x) && !isIv(y)) return R.cmp(x, y) <= 0 ? x : y;
+      return ivOf(R.cmp(loOf(x), loOf(y)) <= 0 ? loOf(x) : loOf(y), R.cmp(hiOf(x), hiOf(y)) <= 0 ? hiOf(x) : hiOf(y));
+    },
+    max(x, y) {
+      if (!isIv(x) && !isIv(y)) return R.cmp(x, y) >= 0 ? x : y;
+      return ivOf(R.cmp(loOf(x), loOf(y)) >= 0 ? loOf(x) : loOf(y), R.cmp(hiOf(x), hiOf(y)) >= 0 ? hiOf(x) : hiOf(y));
+    },
+    pow(x, k) {
+      if (!Number.isInteger(k) || k < 0) throw new RangeError("Q.pow exponent must be a nonnegative integer index");
+      let r = Q.ONE;
+      let b = x;
+      let e = k;
+      while (e > 0) {
+        if (e & 1) r = Q.mul(r, b);
+        e >>= 1;
+        if (e) b = Q.mul(b, b);
+      }
+      return r;
+    },
+    isExact(x) { return !isIv(x); },
+    isValue(x) { return isExactR(x) || (!!x && isExactR(x.lo) && isExactR(x.hi) && R.cmp(x.lo, x.hi) < 0); },
+    lo: loOf,
+    hi: hiOf,
+    width(x) { return isIv(x) ? R.sub(x.hi, x.lo) : R.ZERO; },
+    toString(x) { return isIv(x) ? `[${R.toString(x.lo)}, ${R.toString(x.hi)}]` : R.toString(x); },
+    bits(x) {
+      if (!isIv(x)) return R.bits(x);
+      const a = R.bits(x.lo), b = R.bits(x.hi);
+      return { numeratorBits: Math.max(a.numeratorBits, b.numeratorBits),
+               denominatorBits: Math.max(a.denominatorBits, b.denominatorBits), interval: true };
+    },
+    ZERO: R.ZERO,
+    ONE: R.ONE,
+    TWO: R.TWO,
+    FOUR: R.FOUR,
+    HALF: R.HALF,
+    QUARTER: R.QUARTER,
+    SIXTEENTH: R.SIXTEENTH
+  });
+  const workBits = () => WORK_BITS;
+  const exactBits = () => EXACT_BITS === Infinity ? null : EXACT_BITS;
+  const setExactBits = bits => {
+    if (bits !== null && (!Number.isInteger(bits) || bits < 64))
+      throw new RangeError(`an exact size of ${bits} bits is not null or a whole number of at least 64`);
+    EXACT_BITS = bits === null ? Infinity : bits;
+  };
+  const setWorkBits = bits => {
+    if (!Number.isInteger(bits) || bits < 64 || bits > MAX_WORK_BITS)
+      throw new RangeError(`a working precision of ${bits} bits is outside 64 to ${MAX_WORK_BITS}`);
+    WORK_BITS = bits;
+  };
+  const certify = (compute, from = WORK_BITS) => {
+    const saved = WORK_BITS;
+    try {
+      for (let bits = from; ; bits *= 2) {
+        WORK_BITS = bits;
+        try { return { value: compute(), bits }; }
+        catch (e) {
+          if (!(e instanceof NeedPrecision)) throw e;
+          if (bits * 2 > MAX_WORK_BITS)
+            throw new RangeError(`${e.what} is still not decided at ${bits} bits, the most this kernel carries; it is refused rather than guessed`);
+        }
+      }
+    } finally { WORK_BITS = saved; }
+  };
+  const STORE_BITS = null;
   const storeQ = x => {
-    if (x.n === 0n) return x;
-    const neg = x.n < 0n, n = neg ? -x.n : x.n, d = x.d;
-    const k = STORE_BITS - (bitLength(n) - bitLength(d));
-    const num = k >= 0 ? (n << BigInt(k)) : n;
-    const den = k >= 0 ? d : (d << BigInt(-k));
-    if (num < (den << BigInt(STORE_BITS - 1)))
-      throw new Error('storeQ: scaled value below 2^(B-1); the error bound would not apply');
-    const m = (2n * num + den) / (2n * den);
-    const sm = neg ? -m : m;
-    return k >= 0 ? Q.mk(sm, 1n << BigInt(k)) : Q.mk(sm << BigInt(-k), 1n);
+    if (!Q.isValue(x)) throw new TypeError('storeQ requires an exact rational or a certified interval');
+    return x;
   };
   const solveLinearQ = (matrix, rhs) => {
     const n = matrix.length;
@@ -498,7 +651,7 @@ const KERNEL_FACTORY = () => {
     add(x, y) { return A4.mk(Q.add(x.a,y.a), Q.add(x.b,y.b), Q.add(x.c,y.c), Q.add(x.d,y.d)); },
     sub(x, y) { return A4.mk(Q.sub(x.a,y.a), Q.sub(x.b,y.b), Q.sub(x.c,y.c), Q.sub(x.d,y.d)); },
     neg(x) { return A4.mk(Q.neg(x.a), Q.neg(x.b), Q.neg(x.c), Q.neg(x.d)); },
-    isRational(x) { return Q.isZero(x.b) && Q.isZero(x.c) && Q.isZero(x.d); },
+    isRational(x) { return [x.b, x.c, x.d].every(q => Q.isExact(q) && q.n === 0n); },
     mul(x, y) {
       if (A4.isRational(y)) return A4.scaleQ(x, y.a);
       if (A4.isRational(x)) return A4.scaleQ(y, x.a);
@@ -515,6 +668,8 @@ const KERNEL_FACTORY = () => {
     scaleQ(x, q) { return A4.mk(Q.mul(x.a,q),Q.mul(x.b,q),Q.mul(x.c,q),Q.mul(x.d,q)); },
     isZero(x) { return Q.isZero(x.a)&&Q.isZero(x.b)&&Q.isZero(x.c)&&Q.isZero(x.d); },
     eq(x,y) { return Q.eq(x.a,y.a)&&Q.eq(x.b,y.b)&&Q.eq(x.c,y.c)&&Q.eq(x.d,y.d); },
+    agree(x,y) { return Q.agree(x.a,y.a)&&Q.agree(x.b,y.b)&&Q.agree(x.c,y.c)&&Q.agree(x.d,y.d); },
+    mayZero(x) { return Q.mayZero(x.a)&&Q.mayZero(x.b)&&Q.mayZero(x.c)&&Q.mayZero(x.d); },
     inv(x) {
       if (A4.isZero(x)) throw new RangeError("A4 division by zero");
       const u2 = q2Square(x.a, x.b);
@@ -625,10 +780,15 @@ const KERNEL_FACTORY = () => {
     if(!Q.isZero(x.b)||!Q.isZero(x.c)||!Q.isZero(x.d))throw new Error(`${name} must be rational in the strict dynamics channel`);
     return x.a;
   };
-  const floorQ = x => { const z = x.n / x.d; return (x.n % x.d !== 0n && x.n < 0n) ? z - 1n : z; };
+  const floorQ = x => Q.floor(x);
   const bigAbs = x => x < 0n ? -x : x;
   const absFloor = x => bigAbs(floorQ(x));
-  const sgnQ = x => x.n < 0n ? -1n : 1n;
+  const sgnQ = x => {
+    if (Q.isExact(x)) return x.n < 0n ? -1n : 1n;
+    if (R.sign(x.hi) < 0) return -1n;
+    if (R.sign(x.lo) >= 0) return 1n;
+    throw new NeedPrecision('a sign');
+  };
   const SUTRA_SUM = 435n;
   const SIM_DT = Q.mk(16667n, 50000n);
   const PHI_Q = Q.mk(12586269025n, 7778742049n);
@@ -642,8 +802,8 @@ const KERNEL_FACTORY = () => {
   const meanR = psi => Q.mul(psi.reduce((s, p) => Q.add(s, p), Q.ZERO), Q.SIXTEENTH);
   const meanAbsR = xs => Q.div(xs.reduce((s, x) => Q.add(s, Q.abs(x)), Q.ZERO), Q.mk(BigInt(xs.length)));
   const proportionate = (num, mag) => {
-    if (mag.n !== 0n) return Q.div(num, mag);
-    if (num.n !== 0n) throw new RangeError('a nonzero term over a zero magnitude');
+    if (!Q.isZero(mag)) return Q.div(num, mag);
+    if (!Q.isZero(num)) throw new RangeError('a nonzero term over a zero magnitude');
     return num;
   };
   const energyR = psi => psi.reduce((s, p) => Q.add(s, Q.mul(p, p)), Q.ZERO);
@@ -657,7 +817,7 @@ const KERNEL_FACTORY = () => {
     const prev = (x + 3) % 4, next = (x + 1) % 4, mu = [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO];
     mu[x] = GRVQ_IDLE;
     const om = Q.sub(Q.ONE, GRVQ_IDLE), wp = Q.abs(lam[prev]), wn = Q.abs(lam[next]), tot = Q.add(wp, wn);
-    const sp = tot.n === 0n ? Q.HALF : Q.div(wp, tot), sn = tot.n === 0n ? Q.HALF : Q.div(wn, tot);
+    const sp = Q.isZero(tot) ? Q.HALF : Q.div(wp, tot), sn = Q.isZero(tot) ? Q.HALF : Q.div(wn, tot);
     mu[prev] = Q.add(mu[prev], Q.mul(om, sp));
     mu[next] = Q.add(mu[next], Q.mul(om, sn));
     return mu;
@@ -828,7 +988,7 @@ const KERNEL_FACTORY = () => {
           for (let base = 0; base < 16; base++) {
             if (base & mask) continue;
             const i0 = base, i1 = base | mask, v0 = p[i0], v1 = p[i1];
-            if (v0.n === 0n) continue;
+            if (Q.isZero(v0)) continue;
             const ratio = Q.div(v1, v0), err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1]));
             const corr = storeQ(Q.neg(Q.mul(Q.mul(err, al), Q.abs(Q.add(v0, v1)))));
             p[i1] = Q.add(p[i1], corr);
@@ -894,11 +1054,17 @@ const KERNEL_FACTORY = () => {
       case 13: {
         const terms = argInt(a[1]), conv = [];
         for (let pi = 0; pi < 8; pi++) {
-          const pj = pi ^ 15, num = bigAbs(p[pi].n), den = bigAbs(p[pj].n);
-          if (den === 0n) continue;
-          let n = num, d = den;
+          const pj = pi ^ 15;
+          if (Q.isZero(p[pj])) continue;
+          let x = Q.abs(Q.div(p[pi], p[pj]));
           const cf = [];
-          for (let s = 0; s < terms && d > 0n; s++) { cf.push(n / d); const r = n % d; n = d; d = r; }
+          for (let s = 0; s < terms; s++) {
+            const q = Q.floor(x);
+            cf.push(q);
+            const frac = Q.sub(x, Q.mk(q));
+            if (Q.isZero(frac)) break;
+            x = Q.div(Q.ONE, frac);
+          }
           let p0 = 1n, p1 = cf[0], q0 = 0n, q1 = 1n;
           for (let k = 1; k < cf.length; k++) { const p2 = cf[k] * p1 + p0, q2 = cf[k] * q1 + q0; p0 = p1; p1 = p2; q0 = q1; q1 = q2; }
           const target = Q.mk(p1, q1), diff = Q.sub(target, Q.div(p[pi], p[pj]));
@@ -965,7 +1131,7 @@ const KERNEL_FACTORY = () => {
         for (let i = 0; i < 8; i++) {
           const j = i ^ 15, vi = p[i], vj = p[j], sum = Q.add(vi, vj), prod = Q.mul(vi, vj);
           const disc = Q.sub(Q.mul(sum, sum), Q.mul(Q.FOUR, prod));
-          if (disc.n < 0n) {
+          if (Q.sign(disc) < 0) {
             const corr = Q.mul(disc, Q.neg(Q.mul(al, Q.HALF)));
             p[i] = Q.add(p[i], corr); p[j] = Q.sub(p[j], corr);
           } else {
@@ -1026,11 +1192,11 @@ const KERNEL_FACTORY = () => {
           halves.push([lo, hi]);
         }
         for (const [lo, hi] of halves) {
-          if (lo.n === 0n) { prodS = Q.ZERO; break; }
+          if (Q.isZero(lo)) { prodS = Q.ZERO; break; }
           prodS = Q.mul(prodS, lo);
-          if (hi.n !== 0n) prodT = Q.mul(prodT, hi);
+          if (!Q.isZero(hi)) prodT = Q.mul(prodT, hi);
         }
-        const c = prodS.n === 0n ? 0 : Q.cmp(Q.abs(prodS), Q.abs(prodT));
+        const c = Q.isZero(prodS) ? 0 : Q.cmp(Q.abs(prodS), Q.abs(prodT));
         if (c !== 0) {
           const sg = Q.mk(c > 0 ? 1n : -1n);
           for (let i = 0; i < 16; i++) {
@@ -1054,13 +1220,11 @@ const KERNEL_FACTORY = () => {
         const modified = new Array(16).fill(false);
         for (const path of paths) {
           const vals = path.map(i => p[i]);
-          let ds = Q.ZERO;
-          for (let k = 0; k < 4; k++) ds = Q.add(ds, Q.sub(vals[k + 1], vals[k]));
-          const md = Q.mul(ds, Q.QUARTER);
+          const md = Q.mul(Q.sub(vals[4], vals[0]), Q.QUARTER);
           path.forEach((idx, k) => {
-            if (modified[idx]) return;
+            if (modified[idx] || k === 0 || k === 4) return;
             const diff = Q.sub(Q.add(vals[0], Q.mul(Q.mk(BigInt(k)), md)), vals[k]);
-            if (diff.n !== 0n) { p[idx] = Q.add(p[idx], Q.mul(al, diff)); modified[idx] = true; }
+            if (!Q.isZero(diff)) { p[idx] = Q.add(p[idx], Q.mul(al, diff)); modified[idx] = true; }
           });
         }
         const interpolated = [];
@@ -1199,7 +1363,7 @@ const KERNEL_FACTORY = () => {
     return [Q.mk(s, 1n << BigInt(k)), Q.mk(s + 1n, 1n << BigInt(k))];
   };
   const floorDiv = (x, y) => { const z = x / y; return (x % y !== 0n && (x < 0n) !== (y < 0n)) ? z - 1n : z; };
-  const floorGrid = (q, k = ENC_BITS) => Q.mk(floorDiv(q.n << BigInt(k), q.d), 1n << BigInt(k));
+  const floorGrid = (q, k = ENC_BITS) => Q.mk(Q.floor(Q.mul(q, Q.mk(1n << BigInt(k)))), 1n << BigInt(k));
   const ceilGrid = (q, k = ENC_BITS) => Q.neg(floorGrid(Q.neg(q), k));
   const qMin = (a, b) => (Q.cmp(a, b) <= 0 ? a : b), qMax = (a, b) => (Q.cmp(a, b) >= 0 ? a : b);
   const iMul = (a, b) => { const p = [Q.mul(a[0], b[0]), Q.mul(a[0], b[1]), Q.mul(a[1], b[0]), Q.mul(a[1], b[1])];
@@ -1216,20 +1380,16 @@ const KERNEL_FACTORY = () => {
   const factorialN = n => { let f = 1n; for (let i = 2n; i <= BigInt(n); i++) f *= i; return f; };
   const trigEnclose = (q, n) => {
     if (Q.cmp(Q.abs(q), Q.ONE) > 0) throw new RangeError('trig enclosure needs |q| <= 1');
-    const p = q.n, d = q.d, K = BigInt(ENC_BITS);
-    const dpow = [1n]; for (let m = 1; m < n; m++) dpow.push(dpow[m - 1] * d);
-    const P = [1n]; for (let m = 1; m < n; m++) P.push(P[m - 1] * p);
-    let F = 1n, re = 0n, im = 0n;
-    for (let m = n - 1; m >= 0; m--) {
-      const t = P[m] * dpow[n - 1 - m] * F, r = m % 4;
-      if (r === 0) re += t; else if (r === 1) im += t; else if (r === 2) re -= t; else im -= t;
-      F *= BigInt(m);
+    const G = 1n << BigInt(ENC_BITS), scale = Q.mk(G);
+    let c = Q.ZERO, s = Q.ZERO, term = Q.ONE;
+    for (let m = 0; m < n; m++) {
+      if (m > 0) term = Q.div(Q.mul(term, q), Q.mk(BigInt(m)));
+      const r = m % 4;
+      if (r === 0) c = Q.add(c, term); else if (r === 1) s = Q.add(s, term); else if (r === 2) c = Q.sub(c, term); else s = Q.sub(s, term);
     }
-    const D = dpow[n - 1] * factorialN(n - 1), G = 1n << K;
-    const ap = p < 0n ? -p : p, Rd = d ** BigInt(n) * factorialN(n) * BigInt(n);
-    const R = ((ap ** BigInt(n) * BigInt(n + 1)) << K) / Rd + 1n;
-    const enc = N => { const f = floorDiv(N << K, D); return [Q.mk(f - R, G), Q.mk(f + 1n + R, G)]; };
-    return { cos: enc(re), sin: enc(im) };
+    const Rg = Q.floor(Q.div(Q.mul(Q.mul(Q.pow(Q.abs(q), n), Q.mk(BigInt(n + 1))), scale), Q.mk(factorialN(n) * BigInt(n)))) + 1n;
+    const enc = v => { const f = Q.floor(Q.mul(v, scale)); return [Q.mk(f - Rg, G), Q.mk(f + 1n + Rg, G)]; };
+    return { cos: enc(c), sin: enc(s) };
   };
   const E_BRACKET = (() => {
     const n = 48; let s = Q.ZERO, f = 1n;
@@ -1266,7 +1426,7 @@ const KERNEL_FACTORY = () => {
       const w = Q.sub(be[1], be[0]);
       if (first === null) first = { phase: xs, beta: mid, betaEnclosure: be, w };
       const raw = Q.add(xs, Q.mul(MAYA_H, mid));
-      const next = raw.n === 0n ? raw : storeQ(raw);
+      const next = storeQ(raw);
       e = ceilGrid(Q.add(Q.add(Q.mul(Q.add(Q.ONE, Q.mul(MAYA_H, MAYA_LIP)), e), Q.mul(MAYA_H, w)), Q.abs(Q.sub(next, raw))), 256);
       xs = next;
     }
@@ -1277,7 +1437,7 @@ const KERNEL_FACTORY = () => {
   };
   const MAYA_LAYER = (() => {
     let lo = Q.mk(3n, 4n), hi = Q.ONE;
-    const pos = x => mayaBetaEnclose(x)[0].n > 0n, neg = x => mayaBetaEnclose(x)[1].n < 0n;
+    const pos = x => Q.sign(mayaBetaEnclose(x)[0]) > 0, neg = x => Q.sign(mayaBetaEnclose(x)[1]) < 0;
     if (!pos(lo) || !neg(hi)) throw new Error('Maya layer: beta does not change sign on [3/4, 1]');
     for (let i = 0; i < 24; i++) {
       const mid = Q.mul(Q.add(lo, hi), Q.HALF);
@@ -1298,7 +1458,7 @@ const KERNEL_FACTORY = () => {
   const HODGE = [[0, 0, 1], [0, -1, 0], [0, -1, 1], [1, 0, 0], [1, 0, -1], [-1, 1, 0]].map((r, p) => r.map(c => (p === 2 || p === 4 || p === 5) ? Q.mk(BigInt(c), 2n) : Q.mk(BigInt(c))));
   const PHI_CYCLE = [Q.ONE, Q.mk(13n, 10n), Q.ONE, Q.mk(7n, 10n)];
   const MAG_RETAIN = Q.mk(499n, 500n), MAG_FARADAY = Q.mk(1n, 10n), MAG_TOROIDAL = Q.mk(6n, 100n), MAG_POLOIDAL = Q.mk(3n, 100n), TGCR_ETA = Q.HALF;
-  const storeOrZero = x => x.n === 0n ? x : storeQ(x);
+  const storeOrZero = x => storeQ(x);
   const curlA = A => MAG_FACES.map(f => f.edges.reduce((s, [e, sg]) => sg > 0 ? Q.add(s, A[e]) : Q.sub(s, A[e]), Q.ZERO));
   const divA = A => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => (v & (1 << a)) ? Q.add(s, A[EDGE_AT[v][a]]) : Q.sub(s, A[EDGE_AT[v][a]]), Q.ZERO));
   const laplacianV = chi => Array.from({ length: 16 }, (_, v) => [0, 1, 2, 3].reduce((s, a) => Q.add(s, Q.sub(chi[v], chi[v ^ (1 << a)])), Q.ZERO));
@@ -1309,12 +1469,12 @@ const KERNEL_FACTORY = () => {
   const rhoHat = psi => psi.map(x => Q.mul(x, x));
   const edgeShares = rho => {
     const E = rho.reduce((s, x) => Q.add(s, x), Q.ZERO);
-    if (E.n === 0n) throw new RangeError('magnetism: a field with no energy has no edge shares to steer the vortex');
+    if (Q.isZero(E)) throw new RangeError('magnetism: a field with no energy has no edge shares to steer the vortex');
     return MAG_EDGES.map(([v, , h]) => Q.div(Q.mul(Q.mk(8n), Q.add(rho[v], rho[h])), E));
   };
   const energyShare = rho => {
     const E = rho.reduce((s, x) => Q.add(s, x), Q.ZERO);
-    if (E.n === 0n) throw new RangeError('dielectric: a field with no energy has no energy shares to polarise it');
+    if (Q.isZero(E)) throw new RangeError('dielectric: a field with no energy has no energy shares to polarise it');
     return rho.map(x => Q.div(Q.mul(Q.mk(16n), x), E));
   };
   const magInduct = (A, chi, psiIn, psiOut, rhoOut, p) => {
@@ -1337,7 +1497,7 @@ const KERNEL_FACTORY = () => {
       const a = bv[v], b = bv[h], na = n2(a), nb = n2(b);
       if (Q.cmp(na, RECONNECT_FLOOR) <= 0 || Q.cmp(nb, RECONNECT_FLOOR) <= 0) return;
       const dot = a.reduce((s, c, k) => Q.add(s, Q.mul(c, b[k])), Q.ZERO);
-      if (dot.n < 0n && Q.cmp(Q.mul(dot, dot), Q.mul(Q.mk(49n, 100n), Q.mul(na, nb))) > 0) out.push(e);
+      if (Q.sign(dot) < 0 && Q.cmp(Q.mul(dot, dot), Q.mul(Q.mk(49n, 100n), Q.mul(na, nb))) > 0) out.push(e);
     });
     return out;
   };
@@ -1381,7 +1541,7 @@ const KERNEL_FACTORY = () => {
     const AF = fullA(A, chi);
     const strips = TORUS_STRIPS.map(st => {
       const dB = Q.sub(B[st.hi], B[st.lo]), S = st.cells.reduce((s, [f, w]) => w > 0 ? Q.add(s, B[f]) : Q.sub(s, B[f]), Q.ZERO);
-      return { kind: st.kind, from: st.from, dB, S, ok: st.opposite && Q.eq(dB, S) };
+      return { kind: st.kind, from: st.from, dB, S, ok: st.opposite && Q.agree(dB, S) };
     });
     return { hole: HOLE_AT.map(f => B[f]), tube: TUBE_AT.map(f => B[f]),
              cells: CELL_AT.map(row => row.map(f => TORUS_FACES[f].orient > 0 ? B[f] : Q.neg(B[f]))),
@@ -1395,12 +1555,12 @@ const KERNEL_FACTORY = () => {
     MAG_EDGES.reduce((t, [a, , h], e) => h === v ? Q.add(t, J[e]) : a === v ? Q.sub(t, J[e]) : t, Q.ZERO));
   const sourcesData = (A, q) => {
     const J = currentOf(curlA(A)), rho = laplacianV(q);
-    return { current: J, charge: rho, kirchhoff: divergenceOf(J).every(Q.isZero),
-             neutral: Q.isZero(rho.reduce((t, x) => Q.add(t, x), Q.ZERO)) };
+    return { current: J, charge: rho, kirchhoff: divergenceOf(J).every(Q.mayZero),
+             neutral: Q.mayZero(rho.reduce((t, x) => Q.add(t, x), Q.ZERO)) };
   };
   const magData = (A, chi) => {
     const B = curlA(A), pB = pressureAt(B), cubes = cubeFluxes(B);
-    return { flux: B, potential: potentialAt(A, chi), pressure: pB, cubeFlux: cubes, closed: MAG_CUBES.length === 8 && cubes.every(Q.isZero),
+    return { flux: B, potential: potentialAt(A, chi), pressure: pB, cubeFlux: cubes, closed: MAG_CUBES.length === 8 && cubes.every(Q.mayZero),
              fluxEnergy: Q.mul(B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO), Q.HALF),
              helicity: helicityOf(A, chi), reconnections: reconnectionsOf(A), torus: torusData(A, chi, B) };
   };
@@ -1409,8 +1569,9 @@ const KERNEL_FACTORY = () => {
     return { phase: x, beta, betaEnclosure: be, M: storeQ(mayaFactorOf(beta)) };
   };
   const sqrtUpperQ = (q, k = ENC_BITS) => {
-    if (q.n < 0n) throw new RangeError('sqrt of a negative rational');
-    const N = floorDiv(q.n << BigInt(2 * k), q.d) + 1n, s = isqrtN(N);
+    if (Q.sign(Q.hi(q)) < 0) throw new RangeError('sqrt of a negative rational');
+    if (Q.sign(Q.lo(q)) < 0) throw new NeedPrecision('the sign under a square root');
+    const N = Q.floor(Q.mul(q, Q.mk(1n << BigInt(2 * k)))) + 1n, s = isqrtN(N);
     return Q.mk(s + 1n, 1n << BigInt(k));
   };
   const rotPair = (x, y, t) => {
@@ -1472,8 +1633,8 @@ const KERNEL_FACTORY = () => {
     const out=[];
     const fieldMax=psi.reduce((a,x)=>Q.cmp(Q.abs(x),a)>0?Q.abs(x):a,Q.ZERO);
     const dielMax=w.dielectricTrace.reduce((a,x)=>Q.cmp(Q.abs(x),a)>0?Q.abs(x):a,Q.ZERO);
-    if(fieldMax.n===0n)throw new RangeError('the field is zero at every vertex: there is no largest to take a share of');
-    if(dielMax.n===0n)throw new RangeError('the dielectric is zero at every vertex: there is no largest to take a share of');
+    if(Q.isZero(fieldMax))throw new RangeError('the field is zero at every vertex: there is no largest to take a share of');
+    if(Q.isZero(dielMax))throw new RangeError('the dielectric is zero at every vertex: there is no largest to take a share of');
     for(let v=0;v<16;v++){
       const sx=A4.fromQ(Q.mk((v&1)?1n:-1n));
       const sy=A4.fromQ(Q.mk((v&2)?1n:-1n));
@@ -1507,27 +1668,27 @@ const KERNEL_FACTORY = () => {
     const claim = (name,ok,detail) => { R.push({name,ok:!!ok,detail:detail||''}); return !!ok; };
 
     let t1 = true, t1n = 0;
-    for(let v=0;v<16;v++) if(hw(v)===2){ t1n++; if(!A4.isZero(w.magnetic[v])) t1=false; }
+    for(let v=0;v<16;v++) if(hw(v)===2){ t1n++; if(!A4.mayZero(w.magnetic[v])) t1=false; }
     claim('wheeler_inertial_plane_magnetism_zero',t1&&t1n===6,`${t1n} inertial-plane vertices`);
 
     let t2 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k)), mw=Q.div(k2,Q.add(Q.ONE,k2));
-      if(Q.sign(mw)<0||Q.cmp(mw,Q.ONE)>=0) t2=false;
-      if((k===0)!==Q.isZero(mw)) t2=false;
+      if(!Q.mayLe(Q.ZERO,mw)||!Q.mayLt(mw,Q.ONE)) t2=false;
+      if(k===0?!Q.mayZero(mw):(Q.isExact(mw)&&Q.isZero(mw))) t2=false;
     }
     claim('wheeler_magnetic_weight_in_unit_interval',t2);
 
     let t3 = true;
     for(let v=0;v<16;v++)
-      if(!A4.eq(w.dielectric[v],A4.scaleQ(A4.TWO_PHI,Q.mul(sQ,f[v])))) t3=false;
+      if(!A4.agree(w.dielectric[v],A4.scaleQ(A4.TWO_PHI,Q.mul(sQ,f[v])))) t3=false;
     claim('wheeler_dielectric_is_phi_scaled',t3);
 
     let t4 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k));
       const mag=Q.mul(Q.mul(Q.mul(sQ,f[v]),Q.div(k2,Q.add(Q.ONE,k2))),hQ);
-      if(!A4.eq(w.omega[v],A4.fromQ(mag))) t4=false;
+      if(!A4.agree(w.omega[v],A4.fromQ(mag))) t4=false;
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
 
@@ -1535,12 +1696,12 @@ const KERNEL_FACTORY = () => {
     for(let i=0;i<12;i++){
       const rQ=Q.mk(BigInt(i),4n), eQ=Q.mk(1n,10n);
       const rho=WHEELER.rhoQ(rQ,eQ);
-      if(Q.sign(rho)<0||Q.cmp(rho,Q.ONE)>0) t5rho=false;
+      if(!Q.mayLe(Q.ZERO,rho)||!Q.mayLe(rho,Q.ONE)) t5rho=false;
       const rf=WHEELER.radialFactorA4(rQ,eQ);
-      if(!A4.eq(rf,A4.scaleQ(KX.PHI_CU,rho))) t5scaled=false;
+      if(!A4.agree(rf,A4.scaleQ(KX.PHI_CU,rho))) t5scaled=false;
       if(A4.cmp(rf,A4.ZERO)<0||A4.cmp(rf,KX.PHI_CU)>0) t5scaled=false;
     }
-    if(!Q.eq(WHEELER.rhoQ(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5rho=false;
+    if(!Q.agree(WHEELER.rhoQ(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5rho=false;
     claim('wheeler_rho_mem_unit_interval',t5rho);
     claim('wheeler_radial_factor_bounded_by_phi_cubed',t5scaled);
 
@@ -1550,7 +1711,7 @@ const KERNEL_FACTORY = () => {
       if(hw(v)<2) tau=A4.neg(tau);
       const t2a=A4.mul(tau,tau), den=A4.add(A4.ONE,t2a);
       const c=A4.div(A4.sub(A4.ONE,t2a),den), s=A4.div(A4.scaleQ(tau,Q.TWO),den);
-      if(!A4.eq(A4.add(A4.mul(c,c),A4.mul(s,s)),A4.ONE)) t6=false;
+      if(!A4.agree(A4.add(A4.mul(c,c),A4.mul(s,s)),A4.ONE)) t6=false;
     }
     claim('wheeler_cayley_rotation_is_orthogonal',t6,`geoP = ${Q.toString(pQ)}`);
 
@@ -1570,21 +1731,7 @@ const KERNEL_FACTORY = () => {
     return {maxNumeratorBits:maxN,maxDenominatorBits:maxD,meanNumeratorBits:totalN/16,meanDenominatorBits:totalD/16};
   };
   const initState = () => { const f = forwardL(LAMBDA0), d = initDielectric(); return f.map((x, v) => Q.add(x, d[v])); };
-  const storeBudget = stored => {
-    const terms=[];
-    let emin=null;
-    for(const q of stored){
-      if(q.n===0n)continue;
-      const e=bitLength(q.n)-(bitLength(q.d)-1);
-      terms.push(e);
-      if(emin===null||e<emin)emin=e;
-    }
-    if(emin===null)return Q.ZERO;
-    let S=0n;
-    for(const e of terms)S+=1n<<BigInt(e-emin);
-    const ex=emin-(STORE_BITS-1);
-    return ex>=0?Q.mk(S<<BigInt(ex)):Q.mk(S,1n<<BigInt(-ex));
-  };
+  const storeBudget = () => Q.ZERO;
   const makeKeep = () => {
     const ledger={delta:Q.ZERO,stores:0};
     const keep=x=>{const s=x.map(storeQ);ledger.delta=Q.add(ledger.delta,storeBudget(s));ledger.stores++;return s;};
@@ -1638,7 +1785,7 @@ const KERNEL_FACTORY = () => {
   };
   const step = (engine,params,active,mode,formula,part) => {
     if(!formula||!Array.isArray(formula.delta)||formula.delta.length!==16)throw new TypeError('step needs the formula whose share it applies');
-    if(!part||part.d===undefined||Q.sign(part)<0||Q.cmp(part,Q.ONE)>0)throw new RangeError('the share of the formula applied in a step is a rational in [0, 1]');
+    if(!part||!Q.isValue(part)||Q.sign(part)<0||Q.cmp(part,Q.ONE)>0)throw new RangeError('the share of the formula applied in a step is a rational in [0, 1]');
     const input=engine.psi,t=timeOf(engine.frame);
     const rhoIn=rhoHat(input),shareIn=energyShare(rhoIn);
     const dielectricNext=evolveDielectric(engine.dielectric,active,params,shareIn);
@@ -1667,12 +1814,12 @@ const KERNEL_FACTORY = () => {
             lambdaIn:inverseL(input),lambdaOut:inverseL(psi),
             tgcr:tgcrGeometry(psi,params.vortex,tgcrKappa),
             e0:eIn,eF:energy(st.afterF),eFinal,dielectricDrift:dDrift,wheeler:W,active,mode,params,
-            storeBits:STORE_BITS,stepError:{delta:ledger.delta,stores:ledger.stores},complexity:complexity(psi)}
+            storeBits:STORE_BITS,workBits:WORK_BITS,exactBits:exactBits(),stepError:{delta:ledger.delta,stores:ledger.stores},complexity:complexity(psi)}
     };
   };
   const qTraceLambda = psi => inverseL(psi);
   const sumR = psi => psi.reduce((s, x) => Q.add(s, x), Q.ZERO);
-  const sameR = (x, y) => x.length === y.length && x.every((q, i) => Q.eq(q, y[i]));
+  const sameR = (x, y) => x.length === y.length && x.every((q, i) => Q.agree(q, y[i]));
   const formulaClaims = (id, psiIn, arg) => {
     const a = sutraArgs(id, arg), al = alphaOf(id, a, Q.ONE), R = [];
     const claim = (name, ok, detail) => { R.push({ name, ok: !!ok, detail: detail || '' }); };
@@ -1684,53 +1831,53 @@ const KERNEL_FACTORY = () => {
         const c = a[2], ax = 1 << argInt(a[1]), cur = psiIn.slice();
         let ok = true;
         for (let i = 0; i < 16; i++) { const nb = cur[i ^ ax], f = Q.div(nb, Q.add(Q.mul(nb, nb), c));
-          if (Q.cmp(Q.mul(Q.mul(f, f), Q.mul(Q.FOUR, c)), Q.ONE) > 0) ok = false;
+          if (!Q.mayLe(Q.mul(Q.mul(f, f), Q.mul(Q.FOUR, c)), Q.ONE)) ok = false;
           cur[i] = Q.mul(cur[i], Q.add(Q.ONE, Q.mul(al, f))); }
         claim('ekadhikena_factor_bound', ok && sameR(cur, p)); break;
       }
       case 2: case 10: {
         const rad = Q.mk(BigInt(argInt(a[1]))), B = out.base;
         let m = Q.ONE;
-        if (id === 2) { for (const x of psiIn) if (Q.cmp(Q.abs(x), m) > 0) m = Q.abs(x); }
-        else { const mm = Q.abs(meanR(psiIn)); if (Q.cmp(mm, Q.ONE) > 0) m = mm; }
-        claim('radix_order_bracket', Q.cmp(Q.div(B, rad), m) <= 0 && Q.cmp(m, B) < 0, `B = ${Q.toString(B)}`);
-        if (id === 2) claim('nikhilam_affine', p.every((x, i) => Q.eq(x, Q.add(Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), psiIn[i]), Q.mul(al, B)))));
-        else claim('yavadunam_magnifies', p.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[i])) >= 0));
+        if (id === 2) { for (const x of psiIn) m = Q.max(m, Q.abs(x)); }
+        else m = Q.max(Q.ONE, Q.abs(meanR(psiIn)));
+        claim('radix_order_bracket', Q.mayLe(Q.div(B, rad), m) && Q.mayLt(m, B), `B = ${Q.toString(B)}`);
+        if (id === 2) claim('nikhilam_affine', p.every((x, i) => Q.agree(x, Q.add(Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), psiIn[i]), Q.mul(al, B)))));
+        else claim('yavadunam_magnifies', p.every((x, i) => Q.mayLe(Q.abs(psiIn[i]), Q.abs(x))));
         break;
       }
-      case 3: claim('xor_conv_sum', Q.eq(sumR(out.conv), proportionate(Q.div(Q.mul(sumR(psiIn), sumR(psiIn)), a[1]), meanAbsR(psiIn)))); break;
+      case 3: claim('xor_conv_sum', Q.agree(sumR(out.conv), proportionate(Q.div(Q.mul(sumR(psiIn), sumR(psiIn)), a[1]), meanAbsR(psiIn)))); break;
       case 4: {
         const c = out.layers;
         claim('horner_eval', psiIn.every((x, i) => {
           const r = Q.div(Q.mk(BigInt(hw(i))), a[1]), s = Q.div(r, Q.add(Q.ONE, r));
           const P = c.reduce((acc, ck, k) => Q.add(acc, Q.mul(ck, Q.pow(s, k))), Q.ZERO);
-          return Q.eq(p[i], Q.add(x, Q.mul(Q.sub(P, x), al)));
+          return Q.agree(p[i], Q.add(x, Q.mul(Q.sub(P, x), al)));
         })); break;
       }
-      case 5: claim('shunyam_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.eq(Q.add(u, w), Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), Q.add(x, y))))); break;
+      case 5: claim('shunyam_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.add(u, w), Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), Q.add(x, y))))); break;
       case 6: {
         const cur = psiIn.slice(); let ok = true;
         for (let axis = 0; axis < 4; axis++) for (let base = 0; base < 16; base++) {
           if (base & (1 << axis)) continue;
           const i0 = base, i1 = base | (1 << axis), v0 = cur[i0], v1 = cur[i1];
-          if (v0.n === 0n) continue;
+          if (Q.isZero(v0)) continue;
           const ratio = Q.div(v1, v0);
           const err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1])), s = Q.add(v0, v1);
           const exact = Q.neg(Q.mul(Q.mul(err, al), Q.abs(s))), corr = storeQ(exact);
-          if ((exact.n === 0n) !== (err.n === 0n || al.n === 0n || s.n === 0n) || (corr.n === 0n) !== (exact.n === 0n)) ok = false;
+          if (Q.mayZero(exact) !== (Q.mayZero(err) || Q.mayZero(al) || Q.mayZero(s)) || corr !== exact) ok = false;
           cur[i1] = Q.add(cur[i1], corr); cur[i0] = Q.sub(cur[i0], Q.mul(corr, Q.HALF));
         }
         claim('anurupye_fixed_point', ok && sameR(cur, p)); break;
       }
-      case 7: claim('sankalana_lower_fixed', Q.eq(p[0], psiIn[0])); break;
-      case 9: case 11: case 28: claim(id === 9 ? 'laplacian_sum_zero' : id === 11 ? 'layer_mean_sum' : 'transfer_sum', Q.eq(sumR(p), sumR(psiIn))); break;
-      case 29: claim('conservation_mean', Q.eq(meanR(p), meanR(psiIn))); break;
+      case 7: claim('sankalana_lower_fixed', Q.agree(p[0], psiIn[0])); break;
+      case 9: case 11: case 28: claim(id === 9 ? 'laplacian_sum_zero' : id === 11 ? 'layer_mean_sum' : 'transfer_sum', Q.agree(sumR(p), sumR(psiIn))); break;
+      case 29: claim('conservation_mean', Q.agree(meanR(p), meanR(psiIn))); break;
       case 12: {
         const m = BigInt(argInt(a[1]));
         claim('digital_root_congr', psiIn.every(x => { const v = absFloor(x); if (v === 0n) return true; const dr = 1n + (v - 1n) % m; return dr >= 1n && dr <= m && (dr - v) % m === 0n; })); break;
       }
       case 13: claim('convergent_det', out.convergents.every(c => bigAbs(c.p * c.qPrev - c.pPrev * c.q) === 1n)); break;
-      case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[i])) <= 0)); break;
+      case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.mayLe(Q.abs(x), Q.abs(psiIn[i])))); break;
       case 15: {
         let ok = out.urdhva.length === 4;
         for (let axis = 0; axis < 4; axis++) {
@@ -1739,9 +1886,9 @@ const KERNEL_FACTORY = () => {
           const pointwise = sumR(bases.map(b => Q.mul(psiIn[b], psiIn[b | mask])));
           let cross = Q.ZERO;
           for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(psiIn[b], psiIn[c | mask]));
-          if (!Q.eq(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
+          if (!Q.agree(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
           const u = out.urdhva[axis];
-          if (!u || !Q.eq(u.scProduct, Q.add(pointwise, cross)) || !Q.eq(u.scProduct, u.scFactors)) ok = false;
+          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross)) || !Q.agree(u.scProduct, u.scFactors)) ok = false;
         }
         claim('gunita_residual_cross', ok && sameR(psiIn, p)); break;
       }
@@ -1752,7 +1899,7 @@ const KERNEL_FACTORY = () => {
       }
       case 19: {
         const ok = [0, 1, 2, 3, 4, 5, 6, 7].every(i => { const x = psiIn[i], y = psiIn[i ^ 15], s = Q.add(x, y), d = Q.sub(x, y);
-          return Q.eq(Q.sub(Q.mul(s, s), Q.mul(Q.FOUR, Q.mul(x, y))), Q.mul(d, d)); });
+          return Q.agree(Q.sub(Q.mul(s, s), Q.mul(Q.FOUR, Q.mul(x, y))), Q.mul(d, d)); });
         claim('vieta_disc_square', ok); break;
       }
       case 20: {
@@ -1763,15 +1910,20 @@ const KERNEL_FACTORY = () => {
         const o = BigInt(argInt(a[1])), m = BigInt(argInt(a[2]));
         claim('osculation_shift', psiIn.every(x => { const v = absFloor(x), osc = v / 10n + (v % 10n) * o, d = osc % m === 0n ? 0n : m - osc % m; return d >= 0n && d < m && (osc + d) % m === 0n; })); break;
       }
-      case 22: { const k = Q.sub(Q.ONE, Q.mul(al, Q.HALF)); claim('dvandva_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.eq(Q.sub(u, w), Q.mul(Q.mul(k, k), Q.sub(x, y))))); break; }
-      case 23: claim('antyayor_pair_difference', pairsDiff(psiIn, p, (x, y, u, w) => Q.eq(Q.sub(u, w), Q.sub(x, y)))); break;
+      case 22: { const k = Q.sub(Q.ONE, Q.mul(al, Q.HALF)); claim('dvandva_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.sub(u, w), Q.mul(Q.mul(k, k), Q.sub(x, y))))); break; }
+      case 23: claim('antyayor_pair_difference', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.sub(u, w), Q.sub(x, y)))); break;
       case 24: {
         const g = out.gcd;
         claim(g > 1n ? 'gcd_divides_tails' : 'digital_root_nine', g > 1n ? out.tails.every(t => t % g === 0n)
           : out.tails.every(t => { const dr = digitalRoot10(t); return t === 0n ? dr === 0n : dr >= 1n && dr <= 9n && (t - dr) % 9n === 0n; })); break;
       }
-      case 25: claim('log_ratio_sign', out.sign === (out.prodS.n === 0n ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && out.prodT.n !== 0n); break;
-      case 26: claim('flag_is_max', psiIn.every((x, i) => Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) < 0 || (Q.cmp(Q.abs(x), Q.abs(psiIn[out.flag])) === 0 && i >= out.flag)) && Q.eq(p[out.flag], psiIn[out.flag])); break;
+      case 25: claim('log_ratio_sign', out.sign === (Q.isZero(out.prodS) ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && !Q.isZero(out.prodT)); break;
+      case 26: {
+        const f = Q.abs(psiIn[out.flag]);
+        const exactOk = (x, i) => Q.cmp(Q.abs(x), f) < 0 || (Q.cmp(Q.abs(x), f) === 0 && i >= out.flag);
+        const notAbove = x => Q.mayLe(Q.abs(x), f);
+        claim('flag_is_max', psiIn.every((x, i) => Q.isExact(x) && Q.isExact(f) ? exactOk(x, i) : notAbove(x)) && Q.agree(p[out.flag], psiIn[out.flag])); break;
+      }
       case 27: claim('ap_endpoints', out.interpolated.includes(0) && out.interpolated.includes(15)); break;
       case 8: case 17: {
         const u = Array(16).fill(Q.mk(7n, 3n));
@@ -1787,37 +1939,37 @@ const KERNEL_FACTORY = () => {
       if (!g || !g.lambda) continue;
       const lam = g.lambda, k = g.k;
       const mus = [0, 1, 2, 3].map(x => walkMeasure(lam, x));
-      R.push({ name: 'walk_measure_total', ok: mus.every(m => Q.eq(m.reduce((s, x) => Q.add(s, x), Q.ZERO), Q.ONE)) });
+      R.push({ name: 'walk_measure_total', ok: mus.every(m => Q.agree(m.reduce((s, x) => Q.add(s, x), Q.ZERO), Q.ONE)) });
       const muK = mus[k];
       R.push({ name: 'median_minimises_l1', ok: [(k + 3) % 4, (k + 1) % 4].every(y => {
         const F = []; let acc = Q.ZERO; for (let i = 0; i < 4; i++) { acc = Q.add(acc, Q.sub(muK[i], mus[y][i])); F.push(acc); }
         const w = wasserstein1(muK, mus[y]);
-        return F.every(c => Q.cmp(F.reduce((s, f) => Q.add(s, Q.abs(Q.sub(f, c))), Q.ZERO), w) >= 0);
+        return F.every(c => Q.mayLe(w, F.reduce((s, f) => Q.add(s, Q.abs(Q.sub(f, c))), Q.ZERO)));
       }) });
       const injected = injectLambda(forwardL(lam), k, g.delta), back = inverseL(injected);
-      R.push({ name: 'inverse_inject', ok: back.every((x, j) => Q.eq(x, j === k ? Q.add(lam[j], g.delta) : lam[j])) });
+      R.push({ name: 'inverse_inject', ok: back.every((x, j) => Q.agree(x, j === k ? Q.add(lam[j], g.delta) : lam[j])) });
     }
     return { ok: R.every(x => x.ok), results: R };
   };
   const mstvqClaims = ms => {
     const T = ms.T, b2 = ms.B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
-    const R = [{ name: 'stress_trace', ok: Q.eq(ms.trace, Q.neg(Q.mul(Q.HALF, b2))) },
-               { name: 'stress_symm', ok: [0, 1, 2].every(i => [0, 1, 2].every(j => Q.eq(T[i][j], T[j][i]))) }];
+    const R = [{ name: 'stress_trace', ok: Q.agree(ms.trace, Q.neg(Q.mul(Q.HALF, b2))) },
+               { name: 'stress_symm', ok: [0, 1, 2].every(i => [0, 1, 2].every(j => Q.agree(T[i][j], T[j][i]))) }];
     return { ok: R.every(x => x.ok), results: R };
   };
   const stageClaims = (last, p) => {
     const R = [], pairE = (s, v, u) => Q.add(Q.mul(s[v], s[v]), Q.mul(s[u], s[u]));
     const exactM = applyMSTVQ(last.afterG, last.wheeler, p), exactZ = complementRotate(last.afterT, zpeTau(last.wheeler, p));
-    R.push({ name: 'rot_pair_energy', ok: [0, 1, 2, 3, 4, 5, 6, 7].every(v => Q.eq(pairE(exactM, v, v ^ 15), pairE(last.afterG, v, v ^ 15)) && Q.eq(pairE(exactZ, v, v ^ 15), pairE(last.afterT, v, v ^ 15))) });
+    R.push({ name: 'rot_pair_energy', ok: [0, 1, 2, 3, 4, 5, 6, 7].every(v => Q.agree(pairE(exactM, v, v ^ 15), pairE(last.afterG, v, v ^ 15)) && Q.agree(pairE(exactZ, v, v ^ 15), pairE(last.afterT, v, v ^ 15))) });
     const tz = zpeTau(last.wheeler, p);
-    R.push({ name: 'complement_rotation_swap', ok: [0, 1, 2, 3, 4, 5, 6, 7].every(v => { const u = v ^ 15, [x, y] = rotPair(last.afterT[v], last.afterT[u], tz(v)), [y2, x2] = rotPair(last.afterT[u], last.afterT[v], tz(u)); return Q.eq(x, x2) && Q.eq(y, y2); }) });
+    R.push({ name: 'complement_rotation_swap', ok: [0, 1, 2, 3, 4, 5, 6, 7].every(v => { const u = v ^ 15, [x, y] = rotPair(last.afterT[v], last.afterT[u], tz(v)), [y2, x2] = rotPair(last.afterT[u], last.afterT[v], tz(u)); return Q.agree(x, x2) && Q.agree(y, y2); }) });
     const g = last.tgcr;
-    R.push({ name: 'flux_closed', ok: g.cubeFlux.every(Q.isZero) });
+    R.push({ name: 'flux_closed', ok: g.cubeFlux.every(Q.mayZero) });
     R.push({ name: 'pontryagin_density', ok: g.density.every((d, i) => {
       const loc = {}; FACES_AT[i].forEach(f => { loc[MAG_FACES[f].p] = g.F[f]; });
-      return Q.eq(d, Q.add(Q.sub(Q.mul(loc[0], loc[5]), Q.mul(loc[1], loc[4])), Q.mul(loc[2], loc[3])));
+      return Q.agree(d, Q.add(Q.sub(Q.mul(loc[0], loc[5]), Q.mul(loc[1], loc[4])), Q.mul(loc[2], loc[3])));
     }) });
-    R.push({ name: 'hodge_split_norm', ok: Q.eq(g.FSq, Q.mul(Q.HALF, [...Array(16).keys()].reduce((s, i) => Q.add(s, FACES_AT[i].reduce((t, f) => Q.add(t, Q.mul(g.F[f], g.F[f])), Q.ZERO)), Q.ZERO))) });
+    R.push({ name: 'hodge_split_norm', ok: Q.agree(g.FSq, Q.mul(Q.HALF, [...Array(16).keys()].reduce((s, i) => Q.add(s, FACES_AT[i].reduce((t, f) => Q.add(t, Q.mul(g.F[f], g.F[f])), Q.ZERO)), Q.ZERO))) });
     return { ok: R.every(x => x.ok), results: R };
   };
   const MODES3 = Object.freeze(['SERIES','PARALLEL','SYMMETRIC_CONCURRENT']);
@@ -1829,7 +1981,7 @@ const KERNEL_FACTORY = () => {
     for(let i=0;i<MODES3.length;i++)for(let j=i+1;j<MODES3.length;j++){
       const a=states[MODES3[i]],b=states[MODES3[j]];
       let worst=Q.ZERO,identical=true;
-      for(let v=0;v<16;v++){ const d=Q.sub(a[v],b[v]),n=Q.mul(d,d); if(n.n!==0n)identical=false; if(Q.cmp(n,worst)>0)worst=n; }
+      for(let v=0;v<16;v++){ const d=Q.sub(a[v],b[v]),n=Q.mul(d,d); if(!Q.mayZero(n))identical=false; worst=Q.max(n,worst); }
       if(identical)allDistinct=false;
       pairwise[MODES3[i]+'|'+MODES3[j]]={maxNormSq:worst,identical};
     }
@@ -1878,7 +2030,7 @@ const KERNEL_FACTORY = () => {
     const reconstructed = psi.map((_, v) => Q.add(Q.add(meanAxis[v], symmetricMeanFree[v]), antisymmetric[v]));
     const meanAxisEnergy = energy(meanAxis), symmetricMeanFreeEnergy = energy(symmetricMeanFree), antisymmetricEnergy = energy(antisymmetric), totalEnergy = energy(psi);
     return { meanAxis, symmetricMeanFree, antisymmetric, reconstructed, meanAxisEnergy, symmetricMeanFreeEnergy, antisymmetricEnergy, totalEnergy,
-             identityPass: sameR(reconstructed, psi), energyIdentityPass: Q.eq(totalEnergy, Q.add(meanAxisEnergy, Q.add(symmetricMeanFreeEnergy, antisymmetricEnergy))) };
+             identityPass: sameR(reconstructed, psi), energyIdentityPass: Q.agree(totalEnergy, Q.add(meanAxisEnergy, Q.add(symmetricMeanFreeEnergy, antisymmetricEnergy))) };
   };
   const formulaDistinctness = () => {
     const probes = [initState(), initState().map((x, v) => Q.add(Q.mul(x, Q.mk(3n, 7n)), Q.mk(BigInt(v * v - 11), 5n)))];
@@ -1904,6 +2056,23 @@ const KERNEL_FACTORY = () => {
     const throwsRange=(f)=>{try{f();return false;}catch(e){return e instanceof RangeError;}};
     assert("Q canonical",Q.eq(Q.mk(6n,-8n),Q.mk(-3n,4n)));
     {
+      const x=R.mk(3n**2000n+1n,7n**800n), y=R.mk(-(5n**1700n)+3n,11n**750n);
+      const inside=(v,r)=>!Q.isExact(v)&&R.cmp(Q.lo(v),r)<=0&&R.cmp(r,Q.hi(v))<=0;
+      assert("interval sum, difference, product and quotient contain the exact results",
+        inside(Q.add(x,y),R.add(x,y))&&inside(Q.sub(x,y),R.sub(x,y))&&inside(Q.mul(x,y),R.mul(x,y))&&inside(Q.div(x,y),R.div(x,y)));
+      const iv=Q.add(x,R.ZERO), lo=Q.lo(iv);
+      assert("an interval's ends are dyadic, rounded outward to the working precision",
+        (lo.d&(lo.d-1n))===0n&&R.cmp(lo,x)<=0&&R.cmp(x,Q.hi(iv))<=0);
+      const straddle=Q.sub(iv,iv), threw=f=>{try{f();return false;}catch(e){return e instanceof NeedPrecision;}};
+      assert("a sign, zero test or comparison an interval cannot settle is not guessed",
+        threw(()=>Q.sign(straddle))&&threw(()=>Q.isZero(straddle))&&threw(()=>Q.cmp(iv,iv))&&Q.agree(iv,iv)&&Q.mayZero(straddle));
+      const run=()=>Q.cmp(Q.add(x,R.ZERO),Q.add(R.add(x,R.mul(x,R.mk(1n,1n<<900n))),R.ZERO));
+      const c=certify(run,256);
+      assert("certify replays at doubled precision until the decision is settled",c.value===-1&&c.bits>=1024&&workBits()===256);
+      const sc=R.mk(1n,1n<<900n);
+      assert("an interval decides its floor, and it is the exact value's floor",Q.floor(Q.mul(iv,sc))===floorR(R.mul(x,sc)));
+    }
+    {
       const vals=[0n,1n,2n,3n,4n,6n,8n,12n,96n,1024n,1023n,3n<<70n,1n<<127n,(1n<<127n)-1n,5n<<130n,-(1n<<64n),-12n,-7n];
       let agree=true;
       for(const a of vals)for(const b of vals)if(gcd(a,b)!==gcdEuclid(a,b))agree=false;
@@ -1914,7 +2083,7 @@ const KERNEL_FACTORY = () => {
     for(const q of [Q.mk(-7n,2n),Q.mk(7n,2n),Q.mk(-4n),Q.ZERO,Q.mk(1n,3n)])
       assert("floor of "+Q.toString(q),(()=>{const f=floorQ(q);return Q.cmp(Q.mk(f),q)<=0&&Q.cmp(q,Q.mk(f+1n))<0;})());
     const psi=initState();
-    assert("seed has no zero vertex",psi.every(q=>q.n!==0n));
+    assert("seed has no zero vertex",psi.every(q=>!Q.isZero(q)));
     assert("λ of the seed's forward part is (3, 4, 5, 6)",inverseL(forwardL(LAMBDA0)).every((q,k)=>Q.eq(q,LAMBDA0[k])));
     assert("injecting δ on axis k moves λ_k by δ and nothing else",(()=>{const l=inverseL(psi),d=Q.mk(5n,3n),l2=inverseL(injectLambda(psi,2,d));return l2.every((q,k)=>Q.eq(q,k===2?Q.add(l[k],d):l[k]));})());
     for(let id=1;id<=29;id++){
@@ -1930,9 +2099,7 @@ const KERNEL_FACTORY = () => {
     assert("S21 non-integer modulus refused",throwsRange(()=>applySutra(21,psi,[Q.ONE,Q.mk(5n),Q.mk(9n,2n)])));
     assert("strength above 1 refused",throwsRange(()=>applySutra(1,psi,Q.mk(3n,2n))));
     for(const q of [Q.mk(1n,3n),Q.mk(-22n,7n),Q.mk(10n**60n+1n,3n),Q.mk(1n,10n**70n+7n),Q.mk(5n,64n),Q.ZERO]){
-      const r=storeQ(q),err=Q.abs(Q.sub(q,r));
-      assert("store bound "+Q.toString(q).slice(0,24),Q.cmp(Q.mul(err,Q.mk(1n<<BigInt(STORE_BITS))),Q.abs(q))<=0);
-      assert("store idempotent "+Q.toString(q).slice(0,24),Q.eq(storeQ(r),r));
+      assert("store is exact "+Q.toString(q).slice(0,24),storeQ(q)===q);
     }
     assert("store keeps zero",Q.isZero(storeQ(Q.ZERO)));
     {
@@ -1947,9 +2114,8 @@ const KERNEL_FACTORY = () => {
     assert("MSTVQ stress claims",mstvqClaims(one.last.mstvq).ok);
     assert("stage claims",stageClaims(one.last,p).ok);
     const exactRun=stagesFrom(one.last.input,one.last.formula,one.last.part,one.last.wheeler,p,x=>x,one.last.ctx);
-    let dist=Q.ZERO;
-    exactRun.afterZ.forEach((z,v)=>{dist=Q.add(dist,Q.abs(Q.sub(z,one.last.afterZ[v])));});
-    assert("step error within its ledger",Q.cmp(dist,one.last.stepError.delta)<=0);
+    assert("storage is exact: the stored step is the exact step",exactRun.afterZ.every((z,v)=>Q.agree(z,one.last.afterZ[v])));
+    assert("storage is exact: the step's rounding ledger is zero",Q.isZero(one.last.stepError.delta));
     assert("pi bracket certified, width <= 2^-135",Q.cmp(Q.sub(PI_BRACKET[1],PI_BRACKET[0]),Q.mk(1n,1n<<135n))<=0);
     assert("e bracket width <= 2^-150",Q.cmp(Q.sub(E_BRACKET[1],E_BRACKET[0]),Q.mk(1n,1n<<150n))<=0);
     assert("phi/e in [59/100, 3/5] (layer)",Q.cmp(MAYA_A[0],Q.mk(59n,100n))>=0&&Q.cmp(MAYA_A[1],Q.mk(3n,5n))<=0);
@@ -1958,7 +2124,7 @@ const KERNEL_FACTORY = () => {
     assert("layer bracketed in [3/4, 1] to 2^-20 with beta changing sign",
       Q.cmp(MAYA_LAYER[0],Q.mk(3n,4n))>=0&&Q.cmp(MAYA_LAYER[1],Q.ONE)<=0&&
       Q.cmp(Q.sub(MAYA_LAYER[1],MAYA_LAYER[0]),Q.mk(1n,1n<<20n))<=0&&
-      mayaBetaEnclose(MAYA_LAYER[0])[0].n>0n&&mayaBetaEnclose(MAYA_LAYER[1])[1].n<0n);
+      Q.sign(mayaBetaEnclose(MAYA_LAYER[0])[0])>0&&Q.sign(mayaBetaEnclose(MAYA_LAYER[1])[1])<0);
     assert("phi_0 below the layer (toward_layer)",Q.sign(MAYA_PHASE0)>0&&Q.cmp(MAYA_PHASE0,MAYA_LAYER[0])<0);
     {const ms=mayaStep(MAYA_PHASE0,Q.ZERO);
      assert("Maya factor in (19/20, 21/20), above 1 below the layer (factor_mem, factor_gt_one_iff)",
@@ -1998,7 +2164,7 @@ const KERNEL_FACTORY = () => {
      assert("the dielectric's charges sum to zero (charge_neutral)",sd.neutral&&sd.charge.length===16);}
     return tests;
   };
-  const serializeQ=q=>({n:q.n.toString(),d:q.d.toString()});
+  const serializeQ=q=>Q.isExact(q)?({n:q.n.toString(),d:q.d.toString()}):({lo:serializeQ(q.lo),hi:serializeQ(q.hi)});
   const serializeA4=x=>({a:serializeQ(x.a),b:serializeQ(x.b),c:serializeQ(x.c),d:serializeQ(x.d)});
   const serializeC4=z=>({re:serializeA4(z.re),im:serializeA4(z.im)});
   const serializeState=psi=>psi.map(serializeQ);
@@ -2009,6 +2175,7 @@ const KERNEL_FACTORY = () => {
     if (Array.isArray(value)) return value.map(serializeExact);
     if (typeof value === 'object') {
       if ('n' in value && 'd' in value && typeof value.n === 'bigint') return serializeQ(value);
+      if ('lo' in value && 'hi' in value && value.lo && typeof value.lo.n === 'bigint') return serializeQ(value);
       if ('re' in value && 'im' in value && value.re && 'a' in value.re) return serializeC4(value);
       if ('a' in value && 'b' in value && 'c' in value && 'd' in value && value.a && 'n' in value.a) return serializeA4(value);
       const out={};
@@ -2063,6 +2230,8 @@ const KERNEL_FACTORY = () => {
       composition: last.mode,
       activeSutras: last.active.map(x => ({id:x.id,strength:serializeQ(x.strength),args:x.args?x.args.map(serializeQ):null})),
       storeBits: last.storeBits,
+      workBits: last.workBits,
+      exactBits: last.exactBits,
       complexity: last.complexity
     };
   };
@@ -2075,7 +2244,7 @@ const KERNEL_FACTORY = () => {
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
     initState,initEngine,step,formulaOf,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
-    hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley});
+    hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley,certify,NeedPrecision,workBits,setWorkBits,exactBits,setExactBits,MAX_WORK_BITS});
 };
 
 const KERNEL = KERNEL_FACTORY();
@@ -2124,8 +2293,10 @@ const FAITHFUL = (() => {
   const Qc = KERNEL.Q, A4c = KERNEL.A4, C4c = KERNEL.C4;
   const R2 = Math.SQRT2, R5 = Math.sqrt(5), R10 = Math.sqrt(10);
   const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
+  const shown = q => Qc.isExact(q) ? q : Qc.mul(Qc.add(Qc.lo(q), Qc.hi(q)), Qc.HALF);
 
   function qNum(q) {
+    q = shown(q);
     let n = q.n; const d = q.d;
     if (n === 0n) return 0;
     const neg = n < 0n; if (neg) n = -n;
@@ -2136,23 +2307,25 @@ const FAITHFUL = (() => {
   const aNum = x => qNum(x.a) + qNum(x.b) * R2 + qNum(x.c) * R5 + qNum(x.d) * R10;
   function aStr(x) {
     const t = [];
-    if (!Qc.isZero(x.a)) t.push(Qc.toString(x.a));
-    if (!Qc.isZero(x.b)) t.push(Qc.toString(x.b) + '\u221A2');
-    if (!Qc.isZero(x.c)) t.push(Qc.toString(x.c) + '\u221A5');
-    if (!Qc.isZero(x.d)) t.push(Qc.toString(x.d) + '\u221A10');
+    const nz = q => !(Qc.isExact(q) && Qc.isZero(q));
+    if (nz(x.a)) t.push(Qc.toString(x.a));
+    if (nz(x.b)) t.push(Qc.toString(x.b) + '\u221A2');
+    if (nz(x.c)) t.push(Qc.toString(x.c) + '\u221A5');
+    if (nz(x.d)) t.push(Qc.toString(x.d) + '\u221A10');
     return t.length ? t.join('+').replace(/\+-/g, '\u2212') : '0';
   }
 
   function maxExp(psi) {
     let e = null;
-    for (const q of psi) {
+    for (const v of psi) {
+      const q = shown(v);
       if (q.n === 0n) continue;
       const x = bl(q.n) - bl(q.d);
       if (e === null || x > e) e = x;
     }
     return e;
   }
-  const scaleQ = (q, s) => q.n === 0n ? q : (s >= 0 ? Qc.mk(q.n, q.d << BigInt(s)) : Qc.mk(q.n << BigInt(-s), q.d));
+  const scaleQ = (v, s) => { const q = shown(v); return q.n === 0n ? q : (s >= 0 ? Qc.mk(q.n, q.d << BigInt(s)) : Qc.mk(q.n << BigInt(-s), q.d)); };
   const scaleA4 = (x, s) => A4c.mk(scaleQ(x.a, s), scaleQ(x.b, s), scaleQ(x.c, s), scaleQ(x.d, s));
   function project(psi) {
     const s = maxExp(psi) ?? 0;
@@ -2333,7 +2506,7 @@ const FAITHFUL = (() => {
     };
   }
 
-  return { qNum, aNum, aStr, aSci, aLog10, project, coeffs, evaluator, multiRealEvaluator, gridEval, gridNodes, audit, state,
+  return { shown, qNum, aNum, aStr, aSci, aLog10, project, coeffs, evaluator, multiRealEvaluator, gridEval, gridNodes, audit, state,
            ringTheta, ringPhi, GRAY_POS, OFFSET };
 })();
 
@@ -2484,7 +2657,7 @@ function sutraCertFromAudits(audits) {
 }
 function leanConformance() {
   const checks = [];
-  checks.push(['storeBits', KERNEL.STORE_BITS === 128]);
+  checks.push(['storeBits', KERNEL.STORE_BITS === null]);
   checks.push(['sutraTypes', Object.keys(KERNEL.SUTRA_TYPE).length === 29]);
   checks.push(['grvqAxes', Object.keys(KERNEL.GRVQ_K).join() === '1,5,9,14']);
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
@@ -2737,11 +2910,12 @@ const VORTEX_VIEW = { ok: false, why: 'no step yet', vals: null, co: null, gridN
 function refreshVortex(tg) {
   VORTEX_VIEW.co = null; VORTEX_VIEW.vals = null; VORTEX_VIEW.gridNode = Infinity;
   if (!tg) { VORTEX_VIEW.ok = false; VORTEX_VIEW.why = 'no TGCR vortex yet'; return; }
+  const dens = tg.density.map(FAITHFUL.shown);
   let mx = Q.ZERO;
-  for (const d of tg.density) if (Q.cmp(Q.abs(d), mx) > 0) mx = Q.abs(d);
+  for (const d of dens) if (Q.cmp(Q.abs(d), mx) > 0) mx = Q.abs(d);
   if (mx.n === 0n) { VORTEX_VIEW.ok = false; VORTEX_VIEW.why = 'the vortex curvature F = d1 v is zero at every vertex: there is no twist to draw'; return; }
   const re = new Float64Array(16), im = new Float64Array(16);
-  for (let k = 0; k < 16; k++) re[k] = Math.PI * FAITHFUL.qNum(Q.div(tg.density[k], mx));
+  for (let k = 0; k < 16; k++) re[k] = Math.PI * FAITHFUL.qNum(Q.div(dens[k], mx));
   VORTEX_VIEW.vals = re; VORTEX_VIEW.co = FAITHFUL.coeffs({ re, im });
   VORTEX_VIEW.ok = tg.closed === true;
   VORTEX_VIEW.why = VORTEX_VIEW.ok ? '' : 'F = d1 v does not close on every cube';
@@ -3021,21 +3195,21 @@ function newFormula(m) {
   formulaKey = formulaKeyOf(m); glideK = 0; ramp = [];
 }
 function post(msg) { self.postMessage(msg); }
-function postState(ms) {
+function stateOf() {
   const L = engine.last;
-  post({ type: 'state', version: config ? config.version : -1, epoch: config ? config.epoch : -1, ms,
+  return { type: 'state', version: config ? config.version : -1, epoch: config ? config.epoch : -1, ms: 0, bits: KERNEL.workBits(),
          state: { psi: engine.psi, dielectric: engine.dielectric,
                   energyLedger: engine.energyLedger, frame: engine.frame },
          params: config ? config.params : null, couplings: couplingsOf(L), lambda: KERNEL.inverseL(engine.psi),
          tgcr: L ? { density: L.tgcr.density, pontryagin: L.tgcr.pontryagin, FSq: L.tgcr.FSq, vSq: L.tgcr.vSq, energy: L.tgcr.energy,
-                     kappa: L.tgcr.kappa, closed: L.tgcr.cubeFlux.every(KERNEL.Q.isZero) } : null,
+                     kappa: L.tgcr.kappa, closed: L.tgcr.cubeFlux.every(KERNEL.Q.mayZero) } : null,
          delta: L ? L.stepError.delta : KERNEL.Q.ZERO, stores: L ? L.stepError.stores : 0,
          composition: L ? L.mode : null, activeIds: L ? L.active.map(a => a.id) : [], setIds: L ? config.active.map(a => a.id) : [],
          strengths: L ? L.active.map(a => ({ id: a.id, strength: a.strength })) : [],
          sutraDE: L ? Object.values(L.sutraRecord.reduce((m, r) => { const p = m[r.id]; m[r.id] = { id: r.id, dE: p ? KERNEL.Q.add(p.dE, r.dE) : r.dE }; return m; }, {})) : [],
          ramp: ramp.map(r => ({ id: r.id, from: r.from, to: r.to, k: r.k, n: r.n })),
          formula: formula && config ? { k: glideK, n: config.glide } : null,
-         dyn: dynamoOf(engine) });
+         dyn: dynamoOf(engine) };
 }
 function couplingsOf(L) {
   if (!L) return null;
@@ -3058,47 +3232,82 @@ function schedule() {
   scheduled = true;
   setTimeout(tick, 0);
 }
+const START_BITS = KERNEL.workBits();
+let log = [];
+function applyConfig(m) {
+  config = m;
+  if (m.reset) { engine = KERNEL.initEngine(); ramp = []; formula = null; formulaKey = ''; glideK = 0; newFormula(m); }
+  else if (!formula || formulaKeyOf(m) !== formulaKey) newFormula(m);
+}
+function applyTick() {
+  const rs = KERNEL.rampStep(ramp, config.active, config.glide);
+  const part = glideK < config.glide ? KERNEL.Q.mk(1n, BigInt(config.glide)) : KERNEL.Q.ZERO;
+  engine = KERNEL.step(engine, config.params, rs.active, config.composition, formula, part);
+  ramp = rs.ramp;
+  if (glideK < config.glide) glideK++;
+}
+function replay() {
+  engine = KERNEL.initEngine(); ramp = []; formula = null; formulaKey = ''; glideK = 0; config = null;
+  for (const ev of log) { if (ev.config) applyConfig(ev.config); else for (let k = 0; k < ev.tick; k++) applyTick(); }
+}
+function raise() {
+  const bits = KERNEL.workBits() * 2;
+  if (bits > KERNEL.MAX_WORK_BITS)
+    throw new RangeError('a decision is still not decided at ' + KERNEL.workBits() + ' bits, the most this kernel carries; the run is refused rather than guessed');
+  KERNEL.setWorkBits(bits);
+}
+function certified(apply, view) {
+  try { apply(); return view ? view() : null; }
+  catch (err) { if (err.name !== 'NeedPrecision') throw err; }
+  for (;;) {
+    raise();
+    try { replay(); return view ? view() : null; }
+    catch (err) { if (err.name !== 'NeedPrecision') throw err; }
+  }
+}
+function withdraw() { log.pop(); certified(replay); }
+function haltWith(err, m) {
+  halted = { name: err.name || 'Error', message: String(err.message || err) };
+  post({ type: 'halted', version: m.version, epoch: m.epoch, frame: engine.frame, reason: halted });
+}
 function tick() {
   scheduled = false;
   if (!wanted || halted || !config) return;
   wanted = false;
-  const t0 = performance.now();
-  let rs, next;
-  try {
-    rs = KERNEL.rampStep(ramp, config.active, config.glide);
-    const part = glideK < config.glide ? KERNEL.Q.mk(1n, BigInt(config.glide)) : KERNEL.Q.ZERO;
-    next = KERNEL.step(engine, config.params, rs.active, config.composition, formula, part);
-  } catch (err) {
-    halted = { name: err.name || 'Error', message: String(err.message || err) };
-    post({ type: 'halted', version: config.version, epoch: config.epoch, frame: engine.frame, reason: halted });
+  const t0 = performance.now(), m = config;
+  const last = log[log.length - 1];
+  if (last && last.tick) last.tick++; else log.push({ tick: 1 });
+  let state;
+  try { state = certified(applyTick, stateOf); }
+  catch (err) {
+    const l = log[log.length - 1];
+    if (l.tick > 1) { l.tick--; certified(replay); } else withdraw();
+    haltWith(err, m);
     return;
   }
-  engine = next; ramp = rs.ramp;
-  if (glideK < config.glide) glideK++;
-  postState(performance.now() - t0);
+  state.ms = performance.now() - t0;
+  post(state);
 }
 self.onmessage = e => {
   const m = e.data;
   if (m.type === 'config') {
-    config = m; halted = null;
-    try {
-      if (m.reset) { engine = KERNEL.initEngine(); wanted = false; newFormula(m); postState(0); }
-      else if (!formula || formulaKeyOf(m) !== formulaKey) newFormula(m);
-    } catch (err) {
-      halted = { name: err.name || 'Error', message: String(err.message || err) };
-      post({ type: 'halted', version: m.version, epoch: m.epoch, frame: engine.frame, reason: halted });
-      return;
-    }
+    halted = null;
+    if (m.reset) { log = []; KERNEL.setWorkBits(START_BITS); }
+    log.push({ config: m });
+    let state;
+    try { state = certified(() => applyConfig(m), m.reset ? stateOf : null); }
+    catch (err) { withdraw(); haltWith(err, m); return; }
+    if (m.reset) { wanted = false; post(state); }
     schedule();
   }
   else if (m.type === 'next') { wanted = true; schedule(); }
   else if (m.type === 'export') {
     if (!engine.last) { post({ type: 'export', id: m.id, error: 'no step has run yet' }); return; }
-    try { post({ type: 'export', id: m.id, payload: { frame: engine.frame, last: KERNEL.serializeLast(engine.last),
+    try { post({ type: 'export', id: m.id, payload: certified(() => {}, () => ({ frame: engine.frame, last: KERNEL.serializeLast(engine.last),
                  psi: KERNEL.serializeState(engine.psi), dielectric: engine.dielectric.map(KERNEL.serializeQ),
                  tgcrKappa: KERNEL.serializeQ(engine.tgcrKappa),
                  mayaPhase: KERNEL.serializeQ(engine.mayaPhase), mayaErr: KERNEL.serializeQ(engine.mayaErr),
-                 magA: engine.magA.map(KERNEL.serializeQ), magChi: engine.magChi.map(KERNEL.serializeQ) } }); }
+                 magA: engine.magA.map(KERNEL.serializeQ), magChi: engine.magChi.map(KERNEL.serializeQ) })) }); }
     catch (err) { post({ type: 'export', id: m.id, error: String(err.message || err) }); }
   }
 };
@@ -3109,7 +3318,7 @@ const queue = [];
 let busy = false;
 function post(msg) { self.postMessage(msg); }
 function auditOne(id, args, psi) {
-  try { const f = KERNEL.formulaClaims(id, psi, args); return { id, type: f.type, ok: f.ok, claims: f.claims.map(c => ({ name: c.name, ok: c.ok, detail: c.detail })) }; }
+  try { const f = KERNEL.certify(() => KERNEL.formulaClaims(id, psi, args)).value; return { id, type: f.type, ok: f.ok, claims: f.claims.map(c => ({ name: c.name, ok: c.ok, detail: c.detail })) }; }
   catch (err) { return { id, error: String(err.message || err) }; }
 }
 const jobs = {
@@ -3326,7 +3535,7 @@ function applyKernelState(m) {
     KERNEL_VIEW.state = m.state;
     KERNEL_VIEW.params = m.params || KERNEL_VIEW.params;
     KERNEL_VIEW.stepMs = m.ms;
-    KERNEL_VIEW.delta = m.delta; KERNEL_VIEW.stores = m.stores;
+    KERNEL_VIEW.delta = m.delta; KERNEL_VIEW.stores = m.stores; KERNEL_VIEW.bits = m.bits;
     KERNEL_VIEW.appliedVersion = m.version; KERNEL_VIEW.appliedEpoch = m.epoch; KERNEL_VIEW.stateAt = m.at;
     KERNEL_VIEW.appliedActive = m.activeIds; KERNEL_VIEW.appliedSet = m.setIds; KERNEL_VIEW.appliedComposition = m.composition;
     rampView(m.ramp, m.strengths);
@@ -3426,7 +3635,7 @@ const WHEELER_CHANNEL = {
   geoD: 0, geoM: 0, geoP: 0
 };
 function wheelerInputKey(dielectric, params) {
-  return dielectric.map(q => q.n + '/' + q.d).join(',') + '|' +
+  return dielectric.map(q => Q.toString(q)).join(',') + '|' +
          ['dielectricScale', 'appliedH', 'geoD', 'geoM', 'geoP'].map(k => {
            const x = params[k]; return [x.a, x.b, x.c, x.d].map(q => q.n + '/' + q.d).join(':');
          }).join('|');
@@ -3453,10 +3662,11 @@ function refreshWheelerChannel(dielectric, params) {
   if (!C5.audit.ok) { withhold('wheelerAudit: ' + C5.audit.results.filter(r => !r.ok).map(r => r.name).join(', ')); return; }
   if (!C5.surface.ok) { withhold('surfaceAudit: ' + C5.surface.problems.join(', ')); return; }
   C5.geoD = aN(params.geoD); C5.geoM = aN(params.geoM); C5.geoP = aN(params.geoP);
-  const dielMax = w.dielectricTrace.reduce((a, x) => Q.cmp(Q.abs(x), a) > 0 ? Q.abs(x) : a, Q.ZERO);
+  const trace = w.dielectricTrace.map(FAITHFUL.shown);
+  const dielMax = trace.reduce((a, x) => Q.cmp(Q.abs(x), a) > 0 ? Q.abs(x) : a, Q.ZERO);
   if (dielMax.n === 0n) { withhold('the dielectric is zero at every vertex: there is no largest to take a share of'); return; }
   for (let v = 0; v < 16; v++) {
-    C5.Z[v] = FAITHFUL.qNum(Q.mul(Q.mk(BigInt(KERNEL.hw(v) - 2), 2n), Q.div(w.dielectricTrace[v], dielMax)));
+    C5.Z[v] = FAITHFUL.qNum(Q.mul(Q.mk(BigInt(KERNEL.hw(v) - 2), 2n), Q.div(trace[v], dielMax)));
     C5.D[v] = aN(w.dielectric[v]);
     C5.M[v] = aN(w.magnetic[v]);
     C5.W[v] = aN(w.omega[v]) * (KERNEL.hw(v) < 2 ? -1 : 1);
@@ -4748,8 +4958,9 @@ function syncSutraDE() {
     const r = PANEL.rows[s.id];
     if (!r) continue;
     const d = ok ? KERNEL_VIEW.sutraDE.get(s.id) : undefined;
-    r.dE.textContent = d === undefined ? '' : d.n === 0n ? '0' : (d.n < 0n ? '\u2212' : '+') + FAITHFUL.aSci(A4.fromQ(Q.abs(d)), 1);
-    r.dE.style.color = d === undefined || d.n === 0n ? '#555' : d.n < 0n ? '#5fa8d3' : '#e0a050';
+    const sg = d === undefined ? null : Q.isExact(d) ? Q.sign(d) : Q.sign(Q.lo(d)) > 0 ? 1 : Q.sign(Q.hi(d)) < 0 ? -1 : 2;
+    r.dE.textContent = sg === null ? '' : sg === 0 ? '0' : (sg < 0 ? '\u2212' : sg > 1 ? '\u00B1' : '+') + FAITHFUL.aSci(A4.fromQ(Q.abs(FAITHFUL.shown(d))), 1);
+    r.dE.style.color = sg === null || sg === 0 ? '#555' : sg < 0 ? '#5fa8d3' : sg > 1 ? '#aaa' : '#e0a050';
   }
 }
 function clearPresetHighlight() { document.querySelectorAll('#preset-ctrls button').forEach(b => b.classList.remove('preset-active')); }
@@ -4859,7 +5070,7 @@ function updateSimulationHud() {
   set('sim-ms', Math.round(KERNEL_VIEW.stepMs) + ' ms');
   set('sim-energy', FAITHFUL.aSci(A4.fromQ(st.energyLedger)));
   updateCouplingsHud();
-  set('sim-store', `${KERNEL.STORE_BITS} bits · step error ≤ ${KERNEL_VIEW.delta ? qShort(KERNEL_VIEW.delta) : '–'}`);
+  set('sim-store', `exact · intervals certified at ${KERNEL_VIEW.bits || '–'} bits`);
   set('sim-comp', COMPOSITION_LABEL[COMPOSITION]);
   set('sim-glide', glideWords());
   updateDynamoHud();
@@ -5140,7 +5351,7 @@ function updateFormulaDisplay() {
     `Maya: φ ← φ + β(φ)/500 five times, β = (φ_g/e) sin φ − (e/π) φ³; drawn field × M = 1 + β/(20(1+|β|))<br>` +
     `s = ${escHtml(Q.toString(p.dielectricScale.a))} · B = ${escHtml(Q.toString(p.appliedH.a))} · dt =${escHtml(Q.toString(p.dt.a))}<br>` +
     `ω = ${escHtml(Q.toString(p.vortex))} · drive = ${escHtml(Q.toString(p.zpeSource.a))} · χ = ${escHtml(Q.toString(p.polarisation))}<br>` +
-    `every operator, inner layer and stage exact, then stored to ${KERNEL.STORE_BITS} bits`;
+    `every operator, inner layer and stage exact and stored exactly; a value too large to carry as a rational is a certified interval at ${KERNEL_VIEW.bits || '–'} bits`;
 }
 function renderModeIdentities() {
   const el = document.getElementById('mode-identities');
