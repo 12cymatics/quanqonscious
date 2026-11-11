@@ -201,19 +201,19 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="section">
     <h5>PRESETS</h5>
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
-      <button type="button" id="pre-quartet">✦ QUARTET</button>
-      <button type="button" id="pre-damper">⏚ DAMPER</button>
-      <button type="button" id="pre-inductor">🧲 INDUCTOR</button>
-      <button type="button" id="pre-dynamo">⚙ DYNAMO</button>
-      <button type="button" id="pre-containment">⛨ CONTAINMENT</button>
-      <button type="button" id="pre-capacitor">⚡ CAPACITOR</button>
-      <button type="button" id="pre-balancer">⚖ BALANCER</button>
-      <button type="button" id="pre-checksum">✓ CHECKSUM</button>
-      <button type="button" id="pre-lock">🔒 LOCK</button>
-      <button type="button" id="pre-rejector">⇄ REJECTOR</button>
-      <button type="button" id="pre-mixer">◐ MIXER</button>
-      <button type="button" id="pre-amplifier">▲ AMPLIFIER</button>
-      <button type="button" id="pre-correlator">⊛ CORRELATOR</button>
+      <button type="button" id="pre-2-6-23-26">S2 · S6 · S23 · S26</button>
+      <button type="button" id="pre-9-11-29">S9 · S11 · S29</button>
+      <button type="button" id="pre-3-9-27">S3 · S9 · S27</button>
+      <button type="button" id="pre-3-9-11-25-29">S3 · S9 · S11 · S25 · S29</button>
+      <button type="button" id="pre-9-28">S9 · S28</button>
+      <button type="button" id="pre-4-5-26">S4 · S5 · S26</button>
+      <button type="button" id="pre-2-9">S2 · S9</button>
+      <button type="button" id="pre-9-12-18-24">S9 · S12 · S18 · S24</button>
+      <button type="button" id="pre-9-20">S9 · S20</button>
+      <button type="button" id="pre-3-9-11">S3 · S9 · S11</button>
+      <button type="button" id="pre-9-22">S9 · S22</button>
+      <button type="button" id="pre-1">S1</button>
+      <button type="button" id="pre-3-9">S3 · S9</button>
     </div>
   </div>
   <div class="section">
@@ -1486,12 +1486,17 @@ const KERNEL_FACTORY = () => {
       }
       return Object.freeze(matchings.map(m => Object.freeze(m)));
     })();
+    const built = new Map();
     const matrixOf = (coefficients, strength) => {
       if (!Q.isExact(strength)) throw new TypeError('the strength of a book rotation is an exact rational');
+      const key = `${strength.n}/${strength.d}|${coefficients.map(c => `${c.n}/${c.d}`).join(',')}`;
+      const kept = built.get(key);
+      if (kept) return kept;
       const N = Array.from({ length: 16 }, (_, i) => Array.from({ length: 16 }, (_, j) => i === j ? 1n : 0n));
       let D = 1n;
       for (const c of coefficients) {
         const t = R.mul(strength, c), p = t.n, q = t.d;
+        if (p === 0n) continue;
         let base = q * q + p * p, cos = q * q - p * p, sin = 2n * p * q;
         const g = gcdZ(gcdZ(base, cos), sin);
         base /= g; cos /= g; sin /= g;
@@ -1503,11 +1508,28 @@ const KERNEL_FACTORY = () => {
           D *= base;
         }
       }
-      return { N, D };
+      const out = Object.freeze({ N: Object.freeze(N.map(row => Object.freeze(row))), D });
+      if (built.size >= 64) built.clear();
+      built.set(key, out);
+      return out;
     };
     const rotate = (psi, coefficients, strength) => {
-      const { N, D } = matrixOf(coefficients, strength), over = R.mk(D);
-      return N.map(row => Q.div(row.reduce((s, n, k) => n === 0n ? s : Q.add(s, Q.mul(psi[k], R.mk(n))), Z), over));
+      const { N, D } = matrixOf(coefficients, strength);
+      const lo = psi.map(Q.lo), hi = psi.map(Q.hi);
+      let L = 1n;
+      for (const e of lo.concat(hi)) L = L / gcdZ(L, e.d) * e.d;
+      const a = lo.map(e => e.n * (L / e.d)), b = hi.map(e => e.n * (L / e.d));
+      const den = D * L, exact = psi.every(Q.isExact);
+      const end = n => n === 0n ? Z : { n, d: den };
+      return N.map(row => {
+        let sl = 0n, sh = 0n;
+        for (let k = 0; k < 16; k++) {
+          const n = row[k];
+          if (n > 0n) { sl += n * a[k]; sh += n * b[k]; }
+          else if (n < 0n) { sl += n * b[k]; sh += n * a[k]; }
+        }
+        return exact ? settle(R.mk(sl, den)) : rounded(end(sl), end(sh));
+      });
     };
     const apply = (id, psi, strength, operands) => rotate(psi, terms(id, operands), strength);
     const operandsOf = (id, psi) => {
@@ -2950,34 +2972,34 @@ function updateFaithfulBadge() {
       ].filter(Boolean).join(' · ') + "</span>" : "");
 }
 const SUTRAS = [
-  { id:1, name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', guide:'SUTRA · p. 2–4 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 9), each from the one before by the multiplier one more than the previous; the field is turned on its edges by α × each term · GRVQ feeds λ₀' },
+  { id:1, name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', guide:'SUTRA · p. 2–4 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 9), each from the one before by the multiplier one more than the previous · refuses a denominator above 999; the field is turned on its edges by α × each term · GRVQ feeds λ₀' },
   { id:2, name:'Nikhilam Navataścaramam Daśataḥ', sk:'निखिलं', guide:'SUTRA · p. 12–13 · ⌊Ψ₀⌋ × ⌊Ψ₁₅⌋ by their deficiencies from the power of ten above them: the two deficiencies, the cross part and their product; the field is turned on its edges by α × each term · sets MSTVQ B' },
   { id:3, name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'SUTRA · p. 33–36 · the crosswise product of the two halves ⌊Ψ₀..₇⌋ and ⌊Ψ₈..₁₅⌋ as coefficients: 15 terms; the field is turned on its edges by α × each term · sets MSTVQ B' },
   { id:4, name:'Parāvartya Yojayet', sk:'परावर्त्य', guide:'SUTRA · p. 53–58 · ⌊Ψ₀..₇⌋ as a polynomial divided by x + ⌊Ψ₁₅⌋ by transposing: quotient and remainder; the field is turned on its edges by α × each term' },
   { id:5, name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', guide:'SUTRA · p. 98 · (x + a)(x + b) = (x + c)(x + d) with ab = cd built from ⌊Ψ₀⌋, ⌊Ψ₁⌋, ⌊Ψ₁₅⌋: the two equal products and the sum’s difference; the field is turned on its edges by α × each term · GRVQ feeds λ₁' },
-  { id:6, name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'SUTRA · p. 130–132 · two equations whose y column is in the ratio of the right-hand sides, from ⌊Ψ₀..₃⌋ and ⌊Ψ₁₅⌋: the determinant and the solution with the other unknown zero · refuses a singular pair; the field is turned on its edges by α × each term' },
-  { id:7, name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'SUTRA · p. 132 · ax + by = c, bx + ay = d from ⌊Ψ₀..₃⌋ by adding and subtracting: sum, difference and the two unknowns · refuses a = ±b; the field is turned on its edges by α × each term' },
-  { id:8, name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'SUTRA · p. 155–156 · ⌊Ψ₀⌋x² + ⌊Ψ₁⌋x + ⌊Ψ₂⌋ completed to a square: a, the shift and the remainder · refuses a = 0; the field is turned on its edges by α × each term' },
+  { id:6, name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'SUTRA · p. 130–132 · (2⌊Ψ₀⌋+1)x + 2⌊Ψ₁⌋y = ⌊Ψ₁₅⌋·2⌊Ψ₁⌋ and 2⌊Ψ₂⌋x + (2⌊Ψ₃⌋+1)y = ⌊Ψ₁₅⌋·(2⌊Ψ₃⌋+1), the y column in the ratio of the right-hand sides: the determinant, which is odd, and the solution with the other unknown zero; the field is turned on its edges by α × each term' },
+  { id:7, name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'SUTRA · p. 132 · ax + by = c, bx + ay = d with a = 2⌊Ψ₀⌋+1, b = 2⌊Ψ₁⌋, c = ⌊Ψ₂⌋, d = ⌊Ψ₃⌋ by adding and subtracting: sum, difference and the two unknowns; the field is turned on its edges by α × each term' },
+  { id:8, name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'SUTRA · p. 155–156 · ax² + ⌊Ψ₁⌋x + ⌊Ψ₂⌋ completed to a square, a one further from zero than ⌊Ψ₀⌋: a, the shift and the remainder; the field is turned on its edges by α × each term' },
   { id:9, name:'Calana-Kalanābhyām', sk:'चलन', guide:'SUTRA · p. 145, 175–178 · the derivative of the polynomial whose coefficients are ⌊Ψ₀..₁₅⌋: 15 terms; the field is turned on its edges by α × each term · GRVQ feeds λ₂' },
   { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'SUTRA · p. 24–27 · ⌊Ψ₀⌋² by its deficiency from the power of ten above it: the deficiency, the left part and its square; the field is turned on its edges by α × each term' },
   { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', guide:'SUTRA · p. 160–161 · (x + a)⁴ + (x + b)⁴ = total with a, b, total = ⌊Ψ₀⌋, ⌊Ψ₁₅⌋, ⌊Ψ₁⌋: the mean, the half-difference and the reduced biquadratic; the field is turned on its edges by α × each term' },
-  { id:12, name:'Śeṣāṇyaṅkena Carameṇa', guide:'SUTRA · p. 195–197 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 7) read off its remainders by the last digit; the field is turned on its edges by α × each term' },
-  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'SUTRA · p. 136–137 · 1/AB + 1/AC = 1/AD + 1/BC on factors in arithmetic progression from ⌊Ψ₀..₃⌋: twice the penultimate plus the ultimate · refuses a constant progression; the field is turned on its edges by α × each term' },
+  { id:12, name:'Śeṣāṇyaṅkena Carameṇa', guide:'SUTRA · p. 195–197 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 7) read off its remainders by the last digit · refuses a denominator above 999; the field is turned on its edges by α × each term' },
+  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'SUTRA · p. 136–137 · 1/AB + 1/AC = 1/AD + 1/BC on factors in arithmetic progression, the first ⌊Ψ₀⌋ + (2⌊Ψ₁⌋+1)x and the difference ⌊Ψ₂⌋ + 2⌊Ψ₃⌋x: twice the penultimate plus the ultimate; the field is turned on its edges by α × each term' },
   { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'SUTRA · p. 29–32 · ⌊Ψ₀⌋ × 99…9 with as many nines as it has digits: one less than the number, and its complement; the field is turned on its edges by α × each term · GRVQ feeds λ₃' },
   { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'SUTRA · p. 76, 81–85 · the product of the four binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x, v = 0..3; the sum of its coefficients is the product of the sums; the field is turned on its edges by α × each term' },
   { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'SUTRA · p. 175–178 · the derivative of the product of the three binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x as the sum of each factor’s derivative times the rest; the field is turned on its edges by α × each term' },
   { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', guide:'SUB-SUTRA · p. 17–22 · ⌊Ψ₀⌋ × ⌊Ψ₁₅⌋ from a working base, the multiple of the power of ten just above them, taken proportionately; the field is turned on its edges by α × each term' },
   { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', guide:'SUB-SUTRA · p. 19, 57 · ⌊Ψ₀⌋ divided by |⌊Ψ₁₅⌋| + 1: the quotient and the remainder that remains; the field is turned on its edges by α × each term' },
-  { id:19, name:'Ādyamādyenāntyamantyena', guide:'SUB-SUTRA · p. 74–75 · the quadratic (q + px)(r + sx) from ⌊Ψ₀..₃⌋ divided by its factor: first by first and last by last · refuses a zero end; the field is turned on its edges by α × each term' },
+  { id:19, name:'Ādyamādyenāntyamantyena', guide:'SUB-SUTRA · p. 74–75 · the quadratic (q + px)(r + sx) divided by its factor q + px, with r = ⌊Ψ₂⌋ and q, p, s one further from zero than ⌊Ψ₀⌋, ⌊Ψ₁⌋, ⌊Ψ₃⌋: first by first and last by last; the field is turned on its edges by α × each term' },
   { id:20, name:'Kevalaiḥ Saptakaṃ Guṇyāt', sk:'केवलैः', guide:'SUB-SUTRA · p. 202 · the recurring digits of (1 + |⌊Ψ₀⌋| mod 6)/7 from 143 × 999; the field is turned on its edges by α × each term' },
   { id:21, name:'Veṣṭanam', sk:'वेष्टनम्', guide:'SUB-SUTRA · p. 259–266 · |⌊Ψ₀⌋| tested for divisibility by 10·|⌊Ψ₁₅⌋| + 7 by its positive and negative osculators: both chains; the field is turned on its edges by α × each term' },
   { id:22, name:'Yāvadūnaṃ Tāvadūnam', guide:'SUB-SUTRA · p. 288–289 · ⌊Ψ₀⌋³ by its deficiency from the power of ten above it: the deficiency and the three parts; the field is turned on its edges by α × each term' },
   { id:23, name:'Yāvadūnaṃ Tāvadūnīkṛtya Vargañca Yojayet', guide:'SUB-SUTRA · p. 24–27 · ⌊Ψ₁₅⌋² by its deficiency from the power of ten above it: the deficiency, the left part and its square; the field is turned on its edges by α × each term' },
   { id:24, name:"Antyayordaśake'pi", sk:'अन्त्ययोः', guide:'SUB-SUTRA · p. 28–29 · two numbers with the prefix |⌊Ψ₀⌋| and last digits totalling ten: prefix × one more, and the product of the last digits; the field is turned on its edges by α × each term' },
-  { id:25, name:'Antyayoreva', guide:'SUB-SUTRA · p. 138–143 · (AC + D)/(BC + E) = A/B with A, B, C, D, E from ⌊Ψ₀..₇⌋ reduced to A/B = D/E: the last terms and the linear equation left · refuses a zero denominator; the field is turned on its edges by α × each term' },
+  { id:25, name:'Antyayoreva', guide:'SUB-SUTRA · p. 138–143 · (AC + D)/(BC + E) = A/B with A = ⌊Ψ₀⌋ + ⌊Ψ₁⌋x, B = ⌊Ψ₂⌋ + bx, C = ⌊Ψ₄⌋ + cx, D = ⌊Ψ₆⌋, E = ⌊Ψ₇⌋, b and c one further from zero than ⌊Ψ₃⌋ and ⌊Ψ₅⌋, reduced to A/B = D/E: the last terms and the linear equation left; the field is turned on its edges by α × each term' },
   { id:26, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'SUB-SUTRA · p. 76 · the crosswise product of ⌊Ψ₀..₃⌋ and ⌊Ψ₄..₇⌋: 7 terms whose sum is the product of the sums; the field is turned on its edges by α × each term' },
-  { id:27, name:'Lopanasthāpanābhyām', sk:'लोपन', guide:'SUB-SUTRA · p. 77–79 · the homogeneous quadratic (x + py + qz)(ax + ry + sz) from ⌊Ψ₀..₄⌋ factored by eliminating z, then y, and retaining x · refuses a = 0; the field is turned on its edges by α × each term' },
-  { id:28, name:'Vilokanam', sk:'विलोकनम्', guide:'SUB-SUTRA · p. 147–148 · x + 1/x = ⌊Ψ₀⌋ + 1/⌊Ψ₀⌋ solved by observation: the sum and the reciprocal pair · refuses zero; the field is turned on its edges by α × each term' },
+  { id:27, name:'Lopanasthāpanābhyām', sk:'लोपन', guide:'SUB-SUTRA · p. 77–79 · the homogeneous quadratic (x + ⌊Ψ₁⌋y + ⌊Ψ₂⌋z)(ax + ⌊Ψ₃⌋y + ⌊Ψ₄⌋z), a one further from zero than ⌊Ψ₀⌋, factored by eliminating z, then y, and retaining x; the field is turned on its edges by α × each term' },
+  { id:28, name:'Vilokanam', sk:'विलोकनम्', guide:'SUB-SUTRA · p. 147–148 · x + 1/x = n + 1/n, n one further from zero than ⌊Ψ₀⌋, solved by observation: the sum and the reciprocal pair; the field is turned on its edges by α × each term' },
   { id:29, name:'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', guide:'SUB-SUTRA · p. 76 · the product of the eight binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x; the sum of its coefficients is the product of the sums; the field is turned on its edges by α × each term · sets MSTVQ B' }
 ];
 function parseStrengthPercentQ(raw) {
@@ -5425,32 +5447,32 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
   pushConfig('composition → ' + COMPOSITION_LABEL[COMPOSITION]);
 }));
 const PRESETS = {
-  'pre-quartet': { comp: 'PARALLEL', set: { 2: 100, 6: 100, 23: 100, 26: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'One formula from four sutras whose changes to the seed field point in different directions (the largest cosine between any two of them is 0.40): S2 reflects every vertex about half the base, S6 drives each edge ratio toward its target, S23 moves complement pairs toward tens and S26 pulls every vertex toward the flag over its portion, all from the same state. The formula goes in over the glide; after that only the stages run and the energy of the field holds.' },
-  'pre-damper': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state.' },
-  'pre-inductor': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
-    purpose: 'S3, S9 and S27 with the drive and the vortex going into the magnetism memory.' },
-  'pre-dynamo': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
-    purpose: 'S3, S9, S11, S25 and S29, driven and twisted by the vortex.' },
-  'pre-containment': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
-    purpose: 'S9 and S28 under a strong vortex.' },
-  'pre-capacitor': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
-    purpose: 'S4, S5 and S26 with the polarisation at 3, so the field charges the dielectric.' },
-  'pre-balancer': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha, while S9 diffuses the field.' },
-  'pre-checksum': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once, with S9 diffusing the field over the hypercube.' },
-  'pre-lock': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S20 moves every vertex toward the nearest multiple of 7 while S9 diffuses the field.' },
-  'pre-rejector': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and S11 averages each Hamming layer, each from the same state.' },
-  'pre-mixer': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S22 pulls every vertex toward the mean of itself and its complement while S9 diffuses the field.' },
-  'pre-amplifier': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S1 multiplies every vertex up by one more than its neighbour gives, and the field grows.' },
-  'pre-correlator': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.' }
+  'pre-2-6-23-26': { comp: 'PARALLEL', set: { 2: 100, 6: 100, 23: 100, 26: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S2 multiplies ⌊Ψ₀⌋ by ⌊Ψ₁₅⌋ from their deficiencies, S6 solves a pair of equations with one column in the ratio of the right-hand sides, S23 squares ⌊Ψ₁₅⌋ from its deficiency and S26 multiplies ⌊Ψ₀..₃⌋ by ⌊Ψ₄..₇⌋ crosswise.' },
+  'pre-9-11-29': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S9 differentiates the polynomial whose coefficients are ⌊Ψ₀..₁₅⌋, S11 reduces (x + ⌊Ψ₀⌋)⁴ + (x + ⌊Ψ₁₅⌋)⁴ = ⌊Ψ₁⌋ to a biquadratic and S29 multiplies out the eight binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x.' },
+  'pre-3-9-27': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field and S27 factors a homogeneous quadratic by elimination and retention, with the drive at 1 and the vortex at 3.' },
+  'pre-3-9-11-25-29': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field, S11 reduces a biquadratic, S25 reduces a ratio to its last terms and S29 multiplies out eight binomials, with the drive at 1 and the vortex at 2.' },
+  'pre-9-28': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
+    purpose: 'S9 differentiates the polynomial of the field and S28 solves x + 1/x by observation, with the vortex at 4.' },
+  'pre-4-5-26': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
+    purpose: 'S4 divides ⌊Ψ₀..₇⌋ by x + ⌊Ψ₁₅⌋ by transposing, S5 equates the two products and S26 multiplies ⌊Ψ₀..₃⌋ by ⌊Ψ₄..₇⌋ crosswise, with the polarisation at 3.' },
+  'pre-2-9': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S2 multiplies ⌊Ψ₀⌋ by ⌊Ψ₁₅⌋ from their deficiencies and S9 differentiates the polynomial of the field.' },
+  'pre-9-12-18-24': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S12 reads the recurring digits of 1/(10·|⌊Ψ₀⌋| + 7) off its remainders, S24 multiplies two numbers whose last digits total ten, S18 divides ⌊Ψ₀⌋ by |⌊Ψ₁₅⌋| + 1 and keeps the remainder, and S9 differentiates the polynomial of the field.' },
+  'pre-9-20': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S20 takes the recurring digits of a seventh from 143 × 999 and S9 differentiates the polynomial of the field.' },
+  'pre-3-9-11': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field and S11 reduces a biquadratic.' },
+  'pre-9-22': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S22 cubes ⌊Ψ₀⌋ from its deficiency and S9 differentiates the polynomial of the field.' },
+  'pre-1': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S1 alone: the recurring digits of 1/(10·|⌊Ψ₀⌋| + 9), each from the one before.' },
+  'pre-3-9': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise and S9 differentiates the polynomial of the field, with the drive at 2.' }
 };
 
 function presetTitle(p) {

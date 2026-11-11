@@ -848,7 +848,7 @@ section('the engine on the torus');
   ok(agree && exact, 'the kernel\'s hole, tube and cell fluxes and its edge flows are exactly the gate\'s own circulations on 40 exact potentials', where);
   ok(laws, 'from one loop to the next the flux steps by exactly the circulation of the cells between (hole_flux_step_y/z, tube_flux_step_x/w)');
   ok(balanced, 'the kernel decides all eight strip balances on each of them (cube_strip)');
-  /* and on a run: the damper preset, every step */
+  /* and on a run: the S9 · S11 · S29 preset, every step */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
     appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
@@ -869,7 +869,7 @@ section('the engine on the torus');
     return { runAgree, runLaws, nonzero };
   });
   ok(run.value.runAgree && run.value.runLaws && run.value.nonzero,
-     `on 40 steps of the damper preset the torus fluxes are the gate's, no balance is refuted, and the loops and cells carry flux, to the width of the intervals (certified at ${run.bits} bits)`);
+     `on 40 steps of the S9 · S11 · S29 preset the torus fluxes are the gate's, no balance is refuted, and the loops and cells carry flux, to the width of the intervals (certified at ${run.bits} bits)`);
 }
 
 
@@ -919,7 +919,7 @@ section('the sources of the fields around the construct');
   ok(rSame, 'each vertex\'s charge is the dielectric there less its four neighbours\', summed (rho = (d0)^T d0 q, charge_laplacian), on 40 dielectrics');
   ok(neutral, 'the charges sum to zero (charge_neutral, recomputed)');
   ok(flags, 'sourcesData gives exactly these, and decides both laws true, on 40 potentials and dielectrics');
-  /* and on a run: the damper preset's sources are the gate's and not empty */
+  /* and on a run: the S9 · S11 · S29 preset's sources are the gate's and not empty */
   const X = A4;
   const params = { dt: X.fromQ(Q.mk(1n, 64n)), dielectricScale: X.fromQ(Q.mk(1n, 8n)), coherence: Q.mk(1n, 4n),
     appliedH: X.fromQ(Q.mk(1n, 64n)), mstvq: X.fromQ(Q.mk(1n, 128n)),
@@ -939,7 +939,7 @@ section('the sources of the fields around the construct');
     return { runOk, live };
   });
   const { runOk, live } = run.value;
-  ok(runOk && live === 30, `on 30 steps of the damper preset the sources are the gate's, both laws hold to the width of the intervals, and current and charge are both certainly present (${live}/30 steps, certified at ${run.bits} bits)`);
+  ok(runOk && live === 30, `on 30 steps of the S9 · S11 · S29 preset the sources are the gate's, both laws hold to the width of the intervals, and current and charge are both certainly present (${live}/30 steps, certified at ${run.bits} bits)`);
 }
 
 
