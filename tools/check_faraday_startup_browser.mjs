@@ -59,33 +59,20 @@ try {
     await page.goto(scenario.url, { waitUntil: 'load', timeout: 30000 });
     await page.waitForFunction(() => typeof simT !== 'undefined' && simT > 0.5 && state && !renderError, undefined, { timeout: 30000 });
     assert.match(await page.title(), /Faraday|cymatic/i);
-    const pending = await page.evaluate(async () => {
-      let exportError = '';
-      try { await exportImage(129, () => {}); } catch (error) { exportError = error.message; }
-      return { experimentMode, experiment: !!state.experiment, rim, useSolver, solverRequested,
-        haveFrame: CELL3D.clocks().have, comparePaper, visualSignature: state.visualSignature,
-        fieldIsZero: [ETA, IMF, NX, NY].every(a => a.every(v => v === 0)), exportError };
-    });
-    assert.equal(pending.experimentMode, 'general');
-    assert.equal(pending.experiment, true);
-    assert.equal(pending.rim, 'pinned');
-    assert.equal(pending.useSolver, true);
-    assert.equal(pending.solverRequested, false);
-    assert.equal(pending.haveFrame, false);
-    assert.equal(pending.comparePaper, false);
-    assert.equal(pending.visualSignature, null);
-    assert.equal(pending.fieldIsZero, true, 'Pending nonlinear mode must not substitute a modal field');
-    assert.match(pending.exportError, /No nonlinear solver frame/);
-    assert.equal(await page.locator('#solverOverlay').isVisible(), true);
-    assert.match(await page.locator('#solverOverlay').innerText(), /not started/i);
-    results.push({ name: scenario.name + '-general-pinned-pending', pending, passed: true });
-
-    // Exercise the original playback fixture only after explicitly choosing it.
-    await page.locator('#configurationMode').selectOption('reference');
-    await page.locator('#srcSeg [data-s="modal"]').click();
-    await page.locator('#rimSeg [data-r="free"]').click();
-    await page.waitForFunction(() => experimentMode === 'reference' && !useSolver
-      && !dirty && state.expression > 0 && !renderError);
+    const defaultState = await page.evaluate(() => ({ experimentMode, rim, useSolver, view,
+      running, solverRequested, drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed }));
+    assert.equal(defaultState.experimentMode, 'reference');
+    assert.equal(defaultState.rim, 'free');
+    assert.equal(defaultState.useSolver, false);
+    assert.equal(defaultState.view, 'sand');
+    assert.equal(defaultState.running, true);
+    assert.equal(defaultState.solverRequested, false);
+    assert.equal(defaultState.failed, false);
+    assert.equal(await page.locator('#viewSeg [data-v="sand"]').isEnabled(), true);
+    assert.equal(await page.locator('#play').isEnabled(), true);
+    assert.equal(await page.locator('#sprinkleBtn').isEnabled(), true);
+    assert.equal(await page.locator('#solverOverlay').isVisible(), false);
+    results.push({ name: scenario.name + '-sand-on-entry', defaultState, passed: true });
     assert.equal(await page.locator('#c').isVisible(), true);
     const initial = await page.evaluate(() => {
       const canvas = document.getElementById('c');
@@ -94,7 +81,7 @@ try {
       for (let i = 0; i < pixels.length; i += 4) { min = Math.min(min, pixels[i]); max = Math.max(max, pixels[i]); }
       return { simT, running, renderError, renderEngine, useSolver, expression: state.expression, spread: max - min };
     });
-    assert.match(await page.locator('#startupStatus').innerText(), /Canvas rendering started/);
+    assert.equal(await page.evaluate(() => FARADAY_STARTUP.drawn && !FARADAY_STARTUP.failed), true);
     assert.equal(initial.running, true);
     assert.equal(initial.renderError, null);
     assert.equal(initial.renderEngine, 'cpu');
@@ -126,6 +113,29 @@ try {
     assert.equal(await page.locator('#f').inputValue(), '56');
     assert.equal(await page.evaluate(() => renderError), null);
     await page.screenshot({ path: resolve(out, `${scenario.name}-changed-frequency.png`), fullPage: true });
+    await page.locator('#workspaceSeg [data-workspace="ns"]').click();
+    await page.waitForFunction(() => useSolver && !dirty && CELL3D.clocks().initial);
+    const initialCondition = await page.evaluate(() => ({ experimentMode, rim, useSolver, solverRequested,
+      clocks: CELL3D.clocks(), source: CELL3D.snapshot().provenance,
+      signature: state.visualSignature, fieldPresent: ETA.some(v => v !== 0) }));
+    assert.equal(initialCondition.experimentMode, 'general');
+    assert.equal(initialCondition.rim, 'pinned');
+    assert.equal(initialCondition.useSolver, true);
+    assert.equal(initialCondition.solverRequested, false);
+    assert.equal(initialCondition.clocks.have, false);
+    assert.equal(initialCondition.clocks.physT, 0);
+    assert.equal(initialCondition.clocks.stepsDone, 0);
+    assert.equal(initialCondition.source.fieldKind, 'initial-condition');
+    assert.equal(initialCondition.signature, null);
+    assert.equal(initialCondition.fieldPresent, true);
+    assert.equal(await page.locator('#solverOverlay').isVisible(), false);
+    assert.match(await page.locator('#solverStatus').innerText(), /initial|not evolved/i);
+    results.push({ name: scenario.name + '-explicit-ns-initial-condition', initialCondition, passed: true });
+    await page.screenshot({ path: resolve(out, `${scenario.name}-ns-initial-condition.png`), fullPage: true });
+    await page.locator('#workspaceSeg [data-workspace="sand"]').click();
+    await page.waitForFunction(() => !useSolver && !dirty && view === 'sand');
+    assert.equal(await page.evaluate(() => freq), 56, 'Returning to Sand discarded its frequency');
+    assert.equal(await page.locator('#viewSeg [data-v="sand"]').isEnabled(), true);
     assert.deepEqual(pageErrors, [], `${scenario.name} runtime errors`);
     results.push({ name: scenario.name, initial, paused, resumed, errors: pageErrors, passed: true });
     await context.close();
@@ -151,7 +161,7 @@ try {
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));
-  const scope = 'general pinned nonlinear startup with no substitute field or export; explicit reference modal CPU playback; not nonlinear integration or GPU validation'
+  const scope = 'immediate moving Sand and playback; explicit pinned NS initial-condition preview with no invented evolution; workspace settings retained; not nonlinear integration or GPU validation'
     + (transport === 'http' ? '; explicit HTTP scope, file:// is not validated' : '; includes file:// startup');
   await writeFile(resolve(out, 'results.json'), JSON.stringify({ engine: engineName, transport, scope, results, errors }, null, 2));
   console.log(JSON.stringify({ engine: engineName, transport, scope, results, errors }, null, 2));

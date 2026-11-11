@@ -27,9 +27,9 @@ header p b{color:var(--ink2);font-weight:500}
 
 .lab{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
 
-.rig{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:1px;background:var(--edge);
+.rig{align-items:start;display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:1px;background:var(--edge);
   border:1px solid var(--edge)}
-.stage{position:relative;background:#000;aspect-ratio:1/1}
+.stage{position:sticky;top:126px;background:#000;aspect-ratio:1/1;width:100%;max-width:calc(100vh - 150px);justify-self:center}
 .stage canvas{width:100%;height:100%;display:block}
 .stage canvas#cgl{position:absolute;left:0;top:0}
 .ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
@@ -43,7 +43,7 @@ header p b{color:var(--ink2);font-weight:500}
 .ph.two{background:var(--amb)}
 
 .deck{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:11px;
-  overflow-y:auto}
+  overflow-y:auto;max-height:calc(100vh - 150px)}
 .deck::-webkit-scrollbar{width:7px}
 .deck::-webkit-scrollbar-thumb{background:var(--edge2)}
 .fld{display:grid;gap:4px}
@@ -110,13 +110,19 @@ footer{margin-top:16px;color:var(--dim);font-size:9.5px;line-height:1.85}
 .qgrid .v b{color:var(--cy)}
 .zero{color:var(--grn)}
 footer b{color:var(--ink2);font-weight:500}
-@media (max-width:900px){.rig{grid-template-columns:1fr}}
+.workspaceBar{position:sticky;top:0;z-index:10;background:var(--panel);border:1px solid var(--edge);padding:8px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.workspaceBar #workspaceSeg{min-width:300px}.workspaceActions{display:flex;gap:5px}.workspaceActions .btn{flex:initial!important}
+#workspaceNote,#solverStatus{font-size:10px;color:var(--ink2)}
+details{border-top:1px solid var(--edge);padding:7px 0}summary{cursor:pointer;color:var(--ink2)}.detailBody{display:grid;gap:12px;padding-top:10px}.detailBody p{font-size:10px;color:var(--ink2);margin:0}
+#generalAcceleration{display:grid;grid-template-columns:1fr 100px;align-items:center;gap:6px;font-size:10px}#generalAcceleration input{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--edge2);padding:4px}
+button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(--edge2);color:var(--ink2)}
+@media (max-width:900px){.rig{grid-template-columns:1fr}.stage{position:relative;top:auto;max-width:none}.deck{max-height:none}.workspaceBar #workspaceSeg{min-width:0;width:100%}.workspaceBar{padding:6px}.workspaceActions{width:100%}.workspaceActions .btn{flex:1!important}.ov.bl{max-width:52%;line-height:1.35}.ov.br{max-width:44%;text-align:right;line-height:1.35}#workspaceNote{font-size:9px}.wrap{padding:0 8px 24px}header{padding:12px 0 8px}}
 </style>
 
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>General circular-cell experiment · SI physical inputs · optional Sheldrake &amp; Sheldrake 2017 comparison</p>
+  <p>Sand visualization and nonlinear liquid experiments</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -135,7 +141,7 @@ globalThis.FARADAY_STARTUP = {
     if (this.drawn || this.failed) return;
     this.drawn = true;
     const status = document.getElementById('startupStatus');
-    status.textContent = 'Canvas rendering started. The active model is identified under surface drawn from. Nonlinear Navier–Stokes physical time can advance much more slowly than wall time.';
+    status.textContent = 'Sand visualization ready. Choose 3D Navier–Stokes for the nonlinear liquid solver.';
     status.style.color = 'var(--grn)';
   }
 };
@@ -146,15 +152,22 @@ window.addEventListener('error', event => {
 window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(event.reason));
 </script>
 
+<div class="workspaceBar">
+<div class="seg" id="workspaceSeg" aria-label="Workspace"><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
+<div id="sandActions" class="workspaceActions" data-sand-only><button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button><button aria-pressed="true" class="btn" id="play" style="flex:1">running</button><button class="btn" id="reset" style="flex:1">re-excite</button></div>
+<div id="solverActions" class="workspaceActions" data-ns-only hidden><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset to initial state</button></div>
+<div id="workspaceNote">Modal sand visualization · full liquid solver available in 3D Navier–Stokes</div>
+<div id="solverStatus" role="status" data-ns-only hidden>Initial condition · t = 0 · not evolved</div>
+</div>
 <div class="rig">
   <div class="stage">
-    <div id="solverOverlay" role="status" style="position:absolute;inset:0;z-index:3;background:#080d13;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;line-height:1.8">Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.</div>
+    <div id="solverOverlay" role="status" style="position:absolute;left:8px;right:8px;bottom:35px;z-index:3;background:#080d13e8;display:none;padding:12px;text-align:center;line-height:1.6"></div>
     <canvas id="c" width="381" height="381"></canvas>
     <canvas id="cgl" width="381" height="381" style="display:none"></canvas>
     <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">not started</b><span id="oRunit"></span><br>
       cell ⌀ <b id="oD">24.25</b> mm<br>
       <span class="ph" id="oPh"></span><span id="oPhT">phase I</span></div>
-    <div class="ov tr">empirical <b id="oFold">10</b>-fold<br>
+    <div class="ov tr" data-sand-only>empirical <b id="oFold">10</b>-fold<br>
       m = <b id="oM">5</b> &nbsp; conf <b id="oConf">67%</b><br>
       <span id="oRisk">risk 0.33</span></div>
     <div class="ov bl"><span id="oExp">expression 0%</span></div>
@@ -162,122 +175,101 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 
   <div class="deck">
-    <div class="fld">
-      <label class="lab" for="configurationMode">experiment configuration</label>
-      <select id="configurationMode"><option value="general">General SI inputs</option><option value="reference">2017 apparatus reconstruction</option></select>
-      <span style="font-size:10px;color:var(--ink2)">Initial values are editable examples, not measurements.</span>
-    </div>
-    <div id="generalInputs" style="display:grid;gap:7px">
-      <label>Diameter (mm) <input id="expDiameter" type="number" min="0" step="any" value="30"></label>
-      <label>Depth (mm) <input id="expDepth" type="number" min="0" step="any" value="4"></label>
-      <label>Density ρ (kg/m³) <input id="expRho" type="number" min="0" step="any" value="1000"></label>
-      <label>Dynamic viscosity μ (Pa·s) <input id="expMu" type="number" min="0" step="any" value="0.001"></label>
-      <label>Surface tension γ (N/m) <input id="expSigma" type="number" min="0" step="any" value="0.0728"></label>
-      <label>Gravity (m/s²) <input id="expGravity" type="number" min="0" step="any" value="9.80665"></label>
-      <label>Peak acceleration (m/s²) <input id="expAccel" type="number" min="0" step="any" value="7"></label>
-      <label>Initial azimuthal order m <input id="expSeedM" type="number" min="0" step="1" value="2"></label>
-      <label>Initial amplitude / depth <input id="expSeedFraction" type="number" min="0" step="any" value="0.0001"></label>
-      <span style="font-size:10px;color:var(--ink2)">Drive: g + a cos(2π f t). Kinematic viscosity is μ/ρ. Initial displacement: (amplitude/depth) × depth × Jₘ(jₘ,₁ r/R) cos(mθ); initial velocity is zero.</span>
-    </div>
-    <div id="experimentError" role="alert" style="color:var(--red)"></div>
-    <div class="fld" style="font-size:10px;color:var(--ink2)">One incompressible Newtonian liquid in a rigid circular cylinder; a single-valued free surface; pinned contact line with no-slip floor and wall. Free contact is available only for modal diagnostics. No air dynamics, overturning, contact-angle hysteresis or deformable vessel. Finite numerical discretization, not an exact continuum solution.</div>
-    <div class="fld" data-reference-control hidden>
-      <span class="lab">reference cell diameter</span>
-      <div class="seg" id="cellSeg">
-        <button data-c="small" aria-pressed="false">10.00</button>
-        <button data-c="medium" aria-pressed="true">24.25</button>
-        <button data-c="large" aria-pressed="false">49.50</button>
-      </div>
-    </div>
-    <div class="fld">
-      <div class="top"><span class="lab">drive frequency</span>
-        <span class="v"><input id="fnum" type="number" min="0" step="any" value="111"
-          style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
-          font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px"> Hz</span></div>
-      <input type="range" id="f" min="50" max="5000" step="1" value="111">
-      <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
-    </div>
-    <div class="fld" data-reference-control hidden>
-      <div class="top"><span class="lab">reference apparatus amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
-      <input type="range" id="a" min="0" max="1000" step="1" value="229">
-      <span class="lab" id="accLab" style="text-align:right"></span>
-    </div>
-    <div class="fld" data-reference-control hidden>
-      <div class="top"><span class="lab">water temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
-      <input type="range" id="t" min="5" max="30" step="1" value="20">
-    </div>
-    <div class="fld" data-reference-control hidden>
-      <div class="top"><span class="lab">depth</span><span class="v"><span id="hv">3.0</span> mm</span></div>
-      <input type="range" id="h" min="1" max="10" step="0.1" value="3">
-    </div>
-    <div class="fld">
-      <span class="lab">contact line</span>
-      <div class="seg" id="rimSeg">
-        <button data-r="free" aria-pressed="false">free (modal only)</button>
-        <button data-r="pinned" aria-pressed="true">pinned</button>
-      </div>
-    </div>
-    <div class="fld">
-      <span class="lab">render</span>
-      <div class="seg" id="viewSeg">
-        <button data-v="sand" aria-pressed="false" disabled>sand (modal only)</button>
-        <button data-v="optical" aria-pressed="false">optical</button>
-        <button data-v="height" aria-pressed="true">height</button>
-        <button data-v="nodal" aria-pressed="false">nodal</button>
-      </div>
-    </div>
-    <div class="fld">
-      <span class="lab">draw on</span>
-      <div class="seg" id="engSeg">
-        <button data-e="cpu" aria-pressed="true">CPU</button>
-        <button data-e="gpu" aria-pressed="false">GPU</button>
-      </div>
-      <div id="renderStatus" role="status" aria-live="polite">CPU drawing.</div>
-    </div>
-    <div class="fld">
-      <span class="lab">surface</span>
-      <div class="seg" id="srcSeg">
-        <button data-s="modal" aria-pressed="false">modal diagnostic</button>
-        <button data-s="dns" aria-pressed="true">3D N-S (JS)</button>
-        <button data-s="dnscpp" aria-pressed="false">3D N-S (C++)</button>
-      </div>
-    </div>
-    <div class="fld">
-      <button class="btn" id="runSolver">Run 3D solver</button>
-      <span class="lab">solver threads</span>
-      <!-- filled at load from navigator.hardwareConcurrency: see CELL3D_CORES -->
-      <div class="seg" id="thrSeg"></div>
-    </div>
-    <div class="fld">
-      <span class="lab">modal display phase</span>
-      <div class="seg" id="phaseSeg">
-        <button data-p="1" aria-pressed="true">phase I</button>
-        <button data-p="-1" aria-pressed="false">phase II</button>
-        <button data-p="swap" aria-pressed="false">swap</button>
-      </div>
-    </div>
-    <div class="fld">
-      <div class="top"><span class="lab">agitation</span><span class="v" id="agv">1.15</span></div>
-      <input type="range" id="ag" min="0.15" max="2.4" step="0.01" value="1.15">
-    </div>
-    <div style="display:flex;gap:5px">
-      <button class="btn" id="sprinkleBtn" disabled title="Modal sand visualization only" style="flex:1">re-sprinkle</button>
-      <button class="btn" id="play" disabled title="Modal playback only; nonlinear frames use solver time" aria-pressed="true" style="flex:1">running</button>
-      <button class="btn" id="reset" disabled title="Modal re-excitation only; use Run to restart the nonlinear solver" style="flex:1">re-excite</button>
-    </div>
-    <div class="fld">
-      <span class="lab">image export</span>
-      <div class="seg" id="expSeg">
-        <button data-s="2048" aria-pressed="false">2048</button>
-        <button data-s="3840" aria-pressed="true">4K</button>
-      </div>
-      <button class="btn" id="expBtn" style="margin-top:5px">render &amp; save</button>
-      <span class="lab" id="expNote" style="line-height:1.6"></span>
-    </div>
-    <div id="warnBox" style="display:grid;gap:6px"></div>
-    <div class="sep"></div>
-    <span class="lab">state</span>
-    <dl class="ro" id="ro"></dl>
+<div class="fld">
+<span class="lab">render</span>
+<div class="seg" id="viewSeg">
+<button aria-pressed="true" data-v="sand">sand</button>
+<button aria-pressed="false" data-v="optical">optical</button>
+<button aria-pressed="false" data-v="height">height</button>
+<button aria-pressed="false" data-v="nodal">nodal</button>
+</div>
+</div><div class="fld">
+<div class="top"><span class="lab">drive frequency</span>
+<span class="v"><input id="fnum" min="0" step="any" style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
+          font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px" type="number" value="111"/> Hz</span></div>
+<input id="f" max="5000" min="50" step="1" type="range" value="111"/>
+<div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
+</div><div class="fld" data-reference-control="">
+<div class="top"><span class="lab">reference apparatus amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
+<input id="a" max="1000" min="0" step="1" type="range" value="229"/>
+<span class="lab" id="accLab" style="text-align:right"></span>
+</div><label hidden="" id="generalAcceleration">Peak acceleration (m/s²) <input id="expAccel" min="0" step="any" type="number" value="7"/></label><div class="fld" data-ns-only="" hidden="">
+<span class="lab">Navier–Stokes engine</span>
+<div class="seg" id="srcSeg">
+<button aria-pressed="false" data-s="modal" hidden="">modal diagnostic</button>
+<button aria-pressed="false" data-s="dns">3D N-S (JS)</button>
+<button aria-pressed="true" data-s="dnscpp">3D N-S (C++)</button>
+</div>
+</div><div class="fld" data-sand-only="">
+<span class="lab">modal display phase</span>
+<div class="seg" id="phaseSeg">
+<button aria-pressed="true" data-p="1">phase I</button>
+<button aria-pressed="false" data-p="-1">phase II</button>
+<button aria-pressed="false" data-p="swap">swap</button>
+</div>
+</div><div class="fld" data-sand-only="">
+<div class="top"><span class="lab">agitation</span><span class="v" id="agv">1.15</span></div>
+<input id="ag" max="2.4" min="0.15" step="0.01" type="range" value="1.15"/>
+</div><div class="fld">
+<span class="lab">image export</span>
+<div class="seg" id="expSeg">
+<button aria-pressed="false" data-s="2048">2048</button>
+<button aria-pressed="true" data-s="3840">4K</button>
+</div>
+<button class="btn" id="expBtn" style="margin-top:5px">render &amp; save</button>
+<span class="lab" id="expNote" style="line-height:1.6"></span>
+</div>
+<details id="parameterDetails"><summary>Experiment parameters</summary><div class="detailBody">
+<div class="fld" data-sand-only="">
+<label class="lab" for="configurationMode">experiment configuration</label>
+<select id="configurationMode"><option value="general">General SI inputs</option><option selected="" value="reference">2017 apparatus reconstruction</option></select>
+<span style="font-size:10px;color:var(--ink2)">Initial values are editable examples, not measurements.</span>
+</div><div hidden="" id="generalInputs" style="display:grid;gap:7px">
+<label>Diameter (mm) <input id="expDiameter" min="0" step="any" type="number" value="30"/></label>
+<label>Depth (mm) <input id="expDepth" min="0" step="any" type="number" value="4"/></label>
+<label>Density ρ (kg/m³) <input id="expRho" min="0" step="any" type="number" value="1000"/></label>
+<label>Dynamic viscosity μ (Pa·s) <input id="expMu" min="0" step="any" type="number" value="0.001"/></label>
+<label>Surface tension γ (N/m) <input id="expSigma" min="0" step="any" type="number" value="0.0728"/></label>
+<label>Gravity (m/s²) <input id="expGravity" min="0" step="any" type="number" value="9.80665"/></label>
+
+<label>Initial azimuthal order m <input id="expSeedM" min="0" step="1" type="number" value="2"/></label>
+<label>Initial amplitude / depth <input id="expSeedFraction" min="0" step="any" type="number" value="0.0001"/></label>
+<span style="font-size:10px;color:var(--ink2)">Drive: g + a cos(2π f t). Kinematic viscosity is μ/ρ. Initial displacement: (amplitude/depth) × depth × Jₘ(jₘ,₁ r/R) cos(mθ); initial velocity is zero.</span>
+</div><div class="fld" data-reference-control="">
+<span class="lab">reference cell diameter</span>
+<div class="seg" id="cellSeg">
+<button aria-pressed="false" data-c="small">10.00</button>
+<button aria-pressed="true" data-c="medium">24.25</button>
+<button aria-pressed="false" data-c="large">49.50</button>
+</div>
+</div><div class="fld" data-reference-control="">
+<div class="top"><span class="lab">water temperature</span><span class="v"><span id="tv">20</span> °C</span></div>
+<input id="t" max="30" min="5" step="1" type="range" value="20"/>
+</div><div class="fld" data-reference-control="">
+<div class="top"><span class="lab">depth</span><span class="v"><span id="hv">3.0</span> mm</span></div>
+<input id="h" max="10" min="1" step="0.1" type="range" value="3"/>
+</div><div class="fld" data-sand-only="">
+<span class="lab">contact line</span>
+<div class="seg" id="rimSeg">
+<button aria-pressed="true" data-r="free">free (modal only)</button>
+<button aria-pressed="false" data-r="pinned">pinned</button>
+</div>
+</div><div class="fld" data-ns-only="" hidden="">
+
+<span class="lab">solver threads</span>
+<!-- filled at load from navigator.hardwareConcurrency: see CELL3D_CORES -->
+<div class="seg" id="thrSeg"></div>
+</div></div></details>
+<details><summary>Drawing and model details</summary><div class="detailBody">
+<div class="fld">
+<span class="lab">draw on</span>
+<div class="seg" id="engSeg">
+<button aria-pressed="true" data-e="cpu">CPU</button>
+<button aria-pressed="false" data-e="gpu">GPU</button>
+</div>
+<div aria-live="polite" id="renderStatus" role="status">CPU drawing.</div>
+</div><p data-sand-only>Sand is the existing modal visualization, including its assumed grain-transport model. It is separate from the nonlinear liquid solver.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder; a single-valued free surface; pinned contact line with no-slip floor and wall. No air dynamics, overturning, contact-angle hysteresis or deformable vessel. Finite numerical discretization, not an exact continuum solution. Initial values are editable examples, not measurements.</p></div></details>
+<div id="experimentError" role="alert" style="color:var(--red)"></div><div id="warnBox" style="display:grid;gap:6px"></div><details><summary>State and diagnostics</summary><dl class="ro" id="ro"></dl></details>
   </div>
 </div>
 
@@ -293,12 +285,12 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 
 <div class="insp" id="insp"></div>
 
-<div class="research">
+<div class="research" data-sand-only>
   <div class="research-hd">
     <span class="lab">navier-stokes · Floquet stability in this cell</span>
     <button id="dnsRun" class="seg" style="padding:4px 10px">run</button>
   </div>
-  <p>The deck above decides onset from a damped Mathieu form — one amplitude equation, with
+  <p>This optional modal diagnostic compares onset from a damped Mathieu form — one amplitude equation, with
   all the viscous damping folded into a single rate γ. This solves the incompressible
   Navier–Stokes equations instead, linearised about the flat layer <b>in this disc</b>: the
   same radius, depth, water and drive, with no slip on the floor and the sidewall, the full
@@ -8155,7 +8147,7 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'height';
+let view = 'sand';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -8429,8 +8421,8 @@ function drawAtlas(cellKey, f){
     + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
 })();
 
-let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
-let experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
+let workspace = 'sand', experimentMode = 'reference', comparePaper = true, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
 let problemKey = null, resolutionKey = null, solverRequested = false;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
@@ -8459,8 +8451,7 @@ function tfeOf(){
 }
 
 function recompute(){
-  for (const id of ['play','reset','sprinkleBtn']) $(id).disabled = useSolver;
-  $('play').textContent = useSolver ? 'modal playback' : running ? 'running' : 'paused';
+  $('play').textContent = running ? 'running' : 'paused';
   const experiment = experimentMode === 'general'
     ? { ...generalInput, frequencyHz: freq, contact: rim } : null;
   const inputs = { cellKey, f: freq, amplitudeMv: amp, tempC: temp, depthMm: depth, rim, driveR: 0, experiment };
@@ -8471,22 +8462,16 @@ function recompute(){
     resolutionKey = key;
   }
   state.expression = useSolver || experiment ? 1 : amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf()));
-  const nextKey = JSON.stringify([state.cellDiameterMm, state.depthMm, state.water,
-    state.gravity, state.accelAssumed, freq, rim, state.experiment?.seedMode, state.experiment?.seedFraction]);
-  if (problemKey !== null && problemKey !== nextKey){
-    CELL3D.reset(); solverRequested = false;
-  }
-  problemKey = nextKey;
   if (useSolver){
+    const nextKey = JSON.stringify([state.cellDiameterMm, state.depthMm, state.water,
+      state.gravity, state.accelAssumed, freq, rim, state.experiment?.seedMode, state.experiment?.seedFraction]);
+    if (problemKey !== null && problemKey !== nextKey){ CELL3D.reset(); solverRequested = false; }
+    problemKey = nextKey;
     state.visualSignature = null;
     state.expression = 1;
     const c = CELL3D.clocks();
-    if (!c.err && c.have) CELL3D.build(state);
-    else {
-      for (const field of [ETA, IMF, NX, NY, GIX, GIY, PGX, PGY]) field.fill(0);
-      BIN.fill(0); FIELD_GEN++;
-      state.render = { drawn: 0, gatedRms: 0, gated: 0 };
-    }
+    if (c.have) CELL3D.build(state);
+    else CELL3D.preview(state);
   } else buildSurface(state);
   paintDeck(); paintInspector();
   $('referenceAtlas').hidden = !comparePaper;
@@ -8509,7 +8494,7 @@ function paintDeck(){
       ['contact line', e.contact === 'pinned' ? 'pinned; no-slip floor and wall' : 'free — nonlinear law unsupported'],
       ['initial displacement', `J_${e.seedMode} first-root profile; amplitude ${e.seedFraction*e.depthMm/1000} m`],
       ['initial velocity', 'zero'],
-      ['status', c.err ? `failed: ${c.err}` : c.have ? 'solver frame available' : solverRequested ? 'starting' : 'not started'],
+      ['status', c.err ? `failed: ${c.err}` : c.starting ? 'starting from specified initial condition' : c.have ? c.live ? 'running' : c.pending ? 'pausing after current slice' : 'paused' : 'initial condition; not evolved'],
       ['physics clock', `${(c.physT*1000).toFixed(3)} ms`], ['wall clock', `${c.wall.toFixed(3)} s`],
       ['ratio', c.physT > 0 ? `${c.ratio.toFixed(1)}× slower than real time · ${c.perStep.toFixed(1)} ms a step` : 'not measured'],
       ['steps taken', `${c.stepsDone}`],
@@ -8690,15 +8675,15 @@ function paintOverlay(){
   $('oD').textContent = s.cellDiameterMm.toFixed(2);
   const pI = phaseSign > 0;
   $('oPh').className = 'ph' + (pI ? '' : ' two');
-  $('oPhT').textContent = useSolver ? 'instantaneous field' : pI ? 'phase I' : 'phase II';
+  $('oPhT').textContent = useSolver ? CELL3D.clocks().have ? 'solver field' : 'specified initial condition' : pI ? 'phase I' : 'phase II';
   $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
   $('oM').textContent = s.states.length ? s.states[0].m : '—';
   $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
   $('oRisk').textContent = s.transitionRisk === null ? 'no empirical prior' : 'risk ' + s.transitionRisk.toFixed(2);
-  $('oExp').textContent = useSolver ? `solver time ${(CELL3D.clocks().physT*1000).toFixed(3)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
+  $('oExp').textContent = useSolver ? `${CELL3D.clocks().have ? 'solver time' : 'initial condition · t ='} ${(CELL3D.clocks().physT*1000).toFixed(3)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
     + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
   const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
-  $('oMode').textContent = useSolver ? `nonlinear field · pinned rim · initial m=${s.experiment?.seedMode ?? 'reference'}` : `J′ mode m=${m.m} n=${m.n}`;
+  $('oMode').textContent = useSolver ? `${CELL3D.clocks().have ? 'nonlinear field' : 'not evolved'} · pinned rim · initial m=${s.experiment?.seedMode ?? 'reference'}` : `J′ mode m=${m.m} n=${m.n}`;
 }
 
 function seg(id, apply){
@@ -8711,7 +8696,7 @@ seg('cellSeg', b => { cellKey = b.dataset.c;
   $('atlasWho').textContent = CELLS[cellKey].atlas
     ? `${CELLS[cellKey].d.toFixed(2)} mm, ${CELLS[cellKey].note}`
     : `${CELLS[cellKey].d.toFixed(2)} mm — ${CELLS[cellKey].note}`; });
-seg('rimSeg', b => { rim = b.dataset.r; });
+seg('rimSeg', b => { rim = useSolver ? 'pinned' : b.dataset.r; });
 seg('phaseSeg', b => {
   if (b.dataset.p === 'swap'){ swapping = true; }
   else { swapping = false; phaseSign = +b.dataset.p; }
@@ -8721,27 +8706,14 @@ seg('viewSeg', b => {
   view = b.dataset.v;
 });
 seg('engSeg', b => setRenderEngine(b.dataset.e));
-/* Switching to the solver starts it from the deck's current operating point. Switching
-   back stops the worker rather than leaving it burning a core behind a picture nobody
-   is looking at. */
+seg('workspaceSeg', b => switchWorkspace(b.dataset.workspace));
 seg('srcSeg', b => {
-  const want = b.dataset.s !== 'modal';
-  /* The two solver buttons are the SAME solver: dns/faraday_cell3d.cpp is a
-     transcription of dns/faraday-cell3d.js and dns/check-cell3d-wasm.mjs holds the
-     two to identical fields over a whole drive period, so this chooses how long
-     you wait and nothing about what you see. The deck reports which one ran, and
-     the C++ one refuses rather than falling back if its module cannot be loaded. */
+  if (b.dataset.s === 'modal'){ switchWorkspace('sand'); return; }
+  if (!useSolver) switchWorkspace('ns');
   const eng = b.dataset.s === 'dnscpp' ? 'cpp' : 'js';
-  if (want === useSolver && eng === cell3dEngine) return;
+  if (eng === cell3dEngine) return;
   cell3dEngine = eng;
-  useSolver = want;
-  CELL3D.reset(); solverRequested = false;
-  document.querySelector('#viewSeg [data-v="sand"]').disabled = want;
-  if (want && view === 'sand'){
-    view = 'height';
-    document.querySelectorAll('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === view)));
-  }
-  dirty = true;
+  CELL3D.reset(); solverRequested = false; dirty = true;
 });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
@@ -8777,7 +8749,7 @@ $('a').addEventListener('input', e => {
 bind('t', 'tv', v => temp = v);
 bind('h', 'hv', v => depth = v, v => v.toFixed(1));
 bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
-$('sprinkleBtn').addEventListener('click', sprinkle);
+$('sprinkleBtn').addEventListener('click', () => { sprinkle(); dirty=true; });
 $('play').addEventListener('click', e => {
   if (!running) t0 = performance.now() - simT*1000;
   running = !running; e.target.setAttribute('aria-pressed', String(running));
@@ -8791,9 +8763,19 @@ sc.addEventListener('click', e => {
 
 let exporting = false;
 async function exportImage(SIZE, onProgress){
-  if (useSolver && $('experimentError').textContent) throw new Error($('experimentError').textContent);
+  if ($('experimentError').textContent) throw new Error($('experimentError').textContent);
   if (dirty) recompute();
   const exportRnd = mulberry32(EXPORT_SEED);
+  let exportDeadline=performance.now()+10;
+  const exportYield=() => new Promise(resolve => setTimeout(() => {
+    exportDeadline=performance.now()+10;resolve();
+  },0));
+  const exportChunks=async(count,size,work) => {
+    for(let begin=0;begin<count;begin+=size){
+      work(begin,Math.min(count,begin+size));
+      if(performance.now()>=exportDeadline)await exportYield();
+    }
+  };
 
   const g = SIZE % 2 ? SIZE : SIZE + 1;
   if (g % 2 === 0) throw new Error('export grid must be odd');
@@ -8807,7 +8789,7 @@ async function exportImage(SIZE, onProgress){
   const exportGain = solverSnapshot ? 1 : phaseSign*st.expression;
   const exportSignature = solverSnapshot || !st.visualSignature ? null : { ...st.visualSignature };
   const exportAgitation = agitation;
-  const exportLabel = { diameterMm: st.cellDiameterMm, frequencyHz: freq, model: solverSnapshot ? 'navier-stokes' : 'modal', view: exportView };
+  const exportLabel = { diameterMm: st.cellDiameterMm, frequencyHz: freq, model: solverSnapshot ? 'navier-stokes' : 'modal', view: exportView, fieldTag: solverSnapshot ? solverSnapshot.provenance.fieldKind === 'initial-condition' ? 'initial-t0' : `t${solverSnapshot.provenance.physicalTime.toFixed(9)}s` : null };
   const usable = solverSnapshot ? [] : st.states.filter(x => 2*Math.PI*rr/finestZeroOf(x.radial) >= RES_GATE);
   if (!solverSnapshot && !usable.length) throw new Error('every mode is below the resolution gate even at this size');
 
@@ -8834,7 +8816,8 @@ async function exportImage(SIZE, onProgress){
     const seen = new Uint8Array(rsqMax + 1);
     for (let ay = 0; ay <= cc; ay++){
       const ay2 = ay*ay; if (ay2 > rsqMax) break;
-      for (let ax = 0; ax <= cc; ax++){
+      await exportChunks(cc+1,pinE ? 32 : 512,(begin,end) => {
+      for (let ax = begin; ax < end; ax++){
         const q = ax*ax + ay2; if (q > rsqMax) break;
         if (seen[q]) continue;
         seen[q] = 1;
@@ -8851,10 +8834,11 @@ async function exportImage(SIZE, onProgress){
         const pr = besselPair(m, jp*Math.sqrt(q)/rr);
         jr[q] = pr[0]; dr[q] = jp*pr[1];
       }
+      });
     }
     tables.push({ jr, dr, m, w: sMode.weight, phi: sMode.phi || 0 });
     onProgress(`mode ${mi+1} of ${usable.length}`);
-    await new Promise(r => setTimeout(r, 0));
+    await exportYield();
   }
 
   const cvx = document.createElement('canvas');
@@ -8904,7 +8888,8 @@ async function exportImage(SIZE, onProgress){
 
   onProgress('measuring field extent');
   let mx = solverSnapshot ? 0 : 1e-9, gmx = solverSnapshot ? 0 : 1e-9, sumsq = 0, nSamp = 0;
-  for (let y = 0; y < SIZE; y++){
+  await exportChunks(SIZE,2,(begin,end) => {
+  for (let y = begin; y < end; y++){
     for (let x = 0; x < SIZE; x++){
       const v = evalAt(x + off - cc, y + off - cc);
       if (!v) continue;
@@ -8913,6 +8898,7 @@ async function exportImage(SIZE, onProgress){
       sumsq += v.Re*v.Re; nSamp++;
     }
   }
+  });
   const inv = mx > 0 ? 1/mx : 1, ginv = gmx > 0 ? 1/gmx : 1;
   if (contrast === null){
     if (!nSamp) throw new Error(
@@ -8930,7 +8916,8 @@ async function exportImage(SIZE, onProgress){
     const tc = transportCoefficients(st.damping, st.wavelength);
     const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
     let dmax = 1e-9;
-    for (let y = 0; y < SIZE; y++){
+    await exportChunks(SIZE,2,(begin,end) => {
+    for (let y = begin; y < end; y++){
       for (let x = 0; x < SIZE; x++){
         const v = evalAt(x + off - cc, y + off - cc);
         if (!v) continue;
@@ -8944,23 +8931,34 @@ async function exportImage(SIZE, onProgress){
         const d = Math.hypot(px, py); if (d > dmax) dmax = d;
       }
       if ((y & 255) === 0){ onProgress(`transport field ${(100*y/SIZE).toFixed(0)}%`);
-                            await new Promise(r => setTimeout(r, 0)); }
+                             }
     }
+    });
     const dinv = 1/dmax;
-    for (let i = 0; i < PGXe.length; i++){ PGXe[i] *= dinv; PGYe[i] *= dinv; }
+    await exportChunks(PGXe.length,32768,(begin,end) => {
+    for (let i = begin; i < end; i++){
+      PGXe[i] *= dinv; PGYe[i] *= dinv;
+    }
+    });
 
     const N = NP;
     const rg0 = Math.max(0.5, SCALE/2);
 
     const grad = new Float32Array(N);
-    for (let p = 0; p < N; p++) grad[p] = rg0*(0.8 + 0.4*exportRnd());
+    await exportChunks(N,4096,(begin,end) => {
+    for (let p = begin; p < end; p++){
+      grad[p] = rg0*(0.8 + 0.4*exportRnd());
+    }
+    });
     const gx = new Float32Array(N), gy = new Float32Array(N),
           gvx = new Float32Array(N), gvy = new Float32Array(N);
     const ccE = cc - off;
-    for (let p = 0; p < N; p++){
+    await exportChunks(N,2048,(begin,end) => {
+    for (let p = begin; p < end; p++){
       const a = exportRnd()*Math.PI*2, rad = Math.sqrt(exportRnd())*(rr - 2);
       gx[p] = ccE + rad*Math.cos(a); gy[p] = ccE + rad*Math.sin(a);
     }
+    });
     const cellPx = Math.max(1, SCALE);
     const gw = Math.ceil(SIZE/cellPx);
     const occ = new Float32Array(gw*gw);
@@ -8977,13 +8975,16 @@ async function exportImage(SIZE, onProgress){
     const jitter = AGIT*exportAgitation;
     let refused = 0, toppleSweeps = 0;
     const occLive = new Float32Array(gw*gw);
-    const shedSurplus = () => {
+    const shedSurplus = async () => {
       toppleSweeps++;
       occLive.fill(0);
-      for (let p = 0; p < N; p++){
+      await exportChunks(N,4096,(begin,end) => {
+      for (let p = begin; p < end; p++){
         const c = cellOf(gx[p], gy[p]); if (c >= 0) occLive[c] += 1;
       }
-      for (let p = 0; p < N; p++){
+      });
+      await exportChunks(N,256,(begin,end) => {
+      for (let p = begin; p < end; p++){
         const cx0i = (gx[p]/cellPx)|0, cy0i = (gy[p]/cellPx)|0;
         if (cx0i < 0 || cy0i < 0 || cx0i >= gw || cy0i >= gw) continue;
         const c = cy0i*gw + cx0i;
@@ -9008,9 +9009,11 @@ async function exportImage(SIZE, onProgress){
           }
         }
       }
+      });
     };
     for (let step = 0; step < STEPS; step++){
-      for (let p = 0; p < N; p++){
+      await exportChunks(N,1024,(begin,end) => {
+      for (let p = begin; p < end; p++){
         const x0 = gx[p], y0 = gy[p];
         const xi = x0|0, yi = y0|0;
         if (xi < 0 || yi < 0 || xi >= SIZE || yi >= SIZE) continue;
@@ -9028,14 +9031,17 @@ async function exportImage(SIZE, onProgress){
         }
         gx[p] = x; gy[p] = y; gvx[p] = vx; gvy[p] = vy;
       }
-      if (step % TOPPLE_EVERY === TOPPLE_EVERY - 1) shedSurplus();
+      });
+      if (step % TOPPLE_EVERY === TOPPLE_EVERY - 1) await shedSurplus();
       if ((step & 31) === 0){ onProgress(`settling grains ${(100*step/STEPS).toFixed(0)}%`);
-                              await new Promise(r => setTimeout(r, 0)); }
+                              await exportYield(); }
     }
 
-    for (let p = 0; p < N; p++){
+    await exportChunks(N,4096,(begin,end) => {
+    for (let p = begin; p < end; p++){
       const c = cellOf(gx[p], gy[p]); if (c >= 0) occ[c] += 1;
     }
+    });
     const sweeps = toppleSweeps;
 
     const PASS_CAP = 90;
@@ -9057,7 +9063,8 @@ async function exportImage(SIZE, onProgress){
     for (; passes < PASS_CAP; passes++){
       rehash();
       worstOverlap = 0;
-      for (let q = 0; q < N; q++){
+      await exportChunks(N,256,(begin,end) => {
+      for (let q = begin; q < end; q++){
         const cxi = (gx[q]/hcell)|0, cyi = (gy[q]/hcell)|0;
         for (let ddy = -1; ddy <= 1; ddy++) for (let ddx = -1; ddx <= 1; ddx++){
           const nx = cxi + ddx, ny = cyi + ddy;
@@ -9078,11 +9085,14 @@ async function exportImage(SIZE, onProgress){
           }
         }
       }
-      for (let q = 0; q < N; q++){
+      });
+      await exportChunks(N,4096,(begin,end) => {
+      for (let q = begin; q < end; q++){
         const rx = gx[q] - ccE, ry = gy[q] - ccE, r = Math.hypot(rx, ry);
         const lim = rr - grad[q];
         if (r > lim){ const k = lim/r; gx[q] = ccE + rx*k; gy[q] = ccE + ry*k; }
       }
+      });
       if (worstOverlap < best){
         best = worstOverlap;
         bx.set(gx); by.set(gy);
@@ -9091,14 +9101,15 @@ async function exportImage(SIZE, onProgress){
       if ((passes & 3) === 0){
         onProgress(`relaxing to contact, pass ${passes+1} (overlap `
           + `${(100*worstOverlap).toFixed(0)}%)`);
-        await new Promise(r => setTimeout(r, 0));
+        await exportYield();
       }
     }
 
     if (best < worstOverlap){ gx.set(bx); gy.set(by); worstOverlap = best; }
 
     sandBIN = new Float32Array(SIZE*SIZE);
-    for (let p = 0; p < N; p++){
+    await exportChunks(N,256,(begin,end) => {
+    for (let p = begin; p < end; p++){
       const rg = grad[p], rg2 = rg + 0.7071;
       const px = gx[p], py = gy[p];
       const x0 = Math.max(0, Math.floor(px - rg2)), x1 = Math.min(SIZE-1, Math.ceil(px + rg2));
@@ -9115,8 +9126,9 @@ async function exportImage(SIZE, onProgress){
         }
       }
       if ((p & 8191) === 0){ onProgress(`depositing ${(100*p/N).toFixed(0)}%`);
-                             await new Promise(r => setTimeout(r, 0)); }
+                              }
     }
+    });
     const grainMm = st.cellDiameterMm/(2*RR);
     let filled = 0;
     for (let c = 0; c < occ.length; c++) if (occ[c] > 0) filled++;
@@ -9131,7 +9143,8 @@ async function exportImage(SIZE, onProgress){
 
   onProgress('painting');
   const SLOPE = 0.8;
-  for (let y = 0; y < SIZE; y++){
+  await exportChunks(SIZE,2,(begin,end) => {
+  for (let y = begin; y < end; y++){
     for (let x = 0; x < SIZE; x++){
       const i = (y*SIZE + x)*4;
       const dx = x + off - cc, dy = y + off - cc;
@@ -9176,8 +9189,9 @@ async function exportImage(SIZE, onProgress){
       op[i+3] = 255;
     }
     if ((y & 255) === 0){ onProgress(`painting ${(100*y/SIZE).toFixed(0)}%`);
-                          await new Promise(r => setTimeout(r, 0)); }
+                           }
   }
+  });
 
   let lit = 0, inside = 0;
   for (let y = 0; y < SIZE; y += 7) for (let x = 0; x < SIZE; x += 7){
@@ -9223,7 +9237,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     btn.textContent = 'encoding PNG';
     const blob = await new Promise(r => res.canvas.toBlob(r, 'image/png'));
     const exportLabel = res.label;
-    const name = `faraday-${exportLabel.diameterMm.toFixed(2)}mm-${exportLabel.frequencyHz}Hz-${exportLabel.model}-${exportLabel.view}-${requestedSize}.png`;
+    const name = `faraday-${exportLabel.diameterMm.toFixed(2)}mm-${exportLabel.frequencyHz}Hz-${exportLabel.model}${exportLabel.fieldTag ? "-"+exportLabel.fieldTag : ""}-${exportLabel.view}-${requestedSize}.png`;
     if (saver){ await saver.save({ filename: name, data: blob }); }
     else {
       const url = URL.createObjectURL(blob);
@@ -9242,7 +9256,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     note.textContent = (e && e.code === 'declined') ? 'save declined'
       : 'export failed: ' + (e && (e.message || e.code) || e);
   } finally {
-    btn.textContent = 'render & save'; exporting = false;
+    btn.textContent = 'render & save'; releaseExportPreview(); exporting = false;
   }
 });
 
@@ -9608,12 +9622,15 @@ document.getElementById('expBtn').addEventListener('click', async () => {
 })();
 
 let lastBuild = -1;
+let lastDrawnField=-1,lastDrawnView=null,lastDrawnPhase=null,lastDrawnGain=null,lastDrawnEngine=null;
+function releaseExportPreview(){if(!useSolver)t0=performance.now()-simT*1000;}
 function loop(now){
   try {
   if (renderError) return;
-  if (running) simT = (now - t0)/1000;
+  if(exporting && !useSolver)t0=now-simT*1000;
+  if (running && !useSolver && !exporting) simT = (now - t0)/1000;
 
-  if (swapping && running){
+  if (swapping && running && !useSolver && !exporting){
     swapAcc += 16.7;
     if (swapAcc > 900){ swapAcc = 0; phaseSign = -phaseSign; }
   }
@@ -9623,19 +9640,34 @@ function loop(now){
          state.expression = useSolver || state.experiment ? 1 : amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
   const clock = CELL3D.clocks();
   const inputError = $('experimentError').textContent;
-  const pending = useSolver && (!clock.have || clock.err || inputError);
-  $('solverOverlay').style.display = pending ? 'flex' : 'none';
-  if (pending){
-    $('solverOverlay').textContent = inputError ? `Inputs invalid: ${inputError}` : clock.err ? `Solver failed: ${clock.err}` : solverRequested ? 'Nonlinear solver starting; no replacement surface is displayed.' : 'Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.';
-    $('expBtn').disabled = true;
-    paintOverlay(); FARADAY_STARTUP.ready(); return;
+  const blocked = inputError || (useSolver && clock.err);
+  $('solverOverlay').style.display = blocked ? 'block' : 'none';
+  if (blocked) $('solverOverlay').textContent = inputError ? `Inputs invalid: ${inputError}` : `Solver failed: ${clock.err}`;
+  if (useSolver){
+    $('solverStatus').textContent = inputError ? `Inputs invalid: ${inputError}` : clock.err ? `Solver failed: ${clock.err}`
+      : clock.starting ? 'Starting the solver · specified initial condition shown'
+      : clock.have ? `${clock.live ? 'Running' : clock.pending ? 'Pausing after current slice' : 'Paused'} · physical time ${(clock.physT*1000).toFixed(3)} ms · ${clock.stepsDone} steps`
+      : `${clock.ready && !clock.live ? 'Paused before first step · ' : ''}Specified initial condition · t = 0 · not evolved`;
+    $('pauseSolver').textContent = clock.live ? 'Pause' : 'Resume';
+    $('pauseSolver').disabled = !!clock.err || (!clock.have && !clock.starting && !clock.ready);
+    $('runSolver').textContent = clock.have || clock.starting || clock.ready ? 'Restart' : 'Run';
   }
-  $('expBtn').disabled = exporting;
-  if (view === 'sand' && running){
+  $('expBtn').disabled = exporting || !!blocked;
+  if (view === 'sand' && running && !exporting){
     const gain = useSolver ? 1 : phaseSign*state.expression;
     stepGrains(gain); stepGrains(gain); stepGrains(gain);
   }
-  renderSurface(state);
+  const previewAnimating=!useSolver && running && !exporting;
+  if(previewAnimating || lastDrawnField!==FIELD_GEN || lastDrawnView!==view
+      || lastDrawnPhase!==phaseSign || lastDrawnGain!==state.expression || lastDrawnEngine!==renderEngine){
+    renderSurface(state);
+    lastDrawnField=FIELD_GEN;lastDrawnView=view;lastDrawnPhase=phaseSign;
+    lastDrawnGain=state.expression;lastDrawnEngine=renderEngine;
+  }
+  const workspaceText=useSolver ? 'Nonlinear liquid solver · General SI inputs · pinned rim · no modal substitution'
+    : exporting ? 'Sand preview paused while exporting · your playback setting is preserved'
+    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+  if($('workspaceNote').textContent!==workspaceText)$('workspaceNote').textContent=workspaceText;
   paintOverlay();
   FARADAY_STARTUP.ready();
   } catch (error){
@@ -9676,6 +9708,7 @@ function loop(now){
    ─────────────────────────────────────────────────────────────────────────── */
 const CELL3D = (function(){
   let worker = null, vessel = null, running3d = false, err = null;
+  let starting3d = false, workerReady = false, slicePending = false, initialPreview = null;
   let physT = 0, wall = 0, stepsDone = 0, perStep = 0, grid = null;
   /* The generation this run belongs to, and the engine that actually answered.
      `ranEngine` is read back off the worker's own messages rather than copied from
@@ -9867,15 +9900,15 @@ const CELL3D = (function(){
              : new FARADAY_CELL3D.FaradayCell3D(o));
        };`].join('\n;\n');
     const h = new Worker(URL.createObjectURL(new Blob([helperBody], { type: 'text/javascript' })));
+    const owner=worker;
     helpersMade++;
-    /* A helper that dies never answers the step waiting on it. The solver's worker is told,
-       so its pool fails that step with this reason -- otherwise the step, and every command
-       queued behind it, would wait for good. A helper of a run already replaced is nobody's
-       concern: its pool is gone. */
+    /* Report failure to the owning worker even after a new generation was requested:
+       the old pool may still be completing a step before the queued init can start.
+       Only the current generation may change the visible error state. */
     h.onerror = ev => {
-      if (myGen !== gen) return;
       const reason = 'failed: ' + (ev.message || 'the browser gave no message');
-      if (worker) worker.postMessage({ cmd: 'helperFailed', gen: myGen, index, reason });
+      if(owner) owner.postMessage({cmd:'helperFailed',gen:myGen,index,reason});
+      if(myGen !== gen) return;
       err = 'solver thread ' + (index + 1) + ' ' + reason;
       running3d = false; dirty = true;
     };
@@ -9894,6 +9927,62 @@ const CELL3D = (function(){
     return out;
   }
 
+  function initialCondition(st){
+    const e = st.experiment;
+    if (!e || e.contact !== 'pinned') throw new Error('The nonlinear workspace requires explicit SI inputs and a pinned rim.');
+    const m = e.seedMode;
+    const maxNth = 2*Math.floor(FARADAY_CELL3D.CELL3D_MAX_CELLS
+      /(2*FARADAY_CELL3D.CELL3D_SIZE_NR[0]*FARADAY_CELL3D.CELL3D_SIZE_NZ[0]));
+    if (m >= maxNth/2) throw new Error(`Initial mode m=${m} cannot be represented below the azimuthal Nyquist limit of any grid within the ${FARADAY_CELL3D.CELL3D_MAX_CELLS}-cell arena. The requested mode was not changed.`);
+    const root = FARADAY_KERNEL.jZeroNear(m, Math.max(.02,m-2));
+    if (!(root > 0)) throw new Error(`Could not resolve the pinned initial-condition root for m=${m}.`);
+    const R=e.diameterMm/2000, h=e.depthMm/1000, amplitude=e.seedFraction*h;
+    if (!(R>0) || !(h>0) || !Number.isFinite(R) || !Number.isFinite(h) || !Number.isFinite(amplitude))
+      throw new Error('Initial geometry and displacement must remain finite in SI units.');
+    let minDepth=h;
+    if(m>0){
+      const peakRoot=FARADAY_KERNEL.jpZeroNear(m,Math.max(.02,m-2));
+      if(!(peakRoot>0 && peakRoot<root)) throw new Error('Could not resolve the initial surface minimum.');
+      minDepth=h-amplitude*FARADAY_KERNEL.besselJ(m,peakRoot);
+    }
+    if (!(minDepth>0)) throw new Error(`Initial surface reaches or crosses the floor: minimum layer depth ${minDepth} m. Choose a valid initial displacement; no clipping was applied.`);
+    const provenance={model:'nonlinear-incompressible-free-surface-navier-stokes',fieldKind:'initial-condition',
+      physicalTime:0,steps:0,engine:null,
+      parameters:{R,h,rho:e.rho,nu:e.mu/e.rho,gamma:e.sigma,g:e.gravity,accel:e.acceleration,omegaD:2*Math.PI*e.frequencyHz,contact:'pinned'},
+      initialCondition:{kind:'first-root-bessel',m,root,amplitudeM:amplitude,minimumDepthM:minDepth},
+      display:'normalized specified initial displacement; not an evolved solver result'};
+    function at(rho,theta){
+      const pair=FARADAY_KERNEL.besselPair(m,root*rho), cm=Math.cos(m*theta), sm=Math.sin(m*theta);
+      const re=rho === 1 ? 0 : amplitude*pair[0]*cm;
+      const dr=amplitude*root*pair[1]*cm;
+      const dt=rho > 0 ? -amplitude*m*pair[0]*sm/rho : m === 1 ? -amplitude*root*sm/2 : 0;
+      const c=Math.cos(theta),sn=Math.sin(theta);
+      return {Re:re,Im:0,gRx:dr*c-dt*sn,gRy:dr*sn+dt*c,gIx:0,gIy:0};
+    }
+    return {root,m,R,h,amplitude,at,provenance};
+  }
+  function preview(st){
+    const key=JSON.stringify(st.experiment);
+    try {
+      if (!initialPreview || initialPreview.key !== key){
+        const ic=initialCondition(st), re=new Float32Array(NSZ), gx=new Float32Array(NSZ), gy=new Float32Array(NSZ);
+        for(let i=0;i<NSZ;i++) if(COVER[i]>0){
+          const v=ic.at(Math.min(1,RAD[i]),ANG[i]);re[i]=v.Re;gx[i]=v.gRx;gy[i]=v.gRy;
+        }
+        initialPreview={...ic,key,re,gx,gy};
+      }
+      ETA.set(initialPreview.re);NX.set(initialPreview.gx);NY.set(initialPreview.gy);
+      st.render={drawn:1,gatedRms:0,gated:0,initial:true};finishSurface(st);
+      return true;
+    } catch(e){
+      err=String(e.message||e);initialPreview=null;ETA.fill(0);NX.fill(0);NY.fill(0);finishSurface(st);return false;
+    }
+  }
+  function scheduleSlice(){
+    if (!running3d || !workerReady || slicePending || err) return;
+    slicePending=true;worker.postMessage({cmd:'slice',gen});
+  }
+
   async function start(st){
     /* The new generation FIRST, before anything awaited. The previous run's handler stays
        installed until this run replaces it, several awaits from here -- fetching sources,
@@ -9903,31 +9992,32 @@ const CELL3D = (function(){
        the surface held then belonged to two runs at once. The page's thread check caught it,
        replaying a frame that reported 43 steps and matched none of them. */
     const myGen = ++gen;
-    try { await startInner(st, myGen); }
+    const request={engine:cell3dEngine,threads:cell3dThreads};
+    running3d=true;starting3d=true;workerReady=false;slicePending=false;err=null;
+    haveFrame=false;physT=wall=stepsDone=0;dirty=true;
+    try {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      if(myGen !== gen) return;
+      await startInner(st, myGen, request);
+    }
     catch (e){
       /* A start that a newer one has replaced has nothing left to report to: the page is
          showing the newer run, and this error belongs to a run nobody is waiting for. */
-      if (myGen === gen){ err = String(e && e.message || e); running3d = false; dirty = true; }
+      if (myGen === gen){ err = String(e && e.message || e); running3d = false; starting3d=false; slicePending=false; dirty = true; }
     }
   }
-  async function startInner(st, myGen){
+  async function startInner(st, myGen, request){
     err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
     const e = st.experiment;
     if (!e) throw new Error('Nonlinear runs require General SI inputs and physical acceleration; an assumed apparatus mV calibration is not accepted.');
-    if (rim !== 'pinned') throw new Error('Nonlinear free-contact dynamics require a compatible slip/contact-angle law. This simulator supports the pinned rim only.');
-    const m = e.seedMode;
-    const maxNth = 2*Math.floor(FARADAY_CELL3D.CELL3D_MAX_CELLS
-      /(2*FARADAY_CELL3D.CELL3D_SIZE_NR[0]*FARADAY_CELL3D.CELL3D_SIZE_NZ[0]));
-    if (m >= maxNth/2) throw new Error(`Initial mode m=${m} cannot be represented below the azimuthal Nyquist limit of any grid within the ${FARADAY_CELL3D.CELL3D_MAX_CELLS}-cell arena. Choose a representable initial condition; the requested mode was not changed.`);
-    const R = st.cellDiameterMm*5e-4, h = st.depthMm*1e-3, pinned = true;
-    const water = { rho: st.water.rho, nu: st.water.mu/st.water.rho, gamma: st.water.sigma };
-    const root = FARADAY_KERNEL.jZeroNear(m, Math.max(0.02, m - 2));
-    if (!(root > 0)) throw new Error(`Could not resolve the pinned initial-condition root for m=${m}.`);
+    if (e.contact !== 'pinned') throw new Error('Nonlinear free-contact dynamics require a compatible slip/contact-angle law. This simulator supports the pinned rim only.');
+    const initial=initialCondition(st), {m,root,R,h}=initial, pinned=true;
+    const water = {rho:st.water.rho,nu:st.water.mu/st.water.rho,gamma:st.water.sigma};
     const kTest = root/R;
     const size = FARADAY_CELL3D.suggestCell3DGrid({
       m, k: kTest, R, h, ...water, g: st.gravity, accel: st.accelAssumed,
       contact: pinned ? 'pinned' : 'free',
-      omegaResponse: 2*Math.PI*freq, omegaDrive: 2*Math.PI*freq,
+      omegaResponse: 2*Math.PI*e.frequencyHz, omegaDrive: 2*Math.PI*e.frequencyHz,
       besselJ: FARADAY_KERNEL.besselJ });
     if (size.unreachable){
       const c = size.closest;
@@ -9946,7 +10036,7 @@ const CELL3D = (function(){
     const opts = { nr: size.nr, nth: size.nth, nz: size.nz,
                    rStretch: size.rStretch, zStretch: size.zStretch,
                    R, h, ...water, g: st.gravity,
-                   accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
+                   accel: st.accelAssumed, omegaD: 2*Math.PI*e.frequencyHz,
                    contact: pinned ? 'pinned' : 'free' };
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
     grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R,
@@ -9966,11 +10056,12 @@ const CELL3D = (function(){
        "solver starting" for good. So the workers this start makes are its own until it has
        won, and after each await it checks, and if it has been overtaken it ends them and
        leaves. */
-    const engine = cell3dEngine, threads = cell3dThreads;
+    const {engine,threads}=request;
     const wasmBytes = engine === 'cpp' ? await cellWasmBytes() : null;
     if (myGen !== gen) return;
     const w = await ensureWorker();
     if (myGen !== gen) return;
+    if(worker !== w) throw new Error('The solver worker stopped during initialization. Press Run to create a new worker.');
     /* S11: the threads asked for, this one included, and never more than the radial rows
        there are to divide -- the pool refuses an idle worker rather than pretending. */
     const want = Math.max(1, Math.min(threads, opts.nr));
@@ -9978,13 +10069,14 @@ const CELL3D = (function(){
     for (let t = 1; t < want; t++){
       mine.push(await startHelper(engine, wasmBytes, myGen, t - 1));
       if (myGen !== gen){ for (const h of mine) endHelper(h); return; }
+      if(worker !== w){for(const h of mine) endHelper(h);throw new Error('The solver worker stopped during initialization. Press Run to create a new worker.');}
     }
     /* Won. The previous run's workers retire -- the solver may still be finishing a slice
        on them -- and this run's become the page's. */
     retiring.push(...helpers);
     helpers = mine;
     ranEngine = null; ranThreads = 0;
-    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine };
+    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine, initialCondition:{...initial.provenance.initialCondition} };
     w.onmessage = ev => {
       const d = ev.data;
       if (d.gen !== undefined && (d.gen !== myGen || myGen !== gen)) return;   /* a previous run's */
@@ -9993,35 +10085,52 @@ const CELL3D = (function(){
          whether this run then starts or fails. */
       for (const r of retiring) endHelper(r);
       retiring = [];
-      if (!d.ok){ err = d.error; running3d = false; dirty = true; return; }
+      if (!d.ok){ err=d.error;running3d=false;starting3d=false;slicePending=false;dirty=true;return; }
       if (d.kind === 'ready'){
-        ranEngine = d.engine; ranThreads = d.threads;
-        w.postMessage({ cmd: 'slice', gen: myGen });
+        ranEngine=d.engine;ranThreads=d.threads;workerReady=true;starting3d=false;dirty=true;
+        scheduleSlice();
         return;
       }
       if (d.kind === 'frame'){
+        slicePending=false;
         ranEngine = d.engine; ranThreads = d.threads;
         etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
         wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
         haveFrame = true; dirty = true;
-        if (running3d) w.postMessage({ cmd: 'slice', gen: myGen });
+        scheduleSlice();
       }
     };
-    w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
-    running3d = true;
+    w.onerror = ev => {
+      if(worker !== w) return;
+      w.terminate();worker=null;workerP=null;
+      for(const h of [...helpers,...retiring]) endHelper(h);
+      helpers=[];retiring=[];
+      if(myGen !== gen) return;
+      err=ev.message||'worker failed';running3d=false;starting3d=false;slicePending=false;workerReady=false;dirty=true;
+    };
     const ports = helpers.map(h => h.port);
     w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
                     engine, wasmBytes, ports }, ports);
   }
 
-  function stop(){ running3d = false; }
+  function pause(){running3d=false;dirty=true;}
+  function stop(){pause();}
+  function resume(){
+    if(err || (!workerReady && !starting3d)) return false;
+    running3d=true;scheduleSlice();dirty=true;return true;
+  }
   function reset(){
-    running3d = false; haveFrame = false; err = null; gen++;
-    etaBuf = null; htBuf = null; dirty = true;
+    running3d=false;starting3d=false;workerReady=false;slicePending=false;haveFrame=false;err=null;gen++;
+    etaBuf=null;htBuf=null;initialPreview=null;vessel=null;lastRun=null;grid=null;
+    physT=wall=stepsDone=perStep=peakRaw=0;ranEngine=null;ranThreads=0;dirty=true;
   }
   function snapshot(){
-    if (err || !haveFrame || !vessel || !lastRun)
-      throw new Error(err || 'No nonlinear solver frame is available to export.');
+    if (err) throw new Error(err);
+    if (!haveFrame){
+      if (!initialPreview) throw new Error('No valid initial condition is available to export.');
+      return {provenance:structuredClone(initialPreview.provenance),at:initialPreview.at};
+    }
+    if (!vessel || !lastRun) throw new Error('No nonlinear solver frame is available to export.');
     const frozen = new FARADAY_CELL3D.FaradayCell3D(lastRun.opts);
     for (let i = 0; i < frozen.nr; i++) for (let j = 0; j < frozen.nth; j++){
       const e = frozen.ie(i, j), k = i*frozen.nth + j;
@@ -10029,9 +10138,9 @@ const CELL3D = (function(){
     }
     frozen.refreshMetric();
     return {
-      provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes',
+      provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes', fieldKind:'evolved-solver-frame',
         physicalTime: physT, steps: stepsDone, engine: ranEngine,
-        parameters: { ...lastRun.opts }, initialCondition: { kind: 'first-root-bessel', m: grid.m, amplitudeM: state.experiment.seedFraction*state.depthMm/1000 }, display: 'normalized surface snapshot; image size is not solver resolution' },
+        parameters: { ...lastRun.opts }, initialCondition:{...lastRun.initialCondition}, display: 'normalized surface snapshot; image size is not solver resolution' },
       at(rho, th){
         const r = rho*frozen.R, theta = th < 0 ? th + 2*Math.PI : th;
         const a = frozen.etaSlopeAt(r, theta);
@@ -10089,7 +10198,8 @@ const CELL3D = (function(){
   }
 
   const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
-                          live: running3d, have: haveFrame,
+                          live:running3d,have:haveFrame,starting:starting3d,pending:slicePending,ready:workerReady,
+                          paused:!running3d && (workerReady || starting3d),initial:!haveFrame && !!initialPreview,
                           engine: ranEngine, asked: cell3dEngine,
                           threads: ranThreads, askedThreads: cell3dThreads,
                           ratio: physT > 0 ? wall/physT : 0 });
@@ -10102,15 +10212,15 @@ const CELL3D = (function(){
   const threadWorkers = () => ({ live: helpers.length, retiring: retiring.length,
                                  made: helpersMade, ended: helpersEnded,
                                  workers: helpers.map(h => h.worker) });
-  return { start, stop, reset, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
+  return { start, stop, pause, resume, reset, preview, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = true;
+let useSolver = false;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
-let cell3dEngine = 'js';
+let cell3dEngine = 'cpp';
 /* S11: how many threads the solver's explicit terms are spread over, this page's solver
    thread included. The answer is the same to the bit on any number -- dns/check-cell3d-pool.mjs
    asserts it and dns/check-page.mjs checks it again here -- so this is a choice about time.
@@ -10132,10 +10242,70 @@ let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
 }
 
 
+const GENERAL_FIELDS = [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']];
+const workspaceSettings = {
+  sand: null,
+  ns: { cellKey: 'medium', freq: 111, amp: 180, temp: 20, depth: 3, rim: 'pinned',
+    experimentMode: 'general', generalInput: { ...generalInput }, view: 'height',
+    phaseSign: PHASE_I, swapping: false, agitation: 1.15, running: true, simT: 0,
+    comparePaper: false, referenceCell: 'medium', engine: 'cpp', threads: cell3dThreads,
+    error: '', frequencyText:'111', formValues: null }
+};
+function captureWorkspace(){
+  return { cellKey, freq, amp, temp, depth, rim, experimentMode, generalInput: { ...generalInput },
+    view, phaseSign, swapping, agitation, running, simT, comparePaper, referenceCell,
+    engine: cell3dEngine, threads: cell3dThreads, error: $('experimentError').textContent, frequencyText:$('fnum').value,
+    formValues: Object.fromEntries(GENERAL_FIELDS.map(([id]) => [id, $(id).value])) };
+}
+function syncWorkspaceControls(){
+  document.querySelectorAll('[data-sand-only]').forEach(el => { el.hidden = useSolver; });
+  document.querySelectorAll('[data-ns-only]').forEach(el => { el.hidden = !useSolver; });
+  document.querySelectorAll('[data-reference-control]').forEach(el => { el.hidden = useSolver || experimentMode !== 'reference'; });
+  $('generalInputs').hidden = experimentMode !== 'general';
+  $('generalAcceleration').hidden = experimentMode !== 'general';
+  $('configurationMode').value = experimentMode;
+  $('configurationMode').disabled = useSolver;
+  $('fnum').value = freq; $('f').value = freq;
+  $('a').value = sliderFromMv(amp); $('av').textContent = amp >= 1000 ? (amp/1000).toFixed(2)+' V' : amp.toFixed(0)+' mV';
+  $('t').value = temp; $('tv').textContent = temp;
+  $('h').value = depth; $('hv').textContent = depth.toFixed(1);
+  $('ag').value = agitation; $('agv').textContent = agitation.toFixed(2);
+  $('comparePaper').checked = comparePaper; $('referenceCell').value = referenceCell;
+  $('play').setAttribute('aria-pressed', String(running));
+  for (const [id, key, value] of [['workspaceSeg','workspace',workspace],['cellSeg','c',cellKey],['rimSeg','r',rim],['viewSeg','v',view],['srcSeg','s',useSolver ? cell3dEngine === 'cpp' ? 'dnscpp' : 'dns' : 'modal'],['thrSeg','t',String(cell3dThreads)],['phaseSeg','p',swapping ? 'swap' : String(phaseSign)]])
+    document.querySelectorAll('#'+id+' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset[key] === value)));
+  document.querySelector('#viewSeg [data-v="sand"]').hidden = useSolver;
+  if(FARADAY_STARTUP.drawn && !FARADAY_STARTUP.failed) $('startupStatus').textContent = useSolver ? '3D Navier–Stokes workspace ready.' : 'Sand visualization ready.';
+  $('workspaceNote').textContent = useSolver
+    ? 'Nonlinear liquid solver · General SI inputs · pinned rim · no modal substitution'
+    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+}
+function switchWorkspace(next){
+  if (!['sand','ns'].includes(next)) throw new Error('Unknown workspace: '+next);
+  if (next === workspace) return;
+  workspaceSettings[workspace] = captureWorkspace();
+  if (useSolver) CELL3D.pause();
+  workspace = next;
+  const saved = workspaceSettings[next];
+  ({ cellKey, freq, amp, temp, depth, rim, experimentMode, view, phaseSign, swapping,
+     agitation, running, simT, comparePaper, referenceCell } = saved);
+  generalInput = { ...saved.generalInput };
+  useSolver = next === 'ns';
+  if (useSolver){ experimentMode = 'general'; rim = 'pinned'; }
+  cell3dEngine = saved.engine; cell3dThreads = saved.threads;
+  for (const [id,key] of GENERAL_FIELDS) $(id).value = saved.formValues ? saved.formValues[id] : generalInput[key];
+  $('experimentError').textContent = saved.error;
+  t0 = performance.now() - simT*1000;
+  resolutionKey = null; renderError = null; dirty = true;
+  syncWorkspaceControls();
+  $('fnum').value=saved.frequencyText;
+  recompute();
+}
+
 function commitGeneralInputs(){
   try {
     const next = { ...generalInput };
-    for (const [id, key] of [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']])
+    for (const [id, key] of GENERAL_FIELDS)
       {
         if ($(id).value.trim() === '') throw new RangeError(`${key} requires an explicit number.`);
         next[key] = Number($(id).value);
@@ -10147,11 +10317,11 @@ function commitGeneralInputs(){
     return true;
   } catch (e){ $('experimentError').textContent = e.message; return false; }
 }
-$('generalInputs').querySelectorAll('input').forEach(input => input.addEventListener('change', commitGeneralInputs));
+GENERAL_FIELDS.forEach(([id]) => $(id).addEventListener('change', commitGeneralInputs));
 $('configurationMode').addEventListener('change', e => {
-  experimentMode = e.target.value;
-  $('generalInputs').hidden = experimentMode !== 'general';
-  document.querySelectorAll('[data-reference-control]').forEach(el => { el.hidden = experimentMode !== 'reference'; });
+  experimentMode = useSolver ? 'general' : e.target.value;
+  syncWorkspaceControls();
+  if(experimentMode === 'general') commitGeneralInputs(); else $('experimentError').textContent='';
   $('fnum').step = 'any';
   renderError = null;
   dirty = true;
@@ -10165,7 +10335,16 @@ $('runSolver').addEventListener('click', () => {
   recompute(); solverRequested = true; CELL3D.start(state); dirty = true;
 });
 
-sprinkle(); recompute();
+$('pauseSolver').addEventListener('click', () => {
+  if (!useSolver) return;
+  if (CELL3D.clocks().live) CELL3D.pause(); else CELL3D.resume();
+  dirty = true;
+});
+$('resetSolver').addEventListener('click', () => {
+  if (!useSolver) return;
+  CELL3D.reset(); solverRequested = false; dirty = true; recompute();
+});
+syncWorkspaceControls(); sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage
    blocked the page starts on the CPU, as it always has. */
 try {

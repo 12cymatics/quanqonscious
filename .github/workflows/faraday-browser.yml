@@ -9,6 +9,7 @@ on:
       - faraday-cell/**
       - faraday-cell.zip
       - tools/check_faraday_startup_browser.mjs
+      - tools/check_faraday_usability_browser.mjs
       - .github/workflows/faraday-browser.yml
   push:
     paths:
@@ -18,6 +19,7 @@ on:
       - faraday-cell/**
       - faraday-cell.zip
       - tools/check_faraday_startup_browser.mjs
+      - tools/check_faraday_usability_browser.mjs
       - .github/workflows/faraday-browser.yml
 permissions:
   contents: read
@@ -50,6 +52,10 @@ jobs:
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: node faraday/build-zip.mjs
       - run: node tools/check_faraday_startup_browser.mjs faraday-cell
+      - name: Sand controls and nonlinear run controls
+        run: node tools/check_faraday_usability_browser.mjs faraday-cell
+        env:
+          FARADAY_QA_ARTIFACTS: faraday-browser-evidence/usability
       - name: Ensure artifact directory exists even if browser evidence generation is skipped or fails
         if: always()
         run: mkdir -p faraday-browser-evidence
