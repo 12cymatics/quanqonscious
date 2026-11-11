@@ -214,3 +214,113 @@ are used to derive manufactured pressure/coordinate identities in
 implementation; the Navier–Stokes momentum law, stress balance and pressure
 projection are not relabelled as sutras. A book arithmetic identity is not by
 itself a derivation or empirical validation of fluid dynamics.
+
+## Free-surface geometry by the book's procedures
+
+`check-book-surface.py` applies the book to the geometry of the free surface.
+For a polynomial surface `z = h + eta(x, y)` the slopes, the squared slope
+`q = eta_x^2 + eta_y^2`, the unnormalised normal `(-eta_x, -eta_y, 1)` and the
+numerator of the mean curvature are polynomials, and it derives them with three
+procedures as the pinned `vedic_book.py` implements them:
+
+| Procedure | Printed pages | Use |
+| --- | --- | --- |
+| Calana-Kalanabhyam | 145, 175-178 | every derivative of `eta` |
+| Urdhva-Tiryagbhyam | 33-36 | every product of two polynomials |
+| Gunita-samuccaya | 76 | the test of each product: the sum of its coefficients is the product of the factors' sums |
+
+With `s = sqrt(1 + q)` the curvature `C` of this document is `N / s^3`, where
+
+```
+N = (1 + eta_y^2)*eta_xx - 2*eta_x*eta_y*eta_xy + (1 + eta_x^2)*eta_yy.
+```
+
+`N` is derived a second way, from the divergence,
+`(1 + q)*(eta_xx + eta_yy) - (eta_x*q_x + eta_y*q_y)/2`, and the two must be the
+same polynomial. The cylindrical slopes come from `r*eta_r = x*eta_x + y*eta_y`
+and `eta_theta = x*eta_y - y*eta_x`, and `(r*eta_r)^2 + eta_theta^2 = r^2*q` is
+required as a polynomial identity. sympy then differentiates the formulas of the
+free-surface section above, in cylindrical coordinates and with the square root
+in place, and must arrive at the same `N`.
+
+### What is held to it
+
+`book-surface-probe.mjs` gives `FaradayCell3D` each surface, sampled at its own
+cell centres and correctly rounded to doubles, and returns the solver's
+`curvature()`, `surfaceSlopeSquared()` and `surfaceNormal()`. These are compared
+with the exact values at the same cell centres.
+
+No comparison is made in floating point. A double is an exact rational. The
+cell-centre angles `pi*(2k + 1)/nth`, their cosines and sines, and `s` are not
+rational, so each is carried as an interval with integer ends at `2^-320`,
+rounded outward at every operation: `pi` from Machin's alternating series,
+cosine and sine from their Taylor series with the remainder added, the root from
+the integer square root. Every claim is decided on the ends of those intervals.
+It is true of the real numbers they enclose, or the check fails.
+
+The solver is a second-order discretisation in doubles, so it is not asked to
+equal the exact value. It is asked to converge on it. The measure is the
+area-weighted root mean square of the error over a region, relative to that of
+the exact quantity. The inner region is `r <= 9R/10`; the rim is beyond it. The
+cut is a physical radius, so every grid measures the same region.
+
+Two surfaces are used, on `R = 1/64 m`, `h = 1/32 m`, both with zero elevation
+and zero radial slope at the rim, so each meets the free and the pinned contact
+condition:
+
+```
+cap     eta = (R/2)*(1 - rho^2/R^2)^2                               slope up to 0.77
+lobed   eta = (R/2)*(1 - rho^2/R^2)^2 * (1 + 2*(x^2 - y^2)/R^2)     slope up to 1.11
+```
+
+### What was measured
+
+Grids `16x24`, `32x48`, `64x96`, `128x192` (radial by azimuthal). Relative error
+on each, and the fall per halving that the check requires (second order is 4):
+
+| Quantity, region, contact | cap | lobed | Required |
+| --- | --- | --- | --- |
+| curvature, inner, either | 2.38e-2, 6.18e-3, 1.56e-3, 3.92e-4 | 3.91e-2, 1.06e-2, 2.72e-3, 6.85e-4 | 7/2 |
+| squared slope, inner, either | 3.00e-2, 7.63e-3, 1.92e-3, 4.80e-4 | 3.96e-2, 1.02e-2, 2.56e-3, 6.40e-4 | 7/2 |
+| radial slope of the normal, inner, either | 1.22e-2, 3.09e-3, 7.75e-4, 1.94e-4 | 1.87e-2, 4.76e-3, 1.19e-3, 2.99e-4 | 7/2 |
+| azimuthal slope of the normal, inner and rim, either | exactly zero | 4.51e-2, 1.14e-2, 2.85e-3, 7.14e-4 | 7/2 |
+| squared slope, rim, either | 5.08e-2, 1.26e-2, 3.13e-3, 7.82e-4 | 3.23e-2, 8.10e-3, 2.02e-3, 5.06e-4 | 7/2 |
+| radial slope of the normal, rim, free | 1.81e-2, 4.60e-3, 1.16e-3, 2.90e-4 | 1.40e-2, 3.62e-3, 9.16e-4, 2.30e-4 | 7/2 |
+| radial slope of the normal, rim, pinned | 2.18e-2, 5.85e-3, 1.65e-3, 4.91e-4 | 1.93e-2, 5.44e-3, 1.61e-3, 5.06e-4 | 2 |
+| curvature, rim, free | 3.64e-2, 1.23e-2, 4.23e-3, 1.47e-3 | 3.91e-2, 1.39e-2, 4.86e-3, 1.71e-3 | 2 |
+| curvature, rim, pinned | 8.83e-2, 7.53e-2, 5.76e-2, 4.22e-2 | 1.09e-1, 9.01e-2, 6.87e-2, 5.03e-2 | any fall |
+
+That is 88 claims decided, and two references the same decision refuses on each
+surface and contact, eight in all: the linearised curvature `eta_xx + eta_yy`
+(error 26% and 35%, not falling) and the curvature of a surface one per cent
+taller (error near 1%, not falling at the required rate).
+
+### The pinned rim row does not converge
+
+Under the pinned contact condition the curvature in the outermost row of cells
+does not approach the exact value on these surfaces. The check prints the
+relative error of that row alone on the four grids:
+
+```
+          pinned                        free
+cap       0.181, 0.217, 0.234, 0.242    0.0733, 0.0349, 0.0170, 0.00839
+lobed     0.190, 0.220, 0.235, 0.243    0.0672, 0.0334, 0.0165, 0.00821
+```
+
+Pinned, it grows toward about a quarter instead of falling. Free, it halves
+with the cell. The cause is the pinned rim closure: the slope at the wall face
+is taken as the two-point difference between the last cell centre and the
+wall, which is the slope a quarter of a cell inside the wall. On a surface
+whose rim slope is zero that is a slope error of first order in the cell
+width, and the curvature divides it by the cell width. The area-weighted error
+over the rim region still falls, because the row is one cell wide, which is
+why the table above requires only a fall there.
+
+`check-cell3d.mjs` section 7d bounds the pinned rim at nine per cent on its own
+surface, `eta = A*(1 - x^2)`, where the solver's source records 0.013, 0.016
+and 0.017 for this row. That bound does not hold on a surface with zero rim
+slope.
+
+This check verifies the solver's surface geometry against an exact derivation.
+It does not test the fluid equations, the pressure solve, time stepping or
+agreement with an experiment.

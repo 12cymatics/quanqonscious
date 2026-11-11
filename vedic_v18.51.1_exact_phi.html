@@ -1665,11 +1665,9 @@ const KERNEL_FACTORY = () => {
     const pQ = rationalA4(par.geoP,"geoP");
     const R = [];
     const claim = (name,ok,detail) => { R.push({name,ok:!!ok,detail:detail||''}); return !!ok; };
-
     let t1 = true, t1n = 0;
     for(let v=0;v<16;v++) if(hw(v)===2){ t1n++; if(!A4.mayZero(w.magnetic[v])) t1=false; }
     claim('wheeler_inertial_plane_magnetism_zero',t1&&t1n===6,`${t1n} inertial-plane vertices`);
-
     let t2 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k)), mw=Q.div(k2,Q.add(Q.ONE,k2));
@@ -1677,12 +1675,10 @@ const KERNEL_FACTORY = () => {
       if(k===0?!Q.mayZero(mw):(Q.isExact(mw)&&Q.isZero(mw))) t2=false;
     }
     claim('wheeler_magnetic_weight_in_unit_interval',t2);
-
     let t3 = true;
     for(let v=0;v<16;v++)
       if(!A4.agree(w.dielectric[v],A4.scaleQ(A4.TWO_PHI,Q.mul(sQ,f[v])))) t3=false;
     claim('wheeler_dielectric_is_phi_scaled',t3);
-
     let t4 = true;
     for(let v=0;v<16;v++){
       const k=hw(v)-2, k2=Q.mk(BigInt(k*k));
@@ -1690,7 +1686,6 @@ const KERNEL_FACTORY = () => {
       if(!A4.agree(w.omega[v],A4.fromQ(mag))) t4=false;
     }
     claim('wheeler_omega_linear_in_magnetic',t4);
-
     let t5rho = true, t5scaled = true;
     for(let i=0;i<12;i++){
       const rQ=Q.mk(BigInt(i),4n), eQ=Q.mk(1n,10n);
@@ -1703,7 +1698,6 @@ const KERNEL_FACTORY = () => {
     if(!Q.agree(WHEELER.rhoQ(Q.ZERO,Q.mk(1n,10n)),Q.ONE)) t5rho=false;
     claim('wheeler_rho_mem_unit_interval',t5rho);
     claim('wheeler_radial_factor_bounded_by_phi_cubed',t5scaled);
-
     let t6 = true;
     for(let v=0;v<16;v++){
       let tau=A4.mul(par.geoP,w.omega[v]);
@@ -1713,12 +1707,10 @@ const KERNEL_FACTORY = () => {
       if(!A4.agree(A4.add(A4.mul(c,c),A4.mul(s,s)),A4.ONE)) t6=false;
     }
     claim('wheeler_cayley_rotation_is_orthogonal',t6,`geoP = ${Q.toString(pQ)}`);
-
     let t7 = true;
     for(let v=0;v<16;v++)
       if(A4.sign(A4.add(A4.ONE,A4.mul(par.geoD,w.dielectric[v])))<=0) t7=false;
     claim('wheeler_compression_positive',t7,`geoD = ${Q.toString(dQ)}`);
-
     return Object.freeze({results:Object.freeze(R),ok:R.every(x=>x.ok),
                           byName:Object.freeze(Object.fromEntries(R.map(x=>[x.name,x.ok])))});
   };
@@ -2153,7 +2145,6 @@ const KERNEL_FACTORY = () => {
     initState,initEngine,step,formulaOf,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
     hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley,BOOK,certify,NeedPrecision,workBits,setWorkBits,exactBits,setExactBits,MAX_WORK_BITS});
 };
-
 const KERNEL = KERNEL_FACTORY();
 function releaseManifest() {
   return {
@@ -2195,13 +2186,11 @@ function verifyVersionIntegrity() {
     problems.push('leanMirror does not match VERSION.string');
   return { ok: problems.length === 0, version: VERSION.string, problems };
 }
-
 const FAITHFUL = (() => {
   const Qc = KERNEL.Q, A4c = KERNEL.A4, C4c = KERNEL.C4;
   const R2 = Math.SQRT2, R5 = Math.sqrt(5), R10 = Math.sqrt(10);
   const bl = x => x === 0n ? 0 : (x < 0n ? -x : x).toString(2).length;
   const shown = q => Qc.isExact(q) ? q : Qc.mul(Qc.add(Qc.lo(q), Qc.hi(q)), Qc.HALF);
-
   function qNum(q) {
     q = shown(q);
     let n = q.n; const d = q.d;
@@ -2221,7 +2210,6 @@ const FAITHFUL = (() => {
     if (nz(x.d)) t.push(Qc.toString(x.d) + '\u221A10');
     return t.length ? t.join('+').replace(/\+-/g, '\u2212') : '0';
   }
-
   function maxExp(psi) {
     let e = null;
     for (const v of psi) {
@@ -2260,12 +2248,10 @@ const FAITHFUL = (() => {
     const v = aNum(scaleA4(x, s));
     return v === 0 ? -Infinity : Math.log10(Math.abs(v)) + s * Math.log10(2);
   }
-
   const GRAY_POS = { 0: 0, 1: 1, 3: 2, 2: 3 };
   const ringTheta = k => GRAY_POS[(((k >> 3) & 1) << 1) | (k & 1)];
   const ringPhi   = k => GRAY_POS[(((k >> 2) & 1) << 1) | ((k >> 1) & 1)];
   const OFFSET = Math.PI / 4;
-
   function coeffs(proj) {
     const gr = new Float64Array(16), gi = new Float64Array(16);
     for (let k = 0; k < 16; k++) {
@@ -2285,9 +2271,7 @@ const FAITHFUL = (() => {
     }
     return { cr, ci };
   }
-
   const MODES = [0, 1, 2, -1], MI = f => ((f % 4) + 4) % 4;
-
   function evaluator(c) {
     const cr = c.cr, ci = c.ci;
     return (theta, phi) => {
@@ -2307,7 +2291,6 @@ const FAITHFUL = (() => {
       return { re: sr, im: si, p: sr * sr + si * si };
     };
   }
-
   function gridBasis(N, shift) {
     const c = new Float64Array(N * 4), s = new Float64Array(N * 4);
     for (let i = 0; i < N; i++) {
@@ -2350,9 +2333,7 @@ const FAITHFUL = (() => {
     }
     return out;
   }
-
   const state = { ok: null, rel: 0, node: 0, exact: 0, recon: 0, a4: '0', channels: null, zero: false };
-
   function audit(psi, NT, NP) {
     NT = NT || 64; NP = NP || 64;
     const proj = project(psi), co = coeffs(proj), ev = evaluator(co);
@@ -2385,7 +2366,6 @@ const FAITHFUL = (() => {
     state.ok = proj_ok && ch !== null && ch.all;
     return { proj, co, ev, rel, node, recon, ok: state.ok };
   }
-
   function multiRealEvaluator(valsList) {
     const cs = valsList.map(vals => {
       const re = new Float64Array(16), im = new Float64Array(16);
@@ -2412,11 +2392,9 @@ const FAITHFUL = (() => {
       return out;
     };
   }
-
   return { shown, qNum, aNum, aStr, aSci, aLog10, project, coeffs, evaluator, multiRealEvaluator, gridEval, gridNodes, audit, state,
            ringTheta, ringPhi, GRAY_POS, OFFSET };
 })();
-
 const Q = KERNEL.Q;
 const A4 = KERNEL.A4;
 const C4 = KERNEL.C4;
@@ -2622,7 +2600,6 @@ const CQuad = Object.freeze({
   scaleRat: (z, r) => C4.scaleQ(z, r),
   toFloatPair: z => [FAITHFUL.aNum(z.re), FAITHFUL.aNum(z.im)]
 });
-
 const KConsts = (() => {
   const half = Q.mk(1n, 2n);
   const s2o2 = Quad.mk(Q.ZERO, half);
@@ -2800,7 +2777,6 @@ const WHEELER = {
 };
 WHEELER._initExact();
 const SUTRA_KIND = [null, ...Array.from({ length: 29 }, (_, i) => i < 16 ? 'MULT' : 'DIFF')];
-
 const FIELD_TH = 160, FIELD_PH = 80;
 const fieldGrid = new Float64Array(FIELD_TH * FIELD_PH);
 let vortexGain = 0, vortexHelicity = 1;
@@ -3071,7 +3047,6 @@ function kernelParams() {
 }
 let COMPOSITION = 'SERIES';
 const COMPOSITION_LABEL = { SERIES: 'SERIES', PARALLEL: 'PARALLEL', SYMMETRIC_CONCURRENT: 'CONCURRENT' };
-
 const KERNEL_VIEW = {
   state: null, params: null,
   selfTestsOk: null, selfTestCount: 0, selfTestError: '',
@@ -3770,7 +3745,6 @@ function requestFields() {
                       nodes, paths, J: Float64Array.from(FIELDS.sources.J), Q: Float64Array.from(FIELDS.sources.Q) };
   FIELDS.worker.postMessage(FIELDS.inflight);
 }
-
 const TESS_V = [];
 for (let i = 0; i < 16; i++) TESS_V.push({
   x: (i & 1) ? 1 : -1, y: (i & 2) ? 1 : -1,
@@ -4679,7 +4653,6 @@ function drawLattice(cw, ch, CERT) {
   }
   D.verts = OV.n - n0;
 }
-
 const FIELD_COL = { planeB: [0.14, 0.42, 1.0], planeE: [1.0, 0.42, 0.08] };
 const FP = { sets: [], n: 0, behind: 0 };
 function project3(cam, x, y, z, out, o) {
@@ -4750,7 +4723,6 @@ function fieldsDraw() {
     }
   }
 }
-
 const LOAD_T0 = performance.now();
 const escHtml = v => String(v).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[ch]));
 const LOG = {
@@ -5474,7 +5446,6 @@ const PRESETS = {
   'pre-3-9': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
     purpose: 'S3 multiplies the two halves of the field crosswise and S9 differentiates the polynomial of the field, with the drive at 2.' }
 };
-
 function presetTitle(p) {
   const ops = Object.entries(p.set).map(([i, v]) => `S${i}(${v})`).join(' ');
   const knobs = [`vortex ω ${(p.omega / 10).toFixed(1)}`, p.drive ? `drive ${(p.drive / 4).toFixed(2)}` : '', p.chi !== 10 ? `χ ${(p.chi / 10).toFixed(1)}` : ''].filter(Boolean).join(', ');
@@ -5612,7 +5583,6 @@ document.getElementById('btn-exact-operator-audit').addEventListener('click', ()
   const b = document.getElementById('btn-exact-operator-audit'); b.disabled = true; b.textContent = 'AUDIT RUNNING';
   AUDIT_WORKER.postMessage({ type: 'fullAudit', ids: Array.from({ length: 29 }, (_, i) => i + 1), purpose: 'download' });
 });
-
 const SUTRA_GRAPH_INSPECTOR = {
   mode: 'full',
   selected: 1,
@@ -5993,7 +5963,6 @@ const SUTRA_GRAPH_INSPECTOR = {
   }
 };
 window.SUTRA_GRAPH_INSPECTOR = SUTRA_GRAPH_INSPECTOR;
-
 window._ERRORS = [];
 window.addEventListener('error', ev => {
   const rec = { t: Date.now(), msg: String((ev.error && ev.error.message) || ev.message || '(no message)'),
@@ -6024,6 +5993,5 @@ startFieldWorker();
 renderModeIdentities();
 requestAnimationFrame(frame);
 </script>
-
 </body>
 </html>

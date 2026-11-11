@@ -24,6 +24,7 @@ const SUITES = [
   {"name":"faraday/check-general.mjs","file":"faraday/check-general.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-surface-pressure.mjs","file":"dns/check-surface-pressure.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-book-pressure.py","file":"dns/check-book-pressure.py","slow":false,"browser":false,"interpreter":"python3"},
+  {"name":"dns/check-book-surface.py","file":"dns/check-book-surface.py","slow":false,"browser":false,"interpreter":"python3"},
   {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-clean.mjs","file":"faraday/check-clean.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-dns.mjs","file":"dns/check-dns.mjs","slow":false,"browser":false,"interpreter":null},

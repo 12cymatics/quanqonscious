@@ -28,5 +28,7 @@ jobs:
         run: node --test faraday/check-general.mjs
       - name: Exact book and pressure identities
         run: python dns/check-book-pressure.py
+      - name: Exact book surface geometry, and the solver held to it
+        run: python dns/check-book-surface.py
       - name: Kernel regression checks
         run: node faraday/check-kernel.mjs

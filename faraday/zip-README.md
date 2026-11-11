@@ -52,12 +52,19 @@ book corrections recorded in PR #172 and independently checks them. Those
 arithmetic checks do not turn the fluid equations or pressure projection into
 sutras and do not claim physical validation.
 
+`dns/check-book-surface.py` derives the free surface's slope, normal and
+curvature exactly with the same book procedures and holds the solver's own
+`curvature()`, `surfaceSlopeSquared()` and `surfaceNormal()` to them on two
+manufactured surfaces. `dns/MODEL.md` states what it derives, how it decides,
+and what it measured, including the pinned rim row, which does not converge.
+
 Run the focused checks from this folder:
 
 ```
 node dns/check-surface-pressure.mjs
 node faraday/check-general.mjs
 python3 dns/check-book-pressure.py
+python3 dns/check-book-surface.py
 ```
 
 ## Playback update — 22 October 2026
