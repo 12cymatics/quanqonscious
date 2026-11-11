@@ -8,17 +8,30 @@ standalone simulator, not a link or a launcher requiring Node. No installation
 is needed. A static attachment or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
 
-The page now shows whether startup has reached a rendered frame, and reports
-startup errors rather than leaving an unexplained blank surface.
+The app opens in **Sand visualization**, with moving grains and working
+frequency, render, pause, re-sprinkle and export controls. The workspace selector
+at the top switches to **3D Navier–Stokes**. Each workspace keeps its own
+settings, and the active model is identified beside the image.
 
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
 server described below. Running from a folder does not itself accelerate the
-numerical solver. General experiment mode uses explicit physical inputs and a
-pinned contact line. Select the nonlinear JavaScript or C++ engine and start the
-solver explicitly. Its initialization and failures remain visible; a modal image
-is not substituted while waiting for a solver frame.
+numerical solver.
 
+The 3D workspace uses explicit physical inputs and a pinned contact line. It
+shows the specified initial surface at **t = 0** before a run. **Run** evolves
+that state, **Pause/Resume** retains the computed state, and **Reset** returns to
+the initial condition. The physical clock and measured wall time make the
+solver's progress visible. The C++ and JavaScript engines solve the same
+discretized equations; browser rendering speed is separate from physical time.
+Detailed fluid, geometry, initial-condition and numerical settings are grouped
+under expandable controls.
+
+Sand is the original modal particle visualization. Its display drift, agitation
+and packing rules are a visual model, not sediment transport coupled to the
+three-dimensional fluid equations. Choosing that workspace is explicit; a
+nonlinear run never falls back to it. The fluid solver, its pressure correction,
+its accuracy requirements and the book-derived checks are retained.
 
 A nonlinear free-surface simulation of an incompressible Newtonian liquid in a
 rigid circular cell, with a pinned rim and no-slip floor and wall. Diameter,
@@ -72,11 +85,10 @@ new physics model or a speed-up of the nonlinear solver.
 clock update with controlled timestamps, including re-excite while paused.
 It is a deterministic logic check, not a substitute for the real-browser suite.
 
-The modal view is an explicitly selected visualization. The Navier–Stokes
-views evolve a separate physical clock in a worker; the modal playback button
-does not pause that solver. Those views can take a long time at the strict
-accuracy grid. See the physical-time and wall-time readouts; do not expect
-real-time fluid evolution.
+The sand workspace starts with this modal playback behavior. The Navier–Stokes
+workspace evolves a separate physical clock in a worker and has its own
+Pause/Resume control. It can take a long time at the strict accuracy grid;
+the physical-time and wall-time readouts describe the actual progress.
 
 ## What is in here
 

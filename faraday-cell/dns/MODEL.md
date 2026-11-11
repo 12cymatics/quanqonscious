@@ -181,8 +181,17 @@ Negative layer depth, failed pressure convergence, invalid input, unavailable
 backend and an infeasible requested grid are failures. They must not yield
 clipped states, a cheaper solver, or a modal image presented as a nonlinear
 result. Image colour limits and interpolation into display pixels do not modify
-the solver state. A saved nonlinear image uses the actual completed solver
-surface, not a newly generated modal approximation.
+the solver state. Before integration, the interface can display and export the
+specified analytic initial condition, identified as initial data at `t = 0`.
+After integration, a saved nonlinear image freezes the actual completed solver
+surface. Neither state is a modal approximation of the nonlinear result.
+
+The separate Sand visualization workspace retains the earlier modal particle
+display and its original controls. Its display drift, agitation and packing
+rules do not represent granular sand coupled to these fluid equations.
+Switching workspaces is explicit and preserves the independently specified
+physical experiment. Pausing a nonlinear run retains its worker state and
+physical time; resuming continues that state rather than reconstructing it.
 
 Required evidence includes constant-pressure invariance, manufactured operator
 checks, pinned boundary compatibility, nonlinear harmonic generation, mass and

@@ -290,28 +290,44 @@ let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
 
 async function checkGeneralPending(page){
+  const sand=await page.json(`({useSolver,view,visible:ETA.some(v=>v!==0),
+    enabled:!document.querySelector('#viewSeg [data-v="sand"]').disabled})`);
+  ok(!sand.useSolver && sand.view==='sand' && sand.visible && sand.enabled,
+     'entry displays usable Sand before the user chooses a nonlinear experiment',JSON.stringify(sand));
+  await page.eval(`document.querySelector('#workspaceSeg [data-workspace="ns"]').click(); recompute(); true`);
   const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
-    rim, useSolver, solverRequested, have: CELL3D.clocks().have,
+    rim, useSolver, solverRequested, clocks: CELL3D.clocks(),
     comparePaper, signature: state.visualSignature,
-    empty: [ETA, IMF, NX, NY].every(a => a.every(v => v === 0)),
+    visible: ETA.some(v => v !== 0), source:CELL3D.snapshot().provenance,
     overlay: getComputedStyle(document.getElementById('solverOverlay')).display !== 'none' })`);
   ok(pending.experimentMode === 'general' && pending.experiment,
-     'the default experiment uses independent physical inputs', JSON.stringify(pending));
+     'the explicitly selected nonlinear experiment uses independent physical inputs', JSON.stringify(pending));
   ok(pending.rim === 'pinned' && pending.useSolver,
-     'the default surface is the nonlinear solver with a pinned rim', JSON.stringify(pending));
-  ok(!pending.solverRequested && !pending.have && pending.empty && pending.overlay,
-     'before an explicit run no worker frame or substitute modal surface is displayed', JSON.stringify(pending));
+     'the nonlinear workspace selects the pinned boundary', JSON.stringify(pending));
+  ok(!pending.solverRequested && !pending.clocks.have && pending.clocks.initial && pending.visible
+     && pending.clocks.physT===0 && pending.clocks.stepsDone===0 && !pending.overlay,
+     'before a run the specified initial condition is visible without claiming evolution', JSON.stringify(pending));
   ok(!pending.comparePaper && pending.signature === null,
-     'the pending nonlinear field has no reference-atlas texture or comparator enabled', JSON.stringify(pending));
-  const exportError = await page.eval(`(async () => {
-    try { await exportImage(129, () => {}); return ''; }
-    catch (e){ return e.message; }
-  })()`, true);
-  ok(/No nonlinear solver frame/.test(exportError),
-     'export refuses a nonlinear run without a frame instead of exporting a modal substitute', exportError);
+     'the nonlinear initial condition has no reference-atlas texture or comparator enabled', JSON.stringify(pending));
+  const seed=await page.json(`(()=>{
+    const e=state.experiment, snap=CELL3D.snapshot(), m=e.seedMode;
+    const root=FARADAY_KERNEL.jZeroNear(m,Math.max(.02,m-2)), amplitude=e.seedFraction*e.depthMm/1000;
+    let worst=0,scale=0,n=0;
+    for(let i=1;i<12;i++)for(let j=0;j<13;j++){
+      const r=i/12,theta=2*Math.PI*j/13;
+      const want=amplitude*FARADAY_KERNEL.besselJ(m,root*r)*Math.cos(m*theta);
+      worst=Math.max(worst,Math.abs(snap.at(r,theta).Re-want));scale=Math.max(scale,Math.abs(want));n++;
+    }
+    return {n,relative:worst/scale,kind:snap.provenance.fieldKind};
+  })()`);
+  ok(seed.n>100 && seed.relative<1e-12 && seed.kind==='initial-condition',
+     'the preview samples the explicitly specified analytic seed, not a modal prediction',JSON.stringify(seed));
+  const exported=await page.eval(`(async()=>{const r=await exportImage(129,()=>{});return r.source;})()`,true);
+  ok(exported.fieldKind==='initial-condition' && exported.physicalTime===0 && exported.steps===0 && exported.engine===null,
+     'initial-condition export identifies zero evolution and no solver engine',JSON.stringify(exported));
 
   const physical = await page.json(`(() => {
-    globalThis.__savedPhysicalInputs = [...document.querySelectorAll('#generalInputs input')]
+    globalThis.__savedPhysicalInputs = [...document.querySelectorAll('#generalInputs input'),document.getElementById('expAccel')]
       .map(e => [e.id, e.value]);
     globalThis.__savedPhysicalFrequency = freq;
     for (const [id, value] of [['expDiameter',35],['expDepth',5],['expRho',1100],
@@ -357,10 +373,12 @@ async function checkPage(url, name, expectInline, clean = false){
   await checkGeneralPending(page);
   /* The retained Floquet and modal drawing fixtures explicitly select their
      reference apparatus and free linear contact condition. Those diagnostics
-     are separate from the default pinned nonlinear experiment. */
+     are separate from the explicitly selected pinned nonlinear experiment. */
   await selectReferenceModal(page);
 
-  /* 1. the page declares its own character set */
+  /* 1. the page declares its own character set. The compact UI keeps state
+     diagnostics in a disclosure; open it before inspecting rendered unit text. */
+  await page.eval(`document.getElementById('ro').closest('details').open = true`);
   const cs = await page.json(`{
     characterSet: document.characterSet,
     deck: document.body.innerText,
@@ -373,6 +391,7 @@ async function checkPage(url, name, expectInline, clean = false){
      'micron survives decoding', `no clean µm in the rendered text`);
   ok(cs.deck.includes('s⁻¹') && !cs.deck.includes('sâ'),
      'inverse seconds survives decoding');
+  await page.eval(`document.getElementById('ro').closest('details').open = false`);
 
   /* 2. the top-level script ran to the end */
   const s = await page.json(`{
@@ -656,7 +675,8 @@ async function checkPage(url, name, expectInline, clean = false){
 }
 
 async function selectReferenceModal(page){
-  await page.eval(`document.getElementById('configurationMode').value = 'reference';
+  await page.eval(`document.querySelector('#workspaceSeg [data-workspace="sand"]').click();
+    document.getElementById('configurationMode').value = 'reference';
     document.getElementById('configurationMode').dispatchEvent(new Event('change', {bubbles:true}));
     document.querySelector('#srcSeg [data-s="modal"]').click();
     document.querySelector('#rimSeg [data-r="free"]').click();
@@ -687,9 +707,9 @@ async function checkSolverDraws(page){
 
   await selectGeneralSolverFixture(page,'dns');
   const selected = await page.json(`({ requested:solverRequested, have:CELL3D.clocks().have,
-    empty:ETA.every(v => v === 0), rim })`);
-  ok(!selected.requested && !selected.have && selected.empty && selected.rim === 'pinned',
-     'selecting a nonlinear engine clears the modal raster and waits for an explicit run', JSON.stringify(selected));
+    initial:CELL3D.clocks().initial, visible:ETA.some(v => v !== 0), rim })`);
+  ok(!selected.requested && !selected.have && selected.initial && selected.visible && selected.rim === 'pinned',
+     'selecting a nonlinear engine shows its labeled initial condition and waits for an explicit run', JSON.stringify(selected));
   await page.eval('document.getElementById("runSolver").click()');
   const waited = await page.waitFor('CELL3D.clocks().have === true', 60000,
                                     "the worker's first frame");
@@ -784,19 +804,19 @@ async function checkSolverDraws(page){
 
 async function selectGeneralSolverFixture(page,engine){
   await page.eval(`(() => {
-    // Retain the preceding diagnostic's fluid and geometry as explicit numerical
-    // test inputs. They are not claimed to be measured apparatus calibration.
-    if (experimentMode !== 'general'){
-      const values={expDiameter:state.cellDiameterMm,expDepth:state.depthMm,
-        expRho:state.water.rho,expMu:state.water.mu,expSigma:state.water.sigma,
-        expGravity:state.gravity,expAccel:state.accelAssumed,
-        expSeedM:state.nearestTheoryModes[0].m,expSeedFraction:.0001};
-      document.getElementById('configurationMode').value='general';
-      document.getElementById('configurationMode').dispatchEvent(new Event('change',{bubbles:true}));
+    // Preserve the legacy fixture's numerical fluid/geometry domain while
+    // entering the explicitly separate nonlinear workspace through its control.
+    const values=!useSolver?{expDiameter:state.cellDiameterMm,expDepth:state.depthMm,
+      expRho:state.water.rho,expMu:state.water.mu,expSigma:state.water.sigma,
+      expGravity:state.gravity,expAccel:state.accelAssumed,
+      expSeedM:state.nearestTheoryModes[0].m,expSeedFraction:.0001}:null;
+    const fixtureFrequency=freq;
+    document.querySelector('#workspaceSeg [data-workspace="ns"]').click();
+    if(values){
       for(const [id,value] of Object.entries(values)) document.getElementById(id).value=String(value);
+      document.getElementById('fnum').value=String(fixtureFrequency);
       document.getElementById('expAccel').dispatchEvent(new Event('change',{bubbles:true}));
     }
-    document.querySelector('#rimSeg [data-r="pinned"]').click();
     document.querySelector('#srcSeg [data-s="${engine}"]').click();
     document.getElementById('comparePaper').checked=false;
     document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
