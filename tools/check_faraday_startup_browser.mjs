@@ -94,6 +94,11 @@ try {
     results.push({ name: scenario.name + '-canvas-changes', passed: true });
     await page.screenshot({ path: resolve(out, `${scenario.name}-running.png`), fullPage: true });
     await page.locator('#play').click();
+    // WebKit may acknowledge the input command before its click handler runs.
+    // Observe the actual state transition; a missed click must still time out.
+    await page.waitForFunction(() => running === false
+      && document.getElementById('play').getAttribute('aria-pressed') === 'false'
+      && document.getElementById('play').textContent === 'paused', undefined, { timeout:5000 });
     const paused = await page.evaluate(() => ({ running, simT }));
     assert.equal(paused.running, false);
     await page.waitForTimeout(600);

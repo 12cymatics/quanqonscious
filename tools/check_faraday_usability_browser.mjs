@@ -178,6 +178,9 @@ try {
     }
 
     await page.locator('#play').click();
+    await page.waitForFunction(() => running === false
+      && document.getElementById('play').getAttribute('aria-pressed') === 'false'
+      && document.getElementById('play').textContent === 'paused', undefined, { timeout:5000 });
     const paused = await page.evaluate(() => ({ running, simT, positions:Array.from(PX.slice(0,1024)) }));
     assert.equal(paused.running, false);
     await page.waitForTimeout(500);
@@ -203,6 +206,9 @@ try {
     await page.waitForFunction(() => view==='sand'&&!dirty);
     const beforeSprinkle=await pixels();
     await page.locator('#sprinkleBtn').click();
+    await page.waitForFunction(before => PX.slice(0,before.length)
+      .reduce((count,value,index) => count + (value !== before[index]), 0) > 100,
+      paused.positions, { timeout:5000 });
     const sprinkled = await page.evaluate(() => Array.from(PX.slice(0,1024)));
     assert(sprinkled.filter((v,i) => v !== paused.positions[i]).length > 100, 'Re-sprinkle did not redistribute grains');
     await page.waitForTimeout(200);
