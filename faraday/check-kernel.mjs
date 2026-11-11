@@ -1397,7 +1397,7 @@ section('13. response phase, and that every state carries one');
      throughout. RR and RES_GATE are read from cymatic.html so this cannot
      drift from the renderer it is protecting. */
   {
-    const RR = Number(/const GR = (\d+)/.exec(page)[1]);
+    const RR = Number(/const GR_BASE = (\d+)/.exec(page)[1]);
     const rr = (RR - 1)/2 - 3;
     const resGate = Number(/const RES_GATE = ([\d.]+)/.exec(page)[1]);
     ok(rr > 0 && resGate > 0, 'render constants read out of cymatic.html',

@@ -67,6 +67,37 @@ python3 dns/check-book-pressure.py
 python3 dns/check-book-surface.py
 ```
 
+## Drawing update — 11 November 2026
+
+The modal view drew every frequency on a fixed 381-pixel grid. At 4392 Hz in
+the 24.25 mm cell that is about 7 pixels per wavelength with a free rim, which
+grains one pixel wide cannot show, and under 3 with a pinned rim, where the
+page dropped every mode and drew a zero field without saying so.
+
+- On a screen with a device pixel ratio of 2 or more the grid is 571 pixels
+  and the grains are finer in proportion: 89 921 of them, with the same
+  physical drift and agitation. On other screens nothing changes. The image
+  export is unchanged on every screen.
+- When no mode reaches the 4 pixels per wavelength the page draws at, the
+  stage says so, with the figure, and shows no surface: for example
+  `not drawn · 2.9 px/λ · 4 needed · grid 381`.
+- The surface is rebuilt when its state changes, not every 0.12 s.
+- Pinned-rim radial tables are built once per order for all the states that
+  share it. The tables are the same to the bit. At 1500 Hz the build measured
+  10.6 s before and 2.5 s after on the same machine.
+
+Measured in Chromium at 4392 Hz, free rim, 120 grain steps from a fresh
+sprinkle: the mean surface amplitude under the grains, relative to the mean
+over the disc, is 0.99 fresh on both grids, 0.61 settled on the 381 grid and
+0.44 settled on the 571 grid. The repository's browser startup check holds
+those orderings, the grid sizes, the status line and the table identity; it
+is not part of this folder.
+
+Not changed: which modes the model selects. At 4392 Hz with a free rim it
+selects m = 144, whose motion is confined near the rim, so the centre of the
+dish stays unsorted on any grid. On the 571 grid a pinned rim at high
+frequency builds its tables on the main thread and the page waits for them.
+
 ## Playback update — 22 October 2026
 
 Pause/resume in the modal view now resumes from the frozen simulation time,

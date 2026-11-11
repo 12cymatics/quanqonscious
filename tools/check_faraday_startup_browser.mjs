@@ -131,6 +131,77 @@ try {
     await context.close();
     activePage = null;
   }
+  const sorted = {};
+  for (const grid of [{ name: 'grid-base', scale: 1, size: 381 }, { name: 'grid-fine', scale: 2, size: 571 }]) {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: grid.scale });
+    const page = await context.newPage();
+    const pageErrors = [];
+    activePage = page;
+    activeScenario = grid.name;
+    activePageErrors = pageErrors;
+    page.on('pageerror', error => pageErrors.push(String(error)));
+    page.on('console', message => { if (message.type() === 'error') pageErrors.push(message.text()); });
+    await page.goto(origin + '/index.html', { waitUntil: 'load', timeout: 30000 });
+    await page.waitForFunction(() => typeof simT !== 'undefined' && state && !renderError, undefined, { timeout: 30000 });
+    const sizes = await page.evaluate(() => ({ GR, NP, canvas: document.getElementById('c').width, ratio: window.devicePixelRatio }));
+    assert.deepEqual(sizes, { GR: grid.size, NP: Math.round(60000*grid.size/381), canvas: grid.size, ratio: grid.scale });
+    const bessel = await page.evaluate(() => {
+      let compared = 0, different = 0;
+      for (const m of [0, 1, 2, 5, 9, 11, 52, 79, 144, 158]) for (let i = 0; i <= 200; i++) {
+        const z = i === 0 ? 0 : i*2.4742 + (m % 7)*0.013;
+        const want = FARADAY_KERNEL.besselPair(m, z);
+        besselInto(m, z);
+        compared++;
+        if (!Object.is(want[0], BESSEL[0]) || !Object.is(want[1], BESSEL[1])) different++;
+      }
+      return { compared, different };
+    });
+    assert.deepEqual(bessel, { compared: 2010, different: 0 });
+    await page.locator('#configurationMode').selectOption('reference');
+    await page.locator('#srcSeg [data-s="modal"]').click();
+    await page.locator('#rimSeg [data-r="free"]').click();
+    await page.locator('#fnum').fill('4392');
+    await page.locator('#fnum').press('Tab');
+    await page.waitForFunction(() => freq === 4392 && !dirty && state && state.render && !useSolver);
+    const drawn = await page.evaluate(() => ({ states: state.states.length, drawn: state.render.drawn, gated: state.render.gated,
+      coarsest: Math.min(...state.states.map(s => s.pxPerWave)), gate: RES_GATE,
+      overlay: getComputedStyle(document.getElementById('solverOverlay')).display }));
+    assert(drawn.states > 0 && drawn.drawn === drawn.states && drawn.gated === 0, `${grid.name}: ${JSON.stringify(drawn)}`);
+    assert(drawn.coarsest >= drawn.gate, `${grid.name}: ${drawn.coarsest} px per wavelength`);
+    assert.equal(drawn.overlay, 'none');
+    sorted[grid.name] = await page.evaluate(() => {
+      running = false;
+      const atGrains = () => { let sum = 0; for (let p = 0; p < NP; p++) sum += Math.abs(ETA[(PY[p] | 0)*GR + (PX[p] | 0)]); return sum/NP; };
+      let all = 0, cells = 0;
+      for (let i = 0; i < NSZ; i++) if (COVER[i] === 1) { all += Math.abs(ETA[i]); cells++; }
+      const mean = all/cells;
+      sprinkle();
+      const fresh = atGrains()/mean;
+      for (let i = 0; i < 120; i++) stepGrains(1);
+      return { fresh, settled: atGrains()/mean, pxPerWave: Math.min(...state.states.map(s => s.pxPerWave)) };
+    });
+    assert(sorted[grid.name].fresh > 0.9 && sorted[grid.name].fresh < 1.1, `${grid.name}: fresh grains ${sorted[grid.name].fresh}`);
+    assert(sorted[grid.name].settled < sorted[grid.name].fresh, `${grid.name}: ${JSON.stringify(sorted[grid.name])}`);
+    if (grid.scale === 1) {
+      await page.locator('#rimSeg [data-r="pinned"]').click();
+      await page.waitForFunction(() => !dirty && state.render && state.render.drawn === 0 && state.states.length > 0);
+      await page.waitForFunction(() => getComputedStyle(document.getElementById('solverOverlay')).display !== 'none');
+      const notice = await page.locator('#solverOverlay').innerText();
+      const best = await page.evaluate(() => Math.max(...state.states.map(s => s.pxPerWave)));
+      assert.match(notice, /^not drawn · [0-9.]+ px\/λ · 4 needed · grid 381$/);
+      assert.equal(notice.split(' · ')[1], `${best.toFixed(1)} px/λ`);
+      assert(best < 4, `pinned 4392 Hz on the base grid: ${best} px per wavelength`);
+    }
+    await page.screenshot({ path: resolve(out, `${grid.name}-4392hz.png`), fullPage: true });
+    assert.deepEqual(pageErrors, [], `${grid.name} runtime errors`);
+    results.push({ name: grid.name, sizes, drawn, sorted: sorted[grid.name], passed: true });
+    await context.close();
+    activePage = null;
+  }
+  assert(sorted['grid-fine'].settled < sorted['grid-fine'].fresh/2, `fine grid at 4392 Hz: ${JSON.stringify(sorted['grid-fine'])}`);
+  assert(sorted['grid-fine'].settled < sorted['grid-base'].settled, `fine against base at 4392 Hz: ${JSON.stringify(sorted)}`);
+  assert(sorted['grid-fine'].pxPerWave > sorted['grid-base'].pxPerWave);
+  results.push({ name: 'grid-fine-sorts-better', sorted, passed: true });
   const preview = await browser.newContext({ javaScriptEnabled: false });
   const previewPage = await preview.newPage();
   await previewPage.goto(origin + '/index.html');
