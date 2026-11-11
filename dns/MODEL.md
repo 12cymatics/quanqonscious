@@ -183,15 +183,44 @@ clipped states, a cheaper solver, or a modal image presented as a nonlinear
 result. Image colour limits and interpolation into display pixels do not modify
 the solver state. Before integration, the interface can display and export the
 specified analytic initial condition, identified as initial data at `t = 0`.
-After integration, a saved nonlinear image freezes the actual completed solver
-surface. Neither state is a modal approximation of the nonlinear result.
+After integration, a saved nonlinear image freezes the displayed solver frame,
+particle positions, camera and physical timestamp. Export resolution changes
+drawing resolution, not the physical state. Neither state is a modal
+approximation of the nonlinear result.
 
-The separate Sand visualization workspace retains the earlier modal particle
-display and its original controls. Its display drift, agitation and packing
-rules do not represent granular sand coupled to these fluid equations.
-Switching workspaces is explicit and preserves the independently specified
-physical experiment. Pausing a nonlinear run retains its worker state and
-physical time; resuming continues that state rather than reconstructing it.
+The interface shows one three-dimensional vessel with surface, sand-coloured
+flow-tracer and velocity-vector layers over the same nonlinear state. The
+observer reconstructs the solver's physical velocities on its staggered mesh;
+tracers advance with solved physical time, independently of camera motion,
+render frame rate and wall time. The particles are passive one-way liquid
+tracers: they do not model granular settling, particle inertia, grain contacts
+or fluid feedback. The earlier empirical grain drift and independent settling
+render do not drive this solver view.
+
+For a tracer at physical position `X`, transport is `dX/dt = u(X,t)`.
+In the surface-following coordinate `σ = z/H`, the vertical coordinate obeys
+`dσ/dt = [w − σ(Ht + ur Hr + (uθ/r) Hθ)]/H`; the horizontal coordinates
+use the reconstructed physical velocity. Transport uses the old and completed
+fluid-step fields with adaptive embedded Runge–Kutta error control. A trial
+that leaves the liquid domain causes particle-step refinement or an explicit
+failure, not a projected, reflected or clipped position. Marker count is a
+visual sampling choice, not a measured number of sand grains or a grain-size
+estimate.
+
+The camera can orbit and zoom around metric vessel geometry. The visible
+vertical displacement scale defaults to 5000 times the computed displacement;
+1 times shows the metric surface. This fixed display setting changes neither
+the physical field nor the tracer integration, and never renormalizes each
+frame by its current peak. Recorded-frame playback uses only frames already
+computed by the worker. History is bounded to 180 frames and 32 MiB, with its
+available interval shown in the interface; playback does not extrapolate
+future fluid states.
+
+The default page starts integration after drawing the initial three-dimensional
+state. Opening it with `?paused=1` leaves that state available for inspection.
+Pausing retains the worker state, tracers and physical time; resuming continues
+that state rather than reconstructing it. Reset returns to the initial
+condition and holds at `t = 0` until Run is requested.
 
 Required evidence includes constant-pressure invariance, manufactured operator
 checks, pinned boundary compatibility, nonlinear harmonic generation, mass and

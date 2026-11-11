@@ -1,5 +1,7 @@
 # faraday-cell
 
+The velocity arrows are visible by default. Their fixed drawing scale is 1000 seconds: arrow length equals velocity multiplied by that scale, not a predicted particle trajectory. The displacement magnification is likewise display-only; neither scale changes the computed fluid or tracer coordinates.
+
 ## Start here
 
 Extract the ZIP, open the faraday-cell folder, then open **index.html** in a
@@ -8,30 +10,39 @@ standalone simulator, not a link or a launcher requiring Node. No installation
 is needed. A static attachment or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
 
-The app opens in **Sand visualization**, with moving grains and working
-frequency, render, pause, re-sprinkle and export controls. The workspace selector
-at the top switches to **3D Navier–Stokes**. Each workspace keeps its own
-settings, and the active model is identified beside the image.
+The app opens one **3D Navier–Stokes** scene. Its free surface, sand-coloured
+flow tracers and velocity vectors share the same computed state and physical
+clock. Drag to orbit, scroll to zoom, and use the view controls to inspect the
+vessel from above or return to the initial camera. Surface and particle controls
+show or hide layers of this scene; they do not switch to another simulation.
 
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
 server described below. Running from a folder does not itself accelerate the
-numerical solver.
+numerical solver. The 3D drawing requires WebGL2; all fluid calculations remain
+in double precision on the CPU.
 
-The 3D workspace uses explicit physical inputs and a pinned contact line. It
-shows the specified initial surface at **t = 0** before a run. **Run** evolves
-that state, **Pause/Resume** retains the computed state, and **Reset** returns to
-the initial condition. The physical clock and measured wall time make the
-solver's progress visible. The C++ and JavaScript engines solve the same
-discretized equations; browser rendering speed is separate from physical time.
-Detailed fluid, geometry, initial-condition and numerical settings are grouped
-under expandable controls.
+The page draws the specified initial surface at **t = 0**, then starts the
+nonlinear solver. **Pause/Resume** retains the computed fluid and particle state;
+**Reset** returns to the initial condition and holds until **Run** is requested.
+Open with `?paused=1` to inspect the initial state before starting. The physical
+clock and measured wall time make progress visible. The C++ and JavaScript
+engines solve the same discretized equations. Detailed fluid, geometry,
+initial-condition and numerical settings remain explicit inputs.
 
-Sand is the original modal particle visualization. Its display drift, agitation
-and packing rules are a visual model, not sediment transport coupled to the
-three-dimensional fluid equations. Choosing that workspace is explicit; a
-nonlinear run never falls back to it. The fluid solver, its pressure correction,
-its accuracy requirements and the book-derived checks are retained.
+The vertical displacement scale is a visible drawing setting, initially
+**5000×**, because the default initial displacement is microscopic relative to
+the vessel diameter. Select **1×** for metric displacement. This fixed setting
+never changes the solver or renormalizes a new frame to its own peak.
+
+The sand-coloured particles are **passive flow tracers**, advected by the actual
+computed fluid velocity and physical time. They reveal the same flow as the
+surface and vectors. They do not represent physical sediment settling, particle
+inertia, grain contacts or feedback on the fluid; those require a separate
+material model and parameters. The earlier empirical drift, agitation and
+packing calculation is not used to animate this nonlinear scene. The fluid
+solver, its pressure correction, accuracy requirements and book-derived checks
+are retained.
 
 A nonlinear free-surface simulation of an incompressible Newtonian liquid in a
 rigid circular cell, with a pinned rim and no-slip floor and wall. Diameter,
@@ -73,28 +84,28 @@ node faraday/check-general.mjs
 python3 dns/check-book-pressure.py
 ```
 
-## Playback update — 22 October 2026
+## One physical clock and recorded playback
 
-Pause/resume in the modal view now resumes from the frozen simulation time,
-without adding the time spent paused. Repeated pauses and re-exciting while
-paused preserve that behavior. The numerical solvers, grid selection and
-accuracy settings are unchanged. This is a playback-clock correction, not a
-new physics model or a speed-up of the nonlinear solver.
+Live rendering displays completed solver frames. Camera movement and drawing
+speed do not advance fluid or tracer time. Recorded playback lets you inspect
+already-computed frames, with their original timestamps; it never invents a
+future oscillation while the solver is computing. The displayed history is
+bounded to **180 frames and 32 MiB**. The available recorded interval is shown in
+the interface, and returning to Live resumes the latest computed view.
 
-`node faraday/check-playback.mjs` checks the page's actual playback handlers and
-clock update with controlled timestamps, including re-excite while paused.
-It is a deterministic logic check, not a substitute for the real-browser suite.
+Image export freezes the displayed geometry, tracer positions, camera and
+physical timestamp. Choosing 2048 or 4K changes only rendering resolution. It
+does not rerun a separate particle-settling simulation.
 
-The sand workspace starts with this modal playback behavior. The Navier–Stokes
-workspace evolves a separate physical clock in a worker and has its own
-Pause/Resume control. It can take a long time at the strict accuracy grid;
-the physical-time and wall-time readouts describe the actual progress.
+The solver can take substantial wall time to advance a small physical interval
+on its accuracy-selected grid. Physical and wall clocks remain visible; replay
+and camera motion do not claim real-time fluid computation.
 
 ## What is in here
 
 | | |
 |---|---|
-| `faraday-cell-standalone.html` | **Open this first.** One file, double-click it. No server, no siblings, nothing fetched. |
+| `faraday-cell-standalone.html` | The same self-contained application as index.html. No server, no siblings, nothing fetched. |
 | `cymatic.html` | The same page as it lives in the repository, loading its scripts from `faraday/` and `dns/`. Needs a local server (below). |
 | `dns/run-cell3d.mjs` | The three-dimensional solver in a terminal, no browser: an ASCII plan view of the surface, the energy split, and the clocks. |
 | `run-checks.mjs` | Runs every suite in this directory, in one command. |
@@ -107,6 +118,9 @@ The solvers:
 | `faraday/kernel.js` | The linear theory: Bessel modes, viscous damping, the Kumar–Tuckerman-style threshold problem, the mode map the page draws its labels from. |
 | `dns/faraday-disc.js` | A two-dimensional axisymmetric Navier–Stokes solver, **one azimuthal mode at a time**, linear in the surface amplitude. Its Floquet growth rates are the reference the three-dimensional solver is measured against. |
 | `dns/faraday-cell3d.js` | The three-dimensional **nonlinear** solver: every azimuthal mode at once and coupled, in a domain that follows the surface. This is what the page draws. |
+| `dns/cell3d-observation.js` | Physical-height velocity reconstruction and geometry from the actual staggered solver fields. |
+| `dns/cell3d-tracers.js` | Passive fluid-tracer transport on the solver clock. |
+| `faraday/scene3d.js` | The WebGL2 vessel, surface, particle and velocity-vector renderer, orbit camera and captured-state image export. |
 | `dns/faraday_disc.cpp`, `dns/faraday_disc.wasm` | The two-dimensional solver again in C++, compiled to WebAssembly, bit for bit against the JavaScript. `dns/build-wasm.sh` rebuilds it. |
 | `dns/faraday_cell3d.cpp`, `dns/faraday_cell3d.wasm` | **The three-dimensional solver in C++**, likewise compiled to WebAssembly and likewise bit for bit — operator by operator and then over a whole drive period, 894 steps at 12 × 24 × 8, every element by `Object.is`. `dns/build-wasm-cell3d.sh` rebuilds it; neither needs Emscripten, only `clang` with the wasm32 target and `lld`. |
 | `dns/faraday-floquet.js`, `dns/faraday-dns.js` | The Floquet machinery and the periodic-box solver the disc one was built from. |
@@ -115,7 +129,7 @@ The solvers:
 ## Running it
 
 **The single file.** Double-click `faraday-cell-standalone.html`. The
-three-dimensional solver runs in a worker; pick it under *surface drawn from*.
+three-dimensional solver runs in a worker and feeds the visible 3D scene.
 
 **The repository page.** `cymatic.html` loads its scripts by relative path and
 its compiled WebAssembly by fetch, and a page opened from `file://` has no
@@ -200,40 +214,34 @@ you the physics clock, the wall clock and their ratio rather than hiding the
 gap; `dns/run-cell3d.mjs` prints the same three numbers. Your machine will give a
 different ratio and the number it prints is measured on it, not estimated.
 
-**The page's own grids are far larger than that, by design.** The page sizes its grid
-for the mode it seeds, to the 1% contract below, and at the default operating point that
-is 40 × 210 × 12 with a time step of 0.54 µs. Measured with `dns/run-cell3d.mjs`: 316 ms a
-step in C++ and 971 ms in JavaScript, 188 and 553 ms on three threads -- about 590 000×
-slower than real time in C++, so one drive period is about an hour. The fixed grid it used
-to run instead was about eighty times quicker and misstated the surface's restoring force
-by 4.65%.
+**The page sizes its grid for the entered experiment.** Its requirements are the
+surface-operator accuracy and Stokes-layer resolution stated below. The active
+grid, physical step and measured progress appear in the diagnostics. Historical
+timings for earlier apparatus defaults in `dns/PLAN-cell3d.md` are not promises
+for the current inputs or your computer.
 
 **The physics is in double precision on the CPU, and stays there.** No GPU on an
 Intel Mac has a double-precision type — Metal has no `double`, so WGSL has no
 `f64` — so the GPU is used for *drawing*, where single precision is correct
 because the output is an 8-bit pixel, and never for the field.
 
-**Drawing on the GPU.** Pick **GPU** under *draw on*. The surface is then shaded by
-a WebGL2 fragment shader (`faraday/render-gl.js`) instead of a per-pixel JavaScript
-loop that costs 11.6–22.2 ms a frame on the CPU this was built on — more than a
-whole 60 Hz frame on its own. The page remembers the choice. The deck names the
-processor that drew the frame and what it cost the page. Where WebGL2 is not
-available, or the browser takes the GPU's context away, drawing pauses with GPU
-still selected and the line under *draw on* says why: choose CPU to draw there, or
-GPU again to retry once the context is back. It never draws with the CPU under the
-GPU's name, and never switches to the CPU for you.
+**Drawing the 3D scene.** `faraday/scene3d.js` uses WebGL2 for perspective,
+depth testing, lighting and point rendering. Camera orbit, zoom, layer visibility
+and displacement magnification affect display only. If the graphics context is
+lost, the renderer reports it and restores the same frame and camera when the
+browser restores the context. No substitute fluid calculation is started.
 
-The two are held to the same picture: `dns/check-page.mjs` draws every view both
-ways, at the page's amplitude and at full amplitude in both phases, with the
-texture noise off and on, and again after the field is rebuilt, and requires every
-byte to agree **to within one level out of 255**. That bound is derived rather
-than tuned — the inputs are identical and the two evaluations differ by parts in
-ten million, which can move a byte only at a rounding boundary and only by one
-level. Because a byte check alone cannot see an error smaller than one level — a
-wrong coefficient that moved pixels by half a level passed it — the values
-*before* rounding are compared too, against a bound of 0.02 of a level derived
-from the GLSL precision rules; measured, they agree to 5×10⁻⁴. The grain simulation stays on the CPU: it draws from one seeded random
-sequence in grain order, and a parallel version would be a different algorithm.
+`faraday/check-scene3d.mjs` checks scene geometry, camera transforms, fixed
+magnification and immutable export capture. `dns/check-cell3d-observation.mjs`
+checks the conversion of actual solver fields into observation data;
+`dns/check-cell3d-tracers.mjs` checks transport against known velocity fields.
+`faraday/check-unified-playback.mjs` exercises the page's actual history and
+export controller, including timestamp/generation consistency, bounded memory,
+pause on seeking and immutable capture across a new incoming solver frame.
+The browser checks exercise actual drawing and controls. The retained legacy
+field renderer has its own CPU/GPU parity checks; those are separate from the
+three-dimensional geometry checks and are not claimed as validation of grain
+material physics.
 
 ## What this is, and what it is not
 
