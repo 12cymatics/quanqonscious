@@ -121,11 +121,56 @@ check('every script gives acorn the same tokens as the page it came from, and no
   });
 });
 
-check('the page builds three worker bodies and two shaders, and no other token differs', () => {
+check('the page retains three template worker bodies and four shaders, and no other token differs', () => {
   eq(workerBodies, 3, 'worker bodies read by acorn');
   eq(clean.counts.workerBodies, 3, 'worker bodies the builder found');
-  eq(shaders, 2, 'shaders read');
-  eq(clean.counts.shaders, 2, 'shaders the builder found');
+  eq(shaders, 4, 'shaders read');
+  eq(clean.counts.shaders, 4, 'shaders the builder found');
+});
+
+check('the serialized export worker is the same standalone program after comment removal', () => {
+  const sceneBefore = before.find(s => /id="faradayScene3d"/.test(s.attrs));
+  const sceneAfter = after.find(s => /id="faradayScene3d"/.test(s.attrs));
+  if (!sceneBefore || !sceneAfter) throw new Error('The scene module is missing.');
+  // Expose the existing source factory only in this test. Remove that binding
+  // from the serialized function again, so the checked source is what the real
+  // module sends to Worker rather than an instrumented replacement.
+  const binding = 'root.__checkExportWorkerSource = exportWorkerSource;\n';
+  const marker = 'const api = Object.freeze({ create,';
+  function generated(body) {
+    eq(body.split(marker).length - 1, 1, 'scene export binding');
+    const context = vm.createContext({});
+    vm.runInContext(body.replace(marker, binding + marker), context);
+    const instrumented = context.__checkExportWorkerSource();
+    eq(instrumented.split(binding).length - 1, 1, 'serialized test binding');
+    return instrumented.replace(binding, '');
+  }
+  const fullWorker = generated(sceneBefore.body), cleanWorker = generated(sceneAfter.body);
+  const fullComments = [], cleanComments = [];
+  const fullTokens = tokens(fullWorker, fullComments), cleanTokens = tokens(cleanWorker, cleanComments);
+  if (!fullComments.length) throw new Error('The generated full worker had no comments, so stripping was not exercised.');
+  eq(cleanComments.length, 0, 'comments in the serialized clean worker');
+  eq(cleanTokens.length, fullTokens.length, 'serialized worker token count');
+  let shaderCount = 0;
+  fullTokens.forEach((token, i) => {
+    const other = cleanTokens[i];
+    eq(other.type.label, token.type.label, `serialized worker token ${i} kind`);
+    if (token.type.label === 'template' && String(token.value).startsWith('#version ')) {
+      const comments = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+      const words = text => text.replace(comments, ' ').split(/\s+/).filter(Boolean).join(' ');
+      eq(words(other.value), words(token.value), `serialized worker shader ${shaderCount}`);
+      if (/\/\*|\/\//.test(other.value)) throw new Error('A serialized clean shader still contains a comment.');
+      shaderCount++;
+    } else eq(other.value, token.value, `serialized worker token ${i}`);
+  });
+  eq(shaderCount, 2, 'serialized scene shaders');
+  for (const [name, source] of [['full', fullWorker], ['clean', cleanWorker]]) {
+    const context = vm.createContext({});
+    context.self = context;
+    new vm.Script(source, { filename: `${name} scene export worker` }).runInContext(context);
+    eq(typeof context.onmessage, 'function', `${name} worker message handler`);
+    eq(typeof context.FARADAY_SCENE3D.create, 'function', `${name} worker renderer`);
+  }
 });
 
 check('the builder removed exactly the comments acorn and the GLSL pattern count', () => {

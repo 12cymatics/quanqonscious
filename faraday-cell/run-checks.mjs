@@ -20,9 +20,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SUITES = [
   {"name":"faraday/check-startup.mjs","file":"faraday/check-startup.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-playback.mjs","file":"faraday/check-playback.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-unified-playback.mjs","file":"faraday/check-unified-playback.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-scene3d.mjs","file":"faraday/check-scene3d.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-general.mjs","file":"faraday/check-general.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-surface-pressure.mjs","file":"dns/check-surface-pressure.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-cell3d-observation.mjs","file":"dns/check-cell3d-observation.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-cell3d-tracers.mjs","file":"dns/check-cell3d-tracers.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-book-pressure.py","file":"dns/check-book-pressure.py","slow":false,"browser":false,"interpreter":"python3"},
   {"name":"faraday/check-standalone.mjs","file":"faraday/check-standalone.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-clean.mjs","file":"faraday/check-clean.mjs","slow":false,"browser":false,"interpreter":null},

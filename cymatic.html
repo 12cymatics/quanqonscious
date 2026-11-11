@@ -32,6 +32,16 @@ header p b{color:var(--ink2);font-weight:500}
 .stage{position:sticky;top:126px;background:#000;aspect-ratio:1/1;width:100%;max-width:calc(100vh - 150px);justify-self:center}
 .stage canvas{width:100%;height:100%;display:block}
 .stage canvas#cgl{position:absolute;left:0;top:0}
+.stage #scene3d{position:absolute;inset:0;touch-action:none;outline:none}
+.stage #scene3d:focus-visible{outline:2px solid var(--cy);outline-offset:-2px}
+.sceneTools{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.sceneTools label{display:flex;gap:6px;align-items:center}
+.sceneTools input[type=checkbox]{accent-color:var(--cy)}
+.timelineBar{padding:9px 12px;background:var(--panel);border:1px solid var(--edge);display:grid;grid-template-columns:auto minmax(100px,1fr) auto;gap:8px;align-items:center}
+.timelineBar .timeNote{grid-column:1/-1;color:var(--ink2);font-size:10px}
+#sceneError{color:var(--red)}
+#heightScale,#vectorScale{width:92px;background:var(--panel2);border:1px solid var(--edge2);padding:4px;color:var(--cy);font:inherit}
+[data-legacy]{display:none!important}
+@media(max-width:600px){.timelineBar{grid-template-columns:1fr 1fr}.timelineBar input{grid-column:1/-1}.sceneTools{gap:5px}}
 .ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
 .ov b{color:var(--cy);font-weight:600}
 .ov.tl{left:11px;top:10px;line-height:1.75}
@@ -116,13 +126,13 @@ footer b{color:var(--ink2);font-weight:500}
 details{border-top:1px solid var(--edge);padding:7px 0}summary{cursor:pointer;color:var(--ink2)}.detailBody{display:grid;gap:12px;padding-top:10px}.detailBody p{font-size:10px;color:var(--ink2);margin:0}
 #generalAcceleration{display:grid;grid-template-columns:1fr 100px;align-items:center;gap:6px;font-size:10px}#generalAcceleration input{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--edge2);padding:4px}
 button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(--edge2);color:var(--ink2)}
-@media (max-width:900px){.rig{grid-template-columns:1fr}.stage{position:relative;top:auto;max-width:none}.deck{max-height:none}.workspaceBar #workspaceSeg{min-width:0;width:100%}.workspaceBar{padding:6px}.workspaceActions{width:100%}.workspaceActions .btn{flex:1!important}.ov.bl{max-width:52%;line-height:1.35}.ov.br{max-width:44%;text-align:right;line-height:1.35}#workspaceNote{font-size:9px}.wrap{padding:0 8px 24px}header{padding:12px 0 8px}}
+@media (max-width:900px){.rig{grid-template-columns:1fr}.stage{position:relative;top:auto;max-width:none}.deck{max-height:none}.workspaceBar #workspaceSeg{min-width:0;width:100%}.workspaceBar{padding:6px}.workspaceActions{width:100%}.workspaceActions .btn{flex:1!important}.ov.bl{left:10px;right:10px;bottom:28px;max-width:none;line-height:1.35}.ov.br{left:10px;right:10px;bottom:10px;max-width:none;text-align:left;line-height:1.35}#workspaceNote{font-size:9px}.wrap{padding:0 8px 24px}header{padding:12px 0 8px}}
 </style>
 
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>Sand visualization and nonlinear liquid experiments</p>
+  <p>One fluid state · surface, particles and flow in 3D</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -141,7 +151,7 @@ globalThis.FARADAY_STARTUP = {
     if (this.drawn || this.failed) return;
     this.drawn = true;
     const status = document.getElementById('startupStatus');
-    status.textContent = 'Sand visualization ready. Choose 3D Navier–Stokes for the nonlinear liquid solver.';
+    status.textContent = '3D cell ready. Surface and flow tracers share the nonlinear solver state.';
     status.style.color = 'var(--grn)';
   }
 };
@@ -153,16 +163,18 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </script>
 
 <div class="workspaceBar">
-<div class="seg" id="workspaceSeg" aria-label="Workspace"><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
+<div class="seg" id="workspaceSeg" aria-label="Legacy diagnostic fixtures" hidden><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
 <div id="sandActions" class="workspaceActions" data-sand-only><button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button><button aria-pressed="true" class="btn" id="play" style="flex:1">running</button><button class="btn" id="reset" style="flex:1">re-excite</button></div>
-<div id="solverActions" class="workspaceActions" data-ns-only hidden><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset to initial state</button></div>
-<div id="workspaceNote">Modal sand visualization · full liquid solver available in 3D Navier–Stokes</div>
+<div id="solverActions" class="workspaceActions" data-ns-only><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset</button><button class="btn" id="seedParticles">Re-seed particles</button></div>
+<div class="sceneTools"><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
+<div id="workspaceNote">Surface and sand-coloured flow tracers · one Navier–Stokes state</div>
 <div id="solverStatus" role="status" data-ns-only hidden>Initial condition · t = 0 · not evolved</div>
 </div>
 <div class="rig">
   <div class="stage">
     <div id="solverOverlay" role="status" style="position:absolute;left:8px;right:8px;bottom:35px;z-index:3;background:#080d13e8;display:none;padding:12px;text-align:center;line-height:1.6"></div>
-    <canvas id="c" width="381" height="381"></canvas>
+    <canvas id="scene3d" width="900" height="900" tabindex="0" aria-label="Interactive three-dimensional fluid cell"></canvas>
+    <canvas id="c" width="381" height="381" style="display:none"></canvas>
     <canvas id="cgl" width="381" height="381" style="display:none"></canvas>
     <div class="ov tl">drive <b id="oF">111</b> Hz &nbsp; surface <b id="oR">not started</b><span id="oRunit"></span><br>
       cell ⌀ <b id="oD">24.25</b> mm<br>
@@ -175,8 +187,16 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 
   <div class="deck">
-<div class="fld">
-<span class="lab">render</span>
+<div class="fld"><span class="lab">Layers · same fluid state</span><div class="sceneTools">
+<label><input id="showParticles" type="checkbox" checked> Sand / flow tracers</label>
+<label><input id="showSurface" type="checkbox" checked> Surface</label>
+<label><input id="showVectors" type="checkbox" checked> Velocity vectors</label>
+</div></div>
+<div class="fld"><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
+<div class="fld"><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
+<div id="sceneError" role="alert"></div>
+<div class="fld" data-legacy>
+<span class="lab">diagnostic render</span>
 <div class="seg" id="viewSeg">
 <button aria-pressed="true" data-v="sand">sand</button>
 <button aria-pressed="false" data-v="optical">optical</button>
@@ -194,7 +214,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <input id="a" max="1000" min="0" step="1" type="range" value="229"/>
 <span class="lab" id="accLab" style="text-align:right"></span>
 </div><label hidden="" id="generalAcceleration">Peak acceleration (m/s²) <input id="expAccel" min="0" step="any" type="number" value="7"/></label><div class="fld" data-ns-only="" hidden="">
-<span class="lab">Navier–Stokes engine</span>
+<span class="lab">Navier–Stokes compute engine</span>
 <div class="seg" id="srcSeg">
 <button aria-pressed="false" data-s="modal" hidden="">modal diagnostic</button>
 <button aria-pressed="false" data-s="dns">3D N-S (JS)</button>
@@ -261,18 +281,20 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <div class="seg" id="thrSeg"></div>
 </div></div></details>
 <details><summary>Drawing and model details</summary><div class="detailBody">
-<div class="fld">
-<span class="lab">draw on</span>
+<div class="fld" data-legacy>
+<span class="lab">diagnostic draw on</span>
 <div class="seg" id="engSeg">
 <button aria-pressed="true" data-e="cpu">CPU</button>
 <button aria-pressed="false" data-e="gpu">GPU</button>
 </div>
 <div aria-live="polite" id="renderStatus" role="status">CPU drawing.</div>
-</div><p data-sand-only>Sand is the existing modal visualization, including its assumed grain-transport model. It is separate from the nonlinear liquid solver.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder; a single-valued free surface; pinned contact line with no-slip floor and wall. No air dynamics, overturning, contact-angle hysteresis or deformable vessel. Finite numerical discretization, not an exact continuum solution. Initial values are editable examples, not measurements.</p></div></details>
+</div><p data-sand-only>The retained modal functions are internal numerical diagnostics, not the displayed particle simulation.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
+<label class="sceneTools">Velocity arrow scale (seconds) <input id="vectorScale" type="number" value="1000" min="0" step="any"></label><p style="font-size:10px;color:var(--ink2);margin:0">Arrow length is velocity × this drawing scale, not a predicted trajectory.</p>
 <div id="experimentError" role="alert" style="color:var(--red)"></div><div id="warnBox" style="display:grid;gap:6px"></div><details><summary>State and diagnostics</summary><dl class="ro" id="ro"></dl></details>
   </div>
 </div>
 
+<div class="timelineBar"><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div></div>
 <label style="display:block;padding:10px"><input type="checkbox" id="comparePaper"> Compare with the 2017 atlas (display only) <select id="referenceCell"><option value="medium">24.25 mm</option><option value="small">10.00 mm</option><option value="large">49.50 mm</option></select></label>
 <div class="atlas" id="referenceAtlas" hidden>
   <div class="atlas-hd">
@@ -303,11 +325,12 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   <p id="dnsNote"></p>
 </div>
 <footer>
-  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The reference reconstruction and modal diagnostic are separate visual models. Image normalization does not alter the solver field. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
+  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
 </footer>
 </div>
 <script src="faraday/kernel.js"></script>
 <script id="renderGl" src="faraday/render-gl.js"></script>
+<script id="faradayScene3d" src="faraday/scene3d.js"></script>
 <script id="dnsSolver" src="dns/faraday-dns.js"></script>
 <script id="dnsDisc" src="dns/faraday-disc.js"></script>
 <script id="dnsDiscWasm" src="dns/faraday-disc-wasm.js"></script>
@@ -316,6 +339,8 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <script id="dnsCell3d" src="dns/faraday-cell3d.js"></script>
 <script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>
 <script id="dnsCell3dPool" src="dns/cell3d-pool.js"></script>
+<script id="dnsCell3dObservation" src="dns/cell3d-observation.js"></script>
+<script id="dnsCell3dTracers" src="dns/cell3d-tracers.js"></script>
 <script id="dnsCell3dWasmBase64"></script>
 <script>
 
@@ -588,7 +613,7 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'sand';
+let view = 'height';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -862,8 +887,8 @@ function drawAtlas(cellKey, f){
     + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
 })();
 
-let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
-let workspace = 'sand', experimentMode = 'reference', comparePaper = true, referenceCell = 'medium';
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
+let workspace = 'ns', experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
 let problemKey = null, resolutionKey = null, solverRequested = false;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
@@ -941,9 +966,9 @@ function paintDeck(){
       ['steps taken', `${c.stepsDone}`],
       ['solver', c.engine === 'cpp' ? 'C++ · faraday_cell3d.wasm' : c.engine === 'js' ? 'JavaScript' : `requested ${cell3dEngine}; not running`],
       ['solver threads', c.threads ? `${c.threads} thread${c.threads === 1 ? '' : 's'}` : 'not running'],
-      ['drawn on', renderEngine === 'gpu' ? 'GPU drawing only · WebGL2' : 'CPU · canvas 2D'],
-      ['display', 'normalized surface displacement; no reference-paper weighting'],
-      ['modal thresholds', 'not computed; select modal diagnostic separately']
+      ['drawn on', 'WebGL2 · depth-tested 3D geometry'],
+      ['display', 'metre-valued surface and flow; fixed display magnification'],
+      ['particles', 'passive flow tracers; no settling or grain-contact model']
     ];
     if (c.grid){
       rows.push(['grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} = ${c.grid.nr*c.grid.nth*c.grid.nz} cells`]);
@@ -1078,6 +1103,8 @@ function paintDeck(){
     : `<dt>${k}</dt><dd${k === 'drawn on' ? ' id="renderProcessor"' : ''}>${v}</dd>`).join('');
 }
 function paintInspector(){
+  $('insp').hidden=useSolver && !comparePaper;
+  if($('insp').hidden)return;
   const s = state, vs = s.visualSignature;
   const cells = [];
   if (comparePaper){
@@ -1110,21 +1137,21 @@ function paintInspector(){
     `<div><span class="k">${k}</span><div class="val">${v}</div></div>`).join('');
 }
 function paintOverlay(){
-  const s = state;
+  const s = state, displayed = useSolver ? UNIFIED3D.scene.stats() : null;
   $('oF').textContent = freq; $('oR').textContent = useSolver ? 'instantaneous field' : s.responseHz.toFixed(1);
   $('oRunit').textContent = useSolver ? '' : ' Hz';
   $('oD').textContent = s.cellDiameterMm.toFixed(2);
   const pI = phaseSign > 0;
   $('oPh').className = 'ph' + (pI ? '' : ' two');
-  $('oPhT').textContent = useSolver ? CELL3D.clocks().have ? 'solver field' : 'specified initial condition' : pI ? 'phase I' : 'phase II';
+  $('oPhT').textContent = useSolver ? !displayed.initial ? 'solver field' : 'specified initial condition' : pI ? 'phase I' : 'phase II';
   $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
   $('oM').textContent = s.states.length ? s.states[0].m : '—';
   $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
   $('oRisk').textContent = s.transitionRisk === null ? 'no empirical prior' : 'risk ' + s.transitionRisk.toFixed(2);
-  $('oExp').textContent = useSolver ? `${CELL3D.clocks().have ? 'solver time' : 'initial condition · t ='} ${(CELL3D.clocks().physT*1000).toFixed(3)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
+  $('oExp').textContent = useSolver ? `${displayed.initial ? 'initial condition · t =' : 'displayed physical time'} ${((displayed.time||0)*1000).toFixed(6)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
     + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
   const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
-  $('oMode').textContent = useSolver ? `${CELL3D.clocks().have ? 'nonlinear field' : 'not evolved'} · pinned rim · initial m=${s.experiment?.seedMode ?? 'reference'}` : `J′ mode m=${m.m} n=${m.n}`;
+  $('oMode').textContent = useSolver ? `${displayed.initial ? 'not evolved' : 'nonlinear field'} · pinned rim · initial m=${s.experiment?.seedMode ?? 'reference'}` : `J′ mode m=${m.m} n=${m.n}`;
 }
 
 function seg(id, apply){
@@ -1143,7 +1170,7 @@ seg('phaseSeg', b => {
   else { swapping = false; phaseSign = +b.dataset.p; }
 });
 seg('viewSeg', b => {
-  if (useSolver && b.dataset.v === 'sand') throw new Error('Sand transport is available only as a modal visualization.');
+  if (useSolver && b.dataset.v === 'sand') return;
   view = b.dataset.v;
 });
 seg('engSeg', b => setRenderEngine(b.dataset.e));
@@ -1203,7 +1230,14 @@ sc.addEventListener('click', e => {
 });
 
 let exporting = false;
-async function exportImage(SIZE, onProgress){
+async function exportImage(SIZE, onProgress = () => {}){
+  if (!useSolver) return exportDiagnosticImage(SIZE, onProgress);
+  if ($('experimentError').textContent) throw new Error($('experimentError').textContent);
+  if (CELL3D.clocks().err) throw new Error(CELL3D.clocks().err);
+  if ($('sceneError').textContent) throw new Error($('sceneError').textContent);
+  return UNIFIED3D.exportImage(SIZE, onProgress);
+}
+async function exportDiagnosticImage(SIZE, onProgress){
   if ($('experimentError').textContent) throw new Error($('experimentError').textContent);
   if (dirty) recompute();
   const exportRnd = mulberry32(EXPORT_SEED);
@@ -1686,7 +1720,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
-    note.textContent = `${requestedSize}² · ${res.modes} modes · `
+    note.textContent = res.scene ? `${requestedSize}² · 3D frame at ${(res.source.physicalTime*1000).toFixed(6)} ms · ${res.particles} flow tracers · ${((performance.now()-t0)/1000).toFixed(1)}s` : `${requestedSize}² · ${res.modes} modes · `
       + `${res.pxPerWave === null ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
       + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
@@ -2067,7 +2101,7 @@ let lastDrawnField=-1,lastDrawnView=null,lastDrawnPhase=null,lastDrawnGain=null,
 function releaseExportPreview(){if(!useSolver)t0=performance.now()-simT*1000;}
 function loop(now){
   try {
-  if (renderError) return;
+  if (renderError && !useSolver) return;
   if(exporting && !useSolver)t0=now-simT*1000;
   if (running && !useSolver && !exporting) simT = (now - t0)/1000;
 
@@ -2092,25 +2126,33 @@ function loop(now){
     $('pauseSolver').textContent = clock.live ? 'Pause' : 'Resume';
     $('pauseSolver').disabled = !!clock.err || (!clock.have && !clock.starting && !clock.ready);
     $('runSolver').textContent = clock.have || clock.starting || clock.ready ? 'Restart' : 'Run';
+    $('seedParticles').disabled=clock.starting || !!clock.err;
   }
-  $('expBtn').disabled = exporting || !!blocked;
-  if (view === 'sand' && running && !exporting){
+  $('expBtn').disabled = exporting || !!blocked || (useSolver && !!$('sceneError').textContent);
+  if (!useSolver && view === 'sand' && running && !exporting){
     const gain = useSolver ? 1 : phaseSign*state.expression;
     stepGrains(gain); stepGrains(gain); stepGrains(gain);
   }
   const previewAnimating=!useSolver && running && !exporting;
-  if(previewAnimating || lastDrawnField!==FIELD_GEN || lastDrawnView!==view
-      || lastDrawnPhase!==phaseSign || lastDrawnGain!==state.expression || lastDrawnEngine!==renderEngine){
+  if(!useSolver && (previewAnimating || lastDrawnField!==FIELD_GEN || lastDrawnView!==view
+      || lastDrawnPhase!==phaseSign || lastDrawnGain!==state.expression || lastDrawnEngine!==renderEngine)){
     renderSurface(state);
     lastDrawnField=FIELD_GEN;lastDrawnView=view;lastDrawnPhase=phaseSign;
     lastDrawnGain=state.expression;lastDrawnEngine=renderEngine;
   }
-  const workspaceText=useSolver ? 'Nonlinear liquid solver · General SI inputs · pinned rim · no modal substitution'
+  const workspaceText=useSolver ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
     : exporting ? 'Sand preview paused while exporting · your playback setting is preserved'
     : 'Modal sand visualization · separate from the nonlinear liquid solver';
   if($('workspaceNote').textContent!==workspaceText)$('workspaceNote').textContent=workspaceText;
+  if(useSolver){
+    if(UNIFIED3D.tick(now)){
+      FARADAY_STARTUP.ready();
+      if(initialAutostart && !$('experimentError').textContent && !clock.err){
+        initialAutostart=false;solverRequested=true;CELL3D.start(state);
+      }
+    }
+  }else FARADAY_STARTUP.ready();
   paintOverlay();
-  FARADAY_STARTUP.ready();
   } catch (error){
     FARADAY_STARTUP.fail(error);
     refuseRender(error);
@@ -2156,6 +2198,7 @@ const CELL3D = (function(){
      what was asked for, so the deck reports what ran and not what was requested. */
   let gen = 0, ranEngine = null, ranThreads = 0;
   let etaBuf = null, htBuf = null, haveFrame = false, peakRaw = 0;
+  let sceneFrame = null, tracerSeed = 0x46524144;
   /* S11: the workers that form the explicit terms' rows beside the solver's own thread,
      and the previous run's, kept until the new run says it is ready -- the solver may
      still be finishing a slice on them when the page asks for a new run. */
@@ -2231,8 +2274,19 @@ const CELL3D = (function(){
   async function buildWorker(){
     const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
       await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
+      await sourceOf('dnsCell3dObservation'), await sourceOf('dnsCell3dTracers'),
       `let S = null, W = null, E = null, pool = null, dt = 0, sliceMs = 120, gen = -1,
-           engine = 'js';
+           engine = 'js', cloud = null, observation = null, totalSteps = 0;
+       const OBS=FARADAY_CELL3D_OBSERVATION;
+       function sceneObservation(initial=false){
+         const src=W?W.views:S;
+         return OBS.createFrame(S,{source:src,time:W?W.t:S.t,generation:gen,steps:totalSteps,initial,particles:cloud.physicalPositions(observation)});
+       }
+       function postFrame(steps,ms,kind='frame'){
+         const src=W?W.views:S,eta=new Float64Array(src.eta),ht=new Float64Array(src.Ht),scene=sceneObservation(totalSteps===0);
+         const transfer=[eta.buffer,ht.buffer,...Object.values(scene).filter(ArrayBuffer.isView).map(a=>a.buffer)];
+         self.postMessage({ok:true,kind,gen,engine,threads:pool?pool.channels.length+1:1,t:W?W.t:S.t,steps,ms,eta,ht,scene,cg:W?W.cgIters:S.cgIters},[...new Set(transfer)]);
+       }
        /* One command at a time, each to completion: a slice awaits the pool's workers,
           and an init arriving meanwhile must not replace the cell under it. */
        let chain = Promise.resolve();
@@ -2276,6 +2330,8 @@ const CELL3D = (function(){
              S.refreshMetric();
              if (W){ W.pushState(); W.refreshMetric(); }
              dt = S.stableStep();
+             totalSteps=0;observation=OBS.createObserver(S,{source:W?W.views:S,time:W?W.t:S.t,generation:gen});
+             cloud=FARADAY_CELL3D_TRACERS.create(observation,{count:4096,seed:d.tracerSeed});
              /* S11: the explicit terms' rows over the ports the page sent, one per
                 worker it started; none means this thread forms every row. */
              if (d.ports && d.ports.length){
@@ -2291,8 +2347,12 @@ const CELL3D = (function(){
              self.postMessage({ ok: true, kind: 'ready', gen, engine,
                threads: pool ? pool.channels.length + 1 : 1, dt,
                nr: S.nr, nth: S.nth, nz: S.nz, dth: S.dth,
-               rc: Array.from(S.rc), R: S.R, h: S.h });
+               rc: Array.from(S.rc), R: S.R, h: S.h,scene:sceneObservation(true) });
              return;
+           }
+           if(d.cmd==='reseed'){
+             if(d.gen!==gen)return;
+             cloud.reseed(observation,{seed:d.seed});postFrame(0,0,'particles');return;
            }
            if (d.cmd === 'slice'){
              if (d.gen !== gen) return;      /* a slice for a run that has ended */
@@ -2301,15 +2361,11 @@ const CELL3D = (function(){
                if (W) W.pullState();
                dt = S.stableStep();
                if (pool) await pool.step(dt); else E.step(dt);
-               n++;
+               const nextObservation=OBS.createObserver(S,{source:W?W.views:S,time:W?W.t:S.t,generation:gen});
+               cloud.step(observation,nextObservation,dt);observation=nextObservation;
+               n++;totalSteps++;
              }
-             const src = W ? W.views : S;
-             const eta = new Float64Array(src.eta), ht = new Float64Array(src.Ht);
-             self.postMessage({ ok: true, kind: 'frame', gen, engine,
-               threads: pool ? pool.channels.length + 1 : 1,
-               t: W ? W.t : S.t, steps: n,
-               ms: Date.now() - t0, eta, ht, cg: W ? W.cgIters : S.cgIters },
-               [eta.buffer, ht.buffer]);
+             postFrame(n,Date.now()-t0);
              return;
            }
            throw new Error('cell3d worker: unknown command ' + d.cmd);
@@ -2391,7 +2447,7 @@ const CELL3D = (function(){
       physicalTime:0,steps:0,engine:null,
       parameters:{R,h,rho:e.rho,nu:e.mu/e.rho,gamma:e.sigma,g:e.gravity,accel:e.acceleration,omegaD:2*Math.PI*e.frequencyHz,contact:'pinned'},
       initialCondition:{kind:'first-root-bessel',m,root,amplitudeM:amplitude,minimumDepthM:minDepth},
-      display:'normalized specified initial displacement; not an evolved solver result'};
+      display:'physical initial geometry with explicit display-only displacement magnification; not evolved'};
     function at(rho,theta){
       const pair=FARADAY_KERNEL.besselPair(m,root*rho), cm=Math.cos(m*theta), sm=Math.sin(m*theta);
       const re=rho === 1 ? 0 : amplitude*pair[0]*cm;
@@ -2414,6 +2470,13 @@ const CELL3D = (function(){
       }
       ETA.set(initialPreview.re);NX.set(initialPreview.gx);NY.set(initialPreview.gy);
       st.render={drawn:1,gatedRms:0,gated:0,initial:true};finishSurface(st);
+      if(!workerReady && (!sceneFrame || sceneFrame.generation!==gen || sceneFrame.previewKey!==key)){
+        const ic=initialPreview,geometry={R:ic.R,h:ic.h,time:0,generation:gen,heightAt:(r,th)=>ic.h+ic.at(r/ic.R,th).Re};
+        const initialCloud=FARADAY_CELL3D_TRACERS.create(geometry,{count:4096,seed:tracerSeed});
+        sceneFrame=FARADAY_CELL3D_OBSERVATION.createInitialFrame({...ic,generation:gen,initialCondition:ic.provenance.initialCondition,particles:initialCloud.physicalPositions(geometry)});
+        sceneFrame={...sceneFrame,previewKey:key,provenance:{...ic.provenance,generation:gen}};
+        UNIFIED3D.acceptFrame(sceneFrame);
+      }
       return true;
     } catch(e){
       err=String(e.message||e);initialPreview=null;ETA.fill(0);NX.fill(0);NY.fill(0);finishSurface(st);return false;
@@ -2529,16 +2592,18 @@ const CELL3D = (function(){
       if (!d.ok){ err=d.error;running3d=false;starting3d=false;slicePending=false;dirty=true;return; }
       if (d.kind === 'ready'){
         ranEngine=d.engine;ranThreads=d.threads;workerReady=true;starting3d=false;dirty=true;
+        sceneFrame=d.scene;UNIFIED3D.acceptFrame({...sceneFrame,provenance:{...sceneFrame.provenance,engine:ranEngine,parameters:{...lastRun.opts},initialCondition:{...lastRun.initialCondition}}});
         scheduleSlice();
         return;
       }
-      if (d.kind === 'frame'){
-        slicePending=false;
+      if (d.kind === 'frame' || d.kind === 'particles'){
+        if(d.kind==='frame')slicePending=false;
         ranEngine = d.engine; ranThreads = d.threads;
         etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
-        wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
-        haveFrame = true; dirty = true;
-        scheduleSlice();
+        wall += d.ms/1000; if(d.steps)perStep = d.ms/d.steps;
+        sceneFrame=d.scene;UNIFIED3D.acceptFrame({...sceneFrame,provenance:{...sceneFrame.provenance,engine:ranEngine,parameters:{...lastRun.opts},initialCondition:{...lastRun.initialCondition}}});
+        haveFrame = stepsDone>0; dirty = true;
+        if(d.kind==='frame')scheduleSlice();
       }
     };
     w.onerror = ev => {
@@ -2550,10 +2615,16 @@ const CELL3D = (function(){
       err=ev.message||'worker failed';running3d=false;starting3d=false;slicePending=false;workerReady=false;dirty=true;
     };
     const ports = helpers.map(h => h.port);
-    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
+    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0, tracerSeed,
                     engine, wasmBytes, ports }, ports);
   }
 
+  function reseed(){
+    if(starting3d)return false;
+    tracerSeed=(tracerSeed+1)>>>0;
+    if(workerReady){worker.postMessage({cmd:'reseed',gen,seed:tracerSeed});return;}
+    sceneFrame=null;dirty=true;
+  }
   function pause(){running3d=false;dirty=true;}
   function stop(){pause();}
   function resume(){
@@ -2562,7 +2633,7 @@ const CELL3D = (function(){
   }
   function reset(){
     running3d=false;starting3d=false;workerReady=false;slicePending=false;haveFrame=false;err=null;gen++;
-    etaBuf=null;htBuf=null;initialPreview=null;vessel=null;lastRun=null;grid=null;
+    etaBuf=null;htBuf=null;initialPreview=null;vessel=null;lastRun=null;grid=null;sceneFrame=null;UNIFIED3D.reset();
     physT=wall=stepsDone=perStep=peakRaw=0;ranEngine=null;ranThreads=0;dirty=true;
   }
   function snapshot(){
@@ -2581,7 +2652,7 @@ const CELL3D = (function(){
     return {
       provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes', fieldKind:'evolved-solver-frame',
         physicalTime: physT, steps: stepsDone, engine: ranEngine,
-        parameters: { ...lastRun.opts }, initialCondition:{...lastRun.initialCondition}, display: 'normalized surface snapshot; image size is not solver resolution' },
+        parameters: { ...lastRun.opts }, initialCondition:{...lastRun.initialCondition}, display: 'physical solver snapshot; image size is not solver resolution' },
       at(rho, th){
         const r = rho*frozen.R, theta = th < 0 ? th + 2*Math.PI : th;
         const a = frozen.etaSlopeAt(r, theta);
@@ -2653,11 +2724,12 @@ const CELL3D = (function(){
   const threadWorkers = () => ({ live: helpers.length, retiring: retiring.length,
                                  made: helpersMade, ended: helpersEnded,
                                  workers: helpers.map(h => h.worker) });
-  return { start, stop, pause, resume, reset, preview, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
+  return { start, stop, pause, resume, reset, reseed, preview, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
+           sceneFrame:()=>sceneFrame,
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = false;
+let useSolver = true;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
@@ -2685,7 +2757,7 @@ let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
 
 const GENERAL_FIELDS = [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']];
 const workspaceSettings = {
-  sand: null,
+  sand: {cellKey:'medium',freq:111,amp:180,temp:20,depth:3,rim:'free',experimentMode:'reference',generalInput:{...generalInput},view:'sand',phaseSign:PHASE_I,swapping:false,agitation:1.15,running:true,simT:0,comparePaper:true,referenceCell:'medium',engine:'cpp',threads:cell3dThreads,error:'',frequencyText:'111',formValues:null},
   ns: { cellKey: 'medium', freq: 111, amp: 180, temp: 20, depth: 3, rim: 'pinned',
     experimentMode: 'general', generalInput: { ...generalInput }, view: 'height',
     phaseSign: PHASE_I, swapping: false, agitation: 1.15, running: true, simT: 0,
@@ -2716,10 +2788,12 @@ function syncWorkspaceControls(){
   for (const [id, key, value] of [['workspaceSeg','workspace',workspace],['cellSeg','c',cellKey],['rimSeg','r',rim],['viewSeg','v',view],['srcSeg','s',useSolver ? cell3dEngine === 'cpp' ? 'dnscpp' : 'dns' : 'modal'],['thrSeg','t',String(cell3dThreads)],['phaseSeg','p',swapping ? 'swap' : String(phaseSign)]])
     document.querySelectorAll('#'+id+' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset[key] === value)));
   document.querySelector('#viewSeg [data-v="sand"]').hidden = useSolver;
-  if(FARADAY_STARTUP.drawn && !FARADAY_STARTUP.failed) $('startupStatus').textContent = useSolver ? '3D Navier–Stokes workspace ready.' : 'Sand visualization ready.';
+  $('scene3d').style.display = useSolver ? 'block' : 'none';
+  $('c').style.display = useSolver ? 'none' : 'block';
+  $('cgl').style.display = !useSolver && renderEngine === 'gpu' ? 'block' : 'none';
   $('workspaceNote').textContent = useSolver
-    ? 'Nonlinear liquid solver · General SI inputs · pinned rim · no modal substitution'
-    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+    ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
+    : 'Internal modal diagnostic';
 }
 function switchWorkspace(next){
   if (!['sand','ns'].includes(next)) throw new Error('Unknown workspace: '+next);
@@ -2773,23 +2847,124 @@ $('runSolver').addEventListener('click', () => {
   if (experimentMode === 'general' && !commitGeneralInputs()) return;
   if ($('experimentError').textContent) return;
   if (!useSolver){ $('experimentError').textContent = 'Select a 3D N-S engine before starting the solver.'; return; }
-  recompute(); solverRequested = true; CELL3D.start(state); dirty = true;
+  initialAutostart=false;UNIFIED3D.live();recompute(); solverRequested = true; CELL3D.start(state); dirty = true;
 });
 
 $('pauseSolver').addEventListener('click', () => {
   if (!useSolver) return;
-  if (CELL3D.clocks().live) CELL3D.pause(); else CELL3D.resume();
+  initialAutostart=false;
+  if (CELL3D.clocks().live) CELL3D.pause(); else {UNIFIED3D.live();CELL3D.resume();}
   dirty = true;
 });
 $('resetSolver').addEventListener('click', () => {
   if (!useSolver) return;
-  CELL3D.reset(); solverRequested = false; dirty = true; recompute();
+  initialAutostart=false;CELL3D.reset(); solverRequested = false; dirty = true; recompute();
 });
+/* The scene and replay consume immutable, generation-stamped observations.
+   Camera, layers and replay never step or replace the nonlinear fluid. */
+const UNIFIED3D = (() => {
+  const FRAME_LIMIT=180, BYTE_LIMIT=32*1024*1024;
+  let frames=[],bytes=0,current=null,following=true,playing=false,replayStart=null,replaySpan=null,paint=true,lastExport=null,generationFloor=-1;
+  const scene=FARADAY_SCENE3D.create($('scene3d'),{
+    options:{heightScale:5000,pointSize:3,showVectors:true,vectorScaleSeconds:1000,colorScaleM:generalInput.seedFraction*generalInput.depthMm/1000 || generalInput.depthMm/1000},
+    onError:e=>{$('sceneError').textContent=String(e.message||e);},
+    onContextChange:status=>{paint=true;if(!status.lost)$('sceneError').textContent='';},
+    onExportStatus:message=>{$('expNote').textContent=message;}
+  });
+  function frameBytes(f){let n=0;for(const v of Object.values(f))if(ArrayBuffer.isView(v))n+=v.byteLength;return n;}
+  function show(f){current=f;scene.setFrame(f);paint=true;}
+  function update(){
+    $('timeline').max=String(Math.max(0,frames.length-1));
+    $('timeline').value=String(Math.max(0,frames.indexOf(current)));
+    $('replayToggle').disabled=frames.length<2;
+    $('replayToggle').textContent=playing?'Pause replay':'Play recorded frames';
+    $('liveView').setAttribute('aria-pressed',String(following));
+    $('frameTime').textContent=current?`${current.initial?'Initial condition':following?'Live solver':'Recorded frame'} · ${(current.time*1000).toFixed(6)} ms · ${current.steps} steps`:'No valid frame';
+    $('historyNote').textContent=frames.length?`${frames.length} recorded frames · ${(frames[0].time*1000).toFixed(6)}–${(frames.at(-1).time*1000).toFixed(6)} ms · history limit 180 frames / 32 MiB`:'Waiting for computed frames';
+  }
+  function reset(f=null){frames=[];bytes=0;current=null;following=true;playing=false;replayStart=null;replaySpan=null;if(f)acceptFrame(f);else update();}
+  function acceptFrame(f){
+    if(!f || !Number.isFinite(f.time) || f.time<0 || !Number.isInteger(f.generation) || f.generation<0 || !Number.isInteger(f.steps) || f.steps<0)throw new Error('Invalid 3D observation metadata.');
+    if(f.generation<generationFloor)return false;
+    const last=frames.at(-1);
+    if(last && f.generation===last.generation && f.time<last.time)throw new Error('A solver frame moved physical time backwards.');
+    if(frameBytes(f)>BYTE_LIMIT)throw new Error('This observation exceeds the 32 MiB recorded-frame budget. No data was reduced.');
+    const stored=FARADAY_SCENE3D.captureFrame({...f,source:{...(f.provenance||f.source||{}),model:'nonlinear-incompressible-free-surface-navier-stokes',particleModel:'passive-fluid-tracers',fieldKind:f.initial?'initial-condition':'evolved-solver-frame',physicalTime:f.time,generation:f.generation,steps:f.steps}});
+    if(frameBytes(stored)>BYTE_LIMIT)throw new Error('This observation exceeds the 32 MiB recorded-frame budget. No data was reduced.');
+    if(last && f.generation!==last.generation)reset();
+    if(f.generation!==generationFloor){
+      const amplitude=stored.source.initialCondition?.amplitudeM;
+      scene.setOptions({colorScaleM:amplitude>0?amplitude:f.h});
+    }
+    generationFloor=f.generation;
+    frames.push(stored);bytes+=frameBytes(stored);
+    while(frames.length>1 && (frames.length>FRAME_LIMIT || bytes>BYTE_LIMIT)){const old=frames.shift();bytes-=frameBytes(old);}
+    if(following || !current)show(stored);
+    update();return true;
+  }
+  function seek(index){
+    if(!Number.isInteger(index)||index<0||index>=frames.length)throw new RangeError('Recorded frame is outside the stored timeline.');
+    CELL3D.pause();following=false;playing=false;replayStart=null;show(frames[index]);update();
+  }
+  function play(){
+    if(playing){playing=false;update();return;}
+    if(frames.length<2)return;
+    CELL3D.pause();following=false;playing=true;replayStart=null;
+    replaySpan={frames:frames.slice(),start:frames[0].time,end:frames.at(-1).time};
+    show(replaySpan.frames[0]);update();
+  }
+  function live(){following=true;playing=false;replayStart=null;replaySpan=null;if(frames.length)show(frames.at(-1));update();}
+  function tick(now){
+    if(playing && replaySpan){
+      if(replayStart===null)replayStart=now;
+      const elapsed=(now-replayStart)/8000;
+      const target=replaySpan.start+Math.min(1,elapsed)*(replaySpan.end-replaySpan.start);
+      let f=replaySpan.frames[0];for(const candidate of replaySpan.frames){if(candidate.time<=target)f=candidate;else break;}
+      if(f!==current)show(f);
+      if(elapsed>=1){show(replaySpan.frames.at(-1));playing=false;}
+      update();
+      $('historyNote').textContent+=` · recorded interval replayed over 8 s; no future extrapolation`;
+    }
+    if(paint && current){scene.render();paint=false;}
+    return scene.stats().ready;
+  }
+  function captureExport(){
+    if(!current)throw new Error('No current physical frame is available to export.');
+    const snap=scene.snapshot();
+    snap.provenance={...snap.frame.source,camera:{...snap.camera},display:{...snap.options},particles:snap.frame.particles.length/3};
+    return snap;
+  }
+  async function exportImage(size,onProgress){
+    const snap=captureExport();onProgress(`Rendering captured 3D frame at ${(snap.frame.time*1000).toFixed(6)} ms`);
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+    const canvas=await scene.exportCanvas(size,snap);
+    lastExport=structuredClone(snap.provenance);
+    return {canvas,scene:true,particles:snap.frame.particles.length/3,modes:0,pxPerWave:null,source:snap.provenance,
+      label:{diameterMm:snap.frame.R*2000,frequencyHz:snap.frame.source.parameters?.omegaD/(2*Math.PI)||freq,model:'navier-stokes',view:'3d',fieldTag:snap.frame.initial?'initial-t0':`t${snap.frame.time.toFixed(9)}s`}};
+  }
+  return {scene,acceptFrame,reset,seek,play,live,tick,captureExport,exportImage,
+    currentFrame:()=>current?scene.snapshot().frame:null,
+    lastExport:()=>lastExport?structuredClone(lastExport):null,
+    historyState:()=>({following,playing,bytes,limitFrames:FRAME_LIMIT,limitBytes:BYTE_LIMIT,frames:frames.map(f=>({time:f.time,generation:f.generation,steps:f.steps,initial:f.initial})),currentTime:current?.time??null})};
+})();
+$('topView').addEventListener('click',()=>UNIFIED3D.scene.topView());
+$('resetCamera').addEventListener('click',()=>UNIFIED3D.scene.resetCamera());
+for(const [id,option] of [['showParticles','showParticles'],['showSurface','showSurface'],['showVectors','showVectors']])
+  $(id).addEventListener('change',()=>{UNIFIED3D.scene.setOptions({[option]:$(id).checked});UNIFIED3D.scene.render();});
+for(const [id,option] of [['heightScale','heightScale'],['vectorScale','vectorScaleSeconds']])
+  $(id).addEventListener('change',()=>{try{const value=Number($(id).value);if(!$(id).value.trim()||!Number.isFinite(value)||value<=0)throw new Error('Display scale must be a finite positive number.');UNIFIED3D.scene.setOptions({[option]:value});UNIFIED3D.scene.render();$('sceneError').textContent='';}catch(e){$('sceneError').textContent=e.message;}});
+$('surfaceColor').addEventListener('change',()=>{UNIFIED3D.scene.setOptions({colorMode:$('surfaceColor').value});UNIFIED3D.scene.render();});
+$('timeline').addEventListener('input',()=>UNIFIED3D.seek(Number($('timeline').value)));
+$('replayToggle').addEventListener('click',()=>UNIFIED3D.play());
+$('liveView').addEventListener('click',()=>UNIFIED3D.live());
+$('seedParticles').addEventListener('click',()=>CELL3D.reseed());
+let initialAutostart = new URLSearchParams(location.search).get('paused') !== '1';
+
 syncWorkspaceControls(); sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage
    blocked the page starts on the CPU, as it always has. */
 try {
-  if (localStorage.getItem('cymatic.renderEngine') === 'gpu'){
+  if (!useSolver && localStorage.getItem('cymatic.renderEngine') === 'gpu'){
     document.querySelectorAll('#engSeg button').forEach(x =>
       x.setAttribute('aria-pressed', String(x.dataset.e === 'gpu')));
     setRenderEngine('gpu');

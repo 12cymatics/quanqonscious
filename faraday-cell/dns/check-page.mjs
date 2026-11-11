@@ -36,7 +36,7 @@
 */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, readFileSync, statSync, mkdtempSync,
+import { createReadStream, existsSync, readFileSync, statSync, mkdtempSync, mkdirSync,
          rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -193,7 +193,8 @@ class Page {
     await page.cmd('Runtime.enable');
     await page.cmd('Log.enable');
     await page.cmd('Page.enable');
-    const navigation = await page.cmd('Page.navigate', { url });
+    const inspectedUrl = new URL(url); inspectedUrl.searchParams.set('paused', '1');
+    const navigation = await page.cmd('Page.navigate', { url: inspectedUrl.href });
     if (navigation.errorText) throw new Error(
       `check-page: navigation to ${url} failed: ${navigation.errorText}. No page assertions ran for this URL.`);
     return page;
@@ -220,6 +221,7 @@ class Page {
     }
   }
   async shot(path){
+    mkdirSync(dirname(path), { recursive: true });
     const r = await this.cmd('Page.captureScreenshot', { format: 'png' });
     writeFileSync(path, Buffer.from(r.data, 'base64'));
   }
@@ -290,20 +292,21 @@ let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
 
 async function checkGeneralPending(page){
-  const sand=await page.json(`({useSolver,view,visible:ETA.some(v=>v!==0),
-    enabled:!document.querySelector('#viewSeg [data-v="sand"]').disabled})`);
-  ok(!sand.useSolver && sand.view==='sand' && sand.visible && sand.enabled,
-     'entry displays usable Sand before the user chooses a nonlinear experiment',JSON.stringify(sand));
-  await page.eval(`document.querySelector('#workspaceSeg [data-workspace="ns"]').click(); recompute(); true`);
+  await page.waitFor('typeof UNIFIED3D !== "undefined" && UNIFIED3D.scene && UNIFIED3D.scene.stats().ready',
+    30000, 'the unified three-dimensional initial scene');
+  const scene=await page.json(`({useSolver,visible:document.getElementById('scene3d').getBoundingClientRect().width>0,
+    stats:UNIFIED3D.scene.stats(),workspaceHidden:getComputedStyle(document.getElementById('workspaceSeg')).display==='none'})`);
+  ok(scene.useSolver && scene.visible && scene.stats.triangles>100 && scene.workspaceHidden,
+     'entry displays one actual three-dimensional nonlinear scene without a separate Sand workspace',JSON.stringify(scene));
   const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
     rim, useSolver, solverRequested, clocks: CELL3D.clocks(),
     comparePaper, signature: state.visualSignature,
     visible: ETA.some(v => v !== 0), source:CELL3D.snapshot().provenance,
     overlay: getComputedStyle(document.getElementById('solverOverlay')).display !== 'none' })`);
   ok(pending.experimentMode === 'general' && pending.experiment,
-     'the explicitly selected nonlinear experiment uses independent physical inputs', JSON.stringify(pending));
+     'the unified nonlinear experiment uses independent physical inputs', JSON.stringify(pending));
   ok(pending.rim === 'pinned' && pending.useSolver,
-     'the nonlinear workspace selects the pinned boundary', JSON.stringify(pending));
+     'the unified nonlinear experiment selects the pinned boundary', JSON.stringify(pending));
   ok(!pending.solverRequested && !pending.clocks.have && pending.clocks.initial && pending.visible
      && pending.clocks.physT===0 && pending.clocks.stepsDone===0 && !pending.overlay,
      'before a run the specified initial condition is visible without claiming evolution', JSON.stringify(pending));
@@ -805,7 +808,7 @@ async function checkSolverDraws(page){
 async function selectGeneralSolverFixture(page,engine){
   await page.eval(`(() => {
     // Preserve the legacy fixture's numerical fluid/geometry domain while
-    // entering the explicitly separate nonlinear workspace through its control.
+    // entering the unified nonlinear state through the retained internal diagnostic fixture.
     const values=!useSolver?{expDiameter:state.cellDiameterMm,expDepth:state.depthMm,
       expRho:state.water.rho,expMu:state.water.mu,expSigma:state.water.sigma,
       expGravity:state.gravity,expAccel:state.accelAssumed,
@@ -834,7 +837,7 @@ async function checkSolverExport(page, changeControls = false){
     CELL3D.snapshot = () => { snapshots++; frozen = originalSnapshot(); return frozen; };
     try {
       view = 'height';
-      const size = 129, exported = await exportImage(size, message => {
+      const size = 129, exported = await exportDiagnosticImage(size, message => {
         if (${JSON.stringify(changeControls)} && !changed && message === 'painting'){
           changed = true; setFreq(originalFrequency + 1); view = 'optical';
         }
