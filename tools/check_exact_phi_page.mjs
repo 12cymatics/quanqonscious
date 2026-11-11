@@ -319,10 +319,10 @@ try {
 
   section('the glide');
   await setGlide(5);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await waitFor(`KERNEL_VIEW.state.frame === 2`, 30000);
   const gl = await evaluate(`(() => {
-    const st = VISUAL_CERTIFICATE.status(), p = PRESETS['pre-damper'].set, f = KERNEL_VIEW.state.frame;
+    const st = VISUAL_CERTIFICATE.status(), p = PRESETS['pre-9-11-29'].set, f = KERNEL_VIEW.state.frame;
     return { f, ok: RAMP_VIEW.ok, cert: st.ramp, rising: RAMP_VIEW.rising, row: glideWords(),
              rows: RAMP_VIEW.rows.map(r => [r.id, Q.toString(r.s), Q.toString(r.to), r.k, r.n]),
              want: Object.keys(p).map(Number).sort((a, b) => a - b).map(id => { const to = Q.mk(BigInt(p[id]), 100n);
@@ -365,7 +365,7 @@ try {
      channels above 0.85 (measured on six presets). */
   const worstWhite = whites.reduce((m, w) => w[1] > m[1] ? w : m, ['', 0]);
   ok(worstWhite[1] < 0.05, `on no preset is more than 5% of the drawn surface near white (worst ${worstWhite[0]}, ${(100 * worstWhite[1]).toFixed(2)}%)`);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   for (const comp of ['PARALLEL', 'SERIES', 'SYMMETRIC_CONCURRENT']) {
     await evaluate(`document.querySelector('#comp-ctrls button[data-comp="${comp}"]').click()`);
     await applied(`composition ${comp}`, { comp });
@@ -380,8 +380,8 @@ try {
   const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
   ok(ao.ids === all29 && ao.half && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
      'ALL ON sends all 29 at 50% to the worker as one setting', JSON.stringify(ao));
-  const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
-  await evaluate(`document.getElementById('pre-damper').click()`);
+  const dp = await evaluate(`({ comp: PRESETS['pre-9-11-29'].comp, active: Object.keys(PRESETS['pre-9-11-29'].set).map(Number).sort((a, b) => a - b).join(',') })`);
+  await evaluate(`document.getElementById('pre-9-11-29').click()`);
   await applied('a preset chosen while ALL ON is still calculating replaces that calculation', dp);
   const r0 = await evaluate(`KERNEL_VIEW.appliedEpoch`);
   await evaluate(`document.getElementById('btn-reset').click()`);
@@ -390,7 +390,7 @@ try {
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(400);
   const p0 = await evaluate(`KERNEL_VIEW.configVersion`);
-  await evaluate(`document.getElementById('pre-checksum').click()`);
+  await evaluate(`document.getElementById('pre-9-12-18-24').click()`);
   await sleep(2500);
   const p1 = await evaluate(`({ cfg: KERNEL_VIEW.configVersion, applied: KERNEL_VIEW.appliedVersion, frame: KERNEL_VIEW.state.frame, inFlight: KERNEL_VIEW.inFlight, queue: KERNEL_VIEW.queue.length })`);
   ok(p1.cfg === p0 + 1 && p1.applied === p1.cfg && p1.frame === 0 && !p1.inFlight && p1.queue === 0, 'PAUSE holds a new setting at its seed, uncalculated', JSON.stringify(p1));
@@ -398,9 +398,9 @@ try {
   ok(await waitFor(`KERNEL_VIEW.state.frame >= 2 && KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion`, 20000), 'RUN goes on from it, a step a second');
 
   section('certified');
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
-  ok(faithful, 'the badge reaches FAITHFUL on the damper preset',
+  ok(faithful, 'the badge reaches FAITHFUL on the S9 · S11 · S29 preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
   section('dynamo and Maya');
@@ -428,7 +428,7 @@ try {
     if (!k || k.omega !== qstr(om, 10) || k.drive !== qstr(dr, 4) || k.chi !== qstr(ch, 10)) { presetParams = false; which = id + ' ' + JSON.stringify(k); }
   }
   ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.hist.frame.length >= 3 && KERNEL_VIEW.state.frame >= 2`, 60000);
   const dy = await evaluate(`(() => {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
@@ -473,7 +473,7 @@ try {
      one state; the worker's exact A and chi for that state are fetched and the
      gate reads them on the torus itself: positions from tessVertexToTorus's
      angles, circulations by walking each face's corners. */
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 2`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -538,7 +538,7 @@ try {
     const by = Y(4) - 6;
     const tubeCol = [0, 1, 2, 3].every(r => (T[r] >= 0 ? amber : cyan)(px(X(r), T[r] >= 0 ? by - 1 : by - 9)));
     const img = ctx.getImageData(Math.round((F.x - 20) * dpr), Math.round((F.y - 44) * dpr), Math.round((4 * c + 96) * dpr), Math.round((4 * c + 80) * dpr)).data;
-    /* glyph pixels, not the panel's dark background: measured 11% on the dynamo preset */
+    /* glyph pixels, not the panel's dark background: measured 11% on the S3 · S9 · S11 · S25 · S29 preset */
     let lit = 0; for (let k = 0; k < img.length; k += 4) if (Math.max(img[k], img[k + 1], img[k + 2]) > 90) lit++;
     /* the arrows and arcs as drawn, against the gate's own reading of which
        way each points: an edge is along theta when its ends differ in
@@ -617,12 +617,12 @@ try {
   section('the fields around the construct');
   /* The magnetic and electric fields of the construct's sources, and the
      energy flow between them (FieldsAround.lean). Paused on one landed state
-     of the damper preset, the gate takes what the page asked the field worker
+     of the S9 · S11 · S29 preset, the gate takes what the page asked the field worker
      (sources, their places, the radius) and what it answered, and recomputes
      the answer independently: B by integrating Biot-Savart numerically along
      each straight piece (Gauss-Legendre, panels finer the nearer the point),
      not by the worker's closed form; E by Coulomb; S = E x B. */
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 2`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -955,7 +955,7 @@ try {
   await evaluate(`document.getElementById('btn-run').click()`);
   await evaluate(`document.getElementById('btn-fields').click()`);
   const q0 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
-  await evaluate(`document.getElementById('pre-checksum').click()`);
+  await evaluate(`document.getElementById('pre-9-12-18-24').click()`);
   const landed = await waitFor(`KERNEL_VIEW.appliedVersion > ${q0.v} && KERNEL_VIEW.state.frame >= 3`, 20000);
   const q1 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
   await evaluate(`document.getElementById('btn-run').click()`);
@@ -970,7 +970,7 @@ try {
   /* One step a second, every step drawn in order, the surface moving to each
      state over its second and landing on it exactly, the next move starting
      where the last ended. */
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
@@ -1021,7 +1021,7 @@ try {
   ok(mo.interior >= 0.3 * mo.frames, `the surface moves between steps: ${mo.interior} of ${mo.frames} frames drawn mid-move`);
   ok(mo.worstZoom <= 0.1, `the framing eases: never more than 10% between frames (worst ${(100 * mo.worstZoom).toFixed(2)}%)`);
   await setGlide(10);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await waitFor(`KERNEL_VIEW.state.frame >= 3 && KERNEL_VIEW.state.frame <= 6`, 20000);
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
@@ -1123,7 +1123,7 @@ try {
   await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-damper', 'pre-amplifier']) {
+  for (const id of ['pre-9-11-29', 'pre-1']) {
     await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
@@ -1159,7 +1159,7 @@ try {
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
   ok(lawBroken.length === 0 && lawFrames > 100,
-     `on a fresh page every one of ${lawFrames} frames over DAMPER and AMPLIFIER keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     `on a fresh page every one of ${lawFrames} frames over the S9 · S11 · S29 and S1 presets keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
   section('on a phone');

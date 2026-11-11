@@ -134,5 +134,48 @@ console.log('\nthe book methods on the vertex field');
   ok(states[0].every((x, i) => BOOK.apply(7, states[0], Q.ZERO)[i] === x || Q.eq(BOOK.apply(7, states[0], Q.ZERO)[i], x)), 'at strength zero the field is unchanged');
 }
 
+console.log('\nthe methods fed from the field');
+{
+  const mk = (seedv, scale, den) => Array.from({ length: 16 }, (_, v) => f(((v + 3) * seedv * 7919 + v * v * 131) % (2 * scale + 1) - scale, den + (v * seedv) % 4));
+  const states = [K.initState(), K.initState().map(x => Q.neg(x)), mk(1, 20, 1), mk(2, 25, 3), mk(3, 9, 2), mk(5, 14, 7), mk(7, 30, 5), mk(11, 5, 1),
+                  Array.from({ length: 16 }, () => Q.ZERO), Array.from({ length: 16 }, (_, v) => f(v % 2 ? 7 : -7, 2))];
+  const cases = [], got = [];
+  K.setExactBits(null);
+  try {
+    for (let id = 1; id <= 29; id++) states.forEach((psi, si) => {
+      const strength = f(1 + si, 64 * id);
+      cases.push({ id, from_field: true, psi: psi.map(S), strength: S(strength) });
+      try { got.push({ terms: BOOK.terms(id, BOOK.operandsOf(id, psi)).map(S), psi: BOOK.fromField(id, psi, strength).map(S) }); }
+      catch (e) { got.push({ refused: e instanceof RangeError ? e.message : 'not a RangeError: ' + e.message }); }
+    });
+  } finally { K.setExactBits(4096); }
+  const want = reference(cases);
+  let same = 0, refusedBoth = 0;
+  const bad = [], computed = Array(30).fill(0);
+  want.forEach((w, i) => {
+    const g = got[i];
+    if (w.refused || g.refused) {
+      if (w.refused && g.refused && !g.refused.startsWith('not a')) refusedBoth++;
+      else bad.push(`S${cases[i].id} state ${i % states.length}: reference ${w.refused ? 'refuses' : 'computes'}, kernel ${g.refused || 'computes'}`);
+    } else if (JSON.stringify(w.terms) === JSON.stringify(g.terms) && JSON.stringify(w.psi) === JSON.stringify(g.psi)) { same++; computed[cases[i].id]++; }
+    else bad.push(`S${cases[i].id} state ${i % states.length} differs`);
+  });
+  ok(bad.length === 0 && same + refusedBoth === cases.length,
+     `${cases.length} applications (29 methods x ${states.length} fields), operands read from the integer parts of the vertices: ${same} give the reference's terms and rotated field exactly, ${refusedBoth} are refused by both`, bad.slice(0, 5).join('; '));
+  const least = Math.min(...computed.slice(1));
+  ok(least >= 4, `every method is computed on at least four of the fields (fewest ${least}: S${computed.indexOf(least, 1)})`);
+  const seed = K.initState();
+  const seedRefused = [];
+  for (let id = 1; id <= 29; id++) { try { BOOK.fromField(id, seed, f(1, 100)); } catch (e) { seedRefused.push('S' + id); } }
+  ok(seedRefused.length === 0, 'on the seed field all 29 methods are computed, none refused', seedRefused.join(' '));
+  const big = Q.add(Q.mk(3n ** 3000n + 1n, 7n ** 1500n), Q.ZERO);
+  const wide = seed.map((x, v) => v === 0 ? Q.add(x, Q.sub(big, big)) : x);
+  let undecided = false;
+  try { BOOK.operandsOf(1, wide); } catch (e) { undecided = e instanceof K.NeedPrecision; }
+  const settled = seed.map((x, v) => v === 0 ? Q.add(Q.mul(x, Q.div(big, big)), Q.mk(1n, 3n)) : x);
+  ok(undecided && !Q.isExact(settled[0]) && S(BOOK.operandsOf(2, settled).a) === S(BOOK.operandsOf(2, seed.map((x, v) => v === 0 ? Q.add(x, Q.mk(1n, 3n)) : x)).a),
+     'an interval that reaches across an integer leaves the integer part undecided, and one that does not gives the exact integer part');
+}
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) process.exit(1);

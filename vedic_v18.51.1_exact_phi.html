@@ -201,19 +201,19 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
   <div class="section">
     <h5>PRESETS</h5>
     <div class="ctrls" id="preset-ctrls" style="gap:2px;margin-top:0">
-      <button type="button" id="pre-quartet">✦ QUARTET</button>
-      <button type="button" id="pre-damper">⏚ DAMPER</button>
-      <button type="button" id="pre-inductor">🧲 INDUCTOR</button>
-      <button type="button" id="pre-dynamo">⚙ DYNAMO</button>
-      <button type="button" id="pre-containment">⛨ CONTAINMENT</button>
-      <button type="button" id="pre-capacitor">⚡ CAPACITOR</button>
-      <button type="button" id="pre-balancer">⚖ BALANCER</button>
-      <button type="button" id="pre-checksum">✓ CHECKSUM</button>
-      <button type="button" id="pre-lock">🔒 LOCK</button>
-      <button type="button" id="pre-rejector">⇄ REJECTOR</button>
-      <button type="button" id="pre-mixer">◐ MIXER</button>
-      <button type="button" id="pre-amplifier">▲ AMPLIFIER</button>
-      <button type="button" id="pre-correlator">⊛ CORRELATOR</button>
+      <button type="button" id="pre-2-6-23-26">S2 · S6 · S23 · S26</button>
+      <button type="button" id="pre-9-11-29">S9 · S11 · S29</button>
+      <button type="button" id="pre-3-9-27">S3 · S9 · S27</button>
+      <button type="button" id="pre-3-9-11-25-29">S3 · S9 · S11 · S25 · S29</button>
+      <button type="button" id="pre-9-28">S9 · S28</button>
+      <button type="button" id="pre-4-5-26">S4 · S5 · S26</button>
+      <button type="button" id="pre-2-9">S2 · S9</button>
+      <button type="button" id="pre-9-12-18-24">S9 · S12 · S18 · S24</button>
+      <button type="button" id="pre-9-20">S9 · S20</button>
+      <button type="button" id="pre-3-9-11">S3 · S9 · S11</button>
+      <button type="button" id="pre-9-22">S9 · S22</button>
+      <button type="button" id="pre-1">S1</button>
+      <button type="button" id="pre-3-9">S3 · S9</button>
     </div>
   </div>
   <div class="section">
@@ -861,48 +861,9 @@ const KERNEL_FACTORY = () => {
   const stressOf = B => { const b2 = B.reduce((s, x) => Q.add(s, Q.mul(x, x)), Q.ZERO);
     return [0, 1, 2].map(i => [0, 1, 2].map(j => Q.add(Q.mul(B[i], B[j]), i === j ? Q.neg(Q.mul(Q.HALF, b2)) : Q.ZERO))); };
   const MSTVQ_FEED = Q.mk(1n, 200000000n), TGCR_KAPPA_FEED = Q.mk(1n, 500n);
-  const SUTRA_TYPE = Object.freeze({1:'MULTIPLICATIVE',2:'REFLECTIVE',3:'CONVOLUTIVE',4:'DIVISIVE',5:'REFLECTIVE',6:'PERMUTATIVE',7:'PERMUTATIVE',
-    8:'DIVISIVE',9:'DIFFUSIVE',10:'MULTIPLICATIVE',11:'CONVOLUTIVE',12:'REFLECTIVE',13:'DIVISIVE',14:'MULTIPLICATIVE',15:'MULTIPLICATIVE',
-    16:'DIVISIVE',17:'DIFFUSIVE',18:'MODULAR',19:'DIVISIVE',20:'MODULAR',21:'MODULAR',22:'REFLECTIVE',23:'REFLECTIVE',24:'MODULAR',
-    25:'CONVOLUTIVE',26:'PERMUTATIVE',27:'DIFFUSIVE',28:'DIFFUSIVE',29:'CONSERVATION'});
+  const SUTRA_TYPE = Object.freeze({1:'nine_ender_repetend',2:'near_base_product',3:'crosswise_coefficients',4:'transposed_polynomial_division',5:'equal_product_equation',6:'proportional_rhs_system',7:'symmetric_system',8:'complete_quadratic',9:'polynomial_derivative',10:'deficiency_square',11:'symmetric_biquadratic',12:'remainder_digits',13:'arithmetic_progression_equation',14:'nines_product',15:'product_coefficient_sum',16:'factor_product_derivative',17:'working_base_product',18:'constant_remainders',19:'complementary_binomial_factor',20:'sevenths_repetend',21:'osculation',22:'deficiency_cube',23:'deficiency_square',24:'complementary_last_digits',25:'last_term_equation',26:'sum_crosswise_products',27:'homogeneous_quadratic_factors',28:'observed_reciprocal_pair',29:'coefficient_sum_identity'});
   const GRVQ_K = Object.freeze({1:0, 5:1, 9:2, 14:3});
-  const SUTRA_ARG_SPEC = Object.freeze({
-    1:  [{name:'axis', role:'the edge to the previous: Ψ_{i⊕2^axis}', def:Q.ZERO, lo:0, hi:3, int:true},
-         {name:'one', role:'"one more": the + 1 in |Ψ_nb|² + 1', def:Q.ONE, lo:1/16, hi:8}],
-    2:  [{name:'radix', role:'"all from 9, last from 10": the base B = radix^order', def:Q.mk(10n), lo:2, hi:16, int:true}],
-    3:  [{name:'divisor', role:'the 1/N of the crosswise (XOR) convolution, taken per mean |Ψ|', def:Q.mk(16n), lo:1, hi:64}],
-    4:  [{name:'quarters', role:'r = hw/quarters in σ = r/(1 + r)', def:Q.mk(4n), lo:1, hi:16}],
-    5:  [],
-    6:  [{name:'ratio', role:'the proportion each edge ratio is driven to', def:PHI_Q, lo:1, hi:4}],
-    7:  [],
-    8:  [{name:'pull', role:'the weight toward the completed square', def:Q.QUARTER, lo:1/16, hi:1}],
-    9:  [],
-    10: [{name:'radix', role:'the base B = radix^order of the deficiency', def:Q.mk(10n), lo:2, hi:16, int:true}],
-    11: [],
-    12: [{name:'modulus', role:'casting out nines: the digital root modulus', def:Q.mk(9n), lo:2, hi:16, int:true}],
-    13: [{name:'terms', role:'continued-fraction terms of the penultimate and ultimate', def:Q.mk(8n), lo:1, hi:16, int:true}],
-    14: [{name:'axis', role:'the edge to the previous: Ψ_{i⊕2^axis}', def:Q.mk(3n), lo:0, hi:3, int:true},
-         {name:'one', role:'"one less": the + 1 in |Ψ_nb| + 1', def:Q.ONE, lo:1/16, hi:8}],
-    15: [],
-    16: [],
-    17: [{name:'proportion', role:'"proportionately": the weight of the gradient', def:PHI_Q, lo:1/16, hi:4}],
-    18: [{name:'modA', role:'the first remainder modulus', def:Q.mk(5n), lo:2, hi:16, int:true},
-         {name:'modB', role:'the second remainder modulus', def:Q.mk(7n), lo:2, hi:16, int:true}],
-    19: [{name:'ratio', role:'the root spacing |r₂/r₁| driven to', def:PHI_Q, lo:1, hi:4},
-         {name:'rate', role:'the step toward it', def:Q.mk(1n,10n), lo:1/128, hi:1}],
-    20: [{name:'base', role:'"by mere observation": the base of the residue', def:Q.mk(7n), lo:2, hi:16, int:true}],
-    21: [{name:'osculator', role:'the osculator of the last digit', def:Q.mk(5n), lo:1, hi:9, int:true},
-         {name:'modulus', role:'the divisor tested by osculation', def:Q.mk(7n), lo:2, hi:16, int:true}],
-    22: [],
-    23: [{name:'tens', role:'"last digits summing to ten"', def:Q.mk(10n), lo:2, hi:16, int:true}],
-    24: [{name:'digits', role:'the tail of 10^digits eliminated and retained', def:Q.TWO, lo:1, hi:4, int:true}],
-    25: [{name:'layer', role:'the push per Hamming layer', def:Q.QUARTER, lo:1/16, hi:1},
-         {name:'gradient', role:'the gradient push on the inertial layer', def:Q.mk(1n,20n), lo:1/128, hi:1}],
-    26: [{name:'portion', role:'the flag portion Ψ_flag / portion', def:Q.mk(16n), lo:1, hi:64}],
-    27: [],
-    28: [{name:'rate', role:'the share moved of the difference of squares over the sum of magnitudes', def:Q.mk(1n,20n), lo:1/128, hi:1}],
-    29: [{name:'weight', role:'the conservation weight 29/145', def:Q.mk(1n,5n), lo:1/16, hi:1}]
-  });
+  const SUTRA_ARG_SPEC = Object.freeze(Object.fromEntries(Array.from({ length: 29 }, (_, k) => [k + 1, Object.freeze([])])));
   const qOfDouble = x => {
     if (!Number.isFinite(x)) throw new RangeError('qOfDouble: non-finite bound');
     let v = x, d = 1n;
@@ -938,319 +899,11 @@ const KERNEL_FACTORY = () => {
     return out;
   };
   const pull = (x, target, w) => Q.add(x, Q.mul(Q.sub(target, x), w));
+  const MSTVQ_SHARE = Object.freeze({ 2: Q.mk(1n, 10n), 3: Q.mk(1n, 100n), 29: Q.mk(1n, 5n) });
   const vedicField = (id, psi, a, al) => {
-    const p = psi.slice();
-    switch (id) {
-      case 1: case 14: {
-        const ax = 1 << argInt(a[1]), one = a[2];
-        for (let i = 0; i < 16; i++) {
-          const nb = p[i ^ ax];
-          const f = id === 1 ? Q.div(nb, Q.add(Q.mul(nb, nb), one)) : Q.neg(Q.div(Q.ONE, Q.add(Q.abs(nb), one)));
-          p[i] = Q.mul(p[i], Q.add(Q.ONE, Q.mul(al, f)));
-        }
-        return { p };
-      }
-      case 2: {
-        let m = Q.ONE;
-        for (const x of psi) if (Q.cmp(Q.abs(x), m) > 0) m = Q.abs(x);
-        const { B, order } = radixAbove(m, BigInt(argInt(a[1])));
-        for (let i = 0; i < 16; i++) p[i] = Q.add(psi[i], Q.mul(Q.sub(Q.sub(B, psi[i]), psi[i]), al));
-        return { p, B: mstvqB(p, Q.mul(al, Q.mk(1n, 10n))), base: B, order };
-      }
-      case 3: {
-        const m = meanAbsR(psi);
-        const conv = Array.from({ length: 16 }, (_, i) => { let s = Q.ZERO; for (let j = 0; j < 16; j++) s = Q.add(s, Q.mul(psi[j], psi[i ^ j])); return proportionate(Q.div(s, a[1]), m); });
-        for (let i = 0; i < 16; i++) p[i] = pull(psi[i], conv[i], al);
-        return { p, B: mstvqB(p, Q.mul(al, Q.mk(1n, 100n))), conv };
-      }
-      case 4: {
-        const sums = [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO], cnt = [0, 0, 0, 0, 0];
-        for (let i = 0; i < 16; i++) { sums[hw(i)] = Q.add(sums[hw(i)], psi[i]); cnt[hw(i)]++; }
-        const c = sums.map((s, h) => Q.div(s, Q.mk(BigInt(cnt[h]))));
-        for (let i = 0; i < 16; i++) {
-          const r = Q.div(Q.mk(BigInt(hw(i))), a[1]), sigma = Q.div(r, Q.add(Q.ONE, r));
-          let P = c[4];
-          for (let k = 3; k >= 0; k--) P = Q.add(c[k], Q.mul(sigma, P));
-          p[i] = pull(psi[i], P, al);
-        }
-        return { p, layers: c };
-      }
-      case 5: {
-        for (let i = 0; i < 8; i++) {
-          const j = i ^ 15, ti = Q.neg(psi[j]), tj = Q.neg(psi[i]);
-          p[i] = pull(psi[i], ti, al); p[j] = pull(psi[j], tj, al);
-        }
-        return { p };
-      }
-      case 6: {
-        for (let axis = 0; axis < 4; axis++) {
-          const mask = 1 << axis;
-          for (let base = 0; base < 16; base++) {
-            if (base & mask) continue;
-            const i0 = base, i1 = base | mask, v0 = p[i0], v1 = p[i1];
-            if (Q.isZero(v0)) continue;
-            const ratio = Q.div(v1, v0), err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1]));
-            const corr = storeQ(Q.neg(Q.mul(Q.mul(err, al), Q.abs(Q.add(v0, v1)))));
-            p[i1] = Q.add(p[i1], corr);
-            p[i0] = Q.sub(p[i0], Q.mul(corr, Q.HALF));
-          }
-        }
-        return { p };
-      }
-      case 7: {
-        for (let axis = 0; axis < 4; axis++) {
-          const mask = 1 << axis;
-          for (let base = 0; base < 16; base++) {
-            if (base & mask) continue;
-            const i0 = base, i1 = base | mask;
-            const S = Q.mul(Q.add(p[i0], p[i1]), Q.HALF), A = Q.mul(Q.sub(p[i0], p[i1]), Q.HALF);
-            const delta = storeQ(Q.mul(proportionate(Q.mul(Q.sub(Q.mul(S, S), Q.mul(A, A)), A), Q.add(Q.mul(S, S), Q.mul(A, A))), al));
-            const nS = Q.add(S, delta), nA = Q.sub(A, delta);
-            p[i0] = Q.add(nS, nA); p[i1] = Q.sub(nS, nA);
-          }
-        }
-        return { p };
-      }
-      case 8: {
-        for (let i = 0; i < 16; i++) {
-          let mini = Q.ZERO;
-          for (const j of NEIGHBORS(i)) mini = Q.add(mini, Q.mul(Q.add(p[i], p[j]), Q.HALF));
-          p[i] = pull(p[i], Q.mul(mini, Q.QUARTER), Q.mul(al, a[1]));
-        }
-        return { p };
-      }
-      case 9: {
-        const lap = psi.map((x, i) => NEIGHBORS(i).reduce((s, j) => Q.add(s, psi[j]), Q.neg(Q.mul(Q.FOUR, x))));
-        for (let i = 0; i < 16; i++) p[i] = Q.add(psi[i], Q.mul(lap[i], al));
-        return { p, laplacian: lap };
-      }
-      case 10: {
-        const mean = meanR(psi), m = Q.cmp(Q.abs(mean), Q.ONE) > 0 ? Q.abs(mean) : Q.ONE;
-        const { B } = radixAbove(m, BigInt(argInt(a[1])));
-        for (let i = 0; i < 16; i++) {
-          const d = Q.div(Q.sub(B, Q.abs(psi[i])), B);
-          p[i] = Q.mul(psi[i], Q.add(Q.ONE, Q.mul(al, Q.mul(d, d))));
-        }
-        return { p, base: B };
-      }
-      case 11: {
-        const sums = [Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO, Q.ZERO], cnt = [0, 0, 0, 0, 0];
-        for (let i = 0; i < 16; i++) { sums[hw(i)] = Q.add(sums[hw(i)], psi[i]); cnt[hw(i)]++; }
-        const whole = meanR(psi);
-        for (let i = 0; i < 16; i++) {
-          const part = Q.div(sums[hw(i)], Q.mk(BigInt(cnt[hw(i)])));
-          p[i] = pull(psi[i], Q.mul(Q.add(part, whole), Q.HALF), al);
-        }
-        return { p };
-      }
-      case 12: {
-        const m = BigInt(argInt(a[1]));
-        for (let i = 0; i < 16; i++) {
-          const v = absFloor(psi[i]), dr = v === 0n ? 0n : 1n + (v - 1n) % m;
-          p[i] = pull(psi[i], Q.mk(sgnQ(psi[i]) * dr), al);
-        }
-        return { p };
-      }
-      case 13: {
-        const terms = argInt(a[1]), conv = [];
-        for (let pi = 0; pi < 8; pi++) {
-          const pj = pi ^ 15;
-          if (Q.isZero(p[pj])) continue;
-          let x = Q.abs(Q.div(p[pi], p[pj]));
-          const cf = [];
-          for (let s = 0; s < terms; s++) {
-            const q = Q.floor(x);
-            cf.push(q);
-            const frac = Q.sub(x, Q.mk(q));
-            if (Q.isZero(frac)) break;
-            x = Q.div(Q.ONE, frac);
-          }
-          let p0 = 1n, p1 = cf[0], q0 = 0n, q1 = 1n;
-          for (let k = 1; k < cf.length; k++) { const p2 = cf[k] * p1 + p0, q2 = cf[k] * q1 + q0; p0 = p1; p1 = p2; q0 = q1; q1 = q2; }
-          const target = Q.mk(p1, q1), diff = Q.sub(target, Q.div(p[pi], p[pj]));
-          conv.push({ pair: [pi, pj], cf, p: p1, q: q1, pPrev: p0, qPrev: q0 });
-          p[pi] = Q.add(p[pi], Q.mul(diff, Q.mul(al, Q.HALF)));
-          p[pj] = Q.sub(p[pj], Q.mul(diff, Q.mul(al, Q.QUARTER)));
-        }
-        return { p, convergents: conv };
-      }
-      case 15: {
-        const urdhva = [];
-        for (let axis = 0; axis < 4; axis++) {
-          const mask = 1 << axis, lo = [], hi = [];
-          for (let base = 0; base < 16; base++) if (!(base & mask)) { lo.push(p[base]); hi.push(p[base | mask]); }
-          const product = Array(lo.length + hi.length - 1).fill(Q.ZERO);
-          for (let i = 0; i < lo.length; i++) for (let j = 0; j < hi.length; j++) product[i + j] = Q.add(product[i + j], Q.mul(lo[i], hi[j]));
-          const sM = lo.reduce((t, x) => Q.add(t, x), Q.ZERO), sP = hi.reduce((t, x) => Q.add(t, x), Q.ZERO);
-          const scProduct = product.reduce((t, x) => Q.add(t, x), Q.ZERO), scFactors = Q.mul(sP, sM);
-          const corr = Q.neg(Q.sub(scFactors, scProduct));
-          for (let base = 0; base < 16; base++) {
-            if (base & mask) continue;
-            p[base | mask] = Q.mul(p[base | mask], Q.add(Q.ONE, Q.mul(al, corr)));
-            p[base] = Q.mul(p[base], Q.sub(Q.ONE, Q.mul(Q.mul(al, corr), Q.HALF)));
-          }
-          urdhva.push({ axis, product, scProduct, scFactors });
-        }
-        return { p, urdhva };
-      }
-      case 16: {
-        const rows = [];
-        for (let pi = 0; pi < 8; pi++) {
-          const pj = pi ^ 15, A = absFloor(p[pi]), Bn = absFloor(p[pj]);
-          let r0 = A, r1 = Bn, s0 = 1n, s1 = 0n, t0 = 0n, t1 = 1n;
-          while (r1 > 0n) { const q = r0 / r1; [r0, r1] = [r1, r0 - q * r1]; [s0, s1] = [s1, s0 - q * s1]; [t0, t1] = [t1, t0 - q * t1]; }
-          rows.push({ pair: [pi, pj], a: A, b: Bn, g: r0, s: s0, t: t0 });
-          if (r0 > 1n) {
-            const g = Q.mk(r0);
-            p[pi] = pull(p[pi], Q.div(p[pi], g), al); p[pj] = pull(p[pj], Q.div(p[pj], g), al);
-          } else if (A > 0n && Bn > 0n) {
-            const vi = p[pi], vj = p[pj];
-            p[pi] = Q.add(vi, Q.mul(Q.mul(al, Q.mk(t0, A)), vj));
-            p[pj] = Q.add(vj, Q.mul(Q.mul(al, Q.mk(s0, Bn)), vi));
-          }
-        }
-        return { p, bezout: rows };
-      }
-      case 17: {
-        for (let i = 0; i < 16; i++) {
-          let g = Q.ZERO;
-          for (const j of NEIGHBORS(i)) g = Q.add(g, Q.sub(p[j], p[i]));
-          p[i] = Q.add(p[i], Q.mul(Q.mul(Q.mul(g, a[1]), Q.QUARTER), al));
-        }
-        return { p };
-      }
-      case 18: {
-        const mA = BigInt(argInt(a[1])), mB = BigInt(argInt(a[2]));
-        for (let i = 0; i < 16; i++) {
-          const h = BigInt(hw(i)), rA = h % mA, rB = h % mB, v = absFloor(psi[i]);
-          if (v % mA !== rA || v % mB !== rB) p[i] = Q.add(psi[i], Q.mul(Q.mk((rA - v % mA + mA) % mA), al));
-        }
-        return { p };
-      }
-      case 19: {
-        for (let i = 0; i < 8; i++) {
-          const j = i ^ 15, vi = p[i], vj = p[j], sum = Q.add(vi, vj), prod = Q.mul(vi, vj);
-          const disc = Q.sub(Q.mul(sum, sum), Q.mul(Q.FOUR, prod));
-          if (Q.sign(disc) < 0) {
-            const corr = Q.mul(disc, Q.neg(Q.mul(al, Q.HALF)));
-            p[i] = Q.add(p[i], corr); p[j] = Q.sub(p[j], corr);
-          } else {
-            const ai = Q.abs(vi), aj = Q.abs(vj), big = Q.cmp(ai, aj) > 0;
-            const spread = big ? Q.sub(ai, Q.mul(a[1], aj)) : Q.sub(aj, Q.mul(a[1], ai)), scale = Q.mul(Q.mul(al, spread), a[2]);
-            if (big) { p[i] = Q.sub(p[i], scale); p[j] = Q.add(p[j], scale); }
-            else { p[j] = Q.sub(p[j], scale); p[i] = Q.add(p[i], scale); }
-          }
-        }
-        return { p };
-      }
-      case 20: {
-        const b = BigInt(argInt(a[1]));
-        for (let i = 0; i < 16; i++) {
-          const r = absFloor(psi[i]) % b;
-          if (r !== 0n) p[i] = Q.add(psi[i], Q.mul(Q.mk(r <= b / 2n ? -r : b - r), al));
-        }
-        return { p };
-      }
-      case 21: {
-        const o = BigInt(argInt(a[1])), m = BigInt(argInt(a[2]));
-        for (let i = 0; i < 16; i++) {
-          const v = absFloor(psi[i]), osc = v / 10n + (v % 10n) * o;
-          const diff = osc % m === 0n ? 0n : m - osc % m;
-          if (diff !== 0n) p[i] = Q.add(psi[i], Q.mul(Q.mk(diff), al));
-        }
-        return { p };
-      }
-      case 22: {
-        for (let i = 0; i < 16; i++) p[i] = pull(p[i], Q.mul(Q.add(p[i], p[i ^ 15]), Q.HALF), al);
-        return { p };
-      }
-      case 23: {
-        const T = BigInt(argInt(a[1]));
-        for (let i = 0; i < 8; i++) {
-          const j = i ^ 15, s = absFloor(psi[i]) % T + absFloor(psi[j]) % T;
-          if (s !== T && s !== 0n) { const adj = Q.mul(Q.mk(T - s, 2n), al); p[i] = Q.add(p[i], adj); p[j] = Q.add(p[j], adj); }
-        }
-        return { p };
-      }
-      case 24: {
-        const M = 10n ** BigInt(argInt(a[1])), tails = psi.map(x => absFloor(x) % M);
-        let g = tails[0];
-        for (let i = 1; i < 16; i++) { let x = g, y = tails[i]; while (y > 0n) [x, y] = [y, x % y]; g = x; }
-        if (g > 1n) for (let i = 0; i < 16; i++) p[i] = Q.add(psi[i], Q.mul(Q.mk(tails[i] / g - tails[i]), al));
-        else for (let i = 0; i < 16; i++) {
-          const frac = Q.sub(psi[i], Q.mk(floorQ(psi[i]))), err = Q.sub(frac, Q.mk(digitalRoot10(tails[i]), 9n));
-          p[i] = Q.sub(psi[i], Q.mul(al, err));
-        }
-        return { p, gcd: g, tails };
-      }
-      case 25: {
-        let prodS = Q.ONE, prodT = Q.ONE;
-        const halves = [];
-        for (let axis = 0; axis < 4; axis++) {
-          let lo = Q.ZERO, hi = Q.ZERO;
-          for (let i = 0; i < 16; i++) if (i & (1 << axis)) hi = Q.add(hi, psi[i]); else lo = Q.add(lo, psi[i]);
-          halves.push([lo, hi]);
-        }
-        for (const [lo, hi] of halves) {
-          if (Q.isZero(lo)) { prodS = Q.ZERO; break; }
-          prodS = Q.mul(prodS, lo);
-          if (!Q.isZero(hi)) prodT = Q.mul(prodT, hi);
-        }
-        const c = Q.isZero(prodS) ? 0 : Q.cmp(Q.abs(prodS), Q.abs(prodT));
-        if (c !== 0) {
-          const sg = Q.mk(c > 0 ? 1n : -1n);
-          for (let i = 0; i < 16; i++) {
-            let push;
-            if (hw(i) === 2) { let g = Q.ZERO; for (const j of NEIGHBORS(i)) g = Q.add(g, Q.sub(p[j], p[i])); push = Q.mul(Q.mul(sg, g), a[2]); }
-            else push = Q.mul(Q.mul(sg, Q.mk(BigInt(hw(i) - 2))), a[1]);
-            p[i] = Q.add(p[i], Q.mul(al, push));
-          }
-        }
-        return { p, halves, prodS, prodT, sign: c };
-      }
-      case 26: {
-        let flag = 0, mx = Q.ZERO;
-        for (let i = 0; i < 16; i++) if (Q.cmp(Q.abs(psi[i]), mx) > 0) { mx = Q.abs(psi[i]); flag = i; }
-        const portion = Q.div(psi[flag], a[1]);
-        for (let i = 0; i < 16; i++) if (i !== flag) p[i] = pull(psi[i], portion, al);
-        return { p, flag };
-      }
-      case 27: {
-        const paths = [[0, 1, 3, 7, 15], [0, 2, 6, 14, 15], [0, 4, 12, 13, 15], [0, 8, 10, 11, 15]];
-        const modified = new Array(16).fill(false);
-        for (const path of paths) {
-          const vals = path.map(i => p[i]);
-          const md = Q.mul(Q.sub(vals[4], vals[0]), Q.QUARTER);
-          path.forEach((idx, k) => {
-            if (modified[idx] || k === 0 || k === 4) return;
-            const diff = Q.sub(Q.add(vals[0], Q.mul(Q.mk(BigInt(k)), md)), vals[k]);
-            if (!Q.isZero(diff)) { p[idx] = Q.add(p[idx], Q.mul(al, diff)); modified[idx] = true; }
-          });
-        }
-        const interpolated = [];
-        for (let i = 0; i < 16; i++) {
-          if (modified[i]) continue;
-          interpolated.push(i);
-          const nbMean = Q.mul(NEIGHBORS(i).reduce((s, j) => Q.add(s, p[j]), Q.ZERO), Q.QUARTER);
-          p[i] = pull(p[i], nbMean, Q.mul(al, Q.HALF));
-        }
-        return { p, interpolated };
-      }
-      case 28: {
-        for (let i = 0; i < 16; i++) for (const j of NEIGHBORS(i)) {
-          if (j <= i) continue;
-          const delta = storeQ(Q.mul(Q.mul(al, Q.sub(Q.abs(p[i]), Q.abs(p[j]))), a[1]));
-          p[i] = Q.sub(p[i], delta); p[j] = Q.add(p[j], delta);
-        }
-        return { p };
-      }
-      case 29: {
-        const a29 = Q.mul(al, a[1]), mean = meanR(psi);
-        for (let i = 0; i < 16; i++) p[i] = pull(psi[i], mean, a29);
-        return { p, B: mstvqB(p, Q.abs(a29)), alpha29: a29 };
-      }
-      default: throw new RangeError(`Unknown sutra S${id}`);
-    }
+    const operands = BOOK.operandsOf(id, psi), terms = BOOK.terms(id, operands);
+    const p = BOOK.rotate(psi, terms, al);
+    return { p, operands, terms, B: MSTVQ_SHARE[id] ? mstvqB(p, Q.abs(Q.mul(al, MSTVQ_SHARE[id]))) : null };
   };
   const alphaOf = (id, a, gain) => Q.mul(Q.mul(Q.mk(BigInt(id), SUTRA_SUM), a[0]), gain);
   const applySutra = (id, psi, arg, ctx = {}) => {
@@ -1833,16 +1486,96 @@ const KERNEL_FACTORY = () => {
       }
       return Object.freeze(matchings.map(m => Object.freeze(m)));
     })();
-    const rotate = (psi, coefficients, strength) => {
-      const p = psi.slice();
+    const built = new Map();
+    const matrixOf = (coefficients, strength) => {
+      if (!Q.isExact(strength)) throw new TypeError('the strength of a book rotation is an exact rational');
+      const key = `${strength.n}/${strength.d}|${coefficients.map(c => `${c.n}/${c.d}`).join(',')}`;
+      const kept = built.get(key);
+      if (kept) return kept;
+      const N = Array.from({ length: 16 }, (_, i) => Array.from({ length: 16 }, (_, j) => i === j ? 1n : 0n));
+      let D = 1n;
       for (const c of coefficients) {
-        const t = Q.neg(Q.mul(strength, c));
-        for (const matching of MATCHINGS) for (const [u, v] of matching) [p[u], p[v]] = rotPair(p[u], p[v], t);
+        const t = R.mul(strength, c), p = t.n, q = t.d;
+        if (p === 0n) continue;
+        let base = q * q + p * p, cos = q * q - p * p, sin = 2n * p * q;
+        const g = gcdZ(gcdZ(base, cos), sin);
+        base /= g; cos /= g; sin /= g;
+        for (const matching of MATCHINGS) {
+          for (const [l, r] of matching) {
+            const a = N[l], b = N[r];
+            for (let k = 0; k < 16; k++) { const u = a[k], v = b[k]; a[k] = cos * u - sin * v; b[k] = sin * u + cos * v; }
+          }
+          D *= base;
+        }
       }
-      return p;
+      const out = Object.freeze({ N: Object.freeze(N.map(row => Object.freeze(row))), D });
+      if (built.size >= 64) built.clear();
+      built.set(key, out);
+      return out;
+    };
+    const rotate = (psi, coefficients, strength) => {
+      const { N, D } = matrixOf(coefficients, strength);
+      const lo = psi.map(Q.lo), hi = psi.map(Q.hi);
+      let L = 1n;
+      for (const e of lo.concat(hi)) L = L / gcdZ(L, e.d) * e.d;
+      const a = lo.map(e => e.n * (L / e.d)), b = hi.map(e => e.n * (L / e.d));
+      const den = D * L, exact = psi.every(Q.isExact);
+      const end = n => n === 0n ? Z : { n, d: den };
+      return N.map(row => {
+        let sl = 0n, sh = 0n;
+        for (let k = 0; k < 16; k++) {
+          const n = row[k];
+          if (n > 0n) { sl += n * a[k]; sh += n * b[k]; }
+          else if (n < 0n) { sl += n * b[k]; sh += n * a[k]; }
+        }
+        return exact ? settle(R.mk(sl, den)) : rounded(end(sl), end(sh));
+      });
     };
     const apply = (id, psi, strength, operands) => rotate(psi, terms(id, operands), strength);
-    return Object.freeze({ terms, rotate, apply, EXAMPLES, MATCHINGS });
+    const operandsOf = (id, psi) => {
+      if (!Number.isInteger(id) || id < 1 || id > 29) refuse('the sutra id must be between one and twenty-nine');
+      if (!Array.isArray(psi) || psi.length !== 16) refuse('the field has sixteen vertices');
+      const w = psi.map(x => Q.floor(x)), m = w.map(absZ);
+      const Zr = v => R.mk(w[v]), N = n => R.mk(n), pick = vs => vs.map(Zr);
+      const nz = v => w[v] >= 0n ? w[v] + 1n : w[v] - 1n, odd = v => 2n * w[v] + 1n, even = v => 2n * w[v];
+      const digits = n => (n > 1n ? n : 1n).toString().length;
+      const period = d => d <= 999n ? d : refuse(`the repetend of 1/${d} can run to ${d - 1n} digits; above three digits it is refused`);
+      const base = n => N(10n ** BigInt(digits(n)));
+      const top = m[0] > m[15] ? m[0] : m[15];
+      switch (id) {
+        case 1: return { denominator: N(period(10n * m[0] + 9n)) };
+        case 2: return { a: Zr(0), b: Zr(15), base: base(top) };
+        case 3: return { a: pick([0, 1, 2, 3, 4, 5, 6, 7]), b: pick([8, 9, 10, 11, 12, 13, 14, 15]) };
+        case 4: return { dividend: pick([0, 1, 2, 3, 4, 5, 6, 7]), divisor: [Zr(15), I] };
+        case 5: return { a: Zr(0), b: N(w[1] * w[15]), c: Zr(1), d: N(w[0] * w[15]) };
+        case 6: return { a: N(odd(0)), b: N(even(1)), c: N(w[15] * even(1)), d: N(even(2)), e: N(odd(3)), f: N(w[15] * odd(3)) };
+        case 7: return { a: N(odd(0)), b: N(even(1)), c: Zr(2), d: Zr(3) };
+        case 8: return { a: N(nz(0)), b: Zr(1), c: Zr(2) };
+        case 9: return { p: w.map(N) };
+        case 10: return { n: Zr(0), base: base(m[0]) };
+        case 11: return { a: Zr(0), b: Zr(15), total: Zr(1) };
+        case 12: return { denominator: N(period(10n * m[0] + 7n)) };
+        case 13: return { first: [Zr(0), N(odd(1))], difference: [Zr(2), N(even(3))] };
+        case 14: return { n: Zr(0), places: N(BigInt(digits(m[0]))) };
+        case 15: return { factors: [0, 1, 2, 3].map(v => pick([v, v ^ 15])) };
+        case 16: return { factors: [0, 1, 2].map(v => pick([v, v ^ 15])) };
+        case 17: return { a: Zr(0), b: Zr(15), reference_base: base(top), ratio: R.mk(BigInt((top > 1n ? top : 1n).toString()[0]) + 1n, 10n) };
+        case 18: return { dividend: Zr(0), divisors: [N(m[15] + 1n)] };
+        case 19: return { quadratic: [N(nz(0) * w[2]), N(nz(0) * nz(3) + nz(1) * w[2]), N(nz(1) * nz(3))], factor: [N(nz(0)), N(nz(1))] };
+        case 20: return { numerator: N(1n + m[0] % 6n) };
+        case 21: return { n: N(m[0]), divisor: N(10n * m[15] + 7n) };
+        case 22: return { n: Zr(0), base: base(m[0]) };
+        case 23: return { n: Zr(15), base: base(m[15]) };
+        case 24: { const d = 1n + m[15] % 9n; return { a: N(10n * m[0] + d), b: N(10n * m[0] + 10n - d) }; }
+        case 25: return { a: pick([0, 1]), b: [Zr(2), N(nz(3))], common: [Zr(4), N(nz(5))], numerator_last: Zr(6), denominator_last: Zr(7) };
+        case 26: return { a: pick([0, 1, 2, 3]), b: pick([4, 5, 6, 7]) };
+        case 27: return { a: N(nz(0)), b: N(w[1] * w[3]), c: N(w[2] * w[4]), xy: N(w[3] + nz(0) * w[1]), yz: N(w[1] * w[4] + w[2] * w[3]), zx: N(w[4] + nz(0) * w[2]) };
+        case 28: return { total: R.add(N(nz(0)), R.mk(1n, nz(0))), split: N(nz(0)) };
+        default: return { factors: [0, 1, 2, 3, 4, 5, 6, 7].map(v => pick([v, v ^ 15])) };
+      }
+    };
+    const fromField = (id, psi, strength) => rotate(psi, terms(id, operandsOf(id, psi)), strength);
+    return Object.freeze({ terms, rotate, matrixOf, apply, operandsOf, fromField, EXAMPLES, MATCHINGS });
   })();
   const edgeRotate = (psi, tau, keep = x => x) => {
     let p = psi;
@@ -2003,11 +1736,21 @@ const KERNEL_FACTORY = () => {
     const keep=x=>{const s=x.map(storeQ);ledger.delta=Q.add(ledger.delta,storeBudget(s));ledger.stores++;return s;};
     return {ledger,keep};
   };
+  const narrow = (xs, what) => {
+    const scale = R.mk(1n << BigInt(Math.floor(WORK_BITS * 13 / 16)));
+    for (const x of xs) {
+      if (Q.isExact(x)) continue;
+      const size = [R.ONE, R.abs(x.lo), R.abs(x.hi)].reduce((a, b) => R.cmp(a, b) >= 0 ? a : b);
+      if (R.cmp(R.mul(R.sub(x.hi, x.lo), scale), size) > 0) throw new NeedPrecision(what);
+    }
+    return xs;
+  };
   const formulaOf = (input,act,mode,t) => {
     const run=makeKeep(),record=[],grvqRecord=[];
     const afterS=applySutraCore(input,act,mode,run.keep,{t,record});
     const afterD=distributedGRVQ(afterS,act,t,run.keep,grvqRecord);
     const ms=distributedMSTVQ(afterD,act,run.keep);
+    narrow(ms.psi,'the width of the formula');
     return Object.freeze({input,active:act,mode,time:t,afterS,afterD,afterB:ms.psi,
       delta:ms.psi.map((x,i)=>Q.sub(x,input[i])),kappaFeed:Q.mul(ms.trace,TGCR_KAPPA_FEED),
       record,grvqRecord,mstvq:ms,stepError:run.ledger});
@@ -2062,6 +1805,7 @@ const KERNEL_FACTORY = () => {
     const eIn=energy(input);
     const run=makeKeep();
     const st=stagesFrom(input,formula,part,W,params,run.keep,ctx);
+    narrow(st.afterZ,'the width of the field');
     const ledger=run.ledger;
     const psi=st.afterZ;
     const dielectric=dielectricNext.map(storeQ);
@@ -2089,119 +1833,10 @@ const KERNEL_FACTORY = () => {
   const formulaClaims = (id, psiIn, arg) => {
     const a = sutraArgs(id, arg), al = alphaOf(id, a, Q.ONE), R = [];
     const claim = (name, ok, detail) => { R.push({ name, ok: !!ok, detail: detail || '' }); };
-    const out = vedicField(id, psiIn, a, al), p = out.p;
+    const out = vedicField(id, psiIn, a, al);
     claim('vedic_update_zero', sameR(vedicField(id, psiIn, a, Q.ZERO).p, psiIn), `S${id} at α = 0`);
-    const pairsDiff = (x, y, f) => [0, 1, 2, 3, 4, 5, 6, 7].every(i => f(x[i], x[i ^ 15], y[i], y[i ^ 15]));
-    switch (id) {
-      case 1: {
-        const c = a[2], ax = 1 << argInt(a[1]), cur = psiIn.slice();
-        let ok = true;
-        for (let i = 0; i < 16; i++) { const nb = cur[i ^ ax], f = Q.div(nb, Q.add(Q.mul(nb, nb), c));
-          if (!Q.mayLe(Q.mul(Q.mul(f, f), Q.mul(Q.FOUR, c)), Q.ONE)) ok = false;
-          cur[i] = Q.mul(cur[i], Q.add(Q.ONE, Q.mul(al, f))); }
-        claim('ekadhikena_factor_bound', ok && sameR(cur, p)); break;
-      }
-      case 2: case 10: {
-        const rad = Q.mk(BigInt(argInt(a[1]))), B = out.base;
-        let m = Q.ONE;
-        if (id === 2) { for (const x of psiIn) m = Q.max(m, Q.abs(x)); }
-        else m = Q.max(Q.ONE, Q.abs(meanR(psiIn)));
-        claim('radix_order_bracket', Q.mayLe(Q.div(B, rad), m) && Q.mayLt(m, B), `B = ${Q.toString(B)}`);
-        if (id === 2) claim('nikhilam_affine', p.every((x, i) => Q.agree(x, Q.add(Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), psiIn[i]), Q.mul(al, B)))));
-        else claim('yavadunam_magnifies', p.every((x, i) => Q.mayLe(Q.abs(psiIn[i]), Q.abs(x))));
-        break;
-      }
-      case 3: claim('xor_conv_sum', Q.agree(sumR(out.conv), proportionate(Q.div(Q.mul(sumR(psiIn), sumR(psiIn)), a[1]), meanAbsR(psiIn)))); break;
-      case 4: {
-        const c = out.layers;
-        claim('horner_eval', psiIn.every((x, i) => {
-          const r = Q.div(Q.mk(BigInt(hw(i))), a[1]), s = Q.div(r, Q.add(Q.ONE, r));
-          const P = c.reduce((acc, ck, k) => Q.add(acc, Q.mul(ck, Q.pow(s, k))), Q.ZERO);
-          return Q.agree(p[i], Q.add(x, Q.mul(Q.sub(P, x), al)));
-        })); break;
-      }
-      case 5: claim('shunyam_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.add(u, w), Q.mul(Q.sub(Q.ONE, Q.mul(Q.TWO, al)), Q.add(x, y))))); break;
-      case 6: {
-        const cur = psiIn.slice(); let ok = true;
-        for (let axis = 0; axis < 4; axis++) for (let base = 0; base < 16; base++) {
-          if (base & (1 << axis)) continue;
-          const i0 = base, i1 = base | (1 << axis), v0 = cur[i0], v1 = cur[i1];
-          if (Q.isZero(v0)) continue;
-          const ratio = Q.div(v1, v0);
-          const err = Q.sub(ratio, sgnQ(ratio) > 0n ? a[1] : Q.neg(a[1])), s = Q.add(v0, v1);
-          const exact = Q.neg(Q.mul(Q.mul(err, al), Q.abs(s))), corr = storeQ(exact);
-          if (Q.mayZero(exact) !== (Q.mayZero(err) || Q.mayZero(al) || Q.mayZero(s)) || corr !== exact) ok = false;
-          cur[i1] = Q.add(cur[i1], corr); cur[i0] = Q.sub(cur[i0], Q.mul(corr, Q.HALF));
-        }
-        claim('anurupye_fixed_point', ok && sameR(cur, p)); break;
-      }
-      case 7: claim('sankalana_lower_fixed', Q.agree(p[0], psiIn[0])); break;
-      case 9: case 11: case 28: claim(id === 9 ? 'laplacian_sum_zero' : id === 11 ? 'layer_mean_sum' : 'transfer_sum', Q.agree(sumR(p), sumR(psiIn))); break;
-      case 29: claim('conservation_mean', Q.agree(meanR(p), meanR(psiIn))); break;
-      case 12: {
-        const m = BigInt(argInt(a[1]));
-        claim('digital_root_congr', psiIn.every(x => { const v = absFloor(x); if (v === 0n) return true; const dr = 1n + (v - 1n) % m; return dr >= 1n && dr <= m && (dr - v) % m === 0n; })); break;
-      }
-      case 13: claim('convergent_det', out.convergents.every(c => bigAbs(c.p * c.qPrev - c.pPrev * c.q) === 1n)); break;
-      case 14: claim('ekanyunena_contracts', p.every((x, i) => Q.mayLe(Q.abs(x), Q.abs(psiIn[i])))); break;
-      case 15: {
-        let ok = out.urdhva.length === 4, book = out.urdhva.length === 4;
-        for (let axis = 0; axis < 4; axis++) {
-          const mask = 1 << axis, bases = [...Array(16).keys()].filter(b => !(b & mask));
-          const sP = sumR(bases.map(b => psiIn[b | mask])), sM = sumR(bases.map(b => psiIn[b]));
-          const pointwise = sumR(bases.map(b => Q.mul(psiIn[b], psiIn[b | mask])));
-          let cross = Q.ZERO;
-          for (const b of bases) for (const c of bases) if (b !== c) cross = Q.add(cross, Q.mul(psiIn[b], psiIn[c | mask]));
-          if (!Q.agree(Q.sub(Q.mul(sP, sM), pointwise), cross)) ok = false;
-          const u = out.urdhva[axis];
-          if (!u || !Q.agree(u.scProduct, Q.add(pointwise, cross))) ok = false;
-          if (!u || !Q.agree(u.scProduct, u.scFactors)) book = false;
-        }
-        claim('gunita_residual_cross', ok);
-        claim('gunita_samuccaya', book && sameR(psiIn, p)); break;
-      }
-      case 16:
-        claim('bezout_identity', out.bezout.every(r => r.s * r.a + r.t * r.b === r.g && (r.g === 0n ? r.a === 0n && r.b === 0n : r.a % r.g === 0n && r.b % r.g === 0n)));
-        claim('bezout_partial_fraction', out.bezout.every(r => r.g !== 1n || r.a === 0n || r.b === 0n || Q.eq(Q.add(Q.mk(r.t, r.a), Q.mk(r.s, r.b)), Q.mk(1n, r.a * r.b)))); break;
-      case 18: {
-        const mA = BigInt(argInt(a[1]));
-        claim('crt_residue_step', psiIn.every((x, i) => { const v = absFloor(x), r = BigInt(hw(i)) % mA; return (v + (r - v % mA + mA) % mA) % mA === r; })); break;
-      }
-      case 19: {
-        const ok = [0, 1, 2, 3, 4, 5, 6, 7].every(i => { const x = psiIn[i], y = psiIn[i ^ 15], s = Q.add(x, y), d = Q.sub(x, y);
-          return Q.agree(Q.sub(Q.mul(s, s), Q.mul(Q.FOUR, Q.mul(x, y))), Q.mul(d, d)); });
-        claim('vieta_disc_square', ok); break;
-      }
-      case 20: {
-        const b = BigInt(argInt(a[1]));
-        claim('nearest_multiple', psiIn.every(x => { const v = absFloor(x), r = v % b; const adj = r === 0n ? 0n : r <= b / 2n ? -r : b - r; return (v + adj) % b === 0n && 2n * bigAbs(adj) <= b; })); break;
-      }
-      case 21: {
-        const o = BigInt(argInt(a[1])), m = BigInt(argInt(a[2]));
-        claim('osculation_shift', psiIn.every(x => { const v = absFloor(x), osc = v / 10n + (v % 10n) * o, d = osc % m === 0n ? 0n : m - osc % m; return d >= 0n && d < m && (osc + d) % m === 0n; })); break;
-      }
-      case 22: { const k = Q.sub(Q.ONE, Q.mul(al, Q.HALF)); claim('dvandva_pair_contract', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.sub(u, w), Q.mul(Q.mul(k, k), Q.sub(x, y))))); break; }
-      case 23: claim('antyayor_pair_difference', pairsDiff(psiIn, p, (x, y, u, w) => Q.agree(Q.sub(u, w), Q.sub(x, y)))); break;
-      case 24: {
-        const g = out.gcd;
-        claim(g > 1n ? 'gcd_divides_tails' : 'digital_root_nine', g > 1n ? out.tails.every(t => t % g === 0n)
-          : out.tails.every(t => { const dr = digitalRoot10(t); return t === 0n ? dr === 0n : dr >= 1n && dr <= 9n && (t - dr) % 9n === 0n; })); break;
-      }
-      case 25: claim('log_ratio_sign', out.sign === (Q.isZero(out.prodS) ? 0 : Q.cmp(Q.abs(out.prodS), Q.abs(out.prodT))) && !Q.isZero(out.prodT)); break;
-      case 26: {
-        const f = Q.abs(psiIn[out.flag]);
-        const exactOk = (x, i) => Q.cmp(Q.abs(x), f) < 0 || (Q.cmp(Q.abs(x), f) === 0 && i >= out.flag);
-        const notAbove = x => Q.mayLe(Q.abs(x), f);
-        claim('flag_is_max', psiIn.every((x, i) => Q.isExact(x) && Q.isExact(f) ? exactOk(x, i) : notAbove(x)) && Q.agree(p[out.flag], psiIn[out.flag])); break;
-      }
-      case 27: claim('ap_endpoints', out.interpolated.includes(0) && out.interpolated.includes(15)); break;
-      case 8: case 17: {
-        const u = Array(16).fill(Q.mk(7n, 3n));
-        claim(id === 8 ? 'purana_uniform_fixed' : 'anurupyena_uniform_fixed', sameR(vedicField(id, u, a, al).p, u)); break;
-      }
-      default: break;
-    }
-    return { id, type: SUTRA_TYPE[id], arguments: a, alpha: al, claims: R, ok: R.length > 0 && R.every(x => x.ok) };
+    claim('rot_pair_energy', Q.agree(energyR(out.p), energyR(psiIn)), `${out.terms.length} terms`);
+    return { id, type: SUTRA_TYPE[id], arguments: a, alpha: al, terms: out.terms, claims: R, ok: R.every(x => x.ok) };
   };
   const grvqClaims = (rec, t) => {
     const R = [];
@@ -2361,12 +1996,14 @@ const KERNEL_FACTORY = () => {
       assert(`S${id} formula claims on the seed`,fc.ok);
     }
     const runs=f=>{try{f();return true;}catch(e){return false;}};
-    assert("S6 runs through a zero vertex",runs(()=>applySutra(6,psi.map((q,v)=>v===0?Q.ZERO:q),Q.ONE,{})));
-    assert("S13 runs through a zero complement",runs(()=>applySutra(13,psi.map((q,v)=>v===12?Q.ZERO:q),Q.ONE,{})));
-    assert("S19 runs through a zero root",runs(()=>applySutra(19,psi.map((q,v)=>v===9?Q.ZERO:q),Q.ONE,{})));
-    assert("S25 runs through a zero half-sum",runs(()=>applySutra(25,psi.map((q,v)=>v===0?Q.sub(q,sumR(psi.filter((_,i)=>!(i&1)))):q),Q.ONE,{})));
-    assert("S1 axis 4 refused",throwsRange(()=>applySutra(1,psi,[Q.ONE,Q.mk(4n)])));
-    assert("S21 non-integer modulus refused",throwsRange(()=>applySutra(21,psi,[Q.ONE,Q.mk(5n),Q.mk(9n,2n)])));
+    assert("all 29 book methods run on the seed",[...Array(29).keys()].every(k=>runs(()=>applySutra(k+1,psi,Q.ONE,{}))));
+    assert("S1 on a field whose first integer part is 1 gives the digits of 1/19",
+      BOOK.terms(1,BOOK.operandsOf(1,psi.map((q,v)=>v===0?Q.mk(3n,2n):q))).map(Q.toString).join("")==="052631578947368421");
+    assert("S2 on first and last integer parts 98 and 97 gives 2, 3, 9500, 6",
+      BOOK.terms(2,BOOK.operandsOf(2,psi.map((q,v)=>v===0?Q.mk(197n,2n):v===15?Q.mk(292n,3n):q))).map(Q.toString).join(" ")==="2 3 9500 6");
+    assert("no book method refuses the zero field",[...Array(29).keys()].every(k=>runs(()=>applySutra(k+1,psi.map(()=>Q.ZERO),Q.ONE,{}))));
+    assert("S1 refuses a repetend longer than its limit",throwsRange(()=>applySutra(1,psi.map((q,v)=>v===0?Q.mk(5000n):q),Q.ONE,{})));
+    assert("every book method keeps the energy of the field",[...Array(29).keys()].every(k=>Q.agree(energyR(vedicField(k+1,psi,[Q.ONE],Q.mk(1n,7n)).p),energyR(psi))));
     assert("strength above 1 refused",throwsRange(()=>applySutra(1,psi,Q.mk(3n,2n))));
     for(const q of [Q.mk(1n,3n),Q.mk(-22n,7n),Q.mk(10n**60n+1n,3n),Q.mk(1n,10n**70n+7n),Q.mk(5n,64n),Q.ZERO]){
       assert("store is exact "+Q.toString(q).slice(0,24),storeQ(q)===q);
@@ -2890,8 +2527,8 @@ const VISUAL_CERTIFICATE = {
       holds: () => RAMP_VIEW.ok
     },
     sutra: {
-      draws: 'each active sutra: its formula and type, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength and operands',
-      theorems: ['vedic_update_zero', 'identity_preserved', 'identity_preserved_of_strength_zero', 'ekadhikena_factor_bound', 'radix_order_bracket', 'nikhilam_affine', 'yavadunam_magnifies', 'xor_conv_sum', 'horner_eval', 'shunyam_pair_contract', 'anurupye_fixed_point', 'sankalana_lower_fixed', 'laplacian_sum_zero', 'layer_mean_sum', 'transfer_sum', 'conservation_mean', 'digital_root_congr', 'cf_det_step', 'convergent_det', 'ekanyunena_contracts', 'gunita_residual_cross', 'gunita_samuccaya', 'ext_euclid_step', 'bezout_identity', 'bezout_partial_fraction', 'crt_residue_step', 'vieta_disc_square', 'nearest_multiple', 'osculation_shift', 'dvandva_pair_contract', 'antyayor_pair_difference', 'gcd_divides_tails', 'digital_root_nine', 'log_ratio_sign', 'flag_is_max', 'ap_endpoints', 'purana_uniform_fixed', 'anurupyena_uniform_fixed'],
+      draws: 'each active sutra: its method from the book, the energy it changed the field by in the one calculation of the formula, and the statements about it decided on the live field at its strength',
+      theorems: ['vedic_update_zero', 'rot_pair_energy', 'identity_preserved', 'identity_preserved_of_strength_zero'],
       holds: () => SUTRA_CERT.ok
     }
   },
@@ -2951,7 +2588,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The formula is the 29 sutra formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths from the field as it stands when a sutra is switched on or a setting changed. One step a second, it goes in over the number of steps the Glide control sets, 10 unless changed, in equal shares, a tenth a step at 10, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. A preset or RESET starts again from the seed. Formulas that update in place do so with their literal constants as operands. No float reads, no magnitude caps or isFinite gates; a test for nonzero is decided exactly. Nothing stops the run at a zero: S6 skips a pair whose base vertex is zero, S25 makes no push when a low half-sum is zero and leaves a zero high half-sum out of its product, S13 leaves a pair whose denominator vertex is zero as it is, S16 leaves a complement pair as it is when an integer part is zero and the gcd is 1, since 1/(ab) then has no partial fractions. Every quadratic or cubic term is taken proportionately (Anurupyena): divided by the magnitude it scales with, so each formula moves the field by a bounded multiple of the field itself: S3 by the mean |psi|, S7 by S^2 + A^2, S19 by the smaller root (alpha rate (|big| - ratio |small|)), S28 and the GRVQ s28 term by |a| + |b|, which divides the difference of squares exactly into |a| - |b|, and the GRVQ s15 term by the mean |lambda|; where that magnitude is zero the term itself is zero. S16 runs extended Euclid on the integer parts of each complement pair: a gcd above 1 is divided out, and a coprime pair is coupled by the partial fractions t/a + s/b = 1/(ab). Where both neighbours of a lambda are zero, the GRVQ walk measure splits 1 - alpha between them in halves (walk_measure_total_split). GRVQ feeds lambda, the four axis modes of psi: S1, S5, S9 and S14 add GRVQ to lambda_0..3 of their result and every other active sutra adds it to lambda_(id-1 mod 4), each times its own alpha, by moving psi along that axis (inverse_inject). S1 strength sets the MSTVQ stress feedback T_kk / 2e8 into lambda the same way and T trace / 500 into the TGCR stiffness kappa; S2, S3 and S29 set MSTVQ B. S15 is Gunitasamuccayah as R. K. Thakur, Advanced Vedic Mathematics (2019), chapter 10, states it: the product of the sums of the coefficients in the factors equals the sum of the coefficients in the product, and the book uses it to verify a product. For each axis S15 forms the Urdhva (vertically and crosswise) product of the field on the lower and upper half; its correction is the difference of the two sides, which is zero, so it verifies the field and leaves it as it is. The statement it decides on the live field is that the product of the half-sums less the vertex-by-vertex products is the crosswise sum (gunita_residual_cross), and that the Urdhva product sums to both. Each formula carries decided statements. The seed is lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The formula is the 29 sutra formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths from the field as it stands when a sutra is switched on or a setting changed. One step a second, it goes in over the number of steps the Glide control sets, 10 unless changed, in equal shares, a tenth a step at 10, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. A preset or RESET starts again from the seed. Each of the 29 is the method of its sutra or sub-sutra in Tirthaji, Vedic Mathematics, at the printed pages its row names, and takes its numbers from the field: the integer parts of the vertices, decided exactly. The exact terms the method produces turn the field on the matched edges of the tesseract by alpha x each term, as one exact rotation that keeps the energy of the field. No method takes an operand from a control. Only S1 and S12 can refuse: a repetend of more than three digits in its denominator is not run. The seed is lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory, made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in), kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -3162,8 +2799,7 @@ const WHEELER = {
   }
 };
 WHEELER._initExact();
-const SUTRA_KIND = [null, ...Array.from({ length: 29 }, (_, i) => ({ MULTIPLICATIVE: 'MULT', REFLECTIVE: 'REFL', CONVOLUTIVE: 'CONV', DIVISIVE: 'DIV',
-  DIFFUSIVE: 'DIFF', PERMUTATIVE: 'PERM', MODULAR: 'MOD', CONSERVATION: 'CONS' })[KERNEL.SUTRA_TYPE[i + 1]])];
+const SUTRA_KIND = [null, ...Array.from({ length: 29 }, (_, i) => i < 16 ? 'MULT' : 'DIFF')];
 
 const FIELD_TH = 160, FIELD_PH = 80;
 const fieldGrid = new Float64Array(FIELD_TH * FIELD_PH);
@@ -3336,35 +2972,35 @@ function updateFaithfulBadge() {
       ].filter(Boolean).join(' · ') + "</span>" : "");
 }
 const SUTRAS = [
-  { id:1,  name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α·Ψₙ/(Ψₙ² + one)), n = i⊕2^axis, in place · GRVQ feeds λ₀' },
-  { id:2,  name:'Nikhilam', sk:'निखिलं', guide:'REFLECTIVE · Ψᵢ ← Ψᵢ + α·(B − 2Ψᵢ), B = radix^order, the first power above max(1, max|Ψ|) · sets MSTVQ B' },
-  { id:3,  name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'CONVOLUTIVE · Ψᵢ pulled by α to Σⱼ ΨⱼΨ_{i⊕j}/(divisor·mean|Ψ|), the crosswise (XOR) convolution taken proportionately · sets MSTVQ B' },
-  { id:4,  name:'Parāvartya Yojayet', sk:'परावर्त्य', guide:'DIVISIVE · Horner of the Hamming-layer means at σ = r/(1+r), r = hw/quarters; Ψᵢ pulled to it by α' },
-  { id:5,  name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', guide:'REFLECTIVE · complement pairs pulled by α to Ψᵢ = −Ψ_{i⊕15}: each pair sum × (1 − 2α) · GRVQ feeds λ₁' },
-  { id:6,  name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'PERMUTATIVE · each edge ratio Ψ₁/Ψ₀ driven to ±ratio by −α·err·|Ψ₀+Ψ₁|, in place · refuses Ψ₀ = 0' },
-  { id:7,  name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'PERMUTATIVE · each edge: S = (Ψ₀+Ψ₁)/2, A = (Ψ₀−Ψ₁)/2, δ = α(S²−A²)A/(S²+A²); S += δ, A −= δ, in place' },
-  { id:8,  name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'DIVISIVE · Ψᵢ pulled by α·pull to the mean of its four completed squares ½(Ψᵢ+Ψⱼ), in place' },
-  { id:9,  name:'Calana-Kalanābhyām', sk:'चलन', guide:'DIFFUSIVE · Ψ ← Ψ + αΔΨ, the graph Laplacian of the tesseract · GRVQ feeds λ₂' },
-  { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 + α((B − |Ψᵢ|)/B)²), B = radix^order above max(1, |mean|)' },
-  { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', guide:'CONVOLUTIVE · Ψᵢ pulled by α to (its Hamming-layer mean + the whole mean)/2' },
-  { id:12, name:'Veṣṭanaṃ', sk:'वेष्टनम्', guide:'REFLECTIVE · Ψᵢ pulled by α to ± its digital root 1 + (|⌊Ψᵢ⌋| − 1) mod modulus' },
-  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'DIVISIVE · each complement pair pulled to the continued-fraction convergent of its ratio |Ψᵢ/Ψ_{i⊕15}| (terms) · refuses a zero' },
-  { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'MULTIPLICATIVE · Ψᵢ ← Ψᵢ·(1 − α/(|Ψₙ| + one)), n = i⊕2^axis, in place · GRVQ feeds λ₃' },
-  { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'MULTIPLICATIVE · per axis the residual (Σ₊)(Σ₋) − Σ(Ūrdhva product of Ψ₋ and Ψ₊) scales Ψ₊ by 1 − α·res and Ψ₋ by 1 + α·res/2; by Guṇitasamuccaya the product of the sums is the sum of the product, so res = 0 and the field is verified, not moved' },
-  { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'DIVISIVE · extended Euclid on the integer parts a, b of each complement pair, sa + tb = g: g > 1 divided out, else the partial fractions t/a, s/b of 1/(ab) cross-couple the pair' },
-  { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', guide:'DIFFUSIVE · Ψᵢ += α·proportion·Σⱼ(Ψⱼ − Ψᵢ)/4 over its four neighbours, in place' },
-  { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', guide:'MODULAR · |⌊Ψᵢ⌋| moved by α toward the residues of its Hamming weight mod modA (and modB)' },
-  { id:19, name:'Kevalaih Saptakam Guṇyāt', sk:'केवलैः', guide:'DIVISIVE · Vieta on complement pairs: α·rate·(|big| − ratio·|small|), the root ratio |big/small| − ratio taken proportionately, moved from the larger root to the smaller' },
-  { id:20, name:'Vilokanam', sk:'विलोकनम्', guide:'MODULAR · Ψᵢ moved by α toward the nearest multiple of base of |⌊Ψᵢ⌋|' },
-  { id:21, name:'Guṇitasamuccayah Samuccayaguṇitaḥ', sk:'गुणितसमुच्चयः', guide:'MODULAR · osculation: last digit × osculator + the rest, Ψᵢ moved by α toward divisibility by modulus' },
-  { id:22, name:'Dvandvayogaḥ', sk:'द्वन्द्वयोगः', guide:'REFLECTIVE · Ψᵢ pulled by α to (Ψᵢ + Ψ_{i⊕15})/2, in place' },
-  { id:23, name:"Antyayordaśake'pi", sk:'अन्त्ययोः', guide:'REFLECTIVE · complement pairs whose last digits do not sum to tens both moved by α·(tens − sum)/2' },
-  { id:24, name:'Lopanasthāpanābhyām', sk:'लोपन', guide:'MODULAR · tails |⌊Ψ⌋| mod 10^digits: a common gcd > 1 eliminated, else the fraction driven to digital root/9' },
-  { id:25, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'CONVOLUTIVE · ∏ of the axis half-sums S vs T: layers pushed by layer·(hw−2), the inertial layer by gradient·∇ · refuses a zero half-sum' },
-  { id:26, name:'Dhvajāṅka', sk:'ध्वजाङ्क', guide:'PERMUTATIVE · every vertex but the flag (the largest |Ψ|) pulled by α to Ψ_flag/portion' },
-  { id:27, name:'Gunitasamuccayah', sk:'गुणितसमुच्चयः', guide:'DIFFUSIVE · four Hamming paths driven to arithmetic progressions; the rest pulled by α/2 to their neighbours' },
-  { id:28, name:'Antyayoḥ Eva', sk:'अन्त्ययोः', guide:'DIFFUSIVE · each edge moves α·rate·(Ψᵢ² − Ψⱼ²)/(|Ψᵢ| + |Ψⱼ|) = α·rate·(|Ψᵢ| − |Ψⱼ|) from Ψᵢ to Ψⱼ, keeping the sum exactly' },
-  { id:29, name:'Conservation', sk:'संरक्षण', guide:'CONSERVATION · Ψ pulled by α·weight to its mean, keeping the mean exactly · sets MSTVQ B' }
+  { id:1, name:'Ekādhikena Pūrveṇa', sk:'एकाधिकेन', guide:'SUTRA · p. 2–4 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 9), each from the one before by the multiplier one more than the previous · refuses a denominator above 999; the field is turned on its edges by α × each term · GRVQ feeds λ₀' },
+  { id:2, name:'Nikhilam Navataścaramam Daśataḥ', sk:'निखिलं', guide:'SUTRA · p. 12–13 · ⌊Ψ₀⌋ × ⌊Ψ₁₅⌋ by their deficiencies from the power of ten above them: the two deficiencies, the cross part and their product; the field is turned on its edges by α × each term · sets MSTVQ B' },
+  { id:3, name:'Ūrdhva-Tiryagbhyām', sk:'ऊर्ध्व', guide:'SUTRA · p. 33–36 · the crosswise product of the two halves ⌊Ψ₀..₇⌋ and ⌊Ψ₈..₁₅⌋ as coefficients: 15 terms; the field is turned on its edges by α × each term · sets MSTVQ B' },
+  { id:4, name:'Parāvartya Yojayet', sk:'परावर्त्य', guide:'SUTRA · p. 53–58 · ⌊Ψ₀..₇⌋ as a polynomial divided by x + ⌊Ψ₁₅⌋ by transposing: quotient and remainder; the field is turned on its edges by α × each term' },
+  { id:5, name:'Śūnyam Sāmyasamuccaye', sk:'शून्यं', guide:'SUTRA · p. 98 · (x + a)(x + b) = (x + c)(x + d) with ab = cd built from ⌊Ψ₀⌋, ⌊Ψ₁⌋, ⌊Ψ₁₅⌋: the two equal products and the sum’s difference; the field is turned on its edges by α × each term · GRVQ feeds λ₁' },
+  { id:6, name:'Ānurūpye Śūnyamanyat', sk:'आनुरूप्ये', guide:'SUTRA · p. 130–132 · (2⌊Ψ₀⌋+1)x + 2⌊Ψ₁⌋y = ⌊Ψ₁₅⌋·2⌊Ψ₁⌋ and 2⌊Ψ₂⌋x + (2⌊Ψ₃⌋+1)y = ⌊Ψ₁₅⌋·(2⌊Ψ₃⌋+1), the y column in the ratio of the right-hand sides: the determinant, which is odd, and the solution with the other unknown zero; the field is turned on its edges by α × each term' },
+  { id:7, name:'Saṅkalana-Vyavakalanābhyām', sk:'संकलन', guide:'SUTRA · p. 132 · ax + by = c, bx + ay = d with a = 2⌊Ψ₀⌋+1, b = 2⌊Ψ₁⌋, c = ⌊Ψ₂⌋, d = ⌊Ψ₃⌋ by adding and subtracting: sum, difference and the two unknowns; the field is turned on its edges by α × each term' },
+  { id:8, name:'Pūraṇāpūraṇābhyām', sk:'पूरणा', guide:'SUTRA · p. 155–156 · ax² + ⌊Ψ₁⌋x + ⌊Ψ₂⌋ completed to a square, a one further from zero than ⌊Ψ₀⌋: a, the shift and the remainder; the field is turned on its edges by α × each term' },
+  { id:9, name:'Calana-Kalanābhyām', sk:'चलन', guide:'SUTRA · p. 145, 175–178 · the derivative of the polynomial whose coefficients are ⌊Ψ₀..₁₅⌋: 15 terms; the field is turned on its edges by α × each term · GRVQ feeds λ₂' },
+  { id:10, name:'Yāvadūnam', sk:'यावदूनम्', guide:'SUTRA · p. 24–27 · ⌊Ψ₀⌋² by its deficiency from the power of ten above it: the deficiency, the left part and its square; the field is turned on its edges by α × each term' },
+  { id:11, name:'Vyaṣṭisamaṣṭiḥ', sk:'व्यष्टि', guide:'SUTRA · p. 160–161 · (x + a)⁴ + (x + b)⁴ = total with a, b, total = ⌊Ψ₀⌋, ⌊Ψ₁₅⌋, ⌊Ψ₁⌋: the mean, the half-difference and the reduced biquadratic; the field is turned on its edges by α × each term' },
+  { id:12, name:'Śeṣāṇyaṅkena Carameṇa', guide:'SUTRA · p. 195–197 · the recurring digits of 1/(10·|⌊Ψ₀⌋| + 7) read off its remainders by the last digit · refuses a denominator above 999; the field is turned on its edges by α × each term' },
+  { id:13, name:'Sopāntyadvayamantyam', sk:'सोपान्त्य', guide:'SUTRA · p. 136–137 · 1/AB + 1/AC = 1/AD + 1/BC on factors in arithmetic progression, the first ⌊Ψ₀⌋ + (2⌊Ψ₁⌋+1)x and the difference ⌊Ψ₂⌋ + 2⌊Ψ₃⌋x: twice the penultimate plus the ultimate; the field is turned on its edges by α × each term' },
+  { id:14, name:'Ekanyūnena Pūrveṇa', sk:'एकन्यूनेन', guide:'SUTRA · p. 29–32 · ⌊Ψ₀⌋ × 99…9 with as many nines as it has digits: one less than the number, and its complement; the field is turned on its edges by α × each term · GRVQ feeds λ₃' },
+  { id:15, name:'Guṇitasamuccayaḥ', sk:'गुणित', guide:'SUTRA · p. 76, 81–85 · the product of the four binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x, v = 0..3; the sum of its coefficients is the product of the sums; the field is turned on its edges by α × each term' },
+  { id:16, name:'Guṇakasamuccayaḥ', sk:'गुणक', guide:'SUTRA · p. 175–178 · the derivative of the product of the three binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x as the sum of each factor’s derivative times the rest; the field is turned on its edges by α × each term' },
+  { id:17, name:'Ānurūpyeṇa', sk:'आनुरूप्येण', guide:'SUB-SUTRA · p. 17–22 · ⌊Ψ₀⌋ × ⌊Ψ₁₅⌋ from a working base, the multiple of the power of ten just above them, taken proportionately; the field is turned on its edges by α × each term' },
+  { id:18, name:'Śiṣyate Śeṣasaṃjñaḥ', sk:'शिष्यते', guide:'SUB-SUTRA · p. 19, 57 · ⌊Ψ₀⌋ divided by |⌊Ψ₁₅⌋| + 1: the quotient and the remainder that remains; the field is turned on its edges by α × each term' },
+  { id:19, name:'Ādyamādyenāntyamantyena', guide:'SUB-SUTRA · p. 74–75 · the quadratic (q + px)(r + sx) divided by its factor q + px, with r = ⌊Ψ₂⌋ and q, p, s one further from zero than ⌊Ψ₀⌋, ⌊Ψ₁⌋, ⌊Ψ₃⌋: first by first and last by last; the field is turned on its edges by α × each term' },
+  { id:20, name:'Kevalaiḥ Saptakaṃ Guṇyāt', sk:'केवलैः', guide:'SUB-SUTRA · p. 202 · the recurring digits of (1 + |⌊Ψ₀⌋| mod 6)/7 from 143 × 999; the field is turned on its edges by α × each term' },
+  { id:21, name:'Veṣṭanam', sk:'वेष्टनम्', guide:'SUB-SUTRA · p. 259–266 · |⌊Ψ₀⌋| tested for divisibility by 10·|⌊Ψ₁₅⌋| + 7 by its positive and negative osculators: both chains; the field is turned on its edges by α × each term' },
+  { id:22, name:'Yāvadūnaṃ Tāvadūnam', guide:'SUB-SUTRA · p. 288–289 · ⌊Ψ₀⌋³ by its deficiency from the power of ten above it: the deficiency and the three parts; the field is turned on its edges by α × each term' },
+  { id:23, name:'Yāvadūnaṃ Tāvadūnīkṛtya Vargañca Yojayet', guide:'SUB-SUTRA · p. 24–27 · ⌊Ψ₁₅⌋² by its deficiency from the power of ten above it: the deficiency, the left part and its square; the field is turned on its edges by α × each term' },
+  { id:24, name:"Antyayordaśake'pi", sk:'अन्त्ययोः', guide:'SUB-SUTRA · p. 28–29 · two numbers with the prefix |⌊Ψ₀⌋| and last digits totalling ten: prefix × one more, and the product of the last digits; the field is turned on its edges by α × each term' },
+  { id:25, name:'Antyayoreva', guide:'SUB-SUTRA · p. 138–143 · (AC + D)/(BC + E) = A/B with A = ⌊Ψ₀⌋ + ⌊Ψ₁⌋x, B = ⌊Ψ₂⌋ + bx, C = ⌊Ψ₄⌋ + cx, D = ⌊Ψ₆⌋, E = ⌊Ψ₇⌋, b and c one further from zero than ⌊Ψ₃⌋ and ⌊Ψ₅⌋, reduced to A/B = D/E: the last terms and the linear equation left; the field is turned on its edges by α × each term' },
+  { id:26, name:'Samuccayaguṇitaḥ', sk:'समुच्चयगुणितः', guide:'SUB-SUTRA · p. 76 · the crosswise product of ⌊Ψ₀..₃⌋ and ⌊Ψ₄..₇⌋: 7 terms whose sum is the product of the sums; the field is turned on its edges by α × each term' },
+  { id:27, name:'Lopanasthāpanābhyām', sk:'लोपन', guide:'SUB-SUTRA · p. 77–79 · the homogeneous quadratic (x + ⌊Ψ₁⌋y + ⌊Ψ₂⌋z)(ax + ⌊Ψ₃⌋y + ⌊Ψ₄⌋z), a one further from zero than ⌊Ψ₀⌋, factored by eliminating z, then y, and retaining x; the field is turned on its edges by α × each term' },
+  { id:28, name:'Vilokanam', sk:'विलोकनम्', guide:'SUB-SUTRA · p. 147–148 · x + 1/x = n + 1/n, n one further from zero than ⌊Ψ₀⌋, solved by observation: the sum and the reciprocal pair; the field is turned on its edges by α × each term' },
+  { id:29, name:'Guṇitasamuccayaḥ Samuccayaguṇitaḥ', guide:'SUB-SUTRA · p. 76 · the product of the eight binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x; the sum of its coefficients is the product of the sums; the field is turned on its edges by α × each term · sets MSTVQ B' }
 ];
 function parseStrengthPercentQ(raw) {
   const text = String(raw).trim();
@@ -5811,32 +5447,32 @@ document.querySelectorAll('#comp-ctrls button').forEach(b => b.addEventListener(
   pushConfig('composition → ' + COMPOSITION_LABEL[COMPOSITION]);
 }));
 const PRESETS = {
-  'pre-quartet': { comp: 'PARALLEL', set: { 2: 100, 6: 100, 23: 100, 26: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'One formula from four sutras whose changes to the seed field point in different directions (the largest cosine between any two of them is 0.40): S2 reflects every vertex about half the base, S6 drives each edge ratio toward its target, S23 moves complement pairs toward tens and S26 pulls every vertex toward the flag over its portion, all from the same state. The formula goes in over the glide; after that only the stages run and the energy of the field holds.' },
-  'pre-damper': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Damping: S9 diffuses the field over the hypercube, S11 averages each Hamming layer and S29 pulls it to its mean, each from the same state.' },
-  'pre-inductor': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
-    purpose: 'S3, S9 and S27 with the drive and the vortex going into the magnetism memory.' },
-  'pre-dynamo': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
-    purpose: 'S3, S9, S11, S25 and S29, driven and twisted by the vortex.' },
-  'pre-containment': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
-    purpose: 'S9 and S28 under a strong vortex.' },
-  'pre-capacitor': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
-    purpose: 'S4, S5 and S26 with the polarisation at 3, so the field charges the dielectric.' },
-  'pre-balancer': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Nikhilam (S2) reflects every vertex about half the base above the field, which moves the sum of a vertex and its complement toward the base and shrinks their difference by 1 - 2 alpha, while S9 diffuses the field.' },
-  'pre-checksum': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'Casting out nines (S12), the common factor of the tails (S24) and the remainders by Hamming weight (S18) all at once, with S9 diffusing the field over the hypercube.' },
-  'pre-lock': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S20 moves every vertex toward the nearest multiple of 7 while S9 diffuses the field.' },
-  'pre-rejector': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and S11 averages each Hamming layer, each from the same state.' },
-  'pre-mixer': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S22 pulls every vertex toward the mean of itself and its complement while S9 diffuses the field.' },
-  'pre-amplifier': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
-    purpose: 'S1 multiplies every vertex up by one more than its neighbour gives, and the field grows.' },
-  'pre-correlator': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
-    purpose: 'S3 pulls the field toward its own crosswise (XOR) convolution, S9 diffuses it and the drive feeds it.' }
+  'pre-2-6-23-26': { comp: 'PARALLEL', set: { 2: 100, 6: 100, 23: 100, 26: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S2 multiplies ⌊Ψ₀⌋ by ⌊Ψ₁₅⌋ from their deficiencies, S6 solves a pair of equations with one column in the ratio of the right-hand sides, S23 squares ⌊Ψ₁₅⌋ from its deficiency and S26 multiplies ⌊Ψ₀..₃⌋ by ⌊Ψ₄..₇⌋ crosswise.' },
+  'pre-9-11-29': { comp: 'PARALLEL', set: { 9: 100, 11: 100, 29: 100 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S9 differentiates the polynomial whose coefficients are ⌊Ψ₀..₁₅⌋, S11 reduces (x + ⌊Ψ₀⌋)⁴ + (x + ⌊Ψ₁₅⌋)⁴ = ⌊Ψ₁⌋ to a biquadratic and S29 multiplies out the eight binomials ⌊Ψᵥ⌋ + ⌊Ψ₁₅₋ᵥ⌋x.' },
+  'pre-3-9-27': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 27: 50 }, omega: 30, drive: 4, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field and S27 factors a homogeneous quadratic by elimination and retention, with the drive at 1 and the vortex at 3.' },
+  'pre-3-9-11-25-29': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 30, 9: 30, 11: 30, 25: 30, 29: 30 }, omega: 20, drive: 4, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field, S11 reduces a biquadratic, S25 reduces a ratio to its last terms and S29 multiplies out eight binomials, with the drive at 1 and the vortex at 2.' },
+  'pre-9-28': { comp: 'SERIES', set: { 9: 30, 28: 30 }, omega: 40, drive: 0, chi: 10,
+    purpose: 'S9 differentiates the polynomial of the field and S28 solves x + 1/x by observation, with the vortex at 4.' },
+  'pre-4-5-26': { comp: 'PARALLEL', set: { 4: 50, 5: 50, 26: 50 }, omega: 10, drive: 0, chi: 30,
+    purpose: 'S4 divides ⌊Ψ₀..₇⌋ by x + ⌊Ψ₁₅⌋ by transposing, S5 equates the two products and S26 multiplies ⌊Ψ₀..₃⌋ by ⌊Ψ₄..₇⌋ crosswise, with the polarisation at 3.' },
+  'pre-2-9': { comp: 'SYMMETRIC_CONCURRENT', set: { 2: 30, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S2 multiplies ⌊Ψ₀⌋ by ⌊Ψ₁₅⌋ from their deficiencies and S9 differentiates the polynomial of the field.' },
+  'pre-9-12-18-24': { comp: 'PARALLEL', set: { 12: 100, 24: 100, 18: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S12 reads the recurring digits of 1/(10·|⌊Ψ₀⌋| + 7) off its remainders, S24 multiplies two numbers whose last digits total ten, S18 divides ⌊Ψ₀⌋ by |⌊Ψ₁₅⌋| + 1 and keeps the remainder, and S9 differentiates the polynomial of the field.' },
+  'pre-9-20': { comp: 'SYMMETRIC_CONCURRENT', set: { 20: 100, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S20 takes the recurring digits of a seventh from 143 × 999 and S9 differentiates the polynomial of the field.' },
+  'pre-3-9-11': { comp: 'PARALLEL', set: { 3: 50, 9: 30, 11: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise, S9 differentiates the polynomial of the field and S11 reduces a biquadratic.' },
+  'pre-9-22': { comp: 'SYMMETRIC_CONCURRENT', set: { 22: 50, 9: 30 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S22 cubes ⌊Ψ₀⌋ from its deficiency and S9 differentiates the polynomial of the field.' },
+  'pre-1': { comp: 'SERIES', set: { 1: 50 }, omega: 10, drive: 0, chi: 10,
+    purpose: 'S1 alone: the recurring digits of 1/(10·|⌊Ψ₀⌋| + 9), each from the one before.' },
+  'pre-3-9': { comp: 'SYMMETRIC_CONCURRENT', set: { 3: 50, 9: 30 }, omega: 10, drive: 8, chi: 10,
+    purpose: 'S3 multiplies the two halves of the field crosswise and S9 differentiates the polynomial of the field, with the drive at 2.' }
 };
 
 function presetTitle(p) {
