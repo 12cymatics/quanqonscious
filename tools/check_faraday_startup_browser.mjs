@@ -59,6 +59,14 @@ try {
     await page.goto(scenario.url, { waitUntil: 'load', timeout: 30000 });
     await page.waitForFunction(() => typeof simT !== 'undefined' && simT > 0.5 && state && !renderError, undefined, { timeout: 30000 });
     assert.match(await page.title(), /Faraday|cymatic/i);
+    const opened = await page.evaluate(() => ({ experimentMode, useSolver, rim, view,
+      overlay: getComputedStyle(document.getElementById('solverOverlay')).display }));
+    assert.deepEqual(opened, { experimentMode: 'reference', useSolver: false, rim: 'free', view: 'sand', overlay: 'none' });
+    results.push({ name: scenario.name + '-opens-on-sand', opened, passed: true });
+    await page.locator('#configurationMode').selectOption('general');
+    await page.locator('#rimSeg [data-r="pinned"]').click();
+    await page.locator('#srcSeg [data-s="dns"]').click();
+    await page.waitForFunction(() => experimentMode === 'general' && useSolver && rim === 'pinned' && view === 'height' && !dirty);
     const pending = await page.evaluate(async () => {
       let exportError = '';
       try { await exportImage(129, () => {}); } catch (error) { exportError = error.message; }

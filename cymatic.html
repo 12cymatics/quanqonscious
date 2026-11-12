@@ -194,7 +194,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
         <span class="v"><input id="fnum" type="number" min="0" step="any" value="111"
           style="width:66px;background:transparent;border:1px solid var(--edge2);color:var(--cy);
           font:inherit;font-weight:600;text-align:right;padding:1px 3px;border-radius:2px"> Hz</span></div>
-      <input type="range" id="f" min="50" max="5000" step="1" value="111">
+      <input type="range" id="f" min="50" max="10000" step="1" value="111">
       <div class="row" id="anchors" style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px"></div>
     </div>
     <div class="fld" data-reference-control hidden>
@@ -327,20 +327,37 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <script id="dnsCell3dWasmBase64"></script>
 <script>
 
-const GR_BASE = 381, GR_FINE = 571, RR_BASE = (GR_BASE-1)/2 - 3;
-const GR = window.devicePixelRatio >= 2 ? GR_FINE : GR_BASE;
-const GRID_SCALE = GR/GR_BASE;
-const CC = (GR-1)/2, RR = CC - 3, NSZ = GR*GR;
+const GR_BASE = 381, RR_BASE = (GR_BASE-1)/2 - 3;
+const GRID_SIZES = window.devicePixelRatio >= 2 ? [571, 763, 993] : [GR_BASE];
+const GRID_TARGET = 10;
 const cv = document.getElementById('c');
-cv.width = GR; cv.height = GR;
 const ctx = cv.getContext('2d', { alpha:false });
-const im = ctx.createImageData(GR, GR), pxl = im.data;
-const COVER = new Float32Array(NSZ), RAD = new Float32Array(NSZ), ANG = new Float32Array(NSZ);
-const RSQ = new Int32Array(NSZ);
-for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
-  const dx = x-CC, dy = y-CC, r = Math.hypot(dx, dy), i = y*GR+x;
-  COVER[i] = Math.max(0, Math.min(1, RR - r + 0.5));
-  RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx); RSQ[i] = dx*dx + dy*dy;
+let GR, GRID_SCALE, CC, RR, NSZ, im, pxl, COVER, RAD, ANG, RSQ, RADII;
+function allocateGrid(size){
+  GR = size; GRID_SCALE = GR/GR_BASE; CC = (GR-1)/2; RR = CC - 3; NSZ = GR*GR; RADII = null;
+  cv.width = GR; cv.height = GR;
+  im = ctx.createImageData(GR, GR); pxl = im.data;
+  COVER = new Float32Array(NSZ); RAD = new Float32Array(NSZ); ANG = new Float32Array(NSZ);
+  RSQ = new Int32Array(NSZ);
+  for (let y = 0; y < GR; y++) for (let x = 0; x < GR; x++){
+    const dx = x-CC, dy = y-CC, r = Math.hypot(dx, dy), i = y*GR+x;
+    COVER[i] = Math.max(0, Math.min(1, RR - r + 0.5));
+    RAD[i] = r/RR; ANG[i] = Math.atan2(dy, dx); RSQ[i] = dx*dx + dy*dy;
+  }
+}
+allocateGrid(GRID_SIZES[0]);
+function gridFor(state){
+  const waves = state.cellDiameterMm*1e-3/state.wavelength;
+  for (const size of GRID_SIZES) if (2*((size-1)/2 - 3)/waves >= GRID_TARGET) return size;
+  return GRID_SIZES[GRID_SIZES.length - 1];
+}
+function setGrid(size){
+  allocateGrid(size); allocateRasters(); allocateGrains();
+  SHAPE.clear(); PIN_SHAPE.clear(); PIN_JOB = null;
+  surfaceBuiltFor = null;
+  GPU_SURFACE.resize();
+  sprinkle();
+  FIELD_GEN++;
 }
 
 const BESSEL = new Float64Array(2);
@@ -362,72 +379,95 @@ function besselInto(m, z){
   hi *= norm; mid *= norm; lo *= norm;
   BESSEL[0] = mid; BESSEL[1] = m === 0 ? -hi : (lo - hi)/2;
 }
-const radiiOfGrid = (() => {
-  let list = null;
-  return () => {
-    if (list) return list;
-    const RSQ_MAX = (RR+2)*(RR+2), seen = new Uint8Array(RSQ_MAX+1);
-    list = [];
-    for (let ay = 0; ay <= CC; ay++){
-      const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
-      for (let ax = 0; ax <= CC; ax++){
-        const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
-        if (seen[rs]) continue;
-        seen[rs] = 1; list.push(rs);
-      }
+function radiiOfGrid(){
+  if (RADII) return RADII;
+  const RSQ_MAX = (RR+2)*(RR+2), seen = new Uint8Array(RSQ_MAX+1);
+  RADII = [];
+  for (let ay = 0; ay <= CC; ay++){
+    const ay2 = ay*ay; if (ay2 > RSQ_MAX) break;
+    for (let ax = 0; ax <= CC; ax++){
+      const rs = ax*ax + ay2; if (rs > RSQ_MAX) break;
+      if (seen[rs]) continue;
+      seen[rs] = 1; RADII.push(rs);
     }
-    return list;
-  };
-})();
+  }
+  return RADII;
+}
 const PIN_SHAPE = new Map();
+let PIN_JOB = null;
 const pinnedKey = (m, zeros, coeffs) => m + ':p:' + zeros.length + ':' + coeffs[0].toExponential(9);
-function shapesOfPinned(m, zeros, coeffSets){
-  const RSQ_MAX = (RR+2)*(RR+2), radii = radiiOfGrid(), count = coeffSets.length;
-  const jr = coeffSets.map(() => new Float32Array(RSQ_MAX+1)), dr = coeffSets.map(() => new Float32Array(RSQ_MAX+1));
-  const v = new Float64Array(count), d = new Float64Array(count);
-  for (const rs of radii){
-    const rho = Math.sqrt(rs)/RR;
+function pinnedGroups(states){
+  const groups = [];
+  for (const s of states){
+    const pin = s.radial.pinned;
+    if (!pin || s.gated) continue;
+    const zeros = s.radial.pinnedZeros, key = pinnedKey(s.m, zeros, pin.coefficients);
+    if (PIN_SHAPE.has(key)) continue;
+    let g = groups.find(x => x.m === s.m && x.zeros.length === zeros.length && x.zeros.every((z, i) => z === zeros[i]));
+    if (!g){ g = { m: s.m, zeros, sets: [], keys: [] }; groups.push(g); }
+    if (!g.keys.includes(key)){ g.keys.push(key); g.sets.push(pin.coefficients); }
+  }
+  return groups;
+}
+function advancePinnedShapes(states, budgetMs){
+  const groups = pinnedGroups(states), wanted = groups.flatMap(g => g.keys);
+  if (!wanted.length){ PIN_JOB = null; return 1; }
+  if (!PIN_JOB || !wanted.every(k => PIN_JOB.keys.has(k))){
+    const RSQ_MAX = (RR+2)*(RR+2);
+    PIN_JOB = { keys: new Set(wanted), groups, radii: radiiOfGrid(), RSQ_MAX, at: 0,
+      tables: groups.map(g => ({
+        jr: g.sets.map(() => new Float32Array(RSQ_MAX+1)), dr: g.sets.map(() => new Float32Array(RSQ_MAX+1)),
+        v: new Float64Array(g.sets.length), d: new Float64Array(g.sets.length) })) };
+  }
+  const job = PIN_JOB, radii = job.radii, n = radii.length, total = job.groups.length*n;
+  const until = performance.now() + budgetMs;
+  while (job.at < total){
+    const gi = Math.floor(job.at/n), ri = job.at - gi*n, g = job.groups[gi], t = job.tables[gi];
+    const rs = radii[ri], rho = Math.sqrt(rs)/RR, zeros = g.zeros, count = g.sets.length, v = t.v, d = t.d;
     v.fill(0); d.fill(0);
-    for (let n = 0; n < zeros.length; n++){
-      besselInto(m, zeros[n]*rho);
-      const p0 = BESSEL[0], p1 = BESSEL[1], zn = zeros[n];
+    for (let z = 0; z < zeros.length; z++){
+      besselInto(g.m, zeros[z]*rho);
+      const p0 = BESSEL[0], p1 = BESSEL[1], zn = zeros[z];
       for (let k = 0; k < count; k++){
-        const c = coeffSets[k][n];
+        const c = g.sets[k][z];
         v[k] += c*p0;
         d[k] += c*zn*p1;
       }
     }
-    for (let k = 0; k < count; k++){ jr[k][rs] = v[k]; dr[k][rs] = d[k]; }
+    for (let k = 0; k < count; k++){ t.jr[k][rs] = v[k]; t.dr[k][rs] = d[k]; }
+    job.at++;
+    if (ri === n - 1){
+      for (let k = 0; k < count; k++){
+        const jr = t.jr[k], dr = t.dr[k];
+        let peak = 0;
+        for (const q of radii) if (Math.abs(jr[q]) > peak) peak = Math.abs(jr[q]);
+        if (!(peak > 0))
+          throw new Error(`shapeOfPinned: the superposition is identically zero at m=${g.m}`);
+        const inv = 1/peak;
+        for (const q of radii){ jr[q] *= inv; dr[q] *= inv; }
+        if (PIN_SHAPE.size > 8) PIN_SHAPE.delete(PIN_SHAPE.keys().next().value);
+        PIN_SHAPE.set(g.keys[k], { jr, dr, evals: n*zeros.length, max: job.RSQ_MAX, peak, pinned: true });
+      }
+    }
+    if ((job.at & 15) === 0 && performance.now() >= until) break;
   }
-  return coeffSets.map((coeffs, k) => {
-    let peak = 0;
-    for (const rs of radii) if (Math.abs(jr[k][rs]) > peak) peak = Math.abs(jr[k][rs]);
-    if (!(peak > 0))
-      throw new Error(`shapeOfPinned: the superposition is identically zero at m=${m}`);
-    const inv = 1/peak;
-    for (const rs of radii){ jr[k][rs] *= inv; dr[k][rs] *= inv; }
-    const rec = { jr: jr[k], dr: dr[k], evals: radii.length*zeros.length, max: RSQ_MAX, peak, pinned: true };
-    if (PIN_SHAPE.size > 8) PIN_SHAPE.delete(PIN_SHAPE.keys().next().value);
-    PIN_SHAPE.set(pinnedKey(m, zeros, coeffs), rec);
-    return rec;
-  });
+  const done = job.at/total;
+  if (job.at === total) PIN_JOB = null;
+  return done;
 }
 function shapeOfPinned(m, zeros, coeffs){
-  return PIN_SHAPE.get(pinnedKey(m, zeros, coeffs)) || shapesOfPinned(m, zeros, [coeffs])[0];
+  const key = pinnedKey(m, zeros, coeffs);
+  if (!PIN_SHAPE.has(key))
+    while (advancePinnedShapes([{ m, gated: false, radial: { pinned: { coefficients: coeffs }, pinnedZeros: zeros } }], Infinity) < 1);
+  return PIN_SHAPE.get(key);
 }
-function preparePinnedShapes(states){
-  const groups = [];
-  for (const s of states){
-    const pin = s.radial.pinned;
-    if (!pin || s.gated || PIN_SHAPE.has(pinnedKey(s.m, s.radial.pinnedZeros, pin.coefficients))) continue;
-    const zeros = s.radial.pinnedZeros;
-    let g = groups.find(x => x.m === s.m && x.zeros.length === zeros.length && x.zeros.every((z, i) => z === zeros[i]));
-    if (!g){ g = { m: s.m, zeros, sets: [], keys: new Set() }; groups.push(g); }
-    const key = pinnedKey(s.m, zeros, pin.coefficients);
-    if (!g.keys.has(key)){ g.keys.add(key); g.sets.push(pin.coefficients); }
+function gateStates(state){
+  for (const s of state.states){
+    s.pxPerWave = 2*Math.PI*RR/finestZeroOf(s.radial);
+    s.gated = s.pxPerWave < RES_GATE;
   }
-  for (const g of groups) shapesOfPinned(g.m, g.zeros, g.sets);
 }
+
 
 const SHAPE = new Map();
 function shapeOf(m, jp){
@@ -445,21 +485,20 @@ function shapeOf(m, jp){
   SHAPE.set(key, rec); return rec;
 }
 
-const ETA = new Float32Array(NSZ), NX = new Float32Array(NSZ), NY = new Float32Array(NSZ);
-
-const PGX = new Float32Array(NSZ), PGY = new Float32Array(NSZ);
-
-const IMF = new Float32Array(NSZ), GIX = new Float32Array(NSZ), GIY = new Float32Array(NSZ);
+let ETA, NX, NY, PGX, PGY, IMF, GIX, GIY;
+function allocateRasters(){
+  ETA = new Float32Array(NSZ); NX = new Float32Array(NSZ); NY = new Float32Array(NSZ);
+  PGX = new Float32Array(NSZ); PGY = new Float32Array(NSZ);
+  IMF = new Float32Array(NSZ); GIX = new Float32Array(NSZ); GIY = new Float32Array(NSZ);
+}
+allocateRasters();
 
 const RES_GATE = 4;
 function buildSurface(state){
   ETA.fill(0); NX.fill(0); NY.fill(0); IMF.fill(0); GIX.fill(0); GIY.fill(0);
   let unresolved = 0, drawn = 0;
-  for (const s of state.states){
-    s.pxPerWave = 2*Math.PI*RR/finestZeroOf(s.radial);
-    s.gated = s.pxPerWave < RES_GATE;
-  }
-  preparePinnedShapes(state.states);
+  gateStates(state);
+  while (advancePinnedShapes(state.states, Infinity) < 1);
   for (const s of state.states){
 
     const pin = s.radial.pinned;
@@ -558,10 +597,8 @@ function finishSurface(state){
 }
 let FIELD_GEN = 0;
 
-const NP_BASE = 60000, NP = Math.round(NP_BASE*GRID_SCALE);
-const PX = new Float32Array(NP), PY = new Float32Array(NP),
-      VX = new Float32Array(NP), VY = new Float32Array(NP);
-const BIN = new Uint16Array(NSZ);
+const NP_BASE = 60000;
+let NP, PX, PY, VX, VY, BIN, OCC, DRIFT, AGIT, TOPPLE_BUDGET;
 let settle = 0;
 function sprinkle(){
   for (let p = 0; p < NP; p++){
@@ -572,12 +609,16 @@ function sprinkle(){
   settle = 0;
 }
 const DRIFT_BASE = 2.2, DAMP = 0.62, AGIT_BASE = 0.85;
-const DRIFT = DRIFT_BASE*GRID_SCALE, AGIT = AGIT_BASE*GRID_SCALE;
 
 const PHI_RCP_PREVIEW = 0.84;
 const PREVIEW_CAP = PHI_RCP_PREVIEW*1/(Math.PI*0.25);
-const TOPPLE_BUDGET = NP;
-const OCC = new Uint16Array(NSZ);
+function allocateGrains(){
+  NP = Math.round(NP_BASE*GRID_SCALE);
+  PX = new Float32Array(NP); PY = new Float32Array(NP); VX = new Float32Array(NP); VY = new Float32Array(NP);
+  BIN = new Uint16Array(NSZ); OCC = new Uint16Array(NSZ);
+  DRIFT = DRIFT_BASE*GRID_SCALE; AGIT = AGIT_BASE*GRID_SCALE; TOPPLE_BUDGET = NP;
+}
+allocateGrains();
 function stepGrains(gain){
   const jitter = AGIT*agitation;
   OCC.fill(0);
@@ -865,7 +906,11 @@ const GPU_SURFACE = (() => {
     if (renderEngine === 'gpu') refuseRender(new Error('The GPU context was restored; choose GPU to rebuild its drawing resources.'));
   });
 
-  return { start, draw, show,
+  function resize(){
+    if (gl){ gl.GR = GR; if (gl.ready) gl.reinitialize(); }
+    staticReady = false; fieldGen = -1;
+  }
+  return { start, draw, show, resize,
            get error(){ return err || (gl && gl.lost ? gl.lostReason : null); },
            get renderer(){ return gl ? gl.renderer : null },
            get ready(){ return !!gl && gl.ready; },
@@ -944,6 +989,7 @@ let experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
 let problemKey = null, resolutionKey = null, solverRequested = false;
 let surfaceBuiltFor = null;
+const TABLE_SLICE_MS = 12;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
 let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
 let dnsShowInput = null;
@@ -969,7 +1015,8 @@ function tfeOf(){
     e.scaleSec*(e.refMv/Math.max(e.minMv, amp))*(e.depthBias + depth/e.depthPerMm));
 }
 
-function recompute(){
+function recompute(budgetMs = Infinity){
+  let tablesPending = false;
   for (const id of ['play','reset','sprinkleBtn']) $(id).disabled = useSolver;
   $('play').textContent = useSolver ? 'modal playback' : running ? 'running' : 'paused';
   const experiment = experimentMode === 'general'
@@ -989,6 +1036,7 @@ function recompute(){
   }
   problemKey = nextKey;
   if (useSolver){
+    if (GR !== GRID_SIZES[0]) setGrid(GRID_SIZES[0]);
     surfaceBuiltFor = null;
     state.visualSignature = null;
     state.expression = 1;
@@ -999,12 +1047,21 @@ function recompute(){
       BIN.fill(0); FIELD_GEN++;
       state.render = { drawn: 0, gatedRms: 0, gated: 0 };
     }
-  } else if (surfaceBuiltFor !== state){ buildSurface(state); surfaceBuiltFor = state; }
+  } else {
+    const size = gridFor(state);
+    if (size !== GR) setGrid(size);
+    if (surfaceBuiltFor !== state){
+      gateStates(state);
+      const built = advancePinnedShapes(state.states, budgetMs);
+      if (built < 1){ state.render = { drawn: 0, gatedRms: 0, gated: 0, building: built }; tablesPending = true; }
+      else { buildSurface(state); surfaceBuiltFor = state; }
+    }
+  }
   paintDeck(); paintInspector();
   $('referenceAtlas').hidden = !comparePaper;
   if (comparePaper) drawAtlas(referenceCell, freq);
   if (dnsShowInput && !(useSolver && state.experiment)) dnsShowInput();
-  dirty = false;
+  dirty = tablesPending;
 }
 
 function paintDeck(){
@@ -1270,7 +1327,7 @@ $('fnum').addEventListener('change', e => setFreq(+e.target.value));
 (function anchors(){
 
   const A = [[56,'6-fold'],[111,'10-fold'],[180,'14-fold'],[199,'atlas end'],
-             [4392,'acceptance'],[5000,'top']];
+             [4392,'acceptance'],[5000,'half'],[10000,'top']];
   $('anchors').innerHTML = A.map(([hz,t]) =>
     `<button class="btn" data-hz="${hz}" title="${t}" style="padding:3px 6px;font-size:10px">${hz}</button>`).join('');
   $('anchors').querySelectorAll('button').forEach(b =>
@@ -2130,7 +2187,7 @@ function loop(now){
     if (swapAcc > 900){ swapAcc = 0; phaseSign = -phaseSign; }
   }
 
-  if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(); lastBuild = simT; }
+  if (dirty || Math.abs(simT - lastBuild) > 0.12){ recompute(TABLE_SLICE_MS); lastBuild = simT; }
   else { state.phase = Math.cos(Math.PI*freq*simT);
          state.expression = useSolver || state.experiment ? 1 : amp < MIN_MV ? 0 : 1 - Math.exp(-simT/Math.max(0.15, tfeOf())); }
   const clock = CELL3D.clocks();
@@ -2143,6 +2200,11 @@ function loop(now){
     paintOverlay(); FARADAY_STARTUP.ready(); return;
   }
   $('expBtn').disabled = exporting;
+  if (!useSolver && state.render.building !== undefined){
+    $('solverOverlay').style.display = 'flex';
+    $('solverOverlay').textContent = `building tables · ${Math.floor(100*state.render.building)}% · grid ${GR}`;
+    paintOverlay(); FARADAY_STARTUP.ready(); return;
+  }
   if (!useSolver && state.states.length > 0 && state.render.drawn === 0){
     const best = Math.max(...state.states.map(s => s.pxPerWave));
     $('solverOverlay').style.display = 'flex';
@@ -2684,6 +2746,11 @@ $('runSolver').addEventListener('click', () => {
 });
 
 sprinkle(); recompute();
+$('configurationMode').value = 'reference';
+$('configurationMode').dispatchEvent(new Event('change'));
+document.querySelector('#srcSeg [data-s="modal"]').click();
+document.querySelector('#rimSeg [data-r="free"]').click();
+document.querySelector('#viewSeg [data-v="sand"]').click();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage
    blocked the page starts on the CPU, as it always has. */
 try {

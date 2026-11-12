@@ -290,6 +290,16 @@ let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
 
 async function checkGeneralPending(page){
+  const opened = await page.json(`({ experimentMode, useSolver, rim, view,
+    overlay: getComputedStyle(document.getElementById('solverOverlay')).display !== 'none' })`);
+  ok(opened.experimentMode === 'reference' && !opened.useSolver && opened.rim === 'free'
+     && opened.view === 'sand' && !opened.overlay,
+     'the page opens on the modal sand pattern with a free rim, drawing', JSON.stringify(opened));
+  await page.eval(`document.getElementById('configurationMode').value = 'general';
+    document.getElementById('configurationMode').dispatchEvent(new Event('change', {bubbles:true}));
+    document.querySelector('#rimSeg [data-r="pinned"]').click();
+    document.querySelector('#srcSeg [data-s="dns"]').click();
+    recompute(); true`);
   const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
     rim, useSolver, solverRequested, have: CELL3D.clocks().have,
     comparePaper, signature: state.visualSignature,
