@@ -2746,6 +2746,11 @@ $('runSolver').addEventListener('click', () => {
 });
 
 sprinkle(); recompute();
+$('configurationMode').value = 'reference';
+$('configurationMode').dispatchEvent(new Event('change'));
+document.querySelector('#srcSeg [data-s="modal"]').click();
+document.querySelector('#rimSeg [data-r="free"]').click();
+document.querySelector('#viewSeg [data-v="sand"]').click();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage
    blocked the page starts on the CPU, as it always has. */
 try {
