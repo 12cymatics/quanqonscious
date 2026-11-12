@@ -251,8 +251,8 @@ function discWasmFactory(){
     + 'Refusing rather than running the JavaScript solver under that name.');
 }
 
-function discStateSize(nr, nz){
-  return 2*(nr - 1)*nz + nr*nz + nr;
+function discStateSize(nr, nz, m){
+  return 2*(nr - 1)*nz + nr*nz + nr + (m === 1 ? nz : 0);
 }
 
 function discPack(S, v, href, uref){
@@ -262,6 +262,10 @@ function discPack(S, v, href, uref){
   for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) S.v[S.iu(i, j)] = v[q++]*uref;
   for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) S.w[S.iw(i, j)] = v[q++]*uref;
   for (let i = 0; i < nr; i++) S.eta[i] = v[q++]*href;
+  if (S.m === 1)
+    for (let j = 0; j < nz; j++){
+      S.u[S.iu(0, j)] = v[q++]*uref; S.v[S.iu(0, j)] = -S.u[S.iu(0, j)];
+    }
   return q;
 }
 
@@ -272,12 +276,13 @@ function discUnpack(S, out, href, uref){
   for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) out[q++] = S.v[S.iu(i, j)]/uref;
   for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) out[q++] = S.w[S.iw(i, j)]/uref;
   for (let i = 0; i < nr; i++) out[q++] = S.eta[i]/href;
+  if (S.m === 1) for (let j = 0; j < nz; j++) out[q++] = S.u[S.iu(0, j)]/uref;
   return q;
 }
 
 function applyDiscPeriodMap(S, v, steps, dt, out, href, uref){
   discPack(S, v, href, uref);
-  S.u[S.iu(0, 0)] = 0;
+  if (S.m !== 1) S.u[S.iu(0, 0)] = 0;
   S.p.fill(0);
   /* The time is SET from the step index rather than accumulated by step().
      Accumulating dt makes t after a full period differ from Td: over the 2759
@@ -359,7 +364,7 @@ function floquetDisc(o){
   const steps = Math.max(1, Math.round(Td/dtIn));
   const dt = Td/steps;
 
-  const n = discStateSize(nr, nz);
+  const n = discStateSize(nr, nz, m);
   const out = new Float64Array(n);
   const href = o.href || 1e-9, uref = href*(omegaD/2);
 

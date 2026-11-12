@@ -258,7 +258,9 @@ function cell3dGridLimits(drMin, dzMin, Hmin, rc0, nth, dth, g, accel, gamma, rh
    A grid that misses the first misstates the capillary restoring force, and so the mode's
    frequency; one that misses the second has its damping set by truncation error rather than
    by the viscosity. Of the grids that meet both, the cheapest: cells times steps per drive
-   period, each at the time step that grid will actually run at.
+   period, each at the time step that grid will actually run at. Where none at the radial
+   grading below does, each radial count is tried again at the weakest stronger grading, in
+   tenths, whose rim cell holds `layerCells`.
 
    WHY THIS SOLVER AND NOT THE TWO-DIMENSIONAL ONE. The page used to size this solver's grid
    with dns/faraday-disc.js's suggestGrid, which knows nothing of the azimuthal direction --
@@ -302,6 +304,16 @@ function cell3dTransformFriendly(nth){
   return n === 1;
 }
 
+const CELL3D_MAX_RSTRETCH = 12;
+
+function cell3dRimStretch(nr, R, delta, layerCells, from){
+  for (let j = Math.round(10*from); j <= 10*CELL3D_MAX_RSTRETCH; j++){
+    const s = j/10, rf = GRADE.gradeToEnd(nr, R, s);
+    if (delta/(rf[nr] - rf[nr-1]) >= layerCells) return s;
+  }
+  return null;
+}
+
 function suggestCell3DGrid(o){
   const m = o.m;
   if (!(Number.isInteger(m) && m >= 0)) throw new RangeError(
@@ -326,12 +338,13 @@ function suggestCell3DGrid(o){
   const zMin = CELL3D_SIZE_NZ[0];
   const tried = [];
   let best = null, closest = null;
-  for (const nr of CELL3D_SIZE_NR){
-    if (nr*16*zMin > maxCells) break;
-    /* the radial grading as the two-dimensional sizing chooses it: milder as the mode's
-       radial wavelength shrinks, because the interior carries the wave */
+  /* the radial grading as the two-dimensional sizing chooses it: milder as the mode's
+     radial wavelength shrinks, because the interior carries the wave */
+  const ruleStretch = nr => {
     const perLambdaUniform = (2*Math.PI/k)/(R/nr);
-    const rStretch = perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8;
+    return perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8;
+  };
+  const consider = (nr, rStretch) => {
     const P = new FaradayCell3D({ nr, nth: 8, nz: 4, R, h, rho, nu, gamma, g, contact,
                                   rStretch, zStretch: 2.2 });
     /* small enough that every slope squared is below the rounding of 1 */
@@ -364,7 +377,7 @@ function suggestCell3DGrid(o){
       const rec = { nr, nth: lastNth, rStretch, err: lastErr, surfaceOk: false };
       tried.push(rec);
       if (!closest || rec.err < closest.err) closest = rec;
-      continue;
+      return;
     }
     let drMin = Infinity;
     for (let i = 0; i < nr; i++) drMin = Math.min(drMin, P.drc[i]);
@@ -392,7 +405,17 @@ function suggestCell3DGrid(o){
           closest = rec;
       }
     }
+  };
+  for (const nr of CELL3D_SIZE_NR){
+    if (nr*16*zMin > maxCells) break;
+    consider(nr, ruleStretch(nr));
   }
+  if (!best)
+    for (const nr of CELL3D_SIZE_NR){
+      if (nr*16*zMin > maxCells) break;
+      const rule = ruleStretch(nr), s = cell3dRimStretch(nr, R, delta, layerCells, rule);
+      if (s !== null && s > rule) consider(nr, s);
+    }
   if (best) return Object.assign({}, best, { errTol, layerCells, maxCells, delta, tried });
   return { unreachable: true, errTol, layerCells, maxCells, delta, closest, tried };
 }
@@ -1544,9 +1567,8 @@ class FaradayCell3D {
      nodes outside it. Second order, and it satisfies the constraint by
      construction rather than by an assertion afterwards.
 
-     Setting it to zero instead -- which is what a single-mode solver does, and why
-     dns/faraday-disc.js refuses m = 1 -- would be exact for m = 0 and for every
-     m >= 2, and wrong for exactly the one mode that is non-zero at the axis. */
+     Setting it to zero instead would be exact for m = 0 and for every m >= 2, and
+     wrong for exactly the one mode that is non-zero at the axis. */
   axisU(){
     const nr = this.nr, nth = this.nth, nz = this.nz, half = nth >> 1;
     const r1 = this.rf[1], r2 = this.rf[2];

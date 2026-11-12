@@ -1807,8 +1807,8 @@ document.getElementById('expBtn').addEventListener('click', async () => {
         + `${layered.length} of them resolve the Stokes layers. Refusing rather `
         + `than returning a multiplier from a grid that misrepresents the `
         + `restoring force by that much. This is a statement about this mode, not `
-        + `about the solver: a mode with that many wavelengths in a 24 mm cell `
-        + `needs a grid this page cannot afford.`);
+        + `about the solver: a mode with that many wavelengths in a `
+        + `${(2000*c.R).toFixed(2)} mm cell needs a grid this page cannot afford.`);
     }
     return g;
   }
@@ -1825,7 +1825,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     const P = { nr: 24, nz: 12, R: c.R, h: c.h, rho: c.rho, nu: c.nu,
                 gamma: c.gamma, m: c.m, rStretch: 2.2, zStretch: 2.2 };
     const S = new FARADAY_DISC.FaradayDisc(P);
-    const nCal = 2*(P.nr - 1)*P.nz + P.nr*P.nz + P.nr;
+    const nCal = 2*(P.nr - 1)*P.nz + P.nr*P.nz + P.nr + (P.m === 1 ? P.nz : 0);
     const dt = S.stableStep(0.4);
     const calSteps = 20;
     let ms;
@@ -1855,11 +1855,6 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     if (!mode) throw new Error(
       'dns panel: the renderer named no theory mode near f/2 for this state, so '
       + 'there is no azimuthal mode number to solve at.');
-    if (mode.m === 1) throw new Error(
-      'dns panel: the dominant mode here is m = 1, which the disc solver refuses '
-      + 'rather than mis-handling. Its radial and azimuthal momentum stay finite '
-      + 'at the axis only through a cancellation that no other m needs, and the '
-      + 'regularity condition the solver imposes is wrong for exactly that one.');
     return { R: state.cellDiameterMm/2000, h: state.depthMm/1000, g: state.gravity,
              rho: w.rho, nu: w.nu, gamma: w.sigma,
              m: mode.m, k: mode.k,
@@ -1993,7 +1988,9 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     return worker;
   }
 
-  let running = false;
+  let running = false, blocked = false, shownFor = null;
+  const keyOf = c => [c.R, c.h, c.rho, c.nu, c.gamma, c.m, c.k, c.omegaD, c.accel,
+                      c.contact].join('|');
   $('dnsRun').addEventListener('click', async () => {
     if (running) return;
     running = true;
@@ -2007,6 +2004,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       c = config();
       showInput(c, null);
       $('dnsOut').innerHTML = '';
+      blocked = false; shownFor = null;
       const g = gridFor(c);
       c.nr = g.nr; c.nz = g.nz; c.rStretch = g.rStretch; c.zStretch = g.zStretch;
       showInput(c, g);
@@ -2070,7 +2068,9 @@ document.getElementById('expBtn').addEventListener('click', async () => {
          + `across Krylov dimensions rather than to a precision it does not have. Where `
          + `this and the deck's Mathieu figure differ, the difference is damping the `
          + `single-rate γ leaves out — chiefly the sidewall layer.`);
+      shownFor = keyOf(c);
     } catch (err) {
+      shownFor = c ? keyOf(c) : null;
       $('dnsOut').innerHTML = '';
       note(`<b>The Navier-Stokes check did not run:</b> ${err.message} Nothing is `
          + `reported in its place.`);
@@ -2089,11 +2089,17 @@ document.getElementById('expBtn').addEventListener('click', async () => {
      to recompute() also keeps these cells in step with the controls instead of
      showing whatever the drive was when the page loaded. */
   dnsShowInput = () => { try { const c = config();
+      if (!running && (blocked || (shownFor !== null && shownFor !== keyOf(c)))){
+        blocked = false; shownFor = null; $('dnsOut').innerHTML = '';
+        const n = document.getElementById('dnsNote');
+        if (n) n.innerHTML = idleNote;
+      }
       showInput(c, sized && sized.key === [c.R, c.h, c.rho, c.nu, c.gamma, c.m,
         c.k, c.omegaD, c.contact].join('|') ? sized.grid : null); }
-    catch (e){ $('dnsInput').innerHTML = ''; note(`<b>Not runnable on this state:</b> `
+    catch (e){ $('dnsInput').innerHTML = ''; if (!running){ $('dnsOut').innerHTML = ''; shownFor = null; } blocked = true; note(`<b>Not runnable on this state:</b> `
       + `${e.message}`); } };
   note('Not run yet. The renderer above is unaffected by this panel.');
+  const idleNote = document.getElementById('dnsNote') ? document.getElementById('dnsNote').innerHTML : '';
 })();
 
 let lastBuild = -1;
@@ -2511,7 +2517,7 @@ const CELL3D = (function(){
     }
   }
   async function startInner(st, myGen, request){
-    err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0;
+    err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0; grid = null;
     const e = st.experiment;
     if (!e) throw new Error('Nonlinear runs require General SI inputs and physical acceleration; an assumed apparatus mV calibration is not accepted.');
     if (e.contact !== 'pinned') throw new Error('Nonlinear free-contact dynamics require a compatible slip/contact-angle law. This simulator supports the pinned rim only.');

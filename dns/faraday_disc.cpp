@@ -84,8 +84,8 @@ int setup(int NR, int NZ, int STEPS){
   cgz = take(np_); pdiag = take(np_);
   dudz = take(nr + 1); dvdz = take(nr + 1);
   drive = take(steps);
-  vecIn = take(2*(nr - 1)*nz + nw_ + nr);
-  vecOut = take(2*(nr - 1)*nz + nw_ + nr);
+  vecIn = take(2*(nr - 1)*nz + nw_ + nr + nz);
+  vecOut = take(2*(nr - 1)*nz + nw_ + nr + nz);
   return lastError;
 }
 
@@ -131,6 +131,7 @@ static void surfacePressure(double gNow, int contactPinned){
 
 static void surfaceSlopes(){
   for (int i = 0; i <= nr; i++){
+    if (i == 0 && mMode == 1){ dudz[0] = -w[iw(0, nz)]/drf[0]; dvdz[0] = -dudz[0]; continue; }
     if (i == 0 || i == nr){ dudz[i] = 0.0; dvdz[i] = 0.0; continue; }
     const double wl = w[iw(i-1, nz)], wrr = w[iw(i, nz)];
     dudz[i] = -(wrr - wl)/drf[i];
@@ -140,7 +141,7 @@ static void surfaceSlopes(){
 }
 
 static void lapUV(const double* f, const double* other, const double* dfdzTop,
-                  double sign, double* out){
+                  double* out){
   const int m = mMode;
   for (int i = 1; i < nr; i++){
     const double r = rf[i];
@@ -156,9 +157,21 @@ static void lapUV(const double* f, const double* other, const double* dfdzTop,
       const double above = (j == nz - 1) ? dfdzTop[i]
                                          : (f[iu(i, j+1)] - fc)/dzf[j+1];
       const double vertical = (above - below)/dzc[j];
-      const double coupling = -(((double)m*m + 1.0)*fc + sign*2.0*m*other[c])/(r*r);
+      const double coupling = -(((double)m*m + 1.0)*fc + 2.0*m*other[c])/(r*r);
       out[c] = radial + vertical + coupling;
     }
+  }
+}
+
+static void lapAxis(const double* dfdzTop, double* outU, double* outV){
+  for (int j = 0; j < nz; j++){
+    const int c = iu(0, j), b = iu(1, j);
+    const double a = u[c];
+    const double radial = (u[b] - v[b] - 2.0*a)/(drc[0]*rc[0]);
+    const double below = (j == 0) ? (a - 0.0)/dzf[0] : (a - u[iu(0, j-1)])/dzf[j];
+    const double above = (j == nz - 1) ? dfdzTop[0] : (u[iu(0, j+1)] - a)/dzf[j+1];
+    outU[c] = radial + (above - below)/dzc[j];
+    outV[c] = -outU[c];
   }
 }
 
@@ -224,7 +237,10 @@ static void gradient(const double* q){
     }
   }
   for (int j = 0; j < nz; j++){
-    gu[iu(0, j)] = 0.0; gv[iu(0, j)] = 0.0;
+    if (m == 1){
+      const double ga = gv[iu(0, j)]/(rc[0]*rc[0]*dzc[j]);
+      gu[iu(0, j)] = ga; gv[iu(0, j)] = -ga;
+    } else { gu[iu(0, j)] = 0.0; gv[iu(0, j)] = 0.0; }
     gu[iu(nr, j)] = 0.0; gv[iu(nr, j)] = 0.0;
   }
   for (int i = 0; i < nr; i++){
@@ -313,13 +329,15 @@ static void stepOnce(double dt, double gNow, int contactPinned){
   const int nu_ = (nr + 1)*nz, nw_ = nr*(nz + 1);
 
   surfaceSlopes();
-  lapUV(u, v, dudz, +1.0, lu);
-  lapUV(v, u, dvdz, -1.0, lv);
+  lapUV(u, v, dudz, lu);
+  lapUV(v, u, dvdz, lv);
   lapW(lw);
+  const int i0 = (mMode == 1) ? 0 : 1;
+  if (i0 == 0) lapAxis(dudz, lu, lv);
 
   for (int i = 0; i < nu_; i++){ us[i] = u[i]; vs[i] = v[i]; }
   for (int i = 0; i < nw_; i++) ws[i] = w[i];
-  for (int i = 1; i < nr; i++)
+  for (int i = i0; i < nr; i++)
     for (int j = 0; j < nz; j++){
       const int c = iu(i, j);
       us[c] = u[c] + dt*nu*lu[c];
@@ -342,7 +360,7 @@ static void stepOnce(double dt, double gNow, int contactPinned){
   gradient(p);
   for (int i = 0; i < nr; i++) gw[iw(i, nz)] += ps[i]/dzf[nz];
 
-  for (int i = 1; i < nr; i++)
+  for (int i = i0; i < nr; i++)
     for (int j = 0; j < nz; j++){
       const int c = iu(i, j);
       u[c] = us[c] - (dt/rho)*gu[c];
@@ -372,6 +390,8 @@ int applyPeriodMap(double dt, double href, double uref, int contactPinned){
   for (int i = 1; i < nr; i++) for (int j = 0; j < nz; j++) v[iu(i, j)] = vecIn[q++]*uref;
   for (int i = 0; i < nr; i++) for (int j = 1; j <= nz; j++) w[iw(i, j)] = vecIn[q++]*uref;
   for (int i = 0; i < nr; i++) eta[i] = vecIn[q++]*href;
+  if (mMode == 1)
+    for (int j = 0; j < nz; j++){ u[iu(0, j)] = vecIn[q++]*uref; v[iu(0, j)] = -u[iu(0, j)]; }
 
   for (int n = 0; n < steps; n++){
     stepOnce(dt, drive[n], contactPinned);
@@ -383,6 +403,7 @@ int applyPeriodMap(double dt, double href, double uref, int contactPinned){
   for (int i = 1; i < nr; i++) for (int j = 0; j < nz; j++) vecOut[q++] = v[iu(i, j)]/uref;
   for (int i = 0; i < nr; i++) for (int j = 1; j <= nz; j++) vecOut[q++] = w[iw(i, j)]/uref;
   for (int i = 0; i < nr; i++) vecOut[q++] = eta[i]/href;
+  if (mMode == 1) for (int j = 0; j < nz; j++) vecOut[q++] = u[iu(0, j)]/uref;
   return 0;
 }
 
@@ -400,12 +421,15 @@ int stepFromVec(double dt, double gNow, double href, double uref, int contactPin
   for (int i = 1; i < nr; i++) for (int j = 0; j < nz; j++) v[iu(i, j)] = vecIn[q++]*uref;
   for (int i = 0; i < nr; i++) for (int j = 1; j <= nz; j++) w[iw(i, j)] = vecIn[q++]*uref;
   for (int i = 0; i < nr; i++) eta[i] = vecIn[q++]*href;
+  if (mMode == 1)
+    for (int j = 0; j < nz; j++){ u[iu(0, j)] = vecIn[q++]*uref; v[iu(0, j)] = -u[iu(0, j)]; }
   stepOnce(dt, gNow, contactPinned);
   q = 0;
   for (int i = 1; i < nr; i++) for (int j = 0; j < nz; j++) vecOut[q++] = u[iu(i, j)]/uref;
   for (int i = 1; i < nr; i++) for (int j = 0; j < nz; j++) vecOut[q++] = v[iu(i, j)]/uref;
   for (int i = 0; i < nr; i++) for (int j = 1; j <= nz; j++) vecOut[q++] = w[iw(i, j)]/uref;
   for (int i = 0; i < nr; i++) vecOut[q++] = eta[i]/href;
+  if (mMode == 1) for (int j = 0; j < nz; j++) vecOut[q++] = u[iu(0, j)]/uref;
   return lastError;
 }
 

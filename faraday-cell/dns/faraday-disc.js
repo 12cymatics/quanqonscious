@@ -109,14 +109,6 @@ class FaradayDisc {
       `contact = ${JSON.stringify(this.contact)}: the contact line is either `
       + `'free' (dEta/dr = 0 at the rim) or 'pinned' (Eta = 0 there). There is no `
       + `default that covers both, and the two give different thresholds.`);
-    if (this.m === 1) throw new RangeError(
-      `m = 1 is not implemented. The radial momentum's singular group is `
-      + `-[(m^2+1)u + 2m v]/r^2, which at m = 1 reads -2(u + v)/r^2 and stays `
-      + `finite only through the cancellation u + v ~ r^2, while u - v tends to a `
-      + `nonzero constant: a rigid sideways translation of the axis. Every other m `
-      + `has u and v vanishing at r = 0, which is what the conservative flux form `
-      + `here imposes. Refusing rather than returning the number that condition `
-      + `produces for the one m where it is wrong.`);
 
     /* Grading strengths. Defaults are chosen so the Stokes layer of the mode
        being asked about falls inside the first few cells; a caller that knows
@@ -281,6 +273,7 @@ class FaradayDisc {
     const nr = this.nr, nz = this.nz, m = this.m;
     const wS = i => this.w[this.iw(i, nz)];
     for (let i = 0; i <= nr; i++){
+      if (i === 0 && m === 1){ dudz[0] = -wS(0)/this.drf[0]; dvdz[0] = -dudz[0]; continue; }
       if (i === 0 || i === nr){ dudz[i] = 0; dvdz[i] = 0; continue; }
       dudz[i] = -(wS(i) - wS(i-1))/this.drf[i];
       const wAtFace = (this.drc[i-1]*wS(i) + this.drc[i]*wS(i-1))
@@ -290,10 +283,10 @@ class FaradayDisc {
   }
 
   /* Vector Laplacian of the (u_r, u_theta) pair at r faces. The scalar part is
-     in flux form; the coupling group -[(m^2+1)f + 2m g]/r^2 is passed in. Both
+     in flux form; the coupling group -[(m^2+1)f + 2m g]/r^2 is the same for both. Both
      components are needed: dropping either changes the equation, not the
      scheme. */
-  lapUV(f, other, dfdzTop, sign, out){
+  lapUV(f, other, dfdzTop, out){
     const nr = this.nr, nz = this.nz, m = this.m;
     const rf = this.rf, rc = this.rc, drf = this.drf, drc = this.drc;
     const zc = this.zc, zf = this.zf, dzc = this.dzc, dzf = this.dzf;
@@ -312,11 +305,25 @@ class FaradayDisc {
         const above = j === nz - 1 ? dfdzTop[i]
                                    : (f[this.iu(i, j+1)] - fc)/dzf[j+1];
         const vertical = (above - below)/dzc[j];
-        const coupling = -((m*m + 1)*fc + sign*2*m*other[c])/(r*r);
+        const coupling = -((m*m + 1)*fc + 2*m*other[c])/(r*r);
         out[c] = radial + vertical + coupling;
       }
     }
     return out;
+  }
+
+  lapAxis(dfdzTop, outU, outV){
+    const nz = this.nz, u = this.u, v = this.v;
+    const rc = this.rc, drc = this.drc, dzc = this.dzc, dzf = this.dzf;
+    for (let j = 0; j < nz; j++){
+      const c = this.iu(0, j), b = this.iu(1, j);
+      const a = u[c];
+      const radial = (u[b] - v[b] - 2*a)/(drc[0]*rc[0]);
+      const below = j === 0 ? (a - 0)/dzf[0] : (a - u[this.iu(0, j-1)])/dzf[j];
+      const above = j === nz - 1 ? dfdzTop[0] : (u[this.iu(0, j+1)] - a)/dzf[j+1];
+      outU[c] = radial + (above - below)/dzc[j];
+      outV[c] = -outU[c];
+    }
   }
 
   lapW(out){
@@ -401,7 +408,10 @@ class FaradayDisc {
       }
     }
     for (let j = 0; j < nz; j++){       // walls: u and v are prescribed there
-      gu[this.iu(0, j)] = 0; gv[this.iu(0, j)] = 0;
+      if (m === 1){
+        const ga = gv[this.iu(0, j)]/(rc[0]*rc[0]*dzc[j]);
+        gu[this.iu(0, j)] = ga; gv[this.iu(0, j)] = -ga;
+      } else { gu[this.iu(0, j)] = 0; gv[this.iu(0, j)] = 0; }
       gu[this.iu(nr, j)] = 0; gv[this.iu(nr, j)] = 0;
     }
     for (let i = 0; i < nr; i++){
@@ -474,12 +484,14 @@ class FaradayDisc {
     const us = this._us, vs = this._vs, ws = this._ws;
 
     this.surfaceSlopes(this._dudz, this._dvdz);
-    this.lapUV(u, v, this._dudz, +1, this._lu);
-    this.lapUV(v, u, this._dvdz, -1, this._lv);
+    this.lapUV(u, v, this._dudz, this._lu);
+    this.lapUV(v, u, this._dvdz, this._lv);
     this.lapW(this._lw);
+    const i0 = this.m === 1 ? 0 : 1;
+    if (i0 === 0) this.lapAxis(this._dudz, this._lu, this._lv);
 
     us.set(u); vs.set(v); ws.set(w);
-    for (let i = 1; i < nr; i++)
+    for (let i = i0; i < nr; i++)
       for (let j = 0; j < nz; j++){
         const c = this.iu(i, j);
         us[c] = u[c] + dt*nu*this._lu[c];
@@ -512,7 +524,7 @@ class FaradayDisc {
     for (let i = 0; i < nr; i++)
       this._gw[this.iw(i, nz)] += this._ps[i]/this.dzf[nz];
 
-    for (let i = 1; i < nr; i++)
+    for (let i = i0; i < nr; i++)
       for (let j = 0; j < nz; j++){
         const c = this.iu(i, j);
         u[c] = us[c] - (dt/rho)*this._gu[c];
@@ -558,6 +570,11 @@ class FaradayDisc {
     const nr = this.nr, nz = this.nz, m = this.m, rho = this.rho;
     const rf = this.rf, rc = this.rc, drc = this.drc, dzc = this.dzc;
     let ke = 0, pe = 0;
+    if (m === 1)
+      for (let j = 0; j < nz; j++){
+        const a = this.u[this.iu(0, j)], b = this.v[this.iu(0, j)];
+        ke += 0.5*rho*(a*a + b*b)*0.5*rc[0]*rc[0]*dzc[j];
+      }
     for (let i = 1; i < nr; i++){
       const vol = rf[i]*0.5*(drc[i-1] + drc[i]);
       for (let j = 0; j < nz; j++){
@@ -781,7 +798,7 @@ function suggestGrid(o){
         const st = S.stokesResolution(omegaResponse);
         const layers = Math.min(st.cellsInFloorLayer, st.cellsInSurfaceLayer,
                                 st.cellsInRimLayer);
-        const stateSize = 2*(nr - 1)*nz + nr*nz + nr;
+        const stateSize = 2*(nr - 1)*nz + nr*nz + nr + (m === 1 ? nz : 0);
         const stepsPerPeriod = Math.max(1, Math.round((2*Math.PI/omegaDrive)
                                                      /S.stableStep(0.4)));
         /* A dimensionless cost, not a time. One step costs one conjugate
