@@ -65,7 +65,7 @@ try{
     await page.goto(scenario.url,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);
     assert.equal(page.url(),scenario.url);
-    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready,undefined,{timeout:30000});
+    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
     assert.equal(await page.locator('#scene3d').isVisible(),true);
     assert.equal(await page.locator('#workspaceSeg').isVisible(),false,'Separate Sand/NS workspaces are still exposed');
     const initial=await page.evaluate(()=>({experimentMode,rim,useSolver,model:state.model,
