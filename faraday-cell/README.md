@@ -253,7 +253,8 @@ solve tolerance; its advection telescopes exactly and conserves energy in the
 inviscid limit; its curvature is the exact variational derivative of its own
 discrete surface area; and at small amplitude its growth rates agree with the
 two-dimensional solver next door — 2.06 against 2.09 on the driven Floquet
-problem, and a quarter-period energy decay agreeing to −0.04%.
+problem, and a quarter-period energy decay within 2.1% at 20 × 12, the gap closing
+at every refinement.
 
 What has **not** been done, stated plainly because the list matters more than the
 agreements:

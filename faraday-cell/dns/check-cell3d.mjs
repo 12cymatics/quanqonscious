@@ -398,8 +398,7 @@ section('4b. the axis is a reflection, not a special case');
    through. Radial index -1 is column 0 of the antipodal half, carrying the family's
    own sign: plus for pressure and the vertical component, minus for the two
    horizontal ones, because r-hat and theta-hat both reverse while z-hat does not.
-   Exact for every azimuthal mode including m = 1 -- the one a single-mode solver
-   cannot handle, and which dns/faraday-disc.js refuses outright.
+   Exact for every azimuthal mode including m = 1, the one whose axis is not at rest.
 
    Both sides of the comparison go through the SAME reconstruction, so the only
    thing under test is which column is read and with what sign. Comparing against
@@ -480,9 +479,7 @@ section('4c. the staggered node families, and u_r at the axis');
   /* u_r at the axis. A single-valued vector field needs u_r(0, theta) =
      -u_r(0, theta + pi); the axis row is built as the antisymmetric part of an
      extrapolation, so it satisfies that by construction. It must also NOT be
-     identically zero, which is what a single-mode solver is forced to assume and
-     why dns/faraday-disc.js refuses m = 1: an m = 1 field is non-zero at the axis,
-     and here it survives. */
+     identically zero: an m = 1 field is non-zero at the axis, and here it survives. */
   const half = S.nth >> 1;
   for (let i = 1; i < S.nr; i++) for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
     S.u[S.iu(i,k,j)] = Math.cos(k*S.dth)*S.rf[i]
@@ -3306,7 +3303,7 @@ section('12. a quarter period\'s energy decay, against an independently written 
  * because there is NO closed form for it: the frequency has one and gate 9 already checks
  * against it, but the dissipation is set by the Stokes layers at the floor, the sidewall and
  * the surface, and the only reference for it is another solver. The disc gate measures the
- * exponent of its own nu-dependence at 0.755 -- between the bulk term's 1 and a pure boundary
+ * exponent of its own nu-dependence at 0.752 -- between the bulk term's 1 and a pure boundary
  * layer's 1/2 -- so most of this number comes from those layers, which is to say from
  * precisely the part of the discretisation the two codes do differently.
  *
@@ -3316,10 +3313,10 @@ section('12. a quarter period\'s energy decay, against an independently written 
  * dns/faraday-disc.js at 20x12, the same figure over lengthening windows:
  *
  *      window   0.125T   0.25T    0.5T     1T      2T      4T      8T
- *      rate     0.641    1.334    1.242    1.468   1.522   1.553   1.565
+ *      rate     0.631    1.307    1.212    1.439   1.494   1.525   1.537
  *
- * and that code's own Floquet multiplier for the same grid gives 1.513. The quarter-period
- * value is 1.334 -- which is exactly the number this section compares, and 15 per cent below
+ * and that code's own Floquet multiplier for the same grid gives 1.437. The quarter-period
+ * value is 1.307 -- which is exactly the number this section compares, and 15 per cent below
  * where the sequence is heading.
  *
  * That does not weaken the comparison and arguably sharpens it. What is compared is a
@@ -3333,31 +3330,30 @@ section('12. a quarter period\'s energy decay, against an independently written 
  * period, matching nr and nz:
  *
  *      grid        disc        cell3d      gap
- *      12x8        1.26121     1.33232     +5.64%
- *      14x10       1.29079     1.32578     +2.71%
- *      16x10       1.30927     1.32165     +0.95%
- *      20x12       1.33430     1.33377     -0.04%
- *      24x14       1.35070     1.34333     -0.55%
+ *      12x8        1.23373     1.33232     +7.99%
+ *      14x10       1.26317     1.32578     +4.96%
+ *      16x10       1.28161     1.32165     +3.12%
+ *      20x12       1.30658     1.33377     +2.08%
+ *      24x14       1.32293     1.34333     +1.54%
  *
  * The last two are outside this gate's time budget -- 24x40x14 alone is 862 s -- and are
  * recorded in dns/PLAN-cell3d.md. The first three are here, and what they assert is the gap
  * and its convergence. Each code is still moving in its own grid over that range (the disc
- * from 1.261 to 1.351, this solver from 1.332 to 1.343), so agreement to four parts in ten
- * thousand at 20x12 is the two of them converging to the same limit from opposite sides and
- * not either one being right.
+ * from 1.234 to 1.323, this solver from 1.332 to 1.343), and the gap shrinks at every
+ * refinement toward the same limit rather than either one being right.
  *
- * m = 2 was measured too: +6.13% at 16x10 and +3.35% at 20x12, also converging.
+ * m = 2 was measured too: +10.00% at 16x10 and +7.03% at 20x12, also converging.
  *
  * WHAT THIS GATE CAN AND CANNOT RESOLVE, measured by injection rather than asserted. Making
  * the floor and sidewall free-slip instead of no-slip -- removing the Stokes layers that the
- * disc gate's own nu-exponent of 0.755 says carry most of the damping -- takes the rate from
+ * disc gate's own nu-exponent of 0.752 says carry most of the damping -- takes the rate from
  * 1.326 to 0.526, a 59 per cent gap, and fails at every pair. Halving the viscosity in the
  * RADIAL predictor alone moves it by about three per cent, and that was GREEN on the first
  * version of this section, which stopped at 14x24x10 with a four per cent window: 1.32578
  * became 1.28233 and the window swallowed it. It also made the coarse pair's agreement
- * BETTER, so a two-point convergence test passed as well. Both holes are why the third pair
- * is here -- at 16x24x10 the clean gap is +0.95% and the defect reads -2.47%, so a two per
- * cent window separates them -- and why the convergence assertion now runs over all three.
+ * BETTER, so a two-point convergence test passed as well. At 16x24x10 the clean gap is +3.12%
+ * and the defect reads -0.37%, so no window on one pair separates them; extrapolated over the
+ * three pairs the clean gap goes to +0.28% and the defect's to -3.16%.
  * The honest statement of this gate's power is: it resolves a defect of a few per cent in the
  * damping and not one of a few tenths.
  *
@@ -3406,28 +3402,87 @@ section('12. a quarter period\'s energy decay, against an independently written 
      'both solvers report a decay and not a growth, which is the sign the energy diagnostic '
      + 'got wrong before section 11 fixed it',
      rates.map(([d, c]) => `${d.toFixed(4)}/${c.toFixed(4)}`).join(', '));
-  ok(Math.abs(gaps[0]) < 0.08,
+  ok(Math.abs(gaps[0]) < 0.09,
      'at 12x20x8 the nonlinear surface-following solver agrees with the linear fixed-grid one '
-     + 'on a quarter period\'s energy decay to within eight per cent',
+     + 'on a quarter period\'s energy decay to within nine per cent',
      `${(100*gaps[0]).toFixed(3)}%`);
-  ok(Math.abs(gaps[1]) < 0.04,
-     'and at 14x24x10 to within four per cent -- two codes sharing nothing but the physics, '
+  ok(Math.abs(gaps[1]) < 0.06,
+     'and at 14x24x10 to within six per cent -- two codes sharing nothing but the physics, '
      + 'on a quantity that has no closed form',
      `${(100*gaps[1]).toFixed(3)}%`);
-  ok(Math.abs(gaps[2]) < 0.02,
-     'and at 16x24x10 to within two per cent, which is the window that resolves a three per '
-     + 'cent error in one component\'s viscous term',
+  ok(Math.abs(gaps[2]) < 0.04,
+     'and at 16x24x10 to within four per cent',
      `${(100*gaps[2]).toFixed(3)}%`);
   ok(Math.abs(gaps[2]) < Math.abs(gaps[1]) && Math.abs(gaps[1]) < Math.abs(gaps[0]),
      'and refining both grids narrows the gap at every step, so they are converging to one '
      + 'another rather than happening to be close on one grid',
      gaps.map(g => (100*g).toFixed(2) + '%').join(' -> '));
+  const ratio = (gaps[2] - gaps[1])/(gaps[1] - gaps[0]);
+  const limit = gaps[2] + (gaps[2] - gaps[1])*ratio/(1 - ratio);
+  ok(ratio > 0 && ratio < 1 && Math.abs(limit) < 0.01,
+     'and the three gaps extrapolate to within one per cent of zero, so the two codes converge '
+     + 'to the same damping -- which a three per cent error in one component\'s viscous term '
+     + 'does not',
+     `ratio ${ratio.toFixed(4)}, extrapolated gap ${(100*limit).toFixed(3)}%`);
   const bulk = 2*CELL.nu*k*k;
   ok(rates[2][1] > 3*bulk,
      'and the decay is several times the bulk term 2 nu k^2, so the floor, sidewall and '
      + 'surface Stokes layers are present in it -- which is what makes the agreement above a '
      + 'statement about the boundary treatment and not about the interior',
      `${rates[1][1].toFixed(4)} against 2 nu k^2 = ${bulk.toFixed(4)} s^-1`);
+}
+
+section('12b. m = 1: the disc\'s axis against a solver with no axis case');
+{
+  const K = require(join(here, '..', 'faraday', 'kernel.js'));
+  const { FaradayDisc } = require(join(here, 'faraday-disc.js'));
+  const m = 1;
+  const jp = K.jpZerosNearN(m, m + 1.9 + 3.2, 2).sort((a, b) => a - b)[1], k = jp/CELL.R;
+  const omega = Math.sqrt((CELL.g*k + CELL.gamma*k*k*k/CELL.rho)*Math.tanh(k*CELL.h));
+  const T = 2*Math.PI/omega, AMP = 1e-9;
+  const span = (S, amp, dt) => {
+    const steps = Math.ceil(3*T/dt), peaks = [];
+    let prev2 = null, prev = amp(S), t = 0;
+    for (let s = 0; s < steps; s++){
+      S.step(dt); t += dt;
+      const a = amp(S);
+      if (prev2 !== null && prev >= prev2 && prev > a && t - dt > 0.4*T)
+        peaks.push({ t: t - dt, y: Math.log(prev) });
+      prev2 = prev; prev = a;
+    }
+    const f = peaks[0], l = peaks[peaks.length - 1];
+    return { rate: -(l.y - f.y)/(l.t - f.t), peaks: peaks.length };
+  };
+  const D = new FaradayDisc({ m, nr: 12, nz: 8, ...CELL, contact: 'free', accel: 0, omegaD: 1 });
+  for (let i = 0; i < D.nr; i++) D.eta[i] = AMP*K.besselJ(m, k*D.rc[i]);
+  const d = span(D, S => {
+    let s = 0;
+    for (let i = 0; i < S.nr; i++) s += S.eta[i]*S.eta[i]*S.rc[i]*S.drc[i];
+    return Math.sqrt(s); }, D.stableStep(0.4));
+  const C3 = new FaradayCell3D({ nr: 12, nth: 20, nz: 8, ...CELL, contact: 'free' });
+  for (let i = 0; i < C3.nr; i++) for (let q = 0; q < C3.nth; q++)
+    C3.eta[C3.ie(i, q)] = AMP*K.besselJ(m, k*C3.rc[i])*Math.cos(m*(q + 0.5)*C3.dth);
+  C3.refreshMetric();
+  const c = span(C3, S => {
+    let s = 0;
+    for (let i = 0; i < S.nr; i++){
+      let cc = 0, ss = 0;
+      for (let q = 0; q < S.nth; q++){
+        const th = (q + 0.5)*S.dth, e = S.eta[S.ie(i, q)];
+        cc += e*Math.cos(m*th); ss += e*Math.sin(m*th);
+      }
+      const a = 2*Math.sqrt(cc*cc + ss*ss)/S.nth;
+      s += a*a*S.rc[i]*S.drc[i];
+    }
+    return Math.sqrt(s); }, C3.stableStep());
+  console.log(`       m = 1, n = 2: disc 12x8 ${d.rate.toFixed(5)} s^-1 over ${d.peaks} peaks, `
+    + `cell3d 12x20x8 ${c.rate.toFixed(5)} s^-1 over ${c.peaks} peaks: `
+    + `${(100*(c.rate/d.rate - 1)).toFixed(2)}%`);
+  ok(d.peaks >= 4 && c.peaks >= 4 && d.rate > 0 && Math.abs(c.rate/d.rate - 1) < 0.05,
+     'the m = 1 mode, whose axis moves, decays at the same rate peak to peak in the disc -- '
+     + 'which carries that motion as an axis unknown -- and in this solver, where it needs no '
+     + 'special case, to within five per cent',
+     `${d.rate} against ${c.rate}`);
 }
 
 section('13. the nonlinearity, doing the thing a linear solver cannot');
@@ -3450,10 +3505,8 @@ section('13. the nonlinearity, doing the thing a linear solver cannot');
  * them, exactly, and so does this one before the first step: the tables below start at 1e-22
  * and 1e-23.
  *
- * m = 1 is worth noticing among the products. dns/faraday-disc.js REFUSES m = 1 -- its radial
- * singular group -[(m^2+1)u + 2m v]/r^2 stays finite there only through a cancellation its
- * flux form does not impose -- and here m = 1 arrives on its own out of the coupling, with no
- * special case anywhere, because S3 made the axis a reflection rather than a boundary.
+ * m = 1 is worth noticing among the products: it arrives on its own out of the coupling, with
+ * no special case anywhere, because S3 made the axis a reflection rather than a boundary.
  *
  * WHAT THIS SECTION DOES NOT SAY, measured rather than reasoned about. An exponent is a
  * STRUCTURAL property: it says a quadratic coupling exists, and it is blind to which term
@@ -3573,8 +3626,8 @@ section('13. the nonlinearity, doing the thing a linear solver cannot');
        `alone at most ${Math.max(only3.m1, only3.m5, only2.m1, only2.m5).toExponential(2)}, `
        + `together at least ${Math.min(both.m1, both.m5).toExponential(2)}`);
     ok(both.m1 > 0 && only2.m1 < 1e-20,
-       'and m = 1 in particular arrives with no special case anywhere -- the solver next door '
-       + 'refuses m = 1 outright, and here it is a product of the axis being a reflection',
+       'and m = 1 in particular arrives with no special case anywhere: here it is a product of '
+       + 'the axis being a reflection',
        `m = 1 reaches ${both.m1.toExponential(3)} from a seed of ${only2.m1.toExponential(2)}`);
   }
 }
@@ -3730,11 +3783,11 @@ section('15. the drive, and that the growth is parametric resonance');
  * THE FIRST PERIOD IS NOT THE MULTIPLIER, and this is why the window is three periods. Released
  * from rest, the initial condition is not the Floquet eigenvector -- that one carries a
  * particular phase between eta and the velocity field -- so the first period's ratio is a
- * projection onto both Floquet modes. Measured, the disc gives 1.24704, 1.78613, 2.01139 over
+ * projection onto both Floquet modes. Measured, the disc gives 1.24895, 1.78849, 2.01394 over
  * three periods and this solver 1.22821, 1.73828, 1.96195: both climbing toward an asymptote as
  * the growing mode takes over. The asymptote is known independently: `floquetDisc` in
  * dns/faraday-floquet.js, which does Arnoldi on the period map rather than integrating a seed,
- * returns |mu| = 2.08649212 for this operating point. It is not computed here because it refuses
+ * returns |mu| = 2.08908171 for this operating point. It is not computed here because it refuses
  * every grid coarser than 20x12 for this mode -- its surface-operator tolerance is one per cent
  * and 18x10 misses by 1.12 -- and matching 20x12 costs this solver 394 s per drive period, which
  * is a measurement and not a gate. Six periods at 20x24x12 are recorded in dns/PLAN-cell3d.md.
@@ -3817,11 +3870,11 @@ section('15. the drive, and that the growth is parametric resonance');
      'and on the amplification over the whole window to within ten per cent, which is the '
      + 'transient and the growth together rather than the growth alone',
      `${cTot.toFixed(4)} against ${dTot.toFixed(4)}, ${(100*(cTot/dTot - 1)).toFixed(2)}%`);
-  ok(cOn[0] < cOn[1] && cOn[1] < cOn[2] && cOn[2] < 2.08649212,
+  ok(cOn[0] < cOn[1] && cOn[1] < cOn[2] && cOn[2] < 2.08908171,
      'and this solver\'s multiplier climbs toward the Arnoldi value floquetDisc computes '
-     + 'independently, 2.08649212, from below -- which is what a projection onto the growing '
+     + 'independently, 2.08908171, from below -- which is what a projection onto the growing '
      + 'Floquet mode does and what a spurious growth would not',
-     cOn.map(x => x.toFixed(5)).join(' -> ') + ' against 2.08649212');
+     cOn.map(x => x.toFixed(5)).join(' -> ') + ' against 2.08908171');
 
   /* --- off resonance, same drive amplitude, two periods --- */
   const det = 1.35;
@@ -4350,10 +4403,10 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
     }
     return null;
   };
-  const direct = (c, nr, nth, nz, rStretch, zStretch) => {
-    const S = new FaradayCell3D({ nr, nth, nz, ...CELL, contact: c.contact, rStretch, zStretch,
-                                  accel: 9, omegaD });
-    const amp = 1e-12*CELL.R;
+  const direct = (c, nr, nth, nz, rStretch, zStretch, cell = CELL, accel = 9, drive = omegaD) => {
+    const S = new FaradayCell3D({ nr, nth, nz, ...cell, contact: c.contact, rStretch, zStretch,
+                                  accel, omegaD: drive });
+    const amp = 1e-12*cell.R;
     for (let i = 0; i < nr; i++){
       const v = amp*K.besselJ(c.m, c.k*S.rc[i]);
       for (let q = 0; q < nth; q++) S.eta[S.ie(i, q)] = v*Math.cos(c.m*(q + 0.5)*S.dth);
@@ -4414,6 +4467,59 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
      + 'tried and the closest grid rather than a grid that misses',
      JSON.stringify({ unreachable: tight.unreachable, closest: tight.closest && {
        nr: tight.closest.nr, nth: tight.closest.nth, err: tight.closest.err } }));
+
+  const WIDE = { R: 0.1625, h: 1e-3, rho: 1000, nu: 1e-6, gamma: 0.0728, g: 3 };
+  const wideDrive = 2*Math.PI*180, wideAccel = 9.8;
+  const wc = { m: 2, k: jz(2, 1)/WIDE.R, contact: 'pinned' };
+  const wide = C.suggestCell3DGrid({ m: wc.m, k: wc.k, ...WIDE, accel: wideAccel,
+                                     contact: wc.contact, omegaResponse: wideDrive,
+                                     omegaDrive: wideDrive, besselJ: K.besselJ });
+  const wideBad = [];
+  const wideDelta = Math.sqrt(2*WIDE.nu/wideDrive);
+  const rimCells = (nr, s) => {
+    const rf = require(join(here, 'faraday-disc.js')).gradeToEnd(nr, WIDE.R, s);
+    return wideDelta/(rf[nr] - rf[nr - 1]);
+  };
+  if (wide.unreachable) wideBad.push(`unreachable, closest ${JSON.stringify(wide.closest && {
+    nr: wide.closest.nr, nth: wide.closest.nth, nz: wide.closest.nz,
+    err: wide.closest.err, thinnest: wide.closest.thinnest })}`);
+  else {
+    const d = direct(wc, wide.nr, wide.nth, wide.nz, wide.rStretch, wide.zStretch, WIDE,
+                     wideAccel, wideDrive);
+    if (!(d.err <= wide.errTol)) wideBad.push(`built, it measures ${d.err}`);
+    const below = friendlyBelow(wide.nth);
+    if (below !== null){
+      const e = direct(wc, wide.nr, below, 4, wide.rStretch, wide.zStretch, WIDE, wideAccel,
+                       wideDrive).err;
+      if (!(e > wide.errTol)) wideBad.push(`nth = ${below} already measures ${e}`);
+    }
+    const S = d.S;
+    const layers = { floor: wideDelta/(S.h*S.dsc[0]), surface: wideDelta/(S.h*S.dsc[wide.nz - 1]),
+                     rim: wideDelta/S.drc[wide.nr - 1] };
+    for (const key of ['floor', 'surface', 'rim'])
+      if (!Object.is(layers[key], wide.layers[key]) || !(layers[key] >= 2))
+        wideBad.push(`${key} layer ${layers[key]} built against ${wide.layers[key]} returned`);
+    S.eta.fill(0); S.refreshMetric();
+    if (!Object.is(S.stableStep(), wide.dt))
+      wideBad.push(`stableStep ${S.stableStep()} built against ${wide.dt} returned`);
+    if (!(wide.cells <= C.CELL3D_MAX_CELLS)) wideBad.push(`${wide.cells} cells, past the cap`);
+    if (!(rimCells(wide.nr, 2.2) < 2)) wideBad.push('the rule\'s grading already holds the rim');
+    if (!(rimCells(wide.nr, (Math.round(10*wide.rStretch) - 1)/10) < 2))
+      wideBad.push(`a grading weaker than ${wide.rStretch} already holds the rim`);
+    const ruleGraded = wide.tried.filter(t => t.rStretch === 2.2);
+    if (!(ruleGraded.length > 0 && ruleGraded.every(t => !(t.surfaceOk && t.layersOk))))
+      wideBad.push('a grid at the rule\'s grading meets the contract');
+  }
+  if (!wide.unreachable) console.log(`       325 mm x 1 mm pinned m = 2 at 180 Hz: `
+    + `${wide.nr}x${wide.nth}x${wide.nz}, rStretch ${wide.rStretch}, zStretch ${wide.zStretch}; `
+    + `${(wide.err*100).toFixed(3)}%; thinnest layer ${wide.thinnest.toFixed(2)} cells; `
+    + `${Math.round(wide.stepsPerPeriod)} steps a period`);
+  ok(wideBad.length === 0,
+     'a 325 mm cell whose rim layer no grid at the rule\'s grading can hold within the cap is '
+     + 'sized with the weakest stronger rim grading that holds it: built in full it is within '
+     + '1%, the azimuthal count below is not, its layers and time step are the ones returned, '
+     + 'and the rule\'s grading and the next weaker one both leave the rim under two cells',
+     wideBad.join(' | '));
 }
 
 console.log('\n' + '-'.repeat(66));
