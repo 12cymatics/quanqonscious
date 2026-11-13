@@ -896,6 +896,7 @@ let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
 let dnsShowInput = null;
 
 const $ = id => document.getElementById(id);
+const setLabel = (id, text) => { const el = $(id); if (el.textContent !== text) el.textContent = text; };
 
 const TFE_ENVELOPE = {
   measured: false,
@@ -917,7 +918,7 @@ function tfeOf(){
 }
 
 function recompute(){
-  $('play').textContent = running ? 'running' : 'paused';
+  setLabel('play', running ? 'running' : 'paused');
   const experiment = experimentMode === 'general'
     ? { ...generalInput, frequencyHz: freq, contact: rim } : null;
   const inputs = { cellKey, f: freq, amplitudeMv: amp, tempC: temp, depthMm: depth, rim, driveR: 0, experiment };
@@ -2129,9 +2130,9 @@ function loop(now){
       : clock.starting ? 'Starting the solver · specified initial condition shown'
       : clock.have ? `${clock.live ? 'Running' : clock.pending ? 'Pausing after current slice' : 'Paused'} · physical time ${(clock.physT*1000).toFixed(3)} ms · ${clock.stepsDone} steps`
       : `${clock.ready && !clock.live ? 'Paused before first step · ' : ''}Specified initial condition · t = 0 · not evolved`;
-    $('pauseSolver').textContent = clock.live ? 'Pause' : 'Resume';
+    setLabel('pauseSolver', clock.live ? 'Pause' : 'Resume');
     $('pauseSolver').disabled = !!clock.err || (!clock.have && !clock.starting && !clock.ready);
-    $('runSolver').textContent = clock.have || clock.starting || clock.ready ? 'Restart' : 'Run';
+    setLabel('runSolver', clock.have || clock.starting || clock.ready ? 'Restart' : 'Run');
     $('seedParticles').disabled=clock.starting || !!clock.err;
   }
   $('expBtn').disabled = exporting || !!blocked || (useSolver && !!$('sceneError').textContent);
@@ -2883,7 +2884,8 @@ const UNIFIED3D = (() => {
     $('timeline').max=String(Math.max(0,frames.length-1));
     $('timeline').value=String(Math.max(0,frames.indexOf(current)));
     $('replayToggle').disabled=frames.length<2;
-    $('replayToggle').textContent=playing?'Pause replay':'Play recorded frames';
+    const replayLabel=playing?'Pause replay':'Play recorded frames';
+    if($('replayToggle').textContent!==replayLabel)$('replayToggle').textContent=replayLabel;
     $('liveView').setAttribute('aria-pressed',String(following));
     $('frameTime').textContent=current?`${current.initial?'Initial condition':following?'Live solver':'Recorded frame'} · ${(current.time*1000).toFixed(6)} ms · ${current.steps} steps`:'No valid frame';
     $('historyNote').textContent=frames.length?`${frames.length} recorded frames · ${(frames[0].time*1000).toFixed(6)}–${(frames.at(-1).time*1000).toFixed(6)} ms · history limit 180 frames / 32 MiB`:'Waiting for computed frames';

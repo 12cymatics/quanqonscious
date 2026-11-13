@@ -84,7 +84,7 @@ try{
     console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}`}));
     await page.goto(`${origin}/${entry}`,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);assert.equal(new URL(page.url()).pathname,'/'+entry);
-    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready,undefined,{timeout:30000});
+    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
     assert.equal(await page.locator('#scene3d').isVisible(),true);
     assert.equal(await page.locator('#workspaceSeg').isVisible(),false,'The rejected separate workspaces remain visible');
     const initial=await page.evaluate(()=>({useSolver,experimentMode,rim,model:state.model,stats:UNIFIED3D.scene.stats()}));
