@@ -5,9 +5,9 @@ The velocity arrows are visible by default. Their fixed drawing scale is 1000 se
 ## Start here
 
 Extract the ZIP, open the faraday-cell folder, then open **index.html** in a
-full desktop browser such as Safari, Chrome or Firefox. This is the complete
-standalone simulator, not a link or a launcher requiring Node. No installation
-is needed. A static attachment or iPhone Files preview may display the controls
+full desktop browser such as Safari, Chrome or Firefox. The standalone fluid
+simulator and native recording viewer need no installation. A static attachment
+or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
 
 The app opens one **3D Navier–Stokes** scene. Its free surface, sand-coloured
@@ -15,6 +15,15 @@ flow tracers and velocity vectors share the same computed state and physical
 clock. Drag to orbit, scroll to zoom, and use the view controls to inspect the
 vessel from above or return to the initial camera. Surface and particle controls
 show or hide layers of this scene; they do not switch to another simulation.
+
+For **physical grains coupled to the liquid**, the ZIP also contains the
+experimental native C++ implementation. See `native/README.md` for its explicit
+case inputs, build/run command and current limits. Choose **Import native
+recording** to view its saved grain and fluid states together in this same 3D
+scene. The native calculation requires a C++20 compiler and Node; the browser
+does not run it. The supplied tiny verification case is not a working beach-sand
+deposition demonstration. The current fixed mesh cannot resolve narrowing gaps
+all the way to a sand bed, and full-vessel performance remains unfinished.
 
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP

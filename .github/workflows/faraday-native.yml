@@ -1,0 +1,37 @@
+name: Faraday native coupling checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['native/**', 'dns/**', 'faraday/native-recording.js', 'faraday/check-native-recording.mjs', '.github/workflows/faraday-native.yml']
+  push:
+    paths: ['native/**', 'dns/**', 'faraday/native-recording.js', 'faraday/check-native-recording.mjs', '.github/workflows/faraday-native.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Strict case preparation and resource checks
+        run: node native/check-case-schema.mjs
+      - name: Canonical native fluid parity and pressure projection
+        run: node native/check-fluid-runtime.mjs
+      - name: Conservative interpolation and contact modules
+        run: |
+          c++ -std=c++20 -O2 -ffp-contract=off -fno-fast-math -Wall -Wextra -Werror native/rigid-interpolation.cpp native/check-interpolation.cpp -o "$RUNNER_TEMP/check-interpolation"
+          "$RUNNER_TEMP/check-interpolation"
+          c++ -std=c++20 -O2 -ffp-contract=off -fno-fast-math -Wall -Wextra -Werror native/rigid-contact.cpp native/check-contact.cpp -o "$RUNNER_TEMP/check-contact"
+          "$RUNNER_TEMP/check-contact"
+      - name: Coupled constraints and transactional failures
+        run: node native/check-coupler.mjs
+      - name: Native command-line output and refusal protocol
+        run: node native/check-cli.mjs
+      - name: Exact native recording import
+        run: node faraday/check-native-recording.mjs

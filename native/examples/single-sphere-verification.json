@@ -1,0 +1,36 @@
+{
+  "format": "faraday-native-case",
+  "version": 1,
+  "fluid": {
+    "radius": 0.0005,
+    "depth": 0.0005,
+    "density": 1000,
+    "dynamicViscosity": 0.001,
+    "surfaceTension": 0.0728,
+    "gravity": 9.80665,
+    "contactLine": "pinned"
+  },
+  "drive": { "frequency": 111, "acceleration": 7 },
+  "grid": { "nr": 20, "nth": 64, "nz": 20, "rStretch": 0, "zStretch": 0 },
+  "initial": { "type": "flat" },
+  "grains": [
+    {
+      "id": 0,
+      "centre": [0, 0, 0.00025],
+      "radius": 0.000125,
+      "density": 2650,
+      "velocity": [0, 0, 0],
+      "omega": [0, 0, 0]
+    }
+  ],
+  "materialProvenance": {
+    "kind": "illustrative",
+    "description": "One spherical 250 micrometre grain with illustrative silica-rich material density 2650 kg/m^3. The 1 mm diameter, 0.5 mm deep verification vessel differs from the 30 mm experiment. Shape, size, density, loading and contact coefficients are declared example inputs, not measurements of a south-east Queensland beach sample.",
+    "source": "Numerical verification geometry only; no site-specific silica fraction, grain grading, friction or restitution measurements supplied."
+  },
+  "contact": { "friction": 0.5, "restitution": 0.3 },
+  "resourceBudgetBytes": 268435456,
+  "duration": 1e-8,
+  "dt": 5e-9,
+  "outputInterval": 1e-8
+}

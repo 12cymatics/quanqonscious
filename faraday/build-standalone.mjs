@@ -72,6 +72,8 @@ export const SCRIPTS = [
     path: 'dns/cell3d-pool.js', open: '<script id="dnsCell3dPool">' },
   { tag: '<script id="dnsCell3dObservation" src="dns/cell3d-observation.js"></script>',
     path: 'dns/cell3d-observation.js', open: '<script id="dnsCell3dObservation">' },
+  { tag: '<script id="nativeRecording" src="faraday/native-recording.js"></script>',
+    path: 'faraday/native-recording.js', open: '<script id="nativeRecording">' },
   { tag: '<script id="dnsCell3dTracers" src="dns/cell3d-tracers.js"></script>',
     path: 'dns/cell3d-tracers.js', open: '<script id="dnsCell3dTracers">' }
 ];
