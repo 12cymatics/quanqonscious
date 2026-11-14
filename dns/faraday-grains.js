@@ -10,8 +10,12 @@ const GRAIN_MODEL = Object.freeze({
   fluidVelocityAt: 'grain centre height d/2 above the floor',
   normalForce: '(m_p - m_f)(g + a cos(omega_d t))',
   friction: 'Coulomb: stick while |F| <= mu_s N, slide against mu_k N',
+  streaming: 'steady streaming inside the floor Stokes layer, u = (1/w) Re[a(z/delta) (U.grad)U* + b(z/delta) (div U) U*], '
+    + 'driven by the response-frequency component of the mode\'s flow taken 4 Stokes depths above the floor and carried '
+    + 'to the floor with cosh(k z); edge values reproduce Schlichting (standing) and Longuet-Higgins 1953 (progressive)',
   neglected: ['Basset history force', 'lift', 'grain-grain contact', 'grain feedback on the fluid',
-              'second-order streaming of the mean flow', 'flight off the floor']
+              'mean flow driven at the free surface and in the interior', 'higher harmonics of the mode in the streaming',
+              'flight off the floor']
 });
 
 function requirePositive(v, name){
@@ -89,6 +93,102 @@ function floorFieldTable(o){
            U, V, dU, dV, amplitude, zGrain, multiplier: mu, scale };
 }
 
+function streamingProfile(zeta){
+  requireNonNegative(zeta, 'zeta');
+  const e1 = Math.exp(-zeta), e2 = Math.exp(-2*zeta), c = Math.cos(zeta), s = Math.sin(zeta);
+  const a = e1*s - (1 - e2)/4;
+  const eRe = e1*c, eIm = e1*s;
+  const pRe = eRe*zeta - eIm*(zeta + 1), pIm = eRe*(zeta + 1) + eIm*zeta;
+  const bRe = -pRe/2 + (eIm - (1 - eRe))/2;
+  const bIm = 0.5 - pIm/2 + ((1 - eRe) + eIm)/2 - (1 - e2)/4;
+  return { a, bRe, bIm };
+}
+
+function streamingCoefficients(o){
+  const { rf, m, omega } = o, prof = o.profile, faces = rf.length, nr = faces - 1;
+  const Ar = o.A.re, Ai = o.A.im, Br = o.B.re, Bi = o.B.im;
+  const PrCC = new Float64Array(faces), PrSS = new Float64Array(faces), PtSC = new Float64Array(faces);
+  const QrCC = new Float64Array(faces), QtSC = new Float64Array(faces);
+  const coef = (pRe, pIm, qRe, qIm) => (prof.a*pRe + prof.bRe*qRe - prof.bIm*qIm)/omega;
+  const coefP = (pRe) => prof.a*pRe/omega;
+  for (let i = 1; i < faces; i++){
+    const r = rf[i];
+    const il = Math.max(0, i - 1), ih = Math.min(nr, i + 1);
+    const dr = rf[ih] - rf[il];
+    const dAr = (Ar[ih] - Ar[il])/dr, dAi = (Ai[ih] - Ai[il])/dr;
+    const dBr = (Br[ih] - Br[il])/dr, dBi = (Bi[ih] - Bi[il])/dr;
+    const Dr = dAr + (Ar[i] + m*Br[i])/r, Di = dAi + (Ai[i] + m*Bi[i])/r;
+    const AdA_re = Ar[i]*dAr + Ai[i]*dAi;
+    const BA_re = Br[i]*Ar[i] + Bi[i]*Ai[i], BB = Br[i]*Br[i] + Bi[i]*Bi[i];
+    const AdB_re = Ar[i]*dBr + Ai[i]*dBi;
+    const DA_re = Dr*Ar[i] + Di*Ai[i], DA_im = Di*Ar[i] - Dr*Ai[i];
+    const DB_re = Dr*Br[i] + Di*Bi[i], DB_im = Di*Br[i] - Dr*Bi[i];
+    PrCC[i] = coefP(AdA_re);
+    PrSS[i] = coefP(-(m*BA_re + BB)/r);
+    PtSC[i] = coefP(AdB_re + (m*BB + BA_re)/r);
+    QrCC[i] = coef(0, 0, DA_re, DA_im);
+    QtSC[i] = coef(0, 0, DB_re, DB_im);
+  }
+  for (const arr of [PrCC, PrSS, PtSC, QrCC, QtSC]) arr[0] = m === 1 ? arr[1] : 0;
+  return { PrCC, PrSS, PtSC, QrCC, QtSC };
+}
+
+function floorStreaming(o){
+  const { mode, m, Td } = o;
+  const amplitude = requirePositive(o.amplitude, 'amplitude');
+  const nu = requirePositive(o.nu, 'nu'), k = requirePositive(o.k, 'k');
+  const zGrain = requirePositive(o.zGrain, 'zGrain');
+  const { rf, zc } = mode.grid, nz = zc.length, nr = rf.length - 1, faces = nr + 1;
+  const frames = mode.frames, perDrive = frames.length - 1;
+  const mu = mode.multiplier, sign = Math.sign(mu), mag = Math.abs(mu);
+  const period = sign < 0 ? 2*Td : Td, omega = 2*Math.PI/period;
+  const delta = Math.sqrt(2*nu/omega);
+  const zTarget = 4*delta;
+  let jo = 0;
+  for (let j = 1; j < nz; j++) if (Math.abs(zc[j] - zTarget) < Math.abs(zc[jo] - zTarget)) jo = j;
+  const zOuter = zc[jo];
+  if (zOuter < 2*delta) throw new RangeError(
+    `floorStreaming: the cell centre nearest 4 Stokes depths is ${zOuter} m, inside the ${delta} m layer.`);
+  let etaPeak = 0;
+  for (let q = 0; q < perDrive; q++){
+    const damp = Math.pow(mag, -frames[q].t/Td);
+    for (const e of frames[q].eta) etaPeak = Math.max(etaPeak, Math.abs(e)*damp);
+  }
+  const scale = amplitude/etaPeak/Math.cosh(k*zOuter);
+  const Ar = new Float64Array(faces), Ai = new Float64Array(faces);
+  const Br = new Float64Array(faces), Bi = new Float64Array(faces);
+  const reps = sign < 0 ? 2 : 1;
+  for (let rep = 0; rep < reps; rep++)
+    for (let q = 0; q < perDrive; q++){
+      const f0 = frames[q], f1 = frames[q + 1];
+      const span = f1.t - f0.t;
+      for (const [f, wgt] of [[f0, span/2], [f1, span/2]]){
+        const t = f.t + rep*Td, s = scale*(rep ? sign : 1)*Math.pow(mag, -f.t/Td)*wgt*2/period;
+        const cr = Math.cos(omega*t)*s, ci = -Math.sin(omega*t)*s;
+        for (let i = 0; i < faces; i++){
+          const u = f.u[i*nz + jo], v = f.v[i*nz + jo];
+          Ar[i] += u*cr; Ai[i] += u*ci; Br[i] += v*cr; Bi[i] += v*ci;
+        }
+      }
+    }
+  const prof = streamingProfile(zGrain/delta);
+  const { PrCC, PrSS, PtSC, QrCC, QtSC } = streamingCoefficients({ rf, m, A: { re: Ar, im: Ai }, B: { re: Br, im: Bi }, omega, profile: prof });
+  return { m, rf: Float64Array.from(rf), faces, omega, delta, zOuter, zetaGrain: zGrain/delta,
+           profile: prof, A: { re: Ar, im: Ai }, B: { re: Br, im: Bi },
+           PrCC, PrSS, PtSC, QrCC, QtSC };
+}
+
+function streamingAt(S, r, th){
+  const { rf, faces, m } = S, nr = faces - 1;
+  let i = 0;
+  while (i < nr - 1 && rf[i + 1] < r) i++;
+  const w = Math.min(1, Math.max(0, (r - rf[i])/(rf[i + 1] - rf[i]))), lin = a => (1 - w)*a[i] + w*a[i + 1];
+  const c = Math.cos(m*th), s = Math.sin(m*th);
+  const ur = (lin(S.PrCC) + lin(S.QrCC))*c*c + lin(S.PrSS)*s*s;
+  const ut = (lin(S.PtSC) + lin(S.QtSC))*s*c;
+  return { ur, ut };
+}
+
 function mulberry32(seed){
   let a = seed >>> 0;
   return () => {
@@ -148,6 +248,9 @@ function advanceGrains(G, T, tEnd, dt){
   const dUt = new Float64Array(faces), dVt = new Float64Array(faces);
   const { x, y, vx, vy, stuck, C, M, mf, mp, muS, muK, g, accel, omegaD, rMax } = G;
   const buoyant = mp - mf;
+  const SM = T.streaming || null;
+  if (SM && (SM.faces !== faces || SM.m !== m || SM.rf.some((v, i) => v !== rf[i]))) throw new RangeError(
+    'advanceGrains: the streaming field was built on a different grid or mode from the oscillatory table.');
   while (G.t < tEnd - 1e-15*period){
     const h = Math.min(dt, tEnd - G.t), tm = G.t + h/2;
     const ph = ((tm % period) + period) % period/period*samples;
@@ -174,7 +277,13 @@ function advanceGrains(G, T, tEnd, dt){
         const ar = wL*dUt[i] + wR*dUt[i + 1], at = wL*dVt[i] + wR*dVt[i + 1];
         const c = r > 0 ? px/r : 1, s = r > 0 ? py/r : 0, th = r > 0 ? Math.atan2(py, px) : 0;
         const cm = Math.cos(m*th), sm = Math.sin(m*th);
-        const vr = ur*cm, vt = ut*sm, qr = ar*cm, qt = at*sm;
+        let vr = ur*cm, vt = ut*sm;
+        const qr = ar*cm, qt = at*sm;
+        if (SM){
+          vr += (wL*(SM.PrCC[i] + SM.QrCC[i]) + wR*(SM.PrCC[i + 1] + SM.QrCC[i + 1]))*cm*cm
+              + (wL*SM.PrSS[i] + wR*SM.PrSS[i + 1])*sm*sm;
+          vt += (wL*(SM.PtSC[i] + SM.QtSC[i]) + wR*(SM.PtSC[i + 1] + SM.QtSC[i + 1]))*sm*cm;
+        }
         ufx = vr*c - vt*s; ufy = vr*s + vt*c;
         afx = qr*c - qt*s; afy = qr*s + qt*c;
       }
@@ -212,6 +321,7 @@ function advanceGrains(G, T, tEnd, dt){
   return G;
 }
 
-const FARADAY_GRAINS = { GRAIN_MODEL, O_NEILL_WALL_SHEAR_FACTOR, floorFieldTable, createGrains, advanceGrains, mulberry32 };
+const FARADAY_GRAINS = { GRAIN_MODEL, O_NEILL_WALL_SHEAR_FACTOR, floorFieldTable, floorStreaming, streamingProfile, streamingAt, streamingCoefficients,
+                         createGrains, advanceGrains, mulberry32 };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_GRAINS;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_GRAINS = FARADAY_GRAINS;

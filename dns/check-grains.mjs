@@ -138,5 +138,61 @@ console.log('7. refusals');
              /not inside/, 'a grain centre above the layer is refused');
 }
 
+console.log('8. the floor-layer streaming profile solves its equation, independently integrated here');
+{
+  const N = 200000, Z = 40, hz = Z/N;
+  const fa = new Float64Array(N + 1), fbr = new Float64Array(N + 1), fbi = new Float64Array(N + 1);
+  for (let q = 0; q <= N; q++){
+    const z = q*hz, er = Math.exp(-z)*Math.cos(z), ei = -Math.exp(-z)*Math.sin(z);
+    const Fr = 1 - er, Fi = -ei, pr = er - ei, pi = er + ei;
+    const gr = z - (Fr + Fi)/2, gi = -(Fi - Fr)/2;
+    fa[q] = Fr*Fr + Fi*Fi - 1; fbr[q] = -(gr*pr + gi*pi); fbi[q] = -(gi*pr - gr*pi);
+  }
+  const twice = f => { const d = new Float64Array(N + 1); let tail = 0;
+    for (let q = N; q > 0; q--){ tail += 0.5*(f[q] + f[q - 1])*hz; d[q - 1] = -tail; }
+    const v = new Float64Array(N + 1); for (let q = 1; q <= N; q++) v[q] = v[q - 1] + 0.5*(d[q] + d[q - 1])*hz; return v; };
+  const A = twice(fa), BR = twice(fbr), BI = twice(fbi);
+  let worst = 0;
+  for (const z of [0.25, 0.8, 1.6, 3, 6, 12]){
+    const q = Math.round(z/hz), p = G.streamingProfile(q*hz);
+    worst = Math.max(worst, Math.abs(A[q] - p.a), Math.abs(BR[q] - p.bRe), Math.abs(BI[q] - p.bIm));
+  }
+  ok(worst < 1e-7, `closed-form a(zeta), b(zeta) against the integrated equation: worst ${worst.toExponential(2)}`);
+  const e = G.streamingProfile(60);
+  ok(Math.abs(e.a + e.bRe + 0.75) < 1e-12, `a standing wave streams -(3/4) U U'/omega at the layer edge (Schlichting): ${(e.a + e.bRe).toFixed(12)}`);
+  ok(Math.abs(e.bIm - 0.75) < 1e-12, `a progressive wave streams (3/4) U^2/c at the layer edge (Longuet-Higgins 1953): ${e.bIm.toFixed(12)}`);
+}
+
+console.log('9. the polar streaming algebra agrees with a Cartesian evaluation of (U.grad)U* and (div U)U*');
+{
+  const m = 3, nrf = 4000, Rr = 0.015, om = 2*Math.PI*40;
+  const rfx = Float64Array.from({ length: nrf + 1 }, (_, i) => Rr*i/nrf);
+  const Af = r => ({ re: Math.sin(5*r/Rr)*r/Rr, im: 0.4*Math.sin(3*r/Rr)*(r/Rr)**2 });
+  const Bf = r => ({ re: -0.7*Math.sin(4*r/Rr)*r/Rr, im: 0.2*Math.cos(2*r/Rr)*(r/Rr)**2 });
+  const A = { re: Float64Array.from(rfx, r => Af(r).re), im: Float64Array.from(rfx, r => Af(r).im) };
+  const B = { re: Float64Array.from(rfx, r => Bf(r).re), im: Float64Array.from(rfx, r => Bf(r).im) };
+  const prof = G.streamingProfile(1.3);
+  const S = { m, rf: rfx, faces: nrf + 1, ...G.streamingCoefficients({ rf: rfx, m, A, B, omega: om, profile: prof }) };
+  const field = (x, y) => { const r = Math.hypot(x, y), th = Math.atan2(y, x), a = Af(r), b = Bf(r), c = Math.cos(m*th), s2 = Math.sin(m*th);
+    const ur = { re: a.re*c, im: a.im*c }, ut = { re: b.re*s2, im: b.im*s2 }, ct = Math.cos(th), st = Math.sin(th);
+    return { x: { re: ur.re*ct - ut.re*st, im: ur.im*ct - ut.im*st }, y: { re: ur.re*st + ut.re*ct, im: ur.im*st + ut.im*ct } }; };
+  let worst = 0, scale = 0;
+  for (const [r, th] of [[0.004, 0.3], [0.007, 1.1], [0.011, 2.0], [0.013, 4.4]]){
+    const x = r*Math.cos(th), y = r*Math.sin(th), hh = 1e-7;
+    const U = field(x, y), Ux = [field(x + hh, y), field(x - hh, y)], Uy = [field(x, y + hh), field(x, y - hh)];
+    const d = (p, q, comp) => ({ re: (p[comp].re - q[comp].re)/(2*hh), im: (p[comp].im - q[comp].im)/(2*hh) });
+    const dxUx = d(Ux[0], Ux[1], 'x'), dyUx = d(Uy[0], Uy[1], 'x'), dxUy = d(Ux[0], Ux[1], 'y'), dyUy = d(Uy[0], Uy[1], 'y');
+    const mulc = (p, q) => ({ re: p.re*q.re + p.im*q.im, im: p.im*q.re - p.re*q.im });
+    const Px = { re: mulc(U.x, dxUx).re + mulc(U.y, dyUx).re }, Py = { re: mulc(U.x, dxUy).re + mulc(U.y, dyUy).re };
+    const div = { re: dxUx.re + dyUy.re, im: dxUx.im + dyUy.im };
+    const Qx = mulc(div, U.x), Qy = mulc(div, U.y);
+    const ux = (prof.a*Px.re + prof.bRe*Qx.re - prof.bIm*Qx.im)/om, uy = (prof.a*Py.re + prof.bRe*Qy.re - prof.bIm*Qy.im)/om;
+    const v = G.streamingAt(S, r, th), ct = Math.cos(th), st = Math.sin(th);
+    const mx = v.ur*ct - v.ut*st, my = v.ur*st + v.ut*ct;
+    worst = Math.max(worst, Math.hypot(mx - ux, my - uy)); scale = Math.max(scale, Math.hypot(ux, uy));
+  }
+  ok(worst < 1e-3*scale, `polar against Cartesian at four points: worst ${worst.toExponential(2)} against a scale of ${scale.toExponential(2)}`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;
