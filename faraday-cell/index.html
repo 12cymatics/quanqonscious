@@ -29,7 +29,7 @@ header p b{color:var(--ink2);font-weight:500}
 
 .rig{align-items:start;display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:1px;background:var(--edge);
   border:1px solid var(--edge)}
-.stage{position:sticky;top:126px;background:#000;aspect-ratio:1/1;width:100%;max-width:calc(100vh - 150px);justify-self:center}
+.stage{position:sticky;top:76px;background:#000;aspect-ratio:1/1;width:100%;max-width:calc(100vh - 210px);justify-self:center}
 .stage canvas{width:100%;height:100%;display:block}
 .stage canvas#cgl{position:absolute;left:0;top:0}
 .stage #scene3d{position:absolute;inset:0;touch-action:none;outline:none}
@@ -39,6 +39,7 @@ header p b{color:var(--ink2);font-weight:500}
 .timelineBar{padding:9px 12px;background:var(--panel);border:1px solid var(--edge);display:grid;grid-template-columns:auto minmax(100px,1fr) auto;gap:8px;align-items:center}
 .timelineBar .timeNote{grid-column:1/-1;color:var(--ink2);font-size:10px}
 #sceneError{color:var(--red)}
+#sceneError:empty,#experimentError:empty,#warnBox:empty{display:none}
 #heightScale,#vectorScale{width:92px;background:var(--panel2);border:1px solid var(--edge2);padding:4px;color:var(--cy);font:inherit}
 [data-legacy]{display:none!important}
 @media(max-width:600px){.timelineBar{grid-template-columns:1fr 1fr}.timelineBar input{grid-column:1/-1}.sceneTools{gap:5px}}
@@ -53,7 +54,7 @@ header p b{color:var(--ink2);font-weight:500}
 .ph.two{background:var(--amb)}
 
 .deck{background:var(--panel);padding:12px;display:flex;flex-direction:column;gap:11px;
-  overflow-y:auto;max-height:calc(100vh - 150px)}
+  min-width:0}
 .deck::-webkit-scrollbar{width:7px}
 .deck::-webkit-scrollbar-thumb{background:var(--edge2)}
 .fld{display:grid;gap:4px}
@@ -67,8 +68,8 @@ input[type=range]:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
 .seg button:last-child{border-right:0}
 .seg button[aria-pressed="true"]{background:var(--cy);color:#070A0D;font-weight:600}
 .seg button:focus-visible{outline:2px solid var(--cy);outline-offset:-2px}
-.btn{font:inherit;font-size:10.5px;background:transparent;color:var(--ink2);
-  border:1px solid var(--edge2);padding:5px 9px;cursor:pointer;border-radius:2px}
+.btn{font:inherit;font-size:11px;background:transparent;color:var(--ink2);
+  border:1px solid var(--edge2);padding:7px 10px;cursor:pointer;border-radius:2px}
 .btn:hover{border-color:var(--cy);color:var(--cy)}
 .btn[aria-pressed="true"]{background:var(--cy);border-color:var(--cy);color:#070A0D;font-weight:600}
 
@@ -122,7 +123,13 @@ footer{margin-top:16px;color:var(--dim);font-size:9.5px;line-height:1.85}
 footer b{color:var(--ink2);font-weight:500}
 .workspaceBar{position:sticky;top:0;z-index:10;background:var(--panel);border:1px solid var(--edge);padding:8px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .workspaceBar #workspaceSeg{min-width:300px}.workspaceActions{display:flex;gap:5px}.workspaceActions .btn{flex:initial!important}
+#recordingActions{flex-wrap:wrap;align-items:center}#recordingActions .btn{white-space:nowrap}#recordingSource{flex:1;min-width:180px}
+@media(max-width:900px){#recordingSource{flex-basis:100%}}
 #workspaceNote,#solverStatus{font-size:10px;color:var(--ink2)}
+#solverStatus{flex-basis:100%;padding-top:2px}
+#pauseSolver{border-color:var(--cy);color:var(--cy)}
+#viewDetails .sceneTools{justify-content:space-between}
+@media(max-width:600px){.btn,.seg button{min-height:36px}input[type=range]{height:28px}summary{min-height:36px;display:list-item;padding:6px 0}}
 details{border-top:1px solid var(--edge);padding:7px 0}summary{cursor:pointer;color:var(--ink2)}.detailBody{display:grid;gap:12px;padding-top:10px}.detailBody p{font-size:10px;color:var(--ink2);margin:0}
 #generalAcceleration{display:grid;grid-template-columns:1fr 100px;align-items:center;gap:6px;font-size:10px}#generalAcceleration input{width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--edge2);padding:4px}
 button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(--edge2);color:var(--ink2)}
@@ -132,7 +139,7 @@ button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>One fluid state · surface, particles and flow in 3D</p>
+  <p>Sand patterns · original controls · pinned rim</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -146,13 +153,15 @@ globalThis.FARADAY_STARTUP = {
     status.textContent = 'Simulation error: ' + String(error && error.message || error)
       + '. No substitute simulation has been loaded. Reload after resolving this error.';
     status.style.color = 'var(--red)';
+    status.hidden = false;
   },
   ready() {
     if (this.drawn || this.failed) return;
     this.drawn = true;
     const status = document.getElementById('startupStatus');
-    status.textContent = '3D cell ready. Surface and flow tracers share the nonlinear solver state.';
+    status.textContent = useSolver ? '3D cell ready. Surface and flow tracers share the nonlinear solver state.' : 'Sand visualization ready. The current sand transport is a qualitative visual model.';
     status.style.color = 'var(--grn)';
+    document.getElementById('startupStatus').hidden = true;
   }
 };
 document.getElementById('startupStatus').textContent = 'Starting the simulator…';
@@ -166,8 +175,8 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <div class="seg" id="workspaceSeg" aria-label="Legacy diagnostic fixtures" hidden><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
 <div id="sandActions" class="workspaceActions" data-sand-only><button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button><button aria-pressed="true" class="btn" id="play" style="flex:1">running</button><button class="btn" id="reset" style="flex:1">re-excite</button></div>
 <div id="solverActions" class="workspaceActions" data-ns-only><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset</button><button class="btn" id="seedParticles">Re-seed particles</button></div>
-<div class="sceneTools"><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
-<div id="workspaceNote">Surface and sand-coloured flow tracers · one Navier–Stokes state</div>
+<div class="sceneTools" data-ns-only><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
+<div id="workspaceNote" hidden>Surface and sand-coloured flow tracers · one Navier–Stokes state</div>
 <div id="solverStatus" role="status" data-ns-only hidden>Initial condition · t = 0 · not evolved</div>
 </div>
 <div class="rig">
@@ -187,16 +196,9 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 
   <div class="deck">
-<div class="fld"><span class="lab">Layers · same fluid state</span><div class="sceneTools">
-<label><input id="showParticles" type="checkbox" checked> Sand / flow tracers</label>
-<label><input id="showSurface" type="checkbox" checked> Surface</label>
-<label><input id="showVectors" type="checkbox" checked> Velocity vectors</label>
-</div></div>
-<div class="fld"><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
-<div class="fld"><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
-<div id="sceneError" role="alert"></div>
-<div class="fld" data-legacy>
-<span class="lab">diagnostic render</span>
+<div id="sceneError" role="alert" data-ns-only></div>
+<div class="fld" data-sand-only>
+<span class="lab">render</span>
 <div class="seg" id="viewSeg">
 <button aria-pressed="true" data-v="sand">sand</button>
 <button aria-pressed="false" data-v="optical">optical</button>
@@ -213,14 +215,13 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <div class="top"><span class="lab">reference apparatus amplitude</span><span class="v"><span id="av">180 mV</span></span></div>
 <input id="a" max="1000" min="0" step="1" type="range" value="229"/>
 <span class="lab" id="accLab" style="text-align:right"></span>
-</div><label hidden="" id="generalAcceleration">Peak acceleration (m/s²) <input id="expAccel" min="0" step="any" type="number" value="7"/></label><div class="fld" data-ns-only="" hidden="">
-<span class="lab">Navier–Stokes compute engine</span>
-<div class="seg" id="srcSeg">
-<button aria-pressed="false" data-s="modal" hidden="">modal diagnostic</button>
-<button aria-pressed="false" data-s="dns">3D N-S (JS)</button>
-<button aria-pressed="true" data-s="dnscpp">3D N-S (C++)</button>
-</div>
-</div><div class="fld" data-sand-only="">
+</div><label hidden="" id="generalAcceleration">Peak acceleration (m/s²) <input id="expAccel" min="0" step="any" type="number" value="7"/></label>
+<div class="fld" data-ns-only><span class="lab">Visible layers</span><div class="sceneTools">
+<label><input id="showParticles" type="checkbox" checked> <span id="particleLabel">Flow tracers</span></label>
+<label><input id="showSurface" type="checkbox" checked> Surface</label>
+<label><input id="showVectors" type="checkbox" checked> Velocity vectors</label>
+</div></div>
+<div class="fld" data-sand-only="">
 <span class="lab">modal display phase</span>
 <div class="seg" id="phaseSeg">
 <button aria-pressed="true" data-p="1">phase I</button>
@@ -239,6 +240,12 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <button class="btn" id="expBtn" style="margin-top:5px">render &amp; save</button>
 <span class="lab" id="expNote" style="line-height:1.6"></span>
 </div>
+<details id="viewDetails" data-ns-only><summary>View settings</summary><div class="detailBody">
+<div class="fld"><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
+<label class="sceneTools">Surface opacity <input id="surfaceOpacity" type="number" min="0" max="1" step="0.05" placeholder="Auto" aria-label="Surface opacity, zero transparent to one opaque"></label>
+<div class="fld"><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
+<label class="sceneTools">Velocity arrow scale (seconds) <input id="vectorScale" type="number" value="1000" min="0" step="any"></label><p style="font-size:10px;color:var(--ink2);margin:0">Arrow length is velocity × this drawing scale, not a predicted trajectory.</p>
+</div></details>
 <details id="parameterDetails"><summary>Experiment parameters</summary><div class="detailBody">
 <div class="fld" data-sand-only="">
 <label class="lab" for="configurationMode">experiment configuration</label>
@@ -271,30 +278,42 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </div><div class="fld" data-sand-only="">
 <span class="lab">contact line</span>
 <div class="seg" id="rimSeg">
-<button aria-pressed="true" data-r="free">free (modal only)</button>
+<button aria-pressed="true" data-r="free">free (historical visual preset)</button>
 <button aria-pressed="false" data-r="pinned">pinned</button>
 </div>
-</div><div class="fld" data-ns-only="" hidden="">
+</div></div></details>
+<details id="computeDetails" data-ns-only><summary>Advanced calculation</summary><div class="detailBody">
+<div class="fld" data-ns-only="" hidden="">
+<span class="lab">Navier–Stokes compute engine</span>
+<div class="seg" id="srcSeg">
+<button aria-pressed="false" data-s="modal" hidden="">modal diagnostic</button>
+<button aria-pressed="false" data-s="dns">3D N-S (JS)</button>
+<button aria-pressed="true" data-s="dnscpp">3D N-S (C++)</button>
+</div>
+</div>
+<div class="fld" data-ns-only="" hidden="">
 
 <span class="lab">solver threads</span>
 <!-- filled at load from navigator.hardwareConcurrency: see CELL3D_CORES -->
 <div class="seg" id="thrSeg"></div>
-</div></div></details>
-<details><summary>Drawing and model details</summary><div class="detailBody">
-<div class="fld" data-legacy>
-<span class="lab">diagnostic draw on</span>
+</div>
+</div></details>
+<details id="modelDetails"><summary>Model details</summary><div class="detailBody">
+<div class="fld" data-sand-only>
+<span class="lab">draw on</span>
 <div class="seg" id="engSeg">
 <button aria-pressed="true" data-e="cpu">CPU</button>
 <button aria-pressed="false" data-e="gpu">GPU</button>
 </div>
 <div aria-live="polite" id="renderStatus" role="status">CPU drawing.</div>
-</div><p data-sand-only>The retained modal functions are internal numerical diagnostics, not the displayed particle simulation.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
-<label class="sceneTools">Velocity arrow scale (seconds) <input id="vectorScale" type="number" value="1000" min="0" step="any"></label><p style="font-size:10px;color:var(--ink2);margin:0">Arrow length is velocity × this drawing scale, not a predicted trajectory.</p>
+</div><p data-sand-only>The original 60,000-grain sand visualization is restored with its unchanged modal field, drift, agitation and packing rules. This is the current qualitative transport model, not completed fully resolved grain–fluid physics. The default rim is pinned as requested; the older free-rim preset used a different modal basis, so its exact pattern can differ. Reference presets use the empirical atlas; General SI inputs remain available under Experiment parameters.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
 <div id="experimentError" role="alert" style="color:var(--red)"></div><div id="warnBox" style="display:grid;gap:6px"></div><details><summary>State and diagnostics</summary><dl class="ro" id="ro"></dl></details>
   </div>
 </div>
 
-<div class="timelineBar"><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div></div>
+<details id="experimentalDetails"><summary>Experimental grain–fluid recordings</summary><div class="detailBody"><div class="workspaceActions" id="recordingActions"><button class="btn" id="importNative">Import native recording</button><input id="nativeFile" type="file" accept=".jsonl,.ndjson,.txt,application/x-ndjson,text/plain" hidden><button class="btn" id="returnFluid" hidden>Return to sand</button><span class="lab" id="recordingSource">Original sand visual model</span></div><p>Optional native recordings display actual saved grains and liquid together in 3D. Import pauses the sand view; returning restores its particles, settings and playback state. The native prototype is experimental and has not demonstrated a settled beach-sand bed.</p><div id="nativeImportError" role="alert"></div></div></details>
+<div class="timelineBar" data-ns-only><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="sceneTools" id="nativeSteps" hidden><button class="btn" id="previousNative">Previous frame</button><button class="btn" id="nextNative">Next frame</button></div><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div><div class="timeNote" id="nativeStatus" role="status" hidden></div></div>
+<details id="nativeDetails" hidden><summary>Native recording and model</summary><p id="nativeScope"></p><pre id="nativeParameters" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 <label style="display:block;padding:10px"><input type="checkbox" id="comparePaper"> Compare with the 2017 atlas (display only) <select id="referenceCell"><option value="medium">24.25 mm</option><option value="small">10.00 mm</option><option value="large">49.50 mm</option></select></label>
 <div class="atlas" id="referenceAtlas" hidden>
   <div class="atlas-hd">
@@ -325,7 +344,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   <p id="dnsNote"></p>
 </div>
 <footer>
-  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
+  The original sand visualization uses a modal field with qualitative drift, agitation and packing rules. Its controls and dense image export are retained; this recovery does not complete fully resolved sediment physics. Pinned is the default rim, which can change the pattern from the historical free-rim preset. Reference presets use the empirical atlas; General SI inputs are available and the atlas display is optional. Experimental native recordings preserve their actual grain–fluid state and physical time.
 </footer>
 </div>
 <script>
@@ -1187,10 +1206,9 @@ function resolvePatternState(o){
 
   const warnings = [];
   if (rim === 'pinned') warnings.push({ hard: false, text:
-    'Pinned contact line: the modal diagnostic is solved in a finite 128-term basis with Richardson extrapolation. '
+    'Pinned contact line: the modal field is solved in a finite 128-term basis with Richardson extrapolation. '
     + 'This is an approximate linear spectral calculation, not an exact continuum solution. '
-    + 'LIMIT: finite contact-line mobility and hysteresis are not computed. '
-    + 'Select 3D N-S for the separate nonlinear model.' });
+    + 'LIMIT: finite contact-line mobility and hysteresis are not computed.' });
   if (!experiment && cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!experiment && !cell.atlas) warnings.push({ hard: false, text:
@@ -2054,7 +2072,7 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
   const DEFAULT_CAMERA = Object.freeze({ yaw: -0.72, elevation: 0.66, distance: 3.45, targetX: 0, targetY: 0 });
   const DEFAULT_OPTIONS = Object.freeze({ heightScale: 1, showSurface: true, showParticles: true,
     showVectors: false, showGrid: true, colorMode: 'water', pointSize: 3,
-    vectorScaleSeconds: 1, colorScaleM: null });
+    vectorScaleSeconds: 1, colorScaleM: null, surfaceOpacity: null });
   const finite = (n, name) => { if (!Number.isFinite(n)) throw new TypeError('3D view: ' + name + ' must be finite.'); return n; };
   function copyArray(a, Type, name, stride) {
     if (a == null) return new Type(0);
@@ -2072,11 +2090,12 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
       source: frame.source == null ? null : JSON.parse(JSON.stringify(frame.source)), positions: copyArray(frame.positions, Float32Array, 'surface positions', 3),
       indices: copyArray(frame.indices, Uint32Array, 'surface triangles', 3),
       particles: copyArray(frame.particles, Float64Array, 'particle positions', 3),
+      particleRadii: frame.particleRadii == null ? null : copyArray(frame.particleRadii, Float64Array, 'particle radii', 1),
       flowPositions: copyArray(frame.flowPositions, Float32Array, 'flow positions', 3),
       flowVectors: copyArray(frame.flowVectors, Float32Array, 'flow vectors', 3),
       etaRange: frame.etaRange ? Array.from(frame.etaRange) : null,
       maxSpeed: frame.maxSpeed == null ? null : finite(frame.maxSpeed, 'maximum speed') };
-    for (const key of ['provenance', 'units', 'grid', 'flowSampling', 'displayTessellation', 'maxSpeedScope', 'tracerProvenance'])
+    for (const key of ['provenance', 'units', 'grid', 'flowSampling', 'displayTessellation', 'maxSpeedScope', 'tracerProvenance', 'grainProvenance'])
       if (frame[key] !== undefined) f[key] = JSON.parse(JSON.stringify(frame[key]));
     const n = f.positions.length / 3;
     if (!n || !f.indices.length) throw new RangeError('3D view: an actual surface mesh is required.');
@@ -2085,6 +2104,17 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
         throw new RangeError('3D view: surface index lies outside its vertex array.');
     }
     if (f.flowVectors.length !== f.flowPositions.length) throw new RangeError('3D view: velocity and position counts differ.');
+    if (f.particleRadii) {
+      if (f.particleRadii.length !== f.particles.length / 3) throw new RangeError('3D view: particle radius and position counts differ.');
+      for (const radius of f.particleRadii) if (!(radius > 0)) throw new RangeError('3D view: particle radii must be positive metres.');
+    }
+    for (const [key,stride] of [['grainIds',1],['grainDensity',1],['grainVelocities',3],['grainAngularVelocities',3]]) {
+      if(frame[key]==null)continue;
+      f[key]=copyArray(frame[key],Float64Array,key,stride);
+      if(!f.particleRadii||f[key].length!==f.particles.length/3*stride)throw new RangeError('3D view: incorrect '+key+' count.');
+      if(key==='grainIds'&&Array.from(f[key]).some(id=>!Number.isSafeInteger(id)||id<0))throw new RangeError('3D view: grain IDs must be nonnegative safe integers.');
+      if(key==='grainDensity'&&Array.from(f[key]).some(d=>!(d>0)))throw new RangeError('3D view: grain density must be positive.');
+    }
     for (const [key, count] of [['surfaceDisplacement', n], ['particleDisplacement', f.particles.length / 3], ['flowDisplacement', f.flowPositions.length / 3]]) {
       f[key] = frame[key] == null ? null : copyArray(frame[key], Float32Array, key, 1);
       if (f[key] && f[key].length !== count) throw new RangeError('3D view: incorrect ' + key + ' count.');
@@ -2103,6 +2133,8 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
     for (const key of ['heightScale', 'pointSize', 'vectorScaleSeconds'])
       if (!(finite(o[key], key) > 0)) throw new RangeError('3D view: ' + key + ' must be positive.');
     if (o.colorScaleM != null && !(finite(o.colorScaleM, 'colour scale') > 0)) throw new RangeError('3D view: colour scale must be positive.');
+    if (o.surfaceOpacity != null && !(finite(o.surfaceOpacity, 'surface opacity') >= 0 && o.surfaceOpacity <= 1))
+      throw new RangeError('3D view: surface opacity must lie between zero and one.');
     if (!['water', 'height', 'nodal'].includes(o.colorMode)) throw new RangeError('3D view: unknown surface colouring.');
     return o;
   }
@@ -2116,6 +2148,15 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
     }
     for (let i = 0; i < out.length; i++) if (!Number.isFinite(out[i])) throw new RangeError('3D view: display coordinates overflow at the requested scale.');
     return out;
+  }
+  function displayedParticleRadii(frame) {
+    if (frame.particleRadii == null) return null;
+    const radii = new Float32Array(frame.particleRadii.length);
+    for (let i = 0; i < radii.length; i++) {
+      radii[i] = frame.particleRadii[i] / frame.R;
+      if (!(radii[i] > 0) || !Number.isFinite(radii[i])) throw new RangeError('3D view: particle display radius is not representable.');
+    }
+    return radii;
   }
   function normalsFor(p, indices) {
     const n = new Float32Array(p.length);
@@ -2137,6 +2178,28 @@ if (typeof globalThis !== 'undefined') globalThis.FARADAY_RENDER_GL = FARADAY_RE
   function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
   function unit(a) { const n = Math.hypot(...a); return a.map(x => x / n); }
   function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  function cameraBasis(camera) {
+    const c = cameraValue(camera), target = [c.targetX, c.targetY, 0], cp = Math.cos(c.elevation);
+    const eye = [target[0] + c.distance * cp * Math.sin(c.yaw),
+      target[1] + c.distance * Math.sin(c.elevation), c.distance * cp * Math.cos(c.yaw)];
+    const back = unit(sub(eye, target)), right = unit(cross([0, 1, 0], back));
+    return { eye, right, up: cross(back, right), forward: back.map(x => -x) };
+  }
+  /* Exact perspective tangent bounds for a sphere, not a constant-pixel point.
+     A sphere crossing the eye plane uses the viewport as a conservative bound;
+     the fragment ray/sphere intersection still determines its actual silhouette. */
+  function projectedSphereBounds(centre, radius, camera, aspect) {
+    if (!(finite(radius, 'sphere radius') > 0)) throw new RangeError('3D view: sphere radius must be positive.');
+    const basis = cameraBasis(camera), d = sub(centre, basis.eye), depth = dot(d, basis.forward);
+    const q = [dot(d, basis.right), dot(d, basis.up)], scale = 1 / Math.tan(42 * Math.PI / 360);
+    if (!(depth > radius)) return { min: [-1, -1], max: [1, 1] };
+    const denominator = depth * depth - radius * radius;
+    const bounds = q.map((x, i) => {
+      const tangent = radius * Math.sqrt(denominator + x * x), f = i ? scale : scale / aspect;
+      return [(x * depth - tangent) * f / denominator, (x * depth + tangent) * f / denominator];
+    });
+    return { min: [bounds[0][0], bounds[1][0]], max: [bounds[0][1], bounds[1][1]] };
+  }
   function multiply(a, b) {
     const out = new Float32Array(16);
     for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
@@ -2165,15 +2228,46 @@ precision highp float;
 in vec3 aPosition;
 in vec3 aNormal;
 in float aValue;
+in vec3 aCenter;
+in float aRadius;
 uniform mat4 uMatrix;
 uniform float uPointSize;
+uniform int uInstanced;
+uniform vec3 uEye;
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform vec3 uForward;
+uniform vec2 uProjectionScale;
 out vec3 vNormal;
 out float vValue;
-void main(){vNormal=aNormal;vValue=aValue;gl_Position=uMatrix*vec4(aPosition,1.0);gl_PointSize=uPointSize;}`;
+flat out vec3 vCenter;
+flat out float vRadius;
+out vec3 vRay;
+void main(){
+ vNormal=aNormal;vValue=aValue;vCenter=aCenter;vRadius=aRadius;vRay=vec3(0.0);
+ if(uInstanced==1){
+   vec3 d=aCenter-uEye;float depth=dot(d,uForward);
+   vec2 c=vec2(dot(d,uRight),dot(d,uUp));vec2 lo=vec2(-1.0),hi=vec2(1.0);
+   float den=depth*depth-aRadius*aRadius;
+   if(depth>aRadius&&den>0.0){
+     vec2 tangent=aRadius*sqrt(vec2(den)+c*c);
+     lo=(c*depth-tangent)*uProjectionScale/den;hi=(c*depth+tangent)*uProjectionScale/den;
+   }
+   vec2 p=mix(lo,hi,aPosition.xy*0.5+0.5);
+   gl_Position=vec4(p,0.0,1.0);
+   vRay=uForward+uRight*(p.x/uProjectionScale.x)+uUp*(p.y/uProjectionScale.y);
+ }else gl_Position=uMatrix*vec4(aPosition,1.0);
+ gl_PointSize=uPointSize;
+}`;
   const FRAGMENT = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in float vValue;
+flat in vec3 vCenter;
+flat in float vRadius;
+in vec3 vRay;
+uniform vec3 uEye;
+uniform mat4 uMatrix;
 uniform vec4 uColor;
 uniform int uKind;
 uniform int uMode;
@@ -2181,10 +2275,33 @@ uniform float uColorScale;
 out vec4 fragColor;
 void main(){
  vec3 col=uColor.rgb;float alpha=uColor.a;
+#ifdef FINITE_GRAINS
+ gl_FragDepth=gl_FragCoord.z;
+#endif
  if(uKind==1){
    vec2 d=gl_PointCoord*2.0-1.0;float r2=dot(d,d);if(r2>1.0)discard;
    float shade=0.6+0.4*sqrt(1.0-r2);col*=shade;
- }else if(uKind==2){
+ }
+#ifdef FINITE_GRAINS
+ else if(uKind==3){
+   vec3 ray=normalize(vRay),toCenter=vCenter-uEye;
+   float along=dot(toCenter,ray);
+   vec3 perpendicular=toCenter-along*ray;
+   float disc=vRadius*vRadius-dot(perpendicular,perpendicular);
+   if(disc<0.0)discard;
+   float root=sqrt(disc),t=along-root;
+   vec4 clip=uMatrix*vec4(uEye+t*ray,1.0);float depth=clip.z/clip.w;
+   if(t<=0.0||clip.w<=0.0||depth< -1.0){
+     t=along+root;clip=uMatrix*vec4(uEye+t*ray,1.0);depth=clip.z/clip.w;
+   }
+   if(t<=0.0||clip.w<=0.0||depth< -1.0||depth>1.0)discard;
+   gl_FragDepth=0.5+0.5*depth;
+   vec3 n=normalize((t-along)*ray-perpendicular);
+   float diffuse=max(dot(n,normalize(vec3(-0.5,0.9,0.35))),0.0);
+   col*=0.45+0.55*diffuse;
+ }
+#endif
+ else if(uKind==2){
    vec3 n=normalize(vNormal);if(!gl_FrontFacing)n=-n;
    float diffuse=abs(dot(n,normalize(vec3(-0.5,0.9,0.35))));
    float light=0.44+0.56*diffuse;
@@ -2259,7 +2376,7 @@ void main(){
     if (!canvas || typeof canvas.getContext !== 'function') throw new TypeError('3D view requires a canvas.');
     callbacks = callbacks || {};
     let frame = null, options = optionsValue(callbacks.options), camera = cameraValue(callbacks.camera);
-    let gl = null, program = null, uniforms, buffers = [], layers = null, lost = false, disposed = false;
+    let gl = null, program = null, grainProgram = null, uniforms, grainUniforms, buffers = [], layers = null, lost = false, disposed = false;
     let revision = 0, renderCount = 0, drawCalls = 0, lastWidth = 0, lastHeight = 0, pixelRatio = 1, drag = null, resizeObserver = null;
     const report = error => { if (callbacks.onError) callbacks.onError(error); };
     function shader(type, source) {
@@ -2271,12 +2388,21 @@ void main(){
       gl = canvas.getContext('webgl2', { alpha: false, antialias: true, depth: true,
         preserveDrawingBuffer: true, premultipliedAlpha: false });
       if (!gl) throw new Error('The interactive 3D view requires WebGL 2. The fluid solver has not been replaced.');
-      const vs = shader(gl.VERTEX_SHADER, VERTEX), fs = shader(gl.FRAGMENT_SHADER, FRAGMENT);
-      program = gl.createProgram(); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      gl.deleteShader(vs); gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('3D shader link: ' + gl.getProgramInfoLog(program));
-      uniforms = {};
-      for (const name of ['uMatrix', 'uPointSize', 'uColor', 'uKind', 'uMode', 'uColorScale']) uniforms[name] = gl.getUniformLocation(program, name);
+      function link(fragment) {
+        const vs = shader(gl.VERTEX_SHADER, VERTEX), fs = shader(gl.FRAGMENT_SHADER, fragment);
+        const p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+        gl.deleteShader(vs); gl.deleteShader(fs);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('3D shader link: ' + gl.getProgramInfoLog(p));
+        const u = {};
+        for (const name of ['uMatrix', 'uPointSize', 'uColor', 'uKind', 'uMode', 'uColorScale', 'uInstanced', 'uEye', 'uRight', 'uUp', 'uForward', 'uProjectionScale']) u[name] = gl.getUniformLocation(p, name);
+        return { program: p, uniforms: u };
+      }
+      const standard = link(FRAGMENT);
+      program = standard.program; uniforms = standard.uniforms;
+      // A separate compiled variant confines explicit sphere depth to grains.
+      // Writing gl_FragDepth even unchanged changes MSAA on the existing layers.
+      const grains = link(FRAGMENT.replace('#version 300 es\n', '#version 300 es\n#define FINITE_GRAINS\n'));
+      grainProgram = grains.program; grainUniforms = grains.uniforms;
       lost = false;
       if (frame) rebuild();
     }
@@ -2297,7 +2423,16 @@ void main(){
       const eta = new Float32Array(p.length / 3);
       for (let i = 0; i < eta.length; i++) eta[i] = frame.surfaceDisplacement ? frame.surfaceDisplacement[i] : frame.positions[i * 3 + 2] - frame.h;
       const surface = layer(p, frame.indices, normalsFor(p, frame.indices), eta, gl.TRIANGLES);
-      const particles = layer(displayedPositions(frame.particles, frame.particleDisplacement, frame, options.heightScale, false), null, null, null, gl.POINTS);
+      const centres = displayedPositions(frame.particles, frame.particleDisplacement, frame, options.heightScale, false);
+      let particles;
+      if (frame.particleRadii) {
+        // Two triangles bound each exact ray-traced sphere. Geometry and fragment
+        // depth come from the supplied metre-valued radius, not the quad itself.
+        particles = layer(new Float32Array([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0]), new Uint32Array([0,1,2,0,2,3]), null, null, gl.TRIANGLES);
+        particles.instances = frame.particleRadii.length;
+        particles.centres = buffer(centres, gl.ARRAY_BUFFER);
+        particles.radii = buffer(displayedParticleRadii(frame), gl.ARRAY_BUFFER);
+      } else particles = layer(centres, null, null, null, gl.POINTS);
       const level = frame.h / (2 * frame.R), floor = [], floorIndices = [], rim = [], grid = [];
       const segments = 128;
       floor.push(0, -level, 0);
@@ -2337,18 +2472,31 @@ void main(){
         flow: layer(new Float32Array(flow), null, null, null, gl.LINES) };
       revision++;
     }
-    function bind(l) {
+    function bind(l, active) {
       for (const [name, b, count] of [['aPosition', l.p, 3], ['aNormal', l.n, 3], ['aValue', l.v, 1]]) {
-        const a = gl.getAttribLocation(program, name); gl.bindBuffer(gl.ARRAY_BUFFER, b);
-        gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0);
+        const a = gl.getAttribLocation(active, name); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(a, 0);
+      }
+      for (const [name, b, count] of [['aCenter', l.centres, 3], ['aRadius', l.radii, 1]]) {
+        const a = gl.getAttribLocation(active, name);
+        if (b) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(a);
+          gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(a, 1);
+        } else {
+          gl.disableVertexAttribArray(a); gl.vertexAttribDivisor(a, 0); gl.vertexAttrib4f(a, 0, 0, 0, 1);
+        }
       }
       if (l.indices) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, l.indices);
     }
     function draw(l, color, kind, depthWrite) {
-      if (!l.count) return;
-      drawCalls++; bind(l); gl.uniform4fv(uniforms.uColor, color); gl.uniform1i(uniforms.uKind, kind);
+      if (!l.count || l.instances === 0) return;
+      const active = kind === 3 ? grainProgram : program, u = kind === 3 ? grainUniforms : uniforms;
+      gl.useProgram(active);
+      drawCalls++; bind(l, active); gl.uniform4fv(u.uColor, color); gl.uniform1i(u.uKind, kind);
+      gl.uniform1i(u.uInstanced, l.instances == null ? 0 : 1);
       gl.depthMask(depthWrite);
-      if (l.indices) gl.drawElements(l.mode, l.count, gl.UNSIGNED_INT, 0); else gl.drawArrays(l.mode, 0, l.count);
+      if (l.instances != null) gl.drawElementsInstanced(l.mode, l.count, gl.UNSIGNED_INT, 0, l.instances);
+      else if (l.indices) gl.drawElements(l.mode, l.count, gl.UNSIGNED_INT, 0); else gl.drawArrays(l.mode, 0, l.count);
     }
     function resize(width, height, ratio) {
       if (disposed) return false;
@@ -2366,15 +2514,22 @@ void main(){
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.CULL_FACE);
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      gl.useProgram(program); gl.uniformMatrix4fv(uniforms.uMatrix, false, matrixFor(camera, canvas.width / canvas.height));
-      gl.uniform1f(uniforms.uPointSize, options.pointSize * (callbacks.interactive === false ? canvas.width / 800 : pixelRatio));
-      gl.uniform1i(uniforms.uMode, options.colorMode === 'height' ? 1 : options.colorMode === 'nodal' ? 2 : 0);
-      gl.uniform1f(uniforms.uColorScale, options.colorScaleM || frame.h);
+      const basis = cameraBasis(camera), scale = 1 / Math.tan(42 * Math.PI / 360);
+      for (const [active, u] of [[program, uniforms], [grainProgram, grainUniforms]]) {
+        gl.useProgram(active); gl.uniformMatrix4fv(u.uMatrix, false, matrixFor(camera, canvas.width / canvas.height));
+        for (const [name, value] of [['uEye', basis.eye], ['uRight', basis.right], ['uUp', basis.up], ['uForward', basis.forward]])
+          gl.uniform3fv(u[name], value);
+        gl.uniform2f(u.uProjectionScale, scale * canvas.height / canvas.width, scale);
+        gl.uniform1f(u.uPointSize, options.pointSize * (callbacks.interactive === false ? canvas.width / 800 : pixelRatio));
+        gl.uniform1i(u.uMode, options.colorMode === 'height' ? 1 : options.colorMode === 'nodal' ? 2 : 0);
+        gl.uniform1f(u.uColorScale, options.colorScaleM || frame.h);
+      }
       draw(layers.floor, [0.045, 0.071, 0.094, 1], 0, true);
       if (options.showGrid) draw(layers.grid, [0.14, 0.20, 0.25, 0.5], 0, false);
       if (options.showVectors) draw(layers.flow, [0.24, 0.79, 0.91, 0.95], 0, true);
-      if (options.showParticles) draw(layers.particles, [0.91, 0.77, 0.49, 1], 1, true);
-      if (options.showSurface) draw(layers.surface, [0.12, 0.52, 0.61, options.showParticles ? 0.42 : 0.82], 2, false);
+      if (options.showParticles) draw(layers.particles, [0.91, 0.77, 0.49, 1], frame.particleRadii ? 3 : 1, true);
+      const surfaceOpacity = options.surfaceOpacity == null ? options.showParticles ? 0.42 : 0.82 : options.surfaceOpacity;
+      if (options.showSurface && surfaceOpacity > 0) draw(layers.surface, [0.12, 0.52, 0.61, surfaceOpacity], 2, surfaceOpacity === 1);
       draw(layers.rim, [0.43, 0.60, 0.67, 0.75], 0, false);
       gl.depthMask(true); gl.flush(); renderCount++; return true;
     }
@@ -2448,6 +2603,7 @@ void main(){
       setCamera: next => { changeCamera({ ...camera, ...next }); return api; },
       resetCamera: () => { changeCamera(DEFAULT_CAMERA); return api; },
       topView: () => { changeCamera({ ...DEFAULT_CAMERA, yaw: 0, elevation: Math.PI / 2 - 0.001 }); return api; },
+      options: () => ({ ...options }),
       snapshot: () => { if (!frame) throw new Error('No solved or specified initial frame is available.'); return { frame: captureFrame(frame), camera: { ...camera }, options: { ...options },
           pointSizePerPixel: options.pointSize * pixelRatio / canvas.width, width: canvas.width, height: canvas.height }; },
       async exportCanvas(size, captured, capturedCamera) {
@@ -2543,16 +2699,17 @@ void main(){
       stats: () => ({ ready: !!frame && !lost && !disposed, lost, revision, renderCount, drawCalls,
         renderer: 'WebGL2 depth-tested 3D', surfaceVertices: frame ? frame.positions.length / 3 : 0,
         triangles: frame ? frame.indices.length / 3 : 0, particles: frame ? frame.particles.length / 3 : 0,
+        particleGeometry: frame && frame.particleRadii ? 'physical-radius spheres' : 'tracer points',
         time: frame ? frame.time : null, generation: frame ? frame.generation : null,
         steps: frame ? frame.steps : null, initial: frame ? frame.initial : null,
         heightScale: options.heightScale, camera: { ...camera }, width: canvas.width, height: canvas.height }),
       dispose(releaseContext) { if (disposed) return; if (resizeObserver) resizeObserver.disconnect(); for (const [t, fn, opts] of listeners) canvas.removeEventListener(t, fn, opts);
-        clearBuffers(); if (program && !lost) gl.deleteProgram(program); disposed = true;
+        clearBuffers(); if (!lost) { if (program) gl.deleteProgram(program); if (grainProgram) gl.deleteProgram(grainProgram); } disposed = true;
         if (releaseContext && !lost) { const extension = gl.getExtension('WEBGL_lose_context'); if (extension) extension.loseContext(); } }
     };
     return api;
   }
-  const api = Object.freeze({ create, captureFrame, displayedPositions, normalsFor, matrixFor, projectPoint, exportWorkerSource, DEFAULT_CAMERA, DEFAULT_OPTIONS });
+  const api = Object.freeze({ create, captureFrame, displayedPositions, displayedParticleRadii, projectedSphereBounds, normalsFor, matrixFor, projectPoint, exportWorkerSource, DEFAULT_CAMERA, DEFAULT_OPTIONS });
   root.FARADAY_SCENE3D = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -8833,6 +8990,286 @@ if(typeof module!=='undefined' && module.exports)module.exports=FARADAY_CELL3D_O
 if(typeof globalThis!=='undefined')globalThis.FARADAY_CELL3D_OBSERVATION=FARADAY_CELL3D_OBSERVATION;
 
 </script>
+<script id="nativeRecording">
+/* Read actual native JSONL output into the existing 3D observation format.
+   This adapter never advances a solver or supplies missing physical fields.
+   feed()/finish()/iterate() are generators: consume every yielded event so a
+   later malformed record cannot conceal the preceding coherent frames. */
+(function(root,factory){
+  const api=factory(typeof module==='object'&&module.exports
+    ?require('../dns/cell3d-observation.js'):root.FARADAY_CELL3D_OBSERVATION);
+  if(typeof module==='object'&&module.exports)module.exports=api;
+  root.FARADAY_NATIVE_RECORDING=api;
+})(typeof globalThis!=='undefined'?globalThis:this,function(OBS){
+  'use strict';
+  const FORMAT='faraday-native-recording',VERSION=1;
+  const SCOPE='Experimental resolved rigid-sphere volume constraints; imported native results, not independently validated measurements of south-east Queensland beach sand.';
+  const DEFAULT_LIMITS=Object.freeze({maxLineChars:32*1024*1024,maxCaseChars:16*1024*1024,
+    maxCells:1000000,maxGrains:100000,maxArrayElements:4000000,maxFrameBytes:64*1024*1024});
+  const copy=value=>JSON.parse(JSON.stringify(value));
+  const finite=(x,name)=>{if(typeof x!=='number'||!Number.isFinite(x))throw new TypeError(name+' must be finite.');return x;};
+  const positive=(x,name)=>{finite(x,name);if(!(x>0))throw new RangeError(name+' must be positive.');return x;};
+  const nonnegative=(x,name)=>{finite(x,name);if(x<0)throw new RangeError(name+' must be nonnegative.');return x;};
+  const integer=(x,name,min=0)=>{if(!Number.isSafeInteger(x)||x<min)throw new RangeError(name+' must be a safe integer >= '+min+'.');return x;};
+  const text=(x,name)=>{if(typeof x!=='string'||!x.trim())throw new TypeError(name+' must be a nonempty string.');return x;};
+  function keys(value,expected,name){
+    if(!value||typeof value!=='object'||Array.isArray(value))throw new TypeError(name+' must be an object.');
+    for(const key of expected)if(!Object.hasOwn(value,key))throw new TypeError(name+'.'+key+' is required.');
+    for(const key of Object.keys(value))if(!expected.includes(key))throw new TypeError(name+'.'+key+' is not recognised.');
+  }
+  function vector(value,name){
+    if(!Array.isArray(value)||value.length!==3)throw new RangeError(name+' must contain three components.');
+    for(let i=0;i<3;i++)finite(value[i],name+'['+i+']');
+    return value;
+  }
+  function grain(value,name,fluid){
+    keys(value,['id','centre','radius','density','velocity','omega'],name);
+    integer(value.id,name+'.id');vector(value.centre,name+'.centre');
+    positive(value.radius,name+'.radius');positive(value.density,name+'.density');
+    if(!(value.density>fluid.density))throw new RangeError(name+'.density must exceed the liquid density for the excess-mass model.');
+    vector(value.velocity,name+'.velocity');vector(value.omega,name+'.omega');
+    const mass=(4/3)*Math.PI*value.radius**3*value.density;
+    positive(mass,name+' mass');positive(.4*mass*value.radius**2,name+' inertia');
+    return value;
+  }
+  function shape(grid,limits){
+    integer(grid.nr,'nr',4);integer(grid.nth,'nth',8);integer(grid.nz,'nz',4);
+    if(grid.nth%2)throw new RangeError('nth must be even.');
+    const cells=grid.nr*grid.nth*grid.nz;
+    if(!Number.isSafeInteger(cells)||cells>limits.maxCells)throw new RangeError('Fluid cell count exceeds the recording reader limit; no smaller grid was substituted.');
+    const lengths={rf:grid.nr+1,rc:grid.nr,sf:grid.nz+1,sc:grid.nz,eta:grid.nr*grid.nth,Ht:grid.nr*grid.nth,
+      u:(grid.nr+1)*grid.nth*grid.nz,v:cells,w:grid.nr*grid.nth*(grid.nz+1)};
+    for(const [name,n] of Object.entries(lengths))if(!Number.isSafeInteger(n)||n>limits.maxArrayElements)
+      throw new RangeError(name+' exceeds the recording reader array limit.');
+    return lengths;
+  }
+  function observationShape(grid,grainCount,glyphLimit,limits){
+    // This is the array layout emitted by cell3d-observation.frame(), plus the
+    // physical grain fields attached below. Mirror its deterministic glyph
+    // strides so the byte bound includes every emitted array before allocation.
+    const {nr,nth,nz}=grid;
+    let sr=1,st=1,sz=1;
+    const count=()=>Math.ceil(nr/sr)*Math.ceil(nth/st)*Math.ceil(nz/sz);
+    while(glyphLimit&&count()>glyphLimit){
+      const ar=nr/sr,at=nth/st,az=nz/sz;
+      if(ar>=at&&ar>=az)sr++;else if(at>=az)st++;else sz++;
+    }
+    const vertices=1+(nr+1)*nth,indices=nth*(1+2*nr)*3,glyphs=glyphLimit?count():0;
+    for(const [name,n] of Object.entries({surfacePositions:3*vertices,surfaceIndices:indices,
+      surfaceDisplacement:vertices,flowPositions:3*glyphs,flowVectors:3*glyphs,
+      flowDisplacement:glyphs,grainPositions:3*grainCount,grainVelocities:3*grainCount,
+      grainAngularVelocities:3*grainCount,grainScalars:grainCount}))
+      if(!Number.isSafeInteger(n)||n>limits.maxArrayElements)
+        throw new RangeError('Observed '+name+' exceeds the recording reader array limit.');
+    return 16*vertices+4*indices+28*glyphs+100*grainCount;
+  }
+  function validateDeclaredGrid(record,c){
+    // Native prepare-case.mjs uses FaradayCell3D, whose radial and sigma maps
+    // are gradeToEnd/gradeBothEnds in dns/faraday-disc.js. Centres are arithmetic
+    // face midpoints. Allow only 16 machine epsilons of the domain length for
+    // cross-runtime tanh/rounding differences; retain the supplied coordinates.
+    const radial=i=>{
+      const n=c.grid.nr,L=c.fluid.radius,s=c.grid.rStretch;
+      if(i===0)return 0;if(i===n)return L;
+      return s===0?L*i/n:L*Math.tanh(s*i/n)/Math.tanh(s);
+    };
+    const vertical=j=>{
+      const n=c.grid.nz,s=c.grid.zStretch;
+      if(j===0)return 0;if(j===n)return 1;
+      return s===0?j/n:.5*(1+Math.tanh(s*(2*j/n-1))/Math.tanh(s));
+    };
+    for(const [name,at,length] of [['rf',radial,c.fluid.radius],['rc',i=>.5*(radial(i)+radial(i+1)),c.fluid.radius],
+      ['sf',vertical,1],['sc',j=>.5*(vertical(j)+vertical(j+1)),1]])
+      for(let i=0;i<record[name].length;i++){
+        const expected=at(i);
+        if(!Number.isFinite(expected)||Math.abs(record[name][i]-expected)>16*Number.EPSILON*length)
+          throw new RangeError('Native '+name+'['+i+'] differs from the declared grid mapping.');
+      }
+  }
+  function readCase(json,limits){
+    if(typeof json!=='string'||!json.length||json.length>limits.maxCaseChars)throw new RangeError('Native case provenance is missing or exceeds its reader limit.');
+    let c;try{c=JSON.parse(json);}catch(e){throw new SyntaxError('Native case provenance is not complete JSON.');}
+    keys(c,['format','version','fluid','drive','grid','initial','grains','materialProvenance','contact','resourceBudgetBytes','duration','dt','outputInterval'],'case');
+    if(c.format!=='faraday-native-case'||c.version!==1)throw new TypeError('Unsupported native case format/version.');
+    keys(c.fluid,['radius','depth','density','dynamicViscosity','surfaceTension','gravity','contactLine'],'fluid');
+    for(const name of ['radius','depth','density','dynamicViscosity','surfaceTension'])positive(c.fluid[name],'fluid.'+name);
+    nonnegative(c.fluid.gravity,'fluid.gravity');if(c.fluid.contactLine!=='pinned')throw new TypeError('Native recording requires the pinned contact line.');
+    keys(c.grid,['nr','nth','nz','rStretch','zStretch'],'grid');shape(c.grid,limits);
+    nonnegative(c.grid.rStretch,'grid.rStretch');nonnegative(c.grid.zStretch,'grid.zStretch');
+    keys(c.drive,['frequency','acceleration'],'drive');nonnegative(c.drive.frequency,'drive.frequency');finite(c.drive.acceleration,'drive.acceleration');
+    if(c.initial?.type==='flat')keys(c.initial,['type'],'initial');
+    else if(c.initial?.type==='seed'){
+      keys(c.initial,['type','azimuthalOrder','amplitude'],'initial');integer(c.initial.azimuthalOrder,'initial.azimuthalOrder');nonnegative(c.initial.amplitude,'initial.amplitude');
+      if(2*c.initial.azimuthalOrder>=c.grid.nth)throw new RangeError('Initial mode is outside the recorded grid.');
+    }else throw new TypeError('Unknown native initial-condition type.');
+    keys(c.contact,['friction','restitution'],'contact');nonnegative(c.contact.friction,'contact.friction');nonnegative(c.contact.restitution,'contact.restitution');
+    if(c.contact.restitution>1)throw new RangeError('Restitution must not exceed one.');
+    keys(c.materialProvenance,['kind','description','source'],'materialProvenance');
+    if(!['illustrative','measured'].includes(c.materialProvenance.kind))throw new TypeError('Unknown material-provenance kind.');
+    text(c.materialProvenance.description,'materialProvenance.description');text(c.materialProvenance.source,'materialProvenance.source');
+    integer(c.resourceBudgetBytes,'resourceBudgetBytes',1);
+    for(const name of ['duration','dt','outputInterval'])positive(c[name],name);
+    if(c.dt>c.duration)throw new RangeError('Recorded requested dt exceeds duration.');
+    if(!Array.isArray(c.grains)||c.grains.length>limits.maxGrains)throw new RangeError('Native grain count is missing or exceeds its reader limit.');
+    const ids=new Set();
+    for(let i=0;i<c.grains.length;i++){
+      const g=grain(c.grains[i],'case.grains['+i+']',c.fluid);if(ids.has(g.id))throw new RangeError('Duplicate native grain ID.');ids.add(g.id);
+      if(Math.hypot(g.centre[0],g.centre[1])+g.radius>c.fluid.radius||g.centre[2]-g.radius<0)
+        throw new RangeError('Declared initial grain penetrates the cylinder or floor.');
+      if(g.centre[2]+g.radius>c.fluid.depth+(c.initial.type==='seed'?c.initial.amplitude:0))
+        throw new RangeError('Declared initial grain exceeds the initial surface upper bound.');
+    }
+    return c;
+  }
+  function cloneFrame(frame){
+    const out={};
+    for(const [key,value] of Object.entries(frame))out[key]=ArrayBuffer.isView(value)?new value.constructor(value):value&&typeof value==='object'?copy(value):value;
+    return Object.freeze(out);
+  }
+  function createSession(options={}){
+    if(!OBS||typeof OBS.createFrame!=='function')throw new Error('The native recording reader requires cell3d-observation.js.');
+    const known=['generation','maxFlowGlyphs',...Object.keys(DEFAULT_LIMITS)];
+    for(const key of Object.keys(options))if(!known.includes(key))throw new TypeError('Unknown native reader option '+key+'.');
+    const limits={...DEFAULT_LIMITS};
+    for(const key of Object.keys(limits))if(options[key]!==undefined)limits[key]=integer(options[key],key,1);
+    const generation=integer(options.generation??0,'generation'),maxFlowGlyphs=integer(options.maxFlowGlyphs??384,'maxFlowGlyphs');
+    if(maxFlowGlyphs>limits.maxArrayElements/3)throw new RangeError('Flow glyph count exceeds the reader array limit.');
+    let pending='',lineNumber=0,header=null,caseValue=null,grainIdentities=null,grid=null,frames=0,lastTime=null,lastSteps=null,latest=null;
+    let terminal=null,closed=false,failed=false,failure=null,feeding=false;
+    const status=()=>Object.freeze({headerSeen:!!header,frames,lastTime,lastSteps,terminal,closed,failed,error:failure});
+    function refuse(error){failed=true;failure=error.message;closed=true;throw error;}
+    function decode(line){
+      lineNumber++;
+      if(lineNumber===1&&line.charCodeAt(0)===0xfeff)line=line.slice(1);
+      if(!line.trim())return null;
+      if(terminal)throw new Error('Unexpected record after the native '+terminal+' terminator.');
+      let record;try{record=JSON.parse(line);}catch(e){throw new SyntaxError('Native recording line '+lineNumber+' is not complete JSON.');}
+      if(!record||typeof record!=='object'||Array.isArray(record))throw new TypeError('Native records must be JSON objects.');
+      if(record.type==='error'){
+        keys(record,['type','message'],'error');text(record.message,'error.message');terminal='error';failed=true;failure=record.message;
+        return Object.freeze({type:'error',message:record.message,framesRetained:frames});
+      }
+      if(!header){
+        keys(record,['type','format','version','caseJson','nativeFluidBytes'],'header');
+        if(record.type!=='native-case'||record.format!==FORMAT||record.version!==VERSION)throw new TypeError('The first record must be a supported native-case header.');
+        const c=readCase(record.caseJson,limits);integer(record.nativeFluidBytes,'nativeFluidBytes',1);
+        if(record.nativeFluidBytes>c.resourceBudgetBytes)throw new RangeError('Recorded native allocation exceeds the declared case budget.');
+        caseValue=c;grainIdentities=new Map(c.grains.map(g=>[g.id,g]));
+        header=Object.freeze({...record,case:copy(c),scope:SCOPE,pressureAvailable:false});
+        return Object.freeze({type:'header',header:copy(header)});
+      }
+      if(record.type==='frame'){
+        keys(record,['type','time','steps','initial','nr','nth','nz','R','h','contact','rf','rc','sf','sc','eta','Ht','u','v','w','grains','diagnostics'],'frame');
+        finite(record.time,'frame.time');integer(record.steps,'frame.steps');
+        if(typeof record.initial!=='boolean')throw new TypeError('frame.initial must be boolean.');
+        if(frames===0){if(record.time!==0||record.steps!==0||!record.initial)throw new RangeError('A native recording must begin with its actual initial frame at t=0, step=0.');}
+        else if(!(record.time>lastTime&&record.steps>lastSteps&&!record.initial))throw new RangeError('Native frame clocks must advance together; duplicate or backwards frames are refused.');
+        if(record.time>caseValue.duration+8*Number.EPSILON*Math.max(caseValue.duration,record.time))throw new RangeError('Native frame time exceeds the declared duration.');
+        for(const name of ['nr','nth','nz'])if(record[name]!==caseValue.grid[name])throw new RangeError('Native frame grid differs from its case.');
+        if(record.R!==caseValue.fluid.radius||record.h!==caseValue.fluid.depth||record.contact!=='pinned')throw new RangeError('Native frame geometry differs from its case.');
+        const lengths=shape(record,limits);
+        if(!Array.isArray(record.grains)||record.grains.length!==grainIdentities.size||record.grains.length>limits.maxGrains)throw new RangeError('Native frame grain count differs from its case.');
+        // maxFrameBytes bounds each physical/observation array representation,
+        // not total process memory, JSON objects, or temporary cloning overhead.
+        const inputBytes=8*(Object.values(lengths).reduce((a,b)=>a+b,0)+12*record.grains.length);
+        const observedBytes=observationShape(record,record.grains.length,maxFlowGlyphs,limits);
+        const bytes=Math.max(inputBytes,observedBytes);
+        if(!Number.isSafeInteger(bytes)||bytes>limits.maxFrameBytes)throw new RangeError('Native frame exceeds the reader byte budget; no fields or grains were dropped.');
+        // Validate all counts and all values before allocating typed-array copies.
+        for(const [name,length] of Object.entries(lengths)){
+          if(!Array.isArray(record[name])||record[name].length!==length)throw new RangeError('Native '+name+' length does not match its staggered grid.');
+          for(let i=0;i<length;i++)finite(record[name][i],name+'['+i+']');
+          if(grid&&['rf','rc','sf','sc'].includes(name))for(let i=0;i<length;i++)if(record[name][i]!==grid[name][i])throw new RangeError('Native coordinate arrays changed within one recording.');
+        }
+        if(!grid)validateDeclaredGrid(record,caseValue);
+        const ids=new Set();
+        for(let i=0;i<record.grains.length;i++){
+          const g=grain(record.grains[i],'frame.grains['+i+']',caseValue.fluid),original=grainIdentities.get(g.id);
+          if(ids.has(g.id)||!original)throw new RangeError('Native frame contains duplicate or unknown grain IDs.');ids.add(g.id);
+          if(g.radius!==original.radius||g.density!==original.density)throw new RangeError('Native grain size or density changed within a rigid-grain recording.');
+          if(frames===0)for(const name of ['centre','velocity','omega'])for(let k=0;k<3;k++)if(g[name][k]!==original[name][k])throw new RangeError('Initial native grain state differs from the declared case.');
+        }
+        keys(record.diagnostics,['dt','slipResidual','divergence','constraintIterations','markers','eventRefinements','contacts'],'diagnostics');
+        for(const name of ['dt','slipResidual','divergence'])nonnegative(record.diagnostics[name],'diagnostics.'+name);
+        for(const name of ['constraintIterations','markers','eventRefinements','contacts'])integer(record.diagnostics[name],'diagnostics.'+name);
+        if(record.initial?record.diagnostics.dt!==0:!(record.diagnostics.dt>0))throw new RangeError('Native step diagnostics do not match the initial/evolved frame clock.');
+        const physical={...record,generation};
+        for(const name of Object.keys(lengths))physical[name]=Float64Array.from(record[name]);
+        const count=record.grains.length,particles=new Float64Array(count*3),radii=new Float64Array(count),density=new Float64Array(count),grainIds=new Float64Array(count),velocity=new Float64Array(count*3),omega=new Float64Array(count*3);
+        record.grains.forEach((g,i)=>{particles.set(g.centre,i*3);radii[i]=g.radius;density[i]=g.density;grainIds[i]=g.id;velocity.set(g.velocity,i*3);omega.set(g.omega,i*3);});
+        const observed=OBS.createFrame(physical,{particles,generation,steps:record.steps,initial:record.initial,maxFlowGlyphs});
+        for(const [name,value] of Object.entries(observed))if(ArrayBuffer.isView(value))for(let i=0;i<value.length;i++)finite(value[i],'observed '+name+'['+i+']');
+        finite(observed.maxSpeed,'observed maximum speed');
+        const frame=Object.freeze({...observed,particleRadii:radii,grainIds,grainDensity:density,grainVelocities:velocity,grainAngularVelocities:omega,
+          grainProvenance:{model:'experimental-resolved-rigid-sphere-volume-constraints',geometry:'spheres',motion:'recorded-native-state',physicalTime:record.time,steps:record.steps,
+            material:copy(caseValue.materialProvenance),contact:copy(caseValue.contact),scope:SCOPE},
+          source:{engine:'native-cpp-recording',format:FORMAT,version:VERSION,caseJson:header.caseJson,nativeFluidBytes:header.nativeFluidBytes,
+            parameters:{R:record.R,h:record.h,rho:caseValue.fluid.density,nu:caseValue.fluid.dynamicViscosity/caseValue.fluid.density,gamma:caseValue.fluid.surfaceTension,g:caseValue.fluid.gravity,omegaD:2*Math.PI*caseValue.drive.frequency,accel:caseValue.drive.acceleration,contact:'pinned'},
+            diagnostics:copy(record.diagnostics),pressureAvailable:false},
+          provenance:{...observed.provenance,source:'native-recording',grainModel:'experimental-resolved-rigid-sphere-volume-constraints'},
+          units:{...observed.units,radius:'m',density:'kg/m^3',angularVelocity:'rad/s'}});
+        // Publish only after the complete observation and particle geometry succeed.
+        if(!grid)grid=Object.fromEntries(['rf','rc','sf','sc'].map(name=>[name,physical[name]]));
+        frames++;lastTime=record.time;lastSteps=record.steps;latest=frame;
+        return Object.freeze({type:'frame',frame:cloneFrame(frame)});
+      }
+      if(record.type==='complete'){
+        keys(record,['type','time','steps'],'complete');finite(record.time,'complete.time');integer(record.steps,'complete.steps');
+        if(!frames||record.time!==lastTime||record.steps!==lastSteps)throw new RangeError('Completion does not match the last emitted native frame.');
+        if(Math.abs(record.time-caseValue.duration)>8*Number.EPSILON*Math.max(record.time,caseValue.duration))throw new RangeError('Completion precedes the requested native duration.');
+        terminal='complete';return Object.freeze({...record,frames});
+      }
+      throw new TypeError('Unknown or misplaced native record type.');
+    }
+    function* feed(chunk){
+      if(closed)throw new Error('This native reader is closed.');
+      if(feeding)throw new Error('Consume the previous native-reader generator before feeding another chunk.');
+      if(typeof chunk!=='string')throw new TypeError('feed requires decoded text chunks; iterateStream accepts UTF-8 byte chunks.');
+      feeding=true;let consumed=false;
+      try{
+        let start=0;
+        while(start<chunk.length){
+          const newline=chunk.indexOf('\n',start),end=newline<0?chunk.length:newline;
+          if(pending.length+end-start>limits.maxLineChars)throw new RangeError('Native JSONL record exceeds the line-length budget before JSON parsing.');
+          pending+=chunk.slice(start,end);start=end+(newline<0?0:1);
+          if(newline<0)break;
+          const line=pending;pending='';const event=decode(line);if(event)yield event;
+        }
+        consumed=true;
+      }catch(error){refuse(error);}finally{
+        feeding=false;
+        if(!consumed){closed=true;if(!failed){failed=true;failure='Native reader events were not fully consumed; remaining input was not accepted.';}}
+      }
+    }
+    function* finish(){
+      if(closed)throw new Error('This native reader is closed.');
+      if(feeding)throw new Error('Consume pending native-reader events before finishing.');
+      feeding=true;let consumed=false;
+      try{
+        if(pending.length){const line=pending;pending='';const event=decode(line);if(event)yield event;}
+        if(!terminal)throw new Error('Native recording ended without a complete/error terminator; the retained frames are incomplete results.');
+        closed=true;consumed=true;
+      }catch(error){refuse(error);}finally{
+        feeding=false;
+        if(!consumed){closed=true;if(!failed){failed=true;failure='Native reader final events were not fully consumed; EOF was not accepted.';}}
+      }
+    }
+    return Object.freeze({feed,finish,status,header:()=>header?copy(header):null,lastFrame:()=>latest?cloneFrame(latest):null,limits:Object.freeze({...limits})});
+  }
+  function* iterate(textValue,options={}){const session=createSession(options);yield*session.feed(textValue);yield*session.finish();}
+  async function* iterateStream(chunks,options={}){
+    const session=createSession(options),decoder=new TextDecoder('utf-8',{fatal:true});
+    for await(const chunk of chunks){
+      if(typeof chunk==='string'){const flush=decoder.decode();if(flush)yield*session.feed(flush);yield*session.feed(chunk);}
+      else if(chunk instanceof Uint8Array)yield*session.feed(decoder.decode(chunk,{stream:true}));
+      else throw new TypeError('Native stream chunks must be strings or UTF-8 Uint8Arrays.');
+    }
+    const flush=decoder.decode();if(flush)yield*session.feed(flush);yield*session.finish();
+  }
+  return Object.freeze({FORMAT,VERSION,SCOPE,DEFAULT_LIMITS,createSession,iterate,iterateStream});
+});
+
+</script>
 <script id="dnsCell3dTracers">
 'use strict';
 
@@ -9304,7 +9741,8 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'height';
+const solverDiagnostic = new URLSearchParams(location.search).get('solver') === '1';
+let view = solverDiagnostic ? 'height' : 'sand';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -9579,9 +10017,10 @@ function drawAtlas(cellKey, f){
 })();
 
 let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
-let workspace = 'ns', experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
+let workspace = solverDiagnostic ? 'ns' : 'sand', experimentMode = solverDiagnostic ? 'general' : 'reference', comparePaper = !solverDiagnostic, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
-let problemKey = null, resolutionKey = null, solverRequested = false;
+let problemKey = null, resolutionKey = null, solverRequested = false, pendingFrequency = null;
+let nativeMode = false;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
 let phaseSign = PHASE_I, swapping = false, swapAcc = 0;
 let dnsShowInput = null;
@@ -9609,6 +10048,8 @@ function tfeOf(){
 }
 
 function recompute(){
+  if(nativeMode){dirty=false;return;}
+  let restartAfterInputs = false;
   setLabel('play', running ? 'running' : 'paused');
   const experiment = experimentMode === 'general'
     ? { ...generalInput, frequencyHz: freq, contact: rim } : null;
@@ -9623,7 +10064,10 @@ function recompute(){
   if (useSolver){
     const nextKey = JSON.stringify([state.cellDiameterMm, state.depthMm, state.water,
       state.gravity, state.accelAssumed, freq, rim, state.experiment?.seedMode, state.experiment?.seedFraction]);
-    if (problemKey !== null && problemKey !== nextKey){ CELL3D.reset(); solverRequested = false; }
+    if (problemKey !== null && problemKey !== nextKey){
+      restartAfterInputs = CELL3D.clocks().live;
+      CELL3D.reset();
+    }
     problemKey = nextKey;
     state.visualSignature = null;
     state.expression = 1;
@@ -9636,6 +10080,9 @@ function recompute(){
   if (comparePaper) drawAtlas(referenceCell, freq);
   if (dnsShowInput && !(useSolver && state.experiment)) dnsShowInput();
   dirty = false;
+  if (restartAfterInputs && !$('experimentError').textContent){
+    UNIFIED3D.live(); CELL3D.start(state);
+  }
 }
 
 function paintDeck(){
@@ -9873,19 +10320,28 @@ seg('srcSeg', b => {
   const eng = b.dataset.s === 'dnscpp' ? 'cpp' : 'js';
   if (eng === cell3dEngine) return;
   cell3dEngine = eng;
-  CELL3D.reset(); solverRequested = false; dirty = true;
+  restartForControlChange();
 });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
   fn(+e.target.value); $(out).textContent = fmt ? fmt(+e.target.value) : e.target.value; dirty = true;
 });
 function setFreq(v){
-  if (!Number.isFinite(v) || v <= 0){ $('experimentError').textContent = 'Frequency must be a finite positive number.'; return; }
-  freq = v;
-  $('f').value = freq; $('fnum').value = freq; dirty = true;
+  pendingFrequency = null;
+  if (!Number.isFinite(v) || v <= 0){
+    $('experimentError').textContent = 'Frequency must be a finite positive number.';
+    if (useSolver){ initialAutostart = false; CELL3D.pause(); }
+    return;
+  }
+  $('f').value = v; $('fnum').value = v;
   if (experimentMode === 'general') commitGeneralInputs();
-  else $('experimentError').textContent = '';
+  else { freq = v; $('experimentError').textContent = ''; dirty = true; }
 }
-$('f').addEventListener('input', e => setFreq(+e.target.value));
+/* A range drag previews the next frequency in the readout. Apply it once on
+   release, so a single gesture cannot repeatedly tear down a running worker. */
+$('f').addEventListener('input', e => {
+  pendingFrequency = +e.target.value; $('fnum').value = pendingFrequency;
+});
+$('f').addEventListener('change', e => setFreq(+e.target.value));
 $('fnum').addEventListener('change', e => setFreq(+e.target.value));
 (function anchors(){
 
@@ -9923,9 +10379,13 @@ sc.addEventListener('click', e => {
 
 let exporting = false;
 async function exportImage(SIZE, onProgress = () => {}){
-  if (!useSolver) return exportDiagnosticImage(SIZE, onProgress);
-  if ($('experimentError').textContent) throw new Error($('experimentError').textContent);
-  if (CELL3D.clocks().err) throw new Error(CELL3D.clocks().err);
+  if (!useSolver){
+    const result=await exportDiagnosticImage(SIZE,onProgress);
+    result.source={...result.source,model:'original-sand-visualization',grainModel:result.label.view==='sand'?'empirical-drift-agitation-packing':null,physicalGrainFluidCoupling:false};
+    return result;
+  }
+  if (!nativeMode && $('experimentError').textContent) throw new Error($('experimentError').textContent);
+  if (!nativeMode && CELL3D.clocks().err) throw new Error(CELL3D.clocks().err);
   if ($('sceneError').textContent) throw new Error($('sceneError').textContent);
   return UNIFIED3D.exportImage(SIZE, onProgress);
 }
@@ -10412,9 +10872,9 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       a.href = url; a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
-    note.textContent = res.scene ? `${requestedSize}² · 3D frame at ${(res.source.physicalTime*1000).toFixed(6)} ms · ${res.particles} flow tracers · ${((performance.now()-t0)/1000).toFixed(1)}s` : `${requestedSize}² · ${res.modes} modes · `
+    note.textContent = res.scene ? `${requestedSize}² · 3D frame at ${(res.source.physicalTime*1000).toFixed(6)} ms · ${res.particles} ${res.source.engine==='native-cpp-recording'?'native grains':'flow tracers'} · ${((performance.now()-t0)/1000).toFixed(1)}s` : `${requestedSize}² · ${res.modes} modes · `
       + `${res.pxPerWave === null ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
-      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
+      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k visual grains · drawing scale `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
           + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
           + `${res.sand.relaxPasses} relax passes leaving `
@@ -10799,6 +11259,7 @@ let lastDrawnField=-1,lastDrawnView=null,lastDrawnPhase=null,lastDrawnGain=null,
 function releaseExportPreview(){if(!useSolver)t0=performance.now()-simT*1000;}
 function loop(now){
   try {
+  if(nativeMode){NATIVE_PLAYBACK.tick(now);return;}
   if (renderError && !useSolver) return;
   if(exporting && !useSolver)t0=now-simT*1000;
   if (running && !useSolver && !exporting) simT = (now - t0)/1000;
@@ -10821,8 +11282,10 @@ function loop(now){
       : clock.starting ? 'Starting the solver · specified initial condition shown'
       : clock.have ? `${clock.live ? 'Running' : clock.pending ? 'Pausing after current slice' : 'Paused'} · physical time ${(clock.physT*1000).toFixed(3)} ms · ${clock.stepsDone} steps`
       : `${clock.ready && !clock.live ? 'Paused before first step · ' : ''}Specified initial condition · t = 0 · not evolved`;
+    if (pendingFrequency !== null && !inputError)
+      $('solverStatus').textContent += ` · release slider to apply ${pendingFrequency} Hz`;
     setLabel('pauseSolver', clock.live ? 'Pause' : 'Resume');
-    $('pauseSolver').disabled = !!clock.err || (!clock.have && !clock.starting && !clock.ready);
+    $('pauseSolver').disabled = !!inputError || !!clock.err || (!clock.have && !clock.starting && !clock.ready);
     setLabel('runSolver', clock.have || clock.starting || clock.ready ? 'Restart' : 'Run');
     $('seedParticles').disabled=clock.starting || !!clock.err;
   }
@@ -10840,7 +11303,7 @@ function loop(now){
   }
   const workspaceText=useSolver ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
     : exporting ? 'Sand preview paused while exporting · your playback setting is preserved'
-    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+    : 'Original sand visualization · qualitative grain transport';
   if($('workspaceNote').textContent!==workspaceText)$('workspaceNote').textContent=workspaceText;
   if(useSolver){
     if(UNIFIED3D.tick(now)){
@@ -11195,7 +11658,7 @@ const CELL3D = (function(){
        replaying a frame that reported 43 steps and matched none of them. */
     const myGen = ++gen;
     const request={engine:cell3dEngine,threads:cell3dThreads};
-    running3d=true;starting3d=true;workerReady=false;slicePending=false;err=null;
+    solverRequested=true;running3d=true;starting3d=true;workerReady=false;slicePending=false;err=null;
     haveFrame=false;physT=wall=stepsDone=0;dirty=true;
     try {
       await new Promise(resolve => requestAnimationFrame(resolve));
@@ -11323,14 +11786,14 @@ const CELL3D = (function(){
     if(workerReady){worker.postMessage({cmd:'reseed',gen,seed:tracerSeed});return;}
     sceneFrame=null;dirty=true;
   }
-  function pause(){running3d=false;dirty=true;}
+  function pause(){solverRequested=false;running3d=false;dirty=true;}
   function stop(){pause();}
   function resume(){
     if(err || (!workerReady && !starting3d)) return false;
-    running3d=true;scheduleSlice();dirty=true;return true;
+    solverRequested=true;running3d=true;scheduleSlice();dirty=true;return true;
   }
   function reset(){
-    running3d=false;starting3d=false;workerReady=false;slicePending=false;haveFrame=false;err=null;gen++;
+    solverRequested=false;running3d=false;starting3d=false;workerReady=false;slicePending=false;haveFrame=false;err=null;gen++;
     etaBuf=null;htBuf=null;initialPreview=null;vessel=null;lastRun=null;grid=null;sceneFrame=null;UNIFIED3D.reset();
     physT=wall=stepsDone=perStep=peakRaw=0;ranEngine=null;ranThreads=0;dirty=true;
   }
@@ -11427,7 +11890,7 @@ const CELL3D = (function(){
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = true;
+let useSolver = solverDiagnostic;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
@@ -11448,14 +11911,14 @@ let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
     const n = +b.dataset.t;
     if (n === cell3dThreads) return;
     cell3dThreads = n;
-    if (useSolver && solverRequested) CELL3D.start(state);
+    if (useSolver) restartForControlChange();
   });
 }
 
 
 const GENERAL_FIELDS = [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']];
 const workspaceSettings = {
-  sand: {cellKey:'medium',freq:111,amp:180,temp:20,depth:3,rim:'free',experimentMode:'reference',generalInput:{...generalInput},view:'sand',phaseSign:PHASE_I,swapping:false,agitation:1.15,running:true,simT:0,comparePaper:true,referenceCell:'medium',engine:'cpp',threads:cell3dThreads,error:'',frequencyText:'111',formValues:null},
+  sand: {cellKey:'medium',freq:111,amp:180,temp:20,depth:3,rim:'pinned',experimentMode:'reference',generalInput:{...generalInput},view:'sand',phaseSign:PHASE_I,swapping:false,agitation:1.15,running:true,simT:0,comparePaper:true,referenceCell:'medium',engine:'cpp',threads:cell3dThreads,error:'',frequencyText:'111',formValues:null},
   ns: { cellKey: 'medium', freq: 111, amp: 180, temp: 20, depth: 3, rim: 'pinned',
     experimentMode: 'general', generalInput: { ...generalInput }, view: 'height',
     phaseSign: PHASE_I, swapping: false, agitation: 1.15, running: true, simT: 0,
@@ -11491,7 +11954,7 @@ function syncWorkspaceControls(){
   $('cgl').style.display = !useSolver && renderEngine === 'gpu' ? 'block' : 'none';
   $('workspaceNote').textContent = useSolver
     ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
-    : 'Internal modal diagnostic';
+    : 'Original sand visualization · qualitative grain transport';
 }
 function switchWorkspace(next){
   if (!['sand','ns'].includes(next)) throw new Error('Unknown workspace: '+next);
@@ -11515,7 +11978,16 @@ function switchWorkspace(next){
   recompute();
 }
 
+function restartForControlChange(){
+  const keepRunning = CELL3D.clocks().live;
+  CELL3D.reset(); recompute();
+  if (keepRunning && !$('experimentError').textContent){
+    UNIFIED3D.live(); CELL3D.start(state);
+  }
+}
+
 function commitGeneralInputs(){
+  pendingFrequency = null;
   try {
     const next = { ...generalInput };
     for (const [id, key] of GENERAL_FIELDS)
@@ -11528,7 +12000,11 @@ function commitGeneralInputs(){
     generalInput = next; freq = frequencyHz; $('f').value = freq;
     $('experimentError').textContent = ''; renderError = null; dirty = true;
     return true;
-  } catch (e){ $('experimentError').textContent = e.message; return false; }
+  } catch (e){
+    $('experimentError').textContent = e.message;
+    if (useSolver){ initialAutostart = false; CELL3D.pause(); }
+    return false;
+  }
 }
 GENERAL_FIELDS.forEach(([id]) => $(id).addEventListener('change', commitGeneralInputs));
 $('configurationMode').addEventListener('change', e => {
@@ -11545,11 +12021,13 @@ $('runSolver').addEventListener('click', () => {
   if (experimentMode === 'general' && !commitGeneralInputs()) return;
   if ($('experimentError').textContent) return;
   if (!useSolver){ $('experimentError').textContent = 'Select a 3D N-S engine before starting the solver.'; return; }
+  /* Run/Restart requests one start, even when this click also commits edits. */
+  CELL3D.pause();
   initialAutostart=false;UNIFIED3D.live();recompute(); solverRequested = true; CELL3D.start(state); dirty = true;
 });
 
 $('pauseSolver').addEventListener('click', () => {
-  if (!useSolver) return;
+  if (!useSolver || $('experimentError').textContent) return;
   initialAutostart=false;
   if (CELL3D.clocks().live) CELL3D.pause(); else {UNIFIED3D.live();CELL3D.resume();}
   dirty = true;
@@ -11562,33 +12040,41 @@ $('resetSolver').addEventListener('click', () => {
    Camera, layers and replay never step or replace the nonlinear fluid. */
 const UNIFIED3D = (() => {
   const FRAME_LIMIT=180, BYTE_LIMIT=32*1024*1024;
+  let sourceMode='fluid';
   let frames=[],bytes=0,current=null,following=true,playing=false,replayStart=null,replaySpan=null,paint=true,lastExport=null,generationFloor=-1;
-  const scene=FARADAY_SCENE3D.create($('scene3d'),{
+  const createScene=()=>FARADAY_SCENE3D.create($('scene3d'),{
     options:{heightScale:5000,pointSize:3,showVectors:true,vectorScaleSeconds:1000,colorScaleM:generalInput.seedFraction*generalInput.depthMm/1000 || generalInput.depthMm/1000},
     onError:e=>{$('sceneError').textContent=String(e.message||e);},
     onContextChange:status=>{paint=true;if(!status.lost)$('sceneError').textContent='';},
     onExportStatus:message=>{$('expNote').textContent=message;}
   });
-  function frameBytes(f){let n=0;for(const v of Object.values(f))if(ArrayBuffer.isView(v))n+=v.byteLength;return n;}
-  function show(f){current=f;scene.setFrame(f);paint=true;}
+  let renderer=null;
+  const scene=new Proxy({},{get(_target,key){const target=renderer||(renderer=createScene()),value=target[key];return typeof value==='function'?value.bind(target):value;}});
+  function frameBytes(f){let n=0;for(const v of Object.values(f)){if(ArrayBuffer.isView(v))n+=v.byteLength;else if(v!=null&&typeof v==='object')n+=2*JSON.stringify(v).length;else if(typeof v==='string')n+=2*v.length;}return n;}
+  function show(f){scene.setFrame(f);current=f;if($('scene3d').style)$('scene3d').style.visibility='';paint=true;}
   function update(){
     $('timeline').max=String(Math.max(0,frames.length-1));
     $('timeline').value=String(Math.max(0,frames.indexOf(current)));
+    $('timeline').disabled=!frames.length;$('liveView').disabled=!frames.length;
     $('replayToggle').disabled=frames.length<2;
     const replayLabel=playing?'Pause replay':'Play recorded frames';
     if($('replayToggle').textContent!==replayLabel)$('replayToggle').textContent=replayLabel;
     $('liveView').setAttribute('aria-pressed',String(following));
-    $('frameTime').textContent=current?`${current.initial?'Initial condition':following?'Live solver':'Recorded frame'} · ${(current.time*1000).toFixed(6)} ms · ${current.steps} steps`:'No valid frame';
+    $('frameTime').textContent=current?`${current.initial?'Initial condition':sourceMode==='native-recording'?'Native recorded frame':following?'Live solver':'Recorded frame'} · ${(current.time*1000).toFixed(6)} ms · ${current.steps} steps`:'No valid frame';
     $('historyNote').textContent=frames.length?`${frames.length} recorded frames · ${(frames[0].time*1000).toFixed(6)}–${(frames.at(-1).time*1000).toFixed(6)} ms · history limit 180 frames / 32 MiB`:'Waiting for computed frames';
+    $('previousNative').disabled=!current||frames.indexOf(current)<=0;
+    $('nextNative').disabled=!current||frames.indexOf(current)>=frames.length-1;
   }
-  function reset(f=null){frames=[];bytes=0;current=null;following=true;playing=false;replayStart=null;replaySpan=null;if(f)acceptFrame(f);else update();}
+  function reset(f=null){frames=[];bytes=0;current=null;following=true;playing=false;replayStart=null;replaySpan=null;if($('scene3d').style)$('scene3d').style.visibility='hidden';if(f)acceptFrame(f);else update();}
   function acceptFrame(f){
+    const native=f?.source?.engine==='native-cpp-recording';
+    if(native!==(sourceMode==='native-recording'))return false;
     if(!f || !Number.isFinite(f.time) || f.time<0 || !Number.isInteger(f.generation) || f.generation<0 || !Number.isInteger(f.steps) || f.steps<0)throw new Error('Invalid 3D observation metadata.');
     if(f.generation<generationFloor)return false;
     const last=frames.at(-1);
     if(last && f.generation===last.generation && f.time<last.time)throw new Error('A solver frame moved physical time backwards.');
     if(frameBytes(f)>BYTE_LIMIT)throw new Error('This observation exceeds the 32 MiB recorded-frame budget. No data was reduced.');
-    const stored=FARADAY_SCENE3D.captureFrame({...f,source:{...(f.provenance||f.source||{}),model:'nonlinear-incompressible-free-surface-navier-stokes',particleModel:'passive-fluid-tracers',fieldKind:f.initial?'initial-condition':'evolved-solver-frame',physicalTime:f.time,generation:f.generation,steps:f.steps}});
+    const stored=FARADAY_SCENE3D.captureFrame({...f,source:{...(native?f.source:(f.provenance||f.source||{})),model:'nonlinear-incompressible-free-surface-navier-stokes',particleModel:native?f.grainProvenance.model:'passive-fluid-tracers',fieldKind:f.initial?'initial-condition':'evolved-solver-frame',physicalTime:f.time,generation:f.generation,steps:f.steps}});
     if(frameBytes(stored)>BYTE_LIMIT)throw new Error('This observation exceeds the 32 MiB recorded-frame budget. No data was reduced.');
     if(last && f.generation!==last.generation)reset();
     if(f.generation!==generationFloor){
@@ -11612,7 +12098,9 @@ const UNIFIED3D = (() => {
     replaySpan={frames:frames.slice(),start:frames[0].time,end:frames.at(-1).time};
     show(replaySpan.frames[0]);update();
   }
-  function live(){following=true;playing=false;replayStart=null;replaySpan=null;if(frames.length)show(frames.at(-1));update();}
+  function live(){if(sourceMode==='native-recording'){if(frames.length)seek(0);return;}following=true;playing=false;replayStart=null;replaySpan=null;if(frames.length)show(frames.at(-1));update();}
+  function setSource(mode){if(!['fluid','native-recording'].includes(mode))throw new Error('Unknown frame source.');sourceMode=mode;generationFloor=-1;reset();}
+  function step(direction){if(frames.length)seek(Math.max(0,Math.min(frames.length-1,frames.indexOf(current)+direction)));}
   function tick(now){
     if(playing && replaySpan){
       if(replayStart===null)replayStart=now;
@@ -11639,13 +12127,110 @@ const UNIFIED3D = (() => {
     const canvas=await scene.exportCanvas(size,snap);
     lastExport=structuredClone(snap.provenance);
     return {canvas,scene:true,particles:snap.frame.particles.length/3,modes:0,pxPerWave:null,source:snap.provenance,
-      label:{diameterMm:snap.frame.R*2000,frequencyHz:snap.frame.source.parameters?.omegaD/(2*Math.PI)||freq,model:'navier-stokes',view:'3d',fieldTag:snap.frame.initial?'initial-t0':`t${snap.frame.time.toFixed(9)}s`}};
+      label:{diameterMm:snap.frame.R*2000,frequencyHz:(snap.frame.source.parameters?.omegaD??freq*2*Math.PI)/(2*Math.PI),model:snap.frame.source.engine==='native-cpp-recording'?'native-grain-fluid':'navier-stokes',view:'3d',fieldTag:snap.frame.initial?'initial-t0':`t${snap.frame.time.toFixed(9)}s`}};
   }
-  return {scene,acceptFrame,reset,seek,play,live,tick,captureExport,exportImage,
+  return {scene,acceptFrame,reset,seek,play,live,tick,captureExport,exportImage,setSource,step,
     currentFrame:()=>current?scene.snapshot().frame:null,
     lastExport:()=>lastExport?structuredClone(lastExport):null,
-    historyState:()=>({following,playing,bytes,limitFrames:FRAME_LIMIT,limitBytes:BYTE_LIMIT,frames:frames.map(f=>({time:f.time,generation:f.generation,steps:f.steps,initial:f.initial})),currentTime:current?.time??null})};
+    historyState:()=>({sourceMode,following,playing,bytes,limitFrames:FRAME_LIMIT,limitBytes:BYTE_LIMIT,frames:frames.map(f=>({time:f.time,generation:f.generation,steps:f.steps,initial:f.initial})),currentTime:current?.time??null})};
 })();
+const NATIVE_PLAYBACK = (() => {
+  let token=0,loading=false,header=null,total=0,failure=null,complete=false,fileName='',saved=null;
+  const controls=()=>document.querySelectorAll('#solverActions button,#f,#fnum,#anchors button,#expAccel,#parameterDetails input,#parameterDetails select,#parameterDetails button,#computeDetails button,#comparePaper,#referenceCell');
+  const hiddenBlocks=()=>[$('solverActions'),$('parameterDetails'),$('computeDetails'),$('modelDetails'),$('experimentError'),$('warnBox'),$('ro').closest('details'),$('generalAcceleration'),$('f').closest('.fld'),$('comparePaper').parentElement,$('referenceAtlas'),document.querySelector('footer')];
+  function enter(){
+    if(!nativeMode){
+      saved={options:UNIFIED3D.scene.options(),useSolver,pendingFrequency,simT,running,
+        disabled:new Map(Array.from(controls(),el=>[el,el.disabled])),
+        hidden:new Map([...new Set([...hiddenBlocks(),...document.querySelectorAll('[data-sand-only],[data-ns-only],[data-reference-control]')])].map(el=>[el,el.hidden])),
+        canvas:new Map(['scene3d','c','cgl'].map(id=>[$(id),{display:$(id).style.display,visibility:$(id).style.visibility}]))};
+    }
+    initialAutostart=false;pendingFrequency=null;CELL3D.reset();
+    nativeMode=true;useSolver=true;UNIFIED3D.setSource('native-recording');dirty=false;
+    document.querySelectorAll('[data-sand-only]').forEach(el=>{el.hidden=true;});
+    document.querySelectorAll('[data-ns-only]').forEach(el=>{el.hidden=false;});
+    $('scene3d').style.display='block';$('c').style.display='none';$('cgl').style.display='none';
+    for(const el of controls())el.disabled=true;
+    for(const el of hiddenBlocks())el.hidden=true;
+    for(const id of ['returnFluid','nativeStatus','nativeSteps','nativeDetails'])$(id).hidden=false;
+    $('recordingSource').textContent='Experimental native recording · coupled grains and fluid';
+    $('returnFluid').textContent=saved.useSolver?'Return to fluid solver':'Return to sand';
+    $('particleLabel').textContent='Physical grains';$('liveView').textContent='First stored frame';
+    $('nativeScope').textContent=FARADAY_NATIVE_RECORDING.SCOPE+' Playback shows saved solver states only. No interpolation or additional calculation. Radii remain physical metres; no grain magnification. Pressure is not included in this recording format.';
+    $('nativeParameters').textContent='Reading case provenance…';
+    $('scene3d').style.visibility='hidden';
+    UNIFIED3D.scene.setOptions({heightScale:1,surfaceOpacity:.25});
+    $('heightScale').value='1';$('surfaceOpacity').value='0.25';
+    $('sceneError').textContent='';
+  }
+  async function load(file){
+    if(!file||typeof file.stream!=='function')throw new TypeError('Choose a local native JSONL recording file.');
+    $('nativeImportError').textContent='';
+    const mine=++token;enter();loading=true;header=null;total=0;failure=null;complete=false;fileName=file.name||'native recording';
+    try{
+      for await(const event of FARADAY_NATIVE_RECORDING.iterateStream(file.stream(),{generation:0,maxFrameBytes:32*1024*1024})){
+        if(mine!==token)return;
+        if(event.type==='header'){
+          header=event.header;
+          $('nativeParameters').textContent=JSON.stringify({file:fileName,format:header.format,version:header.version,nativeFluidBytes:header.nativeFluidBytes,case:header.case},null,2);
+        }else if(event.type==='frame'){
+          UNIFIED3D.acceptFrame(event.frame);total++;$('scene3d').style.visibility='';
+        }else if(event.type==='error'){failure=event.message;complete=false;}
+        else if(event.type==='complete')complete=true;
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    }catch(error){if(mine===token){failure=String(error.message||error);complete=false;}}
+    finally{
+      if(mine===token){loading=false;if(total)UNIFIED3D.seek(0);tick(performance.now());}
+    }
+  }
+  function leave(){
+    ++token;loading=false;nativeMode=false;header=null;failure=null;total=0;complete=false;
+    UNIFIED3D.setSource('fluid');CELL3D.reset();
+    if(saved){
+      useSolver=saved.useSolver;pendingFrequency=saved.pendingFrequency;simT=saved.simT;running=saved.running;
+      for(const [el,value] of saved.disabled)el.disabled=value;
+      for(const [el,value] of saved.hidden)el.hidden=value;
+      for(const [el,style] of saved.canvas){el.style.display=style.display;el.style.visibility=style.visibility;}
+      UNIFIED3D.scene.setOptions(saved.options);
+      $('heightScale').value=String(saved.options.heightScale);$('surfaceOpacity').value=saved.options.surfaceOpacity==null?'':String(saved.options.surfaceOpacity);
+      $('vectorScale').value=String(saved.options.vectorScaleSeconds);$('surfaceColor').value=saved.options.colorMode;
+      for(const id of ['showParticles','showSurface','showVectors'])$(id).checked=saved.options[id];
+    }
+    saved=null;
+    for(const id of ['returnFluid','nativeStatus','nativeSteps','nativeDetails'])$(id).hidden=true;
+    $('recordingSource').textContent=useSolver?'Browser fluid solver · flow tracers':'Original sand visual model';
+    $('particleLabel').textContent='Flow tracers';$('liveView').textContent='Live solver';
+    $('solverOverlay').style.display='none';
+    $('sceneError').textContent='';$('nativeFile').value='';dirty=true;recompute();
+    if(!useSolver)t0=performance.now()-simT*1000;
+  }
+  function tick(now){
+    if(total&&UNIFIED3D.tick(now))FARADAY_STARTUP.ready();
+    const history=UNIFIED3D.historyState(),current=UNIFIED3D.scene.stats();
+    $('timeline').disabled=loading||!total;$('liveView').disabled=loading||!total;
+    if(loading){$('replayToggle').disabled=true;$('previousNative').disabled=true;$('nextNative').disabled=true;}
+    const status=loading?'Reading local recording':failure?'Failed / incomplete recording':complete?'Complete recording':'No complete recording';
+    $('nativeStatus').textContent=`${status} · ${fileName} · ${total} frames read, ${history.frames.length} retained${failure?' · '+failure:''}`;
+    $('solverStatus').textContent=`Native playback · ${history.playing?'playing saved frames':'paused'} · physical time ${history.currentTime==null?'—':history.currentTime.toPrecision(9)+' s'}`;
+    $('solverOverlay').style.display=failure||!total?'block':'none';
+    $('solverOverlay').textContent=failure?`Native recording failed: ${failure}${total?' · Last valid frames remain available.':''}`:loading?'Reading native recording…':'No valid native frame';
+    $('expBtn').disabled=exporting||loading||!total||!!$('sceneError').textContent;
+    if(header){
+      $('oF').textContent=header.case.drive.frequency;$('oD').textContent=(header.case.fluid.radius*2000).toFixed(3);
+      $('oR').textContent='recorded field';$('oRunit').textContent='';$('oPh').className='ph';
+      $('oPhT').textContent=current.initial?'native initial condition':'native coupled state';
+      $('oExp').textContent=`Recorded physical time ${history.currentTime==null?'—':(history.currentTime*1000).toFixed(6)+' ms'}`;
+      $('oMode').textContent=`${header.case.grains.length} physical grains · pinned rim · same native clock`;
+    }
+  }
+  return {load,leave,tick,status:()=>({active:nativeMode,loading,total,complete,failure,fileName,header:header?structuredClone(header):null})};
+})();
+$('importNative').addEventListener('click',()=>{$('nativeFile').value='';$('nativeFile').click();});
+$('nativeFile').addEventListener('change',()=>{if($('nativeFile').files[0])NATIVE_PLAYBACK.load($('nativeFile').files[0]).catch(error=>{$('nativeImportError').textContent=error.message;});});
+$('returnFluid').addEventListener('click',()=>NATIVE_PLAYBACK.leave());
+$('previousNative').addEventListener('click',()=>UNIFIED3D.step(-1));
+$('nextNative').addEventListener('click',()=>UNIFIED3D.step(1));
 $('topView').addEventListener('click',()=>UNIFIED3D.scene.topView());
 $('resetCamera').addEventListener('click',()=>UNIFIED3D.scene.resetCamera());
 for(const [id,option] of [['showParticles','showParticles'],['showSurface','showSurface'],['showVectors','showVectors']])
@@ -11653,11 +12238,12 @@ for(const [id,option] of [['showParticles','showParticles'],['showSurface','show
 for(const [id,option] of [['heightScale','heightScale'],['vectorScale','vectorScaleSeconds']])
   $(id).addEventListener('change',()=>{try{const value=Number($(id).value);if(!$(id).value.trim()||!Number.isFinite(value)||value<=0)throw new Error('Display scale must be a finite positive number.');UNIFIED3D.scene.setOptions({[option]:value});UNIFIED3D.scene.render();$('sceneError').textContent='';}catch(e){$('sceneError').textContent=e.message;}});
 $('surfaceColor').addEventListener('change',()=>{UNIFIED3D.scene.setOptions({colorMode:$('surfaceColor').value});UNIFIED3D.scene.render();});
+$('surfaceOpacity').addEventListener('change',()=>{try{const value=$('surfaceOpacity').value.trim()===''?null:Number($('surfaceOpacity').value);UNIFIED3D.scene.setOptions({surfaceOpacity:value});UNIFIED3D.scene.render();$('sceneError').textContent='';}catch(error){$('sceneError').textContent=error.message;}});
 $('timeline').addEventListener('input',()=>UNIFIED3D.seek(Number($('timeline').value)));
 $('replayToggle').addEventListener('click',()=>UNIFIED3D.play());
 $('liveView').addEventListener('click',()=>UNIFIED3D.live());
 $('seedParticles').addEventListener('click',()=>CELL3D.reseed());
-let initialAutostart = new URLSearchParams(location.search).get('paused') !== '1';
+let initialAutostart = new URLSearchParams(location.search).get('paused') !== '1' && solverDiagnostic;
 
 syncWorkspaceControls(); sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage

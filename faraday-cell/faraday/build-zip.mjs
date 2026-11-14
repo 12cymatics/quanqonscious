@@ -69,7 +69,8 @@ export const BUNDLE_ZIP = join(REPO, `${TOP}.zip`);
    git records the executable bit -- a bundle staged on two machines would
    otherwise differ in the one property nobody reads. */
 export const EXECUTABLE = new Set([
-  'run-checks.mjs', 'dns/build-wasm.sh', 'dns/build-wasm-cell3d.sh', 'dns/run-cell3d.mjs'
+  'run-checks.mjs', 'dns/build-wasm.sh', 'dns/build-wasm-cell3d.sh', 'dns/run-cell3d.mjs',
+  'native/build.sh', 'native/run-case.sh'
 ]);
 
 /* The modification time every file in the zip carries: 2026-01-01T00:00:00Z.
@@ -89,6 +90,7 @@ export const MANIFEST = [
   'faraday/kernel.js',
   'faraday/render-gl.js',
   'faraday/scene3d.js',
+  'faraday/native-recording.js',
   'faraday/benchmark.js',
   'faraday/reference.json',
   'faraday/build-standalone.mjs',
@@ -100,6 +102,7 @@ export const MANIFEST = [
   'faraday/check-unified-playback.mjs',
   'faraday/check-startup.mjs',
   'faraday/check-scene3d.mjs',
+  'faraday/check-native-recording.mjs',
   'faraday/check-standalone.mjs',
   'faraday/check-clean.mjs',
   'faraday/check-zip.mjs',
@@ -138,6 +141,33 @@ export const MANIFEST = [
   'dns/hessenberg-defective-24.json',
   'dns/PLAN-cell3d.md',
 
+  'native/README.md',
+  'native/TESTING.md',
+  'native/build.sh',
+  'native/run-case.sh',
+  'native/examples/single-sphere-verification.json',
+  'native/case-schema.mjs',
+  'native/prepare-case.mjs',
+  'native/run.cpp',
+  'native/memory-budget.hpp',
+  'native/fluid-runtime.hpp',
+  'native/fluid-runtime.cpp',
+  'native/rigid-types.hpp',
+  'native/rigid-contact.hpp',
+  'native/rigid-contact.cpp',
+  'native/rigid-interpolation.hpp',
+  'native/rigid-interpolation.cpp',
+  'native/rigid-coupler.hpp',
+  'native/rigid-coupler.cpp',
+  'native/check-case-schema.mjs',
+  'native/check-cli.mjs',
+  'native/check-fluid-runtime.mjs',
+  'native/check-fluid-runtime.cpp',
+  'native/check-coupler.mjs',
+  'native/check-coupler.cpp',
+  'native/check-contact.cpp',
+  'native/check-interpolation.cpp',
+
   'boundary/boundarykernel.js',
   'boundary/boundarykernel.test.js',
   'boundary/boundaries.html',
@@ -155,6 +185,7 @@ export const SUITES = [
   { name: 'faraday/check-playback.mjs',     file: 'faraday/check-playback.mjs' },
   { name: 'faraday/check-unified-playback.mjs', file: 'faraday/check-unified-playback.mjs' },
   { name: 'faraday/check-scene3d.mjs',      file: 'faraday/check-scene3d.mjs' },
+  { name: 'faraday/check-native-recording.mjs', file: 'faraday/check-native-recording.mjs' },
   { name: 'faraday/check-kernel.mjs',       file: 'faraday/check-kernel.mjs' },
   { name: 'faraday/check-general.mjs',      file: 'faraday/check-general.mjs' },
   { name: 'dns/check-surface-pressure.mjs', file: 'dns/check-surface-pressure.mjs' },

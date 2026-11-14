@@ -37,7 +37,17 @@
 // `step` reads AND those extended arrays, so the gate can compare all of them
 // and the two implementations cannot drift on any of it.
 
+#ifdef CELL3D_NATIVE
+#include <cstddef>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <vector>
+#endif
+
 extern "C" {
+
+#ifndef CELL3D_NATIVE
 
 /* Freestanding means no libc, and -O3 turns the zero-fill loops below into calls
    to memset. Supplying it here rather than importing it keeps the module with no
@@ -62,15 +72,55 @@ void* memcpy(void* dst, const void* src, unsigned long n){
   for (unsigned long i = 0; i < n; i++) d[i] = q[i];
   return dst;
 }
+#endif
 
 /* A value no effective gravity can be, so that a step run without JavaScript
    having set the drive's cos for this instant REFUSES instead of silently reusing
    the previous instant's. */
 #define CELL3D_GRAVITY_UNSET (-1.0e308)
 
+#ifdef CELL3D_NATIVE
+/* Each allocation owns stable storage. This changes storage, not arithmetic;
+   the WebAssembly build below retains its original fixed arena. The native
+   caller supplies a byte budget before initialization. Exceeding it refuses
+   the requested grid instead of reducing its resolution. */
+static std::vector<std::unique_ptr<double[]> > nativeDoubleBlocks;
+static std::vector<std::unique_ptr<int[]> > nativeIntBlocks;
+static std::size_t arenaUsed = 0, iarenaUsed = 0;
+static std::size_t nativeBytes = 0;
+static std::size_t nativeBudget = std::numeric_limits<std::size_t>::max();
+static bool nativeRigidProjection = false;
+static constexpr int nativeRadixResidue(int r, int t, int p){
+  return static_cast<int>((static_cast<long long>(r)*t) % p);
+}
+// Large prime radices can be legal grids even though r*t exceeds signed int.
+static_assert(nativeRadixResidue(50020,50020,50021)==1);
+static void nativeReserveBytes(std::size_t count, std::size_t width){
+  if (count > std::numeric_limits<std::size_t>::max()/width)
+    throw std::length_error("native fluid allocation byte count overflows size_t");
+  const std::size_t bytes = count*width;
+  if (bytes > nativeBudget || nativeBytes > nativeBudget - bytes)
+    throw std::length_error("native fluid arrays exceed the explicitly requested memory budget; grid unchanged");
+  nativeBytes += bytes;
+}
+static void nativeCheckDimensions(int a, int b, int c){
+  if (a < 4 || b < 8 || b % 2 || c < 4)
+    throw std::invalid_argument("native fluid grid requires nr>=4, even nth>=8, nz>=4");
+  const std::size_t limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  const std::size_t aa = static_cast<std::size_t>(a), bb = static_cast<std::size_t>(b), cc = static_cast<std::size_t>(c);
+  auto productFits = [limit](std::size_t x, std::size_t y){ return x <= limit/y; };
+  if (aa > limit-2 || cc > limit-2 || !productFits(aa+2,bb)
+      || !productFits((aa+1)*bb,cc) || !productFits(aa*bb,cc+1)
+      || !productFits(aa,cc) || !productFits((bb/2+1),aa*cc)
+      || !productFits((bb/2+1)*aa*cc,cc+1)
+      || aa+bb+cc > limit/400)
+    throw std::length_error("native fluid grid exceeds the existing solver's signed-index or band-preconditioner range; no coarser grid substituted");
+}
+#else
 static const int ARENA = 12000000;         // doubles; 96 MB
 static double arena[ARENA];
 static int   arenaUsed = 0;
+#endif
 
 /* 0 ok. 1 the arena is exhausted. 2 the conjugate gradient did not converge.
    3 the free surface has reached the floor, which is the one refusal the
@@ -116,14 +166,24 @@ static double *fRlo, *fRhi, *fT, *fS;
 /* The integer bracket tables. A separate arena because the doubles' one holds
    doubles: a reinterpreted slice would be a different alignment on a different
    target, and this costs four kilobytes. */
+#ifndef CELL3D_NATIVE
 static const int IARENA = 400000;
 static int iarena[IARENA];
 static int iarenaUsed = 0;
+#endif
 static int* itake(int n){
+#ifdef CELL3D_NATIVE
+  if (n < 0) throw std::length_error("negative native integer-array length");
+  nativeReserveBytes(static_cast<std::size_t>(n),sizeof(int));
+  auto block = std::make_unique<int[]>(static_cast<std::size_t>(n));
+  int* q = block.get(); nativeIntBlocks.push_back(std::move(block)); iarenaUsed += static_cast<std::size_t>(n);
+  return q;
+#else
   if (iarenaUsed + n > IARENA){ lastError = 1; return iarena; }
   int* q = iarena + iarenaUsed; iarenaUsed += n;
   for (int i = 0; i < n; i++) q[i] = 0;
   return q;
+#endif
 }
 
 /* Node geometry, one descriptor per staggered family -- the C++ face of
@@ -145,10 +205,18 @@ struct Fam {
 static Fam FAMP, FAMU, FAMV, FAMW;
 
 static double* take(int n){
+#ifdef CELL3D_NATIVE
+  if (n < 0) throw std::length_error("negative native floating-array length");
+  nativeReserveBytes(static_cast<std::size_t>(n),sizeof(double));
+  auto block = std::make_unique<double[]>(static_cast<std::size_t>(n));
+  double* q = block.get(); nativeDoubleBlocks.push_back(std::move(block)); arenaUsed += static_cast<std::size_t>(n);
+  return q;
+#else
   if (arenaUsed + n > ARENA){ lastError = 1; return arena; }
   double* q = arena + arenaUsed; arenaUsed += n;
   for (int i = 0; i < n; i++) q[i] = 0.0;
   return q;
+#endif
 }
 
 /* theta is periodic, so k wraps. Exactly the JavaScript's `kw`: the double
@@ -169,6 +237,11 @@ static inline int famIdx(const Fam& f, int a, int k, int b){
 int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
                 double R_, double h_, double rho_, double nu_,
                 double gamma__, double g_, double dth_){
+#ifdef CELL3D_NATIVE
+  nativeCheckDimensions(nr_,nth_,nz_);
+  nativeDoubleBlocks.clear(); nativeIntBlocks.clear(); nativeBytes = 0; iarenaUsed = 0;
+  nativeRigidProjection = false;
+#endif
   arenaUsed = 0; lastError = 0; errI = -1; errK = -1;
   nr = nr_; nth = nth_; nz = nz_; nw = nz_ + 1; pinned = pinned_;
   R = R_; h = h_; rho = rho_; nu = nu_; gamma_ = gamma__; gBase = g_; dth = dth_;
@@ -232,7 +305,11 @@ int    cell3d_error(){ return lastError; }
 int    cell3d_errorI(){ return errI; }
 int    cell3d_errorK(){ return errK; }
 void   cell3d_clearError(){ lastError = 0; errI = -1; errK = -1; }
+#ifdef CELL3D_NATIVE
+std::size_t cell3d_arenaUsed(){ return arenaUsed; }
+#else
 int    cell3d_arenaUsed(){ return arenaUsed; }
+#endif
 
 /* The pointers JavaScript writes the grid and the state through, and reads the
    metric back out of. A wasm32 `double*` IS a byte offset into this module's
@@ -404,6 +481,9 @@ int cell3d_len(int which){
    the same bracket. colValueAtZ was 38.5 per cent of a step before this table
    existed, and at the rim node that search walked the whole list. */
 void cell3d_buildFamilies(){
+#ifdef CELL3D_NATIVE
+  nativeBytes -= iarenaUsed*sizeof(int); nativeIntBlocks.clear();
+#endif
   iarenaUsed = 0;
   rbU[0] = 0.0;
   for (int i = 0; i < nr; i++) rbU[i+1] = rc[i];
@@ -597,6 +677,25 @@ int cell3d_refreshMetric(){
 
 /* ---- the projection ---------------------------------------------------- */
 
+#ifdef CELL3D_NATIVE
+/* Eliminate the dependent axis row before forming a constrained velocity's
+   divergence. This is the same single-valued-axis extrapolation used below;
+   its transpose must also be included in the native rigid-body projection. */
+static void nativeAxisOf(double* field){
+  const int half = nth >> 1;
+  const double r1 = rf[1], r2 = rf[2];
+  double* ex = axEx;
+  for (int j = 0; j < nz; j++){
+    for (int k = 0; k < nth; k++){
+      const double a = field[iu(1, k, j)], b = field[iu(2, k, j)];
+      ex[k] = a + (0 - r1)*(b - a)/(r2 - r1);
+    }
+    for (int k = 0; k < nth; k++)
+      field[iu(0, k, j)] = 0.5*(ex[k] - ex[kw(k + half)]);
+  }
+}
+#endif
+
 /* Net flux out of each cell, in the transformed coordinates:
       d_r(r H u) + d_theta(H v) + d_sigma(r Omega)
    integrated over the cell. Unnormalised, as in the JavaScript: the volume
@@ -690,6 +789,22 @@ static void gradientWithSurface(const double* q, double* ou, double* ov, double*
       }
     }
   }
+#ifdef CELL3D_NATIVE
+  if (nativeRigidProjection){
+    // If u_axis = C u_independent, the independent pressure adjoint is C^T
+    // times the raw axis contribution as well as the ordinary interior rows.
+    // Fold it before dividing by face masses; the axis has no independent mass.
+    const double A = rf[2]/(rf[2] - rf[1]);
+    const double B = -rf[1]/(rf[2] - rf[1]);
+    const int half = nth >> 1;
+    for (int k = 0; k < nth; k++)
+      for (int j = 0; j < nz; j++){
+        const double dual = 0.5*(ou[iu(0,k,j)] - ou[iu(0,k+half,j)]);
+        ou[iu(1,k,j)] += A*dual;
+        ou[iu(2,k,j)] += B*dual;
+      }
+  }
+#endif
   /* u at the axis and the rim is prescribed, so its gradient there is not solved
      for and is zeroed; the same for Omega on the floor. */
   for (int k = 0; k < nth; k++)
@@ -719,6 +834,9 @@ static void gradientWithSurface(const double* q, double* ou, double* ov, double*
       for (int j = 1; j <= nz; j++)
         ow[b + j] /= -(rc[i]*drc[i]*dth*Hc*dsf[j]);
     }
+#ifdef CELL3D_NATIVE
+  if (nativeRigidProjection) nativeAxisOf(ou);
+#endif
 }
 
 void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
@@ -833,7 +951,11 @@ static void cell3dFft(double* xr, double* xi, double* yr, double* yi, int L, int
           for (int t = 0; t < p; t++){
             for (int b = 0; b < nb; b++){ ar[b] = xr[ib + b]; ai[b] = xi[ib + b]; }
             for (int r = 1; r < p; r++){
+#ifdef CELL3D_NATIVE
+              const int tix = 2*sub*nativeRadixResidue(r,t,p), rb = ib + r*ist;
+#else
               const int tix = 2*sub*((r*t) % p), rb = ib + r*ist;
+#endif
               const double wr = C[tix], wi = sign*S[tix];
               for (int b = 0; b < nb; b++){
                 const double xr1 = xr[rb + b], xi1 = xi[rb + b];
@@ -1197,6 +1319,9 @@ static double colDerivAtZ(const double* f, const Fam& fam, int a, int k,
    m = 0 and every m >= 2, and wrong for exactly the one mode that is non-zero at
    the axis. */
 void cell3d_axisU(){
+#ifdef CELL3D_NATIVE
+  nativeAxisOf(u);
+#else
   const int half = nth >> 1;
   const double r1 = rf[1], r2 = rf[2];
   double* ex = axEx;
@@ -1208,6 +1333,7 @@ void cell3d_axisU(){
     for (int k = 0; k < nth; k++)
       u[iu(0, k, j)] = 0.5*(ex[k] - ex[kw(k + half)]);
   }
+#endif
 }
 
 /* ---- the surface's own quantities ------------------------------------- */
@@ -2084,7 +2210,11 @@ int cell3d_stepExplicit(int i0, int i1){
   return lastError;
 }
 
+#ifdef CELL3D_NATIVE
+int cell3d_nativePredictor(double dt){
+#else
 int cell3d_stepFinish(double dt){
+#endif
   if (!(dt > 0)){ lastError = 7; return lastError; }
   for (int i = 1; i < nr; i++)
     for (int k = 0; k < nth; k++)
@@ -2113,6 +2243,16 @@ int cell3d_stepFinish(double dt){
   cell3d_axisU();
   cell3d_omegaFromW();
 
+#ifdef CELL3D_NATIVE
+  return lastError;
+}
+
+/* The native rigid-grain solver eliminates pressure through this same fluid
+   projection while solving its coupled constraint system. Neither this hook
+   nor nativePredictor advances the surface. */
+int cell3d_nativeProject(double dt){
+  if (!(dt > 0)){ lastError = 7; return lastError; }
+#endif
   /* the projection, with the surface pressure as its Dirichlet value -- reason 1 */
   cell3d_divergence(u, v, om, divw);
   const double scale = rho/dt;
@@ -2151,6 +2291,13 @@ int cell3d_stepFinish(double dt){
   cell3d_axisU();
   cell3d_omegaFromW();
 
+#ifdef CELL3D_NATIVE
+  return lastError;
+}
+
+int cell3d_nativeAdvanceSurface(double dt){
+  if (!(dt > 0)){ lastError = 7; return lastError; }
+#endif
   /* eta on the corrected Omega at the surface, which IS dH/dt -- reason 3 above */
   for (int i = 0; i < nr; i++)
     for (int k = 0; k < nth; k++){
@@ -2165,6 +2312,14 @@ int cell3d_stepFinish(double dt){
   gEff = CELL3D_GRAVITY_UNSET;
   return lastError;
 }
+
+#ifdef CELL3D_NATIVE
+int cell3d_stepFinish(double dt){
+  if (cell3d_nativePredictor(dt)) return lastError;
+  if (cell3d_nativeProject(dt)) return lastError;
+  return cell3d_nativeAdvanceSurface(dt);
+}
+#endif
 
 int cell3d_step(double dt){
   if (cell3d_stepBegin(dt)) return lastError;

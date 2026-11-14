@@ -22,6 +22,7 @@ const SUITES = [
   {"name":"faraday/check-playback.mjs","file":"faraday/check-playback.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-unified-playback.mjs","file":"faraday/check-unified-playback.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-scene3d.mjs","file":"faraday/check-scene3d.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"faraday/check-native-recording.mjs","file":"faraday/check-native-recording.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-kernel.mjs","file":"faraday/check-kernel.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"faraday/check-general.mjs","file":"faraday/check-general.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-surface-pressure.mjs","file":"dns/check-surface-pressure.mjs","slow":false,"browser":false,"interpreter":null},

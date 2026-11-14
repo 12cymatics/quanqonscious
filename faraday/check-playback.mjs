@@ -20,7 +20,7 @@ const context = vm.createContext({
   $: id => ({ addEventListener: (event, handler) => listeners.set(`${id}:${event}`, handler) }),
   now: 1000,
 });
-vm.runInContext('let running = true, t0 = performance.now(), simT = 0, dirty = false, renderError = null, useSolver = false, exporting = false;', context);
+vm.runInContext('let running = true, t0 = performance.now(), simT = 0, dirty = false, renderError = null, useSolver = false, exporting = false, nativeMode = false;', context);
 vm.runInContext(handlers, context);
 vm.runInContext(releasePreview, context);
 vm.runInContext(clock + '} finally {} }', context);

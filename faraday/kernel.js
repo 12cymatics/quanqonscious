@@ -856,10 +856,9 @@ function resolvePatternState(o){
 
   const warnings = [];
   if (rim === 'pinned') warnings.push({ hard: false, text:
-    'Pinned contact line: the modal diagnostic is solved in a finite 128-term basis with Richardson extrapolation. '
+    'Pinned contact line: the modal field is solved in a finite 128-term basis with Richardson extrapolation. '
     + 'This is an approximate linear spectral calculation, not an exact continuum solution. '
-    + 'LIMIT: finite contact-line mobility and hysteresis are not computed. '
-    + 'Select 3D N-S for the separate nonlinear model.' });
+    + 'LIMIT: finite contact-line mobility and hysteresis are not computed.' });
   if (!experiment && cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!experiment && !cell.atlas) warnings.push({ hard: false, text:

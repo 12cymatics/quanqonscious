@@ -92,4 +92,64 @@ check('camera zoom changes perspective while recorded physical time stays unchan
   const b = S.projectPoint([0.5, 0.1, 0], { yaw: 0, elevation: 0, distance: 2 }, 1);
   close(b.x / a.x, 2); assert.equal(f.time, 0.01);
 });
+check('optional physical grain radii and their provenance survive an independent capture', () => {
+  const f = fixture(); f.particleRadii = new Float64Array([0.000125]);
+  f.grainProvenance = { geometry: 'sphere', units: { radius: 'm' } };
+  const saved = S.captureFrame(f);
+  f.particleRadii[0] = 10; f.grainProvenance.units.radius = 'pixels';
+  assert(saved.particleRadii instanceof Float64Array);
+  assert.equal(saved.particleRadii[0], 0.000125);
+  assert.equal(saved.grainProvenance.units.radius, 'm');
+  assert.equal(S.captureFrame(fixture()).particleRadii, null);
+  assert.equal(S.DEFAULT_OPTIONS.surfaceOpacity, null);
+});
+check('grain radius validation refuses malformed or nonphysical size data', () => {
+  for (const radii of [[], [0], [-0.1], [NaN], [Infinity], [0.0001, 0.0002]]) {
+    const f = fixture(); f.particleRadii = radii;
+    assert.throws(() => S.captureFrame(f), /radi|finite/);
+  }
+});
+check('native grain identities and rigid-body state remain independent and validated in snapshots', () => {
+  const f=fixture();f.particleRadii=new Float64Array([.000125]);f.grainIds=new Float64Array([7]);f.grainDensity=new Float64Array([2650]);
+  f.grainVelocities=new Float64Array([1,2,3]);f.grainAngularVelocities=new Float64Array([4,5,6]);
+  const saved=S.captureFrame(f);f.grainVelocities.fill(0);f.grainIds[0]=8;
+  assert.deepEqual(Array.from(saved.grainVelocities),[1,2,3]);assert.equal(saved.grainIds[0],7);
+  for(const [key,value] of [['grainIds',[-1]],['grainIds',[.5]],['grainDensity',[0]],['grainVelocities',[1,2]],['grainAngularVelocities',[0,Infinity,0]]])
+    assert.throws(()=>S.captureFrame({...f,[key]:value}),/grain|finite/);
+});
+check('finite spheres use metre-valued radii independent of surface display gain', () => {
+  const f = fixture(); f.particleRadii = new Float64Array([0.000125]);
+  const saved = S.captureFrame(f), r = S.displayedParticleRadii(saved)[0];
+  close(r * saved.R, 0.000125, 1e-11);
+  const a = S.displayedPositions(saved.particles, saved.particleDisplacement, saved, 1, false);
+  const b = S.displayedPositions(saved.particles, saved.particleDisplacement, saved, 5000, false);
+  assert.notEqual(a[1], b[1]);
+  assert.equal(S.displayedParticleRadii(saved)[0], r);
+  assert.equal(saved.particleRadii[0], 0.000125);
+});
+check('sphere billboard bounds are exact perspective tangents, including off-axis centres', () => {
+  const camera={yaw:0,elevation:0,distance:3,targetX:0,targetY:0}, f=1/Math.tan(42*Math.PI/360);
+  const radius=.1, bounds=S.projectedSphereBounds([0,0,0],radius,camera,1);
+  close(bounds.max[0],f*radius/Math.sqrt(9-radius*radius),1e-12);
+  close(bounds.min[0],-bounds.max[0],1e-12);
+  const centre=[.8,.4,.6], d=3-centre[2], off=S.projectedSphereBounds(centre,radius,camera,1.5);
+  for(let axis=0;axis<2;axis++)for(const edge of [off.min[axis],off.max[axis]]){
+    const m=edge/(axis?f:f/1.5), residual=(centre[axis]-m*d)**2-radius**2*(1+m*m);
+    close(residual,0,1e-12);
+  }
+  for(let j=0;j<=24;j++)for(let k=0;k<48;k++){
+    const phi=j*Math.PI/24,theta=k*2*Math.PI/48;
+    const p=[centre[0]+radius*Math.sin(phi)*Math.cos(theta),centre[1]+radius*Math.cos(phi),centre[2]+radius*Math.sin(phi)*Math.sin(theta)];
+    const q=S.projectPoint(p,camera,1.5);
+    assert(q.x>=off.min[0]-1e-7&&q.x<=off.max[0]+1e-7&&q.y>=off.min[1]-1e-7&&q.y<=off.max[1]+1e-7);
+  }
+  assert.deepEqual(S.projectedSphereBounds([0,0,2.95],.1,camera,1),{min:[-1,-1],max:[1,1]});
+});
+check('finite sphere silhouettes change with physical radius and perspective depth', () => {
+  const camera={yaw:0,elevation:0,distance:3,targetX:0,targetY:0};
+  const width=(r,z)=>S.projectPoint([r,0,z],camera,1).x-S.projectPoint([-r,0,z],camera,1).x;
+  close(width(0.1,0)/width(0.05,0),2);
+  close(width(0.05,1)/width(0.05,-1),2);
+  assert(S.projectPoint([0,0,0.1],camera,1).depth<S.projectPoint([0,0,0],camera,1).depth);
+});
 console.log(`${checks} scene geometry checks passed; WebGL interactions are checked in the browser suite.`);
