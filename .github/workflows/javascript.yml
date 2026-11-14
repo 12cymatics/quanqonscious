@@ -238,6 +238,8 @@ jobs:
       run: node dns/check-floquet-mode.mjs
     - name: Grains on the floor in a computed oscillatory flow
       run: node dns/check-grains.mjs
+    - name: Float-free 128-bit dyadic arithmetic
+      run: node dns/check-dyadic128.mjs
 
   # S13b. faraday-cell.zip is what a reader downloads, and the suites above run on the
   # checkout. faraday/check-zip.mjs unpacks a fresh build and runs the FAST suites from it,

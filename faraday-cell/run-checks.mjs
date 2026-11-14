@@ -34,6 +34,7 @@ const SUITES = [
   {"name":"dns/check-disc.mjs","file":"dns/check-disc.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-floquet-mode.mjs","file":"dns/check-floquet-mode.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-grains.mjs","file":"dns/check-grains.mjs","slow":false,"browser":false,"interpreter":null},
+  {"name":"dns/check-dyadic128.mjs","file":"dns/check-dyadic128.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-wasm-build.mjs","file":"dns/check-wasm-build.mjs","slow":false,"browser":false,"interpreter":null},
   {"name":"dns/check-cell3d.mjs","file":"dns/check-cell3d.mjs","slow":true,"browser":false,"interpreter":null},
   {"name":"dns/check-cell3d-wasm.mjs","file":"dns/check-cell3d-wasm.mjs","slow":true,"browser":false,"interpreter":null},
