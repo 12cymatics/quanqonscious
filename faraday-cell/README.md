@@ -10,14 +10,7 @@ standalone simulator, not a link or a launcher requiring Node. No installation
 is needed. A static attachment or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
 
-The app opens on the **Sand visualization**: the original modal visual model,
-with its assumed grain transport, separate from the fluid solver. Its
-re-sprinkle, pause and re-excite controls, render modes and image export work
-as before. The **3D Navier–Stokes** button at the top switches to the nonlinear
-solver's scene, and **Sand visualization** switches back; each keeps its own
-settings, and leaving the solver's scene pauses it.
-
-In the **3D Navier–Stokes** scene the free surface, sand-coloured
+The app opens one **3D Navier–Stokes** scene. Its free surface, sand-coloured
 flow tracers and velocity vectors share the same computed state and physical
 clock. Drag to orbit, scroll to zoom, and use the view controls to inspect the
 vessel from above or return to the initial camera. Surface and particle controls
@@ -29,8 +22,8 @@ server described below. Running from a folder does not itself accelerate the
 numerical solver. The 3D drawing requires WebGL2; all fluid calculations remain
 in double precision on the CPU.
 
-Choosing **3D Navier–Stokes** draws the specified initial surface at **t = 0**,
-then starts the nonlinear solver. **Pause/Resume** retains the computed fluid and particle state;
+The page draws the specified initial surface at **t = 0**, then starts the
+nonlinear solver. **Pause/Resume** retains the computed fluid and particle state;
 **Reset** returns to the initial condition and holds until **Run** is requested.
 Open with `?paused=1` to inspect the initial state before starting. The physical
 clock and measured wall time make progress visible. The C++ and JavaScript

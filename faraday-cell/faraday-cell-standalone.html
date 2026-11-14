@@ -40,6 +40,7 @@ header p b{color:var(--ink2);font-weight:500}
 .timelineBar .timeNote{grid-column:1/-1;color:var(--ink2);font-size:10px}
 #sceneError{color:var(--red)}
 #heightScale,#vectorScale{width:92px;background:var(--panel2);border:1px solid var(--edge2);padding:4px;color:var(--cy);font:inherit}
+[data-legacy]{display:none!important}
 @media(max-width:600px){.timelineBar{grid-template-columns:1fr 1fr}.timelineBar input{grid-column:1/-1}.sceneTools{gap:5px}}
 .ov{position:absolute;font-size:10px;color:var(--dim);text-shadow:0 1px 5px #000;pointer-events:none}
 .ov b{color:var(--cy);font-weight:600}
@@ -131,7 +132,7 @@ button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>Sand visualization and nonlinear liquid experiments</p>
+  <p>One fluid state · surface, particles and flow in 3D</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -147,13 +148,10 @@ globalThis.FARADAY_STARTUP = {
     status.style.color = 'var(--red)';
   },
   ready() {
-    if (this.failed) return;
+    if (this.drawn || this.failed) return;
     this.drawn = true;
     const status = document.getElementById('startupStatus');
-    const text = useSolver ? '3D cell ready. Surface and flow tracers share the nonlinear solver state.'
-      : 'Sand visualization ready. Choose 3D Navier–Stokes for the nonlinear liquid solver.';
-    if (status.textContent === text) return;
-    status.textContent = text;
+    status.textContent = '3D cell ready. Surface and flow tracers share the nonlinear solver state.';
     status.style.color = 'var(--grn)';
   }
 };
@@ -165,11 +163,11 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </script>
 
 <div class="workspaceBar">
-<div class="seg" id="workspaceSeg" aria-label="Workspace"><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
+<div class="seg" id="workspaceSeg" aria-label="Legacy diagnostic fixtures" hidden><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
 <div id="sandActions" class="workspaceActions" data-sand-only><button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button><button aria-pressed="true" class="btn" id="play" style="flex:1">running</button><button class="btn" id="reset" style="flex:1">re-excite</button></div>
-<div id="solverActions" class="workspaceActions" data-ns-only hidden><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset</button><button class="btn" id="seedParticles">Re-seed particles</button></div>
-<div class="sceneTools" data-ns-only hidden><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
-<div id="workspaceNote">Modal sand visualization · separate from the nonlinear liquid solver</div>
+<div id="solverActions" class="workspaceActions" data-ns-only><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset</button><button class="btn" id="seedParticles">Re-seed particles</button></div>
+<div class="sceneTools"><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
+<div id="workspaceNote">Surface and sand-coloured flow tracers · one Navier–Stokes state</div>
 <div id="solverStatus" role="status" data-ns-only hidden>Initial condition · t = 0 · not evolved</div>
 </div>
 <div class="rig">
@@ -189,16 +187,16 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 
   <div class="deck">
-<div class="fld" data-ns-only hidden><span class="lab">Layers · same fluid state</span><div class="sceneTools">
+<div class="fld"><span class="lab">Layers · same fluid state</span><div class="sceneTools">
 <label><input id="showParticles" type="checkbox" checked> Sand / flow tracers</label>
 <label><input id="showSurface" type="checkbox" checked> Surface</label>
 <label><input id="showVectors" type="checkbox" checked> Velocity vectors</label>
 </div></div>
-<div class="fld" data-ns-only hidden><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
-<div class="fld" data-ns-only hidden><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
-<div id="sceneError" role="alert" data-ns-only hidden></div>
-<div class="fld" data-sand-only>
-<span class="lab">render</span>
+<div class="fld"><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
+<div class="fld"><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
+<div id="sceneError" role="alert"></div>
+<div class="fld" data-legacy>
+<span class="lab">diagnostic render</span>
 <div class="seg" id="viewSeg">
 <button aria-pressed="true" data-v="sand">sand</button>
 <button aria-pressed="false" data-v="optical">optical</button>
@@ -283,20 +281,20 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <div class="seg" id="thrSeg"></div>
 </div></div></details>
 <details><summary>Drawing and model details</summary><div class="detailBody">
-<div class="fld" data-sand-only>
-<span class="lab">draw on</span>
+<div class="fld" data-legacy>
+<span class="lab">diagnostic draw on</span>
 <div class="seg" id="engSeg">
 <button aria-pressed="true" data-e="cpu">CPU</button>
 <button aria-pressed="false" data-e="gpu">GPU</button>
 </div>
 <div aria-live="polite" id="renderStatus" role="status">CPU drawing.</div>
-</div><p data-sand-only>Sand is the existing modal visualization, including its assumed grain-transport model. It is separate from the nonlinear liquid solver.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
-<label class="sceneTools" data-ns-only hidden>Velocity arrow scale (seconds) <input id="vectorScale" type="number" value="1000" min="0" step="any"></label><p data-ns-only hidden style="font-size:10px;color:var(--ink2);margin:0">Arrow length is velocity × this drawing scale, not a predicted trajectory.</p>
+</div><p data-sand-only>The retained modal functions are internal numerical diagnostics, not the displayed particle simulation.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
+<label class="sceneTools">Velocity arrow scale (seconds) <input id="vectorScale" type="number" value="1000" min="0" step="any"></label><p style="font-size:10px;color:var(--ink2);margin:0">Arrow length is velocity × this drawing scale, not a predicted trajectory.</p>
 <div id="experimentError" role="alert" style="color:var(--red)"></div><div id="warnBox" style="display:grid;gap:6px"></div><details><summary>State and diagnostics</summary><dl class="ro" id="ro"></dl></details>
   </div>
 </div>
 
-<div class="timelineBar" data-ns-only hidden><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div></div>
+<div class="timelineBar"><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div></div>
 <label style="display:block;padding:10px"><input type="checkbox" id="comparePaper"> Compare with the 2017 atlas (display only) <select id="referenceCell"><option value="medium">24.25 mm</option><option value="small">10.00 mm</option><option value="large">49.50 mm</option></select></label>
 <div class="atlas" id="referenceAtlas" hidden>
   <div class="atlas-hd">
@@ -327,7 +325,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   <p id="dnsNote"></p>
 </div>
 <footer>
-  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The Sand visualization is a separate modal visual model, not a fluid solution. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
+  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
 </footer>
 </div>
 <script>
@@ -9306,7 +9304,7 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'sand';
+let view = 'height';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -9580,8 +9578,8 @@ function drawAtlas(cellKey, f){
     + `<span><i style="background:#9B8CE0"></i>transition study</span>`;
 })();
 
-let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'free';
-let workspace = 'sand', experimentMode = 'reference', comparePaper = true, referenceCell = 'medium';
+let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
+let workspace = 'ns', experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
 let problemKey = null, resolutionKey = null, solverRequested = false;
 let running = true, t0 = performance.now(), simT = 0, state = null, dirty = true;
@@ -11429,7 +11427,7 @@ const CELL3D = (function(){
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = false;
+let useSolver = true;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
@@ -11493,7 +11491,7 @@ function syncWorkspaceControls(){
   $('cgl').style.display = !useSolver && renderEngine === 'gpu' ? 'block' : 'none';
   $('workspaceNote').textContent = useSolver
     ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
-    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+    : 'Internal modal diagnostic';
 }
 function switchWorkspace(next){
   if (!['sand','ns'].includes(next)) throw new Error('Unknown workspace: '+next);
