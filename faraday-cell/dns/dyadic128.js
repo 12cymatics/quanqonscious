@@ -181,6 +181,36 @@ function exp(a){
   return store(sum, Number(k) - FIX);
 }
 
+const HALF = store(1n, -1, 1n);
+
+function expm1(a){
+  if (a.m === 0n) return ZERO;
+  if (cmp(abs(a), HALF) > 0) return sub(exp(a), fromBigInt(1n));
+  const xf = toFix(a), one = POW2[FIX];
+  let sum = one, term = one, n = 2n;
+  while (term !== 0n){ term = ((term*xf) >> BigInt(FIX))/n; sum += term; n += 1n; }
+  return store(a.m*sum, a.e - FIX);
+}
+
+function tanh(a){
+  if (a.m === 0n) return ZERO;
+  if (a.m < 0n) return neg(tanh(neg(a)));
+  const t = expm1(scale2(a, 1));
+  return div(t, add(t, fromBigInt(2n)));
+}
+
+const DECIMAL = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
+function fromDecimal(text){
+  if (typeof text !== 'string') throw new TypeError('fromDecimal: a decimal string is required, so no float is read on the way in.');
+  const g = DECIMAL.exec(text);
+  if (!g) throw new RangeError(`fromDecimal: ${JSON.stringify(text)} is not a decimal number.`);
+  const frac = g[3] || '', exp10 = (g[4] ? Number(g[4]) : 0) - frac.length;
+  if (!Number.isSafeInteger(exp10) || Math.abs(exp10) > 100000) throw new RangeError(`fromDecimal: exponent of ${JSON.stringify(text)} is out of range.`);
+  let n = BigInt(g[2] + frac);
+  if (g[1] === '-') n = -n;
+  return exp10 >= 0 ? store(n*10n**BigInt(exp10), 0, 1n) : store(n, 0, 10n**BigInt(-exp10));
+}
+
 function toNumberForDisplay(a){
   if (a.m === 0n) return 0;
   const bl = bitLength(a.m), sh = Math.max(0, bl - 53);
@@ -190,7 +220,7 @@ function toNumberForDisplay(a){
 
 const DYADIC128 = Object.freeze({
   BITS, ZERO, ONE: fromBigInt(1n), store, fromBigInt, fromRational, add, sub, neg, abs, mul, div,
-  mulRat, scale2, cmp, sign, isZero, eq, sqrt, isqrt, pi, ln2, sin, cos, exp, bitLength,
+  mulRat, scale2, cmp, sign, isZero, eq, sqrt, isqrt, pi, ln2, sin, cos, exp, expm1, tanh, fromDecimal, bitLength,
   toNumberForDisplay
 });
 if (typeof module !== 'undefined' && module.exports) module.exports = DYADIC128;

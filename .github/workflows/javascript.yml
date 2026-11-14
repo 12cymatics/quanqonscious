@@ -242,6 +242,8 @@ jobs:
       run: node dns/check-dyadic128.mjs
     - name: The same arithmetic in WebAssembly, bit for bit, with no float instruction in the module
       run: node dns/check-dyadic128-wasm.mjs
+    - name: The disc solver in 128-bit integer arithmetic, against the float solver and the exact rational step
+      run: node dns/check-disc-d128.mjs
 
   # S13b. faraday-cell.zip is what a reader downloads, and the suites above run on the
   # checkout. faraday/check-zip.mjs unpacks a fresh build and runs the FAST suites from it,

@@ -111,7 +111,36 @@ console.log('6. sine, cosine and exp satisfy their identities to a few ulps');
   for (const [v, want, name] of signs) ok(D.sign(v) === want, `${name} (quadrant signs)`);
 }
 
-console.log('7. the representation never grows');
+console.log('7. expm1 and tanh against published digits and their series, with no cancellation near zero');
+{
+  const E = rat(27182818284590452353602874713526624977572470936999595749669676277n, 10n**64n);
+  const E2 = rat(E.n*E.n, E.d*E.d);
+  ok(within(D.expm1(D.ONE), rsub(E, rat(1n, 1n)), 2), 'expm1(1) = e - 1 within two ulps');
+  ok(within(D.tanh(D.ONE), rat(E2.n - E2.d, E2.n + E2.d), 4), 'tanh(1) = (e^2 - 1)/(e^2 + 1) within four ulps');
+  ok(within(D.tanh(D.fromRational(1n, 2n)), rat(E.n - E.d, E.n + E.d), 4), 'tanh(1/2) = (e - 1)/(e + 1) within four ulps');
+  const x = D.fromRational(1n, 1n << 40n), xr = ofDyadic(x);
+  const pow = k => rat(xr.n**BigInt(k), xr.d**BigInt(k));
+  const series = (terms) => terms.reduce((acc, [c, d, k]) => { const t = pow(k); return rat(acc.n*t.d*d + c*t.n*acc.d, acc.d*t.d*d); }, rat(0n, 1n));
+  ok(within(D.expm1(x), series([[1n, 1n, 1], [1n, 2n, 2], [1n, 6n, 3], [1n, 24n, 4], [1n, 120n, 5]]), 1), 'expm1(2^-40) matches its series to one ulp, where exp(x) - 1 would lose 40 bits');
+  ok(within(D.tanh(x), series([[1n, 1n, 1], [-1n, 3n, 3], [2n, 15n, 5]]), 1), 'tanh(2^-40) matches x - x^3/3 + 2x^5/15 to one ulp');
+  const y = D.fromRational(-7n, 5n);
+  ok(D.eq(D.tanh(y), D.neg(D.tanh(D.neg(y)))), 'tanh is exactly odd');
+}
+
+console.log('8. decimal strings enter exactly, and nothing else is accepted');
+{
+  const cases = [['0.1', rat(1n, 10n)], ['-1.0035510043427237e-6', rat(-10035510043427237n, 10n**22n)], ['998.2041322005837', rat(9982041322005837n, 10n**13n)],
+                 ['6.02214076e23', rat(602214076n*10n**15n, 1n)], ['9.80665', rat(980665n, 100000n)], ['7', rat(7n, 1n)]];
+  let bad = 0;
+  for (const [t, q] of cases) if (!nearest(D.fromDecimal(t), q) || !normal(D.fromDecimal(t))) bad++;
+  ok(bad === 0, `${cases.length} decimal strings, each the nearest 128-bit value to its exact rational (${bad} not)`);
+  let refused = 0;
+  for (const t of ['1e', 'abc', '', '1.2.3', ' 1', '0x10', '.5', 'Infinity', 'NaN']){ try { D.fromDecimal(t); } catch (e){ if (e instanceof RangeError) refused++; } }
+  let typeRefused = false; try { D.fromDecimal(0.1); } catch (e){ typeRefused = e instanceof TypeError; }
+  ok(refused === 9 && typeRefused, `nine malformed strings and a float argument are all refused (${refused} of 9)`);
+}
+
+console.log('9. the representation never grows');
 {
   let x = D.fromRational(1n, 3n), worst = 0;
   for (let k = 0; k < 5000; k++){ x = D.add(D.mulRat(x, 7n, 23n), D.fromRational(BigInt(k % 11), 13n)); worst = Math.max(worst, D.bitLength(x.m)); }
