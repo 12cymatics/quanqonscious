@@ -36,6 +36,9 @@ async function scenePixels(){
     return {width:canvas.width,height:canvas.height,spread:hi-lo,lit,hash:hash>>>0,renderer:gl.getParameter(gl.RENDERER)};
   });
 }
+const SAND_ONLY=['#play','#sprinkleBtn','#viewSeg','#engSeg','#rimSeg'];
+const NS_ONLY=['#runSolver','#resetCamera','#showParticles','#surfaceColor','#heightScale','#vectorScale','#replayToggle'];
+async function shown(selectors){return page.evaluate(s=>s.filter(id=>document.querySelector(id).getClientRects().length>0),selectors);}
 async function pause(){
   await page.locator('#pauseSolver').click();
   await page.waitForFunction(()=>{const c=CELL3D.clocks();return !c.live&&!c.pending&&!c.starting&&c.paused;},undefined,{timeout:30000});
@@ -65,15 +68,36 @@ try{
     await page.goto(scenario.url,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);
     assert.equal(page.url(),scenario.url);
-    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
+    await page.waitForFunction(()=>typeof simT!=='undefined'&&simT>0.5&&state&&!renderError&&FARADAY_STARTUP.drawn,undefined,{timeout:30000})
+      .catch(e=>{throw new Error('The page did not open on a running Sand visualization: '+e.message);});
+    const sand=await page.evaluate(()=>({workspace,experimentMode,rim,useSolver,view,running,solverRequested,
+      failed:FARADAY_STARTUP.failed,status:document.getElementById('startupStatus').textContent}));
+    const {status:sandStatus,...sandState}=sand;
+    assert.deepEqual(sandState,{workspace:'sand',experimentMode:'reference',rim:'free',useSolver:false,view:'sand',
+      running:true,solverRequested:false,failed:false},'The page did not open on the running Sand visualization');
+    assert.match(sandStatus,/^Sand visualization ready\./);
+    assert.equal(await page.locator('#workspaceSeg').isVisible(),true,'The Sand / 3D Navier–Stokes switch is not shown');
+    assert.equal(await page.locator('#c').isVisible(),true);assert.equal(await page.locator('#scene3d').isVisible(),false);
+    assert.deepEqual(await shown(SAND_ONLY),SAND_ONLY,'Sand controls are missing from the Sand visualization');
+    assert.deepEqual(await shown(NS_ONLY),[],'3D Navier–Stokes controls are shown in the Sand visualization');
+    const sandSpread=await page.locator('#c').evaluate(c=>{const p=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+      let lo=255,hi=0;for(let i=0;i<p.length;i+=4){lo=Math.min(lo,p[i]);hi=Math.max(hi,p[i]);}return hi-lo;});
+    assert(sandSpread>10,'The Sand canvas is blank');
+    const sandFrame=await page.locator('#c').evaluate(c=>c.toDataURL());
+    await page.waitForFunction(f=>document.getElementById('c').toDataURL()!==f,sandFrame,{timeout:15000});
+    await page.screenshot({path:resolve(out,scenario.name+'-sand.png'),fullPage:true});
+    results.push({name:scenario.name+'-moving-sand-on-entry',sand,sandSpread,passed:true});
+    await page.locator('#workspaceSeg [data-workspace="ns"]').click();
+    await page.waitForFunction(()=>useSolver&&typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
     assert.equal(await page.locator('#scene3d').isVisible(),true);
-    assert.equal(await page.locator('#workspaceSeg').isVisible(),false,'Separate Sand/NS workspaces are still exposed');
+    assert.deepEqual(await shown(NS_ONLY),NS_ONLY,'3D Navier–Stokes controls are missing from its workspace');
+    assert.deepEqual(await shown(SAND_ONLY),[],'Sand controls are shown in the 3D Navier–Stokes workspace');
     const initial=await page.evaluate(()=>({experimentMode,rim,useSolver,model:state.model,
       stats:UNIFIED3D.scene.stats(),drawn:FARADAY_STARTUP.drawn,failed:FARADAY_STARTUP.failed}));
     assert.equal(initial.experimentMode,'general');assert.equal(initial.rim,'pinned');assert.equal(initial.useSolver,true);
     assert.equal(initial.failed,false);assert(initial.stats.triangles>100,'No actual triangulated surface');
     const pixels=await scenePixels();assert(pixels.spread>10&&pixels.lit>100,'The 3D viewport is blank');
-    results.push({name:scenario.name+'-unified-3d-on-entry',initial,pixels,passed:true});
+    results.push({name:scenario.name+'-unified-3d-on-choosing-navier-stokes',initial,pixels,passed:true});
     await page.waitForFunction(()=>{const c=CELL3D.clocks(),f=UNIFIED3D.scene.stats();if(c.err)throw new Error(c.err);return c.have&&c.physT>0&&f.time===c.physT;},undefined,{timeout:90000});
     const first=await page.evaluate(()=>({clock:CELL3D.clocks(),stats:UNIFIED3D.scene.stats()}));
     assert.equal(first.stats.initial,false);assert.equal(first.stats.time,first.clock.physT);
@@ -97,6 +121,18 @@ try{
     await page.locator('#resetSolver').click();
     await page.waitForFunction(()=>{const c=CELL3D.clocks(),f=UNIFIED3D.scene.stats();return c.physT===0&&c.stepsDone===0&&f.initial&&f.time===0;});
     assert.match(await page.locator('#solverStatus').innerText(),/initial|not evolved/i);
+    await page.locator('#runSolver').click();
+    await page.waitForFunction(()=>{const c=CELL3D.clocks();if(c.err)throw new Error(c.err);return c.live&&c.physT>0;},undefined,{timeout:90000});
+    await page.locator('#workspaceSeg [data-workspace="sand"]').click();
+    await page.waitForFunction(()=>{const c=CELL3D.clocks();return !useSolver&&view==='sand'&&!c.live&&!c.pending&&!c.starting;},undefined,{timeout:30000})
+      .catch(e=>{throw new Error('Leaving 3D Navier–Stokes did not pause the solver: '+e.message);});
+    const left=await page.evaluate(()=>({t:simT,physT:CELL3D.clocks().physT,steps:CELL3D.clocks().stepsDone}));
+    await page.waitForFunction(t=>simT>t+0.3,left.t,{timeout:15000});
+    assert.deepEqual(await page.evaluate(()=>({physT:CELL3D.clocks().physT,steps:CELL3D.clocks().stepsDone})),
+      {physT:left.physT,steps:left.steps},'The solver kept integrating behind the Sand visualization');
+    assert.equal(await page.locator('#c').isVisible(),true);assert.equal(await page.locator('#scene3d').isVisible(),false);
+    assert.match(await page.locator('#startupStatus').innerText(),/^Sand visualization ready\./);
+    results.push({name:scenario.name+'-back-to-moving-sand',left,passed:true});
     assert.deepEqual(pageErrors,[],`${scenario.name} runtime errors`);
     results.push({name:scenario.name+'-resume-reset-and-console',passed:true,errors:pageErrors});
     await context.close();page=null;
@@ -113,7 +149,7 @@ try{
   }catch(e){errors.push('Failure capture: '+String(e));}
 }finally{
   if(browser)await browser.close();await new Promise(r=>server.close(r));
-  const scope='One evolving pinned nonlinear state in an interactive depth-tested 3D viewport; shared particle/solver timestamps; actual pause/resume/reset; '
+  const scope='Moving Sand visualization on entry; one evolving pinned nonlinear state in an interactive depth-tested 3D viewport; shared particle/solver timestamps; actual pause/resume/reset; '
     +(transport==='file'?'includes file:// opening':'explicit HTTP scope; file:// not validated');
   await writeFile(resolve(out,'results.json'),JSON.stringify({engine:engineName,transport,scope,results,errors},null,2));
   console.log(JSON.stringify({engine:engineName,transport,scope,results,errors},null,2));

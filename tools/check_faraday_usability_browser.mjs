@@ -5,8 +5,8 @@ import { resolve, extname, sep, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium, webkit } from 'playwright';
 
-// This gate exercises the delivered 3D scene and a real default 4K download.
-// It never substitutes a modal field, mock solver, tiny export, or synthetic click.
+// This gate exercises the delivered Sand visualization and 3D scene, each with a real default 4K download.
+// It never substitutes a modal field for the solver, a mock solver, a tiny export, or a synthetic click.
 const root=resolve(process.argv[2]||'faraday-cell');
 const entry=process.env.FARADAY_QA_ENTRY||'index.html';
 const engineName=process.env.FARADAY_BROWSER||'chromium',engine={chromium,webkit}[engineName];
@@ -36,6 +36,13 @@ async function pixels(){return page.locator('#scene3d').evaluate(canvas=>{
   for(let i=0;i<rgba.length;i+=4){hash=Math.imul(hash^rgba[i],16777619);lo=Math.min(lo,rgba[i]);hi=Math.max(hi,rgba[i]);if(rgba[i]+rgba[i+1]+rgba[i+2]>100)lit++;}
   return{width:canvas.width,height:canvas.height,hash:hash>>>0,spread:hi-lo,lit};
 });}
+async function sandPixels(){return page.locator('#c').evaluate(canvas=>{
+  const a=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;let lo=255,hi=0,hash=2166136261;
+  for(let i=0;i<a.length;i+=4){lo=Math.min(lo,a[i]);hi=Math.max(hi,a[i]);hash=Math.imul(hash^a[i],16777619);}
+  return{width:canvas.width,height:canvas.height,spread:hi-lo,hash:hash>>>0};
+});}
+async function sandSettings(){return page.evaluate(()=>({experimentMode,cellKey,freq,amp,temp,depth,rim,view,
+  generalInput:JSON.parse(JSON.stringify(generalInput))}));}
 async function physics(){return page.evaluate(()=>{
   function hash(array){const bytes=new Uint8Array(array.buffer,array.byteOffset,array.byteLength);let h=2166136261;for(const b of bytes)h=Math.imul(h^b,16777619);return h>>>0;}
   const f=UNIFIED3D.currentFrame(),c=CELL3D.clocks();
@@ -84,9 +91,99 @@ try{
     console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}`}));
     await page.goto(`${origin}/${entry}`,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);assert.equal(new URL(page.url()).pathname,'/'+entry);
-    await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
-    assert.equal(await page.locator('#scene3d').isVisible(),true);
-    assert.equal(await page.locator('#workspaceSeg').isVisible(),false,'The rejected separate workspaces remain visible');
+    await page.waitForFunction(()=>typeof state!=='undefined'&&state&&!dirty&&!useSolver&&view==='sand'&&ETA.some(v=>v!==0));
+    for(const selector of ['#viewSeg [data-v="sand"]','#play','#sprinkleBtn'])assert.equal(await page.locator(selector).isEnabled(),true,`${selector} is disabled on entry`);
+    assert.equal(await page.locator('#solverOverlay').isVisible(),false);assert.equal(await page.locator('#scene3d').isVisible(),false);
+    const sandInitial=await sandPixels();assert(sandInitial.spread>10,'The initial sand picture is blank');
+    const sandControls=await visibleControls(['#workspaceSeg','#fnum','#play','#sprinkleBtn']);
+    await page.screenshot({path:join(out,scenario.name+'-initial-sand.png')});
+    record('visible-sand-on-entry-with-reachable-controls',{initial:sandInitial,controls:sandControls});
+    const grains=await page.evaluate(()=>Array.from(PX.slice(0,1024)));
+    await page.waitForFunction(before=>PX.slice(0,before.length).some((x,i)=>x!==before[i]),grains);
+    await page.waitForFunction(before=>{const c=document.getElementById('c'),a=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+      let h=2166136261;for(let i=0;i<a.length;i+=4)h=Math.imul(h^a[i],16777619);return(h>>>0)!==before;},sandInitial.hash);
+    record('real-grains-and-visible-picture-move');
+
+    if(scenario.name==='desktop'){
+      if(process.env.FARADAY_QA_EXPORT_SIZE)await page.locator(`#expSeg [data-s="${process.env.FARADAY_QA_EXPORT_SIZE}"]`).click();
+      const size=Number(await page.locator('#expSeg [aria-pressed="true"]').getAttribute('data-s'));
+      if(!process.env.FARADAY_QA_EXPORT_SIZE)assert.equal(size,3840,'The default 4K export changed');
+      const downloadPromise=page.waitForEvent('download',{timeout:600000}).then(download=>({download}),error=>({error}));
+      const start=Date.now(),perfStart=await page.evaluate(()=>{__qaExportHeartbeat={count:0,last:null,maxGap:0};__qaExportMeasure=true;return performance.now();});
+      await page.locator('#expBtn').click({timeout:600000});const result=await downloadPromise;if(result.error)throw result.error;
+      const download=result.download;assert.equal(await download.failure(),null);
+      await page.waitForFunction(()=>!exporting,undefined,{timeout:600000});
+      const perfEnd=await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        __qaExportMeasure=false;resolve(performance.now());
+      }))));
+      const feedback=await page.evaluate(({start,end})=>({frames:__qaExportFrames.filter(x=>x.time>=start&&x.time<=end),heartbeat:{...__qaExportHeartbeat},
+        longestTaskMs:Math.max(0,...__qaExportLongTasks.filter(x=>x.start>=start&&x.start<=end).map(x=>x.duration))}),{start:perfStart,end:perfEnd});
+      await page.evaluate(()=>{__qaExportHeartbeat={count:0,last:null,maxGap:0};});
+      assert(feedback.frames.length>0,'The Sand export never displayed progress on an animation frame');
+      assert(feedback.frames[0].time-perfStart<2000,'The Sand export did not paint progress within two seconds');
+      assert(feedback.heartbeat.count>10&&feedback.heartbeat.maxGap<1000,`The Sand export blocked animation-frame feedback: ${JSON.stringify(feedback.heartbeat)}`);
+      const path=join(out,`sand-${size}.png`);await download.saveAs(path);const png=await readFile(path);
+      assert.deepEqual(Array.from(png.subarray(0,8)),[137,80,78,71,13,10,26,10]);
+      const decoded=await page.evaluate(async encoded=>{
+        const image=new Image();image.src='data:image/png;base64,'+encoded;await image.decode();
+        const c=document.createElement('canvas');c.width=image.naturalWidth;c.height=image.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);
+        const p=ctx.getImageData(0,0,c.width,c.height).data;let lo=255,hi=0,lit=0;
+        for(let i=0;i<p.length;i+=4){lo=Math.min(lo,p[i]);hi=Math.max(hi,p[i]);if(p[i]>40)lit++;}
+        return{width:c.width,height:c.height,spread:hi-lo,lit};
+      },png.toString('base64'));
+      assert.equal(decoded.width,size);assert.equal(decoded.height,size);
+      assert(decoded.spread>10&&decoded.lit>10000,'Downloaded PNG decodes but contains no meaningful sand picture');
+      assert.match(download.suggestedFilename(),new RegExp(`sand.*${size}.*\\.png$`,'i'));
+      record('real-sand-export-downloads-and-decodes',{size,bytes:png.length,decoded,durationMs:Date.now()-start,filename:download.suggestedFilename(),feedback});
+    }
+
+    await page.locator('#play').click();
+    await page.waitForFunction(()=>running===false&&document.getElementById('play').getAttribute('aria-pressed')==='false'
+      &&document.getElementById('play').textContent==='paused',undefined,{timeout:5000});
+    const paused=await page.evaluate(()=>({simT,positions:Array.from(PX.slice(0,1024))}));
+    await page.waitForTimeout(500);
+    assert.deepEqual(await page.evaluate(()=>({simT,positions:Array.from(PX.slice(0,1024))})),paused,'Pause did not freeze the sand');
+    await page.locator('#viewSeg [data-v="height"]').click();
+    await page.waitForFunction(()=>view==='height'&&!dirty);
+    const heightBefore=await sandPixels(),fieldBefore=await page.evaluate(()=>Array.from(ETA));
+    await page.locator('#fnum').fill('56');await page.locator('#fnum').press('Tab');
+    await page.waitForFunction(()=>freq===56&&!dirty&&!renderError);
+    assert.equal(await page.locator('#f').inputValue(),'56');
+    const changed=await page.evaluate(before=>ETA.reduce((n,v,i)=>n+(v!==before[i]),0),fieldBefore);
+    assert(changed>100,'Frequency changed the label but not the actual field');
+    const heightAfterFrequency=await sandPixels();
+    assert.notEqual(heightAfterFrequency.hash,heightBefore.hash,'Frequency did not redraw the paused height field');
+    await page.locator('#phaseSeg [data-p="-1"]').click();
+    await page.waitForFunction(()=>phaseSign===-1&&!dirty);
+    assert.notEqual((await sandPixels()).hash,heightAfterFrequency.hash,'Phase did not redraw the paused height field');
+    assert.deepEqual(await page.evaluate(()=>({simT,positions:Array.from(PX.slice(0,1024))})),paused,'Drawing controls advanced paused grains or time');
+    await page.locator('#phaseSeg [data-p="1"]').click();
+    await page.locator('#viewSeg [data-v="sand"]').click();
+    await page.waitForFunction(()=>view==='sand'&&!dirty);
+    const beforeSprinkle=await sandPixels();
+    await page.locator('#sprinkleBtn').click();
+    await page.waitForFunction(before=>PX.slice(0,before.length).reduce((n,v,i)=>n+(v!==before[i]),0)>100,paused.positions,{timeout:5000});
+    const sprinkled=await page.evaluate(()=>Array.from(PX.slice(0,1024)));
+    await page.waitForTimeout(200);
+    assert.notEqual((await sandPixels()).hash,beforeSprinkle.hash,'Re-sprinkle did not redraw while paused');
+    assert.deepEqual(await page.evaluate(()=>({simT,positions:Array.from(PX.slice(0,1024))})),{simT:paused.simT,positions:sprinkled});
+    const resumeWall=Date.now();await page.locator('#play').click();
+    await page.waitForFunction(t=>running&&simT>t,paused.simT);
+    assert((await page.evaluate(()=>simT))-paused.simT<=(Date.now()-resumeWall)/1000+.15,'Sand resume includes elapsed paused time');
+    record('paused-frequency-phase-and-resprinkle-redraw-without-advancing-grains',{changed});
+    const views=[];
+    for(const name of ['height','optical','nodal','sand']){
+      await page.locator(`#viewSeg [data-v="${name}"]`).click();
+      await page.waitForFunction(name=>view===name&&!dirty&&!renderError,name);
+      const image=await sandPixels();assert(image.spread>10,`${name} rendering is blank`);views.push({name,...image});
+    }
+    assert(new Set(views.map(v=>v.hash)).size===views.length,'Render controls produced the same image');
+    record('frequency-changes-field-and-all-render-views-work',{views});
+    const sandBefore=await sandSettings();
+
+    await page.locator('#workspaceSeg [data-workspace="ns"]').click();
+    await page.waitForFunction(()=>useSolver&&typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
+    assert.equal(await page.locator('#scene3d').isVisible(),true);assert.equal(await page.locator('#c').isVisible(),false);
     const initial=await page.evaluate(()=>({useSolver,experimentMode,rim,model:state.model,stats:UNIFIED3D.scene.stats()}));
     assert.equal(initial.useSolver,true);assert.equal(initial.experimentMode,'general');assert.equal(initial.rim,'pinned');
     assert(initial.stats.triangles>100&&initial.stats.surfaceVertices>100,'The scene contains no actual 3D surface mesh');
@@ -95,7 +192,7 @@ try{
       const r=document.querySelector(selector).getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom};
     }));
     assert(captions[0].bottom<=captions[1].y||captions[1].bottom<=captions[0].y||captions[0].right<=captions[1].x||captions[1].right<=captions[0].x,'Scene captions overlap');
-    const controls=await visibleControls(['#runSolver','#pauseSolver','#resetSolver']);
+    const controls=await visibleControls(['#workspaceSeg','#runSolver','#pauseSolver','#resetSolver']);
     await page.screenshot({path:join(out,scenario.name+'-unified-entry.png')});
     record('single-nonlinear-scene-with-reachable-shared-controls',{initial,picture,controls,captions});
 
@@ -241,6 +338,19 @@ try{
     await page.waitForTimeout(400);assert.deepEqual(await physics(),reset,'Reset did not hold the inspectable initial state');
     await page.locator('#runSolver').click();await page.waitForFunction(()=>{const c=CELL3D.clocks();if(c.err)throw new Error(c.err);return c.have&&c.physT>0;},undefined,{timeout:90000});
     await pause();record('reset-and-run-apply-to-the-whole-simulation',{reset});
+    const fluid=async()=>{const{input,frequency,...state}=await physics();return state;};
+    const solverLeft=await fluid();
+    await page.locator('#workspaceSeg [data-workspace="sand"]').click();
+    await page.waitForFunction(()=>!useSolver&&!dirty&&view==='sand');
+    const sandAfter=await sandSettings();
+    for(const key of Object.keys(sandBefore))assert.deepEqual(sandAfter[key],sandBefore[key],`Switching workspace changed Sand ${key}`);
+    assert.equal(await page.locator('#c').isVisible(),true);assert.equal(await page.locator('#scene3d').isVisible(),false);
+    const back=await page.evaluate(()=>Array.from(PX.slice(0,1024)));
+    await page.waitForFunction(before=>PX.slice(0,before.length).some((x,i)=>x!==before[i]),back);
+    assert.deepEqual(await fluid(),solverLeft,'The Sand visualization advanced or changed the fluid state');
+    await visibleControls(['#workspaceSeg','#fnum','#play','#sprinkleBtn']);
+    await page.screenshot({path:join(out,scenario.name+'-returned-to-sand.png')});
+    record('workspaces-keep-independent-settings-and-return-to-moving-sand',{sandBefore});
     assert.deepEqual(pageErrors,[],`${scenario.name} runtime errors`);record('console-and-page-health',{errors:pageErrors});
     await context.close();page=null;
   }
@@ -252,7 +362,7 @@ try{
   }catch(e){failures.push('Failure capture: '+String(e));}
 }finally{
   if(browser)await browser.close();await new Promise(r=>server.close(r));
-  const scope='HTTP desktop/mobile: one nonlinear 3D fluid/particle state, true camera and visual layers, actual solved motion, pause/resume/reset, real same-state 4K export; not sediment-contact validation';
+  const scope='HTTP desktop/mobile: moving Sand visualization on entry with real controls and 4K export; one nonlinear 3D fluid/particle state, true camera and visual layers, actual solved motion, pause/resume/reset, real same-state 4K export; not sediment-contact validation';
   await writeFile(join(out,'results.json'),JSON.stringify({engine:engineName,scope,results,failures},null,2));
   console.log(JSON.stringify({engine:engineName,scope,results,failures},null,2));
 }

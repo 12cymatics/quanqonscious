@@ -303,7 +303,7 @@ export function stripPage(html){
    failure is cut to the failure's name, and the reason goes to the browser console. */
 export const PROSE_EDITS = [
   ['the subtitle under the title',
-   "\n  <p>One fluid state · surface, particles and flow in 3D</p>", ''],
+   "\n  <p>Sand visualization and nonlinear liquid experiments</p>", ''],
   ['the example-input explanation',
    '<span style="font-size:10px;color:var(--ink2)">Initial values are editable examples, not measurements.</span>',
    '<span style="font-size:10px;color:var(--ink2)">Editable examples · not measurements</span>'],
@@ -319,16 +319,16 @@ export const PROSE_EDITS = [
   ['the model scope explanation',
    'One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.',
    'Incompressible Newtonian liquid · rigid cylinder · pinned rim · no-slip floor and wall · passive flow tracers · no sediment settling, friction, collisions or fluid feedback · display-only magnification · editable examples'],
-  ['the retained diagnostic explanation',
-   'The retained modal functions are internal numerical diagnostics, not the displayed particle simulation.',
-   'Internal modal diagnostics'],
+  ['the sand model explanation',
+   'Sand is the existing modal visualization, including its assumed grain-transport model. It is separate from the nonlinear liquid solver.',
+   'Modal visualization · assumed grain transport · separate from nonlinear liquid solver'],
   ['the startup box\'s sentence before the page runs; the box stays, hidden until a failure',
    "<div id=\"startupStatus\" role=\"status\" style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>",
    "<div id=\"startupStatus\" role=\"status\" hidden style=\"padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6\"></div>"],
   ['the paragraph for a browser without JavaScript', "\n<noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>", ''],
   ['the startup failure\'s sentence', "    status.textContent = 'Simulation error: ' + String(error && error.message || error)\n      + '. No substitute simulation has been loaded. Reload after resolving this error.';",
    "    console.error(error);\n    status.textContent = 'simulation error';\n    status.hidden = false;"],
-  ['the sentence once the canvas draws', "\n    const status = document.getElementById('startupStatus');\n    status.textContent = '3D cell ready. Surface and flow tracers share the nonlinear solver state.';\n    status.style.color = 'var(--grn)';", ''],
+  ['the sentence once the canvas draws', "\n    const status = document.getElementById('startupStatus');\n    const text = useSolver ? '3D cell ready. Surface and flow tracers share the nonlinear solver state.'\n      : 'Sand visualization ready. Choose 3D Navier–Stokes for the nonlinear liquid solver.';\n    if (status.textContent === text) return;\n    status.textContent = text;\n    status.style.color = 'var(--grn)';", ''],
   ['the sentence while the page starts', "\ndocument.getElementById('startupStatus').textContent = 'Starting the simulator\u2026';", ''],
   ['the Navier-Stokes panel\'s opening paragraph',
    "\n  <p>This optional modal diagnostic compares onset from a damped Mathieu form — one amplitude equation, with\n"
@@ -352,7 +352,7 @@ export const PROSE_EDITS = [
    + "         + `reported in its place.`);",
    "console.error(err); $('dnsOut').innerHTML = cell('verdict', '<b>did not run</b>');"],
   ['the footer',
-   "<footer>\n  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.\n"
+   "<footer>\n  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The Sand visualization is a separate modal visual model, not a fluid solution. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.\n"
    + "</footer>\n", ''],
   ['the warnings',
    "  $('warnBox').innerHTML = s.warnings.map(w =>\n"
@@ -394,13 +394,13 @@ export const PROSE_EDITS = [
    anywhere in the built page. Held separately from the edits so that a check of the
    output does not merely restate the edit that produced it. */
 export const REMOVED_PROSE = [
-  'One fluid state · surface, particles and flow in 3D', 'Not started. Open index.html', 'This simulator requires JavaScript',
-  'No substitute simulation has been loaded', '3D cell ready. Surface and flow tracers share', 'Starting the simulator', 'This optional modal diagnostic compares onset', 'General nonlinear experiments use the entered SI properties',
+  'Sand visualization and nonlinear liquid experiments', 'Not started. Open index.html', 'This simulator requires JavaScript',
+  'No substitute simulation has been loaded', 'Sand visualization ready', '3D cell ready. Surface and flow tracers share', 'Starting the simulator', 'This optional modal diagnostic compares onset', 'General nonlinear experiments use the entered SI properties',
   'Initial values are editable examples', 'Kinematic viscosity is μ/ρ',
   'Display only. Set 1 for physical proportions.',
   'Arrow length is velocity × this drawing scale',
   'One incompressible Newtonian liquid in a rigid circular cylinder',
-  'The retained modal functions are internal numerical diagnostics',
+  'Sand is the existing modal visualization',
   'Choose CPU to draw there', 'GPU unavailable: ', 'no atlas for this diameter',
   'Higher atmospheric pressure favoured', 'above flicker fusion', 'saves through the viewer',
   'saving unavailable in this view', "'saves to disk'", "'export failed: '",

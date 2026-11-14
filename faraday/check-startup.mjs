@@ -9,13 +9,41 @@ assert(html.includes('Not started. Open index.html in a full browser'), 'static 
 assert(html.includes('<noscript>'), 'JavaScript-disabled browsers receive an explicit notice');
 assert(html.includes('name="viewport"'), 'mobile viewport is declared');
 assert(html.includes('<canvas id="scene3d"'), 'the interactive three-dimensional canvas exists');
-assert.match(html, /let useSolver = true;/, 'the visible application starts from nonlinear state');
+assert.match(html, /^let useSolver = false;$/m, 'the visible application opens on the Sand visualization');
+assert.match(html, /^let view = 'sand';$/m, 'the opening render is sand');
+assert.match(html, /<div class="seg" id="workspaceSeg" aria-label="Workspace">/, 'the Sand / 3D Navier–Stokes switch is shown');
 const readinessStart = html.indexOf('  if(useSolver){\n    if(UNIFIED3D.tick(now)){');
 const readinessEnd = html.indexOf('}else FARADAY_STARTUP.ready();', readinessStart);
 assert(readinessStart >= 0 && readinessEnd > readinessStart, 'the loop gates startup on the real scene draw');
 const readiness = html.slice(readinessStart, readinessEnd + '}else FARADAY_STARTUP.ready();'.length);
 const autostart = html.match(/let initialAutostart = new URLSearchParams\(location.search\)[^;]+;/);
 assert(autostart, 'the page supplies an explicit initial-state inspection option');
+{
+  const sandStatus = { textContent: '', style: {} }, sandCalls = [];
+  const sand = vm.createContext({
+    document: { getElementById: id => { assert.equal(id, 'startupStatus'); return sandStatus; } },
+    window: { addEventListener: () => {} },
+    $: id => { assert.equal(id, 'experimentError'); return { textContent: '' }; },
+    UNIFIED3D: { tick: () => { sandCalls.push('draw'); return true; } },
+    CELL3D: { start: () => sandCalls.push('start') },
+    URLSearchParams, location: { search: '' },
+  });
+  vm.runInContext(block[1], sand);
+  vm.runInContext('let useSolver = false, now = 0, clock = { err:null }, solverRequested = false, state = {};'
+    + autostart[0], sand);
+  vm.runInContext(readiness, sand);
+  assert.deepEqual(sandCalls, [], 'the Sand visualization neither draws the 3D scene nor starts the solver');
+  assert.equal(sand.FARADAY_STARTUP.drawn, true);
+  assert.match(sandStatus.textContent, /^Sand visualization ready\. Choose 3D Navier–Stokes for the nonlinear liquid solver\.$/);
+  vm.runInContext('useSolver = true', sand);
+  vm.runInContext(readiness, sand);
+  assert.deepEqual(sandCalls, ['draw', 'start'], 'choosing 3D Navier–Stokes draws the scene before the solver starts');
+  assert.match(sandStatus.textContent, /^3D cell ready\./, 'the startup line follows the chosen workspace');
+  vm.runInContext('useSolver = false', sand);
+  vm.runInContext(readiness, sand);
+  assert.deepEqual(sandCalls, ['draw', 'start'], 'returning to Sand neither draws the 3D scene nor restarts the solver');
+  assert.match(sandStatus.textContent, /^Sand visualization ready\./, 'returning to Sand restores its startup line');
+}
 const status = { textContent: '', style: {} }, handlers = new Map();
 const calls = [];
 const context = vm.createContext({

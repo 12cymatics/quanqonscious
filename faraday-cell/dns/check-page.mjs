@@ -292,12 +292,19 @@ let nodeRef = null;          // {muMax, growth} from the node solver
 let servedMu = null;         // |mu| the served page reported
 
 async function checkGeneralPending(page){
+  const sand=await page.json(`({useSolver,view,visible:ETA.some(v=>v!==0),
+    enabled:!document.querySelector('#viewSeg [data-v="sand"]').disabled,
+    switchShown:getComputedStyle(document.getElementById('workspaceSeg')).display!=='none',
+    sceneShown:document.getElementById('scene3d').getBoundingClientRect().width>0})`);
+  ok(!sand.useSolver && sand.view==='sand' && sand.visible && sand.enabled && sand.switchShown && !sand.sceneShown,
+     'entry displays usable Sand, with the switch to the nonlinear solver beside it',JSON.stringify(sand));
+  await page.eval(`document.querySelector('#workspaceSeg [data-workspace="ns"]').click(); recompute(); true`);
   await page.waitFor('typeof UNIFIED3D !== "undefined" && UNIFIED3D.scene && UNIFIED3D.scene.stats().ready',
     30000, 'the unified three-dimensional initial scene');
   const scene=await page.json(`({useSolver,visible:document.getElementById('scene3d').getBoundingClientRect().width>0,
-    stats:UNIFIED3D.scene.stats(),workspaceHidden:getComputedStyle(document.getElementById('workspaceSeg')).display==='none'})`);
-  ok(scene.useSolver && scene.visible && scene.stats.triangles>100 && scene.workspaceHidden,
-     'entry displays one actual three-dimensional nonlinear scene without a separate Sand workspace',JSON.stringify(scene));
+    stats:UNIFIED3D.scene.stats()})`);
+  ok(scene.useSolver && scene.visible && scene.stats.triangles>100,
+     'choosing 3D Navier–Stokes displays one actual three-dimensional nonlinear scene',JSON.stringify(scene));
   const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
     rim, useSolver, solverRequested, clocks: CELL3D.clocks(),
     comparePaper, signature: state.visualSignature,
