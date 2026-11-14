@@ -52,9 +52,10 @@ ok(scan.floatInstructions === 0 && scan.floatTypes === 0,
   const cs = WASMFLOAT.scanWasm(build(ctrl, join(work, 'control.wasm')));
   const want = { 'f32.load': 0x2A, 'f64.load': 0x2B, 'f32.store': 0x38, 'f64.store': 0x39, 'f64.const': 0x44,
                  'f32.lt': 0x5D, 'f64.lt': 0x63, 'f32.add': 0x92, 'f32.sub': 0x93, 'f32.mul': 0x94, 'f32.div': 0x95,
-                 'f64.add': 0xA0, 'f64.sub': 0xA1, 'f64.mul': 0xA2, 'f64.div': 0xA3, 'i64.trunc_f64_s': 0xB0,
+                 'f64.add': 0xA0, 'f64.sub': 0xA1, 'f64.mul': 0xA2, 'f64.div': 0xA3,
                  'f64.convert_i64_s': 0xB9 };
   const missed = Object.entries(want).filter(([, op]) => !cs.floatOpcodes[op]).map(([k]) => k);
+  if (!cs.floatOpcodes[0xB0] && !cs.floatOpcodes[0xFC00 + 6]) missed.push('i64.trunc_f64_s or i64.trunc_sat_f64_s, whichever the compiler emits');
   ok(missed.length === 0 && cs.floatTypes > 0,
     `the same scan finds every class of float instruction in a control module built to contain them: loads, stores, constants, comparisons, `
     + `f32 and f64 arithmetic, truncation and conversion (${cs.floatInstructions} instructions, ${cs.floatTypes} types)`,
