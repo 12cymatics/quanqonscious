@@ -36,11 +36,11 @@ The directory contains:
 | `faraday-native` | Locally compiled executable |
 | `build.log` | Compiler output |
 | `prepared.fns` | Prepared grid, initial state, pressure preconditioner and original case values |
-| `preparation.json` | Resource estimates and initial fluid stability bound |
+| `verification-run/preparation.json` | Resource estimates and initial fluid stability bound |
 | `preparation.log` | Preparation progress or refusal reason |
 | `solver.log` | Accepted-step diagnostics and any native refusal |
-| `recording.jsonl` | Recording after successful completion of the declared interval |
-| `recording.partial.jsonl` | Retained output if calculation fails or is interrupted |
+| `verification-run/recording.jsonl` | Recording after successful completion of the declared interval |
+| `verification-run/recording.partial.jsonl` | Retained output if calculation fails or is interrupted |
 
 An exit status of zero means the declared interval completed. It is not a physical validation certificate. A failed calculation must not be presented as a completed run. Logs can be inspected while execution continues, for example `tail -f verification-run/solver.log`.
 
@@ -64,9 +64,9 @@ With these manual commands, the filename alone does not indicate success: check 
 
 ## View the recording
 
-Open the current packaged `index.html` in a full desktop browser, then choose **Import native recording** and select `recording.jsonl`. The development page is `cymatic.html`; a source checkout may be served locally to load its modules. The import accepts `.jsonl`, `.ndjson` and `.txt` files from the local file picker.
+Open the current packaged `index.html` in a full desktop browser, expand **Experimental grain–fluid recordings**, then choose **Import native recording** and select `verification-run/recording.jsonl`. The development page is `cymatic.html`; a source checkout may be served locally to load its modules. The import accepts `.jsonl`, `.ndjson` and `.txt` files from the local file picker.
 
-The liquid surface, velocity display and finite grain spheres use the same recorded physical time and camera. Use **Play recorded frames**, the timeline or frame navigation to inspect accepted states. Playback does not advance physics, interpolate new grain trajectories or produce future frames. **Return to fluid solver** leaves the imported recording and returns to the browser liquid solver; its passive flow tracers are not sand grains.
+The liquid surface, velocity display and finite grain spheres use the same recorded physical time and camera. Use **Play recorded frames**, the timeline or frame navigation to inspect accepted states. Playback does not advance physics, interpolate new grain trajectories or produce future frames. **Return to sand** restores the original visual model's particles, controls and playback state. When import began from the explicit fluid diagnostic, **Return to fluid solver** returns there instead; that diagnostic's passive flow tracers are not sand grains.
 
 An error record, malformed tail or interrupted file is visibly reported. Earlier coherent frames may remain available, labelled incomplete. Imported pressure is unavailable in this recording version. History is bounded to 180 frames / 32 MiB, with its retained interval shown. Large outputs can exceed the reader's per-frame or record-size limits and are refused rather than reduced. This is a local recording viewer, not a live remote HPC connection.
 

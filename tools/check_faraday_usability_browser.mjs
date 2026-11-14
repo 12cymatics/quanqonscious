@@ -70,6 +70,7 @@ async function visibleControls(selectors){
 }
 async function nativePlayback(){
   assert(nativeFrames.length>1,'Native browser gate requires an actual multi-frame CLI recording');
+  if(!await page.locator('#experimentalDetails').evaluate(el=>el.open))await page.locator('#experimentalDetails > summary').click();
   await page.locator('#nativeFile').setInputFiles(resolve(nativeRecordingPath));
   await page.waitForFunction(()=>NATIVE_PLAYBACK.status().active&&!NATIVE_PLAYBACK.status().loading);
   let observed=await page.evaluate(()=>({status:NATIVE_PLAYBACK.status(),history:UNIFIED3D.historyState(),frame:UNIFIED3D.currentFrame(),stats:UNIFIED3D.scene.stats(),options:UNIFIED3D.captureExport().options,clock:CELL3D.clocks()}));
@@ -120,8 +121,8 @@ try{
         requestAnimationFrame(sample);}
       requestAnimationFrame(sample);
     });
-    console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}`}));
-    await page.goto(`${origin}/${entry}`,{waitUntil:'load',timeout:30000});
+    console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}?solver=1`}));
+    await page.goto(`${origin}/${entry}?solver=1`,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);assert.equal(new URL(page.url()).pathname,'/'+entry);
     await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
     assert.equal(await page.locator('#scene3d').isVisible(),true);

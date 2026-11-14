@@ -6,20 +6,24 @@ on:
       - cymatic.html
       - faraday/**
       - dns/**
+      - native/**
       - faraday-cell/**
       - faraday-cell.zip
       - tools/check_faraday_startup_browser.mjs
       - tools/check_faraday_usability_browser.mjs
+      - tools/check_faraday_restored_sand_browser.mjs
       - .github/workflows/faraday-browser.yml
   push:
     paths:
       - cymatic.html
       - faraday/**
       - dns/**
+      - native/**
       - faraday-cell/**
       - faraday-cell.zip
       - tools/check_faraday_startup_browser.mjs
       - tools/check_faraday_usability_browser.mjs
+      - tools/check_faraday_restored_sand_browser.mjs
       - .github/workflows/faraday-browser.yml
 permissions:
   contents: read
@@ -31,13 +35,16 @@ jobs:
     # matrix is tested with, lists host platforms up to ubuntu24.04 and no later.
     # Move this and the Playwright pin together.
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # The retained pinned-rim 4K export alone can take several minutes; leave
+    # room for browser installation, the native fixture and both fluid gates.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, webkit]
     env:
       FARADAY_BROWSER: ${{ matrix.browser }}
+      FARADAY_QA_NATIVE_RECORDING: ${{ runner.temp }}/faraday-native-browser/recording.jsonl
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,8 +58,15 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.56.1
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - run: node faraday/build-zip.mjs
+      - name: Produce actual native frames for browser round-trip checks
+        run: sh native/run-case.sh --case native/examples/single-sphere-verification.json --out "$RUNNER_TEMP/faraday-native-browser"
+      - name: Restored sand controls, state preservation and original 4K export
+        run: node tools/check_faraday_restored_sand_browser.mjs faraday-cell
+        env:
+          FARADAY_QA_TRANSPORT: file
+          FARADAY_QA_ARTIFACTS: faraday-browser-evidence/restored-sand
       - run: node tools/check_faraday_startup_browser.mjs faraday-cell
-      - name: Sand controls and nonlinear run controls
+      - name: Fluid diagnostic controls and native recording playback
         run: node tools/check_faraday_usability_browser.mjs faraday-cell
         env:
           FARADAY_QA_ARTIFACTS: faraday-browser-evidence/usability

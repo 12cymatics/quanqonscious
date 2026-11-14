@@ -193,7 +193,7 @@ class Page {
     await page.cmd('Runtime.enable');
     await page.cmd('Log.enable');
     await page.cmd('Page.enable');
-    const inspectedUrl = new URL(url); inspectedUrl.searchParams.set('paused', '1');
+    const inspectedUrl = new URL(url); inspectedUrl.searchParams.set('paused', '1'); inspectedUrl.searchParams.set('solver', '1');
     const navigation = await page.cmd('Page.navigate', { url: inspectedUrl.href });
     if (navigation.errorText) throw new Error(
       `check-page: navigation to ${url} failed: ${navigation.errorText}. No page assertions ran for this URL.`);

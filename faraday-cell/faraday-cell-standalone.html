@@ -139,7 +139,7 @@ button:disabled{opacity:.45;cursor:default}.btn:disabled:hover{border-color:var(
 <div class="wrap">
 <header>
   <h1>Faraday <span>Cell</span></h1>
-  <p>One fluid state · surface, particles and flow in 3D</p>
+  <p>Sand patterns · original controls · pinned rim</p>
 </header>
 <div id="startupStatus" role="status" style="padding:12px;border:1px solid var(--edge);margin-bottom:12px;line-height:1.6">Not started. Open index.html in a full browser, not an attachment or Files preview. If this message stays visible, JavaScript has not run.</div>
 <noscript><p>This simulator requires JavaScript. A static file preview cannot run it. Open the extracted index.html in Safari, Chrome or Firefox on your computer.</p></noscript>
@@ -159,7 +159,7 @@ globalThis.FARADAY_STARTUP = {
     if (this.drawn || this.failed) return;
     this.drawn = true;
     const status = document.getElementById('startupStatus');
-    status.textContent = '3D cell ready. Surface and flow tracers share the nonlinear solver state.';
+    status.textContent = useSolver ? '3D cell ready. Surface and flow tracers share the nonlinear solver state.' : 'Sand visualization ready. The current sand transport is a qualitative visual model.';
     status.style.color = 'var(--grn)';
     document.getElementById('startupStatus').hidden = true;
   }
@@ -172,11 +172,10 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </script>
 
 <div class="workspaceBar">
-<div class="workspaceActions" id="recordingActions"><button class="btn" id="importNative">Import native recording</button><input id="nativeFile" type="file" accept=".jsonl,.ndjson,.txt,application/x-ndjson,text/plain" hidden><button class="btn" id="returnFluid" hidden>Return to fluid solver</button><span class="lab" id="recordingSource">Browser fluid solver · flow tracers</span></div>
 <div class="seg" id="workspaceSeg" aria-label="Legacy diagnostic fixtures" hidden><button data-workspace="sand" aria-pressed="true">Sand visualization</button><button data-workspace="ns" aria-pressed="false">3D Navier–Stokes</button></div>
 <div id="sandActions" class="workspaceActions" data-sand-only><button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button><button aria-pressed="true" class="btn" id="play" style="flex:1">running</button><button class="btn" id="reset" style="flex:1">re-excite</button></div>
 <div id="solverActions" class="workspaceActions" data-ns-only><button class="btn" id="runSolver">Run</button><button class="btn" id="pauseSolver" disabled>Pause</button><button class="btn" id="resetSolver">Reset</button><button class="btn" id="seedParticles">Re-seed particles</button></div>
-<div class="sceneTools"><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
+<div class="sceneTools" data-ns-only><button class="btn" id="resetCamera">3D view</button><button class="btn" id="topView">Top view</button><span class="lab">drag to orbit · wheel to zoom</span></div>
 <div id="workspaceNote" hidden>Surface and sand-coloured flow tracers · one Navier–Stokes state</div>
 <div id="solverStatus" role="status" data-ns-only hidden>Initial condition · t = 0 · not evolved</div>
 </div>
@@ -197,9 +196,9 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   </div>
 
   <div class="deck">
-<div id="sceneError" role="alert"></div>
-<div class="fld" data-legacy>
-<span class="lab">diagnostic render</span>
+<div id="sceneError" role="alert" data-ns-only></div>
+<div class="fld" data-sand-only>
+<span class="lab">render</span>
 <div class="seg" id="viewSeg">
 <button aria-pressed="true" data-v="sand">sand</button>
 <button aria-pressed="false" data-v="optical">optical</button>
@@ -217,7 +216,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <input id="a" max="1000" min="0" step="1" type="range" value="229"/>
 <span class="lab" id="accLab" style="text-align:right"></span>
 </div><label hidden="" id="generalAcceleration">Peak acceleration (m/s²) <input id="expAccel" min="0" step="any" type="number" value="7"/></label>
-<div class="fld"><span class="lab">Visible layers</span><div class="sceneTools">
+<div class="fld" data-ns-only><span class="lab">Visible layers</span><div class="sceneTools">
 <label><input id="showParticles" type="checkbox" checked> <span id="particleLabel">Flow tracers</span></label>
 <label><input id="showSurface" type="checkbox" checked> Surface</label>
 <label><input id="showVectors" type="checkbox" checked> Velocity vectors</label>
@@ -241,7 +240,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 <button class="btn" id="expBtn" style="margin-top:5px">render &amp; save</button>
 <span class="lab" id="expNote" style="line-height:1.6"></span>
 </div>
-<details id="viewDetails"><summary>View settings</summary><div class="detailBody">
+<details id="viewDetails" data-ns-only><summary>View settings</summary><div class="detailBody">
 <div class="fld"><label for="surfaceColor" class="lab">Surface colouring</label><select id="surfaceColor"><option value="water">Water</option><option value="height">Displacement</option><option value="nodal">Zero displacement</option></select></div>
 <label class="sceneTools">Surface opacity <input id="surfaceOpacity" type="number" min="0" max="1" step="0.05" placeholder="Auto" aria-label="Surface opacity, zero transparent to one opaque"></label>
 <div class="fld"><label for="heightScale" class="top"><span class="lab">Displacement magnification</span><span>× <input id="heightScale" type="number" value="5000" min="0" step="any"></span></label><span style="color:var(--ink2);font-size:10px">Display only. Set 1 for physical proportions. The solver stays in metres.</span></div>
@@ -279,11 +278,11 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </div><div class="fld" data-sand-only="">
 <span class="lab">contact line</span>
 <div class="seg" id="rimSeg">
-<button aria-pressed="true" data-r="free">free (modal only)</button>
+<button aria-pressed="true" data-r="free">free (historical visual preset)</button>
 <button aria-pressed="false" data-r="pinned">pinned</button>
 </div>
 </div></div></details>
-<details id="computeDetails"><summary>Advanced calculation</summary><div class="detailBody">
+<details id="computeDetails" data-ns-only><summary>Advanced calculation</summary><div class="detailBody">
 <div class="fld" data-ns-only="" hidden="">
 <span class="lab">Navier–Stokes compute engine</span>
 <div class="seg" id="srcSeg">
@@ -300,19 +299,20 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
 </div>
 </div></details>
 <details id="modelDetails"><summary>Model details</summary><div class="detailBody">
-<div class="fld" data-legacy>
-<span class="lab">diagnostic draw on</span>
+<div class="fld" data-sand-only>
+<span class="lab">draw on</span>
 <div class="seg" id="engSeg">
 <button aria-pressed="true" data-e="cpu">CPU</button>
 <button aria-pressed="false" data-e="gpu">GPU</button>
 </div>
 <div aria-live="polite" id="renderStatus" role="status">CPU drawing.</div>
-</div><p data-sand-only>The retained modal functions are internal numerical diagnostics, not the displayed particle simulation.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
+</div><p data-sand-only>The original 60,000-grain sand visualization is restored with its unchanged modal field, drift, agitation and packing rules. This is the current qualitative transport model, not completed fully resolved grain–fluid physics. The default rim is pinned as requested; the older free-rim preset used a different modal basis, so its exact pattern can differ. Reference presets use the empirical atlas; General SI inputs remain available under Experiment parameters.</p><p data-ns-only hidden>One incompressible Newtonian liquid in a rigid circular cylinder, with a pinned contact line and no-slip floor and wall. The golden particles are passive fluid tracers advected by solved velocities and physical time. They do not model sand settling, friction, collisions or feedback on the fluid. Surface magnification and camera changes affect drawing only. Initial values are editable examples, not measurements.</p></div></details>
 <div id="experimentError" role="alert" style="color:var(--red)"></div><div id="warnBox" style="display:grid;gap:6px"></div><details><summary>State and diagnostics</summary><dl class="ro" id="ro"></dl></details>
   </div>
 </div>
 
-<div class="timelineBar"><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="sceneTools" id="nativeSteps" hidden><button class="btn" id="previousNative">Previous frame</button><button class="btn" id="nextNative">Next frame</button></div><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div><div class="timeNote" id="nativeStatus" role="status" hidden></div></div>
+<details id="experimentalDetails"><summary>Experimental grain–fluid recordings</summary><div class="detailBody"><div class="workspaceActions" id="recordingActions"><button class="btn" id="importNative">Import native recording</button><input id="nativeFile" type="file" accept=".jsonl,.ndjson,.txt,application/x-ndjson,text/plain" hidden><button class="btn" id="returnFluid" hidden>Return to sand</button><span class="lab" id="recordingSource">Original sand visual model</span></div><p>Optional native recordings display actual saved grains and liquid together in 3D. Import pauses the sand view; returning restores its particles, settings and playback state. The native prototype is experimental and has not demonstrated a settled beach-sand bed.</p><div id="nativeImportError" role="alert"></div></div></details>
+<div class="timelineBar" data-ns-only><button class="btn" id="replayToggle" disabled>Play recorded frames</button><input type="range" id="timeline" min="0" max="0" step="1" value="0" aria-label="Recorded solver frames"><button class="btn" id="liveView" aria-pressed="true">Live solver</button><div class="sceneTools" id="nativeSteps" hidden><button class="btn" id="previousNative">Previous frame</button><button class="btn" id="nextNative">Next frame</button></div><div class="timeNote"><span id="frameTime">Initial condition · 0 ms</span> · <span id="historyNote">Waiting for computed frames</span></div><div class="timeNote" id="nativeStatus" role="status" hidden></div></div>
 <details id="nativeDetails" hidden><summary>Native recording and model</summary><p id="nativeScope"></p><pre id="nativeParameters" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 <label style="display:block;padding:10px"><input type="checkbox" id="comparePaper"> Compare with the 2017 atlas (display only) <select id="referenceCell"><option value="medium">24.25 mm</option><option value="small">10.00 mm</option><option value="large">49.50 mm</option></select></label>
 <div class="atlas" id="referenceAtlas" hidden>
@@ -344,7 +344,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
   <p id="dnsNote"></p>
 </div>
 <footer>
-  General nonlinear experiments use the entered SI properties and acceleration. The paper atlas is optional comparison data and never selects nonlinear patterns. The 3D surface, flow tracers and recorded-frame exports share the computed physical state. Camera and explicit displacement magnification affect drawing only. Tracers do not model finite sand grains or sediment contacts. Free-surface overturning, gas dynamics and moving contact lines are outside this solver's scope.
+  The original sand visualization uses a modal field with qualitative drift, agitation and packing rules. Its controls and dense image export are retained; this recovery does not complete fully resolved sediment physics. Pinned is the default rim, which can change the pattern from the historical free-rim preset. Reference presets use the empirical atlas; General SI inputs are available and the atlas display is optional. Experimental native recordings preserve their actual grain–fluid state and physical time.
 </footer>
 </div>
 <script>
@@ -1206,10 +1206,9 @@ function resolvePatternState(o){
 
   const warnings = [];
   if (rim === 'pinned') warnings.push({ hard: false, text:
-    'Pinned contact line: the modal diagnostic is solved in a finite 128-term basis with Richardson extrapolation. '
+    'Pinned contact line: the modal field is solved in a finite 128-term basis with Richardson extrapolation. '
     + 'This is an approximate linear spectral calculation, not an exact continuum solution. '
-    + 'LIMIT: finite contact-line mobility and hysteresis are not computed. '
-    + 'Select 3D N-S for the separate nonlinear model.' });
+    + 'LIMIT: finite contact-line mobility and hysteresis are not computed.' });
   if (!experiment && cellKey === 'large' && f > 65) warnings.push({ hard: true, text:
     'The 49.50 mm cell is reported unstable/indistinct above roughly 65 Hz. No atlas morphology exists here.' });
   if (!experiment && !cell.atlas) warnings.push({ hard: false, text:
@@ -9742,7 +9741,8 @@ function stepGrains(gain){
   if (settle < 1) settle = Math.min(1, settle + 0.012);
 }
 
-let view = 'height';
+const solverDiagnostic = new URLSearchParams(location.search).get('solver') === '1';
+let view = solverDiagnostic ? 'height' : 'sand';
 let agitation = 1.15;
 function mulberry32(a){
   return function(){
@@ -10017,7 +10017,7 @@ function drawAtlas(cellKey, f){
 })();
 
 let cellKey = 'medium', freq = 111, amp = 180, temp = 20, depth = 3, rim = 'pinned';
-let workspace = 'ns', experimentMode = 'general', comparePaper = false, referenceCell = 'medium';
+let workspace = solverDiagnostic ? 'ns' : 'sand', experimentMode = solverDiagnostic ? 'general' : 'reference', comparePaper = !solverDiagnostic, referenceCell = 'medium';
 let generalInput = { diameterMm: 30, depthMm: 4, rho: 1000, mu: 0.001, sigma: 0.0728, gravity: 9.80665, acceleration: 7, seedMode: 2, seedFraction: 0.0001 };
 let problemKey = null, resolutionKey = null, solverRequested = false, pendingFrequency = null;
 let nativeMode = false;
@@ -10379,7 +10379,11 @@ sc.addEventListener('click', e => {
 
 let exporting = false;
 async function exportImage(SIZE, onProgress = () => {}){
-  if (!useSolver) return exportDiagnosticImage(SIZE, onProgress);
+  if (!useSolver){
+    const result=await exportDiagnosticImage(SIZE,onProgress);
+    result.source={...result.source,model:'original-sand-visualization',grainModel:result.label.view==='sand'?'empirical-drift-agitation-packing':null,physicalGrainFluidCoupling:false};
+    return result;
+  }
   if (!nativeMode && $('experimentError').textContent) throw new Error($('experimentError').textContent);
   if (!nativeMode && CELL3D.clocks().err) throw new Error(CELL3D.clocks().err);
   if ($('sceneError').textContent) throw new Error($('sceneError').textContent);
@@ -10870,7 +10874,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
     }
     note.textContent = res.scene ? `${requestedSize}² · 3D frame at ${(res.source.physicalTime*1000).toFixed(6)} ms · ${res.particles} ${res.source.engine==='native-cpp-recording'?'native grains':'flow tracers'} · ${((performance.now()-t0)/1000).toFixed(1)}s` : `${requestedSize}² · ${res.modes} modes · `
       + `${res.pxPerWave === null ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
-      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
+      + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k visual grains · drawing scale `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
           + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
           + `${res.sand.relaxPasses} relax passes leaving `
@@ -11299,7 +11303,7 @@ function loop(now){
   }
   const workspaceText=useSolver ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
     : exporting ? 'Sand preview paused while exporting · your playback setting is preserved'
-    : 'Modal sand visualization · separate from the nonlinear liquid solver';
+    : 'Original sand visualization · qualitative grain transport';
   if($('workspaceNote').textContent!==workspaceText)$('workspaceNote').textContent=workspaceText;
   if(useSolver){
     if(UNIFIED3D.tick(now)){
@@ -11886,7 +11890,7 @@ const CELL3D = (function(){
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();
-let useSolver = true;
+let useSolver = solverDiagnostic;
 /* Which engine the solver path uses: 'js' for dns/faraday-cell3d.js, 'cpp' for the
    same discretisation compiled to WebAssembly. They produce identical fields, which
    dns/check-cell3d-wasm.mjs asserts bit for bit, so this is a choice about time. */
@@ -11914,7 +11918,7 @@ let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
 
 const GENERAL_FIELDS = [['expDiameter','diameterMm'],['expDepth','depthMm'],['expRho','rho'],['expMu','mu'],['expSigma','sigma'],['expGravity','gravity'],['expAccel','acceleration'],['expSeedM','seedMode'],['expSeedFraction','seedFraction']];
 const workspaceSettings = {
-  sand: {cellKey:'medium',freq:111,amp:180,temp:20,depth:3,rim:'free',experimentMode:'reference',generalInput:{...generalInput},view:'sand',phaseSign:PHASE_I,swapping:false,agitation:1.15,running:true,simT:0,comparePaper:true,referenceCell:'medium',engine:'cpp',threads:cell3dThreads,error:'',frequencyText:'111',formValues:null},
+  sand: {cellKey:'medium',freq:111,amp:180,temp:20,depth:3,rim:'pinned',experimentMode:'reference',generalInput:{...generalInput},view:'sand',phaseSign:PHASE_I,swapping:false,agitation:1.15,running:true,simT:0,comparePaper:true,referenceCell:'medium',engine:'cpp',threads:cell3dThreads,error:'',frequencyText:'111',formValues:null},
   ns: { cellKey: 'medium', freq: 111, amp: 180, temp: 20, depth: 3, rim: 'pinned',
     experimentMode: 'general', generalInput: { ...generalInput }, view: 'height',
     phaseSign: PHASE_I, swapping: false, agitation: 1.15, running: true, simT: 0,
@@ -11950,7 +11954,7 @@ function syncWorkspaceControls(){
   $('cgl').style.display = !useSolver && renderEngine === 'gpu' ? 'block' : 'none';
   $('workspaceNote').textContent = useSolver
     ? 'Surface and sand-coloured flow tracers · one Navier–Stokes state'
-    : 'Internal modal diagnostic';
+    : 'Original sand visualization · qualitative grain transport';
 }
 function switchWorkspace(next){
   if (!['sand','ns'].includes(next)) throw new Error('Unknown workspace: '+next);
@@ -12038,12 +12042,14 @@ const UNIFIED3D = (() => {
   const FRAME_LIMIT=180, BYTE_LIMIT=32*1024*1024;
   let sourceMode='fluid';
   let frames=[],bytes=0,current=null,following=true,playing=false,replayStart=null,replaySpan=null,paint=true,lastExport=null,generationFloor=-1;
-  const scene=FARADAY_SCENE3D.create($('scene3d'),{
+  const createScene=()=>FARADAY_SCENE3D.create($('scene3d'),{
     options:{heightScale:5000,pointSize:3,showVectors:true,vectorScaleSeconds:1000,colorScaleM:generalInput.seedFraction*generalInput.depthMm/1000 || generalInput.depthMm/1000},
     onError:e=>{$('sceneError').textContent=String(e.message||e);},
     onContextChange:status=>{paint=true;if(!status.lost)$('sceneError').textContent='';},
     onExportStatus:message=>{$('expNote').textContent=message;}
   });
+  let renderer=null;
+  const scene=new Proxy({},{get(_target,key){const target=renderer||(renderer=createScene()),value=target[key];return typeof value==='function'?value.bind(target):value;}});
   function frameBytes(f){let n=0;for(const v of Object.values(f)){if(ArrayBuffer.isView(v))n+=v.byteLength;else if(v!=null&&typeof v==='object')n+=2*JSON.stringify(v).length;else if(typeof v==='string')n+=2*v.length;}return n;}
   function show(f){scene.setFrame(f);current=f;if($('scene3d').style)$('scene3d').style.visibility='';paint=true;}
   function update(){
@@ -12134,14 +12140,21 @@ const NATIVE_PLAYBACK = (() => {
   const hiddenBlocks=()=>[$('solverActions'),$('parameterDetails'),$('computeDetails'),$('modelDetails'),$('experimentError'),$('warnBox'),$('ro').closest('details'),$('generalAcceleration'),$('f').closest('.fld'),$('comparePaper').parentElement,$('referenceAtlas'),document.querySelector('footer')];
   function enter(){
     if(!nativeMode){
-      saved={options:UNIFIED3D.scene.options(),disabled:new Map(Array.from(controls(),el=>[el,el.disabled])),hidden:new Map(hiddenBlocks().map(el=>[el,el.hidden]))};
+      saved={options:UNIFIED3D.scene.options(),useSolver,pendingFrequency,simT,running,
+        disabled:new Map(Array.from(controls(),el=>[el,el.disabled])),
+        hidden:new Map([...new Set([...hiddenBlocks(),...document.querySelectorAll('[data-sand-only],[data-ns-only],[data-reference-control]')])].map(el=>[el,el.hidden])),
+        canvas:new Map(['scene3d','c','cgl'].map(id=>[$(id),{display:$(id).style.display,visibility:$(id).style.visibility}]))};
     }
     initialAutostart=false;pendingFrequency=null;CELL3D.reset();
-    nativeMode=true;UNIFIED3D.setSource('native-recording');dirty=false;
+    nativeMode=true;useSolver=true;UNIFIED3D.setSource('native-recording');dirty=false;
+    document.querySelectorAll('[data-sand-only]').forEach(el=>{el.hidden=true;});
+    document.querySelectorAll('[data-ns-only]').forEach(el=>{el.hidden=false;});
+    $('scene3d').style.display='block';$('c').style.display='none';$('cgl').style.display='none';
     for(const el of controls())el.disabled=true;
     for(const el of hiddenBlocks())el.hidden=true;
     for(const id of ['returnFluid','nativeStatus','nativeSteps','nativeDetails'])$(id).hidden=false;
     $('recordingSource').textContent='Experimental native recording · coupled grains and fluid';
+    $('returnFluid').textContent=saved.useSolver?'Return to fluid solver':'Return to sand';
     $('particleLabel').textContent='Physical grains';$('liveView').textContent='First stored frame';
     $('nativeScope').textContent=FARADAY_NATIVE_RECORDING.SCOPE+' Playback shows saved solver states only. No interpolation or additional calculation. Radii remain physical metres; no grain magnification. Pressure is not included in this recording format.';
     $('nativeParameters').textContent='Reading case provenance…';
@@ -12152,6 +12165,7 @@ const NATIVE_PLAYBACK = (() => {
   }
   async function load(file){
     if(!file||typeof file.stream!=='function')throw new TypeError('Choose a local native JSONL recording file.');
+    $('nativeImportError').textContent='';
     const mine=++token;enter();loading=true;header=null;total=0;failure=null;complete=false;fileName=file.name||'native recording';
     try{
       for await(const event of FARADAY_NATIVE_RECORDING.iterateStream(file.stream(),{generation:0,maxFrameBytes:32*1024*1024})){
@@ -12174,8 +12188,10 @@ const NATIVE_PLAYBACK = (() => {
     ++token;loading=false;nativeMode=false;header=null;failure=null;total=0;complete=false;
     UNIFIED3D.setSource('fluid');CELL3D.reset();
     if(saved){
+      useSolver=saved.useSolver;pendingFrequency=saved.pendingFrequency;simT=saved.simT;running=saved.running;
       for(const [el,value] of saved.disabled)el.disabled=value;
       for(const [el,value] of saved.hidden)el.hidden=value;
+      for(const [el,style] of saved.canvas){el.style.display=style.display;el.style.visibility=style.visibility;}
       UNIFIED3D.scene.setOptions(saved.options);
       $('heightScale').value=String(saved.options.heightScale);$('surfaceOpacity').value=saved.options.surfaceOpacity==null?'':String(saved.options.surfaceOpacity);
       $('vectorScale').value=String(saved.options.vectorScaleSeconds);$('surfaceColor').value=saved.options.colorMode;
@@ -12183,10 +12199,11 @@ const NATIVE_PLAYBACK = (() => {
     }
     saved=null;
     for(const id of ['returnFluid','nativeStatus','nativeSteps','nativeDetails'])$(id).hidden=true;
-    $('recordingSource').textContent='Browser fluid solver · flow tracers';
+    $('recordingSource').textContent=useSolver?'Browser fluid solver · flow tracers':'Original sand visual model';
     $('particleLabel').textContent='Flow tracers';$('liveView').textContent='Live solver';
     $('solverOverlay').style.display='none';
     $('sceneError').textContent='';$('nativeFile').value='';dirty=true;recompute();
+    if(!useSolver)t0=performance.now()-simT*1000;
   }
   function tick(now){
     if(total&&UNIFIED3D.tick(now))FARADAY_STARTUP.ready();
@@ -12210,7 +12227,7 @@ const NATIVE_PLAYBACK = (() => {
   return {load,leave,tick,status:()=>({active:nativeMode,loading,total,complete,failure,fileName,header:header?structuredClone(header):null})};
 })();
 $('importNative').addEventListener('click',()=>{$('nativeFile').value='';$('nativeFile').click();});
-$('nativeFile').addEventListener('change',()=>{if($('nativeFile').files[0])NATIVE_PLAYBACK.load($('nativeFile').files[0]).catch(error=>{$('sceneError').textContent=error.message;});});
+$('nativeFile').addEventListener('change',()=>{if($('nativeFile').files[0])NATIVE_PLAYBACK.load($('nativeFile').files[0]).catch(error=>{$('nativeImportError').textContent=error.message;});});
 $('returnFluid').addEventListener('click',()=>NATIVE_PLAYBACK.leave());
 $('previousNative').addEventListener('click',()=>UNIFIED3D.step(-1));
 $('nextNative').addEventListener('click',()=>UNIFIED3D.step(1));
@@ -12226,7 +12243,7 @@ $('timeline').addEventListener('input',()=>UNIFIED3D.seek(Number($('timeline').v
 $('replayToggle').addEventListener('click',()=>UNIFIED3D.play());
 $('liveView').addEventListener('click',()=>UNIFIED3D.live());
 $('seedParticles').addEventListener('click',()=>CELL3D.reseed());
-let initialAutostart = new URLSearchParams(location.search).get('paused') !== '1';
+let initialAutostart = new URLSearchParams(location.search).get('paused') !== '1' && solverDiagnostic;
 
 syncWorkspaceControls(); sprinkle(); recompute();
 /* The draw-on choice is remembered per browser, as a convenience only: with storage
