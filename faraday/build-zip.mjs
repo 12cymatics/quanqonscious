@@ -69,7 +69,7 @@ export const BUNDLE_ZIP = join(REPO, `${TOP}.zip`);
    git records the executable bit -- a bundle staged on two machines would
    otherwise differ in the one property nobody reads. */
 export const EXECUTABLE = new Set([
-  'run-checks.mjs', 'dns/build-wasm.sh', 'dns/build-wasm-cell3d.sh', 'dns/build-wasm-d128.sh', 'dns/run-cell3d.mjs'
+  'run-checks.mjs', 'dns/build-wasm.sh', 'dns/build-wasm-cell3d.sh', 'dns/build-wasm-d128.sh', 'dns/build-wasm-grains-d128.sh', 'dns/run-cell3d.mjs'
 ]);
 
 /* The modification time every file in the zip carries: 2026-01-01T00:00:00Z.
@@ -125,6 +125,10 @@ export const MANIFEST = [
   'dns/faraday_disc_d128.wasm',
   'dns/build-wasm-d128.sh',
   'dns/faraday-floquet-d128.js',
+  'dns/faraday-grains-d128.js',
+  'dns/faraday_grains_d128.cpp',
+  'dns/faraday_grains_d128.wasm',
+  'dns/build-wasm-grains-d128.sh',
   'dns/cell3d-pool-node.cjs',
   'dns/faraday_disc.cpp',
   'dns/faraday_disc.wasm',
@@ -141,6 +145,7 @@ export const MANIFEST = [
   'dns/check-dyadic128-wasm.mjs',
   'dns/check-disc-d128.mjs',
   'dns/check-floquet-d128.mjs',
+  'dns/check-grains-d128.mjs',
   'dns/check-cell3d.mjs',
   'dns/check-cell3d-observation.mjs',
   'dns/check-cell3d-tracers.mjs',
@@ -187,6 +192,7 @@ export const SUITES = [
   { name: 'dns/check-dyadic128-wasm.mjs',   file: 'dns/check-dyadic128-wasm.mjs' },
   { name: 'dns/check-disc-d128.mjs',        file: 'dns/check-disc-d128.mjs' },
   { name: 'dns/check-floquet-d128.mjs',     file: 'dns/check-floquet-d128.mjs' },
+  { name: 'dns/check-grains-d128.mjs',      file: 'dns/check-grains-d128.mjs' },
   { name: 'dns/check-wasm-build.mjs',       file: 'dns/check-wasm-build.mjs' },
   { name: 'dns/check-cell3d.mjs',           file: 'dns/check-cell3d.mjs', slow: true },
   { name: 'dns/check-cell3d-wasm.mjs',      file: 'dns/check-cell3d-wasm.mjs', slow: true },
