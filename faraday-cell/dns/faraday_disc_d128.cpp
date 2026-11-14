@@ -445,6 +445,23 @@ int arnoldiExtend(int j){
   return lastError;
 }
 
+static D128 orthogonalityLoss;
+D128* ptrOrthogonality(){ return &orthogonalityLoss; }
+
+int basisOrthogonality(int count){
+  if (count < 1 || count > kMax + 1) return 5;
+  orthogonalityLoss = dZero();
+  const D128 one = dFromI64(1);
+  for (int i = 0; i < count; i++)
+    for (int j = i; j < count; j++){
+      D128 g = dot(basis + i*nVec, basis + j*nVec, nVec);
+      if (i == j) g = dSub(g, one);
+      g = dAbs(g);
+      if (dCmp(g, orthogonalityLoss) > 0) orthogonalityLoss = g;
+    }
+  return 0;
+}
+
 int combineBasis(int used){
   if (used < 1 || used > kMax + 1) return 5;
   for (int k = 0; k < nVec; k++) vecOut[k] = dZero();

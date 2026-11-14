@@ -183,6 +183,20 @@ function exp(a){
 
 const HALF = store(1n, -1, 1n);
 
+function ln(a){
+  if (a.m <= 0n) throw new RangeError('ln: the argument must be positive.');
+  const one = POW2[FIX];
+  let X = a.m << BigInt(FIX - (BITS - 1)), k = a.e + (BITS - 1);
+  if (X*X > (one*one) << 1n){ X >>= 1n; k += 1; }
+  const num = X - one, den = X + one;
+  if (num === 0n) return k === 0 ? ZERO : store(BigInt(k)*ln2Fix(), -FIX);
+  const Z = (num << BigInt(FIX))/den, Z2 = (Z*Z) >> BigInt(FIX);
+  let T = one, term = one, j = 1n;
+  while (term !== 0n){ term = (term*Z2) >> BigInt(FIX); T += term/(2n*j + 1n); j += 1n; }
+  if (k === 0) return store(num*T, 1 - FIX, den);
+  return store(BigInt(k)*ln2Fix() + ((num*T) << 1n)/den, -FIX);
+}
+
 function expm1(a){
   if (a.m === 0n) return ZERO;
   if (cmp(abs(a), HALF) > 0) return sub(exp(a), fromBigInt(1n));
@@ -220,7 +234,7 @@ function toNumberForDisplay(a){
 
 const DYADIC128 = Object.freeze({
   BITS, ZERO, ONE: fromBigInt(1n), store, fromBigInt, fromRational, add, sub, neg, abs, mul, div,
-  mulRat, scale2, cmp, sign, isZero, eq, sqrt, isqrt, pi, ln2, sin, cos, exp, expm1, tanh, fromDecimal, bitLength,
+  mulRat, scale2, cmp, sign, isZero, eq, sqrt, isqrt, pi, ln2, sin, cos, exp, expm1, tanh, ln, fromDecimal, bitLength,
   toNumberForDisplay
 });
 if (typeof module !== 'undefined' && module.exports) module.exports = DYADIC128;

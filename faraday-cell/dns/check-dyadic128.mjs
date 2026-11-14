@@ -127,7 +127,33 @@ console.log('7. expm1 and tanh against published digits and their series, with n
   ok(D.eq(D.tanh(y), D.neg(D.tanh(D.neg(y)))), 'tanh is exactly odd');
 }
 
-console.log('8. decimal strings enter exactly, and nothing else is accepted');
+console.log('8. the natural logarithm inverts exp, adds, and keeps its precision next to 1');
+{
+  ok(D.eq(D.ln(D.fromBigInt(2n)), D.ln2()), 'ln 2 is the series value of ln 2 itself');
+  ok(D.isZero(D.ln(D.ONE)), 'ln 1 is exactly zero');
+  let bad = 0;
+  const ulpOf = v => v.e >= 0 ? rat(1n << BigInt(v.e), 1n) : rat(1n, 1n << BigInt(-v.e));
+  for (const [n, d] of [[10n, 1n], [1n, 3n], [355n, 113n], [7n, 1000n], [123456789n, 1n], [2n, 3n], [3n, 2n]]){
+    const y = D.fromRational(n, d), l = D.ln(y);
+    const cond = BigInt(4 + Math.ceil(Math.abs(D.toNumberForDisplay(l))));
+    const u = ulpOf(y), errY = rabs(rsub(ofDyadic(D.exp(l)), ofDyadic(y)));
+    if (rcmp(errY, rat(u.n*cond, u.d)) > 0) bad++;
+    const x = D.fromRational(n, 7n*d), ux = ulpOf(x), errX = rabs(rsub(ofDyadic(D.ln(D.exp(x))), ofDyadic(x)));
+    const boundX = rat(4n*ux.n*(1n << 125n) + ux.d, ux.d*(1n << 125n));
+    if (rcmp(errX, boundX) > 0) bad++;
+  }
+  ok(bad === 0, `exp(ln y) = y within 4 + |ln y| ulps, the conditioning of exp, and ln(exp x) = x within 4 ulps of x plus 2^-125, `
+    + `the rounding of exp(x) near 1 carried through ln, at seven arguments each (${bad} not)`);
+  const a = D.fromRational(17n, 5n), b = D.fromRational(9n, 11n);
+  ok(within(D.add(D.ln(a), D.ln(b)), ofDyadic(D.ln(D.mul(a, b))), 8), 'ln a + ln b = ln ab within eight ulps');
+  const t = D.add(D.ONE, D.fromRational(1n, 1n << 50n)), x = rat(1n, 1n << 50n);
+  const series = rat(x.n*x.d*x.d*6n - 3n*x.n*x.n*x.d + 2n*x.n*x.n*x.n, 6n*x.d*x.d*x.d);
+  ok(within(D.ln(t), series, 1), 'ln(1 + 2^-50) matches x - x^2/2 + x^3/3 to one ulp, where a fixed-point series would keep only 118 bits');
+  let refused = false; try { D.ln(D.neg(D.ONE)); } catch (e){ refused = /positive/.test(e.message); }
+  ok(refused, 'the logarithm of a negative number is refused');
+}
+
+console.log('9. decimal strings enter exactly, and nothing else is accepted');
 {
   const cases = [['0.1', rat(1n, 10n)], ['-1.0035510043427237e-6', rat(-10035510043427237n, 10n**22n)], ['998.2041322005837', rat(9982041322005837n, 10n**13n)],
                  ['6.02214076e23', rat(602214076n*10n**15n, 1n)], ['9.80665', rat(980665n, 100000n)], ['7', rat(7n, 1n)]];
@@ -140,7 +166,7 @@ console.log('8. decimal strings enter exactly, and nothing else is accepted');
   ok(refused === 9 && typeRefused, `nine malformed strings and a float argument are all refused (${refused} of 9)`);
 }
 
-console.log('9. the representation never grows');
+console.log('10. the representation never grows');
 {
   let x = D.fromRational(1n, 3n), worst = 0;
   for (let k = 0; k < 5000; k++){ x = D.add(D.mulRat(x, 7n, 23n), D.fromRational(BigInt(k % 11), 13n)); worst = Math.max(worst, D.bitLength(x.m)); }

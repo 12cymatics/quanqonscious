@@ -9,7 +9,7 @@ const DY = (function(){
 const DISC_D128_EXPORTS = ['setup', 'prepare', 'ptrScal', 'ptrRf', 'ptrZf', 'ptrRc', 'ptrZc', 'ptrDrc', 'ptrDzc', 'ptrDrf', 'ptrDzf',
   'ptrDrive', 'ptrVecIn', 'ptrVecOut', 'ptrU', 'ptrV', 'ptrW', 'ptrP', 'ptrEta', 'ptrBasis', 'ptrHess', 'ptrCoef', 'ptrProbe',
   'ptrProbeOut', 'ptrPressureAsymmetry', 'getNVec', 'getLastError', 'getArenaUsed', 'applyLtoProbe', 'loadVecIn', 'storeVecOut',
-  'runSteps', 'applyPeriodMap', 'arnoldiStart', 'arnoldiExtend', 'combineBasis', 'memory'];
+  'runSteps', 'applyPeriodMap', 'arnoldiStart', 'arnoldiExtend', 'combineBasis', 'basisOrthogonality', 'ptrOrthogonality', 'memory'];
 
 const DISC_D128_ERRORS = {
   1: 'the module arena is exhausted for this grid and Krylov dimension',
@@ -195,6 +195,7 @@ function createDiscD128(o){
     arnoldiStart(vec){ this.writeVec(vec); fail(X.arnoldiStart(), 'arnoldiStart'); },
     arnoldiExtend(j){ fail(X.arnoldiExtend(j), 'arnoldiExtend'); },
     hessColumn(j, rows){ const d = dv(), out = []; for (let i = 0; i < rows; i++) out.push(getD(d, X.ptrHess(), i*kMax + j)); return out; },
+    orthogonality(count){ fail(X.basisOrthogonality(count), 'basisOrthogonality'); return getD(dv(), X.ptrOrthogonality(), 0); },
     combine(coefs){
       writeArray(X.ptrCoef(), coefs);
       fail(X.combineBasis(coefs.length), 'combineBasis');
