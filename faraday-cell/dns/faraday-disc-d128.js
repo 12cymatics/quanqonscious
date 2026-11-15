@@ -204,6 +204,97 @@ function createDiscD128(o){
   };
 }
 
-const FARADAY_DISC_D128 = Object.freeze({ createDiscD128, buildGrid, gradeToEnd, gradeBothEnds, stepLimits, discD128Bytes, DISC_D128_ERRORS });
+const SUGGEST_NR = [24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512];
+const SUGGEST_NZ = [12, 16, 20, 24, 32, 40, 48, 64, 80, 96];
+const SUGGEST_ZSTRETCH = ['2.2', '3.0', '3.8'];
+
+function radialPart(nr, R, rStretch){
+  const rf = gradeToEnd(nr, R, rStretch), rc = [], drc = [], drf = [rf[0]];
+  for (let i = 0; i < nr; i++){ rc.push(DY.scale2(DY.add(rf[i], rf[i + 1]), -1)); drc.push(DY.sub(rf[i + 1], rf[i])); }
+  drf[0] = rc[0];
+  for (let i = 1; i < nr; i++) drf.push(DY.sub(rc[i], rc[i - 1]));
+  drf.push(DY.sub(R, rc[nr - 1]));
+  return { rf, rc, drc, drf };
+}
+function verticalPart(nz, h, zStretch){
+  const zf = gradeBothEnds(nz, h, zStretch), zc = [], dzc = [], dzf = [];
+  for (let j = 0; j < nz; j++){ zc.push(DY.scale2(DY.add(zf[j], zf[j + 1]), -1)); dzc.push(DY.sub(zf[j + 1], zf[j])); }
+  dzf.push(zc[0]);
+  for (let j = 1; j < nz; j++) dzf.push(DY.sub(zc[j], zc[j - 1]));
+  dzf.push(DY.sub(h, zc[nz - 1]));
+  return { zf, zc, dzc, dzf };
+}
+
+function surfaceOperatorError(rad, m, contact, eta, k){
+  const nr = rad.rc.length, mm = DY.fromBigInt(BigInt(m)*BigInt(m)), k2 = DY.mul(k, k);
+  let num = DY.ZERO, den = DY.ZERO;
+  for (let i = 0; i < nr; i++){
+    const outer = i === nr - 1 ? (contact === 'free' ? DY.ZERO : DY.div(DY.mul(rad.rf[nr], DY.neg(eta[nr - 1])), rad.drf[nr]))
+                               : DY.div(DY.mul(rad.rf[i + 1], DY.sub(eta[i + 1], eta[i])), rad.drf[i + 1]);
+    const inner = i === 0 ? DY.ZERO : DY.div(DY.mul(rad.rf[i], DY.sub(eta[i], eta[i - 1])), rad.drf[i]);
+    const got = DY.sub(DY.div(DY.sub(outer, inner), DY.mul(rad.rc[i], rad.drc[i])), DY.div(DY.mul(mm, eta[i]), DY.mul(rad.rc[i], rad.rc[i])));
+    const want = DY.neg(DY.mul(k2, eta[i])), w = DY.mul(rad.rc[i], rad.drc[i]), e = DY.sub(got, want);
+    num = DY.add(num, DY.mul(DY.mul(e, e), w)); den = DY.add(den, DY.mul(DY.mul(want, want), w));
+  }
+  return DY.isZero(den) ? null : DY.sqrt(DY.div(num, den));
+}
+
+function suggestGrid(o){
+  const m = requireInt(o.m, 0, 'm'), k = positive(o.k, 'k'), R = positive(o.R, 'R'), h = positive(o.h, 'h');
+  const rho = positive(o.rho, 'rho'), nu = positive(o.nu, 'nu'), gamma = positive(o.gamma, 'gamma');
+  const g = o.g === undefined ? DY.fromDecimal('9.80665') : positive(o.g, 'g');
+  const omegaResponse = positive(o.omegaResponse, 'omegaResponse'), omegaDrive = positive(o.omegaDrive, 'omegaDrive');
+  const contact = o.contact;
+  if (contact !== 'free' && contact !== 'pinned') throw new TypeError(`contact = ${JSON.stringify(contact)}: 'free' or 'pinned'.`);
+  if (typeof o.profile !== 'function') throw new TypeError('suggestGrid: profile must be a function of a 128-bit radius returning a 128-bit elevation.');
+  const errTol = o.errTol === undefined ? DY.fromRational(1n, 100n) : positive(o.errTol, 'errTol');
+  const layerCells = o.layerCells === undefined ? DY.fromBigInt(2n) : positive(o.layerCells, 'layerCells');
+  const nrCap = o.nrCap === undefined ? 512 : o.nrCap, nzCap = o.nzCap === undefined ? 96 : o.nzCap;
+  const nrMin = o.nrMin === undefined ? 24 : o.nrMin, nzMin = o.nzMin === undefined ? 12 : o.nzMin;
+  const twoPi = DY.scale2(DY.pi(), 1), lambda = DY.div(twoPi, k), Td = DY.div(twoPi, omegaDrive);
+  const delta = DY.sqrt(DY.div(DY.scale2(nu, 1), omegaResponse));
+  const safety = DY.fromRational(2n, 5n), sixteen = DY.fromBigInt(16n), eight = DY.fromBigInt(8n);
+  const verticals = new Map();
+  const tried = [];
+  let best = null;
+  for (const nr of SUGGEST_NR){
+    if (nr < nrMin || nr > nrCap) continue;
+    const perLambda = DY.div(lambda, DY.div(R, DY.fromBigInt(BigInt(nr))));
+    const rStretch = DY.fromDecimal(DY.cmp(perLambda, sixteen) > 0 ? '2.2' : DY.cmp(perLambda, eight) > 0 ? '1.4' : '0.8');
+    const rad = radialPart(nr, R, rStretch);
+    const eta = rad.rc.map(r => o.profile(r));
+    const err = surfaceOperatorError(rad, m, contact, eta, k);
+    if (err === null){ tried.push({ nr, rStretch, refused: 'the profile is identically zero on this radial grid' }); continue; }
+    const rimCells = DY.div(delta, rad.drc[nr - 1]);
+    const drMin = rad.drc.reduce((a, b) => DY.cmp(a, b) <= 0 ? a : b);
+    for (const nz of SUGGEST_NZ){
+      if (nz < nzMin || nz > nzCap) continue;
+      for (const zs of SUGGEST_ZSTRETCH){
+        const key = `${nz}|${zs}`;
+        if (!verticals.has(key)) verticals.set(key, verticalPart(nz, h, DY.fromDecimal(zs)));
+        const ver = verticals.get(key);
+        const floorCells = DY.div(delta, ver.dzc[0]), surfaceCells = DY.div(delta, ver.dzc[nz - 1]);
+        const layers = [floorCells, surfaceCells, rimCells].reduce((a, b) => DY.cmp(a, b) <= 0 ? a : b);
+        const grid = { drc: [drMin], dzc: [ver.dzc.reduce((a, b) => DY.cmp(a, b) <= 0 ? a : b)], rc: rad.rc, dzf: ver.dzf };
+        const lim = stepLimits(grid, { m, rho, nu, gamma, g, accel: DY.ZERO });
+        const stable = DY.mul(safety, DY.cmp(lim.capillary, lim.viscous) <= 0 ? lim.capillary : lim.viscous);
+        const s = roundDyadicToInteger(DY.div(Td, stable)), stepsPerPeriod = s < 1n ? 1n : s;
+        const stateSize = 2*(nr - 1)*nz + nr*nz + nr + (m === 1 ? nz : 0);
+        const S = DY.fromBigInt(BigInt(stateSize));
+        const work = DY.mul(DY.mul(S, DY.sqrt(S)), DY.fromBigInt(stepsPerPeriod));
+        const rec = { nr, nz, rStretch, zStretch: DY.fromDecimal(zs), zStretchText: zs, err, layers, layersOk: DY.cmp(layers, layerCells) >= 0,
+                      stokes: { delta, cellsInFloorLayer: floorCells, cellsInSurfaceLayer: surfaceCells, cellsInRimLayer: rimCells },
+                      stateSize, stepsPerPeriod: Number(stepsPerPeriod), work };
+        tried.push(rec);
+        if (DY.cmp(err, errTol) <= 0 && rec.layersOk && (!best || DY.cmp(work, best.work) < 0)) best = rec;
+      }
+    }
+  }
+  if (best) return Object.assign({}, best, { tried });
+  return { unreachable: true, errTol, layerCells, nrCap, nzCap, tried };
+}
+
+const FARADAY_DISC_D128 = Object.freeze({ createDiscD128, buildGrid, gradeToEnd, gradeBothEnds, stepLimits, discD128Bytes, DISC_D128_ERRORS,
+                                          suggestGrid, surfaceOperatorError, radialPart, verticalPart });
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_DISC_D128;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_DISC_D128 = FARADAY_DISC_D128;
