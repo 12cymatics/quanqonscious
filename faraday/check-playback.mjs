@@ -11,7 +11,8 @@ const extract = (start, end) => {
   return html.slice(first, last);
 };
 const handlers = extract("$('play').addEventListener", "sc.addEventListener");
-const clock = extract('function loop(now){', '  if (swapping && running){');
+const clock = extract('function loop(now){', '  if (swapping && running && !useSolver && !exporting){');
+const releasePreview = extract('function releaseExportPreview(){', 'function loop(now){');
 const listeners = new Map(), attributes = new Map();
 const button = { textContent: 'running', setAttribute: (k, v) => attributes.set(k, v) };
 const context = vm.createContext({
@@ -19,8 +20,9 @@ const context = vm.createContext({
   $: id => ({ addEventListener: (event, handler) => listeners.set(`${id}:${event}`, handler) }),
   now: 1000,
 });
-vm.runInContext('let running = true, t0 = performance.now(), simT = 0, dirty = false, renderError = null;', context);
+vm.runInContext('let running = true, t0 = performance.now(), simT = 0, dirty = false, renderError = null, useSolver = false, exporting = false;', context);
 vm.runInContext(handlers, context);
+vm.runInContext(releasePreview, context);
 vm.runInContext(clock + '} finally {} }', context);
 const value = expression => vm.runInContext(expression, context);
 const frame = time => { context.now = time; value('loop(now)'); };
@@ -66,4 +68,26 @@ equal(value('simT'), 0.125, 'resume after paused re-excite starts at zero');
 click('reset');
 frame(context.now + 500);
 equal(value('simT'), 0.5, 're-excite during playback restarts the clock');
+value('useSolver = true');
+frame(context.now + 60000);
+equal(value('simT'), 0.5, 'the nonlinear workspace does not advance the modal clock');
+value('useSolver = false; running = true; simT = 2; t0 = now - 2000; exporting = true');
+frame(context.now + 60000);
+equal(value('simT'), 2, 'an export holds the live preview clock');
+equal(value('running'), true, 'an export preserves the requested playback state');
+context.now += 500;
+value('releaseExportPreview(); exporting = false');
+frame(context.now + 250);
+equal(value('simT'), 2.25, 'playback after export excludes both held and final encoding time');
+click('play');
+value('exporting = true');
+frame(context.now + 60000);
+context.now += 500;
+value('releaseExportPreview(); exporting = false');
+frame(context.now + 250);
+equal(value('simT'), 2.25, 'exporting while paused keeps the preview clock frozen');
+equal(value('running'), false, 'finishing an export does not start paused playback');
+click('play');
+frame(context.now + 250);
+equal(value('simT'), 2.5, 'manual resume after a paused export excludes all export time');
 console.log(`${checks} playback checks passed, 0 failed`);

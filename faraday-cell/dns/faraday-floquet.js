@@ -251,8 +251,8 @@ function discWasmFactory(){
     + 'Refusing rather than running the JavaScript solver under that name.');
 }
 
-function discStateSize(nr, nz){
-  return 2*(nr - 1)*nz + nr*nz + nr;
+function discStateSize(nr, nz, m){
+  return 2*(nr - 1)*nz + nr*nz + nr + (m === 1 ? nz : 0);
 }
 
 function discPack(S, v, href, uref){
@@ -262,6 +262,10 @@ function discPack(S, v, href, uref){
   for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) S.v[S.iu(i, j)] = v[q++]*uref;
   for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) S.w[S.iw(i, j)] = v[q++]*uref;
   for (let i = 0; i < nr; i++) S.eta[i] = v[q++]*href;
+  if (S.m === 1)
+    for (let j = 0; j < nz; j++){
+      S.u[S.iu(0, j)] = v[q++]*uref; S.v[S.iu(0, j)] = -S.u[S.iu(0, j)];
+    }
   return q;
 }
 
@@ -272,12 +276,64 @@ function discUnpack(S, out, href, uref){
   for (let i = 1; i < nr; i++) for (let j = 0; j < nz; j++) out[q++] = S.v[S.iu(i, j)]/uref;
   for (let i = 0; i < nr; i++) for (let j = 1; j <= nz; j++) out[q++] = S.w[S.iw(i, j)]/uref;
   for (let i = 0; i < nr; i++) out[q++] = S.eta[i]/href;
+  if (S.m === 1) for (let j = 0; j < nz; j++) out[q++] = S.u[S.iu(0, j)]/uref;
   return q;
+}
+
+function realEigenvector(Hm, used, lam){
+  const shift = lam + 1e-10*Math.max(1, Math.abs(lam));
+  let y = new Float64Array(used).fill(1/Math.sqrt(used));
+  for (let pass = 0; pass < 4; pass++){
+    const A = Array.from({ length: used }, (_, i) =>
+      Float64Array.from({ length: used + 1 }, (_, j) =>
+        j === used ? y[i] : Hm[i][j] - (i === j ? shift : 0)));
+    for (let c = 0; c < used; c++){
+      let p = c;
+      for (let r = c + 1; r < used; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (A[p][c] === 0) throw new Error(
+        `realEigenvector: the shifted Hessenberg matrix is singular in column ${c}.`);
+      if (p !== c){ const t = A[p]; A[p] = A[c]; A[c] = t; }
+      for (let r = c + 1; r < used; r++){
+        const f = A[r][c]/A[c][c];
+        if (f !== 0) for (let j = c; j <= used; j++) A[r][j] -= f*A[c][j];
+      }
+    }
+    const x = new Float64Array(used);
+    for (let r = used - 1; r >= 0; r--){
+      let s = A[r][used];
+      for (let j = r + 1; j < used; j++) s -= A[r][j]*x[j];
+      x[r] = s/A[r][r];
+    }
+    let nrm = 0; for (let i = 0; i < used; i++) nrm += x[i]*x[i];
+    nrm = Math.sqrt(nrm);
+    if (!(nrm > 0) || !Number.isFinite(nrm)) throw new Error(
+      'realEigenvector: inverse iteration produced a non-finite vector.');
+    for (let i = 0; i < used; i++) x[i] /= nrm;
+    y = x;
+  }
+  return y;
+}
+
+function discModePeriod(S, v, steps, dt, href, uref, samples){
+  discPack(S, v, href, uref);
+  if (S.m !== 1) S.u[S.iu(0, 0)] = 0;
+  S.p.fill(0);
+  const every = steps/samples;
+  const frames = [];
+  const take = n => frames.push({ step: n, t: n*dt, eta: Float64Array.from(S.eta),
+    u: Float64Array.from(S.u), v: Float64Array.from(S.v), w: Float64Array.from(S.w) });
+  take(0);
+  let next = 1;
+  for (let n = 0; n < steps; n++){
+    S.t = n*dt; S.step(dt);
+    while (next <= samples && n + 1 >= Math.round(next*every)){ take(n + 1); next++; }
+  }
+  return frames;
 }
 
 function applyDiscPeriodMap(S, v, steps, dt, out, href, uref){
   discPack(S, v, href, uref);
-  S.u[S.iu(0, 0)] = 0;
+  if (S.m !== 1) S.u[S.iu(0, 0)] = 0;
   S.p.fill(0);
   /* The time is SET from the step index rather than accumulated by step().
      Accumulating dt makes t after a full period differ from Td: over the 2759
@@ -359,7 +415,7 @@ function floquetDisc(o){
   const steps = Math.max(1, Math.round(Td/dtIn));
   const dt = Td/steps;
 
-  const n = discStateSize(nr, nz);
+  const n = discStateSize(nr, nz, m);
   const out = new Float64Array(n);
   const href = o.href || 1e-9, uref = href*(omegaD/2);
 
@@ -498,9 +554,41 @@ function floquetDisc(o){
     + `at krylov 4 that mistake returned a multiplier BELOW the undriven one, `
     + `which no parametric drive can do.`);
 
+  let mode = null;
+  if (o.vector){
+    const lead = eigs[0];
+    if (Math.abs(lead.im) > 1e-9*cabs(lead)) throw new Error(
+      `the leading Floquet multiplier at m = ${m} is complex (${lead.re.toExponential(6)} `
+      + `${lead.im < 0 ? '-' : '+'} ${Math.abs(lead.im).toExponential(6)}i), so its mode is not `
+      + `locked to the drive and has no single periodic shape to return.`);
+    const lam = lead.re;
+    const y = realEigenvector(Hm, used, lam);
+    const x = new Float64Array(n);
+    for (let j = 0; j < used; j++){
+      const c = y[j];
+      if (c !== 0) for (let q = 0; q < n; q++) x[q] += c*run.V[j][q];
+    }
+    let xn = 0; for (let q = 0; q < n; q++) xn += x[q]*x[q];
+    xn = Math.sqrt(xn);
+    for (let q = 0; q < n; q++) x[q] /= xn;
+    const samples = o.samples === undefined ? 32 : requireFiniteInteger(o.samples, 'samples');
+    if (samples < 2) throw new RangeError(`samples = ${samples}: at least two frames per period.`);
+    const P = new FaradayDiscCtor({ nr, nz, R, h, rho, nu, gamma, m,
+                                    g: o.g, accel, omegaD, contact: o.contact,
+                                    rStretch: o.rStretch, zStretch: o.zStretch });
+    const frames = discModePeriod(P, x, steps, dt, href, uref, samples);
+    const end = new Float64Array(n);
+    discUnpack(P, end, href, uref);
+    let r2 = 0; for (let q = 0; q < n; q++) r2 += (end[q] - lam*x[q])*(end[q] - lam*x[q]);
+    mode = { multiplier: lam, vector: x, ritzResidual: Math.sqrt(r2)/Math.abs(lam),
+             frames, href, uref, samples,
+             grid: { rc: Float64Array.from(P.rc), rf: Float64Array.from(P.rf),
+                     zc: Float64Array.from(P.zc), zf: Float64Array.from(P.zf) } };
+  }
+
   const growth = Math.log(muMax)/Td;
   const growthWidth = spread > 0 ? Math.abs(Math.log(1 + spread/muMax)/Td) : 0;
-  return { eigs, muMax, growth, Td, dt, steps, m, engine,
+  return { eigs, muMax, growth, Td, dt, steps, m, engine, mode,
            muSpread: spread, growthWidth,
            unstable: muMax - spread > 1 ? true : (muMax + spread < 1 ? false : null),
            krylov: used, krylovCap, breakdown, residual, stateSize: n,

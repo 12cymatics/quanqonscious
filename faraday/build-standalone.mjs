@@ -45,6 +45,8 @@ export const SCRIPTS = [
      file://, which dns/check-page.mjs's "fetches no script at all" would catch. */
   { tag: '<script id="renderGl" src="faraday/render-gl.js"></script>',
     path: 'faraday/render-gl.js', open: '<script id="renderGl">' },
+  { tag: '<script id="faradayScene3d" src="faraday/scene3d.js"></script>',
+    path: 'faraday/scene3d.js', open: '<script id="faradayScene3d">' },
   { tag: '<script id="dnsSolver" src="dns/faraday-dns.js"></script>',
     path: 'dns/faraday-dns.js', open: '<script id="dnsSolver">' },
   { tag: '<script id="dnsDisc" src="dns/faraday-disc.js"></script>',
@@ -67,7 +69,11 @@ export const SCRIPTS = [
   { tag: '<script id="dnsCell3dWasm" src="dns/faraday-cell3d-wasm.js"></script>',
     path: 'dns/faraday-cell3d-wasm.js', open: '<script id="dnsCell3dWasm">' },
   { tag: '<script id="dnsCell3dPool" src="dns/cell3d-pool.js"></script>',
-    path: 'dns/cell3d-pool.js', open: '<script id="dnsCell3dPool">' }
+    path: 'dns/cell3d-pool.js', open: '<script id="dnsCell3dPool">' },
+  { tag: '<script id="dnsCell3dObservation" src="dns/cell3d-observation.js"></script>',
+    path: 'dns/cell3d-observation.js', open: '<script id="dnsCell3dObservation">' },
+  { tag: '<script id="dnsCell3dTracers" src="dns/cell3d-tracers.js"></script>',
+    path: 'dns/cell3d-tracers.js', open: '<script id="dnsCell3dTracers">' }
 ];
 
 /* The compiled period map travels as base64 in its own tag. A single file opened

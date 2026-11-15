@@ -186,7 +186,7 @@ section('3. free oscillation against the analytic disc dispersion relation');
    their periods are five to seven times longer at a comparable step -- and they
    are the reason this section is timed in minutes rather than seconds. */
 const OSC_PERIODS = 1.5;
-for (const [m, n] of [[0, 1], [2, 1], [12, 1]]){
+for (const [m, n] of [[0, 1], [1, 2], [2, 1], [12, 1]]){
   const a = analytic(m, n);
   const errs = [];
   for (const [nr, nz] of [[20, 10], [30, 15]]){
@@ -204,6 +204,26 @@ for (const [m, n] of [[0, 1], [2, 1], [12, 1]]){
   }
   ok(errs[1] < errs[0], `m = ${m}: refining the grid moves omega toward the analytic value`,
      `${(errs[0]*100).toFixed(3)}% then ${(errs[1]*100).toFixed(3)}%`);
+}
+{
+  const a = analytic(1, 1);
+  const S = new FaradayDisc({ m: 1, nr: 20, nz: 10, ...CELL, nu: 1e-10, contact: 'free',
+                              accel: 0, omegaD: 1 });
+  seedMode(S, 1, a.k, 1e-9);
+  const r = measureOmega(S, OSC_PERIODS, a.omega);
+  let axis = 0, pair = 0;
+  for (let j = 0; j < S.nz; j++){
+    axis = Math.max(axis, Math.abs(S.u[S.iu(0, j)]));
+    pair = Math.max(pair, Math.abs(S.u[S.iu(0, j)] + S.v[S.iu(0, j)]));
+  }
+  ok(Math.abs(r.omega/a.omega - 1) < 0.01,
+     `m = 1, n = 1, 20x10, the sloshing mode: omega within 1% of ${a.omega.toFixed(2)} rad/s`,
+     `got ${r.omega.toFixed(3)}, ${((r.omega/a.omega-1)*100).toFixed(3)}%`);
+  ok(axis > 0 && pair === 0,
+     'and its axis translates sideways, u = -v there exactly, rather than being held still',
+     `max |u(0)| ${axis.toExponential(3)}, max |u(0) + v(0)| ${pair}`);
+  ok(S.maxDivergence() < 1e-12, 'm = 1, 20x10: the corrected field is divergence free',
+     `max |div u| / volume = ${S.maxDivergence().toExponential(2)}`);
 }
 
 /* ── 4. energy ──────────────────────────────────────────────────────────── */
@@ -272,9 +292,9 @@ section('5. the damping scales with viscosity');
      that is right: the bulk term 2 nu k^2 is linear. But the floor, rim and
      surface Stokes layers dissipate as sqrt(nu), and a real layer carries both,
      so the exponent belongs strictly BETWEEN the two. The arithmetic, at m = 5,
-     n = 1: 2 nu k^2 is 0.562 of the measured 2.463 per second, leaving 1.90 in
-     the layers, for a predicted exponent of (0.562*1 + 1.90*0.5)/2.463 = 0.61.
-     Measured 0.755, on the layer side of the middle. What the test can and does
+     n = 1: 2 nu k^2 is 0.562 of the measured 2.345 per second, leaving 1.78 in
+     the layers, for a predicted exponent of (0.562*1 + 1.78*0.5)/2.345 = 0.62.
+     Measured 0.752, on the layer side of the middle. What the test can and does
      establish is that the exponent is well away from 0 -- the scheme's own
      dissipation does not care what nu is -- and away from a pure square root. */
   ok(slope > 0.55 && slope < 1.05,
@@ -343,8 +363,6 @@ console.log(`\n  sized for the Floquet sections: ${GRID8.nr} x ${GRID8.nz}, `
 
 /* ── 7. refusals ───────────────────────────────────────────────────────── */
 section('7. what it refuses rather than answering');
-throws('m = 1 is refused, naming the cancellation that makes it different',
-       () => new FaradayDisc({ m: 1, nr: 16, nz: 8, ...CELL }), 'm = 1');
 throws('a contact line that is neither free nor pinned is refused',
        () => new FaradayDisc({ m: 2, nr: 16, nz: 8, ...CELL, contact: 'slip' }),
        'contact');
@@ -547,8 +565,8 @@ section('11. the C++ engine against the JavaScript solver, bit for bit');
    transcription, not of the resolution: whether the two implementations agree
    does not depend on whether the grid carries the mode, and a coarse grid
    exercises every term in seconds instead of minutes. */
-{
-  const m = 12, a = analytic(m, 1);
+for (const m of [12, 1]){
+  const a = analytic(m, 1);
   for (const contact of ['free', 'pinned']){
     const nr = 20, nz = 10;
     const mk = () => {
@@ -557,7 +575,10 @@ section('11. the C++ engine against the JavaScript solver, bit for bit');
       return S;
     };
     const S = mk();
-    const n = 2*(nr - 1)*nz + nr*nz + nr;
+    const n = F.discStateSize(nr, nz, m);
+    if (m === 1) ok(n === 2*(nr - 1)*nz + nr*nz + nr + nz,
+       'at m = 1 the period map\'s state carries the axis velocity at every level',
+       `${n} unknowns`);
     const dt = S.stableStep(0.4);
     const href = 1e-9, uref = href*Math.PI*111;
 
@@ -576,7 +597,7 @@ section('11. the C++ engine against the JavaScript solver, bit for bit');
     E.stepOnce(v, wa1, dt, gNow, href, uref);
     let same = 0;
     for (let i = 0; i < n; i++) if (js1[i] === wa1[i]) same++;
-    ok(same === n, `${contact} rim, one step: all ${n} values identical`,
+    ok(same === n, `m = ${m}, ${contact} rim, one step: all ${n} values identical`,
        `${same} of ${n} identical`);
 
     /* Then a full drive period, where a difference of one bit in one cell has
@@ -594,16 +615,17 @@ section('11. the C++ engine against the JavaScript solver, bit for bit');
       const sc = Math.max(Math.abs(jsP[i]), Math.abs(waP[i]));
       if (sc > 0) worst = Math.max(worst, d/sc);
     }
-    ok(same === n, `${contact} rim, one drive period of ${steps} steps: all `
+    ok(same === n, `m = ${m}, ${contact} rim, one drive period of ${steps} steps: all `
        + `${n} values identical`,
        `${same} of ${n} identical, worst relative difference ${worst.toExponential(3)}`);
     /* The map is not the identity, or the equality above would be vacuous. */
     let moved = 0;
     for (let i = 0; i < n; i++) if (waP[i] !== v[i]) moved++;
-    ok(moved > 0.9*n, `${contact} rim: and the period map moved the state, so the `
+    ok(moved > 0.9*n, `m = ${m}, ${contact} rim: and the period map moved the state, so the `
        + `agreement is not two copies of the input`, `${moved} of ${n} moved`);
   }
-
+}
+{
   /* The loader refuses rather than substituting. Bytes that are not a module
      cannot compile, and what comes back must be a refusal that names the engine
      -- not a silent run of the JavaScript under the C++ name. */
@@ -867,6 +889,167 @@ section('12. the grid is sized to the mode, and the space is extended not rebuil
      'a harder vertical grading puts substantially more cells in the floor '
      + 'Stokes layer, so the grading the caller asks for is the grading solved',
      `${mild.toFixed(3)} cells at stretch 1.0 against ${severe.toFixed(3)} at 3.8`);
+}
+
+section('13. the vector Laplacian, and m = 1 carried through the axis');
+{
+  const nr = 24, nz = 8, mid = nz >> 1, a = 1/CELL.R;
+  const zeros = new Float64Array(nr + 1);
+  const apply = S => {
+    const lu = S.lapUV(S.u, S.v, zeros, new Float64Array((nr + 1)*nz));
+    const lv = S.lapUV(S.v, S.u, zeros, new Float64Array((nr + 1)*nz));
+    if (S.m === 1) S.lapAxis(zeros, lu, lv);
+    return { lu, lv };
+  };
+  const potential = [];
+  for (const m of [1, 2, 3]){
+    const S = new FaradayDisc({ m, nr, nz, ...CELL, rStretch: 0, zStretch: 0 });
+    for (let i = 0; i <= nr; i++) for (let j = 0; j < nz; j++){
+      const f = Math.pow(a*S.rf[i], m - 1);
+      S.u[S.iu(i, j)] = f; S.v[S.iu(i, j)] = -f;
+    }
+    const { lu, lv } = apply(S);
+    let worst = 0, scale = 0;
+    for (let i = m === 1 ? 0 : 1; i < nr; i++){
+      const c = S.iu(i, mid), r = i === 0 ? S.rc[0] : S.rf[i];
+      worst = Math.max(worst, Math.abs(lu[c]), Math.abs(lv[c]));
+      scale = Math.max(scale, (m*m + 1)*Math.abs(S.u[c])/(r*r));
+    }
+    potential.push({ m, worst, scale });
+  }
+  ok(potential.every(p => p.worst <= 1e-9*p.scale),
+     'the vector Laplacian of the potential flow grad(r^m cos m theta), which is exactly zero, '
+     + 'is zero in BOTH components at every face for m = 1, 2 and 3 -- the azimuthal one '
+     + 'returned 4mU/r^2 while its coupling carried the wrong sign',
+     potential.map(p => `m = ${p.m}: ${p.worst.toExponential(2)} against ${p.scale.toExponential(2)}`)
+       .join('; '));
+
+  const S1 = new FaradayDisc({ m: 1, nr, nz, ...CELL, rStretch: 0, zStretch: 0 });
+  const radialBad = [], verticalBad = [];
+  for (let i = 0; i <= nr; i++) for (let j = 0; j < nz; j++){
+    const f = (a*S1.rf[i])*(a*S1.rf[i]);
+    S1.u[S1.iu(i, j)] = f; S1.v[S1.iu(i, j)] = -f;
+  }
+  let L = apply(S1);
+  for (let i = 0; i < nr; i++) for (let j = 1; j < nz - 1; j++){
+    const c = S1.iu(i, j);
+    if (!(Math.abs(L.lu[c] - 4*a*a) <= 1e-9*4*a*a && Math.abs(L.lv[c] + 4*a*a) <= 1e-9*4*a*a))
+      radialBad.push(`i ${i} j ${j}: ${L.lu[c]}, ${L.lv[c]}`);
+  }
+  for (let i = 0; i <= nr; i++) for (let j = 0; j < nz; j++){
+    const f = (a*S1.zc[j])*(a*S1.zc[j]);
+    S1.u[S1.iu(i, j)] = f; S1.v[S1.iu(i, j)] = -f;
+  }
+  L = apply(S1);
+  for (let i = 0; i < nr; i++) for (let j = 1; j < nz - 1; j++){
+    const c = S1.iu(i, j);
+    if (!(Math.abs(L.lu[c] - 2*a*a) <= 1e-9*2*a*a && Math.abs(L.lv[c] + 2*a*a) <= 1e-9*2*a*a))
+      verticalBad.push(`i ${i} j ${j}: ${L.lu[c]}, ${L.lv[c]}`);
+  }
+  ok(radialBad.length === 0,
+     'at m = 1 the sideways flow u_x = r^2, whose Laplacian is 4 everywhere, reads 4 on the '
+     + 'axis and at every face, so the axis carries the viscous term rather than dropping it',
+     radialBad.slice(0, 3).join(' | '));
+  ok(verticalBad.length === 0,
+     'and u_x = z^2 reads 2 on the axis and at every face, so the axis has its vertical '
+     + 'diffusion too', verticalBad.slice(0, 3).join(' | '));
+
+  const a1 = analytic(1, 1), axisErr = [];
+  for (const [nrA, nzA] of [[20, 10], [30, 15]]){
+    const S = new FaradayDisc({ m: 1, nr: nrA, nz: nzA, ...CELL, nu: 1e-10, contact: 'free',
+                                accel: 0, omegaD: 1 });
+    seedMode(S, 1, a1.k, 1e-9);
+    const dt = S.stableStep(0.4), steps = Math.round(0.25*(2*Math.PI/a1.omega)/dt);
+    for (let s = 0; s < steps; s++) S.step(dt);
+    const want = K.besselJp(1, 0)/K.besselJp(1, a1.k*S.rf[1]);
+    let worst = 0;
+    for (let j = 0; j < nzA; j++)
+      worst = Math.max(worst, Math.abs(S.u[S.iu(0, j)]/S.u[S.iu(1, j)]/want - 1));
+    axisErr.push(worst);
+  }
+  ok(axisErr[0] < 1e-2 && axisErr[1] < axisErr[0],
+     'a quarter period into the m = 1 sloshing mode the axis moves as the potential flow '
+     + 'does, u(0)/u(r1) = J1\'(0)/J1\'(k r1) at every level to within 1%, and closer on the '
+     + 'finer grid -- where an axis held still would be 100% off',
+     axisErr.map(e => e.toExponential(3)).join(' then '));
+
+  const a2 = analytic(1, 2);
+  const Se = new FaradayDisc({ m: 1, nr: 16, nz: 10, ...CELL, nu: 1e-10, contact: 'free',
+                               accel: 0, omegaD: 1 });
+  seedMode(Se, 1, a2.k, 1e-9);
+  const exact = S => {
+    let e = 0;
+    for (let j = 0; j < S.nz; j++){
+      const p = S.u[S.iu(0, j)], q = S.v[S.iu(0, j)];
+      e += 0.5*S.rho*(p*p + q*q)*0.5*S.rc[0]*S.rc[0]*S.dzc[j];
+    }
+    for (let i = 1; i < S.nr; i++) for (let j = 0; j < S.nz; j++){
+      const p = S.u[S.iu(i, j)], q = S.v[S.iu(i, j)];
+      e += 0.5*S.rho*(p*p + q*q)*S.rf[i]*S.drf[i]*S.dzc[j];
+    }
+    for (let i = 0; i < S.nr; i++) for (let j = 1; j <= S.nz; j++){
+      const p = S.w[S.iw(i, j)];
+      e += 0.5*S.rho*p*p*S.rc[i]*S.drc[i]*S.dzf[j];
+    }
+    for (let i = 0; i < S.nr; i++)
+      e += 0.5*S.rc[i]*S.drc[i]*S.eta[i]*(S.rho*S.g*S.eta[i] - S.gamma*S.surfaceLaplacian(i));
+    return e;
+  };
+  const dtE = Se.stableStep(0.4), stepsE = Math.round(0.5*(2*Math.PI/a2.omega)/dtE);
+  const E0 = exact(Se);
+  let drift = 0;
+  for (let s = 0; s < stepsE; s++){ Se.step(dtE); drift = Math.max(drift, Math.abs(exact(Se)/E0 - 1)); }
+  ok(drift < a2.omega*dtE,
+     'with the viscosity removed the m = 1 energy -- the axis included at its own weight -- '
+     + 'stays within omega dt of its start over half a period, so the axis pressure does no '
+     + 'net work', `${drift.toExponential(3)} against omega dt = ${(a2.omega*dtE).toExponential(3)}`);
+
+  const Sp = new FaradayDisc({ m: 1, nr: 16, nz: 10, ...CELL, contact: 'free', accel: 0,
+                               omegaD: 1 });
+  seedMode(Sp, 1, a2.k, 1e-9);
+  const dtP = Sp.stableStep(0.4);
+  for (let s = 0; s < 30; s++) Sp.step(dtP);
+  const href = 1, uref = 1, nP = F.discStateSize(16, 10, 1);
+  const vec = new Float64Array(nP);
+  let q = 0;
+  for (let i = 1; i < 16; i++) for (let j = 0; j < 10; j++) vec[q++] = Sp.u[Sp.iu(i, j)]/uref;
+  for (let i = 1; i < 16; i++) for (let j = 0; j < 10; j++) vec[q++] = Sp.v[Sp.iu(i, j)]/uref;
+  for (let i = 0; i < 16; i++) for (let j = 1; j <= 10; j++) vec[q++] = Sp.w[Sp.iw(i, j)]/uref;
+  for (let i = 0; i < 16; i++) vec[q++] = Sp.eta[i]/href;
+  for (let j = 0; j < 10; j++) vec[q++] = Sp.u[Sp.iu(0, j)]/uref;
+  const mapped = new Float64Array(nP);
+  F.applyDiscPeriodMap(new FaradayDisc({ m: 1, nr: 16, nz: 10, ...CELL, contact: 'free',
+                                          accel: 0, omegaD: 1 }), vec, 40, dtP, mapped, href, uref);
+  Sp.p.fill(0);
+  for (let s = 0; s < 40; s++){ Sp.t = s*dtP; Sp.step(dtP); }
+  q = 0;
+  let sameP = 0;
+  const cmp = x => { if (mapped[q++] === x) sameP++; };
+  for (let i = 1; i < 16; i++) for (let j = 0; j < 10; j++) cmp(Sp.u[Sp.iu(i, j)]/uref);
+  for (let i = 1; i < 16; i++) for (let j = 0; j < 10; j++) cmp(Sp.v[Sp.iu(i, j)]/uref);
+  for (let i = 0; i < 16; i++) for (let j = 1; j <= 10; j++) cmp(Sp.w[Sp.iw(i, j)]/uref);
+  for (let i = 0; i < 16; i++) cmp(Sp.eta[i]/href);
+  for (let j = 0; j < 10; j++) cmp(Sp.u[Sp.iu(0, j)]/uref);
+  ok(q === nP && sameP === nP && vec[nP - 1] !== 0,
+     'the period map carries the m = 1 axis velocity through its state: packed, stepped and '
+     + 'unpacked, it is the solver stepped directly, to the bit, axis included',
+     `${sameP} of ${nP} identical; axis entry ${vec[nP - 1]}`);
+
+  const rfF = gradeToEnd(24, CELL.R, 2.2), seedF = new Float64Array(24);
+  for (let i = 0; i < 24; i++) seedF[i] = K.besselJ(1, a1.k*0.5*(rfF[i] + rfF[i+1]));
+  const commonF = { nr: 24, nz: 10, ...CELL, m: 1, contact: 'free', eta0: seedF, k: a1.k,
+                    omegaD: 2*a1.omega, engine: 'wasm' };
+  const quietF = F.floquetDisc({ ...commonF, accel: 0 });
+  const drivenF = F.floquetDisc({ ...commonF, accel: 20 });
+  console.log(`       m = 1, n = 1 at 24x10, drive ${(2*a1.omega).toFixed(3)} rad/s: undriven |mu| = `
+    + `${quietF.muMax.toFixed(8)} +/- ${quietF.muSpread.toExponential(2)}; a = 20 m/s^2: |mu| = `
+    + `${drivenF.muMax.toFixed(8)} +/- ${drivenF.muSpread.toExponential(2)}`);
+  ok(quietF.unstable === false && drivenF.unstable === true
+     && quietF.stateSize === F.discStateSize(24, 10, 1),
+     'Floquet at m = 1: the undriven sloshing mode is decided stable, and driven at twice its '
+     + 'frequency it is decided unstable, on the state that carries the axis',
+     `|mu| ${quietF.muMax} (${quietF.unstable}) and ${drivenF.muMax} (${drivenF.unstable}), `
+     + `${quietF.stateSize} unknowns`);
 }
 
 console.log('\n' + '-'.repeat(66));
