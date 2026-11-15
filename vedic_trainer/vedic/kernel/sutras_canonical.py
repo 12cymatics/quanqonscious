@@ -2,7 +2,7 @@
 
 How many formulas this module holds
 -----------------------------------
-Nine, not twenty-nine. ``STRICT_SUTRA_KERNEL`` dispatches on
+Nine, not twenty-nine. ``apply_sutra`` dispatches on
 ``SUTRA_KIND[id]`` through seven templates; two branch internally (REFL on
 ``id == 5``, PERM on ``axis = (id+1) & 3``), so seven become nine. Between two
 ids of the same class the *only* difference is the scalar
@@ -23,8 +23,8 @@ C++ implementations. This module is not those, and does not claim to be.
 Contents
 --------
 * the seven operator types
-* ``STRICT_SUTRA_KERNEL`` — the exact, float-free path,
-  ``psi' = STRICT_SUTRA_KERNEL_i(psi, alpha_i)``
+* ``apply_sutra`` — the exact, float-free path,
+  ``psi' = apply_sutra(i, psi, strength)``
 * ``SUTRA_KIND`` — the id → kind dispatch
 * ``ALPHA.computeQ`` — the α weight
 * §12Y structural singularity suppression — the identity guarantee
@@ -244,7 +244,7 @@ def alpha(sid: int, strength: Fraction) -> Fraction:
 
 
 def blend(current: Fraction, target: Fraction, w: Fraction) -> Fraction:
-    """blend(c, t, w) = c + (t − c)·w.   STRICT_SUTRA_KERNEL.blend."""
+    """blend(c, t, w) = c + (t − c)·w."""
     return current + (target - current) * w
 
 
@@ -354,7 +354,7 @@ _DISPATCH = {
 
 
 def apply_sutra(sid: int, psi: Q16, strength: Fraction) -> Q16:
-    """Apply sutra ``sid`` to Ψ at the given strength.  STRICT_SUTRA_KERNEL.applyOne.
+    """Apply sutra ``sid`` to Ψ at the given strength.
 
     Returns Ψ unchanged when α = 0 — the §12Y structural guarantee, checked
     explicitly rather than emerging from arithmetic.

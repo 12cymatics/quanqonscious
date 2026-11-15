@@ -23,14 +23,13 @@ Renames are the common case and they are silent by nature: the code keeps
 working, so only the prose breaks. This test makes a stale pointer a test
 failure at the moment of the rename.
 
-Two kinds of path are exempt, and only by being declared below -- never by
-failing to be found. ``EXTERNAL`` is for files that live on the user's
-machine rather than in this repository. ``REMOVED`` is for files a document
-names *because they are gone*: a withdrawal notice that cannot say what it
-removed is not a withdrawal. Both lists are checked in both directions --
-an entry nobody cites is deleted, an "external" file that turns up here loses
-its exemption, and a "removed" file that comes back loses its exemption too,
-so neither list can quietly cover a real rename.
+One kind of path is exempt, and only by being declared below -- never by
+failing to be found. ``REMOVED`` is for files a document names *because they
+are gone*: a withdrawal notice that cannot say what it removed is not a
+withdrawal. The list is checked in both directions -- an entry nobody cites is
+deleted, and a "removed" file that comes back loses its exemption, so the list
+cannot quietly cover a real rename. A file that lives anywhere but this
+repository has no exemption: a document that names one fails here.
 
 Tracked, not present
 --------------------
@@ -73,13 +72,6 @@ GIT_ROOT = Path(_git("rev-parse", "--show-toplevel", cwd=REPO)[0])
 #: see the module docstring for what a hand-listed DOCS cost.
 DOCS: tuple[str, ...] = tuple(sorted(_git("ls-files", "*.md", cwd=REPO)))
 
-# Paths deliberately named but not present: they belong to the user, not here.
-EXTERNAL = {
-    # Genuinely absent: no file of this name is tracked anywhere in the work
-    # tree. The bit-exact protocol is written against it.
-    "vedic_v18.16_strict_kernel.html",
-}
-
 # Paths named *because they no longer exist*. Two kinds of document need to
 # do this. ABLATION_RESULTS.md withdraws the figures measured on the synthetic
 # corpus and has to name the pipeline it withdrew with them; a reader cannot
@@ -99,13 +91,12 @@ REMOVED = {
     "vedic/data/tesseract_encode.py",          # the text -> Psi encoder
     "vedic/data/synthetic_contradiction.py",   # (P, not-P) pair generator
     "vedic/data/synthetic_paraphrase.py",      # axis-emphasis pair generator
-    # Renamed to z2_primitives.py. Named by docs/SUTRA_CATALOGUE.md and
-    # docs/BIT_EXACT_PROTOCOL.md in the sentences recording that they used
-    # to point at it — which is how a reader tells a moved pointer from a
-    # vanished feature. It is the defect this whole file was written for,
-    # and it survived in three documents because DOCS listed two.
+    # Renamed to z2_primitives.py. Named by docs/SUTRA_CATALOGUE.md in the
+    # sentence recording that it used to point at it — which is how a reader
+    # tells a moved pointer from a vanished feature. It is the defect this
+    # whole file was written for, and it survived in three documents because
+    # DOCS listed two.
     "vedic/kernel/sutras_exact.py",
-    "sutras_exact.py",
     # Deleted with the submit-pypi-override mechanism. docs/CI_AUTOMATION.md
     # names it in the section recording why that machinery existed and why
     # it is gone — a shadow status is worth explaining once rather than
@@ -184,8 +175,8 @@ def is_live(citation: str, doc: str) -> bool:
     """The gate's whole decision, in one pure function.
 
     True when a reader following this citation lands somewhere real: it
-    resolves to a tracked file, or it is declared in EXTERNAL (someone
-    else's machine) or REMOVED (named because it is gone).
+    resolves to a tracked file, or it is declared in REMOVED (named because
+    it is gone).
 
     This replaced a helper named ``missing()`` that took a pre-computed
     tracked set. When the resolution ladder was added, the gate stopped
@@ -196,7 +187,7 @@ def is_live(citation: str, doc: str) -> bool:
     like a gate. One function makes the decision now, and it is the one the
     regeneration tests exercise.
     """
-    return citation in EXTERNAL or citation in REMOVED or resolves(citation, doc)
+    return citation in REMOVED or resolves(citation, doc)
 
 
 ALL = sorted({(d, p) for d in DOCS for p in _cited(d)})
@@ -215,9 +206,8 @@ def test_documented_path_is_tracked(doc: str, path: str):
            "and fails in a fresh clone. It is a generated artifact: name the "
            "script that writes it instead."
            if (REPO / path).exists() else
-           ". Either the file was renamed and the document was not updated, "
-           "or the path belongs in EXTERNAL in this test with a note saying "
-           "whose machine it is on."))
+           ". The file was renamed or removed and the document was not "
+           "updated."))
 
 
 def test_the_tracked_set_was_read():
@@ -229,35 +219,9 @@ def test_the_tracked_set_was_read():
         f"not read, so every path check above is meaningless")
 
 
-def test_external_list_has_no_dead_entries():
-    """An exemption for a path nobody cites any more is a lie waiting to be
-    reused. If the citation is gone, so is the exemption."""
-    cited = {p for _, p in ALL}
-    stale = EXTERNAL - cited
-    assert not stale, f"EXTERNAL exempts paths no document mentions: {sorted(stale)}"
-
-
-def test_no_external_entry_actually_exists_in_the_repo():
-    """If an 'external' file turns up in the work tree, the exemption is wrong.
-
-    This checked `REPO / p` — this *package* — while the files it exempted sit
-    at the work-tree root one level up. So it asked a question whose answer was
-    always no.
-
-    A guard that looks in the wrong directory is worse than no guard: it reads
-    as coverage. It resolves against ROOT_TRACKED and the work tree now.
-    """
-    present = sorted(p for p in EXTERNAL
-                     if p in ROOT_TRACKED or (GIT_ROOT / p).exists())
-    assert not present, (
-        f"{present} are marked external but are tracked or present in the "
-        f"work tree — remove the exemption so they are checked like "
-        f"everything else, and correct whatever document calls them absent")
-
-
 def test_removed_list_has_no_dead_entries():
-    """Same rule as EXTERNAL: an exemption nobody uses is one waiting to be
-    reused for something it was not written for."""
+    """An exemption nobody uses is one waiting to be reused for something it
+    was not written for."""
     cited = {p for _, p in ALL}
     stale = REMOVED - cited
     assert not stale, f"REMOVED exempts paths no document mentions: {sorted(stale)}"
@@ -272,8 +236,3 @@ def test_no_removed_entry_is_back_in_the_repository():
         f"{back} are listed as removed but are present again. Update the "
         f"document that describes them as gone, then drop them from REMOVED.")
 
-
-def test_the_two_exemption_lists_are_disjoint():
-    """A path cannot be both someone else's file and a file deleted here."""
-    both = EXTERNAL & REMOVED
-    assert not both, f"declared both external and removed: {sorted(both)}"

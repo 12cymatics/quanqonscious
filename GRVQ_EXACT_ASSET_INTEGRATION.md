@@ -210,12 +210,13 @@ canonical GRVQ geodesic evolution or the missing 26 field-coupled formulas.
 
 ## Exact Hodge calculation recovered from the existing source
 
-The Hodge calculation is traced to
-[the preserved v18.24 source](https://github.com/12cymatics/quanqonscious/blob/9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1/vedic_v18.24_full_kernel.html),
-specifically `MAGFIELD.hodgeSD`, `MAGFIELD.hodgeASD`, and its face aggregation.
-That surrounding visualizer is explicitly a floating-point presentation path.
-The new module implements its stated Hodge equations over exact rational inputs;
-it does not claim that the surrounding visualizer has become exact.
+The Hodge split is the one the simulator's kernel uses, the tables
+`HODGE_SD` and `HODGE_ASD` of `vedic_v18.51.1_exact_phi.html`: the self-dual and
+anti-self-dual triples are `(F + *F)/2` and `(F - *F)/2`.
+`tests/test_grvq_q4_hodge.py` reads those tables from the page and checks them
+against this module's split. The module implements the Hodge equations over
+exact rational inputs; the six-face mean and the normalized pressure are its
+stated conventions.
 
 The signature is Euclidean `(+,+,+,+)`, orientation `(0,1,2,3)`, and component
 order is `(01,02,03,12,13,23)`. For `F=(a,b,c,d,e,f)`:

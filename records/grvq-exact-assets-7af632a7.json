@@ -3,7 +3,6 @@
   "task": "integrate-grvq-exact-assets-7af632a7",
   "authorization": "User approved implementing the assessed reusable GRVQ assets with 'Ok do it'.",
   "repository": "12cymatics/quanqonscious",
-  "base_commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
   "candidate_branch": "claude/integrate-grvq-exact-assets-7af632a7",
   "workspace": "isolated selected-source snapshot; remote commits must retain the complete upstream base tree",
   "task_integrator": "/root",
@@ -73,7 +72,6 @@
     "other_workflows": "Pending at this record update"
   },
   "baseline_checks": {
-    "commit": "9f8af8bb6ed3c3d6ab064f71effdcc7bfc576ef1",
     "python_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674517",
     "javascript_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674649",
     "package_run": "https://github.com/12cymatics/quanqonscious/actions/runs/41603674535",

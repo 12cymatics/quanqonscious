@@ -12,7 +12,7 @@ package exposes:
   their definitions; `vedic/kernel/z2_primitives.py` holds the unweighted
   Z₂⁴ primitives the residuals and generators are built from, and is *not*
   the 29. **`sutras_canonical.py` holds nine distinct maps, not twenty-nine**:
-  `STRICT_SUTRA_KERNEL` dispatches through seven kind templates, two of which
+  `apply_sutra` dispatches through seven kind templates, two of which
   branch internally (REFL on `id == 5`, PERM on `axis = (id+1) & 3`), and
   between two ids of one class the only difference is the scalar
   α(n) = (n/435)·(strength/100). That is faithful — upstream is nine maps too,
@@ -83,10 +83,10 @@ text.
 | Blueprint gates  | yes         | 35 tests               |
 | Exact asset extensions | yes   | 154 tests              |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 200 tests              |
-| Script validity  | yes         | 66 tests               |
+| External sidecar | yes         | 199 tests              |
+| Script validity  | yes         | 62 tests               |
 | Withdrawn numbers | yes        | 28 tests               |
-| Documented paths | yes         | 119 tests               |
+| Documented paths | yes         | 110 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 31 tests               |
@@ -119,7 +119,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2849 tests are collected and 2849 pass. **Nothing is skipped**, here or in
+2835 tests are collected and 2835 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
@@ -299,18 +299,13 @@ that this buys correctness of the *kernel*, not correctness of the
 *hypothesis* — criterion 1 shows those are separate questions, and the
 kernel passing tells you nothing about whether the sutras help.
 
-## Bit-exact protocol with v18.16
+## Bit-exact fixtures
 
-The Fraction kernel is the authoritative simulator. The committed
-fixtures (`fixtures/*.json`) are produced by
-`scripts/build_fixtures.py`. The user's `vedic_v18.16_strict_kernel.html` (an external file, not in
-this repository) implements the same operators in JavaScript over BigInt rationals; when
-the user runs `scripts/export_simulator_fixtures.py` against it, the
-exported JSON must equal the committed fixtures byte-for-byte. Any
-mismatch is a kernel bug.
-
-See `docs/BIT_EXACT_PROTOCOL.md` for the JavaScript hooks the simulator
-must expose (`window.exportFixtures(seed, n)`).
+The committed fixtures (`fixtures/*.json`) are produced by
+`scripts/build_fixtures.py` from the Fraction kernel, and
+`scripts/verify_bit_exact.py` requires the kernel to reproduce every record
+exactly. They are written by the kernel they are compared against, so they
+detect drift, not error. See `docs/BIT_EXACT_PROTOCOL.md`.
 
 ## Repository layout
 
