@@ -172,7 +172,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-none" type="button">ALL OFF</button>
     <button id="btn-vortex" type="button" title="Reverse the TGCR vortex: omega changes sign (from 0 it starts at 3). It drives the magnetism memory's induction and twists the drawn precession.">VORTEX ⇄</button>
     <button id="btn-fields" type="button" class="active" title="Show or hide the fields around the construct: the magnetic pressure of its lattice currents seen through as a haze, and the energy densities of the magnetic and electric fields on the equatorial plane">FIELDS ON</button>
-    <button id="btn-lattice" type="button" title="Draw the hypercube on the surface itself: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its vertices and its reconnections. The flux map shows the same values flat.">LATTICE OFF</button>
+    <button id="btn-lattice" type="button" class="active" title="Draw the hypercube on the surface itself: the potential on its 32 edges, the flux through its 16 cells, through the hole and along the tube at its 8 loops, its vertices and its reconnections. The flux map shows the same values flat.">LATTICE ON</button>
     <button id="btn-charts" type="button" class="active" title="Show or hide the charts drawn over the view: the composition comparison, the flux map, the vertex bars and the dynamo timeline">CHARTS ON</button>
     <button id="btn-proof" type="button" title="Exact proof run on the audit worker: every statement about each of the 29 formulas (SutraWS/VedicFormulas.lean) decided on the test states, and each refusal named. Results go to the EVENT LOG.">PROOF</button>
     <button id="btn-export" type="button" title="Export the exact state and every stage of the last step as JSON">EXPORT STEP</button>
@@ -315,7 +315,7 @@ const VERSION = Object.freeze({
 const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
-  stepExport:    'vedic-step-export/7',
+  stepExport:    'vedic-step-export/8',
   operatorAudit: 'vedic-operator-audit/2'
 });
 const VIEW_MOTION = Object.freeze({
@@ -1747,6 +1747,15 @@ const KERNEL_FACTORY = () => {
       delta:ms.psi.map((x,i)=>Q.sub(x,input[i])),kappaFeed:Q.mul(ms.trace,TGCR_KAPPA_FEED),
       record,grvqRecord,mstvq:ms,stepError:run.ledger});
   };
+  const formulaTaking = (f,taking,takingKappa) => Object.freeze({...f,taking,takingKappa,
+    delta:f.delta.map((d,i)=>Q.sub(d,taking[i])),kappaFeed:Q.sub(f.kappaFeed,takingKappa)});
+  const carryThrough = (carried,last) => {
+    const p=last.params,W=last.wheeler;
+    const afterG=edgeRotate(carried,last.ctx.magTau);
+    const afterM=complementRotate(afterG,mstvqTau(W,p));
+    const afterT=edgeRotate(afterM,tgcrTau(last.afterM,p));
+    return complementRotate(afterT,zpeTau(W,p));
+  };
   const stagesFrom = (input,formula,part,W,params,keep,ctx) => {
     const afterF=keep(input.map((x,i)=>Q.add(x,Q.mul(formula.delta[i],part))));
     const afterG=applyMAG(afterF,ctx.magTau,keep);
@@ -2104,6 +2113,8 @@ const KERNEL_FACTORY = () => {
                  afterSutraCore: serializeState(last.formula.afterS), afterDistributedGRVQ: serializeState(last.formula.afterD),
                  afterMSTVQCoupling: serializeState(last.formula.afterB), delta: serializeState(last.formula.delta),
                  kappaFeed: serializeQ(last.formula.kappaFeed),
+                 taking: last.formula.taking ? serializeState(last.formula.taking) : null,
+                 takingKappa: last.formula.taking ? serializeQ(last.formula.takingKappa) : null,
                  stepError: {delta:serializeQ(last.formula.stepError.delta),stores:last.formula.stepError.stores} },
       formulaPart: serializeQ(last.part),
       afterFormulaShare: serializeState(last.afterF),
@@ -2142,7 +2153,7 @@ const KERNEL_FACTORY = () => {
     forwardL,inverseL,injectLambda,LAMBDA0,PHI_Q,PHI_INV_Q,SIM_DT,timeOf,SUTRA_TYPE,GRVQ_K,mstvqB,stressOf,distributedGRVQ,distributedMSTVQ,
     rotPair,edgeRotate,complementRotate,bondCurrent,tgcrGeometry,tgcrTau,zpeTau,mstvqTau,floorQ,absFloor,radixAbove,digitalRoot10,
     modeComparison,modeAudit,SUTRA_ARG_SPEC,ARG_DOMAIN,checkArg,checkStrength,sutraArgs,initDielectric,evolveDielectric,computeWheeler,wheelerAudit,mayaData,exactGeometry,
-    initState,initEngine,step,formulaOf,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
+    initState,initEngine,step,formulaOf,formulaTaking,carryThrough,rampStep,rampValue,stagesFrom,runSelfTests,serializeQ,serializeA4,serializeC4,serializeState,serializeExact,serializeLast,qTraceLambda,complexity,
     hwCoefficients,storeQ,storeBudget,STORE_BITS,cayley,BOOK,certify,NeedPrecision,workBits,setWorkBits,exactBits,setExactBits,MAX_WORK_BITS});
 };
 const KERNEL = KERNEL_FACTORY();
@@ -2530,7 +2541,7 @@ const VISUAL_CERTIFICATE = {
     }));
   }
 };
-const SUTRA_CERT = { ok: false, pending: true, key: '', activeKey: '', decidedKey: null, frame: -1, audits: [], defects: [], dist: null, activeCollisions: [] };
+const SUTRA_CERT = { ok: false, pending: true, key: '', activeKey: null, decidedKey: null, frame: -1, audits: [], defects: [], dist: null, activeCollisions: [] };
 function sutraCertFromAudits(audits) {
   const defects = [];
   for (const a of audits) {
@@ -2566,7 +2577,7 @@ const PROVENANCE = Object.freeze({
   storageScopeNote: 'One formula, one mode. The field is one exact rational per vertex. Every sutra formula and every stage of a step is evaluated in exact rationals from stored values, and its result stored to 128 significant bits before the next acts; within S6, S7 and S28, which update vertices in place from values the same pass has already changed, each increment they apply is stored at 128 bits before it is applied (exactly, their numbers grow from 128 to tens of thousands of bits in one application, S28 to millions), and the value it is applied to stays exact, so S28 keeps the sum of the field exactly. Each stored value is within |x| 2^-128 of the exact one (StoredPrecision.lean, store_err_le); the step reports the sum of those bounds. The sutra formulas are not non-expansive, so that sum bounds what storage did at each store, not how far the whole step lies from the same formulas evaluated with no storage. The correspondence between the Lean statements and this file is by transcription.',
   mayaScopeNote: 'Maya is the coherence flow, beta = (phi_g/e) sin phi - (e/pi) phi^3 stepped as five Euler sub-steps of d(log mu) = 1/500 from phi_0 = 1/16. e, pi, sqrt5 and sin are not in the kernel field: they are enclosed between rationals at 2^-160 (Taylor tails from Complex.exp_bound, pi bracketed by the sign of cos q - sin q, integer square roots), so beta is enclosed, not exact, and the stored phase carries an exact upper bound on its distance from the exact Euler map (euler_err). The layer is bracketed to 2^-20 and has exactly one root inside (layer). M = observed / true scales the drawn field and never the state (SutraWS/MayaFlow.lean).',
   fieldsScopeNote: 'SutraWS/FieldsAround.lean and SutraWS/PressureHaze.lean. The sources are exact in the kernel: the lattice current J = (d1)^T B (Ampere on the hypercube), conserved at every vertex because d1 d0 = 0 on the page own incidence tables (incidence_dd, kirchhoff), and the dielectric charge rho = (d0)^T d0 q, the graph Laplacian of the dielectric field (charge_laplacian), summing to zero (charge_neutral); both decided exactly every step. In space the page evaluates in doubles: B by Biot-Savart with each edge a chain of four straight pieces along its path on the drawn surface, each in the closed form of segment_field_integral, evaluated without cancellation (seg_kernel_stable); E by Coulomb from the 16 charges. The magnetic pressure p = |B|^2 / 2 is the pressure the Maxwell stress T = B B - p I exerts across the field (haze_stress_trace, haze_stress_across), never negative (haze_pressure_nonneg); it is taken on a 40^3 grid over the cube round the construct, each node placed in the log range of the grid (plot_mem, plot_log_mono), and with its differences to its neighbours, central inside and one-sided on the faces, within 1/2 and 1 a step (haze_central_le, haze_side_le). The view is drawn through a medium of index 1 + kappa t (haze_index_ge_one): each pixel is moved by a fixed gain times the part across the view of the sum along its ray of the trilinearly read gradient (haze_trilinear_mem, haze_ray_sum_le), the ray turned from the camera by a rotation (haze_turn_norm), clipped to the ball of radius 1.3 times the farthest surface point (haze_chord_le) and ended at the surface the depth buffer holds; the medium glows faintly by the ray sum of t as a share of the diameter of the ball (haze_veil_mem). Two field states are blended over the glide, and over at least a quarter second, node by node, the older grid read at the nodes of the newer with its differences taken to the step of the newer grid (blend_mem, haze_rescale). On the plane each energy density is placed in its own range on a log scale (plot_mem, plot_log_mono); the hue is the share of each in the sum of the two places (share_mem, mix_mem) and the glow the larger of them (level_mem). The magnetic force on the current at the middle of each straight piece is I u x B with B from every other piece, a piece putting no field anywhere on its own line (axis_integrand_zero), and it is across both the current and the field (lorentz_perp); the electric force on each charge is q E from the other charges, and the sixteen sum to zero (coulomb_newton3). Not modelled: a force of the magnetism on the charges, which in the model sit at the vertices with no velocity (q v x B = 0); no physical constant ties the dielectric unit to the current unit, or the pressure to an index of refraction, so each field is placed against its own range and the haze bends the view by a fixed gain in pixels; the float evaluation in space; currents idealised as lines along the drawn edges.',
-  vedicScopeNote: 'The formula is the 29 sutra formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths from the field as it stands when a sutra is switched on or a setting changed. One step a second, it goes in over the number of steps the Glide control sets, 10 unless changed, in equal shares, a tenth a step at 10, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. A preset or RESET starts again from the seed. Each of the 29 is the method of its sutra or sub-sutra in Tirthaji, Vedic Mathematics, at the printed pages its row names, and takes its numbers from the field: the integer parts of the vertices, decided exactly. The exact terms the method produces turn the field on the matched edges of the tesseract by alpha x each term, as one exact rotation that keeps the energy of the field. No method takes an operand from a control. Only S1 and S12 can refuse: a repetend of more than three digits in its denominator is not run. The seed is lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
+  vedicScopeNote: 'The formula is the 29 sutra formulas, each at alpha = id/435 x strength, then GRVQ and the MSTVQ coupling, calculated once at the set strengths when a sutra is switched on or off or a setting changed, from the field with what the formula before it put in taken out. One step a second, it takes the place of the formula before it over the number of steps the Glide control sets, 10 unless changed, in equal shares, a tenth a step at 10, each sutra shown at the share of its setting put in so far (ramp_steady, ramp_end, ramp_hold); after that no formula is applied while MAG, MSTVQ, TGCR, ZPE, the dielectric, the magnetism memory and Maya run each step. What a formula has put in is carried through each step by the same rotations as the field, and when the settings change each step of the glide takes out an equal share of what is still in, so a sutra switched off has its share taken back out exactly and the field keeps only what the stages did to it. A preset, RESET or ALL OFF starts again from the seed; ALL OFF also sets the vortex and the drive to 0. Each of the 29 is the method of its sutra or sub-sutra in Tirthaji, Vedic Mathematics, at the printed pages its row names, and takes its numbers from the field: the integer parts of the vertices, decided exactly. The exact terms the method produces turn the field on the matched edges of the tesseract by alpha x each term, as one exact rotation that keeps the energy of the field. No method takes an operand from a control. Only S1 and S12 can refuse: a repetend of more than three digits in its denominator is not run. The seed is lambda = (3, 4, 5, 6) forwarded to the 16 vertices plus the dielectric seed 1/(1 + (hw - 2)^2), which leaves no vertex at zero.',
   latticeScopeNote: 'SutraWS/TorusLattice.lean places the magnetism memory on the drawn torus. Under the Gray pairing the 16 vertices are a 4x4 lattice and each 4-cube edge is one quarter turn along one ring (edge_step); the 4 faces through axes 0 and 3 are loops once round the torus, so their flux is the flux through the hole (hole_loop); the 4 through axes 1 and 2 go once round the tube (tube_loop); the other 16 are the lattice cells, each once (cell_corners, cell_count, cells_tile), and a cell orientation is the signed area of its Stokes loop in (theta, phi) (cell_orient_area). Each cube is a strip between two loops (cube_strip), so from one loop to the next the flux steps by exactly the flux through the four cells between them (hole_flux_step_y/z, tube_flux_step_x/w); the kernel decides all eight every step. With the surface sampled in multiples of 8 each way (304 x 152, surface_grid) every vertex and cell centre is a sample (node_grid, cell_centre). Glyph sizes are w0 + w1 |x|/max|x| (glyph_mem). Not modelled: the float conversion of the exact values for drawing, and the depth bias that lifts the glyphs 0.004 of the depth range toward the camera.',
   dynamoScopeNote: 'The magnetism memory, made exact: A on the 32 edges, B = d1 A on the 24 faces, Faraday induction from the change of the field, -(1/10) d0(psi_out - psi_in), kept as a vertex potential so it has no flux by construction (faraday_flux_free), the TGCR vortex steered by each edge share of the field energy (edge_share_total), 499/500 retention (retention_bound). On the real field the potential transports along an edge: each edge rotates its two vertex values by the Cayley angle of dt A_e, axis by axis, an exact rotation that keeps their energy (rot_pair_energy). MSTVQ and ZPE rotate complement pairs (rot_pair_energy, complement_rotation_swap); TGCR rotates each edge by dt tgcr v_e, v_e = omega psi_t psi_h its bond current. The dielectric is polarised by each vertex share 16 psi_v^2 / E of the field energy (polarised_nonneg, polarised_le).',
   interpolationScopeNote: 'SutraWS/Interpolation.lean transcribes the FAITHFUL interpolation: the Gray ring mapping, tessVertexToTorus with atan2 read as Complex.arg, the forward transform with its -2*pi*i/4 sign and 1/16, MODES with the Nyquist term unsplit, evaluator and multiRealEvaluator. For every state it proves node reproduction, uniqueness of the interpolant over MODES, and Parseval both on the coefficients and on any grid of at least 4x4. These statements are over the reals; the page evaluates them in IEEE doubles, so the node and Parseval residuals measure float error against identities that hold exactly, and the 1e-9 gates bound that error. Not modelled: the float conversion of the stored state in FAITHFUL.project, and a TESS_ROT.xy rotation, which is not a rigid shift of theta and phi. The page holds xy at 0.',
@@ -2752,6 +2763,7 @@ const WHEELER = {
   goldenVortex(theta, phi, strength) {
     return this._GVF[this._oct(theta * this._phiAng + phi)][this._oct(theta + phi * this._phiAng)] * strength;
   },
+  distortionPeak() { return this.kappa_phi3 * Math.max(...this._RADF); },
   fieldDistortion(theta, phi, wOmega) {
     const rad = this._RADF[this._oct(phi)];
     const vortex = this.goldenVortex(theta, phi, 1);
@@ -2788,16 +2800,16 @@ let FIELD_NODES_CACHE;
 const fieldNodes = () => (FIELD_NODES_CACHE === undefined ? (FIELD_NODES_CACHE = FAITHFUL.gridNodes(FIELD_TH, FIELD_PH)) : FIELD_NODES_CACHE);
 const DISPLAY_FIELD = new Float64Array(FIELD_TH * FIELD_PH), DISPLAY_PHASE = new Float64Array(FIELD_TH * FIELD_PH);
 const VORTEX_GRID = new Float64Array(FIELD_TH * FIELD_PH);
-const VORTEX_VIEW = { ok: false, why: 'no step yet', vals: null, co: null, gridNode: Infinity };
+const VORTEX_VIEW = { ok: false, why: 'no step yet', vals: null, co: null, gridNode: Infinity, still: false };
 function refreshVortex(tg) {
   VORTEX_VIEW.co = null; VORTEX_VIEW.vals = null; VORTEX_VIEW.gridNode = Infinity;
   if (!tg) { VORTEX_VIEW.ok = false; VORTEX_VIEW.why = 'no TGCR vortex yet'; return; }
   const dens = tg.density.map(FAITHFUL.shown);
   let mx = Q.ZERO;
   for (const d of dens) if (Q.cmp(Q.abs(d), mx) > 0) mx = Q.abs(d);
-  if (mx.n === 0n) { VORTEX_VIEW.ok = false; VORTEX_VIEW.why = 'the vortex curvature F = d1 v is zero at every vertex: there is no twist to draw'; return; }
   const re = new Float64Array(16), im = new Float64Array(16);
-  for (let k = 0; k < 16; k++) re[k] = Math.PI * FAITHFUL.qNum(Q.div(dens[k], mx));
+  VORTEX_VIEW.still = mx.n === 0n;
+  if (!VORTEX_VIEW.still) for (let k = 0; k < 16; k++) re[k] = Math.PI * FAITHFUL.qNum(Q.div(dens[k], mx));
   VORTEX_VIEW.vals = re; VORTEX_VIEW.co = FAITHFUL.coeffs({ re, im });
   VORTEX_VIEW.ok = tg.closed === true;
   VORTEX_VIEW.why = VORTEX_VIEW.ok ? '' : 'F = d1 v does not close on every cube';
@@ -3010,7 +3022,7 @@ function setSutraArgExact(s, i, raw) {
   s.argQ[i] = q;
   return q;
 }
-SUTRAS.forEach(s => { setSutraStrengthExact(s, ({ 9: '50', 22: '50', 29: '50' })[s.id] || '0'); resetSutraArgs(s); });
+SUTRAS.forEach(s => { setSutraStrengthExact(s, '0'); resetSutraArgs(s); });
 function activeSutras() {
   return SUTRAS.filter(s => s.on)
     .map(s => Object.freeze({ id: s.id, strength: s.strengthQ, args: Object.freeze([s.strengthQ, ...s.argQ]) }));
@@ -3060,20 +3072,30 @@ const KERNEL_VIEW = {
 };
 const STEP_INTERVAL_MS = 1000;
 let GLIDE_STEPS = 10;
-const MODE_COMPARE = { key: '', pending: true, requestedAt: 0, modes: [], traces: [], energies: [], pairwise: [],
+const MODE_COMPARE = { key: null, pending: true, requestedAt: 0, modes: [], traces: [], energies: [], pairwise: [],
                        allDistinct: false, active: 0, audit: null };
 function workerSource(handler) {
   return 'const KERNEL = (' + KERNEL_FACTORY.toString() + ')();\n' + handler;
 }
 const KERNEL_WORKER_HANDLER = `
 let engine = KERNEL.initEngine(), ramp = [], formula = null, formulaKey = '', glideK = 0;
+const noShare = () => Array(16).fill(KERNEL.Q.ZERO);
+let carried = noShare(), carriedKappa = KERNEL.Q.ZERO, leaving = noShare(), leavingKappa = KERNEL.Q.ZERO;
 let config = null, halted = null, scheduled = false, wanted = false;
 function formulaKeyOf(m) {
   return m.active.map(a => a.id + ':' + (a.args || [a.strength]).map(q => q.n + '/' + q.d).join(',')).join('|') + '#' + m.composition + '#' + m.glide;
 }
 function newFormula(m) {
-  formula = KERNEL.formulaOf(engine.psi, m.active, m.composition, KERNEL.timeOf(engine.frame));
-  formulaKey = formulaKeyOf(m); glideK = 0; ramp = [];
+  const Q = KERNEL.Q;
+  const base = engine.psi.map((x, i) => Q.sub(Q.sub(x, carried[i]), leaving[i]));
+  formula = KERNEL.formulaOf(base, m.active, m.composition, KERNEL.timeOf(engine.frame));
+  leaving = leaving.map((x, i) => Q.add(x, carried[i])); leavingKappa = Q.add(leavingKappa, carriedKappa);
+  carried = noShare(); carriedKappa = Q.ZERO;
+  formulaKey = formulaKeyOf(m); glideK = 0;
+}
+function seedAgain() {
+  engine = KERNEL.initEngine(); ramp = []; formula = null; formulaKey = ''; glideK = 0;
+  carried = noShare(); carriedKappa = KERNEL.Q.ZERO; leaving = noShare(); leavingKappa = KERNEL.Q.ZERO;
 }
 function post(msg) { self.postMessage(msg); }
 function stateOf() {
@@ -3117,18 +3139,30 @@ const START_BITS = KERNEL.workBits();
 let log = [];
 function applyConfig(m) {
   config = m;
-  if (m.reset) { engine = KERNEL.initEngine(); ramp = []; formula = null; formulaKey = ''; glideK = 0; newFormula(m); }
+  if (m.reset) { seedAgain(); newFormula(m); }
   else if (!formula || formulaKeyOf(m) !== formulaKey) newFormula(m);
 }
 function applyTick() {
-  const rs = KERNEL.rampStep(ramp, config.active, config.glide);
-  const part = glideK < config.glide ? KERNEL.Q.mk(1n, BigInt(config.glide)) : KERNEL.Q.ZERO;
-  engine = KERNEL.step(engine, config.params, rs.active, config.composition, formula, part);
+  const Q = KERNEL.Q, n = config.glide, gliding = glideK < n;
+  const rs = KERNEL.rampStep(ramp, config.active, n);
+  const part = gliding ? Q.mk(1n, BigInt(n)) : Q.ZERO;
+  const out = gliding ? Q.mk(BigInt(n), BigInt(n - glideK)) : Q.ZERO;
+  const shared = KERNEL.formulaTaking(formula, leaving.map(x => Q.mul(x, out)), Q.mul(leavingKappa, out));
+  engine = KERNEL.step(engine, config.params, rs.active, config.composition, shared, part);
+  if (gliding) {
+    const left = Q.mk(BigInt(n - glideK - 1), BigInt(n - glideK)), done = glideK === n - 1;
+    carried = carried.map((x, i) => Q.add(x, Q.mul(formula.delta[i], part)));
+    carriedKappa = Q.add(carriedKappa, Q.mul(formula.kappaFeed, part));
+    leaving = done ? noShare() : leaving.map(x => Q.mul(x, left));
+    leavingKappa = done ? Q.ZERO : Q.mul(leavingKappa, left);
+    glideK++;
+  }
+  carried = KERNEL.carryThrough(carried, engine.last);
+  leaving = KERNEL.carryThrough(leaving, engine.last);
   ramp = rs.ramp;
-  if (glideK < config.glide) glideK++;
 }
 function replay() {
-  engine = KERNEL.initEngine(); ramp = []; formula = null; formulaKey = ''; glideK = 0; config = null;
+  seedAgain(); config = null;
   for (const ev of log) { if (ev.config) applyConfig(ev.config); else for (let k = 0; k < ev.tick; k++) applyTick(); }
 }
 function raise() {
@@ -3762,7 +3796,8 @@ function frameStep(F, body, dtMs) {
   return F + (body - F) * k;
 }
 let FRAME_BODY = 0, FRAME_DT_MS = 16.667, FRAME_DT_AVG = 16.667;
-const AMP = { field: 60, tube: 35, yDisp: 45, gradTwist: 0.08, gradRipple: 8, gradBulge: 5, vortex: 1.0, wheeler: 1.0, fluxBulge: 22, fluxRing: 18, fluxTwist: 0.5 };
+const AMP = { field: 60, tube: 35, yDisp: 45, gradTwist: 0.08, gradRipple: 8, gradBulge: 5, vortex: 1.0, wheeler: 1.0, fluxBulge: 30, fluxRing: 24, fluxTwist: 0.5, distort: 30 };
+const softRatio = x => x / (1 + abs(x));
 function tessVertexToTorus(v, t) {
   let {x, y, z, w} = v;
   const cxw = cos(TESS_ROT.xw), sxw = sin(TESS_ROT.xw);
@@ -3905,12 +3940,12 @@ function projectTorus() {
     for (let j = 0; j < PH_SEG; j++) {
       const phi = GEO.phi[j];
       const idx = i * PH_SEG + j, sb = idx * 12;
-      const fv = bw(DISPLAY_FIELD, sb) * mayaM;
+      const fv = bw(DISPLAY_FIELD, sb) * mayaM, fs = softRatio(fv);
       let R = TORUS_R, r = TORUS_r, yOff = 0, phiShift = 0, wN = 0, kS = 0, ethAt = 0, csAt = 0;
       if (ampOn) {
-        R += fv * AMP.field;
-        r += fv * AMP.tube;
-        const dGth = bw(DISPLAY_FIELD, sb + 4) * mayaM - fv, dGph = bw(DISPLAY_FIELD, sb + 8) * mayaM - fv;
+        R += fs * AMP.field;
+        r += fs * AMP.tube;
+        const dGth = softRatio(bw(DISPLAY_FIELD, sb + 4) * mayaM) - fs, dGph = softRatio(bw(DISPLAY_FIELD, sb + 8) * mayaM) - fs;
         phiShift += dGth * AMP.gradTwist * 3;
         r += abs(dGph) * AMP.gradRipple;
         R += abs(dGth) * AMP.gradBulge;
@@ -3931,7 +3966,7 @@ function projectTorus() {
         const tau = C5.geoP * sW;
         phiShift += Math.atan2(2 * tau, 1 - tau * tau) * (1 + vGain);
         wN = sW * wInv;
-        R += WHEELER.fieldDistortion(theta, phi, wN) * aw * 3;
+        R += WHEELER.fieldDistortion(theta, phi, wN) / WHEELER.distortionPeak() * aw * AMP.distort;
         const ethP = WHEELER.etherPressure(theta, phi, wN);
         ethAt = ethP;
         const ethPNorm = ethP / (1 + abs(ethP));
@@ -4506,7 +4541,7 @@ function inertialLayerSegments(i00, i10, i11, i01, out) {
   }
   for (let s = 0; s + 5 < xs.length; s += 6) out.push([xs[s], xs[s + 1], xs[s + 2], xs[s + 3], xs[s + 4], xs[s + 5]]);
 }
-const LATTICE_SHOW = { on: false };
+const LATTICE_SHOW = { on: true };
 const LATTICE_COL = { pos: [1.0, 0.76, 0.22], neg: [0.22, 0.86, 1.0], ccw: [1.0, 0.34, 0.66], cw: [0.36, 1.0, 0.52],
                       node: [1.0, 1.0, 1.0], burst: [1.0, 0.42, 0.95] };
 const LATTICE_DRAWN = { frame: -1, verts: 0, nEdges: 0, nLoops: 0, nCells: 0, nNodes: 0, nBursts: 0, why: 'not drawn yet',
@@ -4805,7 +4840,7 @@ function buildPanel() {
       el.appendChild(wrap);
     }
     nameSpan.addEventListener('click', () => {
-      setSutraStrengthExact(s, s.on ? '0' : '50');
+      setSutraStrengthExact(s, s.on ? '0' : '100');
       syncRow(s);
       LOG.add(`S${s.id} ${s.sk || s.name} → ${s.on ? 'on @' + s.strength : 'off'}`, s.on ? 'on' : 'off');
       clearPresetHighlight(); pushConfig();
@@ -5381,15 +5416,28 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   pushConfig('force', true);
   LOG.add('RESET — state and dielectric reseeded', 'sys');
 });
+const RUN_OMEGA_TENTHS = 30, RUN_DRIVE_QUARTERS = 4;
+function setDriveSlider(quarters) {
+  const el = document.getElementById('amp-drive');
+  if (!Number.isInteger(quarters) || quarters < +el.min || quarters > +el.max) throw new RangeError(`drive ${quarters / 4} is outside the slider's range`);
+  el.value = String(quarters);
+  document.getElementById('amp-drive-v').textContent = (quarters / 4).toFixed(2);
+}
+function magnetismOn() {
+  if (+document.getElementById('amp-omega').value === 0) setOmegaSlider(RUN_OMEGA_TENTHS);
+  if (+document.getElementById('amp-drive').value === 0) setDriveSlider(RUN_DRIVE_QUARTERS);
+}
 document.getElementById('btn-all').addEventListener('click', () => {
-  SUTRAS.forEach(s => setSutraStrengthExact(s, '50'));
+  SUTRAS.forEach(s => setSutraStrengthExact(s, '100'));
+  magnetismOn();
   syncPanel(); clearPresetHighlight();
-  pushConfig('ALL ON — 29 sūtras at 50%');
+  pushConfig('ALL ON — 29 sūtras at 100%, the vortex and the drive running');
 });
 document.getElementById('btn-none').addEventListener('click', () => {
   SUTRAS.forEach(s => setSutraStrengthExact(s, '0'));
+  setOmegaSlider(0); setDriveSlider(0);
   syncPanel(); clearPresetHighlight();
-  pushConfig('ALL OFF — no sūtra active; the magnetism memory, Wheeler, MSTVQ, TGCR and ZPE stages and the Maya flow still run');
+  pushConfig('ALL OFF — every sūtra off, the vortex and the drive at 0, the field back at the seed', true);
 });
 function setOmegaSlider(tenths) {
   const el = document.getElementById('amp-omega');
@@ -5469,7 +5517,8 @@ Object.entries(PRESETS).forEach(([id, p]) => {
   btn.title = presetTitle(p);
   btn.addEventListener('click', () => applyPreset(id));
 });
-document.getElementById('btn-all').title = 'Every one of the 29, at 50%.';
+document.getElementById('btn-all').title = 'Every one of the 29 at 100%, with the vortex and the drive running.';
+document.getElementById('btn-none').title = 'Every sutra off, the vortex and the drive at 0, and the field back at the seed.';
 for (const [id, dispId, fmt] of [['amp-dielectric', 'amp-dielectric-v', v => (v / 10).toFixed(1)],
                                  ['amp-bfield', 'amp-bfield-v', v => (v / 10).toFixed(1)],
                                  ['amp-drive', 'amp-drive-v', v => (v / 4).toFixed(2)],
@@ -5988,7 +6037,7 @@ if (!window._VERSION_INTEGRITY.ok) console.error('VERSION MISMATCH:', window._VE
 const conformance = leanConformance();
 LOG.add(`runtime/lean conformance ${conformance.passed}/${conformance.total}${conformance.failed.length ? ' FAILED: ' + conformance.failed.join('; ') : ''}`,
         conformance.failed.length ? 'off' : 'sys');
-if (startWorkers()) { SUTRAS.forEach(s => setSutraStrengthExact(s, '50')); syncPanel(); pushConfig('ALL ON — all 29 sūtras at 50%, calculated once from the seed and glided in', true); }
+if (startWorkers()) { SUTRAS.forEach(s => setSutraStrengthExact(s, '0')); magnetismOn(); syncPanel(); pushConfig('START — no sūtra on; the vortex at 3 and the drive at 1 run the magnetism from the seed', true); }
 startFieldWorker();
 renderModeIdentities();
 requestAnimationFrame(frame);
