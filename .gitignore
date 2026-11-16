@@ -36,3 +36,5 @@ vedic_capability_profile
 # is acceptable exactly when something fails the moment it stops matching its
 # source -- faraday/check-bundle.mjs, in CI, requires both to be byte for byte
 # what the sources build today.
+
+product/dist/QuanQonscious-Simulation-Suite/
