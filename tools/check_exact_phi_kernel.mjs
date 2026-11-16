@@ -523,7 +523,8 @@ section('step export');
       const act = actOf(L.activeSutras), FF = L.formula;
       if (L.workBits !== run.bits || L.exactBits !== 4096) throw new Error(`the file records ${L.workBits} and ${L.exactBits} bits, the run used ${run.bits} and 4096`);
       K.setWorkBits(L.workBits);
-      const formula = K.formulaOf(FF.input.map(fromQ), actOf(FF.activeSutras), FF.composition, fromQ(FF.time));
+      const whole = K.formulaOf(FF.input.map(fromQ), actOf(FF.activeSutras), FF.composition, fromQ(FF.time));
+      const formula = FF.taking ? K.formulaTaking(whole, FF.taking.map(fromQ), fromQ(FF.takingKappa)) : whole;
       const replay = K.step({ psi: L.input.map(fromQ), dielectric: L.dielectricIn.map(fromQ),
                               energyLedger: null, frame: L.frameIn, last: null, tgcrKappa: fromQ(L.tgcrKappaIn),
                               mayaPhase: fromQ(L.mayaPhaseIn), mayaErr: fromQ(L.mayaErrIn),
@@ -575,6 +576,66 @@ section('the formula');
   const r = run.value;
   ok(r.sameF && r.shareOk, `the formula is calculated once and put in over the glide in equal shares of 1/10, then none of it is applied (certified at ${run.bits} bits)`, r.parts.join(' '));
   ok(r.heldOk && r.ledgerZero, 'after the glide, with no drive, no step moves the energy of the field: no step rounds anything, and the energy before and after each step agree to the width of their intervals');
+}
+
+section('taking a formula back');
+{
+  const noShare = () => Array(16).fill(Q.ZERO);
+  const isNone = a => a.every(x => Q.isExact(x) && x.n === 0n);
+  const seedE = energyQ(K.initState());
+  const course = (p, plan, n = 4) => K.certify(() => {
+    let e = K.initEngine(), formula = null, ramp = [], k = 0, act = [];
+    let carried = noShare(), carriedKappa = Q.ZERO, leaving = noShare(), leavingKappa = Q.ZERO;
+    let baseHeld = true, replays = true;
+    const set = a => {
+      const base = e.psi.map((x, i) => Q.sub(Q.sub(x, carried[i]), leaving[i]));
+      formula = K.formulaOf(base, a, 'SERIES', K.timeOf(e.frame));
+      leaving = leaving.map((x, i) => Q.add(x, carried[i])); leavingKappa = Q.add(leavingKappa, carriedKappa);
+      carried = noShare(); carriedKappa = Q.ZERO; k = 0; act = a;
+    };
+    const tick = () => {
+      const gliding = k < n, rs = K.rampStep(ramp, act, n);
+      const part = gliding ? Q.mk(1n, BigInt(n)) : Q.ZERO, out = gliding ? Q.mk(BigInt(n), BigInt(n - k)) : Q.ZERO;
+      const shared = K.formulaTaking(formula, leaving.map(x => Q.mul(x, out)), Q.mul(leavingKappa, out));
+      const before = e;
+      e = K.step(e, p, rs.active, 'SERIES', shared, part);
+      if (gliding) {
+        const left = Q.mk(BigInt(n - k - 1), BigInt(n - k)), done = k === n - 1;
+        carried = carried.map((x, i) => Q.add(x, Q.mul(formula.delta[i], part)));
+        carriedKappa = Q.add(carriedKappa, Q.mul(formula.kappaFeed, part));
+        leaving = done ? noShare() : leaving.map(x => Q.mul(x, left));
+        leavingKappa = done ? Q.ZERO : Q.mul(leavingKappa, left);
+        k++;
+      }
+      carried = K.carryThrough(carried, e.last);
+      leaving = K.carryThrough(leaving, e.last);
+      ramp = rs.ramp;
+      if (!near(energyQ(e.psi.map((x, i) => Q.sub(Q.sub(x, carried[i]), leaving[i]))), seedE)) baseHeld = false;
+      const FF = JSON.parse(JSON.stringify(K.serializeLast(e.last))).formula;
+      const whole = K.formulaOf(FF.input.map(fromQ), FF.activeSutras.map(x => ({ id: x.id, strength: fromQ(x.strength) })), FF.composition, fromQ(FF.time));
+      const again = K.step(before, p, rs.active, 'SERIES', K.formulaTaking(whole, FF.taking.map(fromQ), fromQ(FF.takingKappa)), part);
+      if (!sameQ(again.psi, e.psi)) replays = false;
+    };
+    const marks = [];
+    for (const [a, steps] of plan) { set(a); for (let j = 0; j < steps; j++) tick(); marks.push({ energy: energyQ(e.psi), none: isNone(leaving), carriedNone: carried.every(zeroish) }); }
+    return { marks, baseHeld, replays };
+  });
+  const s3 = [{ id: 3, strength: Q.ONE }], trio = [9, 11, 29].map(id => ({ id, strength: Q.ONE }));
+  const p = PARAMS({ vortex: Q.ONE });
+  const a = course(p, [[s3, 6], [[], 6]]).value;
+  ok(!near(a.marks[0].energy, seedE) && near(a.marks[1].energy, seedE) && a.marks[1].none && a.marks[1].carriedNone,
+     'a formula switched off after its glide is taken back out over the next glide: nothing of it is left and the field has the energy of the seed again',
+     `${Q.toString(a.marks[0].energy).slice(0, 40)} -> ${Q.toString(a.marks[1].energy).slice(0, 40)}`);
+  const b = course(p, [[s3, 2], [[], 6]]).value;
+  ok(near(b.marks[1].energy, seedE) && b.marks[1].none && b.marks[1].carriedNone,
+     'switched off half-way up its glide, only the share that went in is taken back, and the field has the energy of the seed again');
+  const c = course(p, [[s3, 2], [trio, 2], [s3, 6], [[], 6]]).value;
+  ok(near(c.marks[3].energy, seedE) && c.marks[3].none && c.marks[3].carriedNone,
+     'through changes made mid-glide (S3, then S9 S11 S29, then S3, then none) every share that went in comes back out');
+  ok(a.baseHeld && b.baseHeld && c.baseHeld,
+     'at every step the field less what the formulas put in has exactly the energy of the seed: the stages turn the shares with the field');
+  ok(a.replays && b.replays && c.replays,
+     'every step replays from the formula its export carries, the share being taken back included');
 }
 
 section('glide');

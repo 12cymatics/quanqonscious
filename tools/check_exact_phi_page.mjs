@@ -375,11 +375,11 @@ try {
   const v0 = await evaluate(`KERNEL_VIEW.configVersion`);
   await evaluate(`document.getElementById('btn-all').click()`);
   await sleep(1000);
-  const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), half: activeSutras().every(a => a.strength.n * 2n === a.strength.d),
+  const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), full: activeSutras().every(a => a.strength.n === a.strength.d),
                                comp: COMPOSITION, cfg: KERNEL_VIEW.configVersion })`);
   const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
-  ok(ao.ids === all29 && ao.half && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
-     'ALL ON sends all 29 at 50% to the worker as one setting', JSON.stringify(ao));
+  ok(ao.ids === all29 && ao.full && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
+     'ALL ON sends all 29 at 100% to the worker as one setting', JSON.stringify(ao));
   const dp = await evaluate(`({ comp: PRESETS['pre-9-11-29'].comp, active: Object.keys(PRESETS['pre-9-11-29'].set).map(Number).sort((a, b) => a - b).join(',') })`);
   await evaluate(`document.getElementById('pre-9-11-29').click()`);
   await applied('a preset chosen while ALL ON is still calculating replaces that calculation', dp);
@@ -558,10 +558,7 @@ try {
   ok(fm.holeCol && fm.tubeCol, 'each loop\'s bar on the flux map is amber for flux circulating towards +theta (+phi) and cyan against');
   ok(fm.glyphs, 'every arrow on the flux map points the way its flux flows, +theta right and +phi up, and every cell\'s arc turns the way its flux circulates');
   ok(fm.rows[1] === '8 of 8 hold exactly' && fm.rows[0].split(/\s+/).length === 4, 'the panel rows show the four loop fluxes and the balances', JSON.stringify(fm.rows));
-  /* the lattice on the surface: off until asked, then every glyph is drawn */
-  const lat0 = await evaluate(`({ on: LATTICE_SHOW.on, verts: LATTICE_DRAWN.verts, why: LATTICE_DRAWN.surfaceWhy })`);
-  await evaluate(`document.getElementById('btn-lattice').click()`);
-  await sleep(300);
+  /* the lattice on the surface: drawn from the start, every glyph of it */
   const lat1 = await evaluate(`(() => {
     const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
     const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
@@ -572,19 +569,21 @@ try {
       return (u === v || u === h) && (((pos[w][k] - pos[u][k] + 4) % 4 === 1) === (D.flow[e] >= 0)); });
     return { on: LATTICE_SHOW.on, verts: D.verts, e: D.nEdges, c: D.nCells, l: D.nLoops, n: D.nNodes, leaves,
              label: document.getElementById('btn-lattice').textContent }; })()`);
-  ok(!lat0.on && lat0.verts === 0 && lat0.why === 'hidden', 'the lattice on the surface is off until asked for');
   ok(lat1.on && lat1.verts > 1000 && lat1.e === 32 && lat1.c === 16 && lat1.l === 8 && lat1.n === 16 && lat1.label === 'LATTICE ON',
      'LATTICE draws all 32 edges, 16 cells, 8 loops and 16 vertices on the surface', JSON.stringify(lat1));
   ok(lat1.leaves, 'on the surface each edge is drawn from the vertex its flow leaves');
   await evaluate(`document.getElementById('btn-lattice').click()`);
   await sleep(300);
-  ok(await evaluate(`!LATTICE_SHOW.on && LATTICE_DRAWN.verts === 0`), 'and clicked again, takes it off');
-  /* withheld when its certificate does not hold */
+  const lat0 = await evaluate(`({ on: LATTICE_SHOW.on, verts: LATTICE_DRAWN.verts, why: LATTICE_DRAWN.surfaceWhy, label: document.getElementById('btn-lattice').textContent })`);
+  ok(!lat0.on && lat0.verts === 0 && lat0.why === 'hidden' && lat0.label === 'LATTICE OFF', 'LATTICE clicked takes it off the surface', JSON.stringify(lat0));
   await evaluate(`document.getElementById('btn-lattice').click()`);
+  await sleep(300);
+  ok(await evaluate(`LATTICE_SHOW.on && LATTICE_DRAWN.verts > 1000`), 'and clicked again, puts it back');
+  /* withheld when its certificate does not hold */
   await evaluate(`LATTICE_VIEW.ok = false; LATTICE_VIEW.why = 'withheld by the gate'`);
   await sleep(300);
   const wh = await evaluate(`({ map: FLUX_MAP.drawn, verts: LATTICE_DRAWN.verts, ready: LATTICE_DRAWN.ready, why: FLUX_MAP.why })`);
-  await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''; document.getElementById('btn-lattice').click()`);
+  await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''`);
   ok(!wh.map && wh.verts === 0 && !wh.ready && wh.why === 'withheld by the gate', 'without its certificate neither the flux map nor the lattice is drawn, and the reason is kept', JSON.stringify(wh));
   const fx = await evaluate(`(() => {
     VISUAL_CERTIFICATE.status(); projectTorus();
@@ -1026,11 +1025,11 @@ try {
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
-  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), from0: Q.eq(r.s, Q.mul(r.to, Q.mk(BigInt(r.k), BigInt(r.n)))), k: r.k, n: r.n })),
+  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), carries: [3, 4, 5, 6, 7].some(j => Q.eq(r.s, Q.mul(r.to, Q.add(Q.mk(BigInt(j), 10n), Q.mul(Q.mk(BigInt(10 - j), 10n), Q.mk(BigInt(r.k), BigInt(r.n))))))), k: r.k, n: r.n })),
                                  formula: KERNEL_VIEW.formula, dur: DISPLAY.dur })`);
   await setGlide(1);
-  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.from0) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
-     'a glide changed mid-way calculates the formula again from the field as it stands and puts it in from 0 over the new number of steps, still one step a second', JSON.stringify(rg));
+  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.carries) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
+     'a glide changed mid-way calculates the formula again from the field less what the old one put in, and each strength carries on from where it stood over the new number of steps, still one step a second', JSON.stringify(rg));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1059,7 +1058,8 @@ try {
       magKeeps = same(K.edgeRotate(B0, tau), G) && near(en(G), en(B0));
       rotKeeps = same(K.edgeRotate(M, tT), T) && near(en(T), en(M));
       const dF = st(L.formula.delta), part = q(L.formulaPart);
-      shareKeeps = same(st(L.input).map((x, i) => Q.add(x, Q.mul(dF[i], part))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
+      const tk = L.formula.taking ? st(L.formula.taking) : null, whole = st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i]));
+      shareKeeps = same(st(L.input).map((x, i) => Q.add(x, Q.mul(dF[i], part))), B0) && (tk ? whole.every((v, i) => near(v, Q.add(dF[i], tk[i]))) : same(whole, dF));
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
     finally { K.setWorkBits(was); }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
@@ -1071,7 +1071,7 @@ try {
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/7' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(gotStep && st.schema === 'vedic-step-export/8' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
   ok(st.params && st.dielectricIn && st.stepError && Number.isInteger(st.bits) && st.bits >= 256 && st.exactBits === 4096 && st.storeBits === null,
      'the step export carries its parameters, starting dielectric, error budget and the precision it was certified at', JSON.stringify(st));
   ok(st.magKeeps === true && st.rotKeeps === true, `the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit at the ${st.bits} bits the step records, and each rotation keeps the energy to the width of the intervals (rot_pair_energy)`, JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));

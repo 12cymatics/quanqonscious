@@ -4457,14 +4457,10 @@ function renderTorus() {
       IDX[nIdx + 3] = v00; IDX[nIdx + 4] = v11; IDX[nIdx + 5] = v01;
       nIdx += 6;
       VIS[i00] = 1; VIS[i10] = 1; VIS[i11] = 1; VIS[i01] = 1;
-      const d0 = PT.depth[i00], d1 = PT.depth[i10], d2 = PT.depth[i11], d3 = PT.depth[i01];
-      if (d0 < zmin) zmin = d0; if (d0 > zmax) zmax = d0;
-      if (d1 < zmin) zmin = d1; if (d1 > zmax) zmax = d1;
-      if (d2 < zmin) zmin = d2; if (d2 > zmax) zmax = d2;
-      if (d3 < zmin) zmin = d3; if (d3 > zmax) zmax = d3;
       nq++;
     }
   }
+  for (let k = 0; k < N_PTS; k++) { const d = PT.depth[k]; if (d < zmin) zmin = d; if (d > zmax) zmax = d; }
   PROJECTION.quads = nq;
   const fz = fieldsProject();
   if (fz.n > 0) { if (fz.zmin < zmin) zmin = fz.zmin; if (fz.zmax > zmax) zmax = fz.zmax; }
