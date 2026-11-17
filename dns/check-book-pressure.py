@@ -34,8 +34,8 @@ import sys
 import sympy as sp
 
 
-UPSTREAM_COMMIT = "e951e23ef93b683b4194b2dde3154952ff7dea73"
-UPSTREAM_BLOB = "98d7d240670ade6701aaaaae4811ec8510203f90"
+UPSTREAM_COMMIT = "efcbaa6869028abb633878b8997610bdd5f6b019"
+UPSTREAM_BLOB = "dc1064e70c0ef68b3ed9cce31601f3dc2a0aade8"
 UPSTREAM_URL = (
     "https://github.com/12cymatics/quanqonscious/blob/"
     + UPSTREAM_COMMIT + "/vedic_book.py"
