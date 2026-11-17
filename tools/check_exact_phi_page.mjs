@@ -1036,7 +1036,7 @@ try {
      page would offer. Both files name the build that wrote them; the step
      carries what replays it, and the audit says which arguments each matrix
      belongs to. Checked inside the page: the audit is about 12 MB. */
-  await evaluate(`saveJSON = async (payload, filename) => { (window.__saved = window.__saved || []).push({ filename, json: JSON.stringify(payload, jsonReplacer) }); return 1; }`);
+  await evaluate(`saveJSON = async (payload, filename) => { (window.__saved = window.__saved || []).push({ filename, json: exportText(payload) }); return 1; }`);
   const fp = await evaluate(`SOURCE_FINGERPRINT`);
   await evaluate(`document.getElementById('btn-export').click()`);
   const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
@@ -1086,9 +1086,14 @@ try {
     for (const c of C) for (const r of c.sutras) { if (r.refused) { refused++; continue; } if (r.ok !== true) failed.push('S' + r.id + ' on corpus ' + c.corpus); decided += r.claims.length; }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, n: F.length,
              args: F.every(f => Array.isArray(f.arguments) && f.arguments.length === spec[f.id].length && f.arguments.every((a, i) => a.name === spec[f.id][i].name)),
-             corpora: C.length, decided, failed, refused }; })()`) : {};
-  ok(gotAudit && au.schema === 'vedic-operator-audit/2' && au.fp === fp && au.n === 29, `the formula audit names this build (fingerprint ${au.fp}) and covers the 29 formulas`);
+             corpora: C.length, decided, failed, refused,
+             shown: C.every(c => c.sutras.every(r => r.refused || (r.operands && typeof r.operands === 'object' && Array.isArray(r.terms) && r.terms.length > 0 && r.alpha && r.moved))),
+             ascii: window.__saved.every(s => /^[\x00-\x7f]*$/.test(s.json)),
+             escapes: (() => { const src = String.fromCharCode(945, 32, 183, 32, 968, 32, 363), t = exportText({ a: src }); return /^[\x00-\x7f]*$/.test(t) && /\\u03b1/.test(t) && JSON.parse(t).a === src; })() }; })()`) : {};
+  ok(gotAudit && au.schema === 'vedic-operator-audit/3' && au.fp === fp && au.n === 29, `the formula audit names this build (fingerprint ${au.fp}) and covers the 29 formulas`);
   ok(au.args === true, 'it lists each formula\'s operands by name, as the kernel declares them');
+  ok(au.shown === true, 'for every formula on every test state it carries the operands read from the field, alpha, the terms the method gave and how far the field moved');
+  ok(au.ascii === true && au.escapes === true, 'both exported files are plain ASCII, and any other character would be written as a JSON escape that reads back as itself, so no viewer can garble them');
   ok(au.corpora > 0 && au.decided > 0 && au.failed.length === 0, `on ${au.corpora} test states every statement decided holds (${au.decided} decided, ${au.refused} refused)`, (au.failed || []).slice(0, 4).join('; '));
 
   section('framing');
