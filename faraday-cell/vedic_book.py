@@ -466,7 +466,7 @@ def antyayoreva(a, b, common, numerator_last, denominator_last):
     d, e = rational(numerator_last), rational(denominator_last)
     x = sp.Symbol("x")
     A, B, C = polynomial(a, x), polynomial(b, x), polynomial(common, x)
-    if sp.expand(B) == 0 or sp.expand(B * C + e) == 0:
+    if all(v == 0 for v in b) or sp.expand(B * C + e) == 0:
         raise ValueError("A denominator is identically zero")
     constant, linear = d * b[0] - e * a[0], d * b[1] - e * a[1]
     if linear == 0:

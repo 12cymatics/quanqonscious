@@ -5,16 +5,15 @@ import Mathlib.Tactic
 /-!
 # Maya: the coherence-layer flow
 
-The Maya illusion sutra of v18.24 (§7, "Maya quantum state predictor"):
+The Maya illusion sutra ("Maya quantum state predictor"):
 
     dφ/dμ = β(φ) / μ,     β(φ) = (φ_g / e) · sin φ − (e / π) · φ³,
 
 `φ_g` the golden ratio. Its fixed points are the coherence layers; the flow
 carries the Maya phase onto the stable one. The Maya factor
-`M = 1 + β / (20 (1 + |β|))` is v18.24's `M = observed / true`: it scales the
-field where it is shown and never the field itself. The kernel takes the flow
-as v18.24 stepped it: `d(log μ) = 1/100` per kernel step, in five Euler
-sub-steps of `1/500`.
+`M = 1 + β / (20 (1 + |β|))` is the simulator's `M = observed / true`: it scales the
+field where it is shown and never the field itself. The kernel steps the
+flow `d(log μ) = 1/100` per kernel step, in five Euler sub-steps of `1/500`.
 
 `e`, `π`, `√5` and `sin` are not in the kernel's number field, so the runtime
 evaluates `β` at a stored rational phase inside rational enclosures. This file
@@ -443,7 +442,7 @@ theorem layer_attracts_above {a b h x xs : ℝ} (ha : 0 ≤ a) (hb : 0 ≤ b) (h
 
 /-! ## The Maya factor -/
 
-/-- `M = 1 + β / (20 (1 + |β|))`, v18.24's `modulationFactor`. -/
+/-- `M = 1 + β / (20 (1 + |β|))`, the simulator's Maya factor. -/
 noncomputable def factor (β : ℝ) : ℝ := 1 + β / (20 * (1 + |β|))
 
 theorem factor_frac_abs_lt (β : ℝ) : |β / (20 * (1 + |β|))| < 1 / 20 := by

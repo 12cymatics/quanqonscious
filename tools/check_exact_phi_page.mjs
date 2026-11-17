@@ -319,10 +319,10 @@ try {
 
   section('the glide');
   await setGlide(5);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await waitFor(`KERNEL_VIEW.state.frame === 2`, 30000);
   const gl = await evaluate(`(() => {
-    const st = VISUAL_CERTIFICATE.status(), p = PRESETS['pre-damper'].set, f = KERNEL_VIEW.state.frame;
+    const st = VISUAL_CERTIFICATE.status(), p = PRESETS['pre-9-11-29'].set, f = KERNEL_VIEW.state.frame;
     return { f, ok: RAMP_VIEW.ok, cert: st.ramp, rising: RAMP_VIEW.rising, row: glideWords(),
              rows: RAMP_VIEW.rows.map(r => [r.id, Q.toString(r.s), Q.toString(r.to), r.k, r.n]),
              want: Object.keys(p).map(Number).sort((a, b) => a - b).map(id => { const to = Q.mk(BigInt(p[id]), 100n);
@@ -365,7 +365,7 @@ try {
      channels above 0.85 (measured on six presets). */
   const worstWhite = whites.reduce((m, w) => w[1] > m[1] ? w : m, ['', 0]);
   ok(worstWhite[1] < 0.05, `on no preset is more than 5% of the drawn surface near white (worst ${worstWhite[0]}, ${(100 * worstWhite[1]).toFixed(2)}%)`);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   for (const comp of ['PARALLEL', 'SERIES', 'SYMMETRIC_CONCURRENT']) {
     await evaluate(`document.querySelector('#comp-ctrls button[data-comp="${comp}"]').click()`);
     await applied(`composition ${comp}`, { comp });
@@ -375,13 +375,13 @@ try {
   const v0 = await evaluate(`KERNEL_VIEW.configVersion`);
   await evaluate(`document.getElementById('btn-all').click()`);
   await sleep(1000);
-  const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), half: activeSutras().every(a => a.strength.n * 2n === a.strength.d),
+  const ao = await evaluate(`({ ids: activeSutras().map(a => a.id).join(','), full: activeSutras().every(a => a.strength.n === a.strength.d),
                                comp: COMPOSITION, cfg: KERNEL_VIEW.configVersion })`);
   const all29 = Array.from({ length: 29 }, (_, i) => i + 1).join(',');
-  ok(ao.ids === all29 && ao.half && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
-     'ALL ON sends all 29 at 50% to the worker as one setting', JSON.stringify(ao));
-  const dp = await evaluate(`({ comp: PRESETS['pre-damper'].comp, active: Object.keys(PRESETS['pre-damper'].set).map(Number).sort((a, b) => a - b).join(',') })`);
-  await evaluate(`document.getElementById('pre-damper').click()`);
+  ok(ao.ids === all29 && ao.full && ao.comp === 'SYMMETRIC_CONCURRENT' && ao.cfg === v0 + 1,
+     'ALL ON sends all 29 at 100% to the worker as one setting', JSON.stringify(ao));
+  const dp = await evaluate(`({ comp: PRESETS['pre-9-11-29'].comp, active: Object.keys(PRESETS['pre-9-11-29'].set).map(Number).sort((a, b) => a - b).join(',') })`);
+  await evaluate(`document.getElementById('pre-9-11-29').click()`);
   await applied('a preset chosen while ALL ON is still calculating replaces that calculation', dp);
   const r0 = await evaluate(`KERNEL_VIEW.appliedEpoch`);
   await evaluate(`document.getElementById('btn-reset').click()`);
@@ -390,7 +390,7 @@ try {
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(400);
   const p0 = await evaluate(`KERNEL_VIEW.configVersion`);
-  await evaluate(`document.getElementById('pre-checksum').click()`);
+  await evaluate(`document.getElementById('pre-9-12-18-24').click()`);
   await sleep(2500);
   const p1 = await evaluate(`({ cfg: KERNEL_VIEW.configVersion, applied: KERNEL_VIEW.appliedVersion, frame: KERNEL_VIEW.state.frame, inFlight: KERNEL_VIEW.inFlight, queue: KERNEL_VIEW.queue.length })`);
   ok(p1.cfg === p0 + 1 && p1.applied === p1.cfg && p1.frame === 0 && !p1.inFlight && p1.queue === 0, 'PAUSE holds a new setting at its seed, uncalculated', JSON.stringify(p1));
@@ -398,9 +398,9 @@ try {
   ok(await waitFor(`KERNEL_VIEW.state.frame >= 2 && KERNEL_VIEW.appliedVersion === KERNEL_VIEW.configVersion`, 20000), 'RUN goes on from it, a step a second');
 
   section('certified');
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   const faithful = await waitFor(`document.getElementById('faithfulBadge').className.includes(' ok')`, 90000);
-  ok(faithful, 'the badge reaches FAITHFUL on the damper preset',
+  ok(faithful, 'the badge reaches FAITHFUL on the S9 · S11 · S29 preset',
      await evaluate(`document.getElementById('faithfulBadge').textContent`));
 
   section('dynamo and Maya');
@@ -428,7 +428,7 @@ try {
     if (!k || k.omega !== qstr(om, 10) || k.drive !== qstr(dr, 4) || k.chi !== qstr(ch, 10)) { presetParams = false; which = id + ' ' + JSON.stringify(k); }
   }
   ok(presetParams, `every preset sets vortex omega, drive and polarisation as it defines them (${pdefs.length})`, which);
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.hist.frame.length >= 3 && KERNEL_VIEW.state.frame >= 2`, 60000);
   const dy = await evaluate(`(() => {
     const s = VISUAL_CERTIFICATE.status(), H = KERNEL_VIEW.hist, n = H.frame.length, d = KERNEL_VIEW.dyn;
@@ -473,7 +473,7 @@ try {
      one state; the worker's exact A and chi for that state are fetched and the
      gate reads them on the torus itself: positions from tessVertexToTorus's
      angles, circulations by walking each face's corners. */
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 2`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -482,7 +482,8 @@ try {
   const tor = await evaluate(`new Promise(res => {
     const id = 1e9 + Math.floor(Math.random() * 1e6);
     EXPORT_WAIT.set(id, m => {
-      const P = m.payload, q = x => Q.mk(BigInt(x.n), BigInt(x.d)), A = P.magA.map(q), chi = P.magChi.map(q);
+      const q = x => 'lo' in x ? Object.freeze({ lo: q(x.lo), hi: q(x.hi) }) : Q.mk(BigInt(x.n), BigInt(x.d));
+      const P = m.payload, A = P.magA.map(q), chi = P.magChi.map(q);
       const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
       const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
       const step4 = (a, b) => (b - a + 4) % 4 === 1 ? 1 : -1;
@@ -537,7 +538,7 @@ try {
     const by = Y(4) - 6;
     const tubeCol = [0, 1, 2, 3].every(r => (T[r] >= 0 ? amber : cyan)(px(X(r), T[r] >= 0 ? by - 1 : by - 9)));
     const img = ctx.getImageData(Math.round((F.x - 20) * dpr), Math.round((F.y - 44) * dpr), Math.round((4 * c + 96) * dpr), Math.round((4 * c + 80) * dpr)).data;
-    /* glyph pixels, not the panel's dark background: measured 11% on the dynamo preset */
+    /* glyph pixels, not the panel's dark background: measured 11% on the S3 · S9 · S11 · S25 · S29 preset */
     let lit = 0; for (let k = 0; k < img.length; k += 4) if (Math.max(img[k], img[k + 1], img[k + 2]) > 90) lit++;
     /* the arrows and arcs as drawn, against the gate's own reading of which
        way each points: an edge is along theta when its ends differ in
@@ -557,10 +558,7 @@ try {
   ok(fm.holeCol && fm.tubeCol, 'each loop\'s bar on the flux map is amber for flux circulating towards +theta (+phi) and cyan against');
   ok(fm.glyphs, 'every arrow on the flux map points the way its flux flows, +theta right and +phi up, and every cell\'s arc turns the way its flux circulates');
   ok(fm.rows[1] === '8 of 8 hold exactly' && fm.rows[0].split(/\s+/).length === 4, 'the panel rows show the four loop fluxes and the balances', JSON.stringify(fm.rows));
-  /* the lattice on the surface: off until asked, then every glyph is drawn */
-  const lat0 = await evaluate(`({ on: LATTICE_SHOW.on, verts: LATTICE_DRAWN.verts, why: LATTICE_DRAWN.surfaceWhy })`);
-  await evaluate(`document.getElementById('btn-lattice').click()`);
-  await sleep(300);
+  /* the lattice on the surface: drawn from the start, every glyph of it */
   const lat1 = await evaluate(`(() => {
     const quarter = t => ((Math.round((t - Math.PI / 4) / (Math.PI / 2)) % 4) + 4) % 4;
     const pos = Array.from({ length: 16 }, (_, k) => { const t = tessVertexToTorus(TESS_V[k], 0); return [quarter(t.theta), quarter(t.phi)]; });
@@ -571,19 +569,21 @@ try {
       return (u === v || u === h) && (((pos[w][k] - pos[u][k] + 4) % 4 === 1) === (D.flow[e] >= 0)); });
     return { on: LATTICE_SHOW.on, verts: D.verts, e: D.nEdges, c: D.nCells, l: D.nLoops, n: D.nNodes, leaves,
              label: document.getElementById('btn-lattice').textContent }; })()`);
-  ok(!lat0.on && lat0.verts === 0 && lat0.why === 'hidden', 'the lattice on the surface is off until asked for');
   ok(lat1.on && lat1.verts > 1000 && lat1.e === 32 && lat1.c === 16 && lat1.l === 8 && lat1.n === 16 && lat1.label === 'LATTICE ON',
      'LATTICE draws all 32 edges, 16 cells, 8 loops and 16 vertices on the surface', JSON.stringify(lat1));
   ok(lat1.leaves, 'on the surface each edge is drawn from the vertex its flow leaves');
   await evaluate(`document.getElementById('btn-lattice').click()`);
   await sleep(300);
-  ok(await evaluate(`!LATTICE_SHOW.on && LATTICE_DRAWN.verts === 0`), 'and clicked again, takes it off');
-  /* withheld when its certificate does not hold */
+  const lat0 = await evaluate(`({ on: LATTICE_SHOW.on, verts: LATTICE_DRAWN.verts, why: LATTICE_DRAWN.surfaceWhy, label: document.getElementById('btn-lattice').textContent })`);
+  ok(!lat0.on && lat0.verts === 0 && lat0.why === 'hidden' && lat0.label === 'LATTICE OFF', 'LATTICE clicked takes it off the surface', JSON.stringify(lat0));
   await evaluate(`document.getElementById('btn-lattice').click()`);
+  await sleep(300);
+  ok(await evaluate(`LATTICE_SHOW.on && LATTICE_DRAWN.verts > 1000`), 'and clicked again, puts it back');
+  /* withheld when its certificate does not hold */
   await evaluate(`LATTICE_VIEW.ok = false; LATTICE_VIEW.why = 'withheld by the gate'`);
   await sleep(300);
   const wh = await evaluate(`({ map: FLUX_MAP.drawn, verts: LATTICE_DRAWN.verts, ready: LATTICE_DRAWN.ready, why: FLUX_MAP.why })`);
-  await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''; document.getElementById('btn-lattice').click()`);
+  await evaluate(`LATTICE_VIEW.ok = true; LATTICE_VIEW.why = ''`);
   ok(!wh.map && wh.verts === 0 && !wh.ready && wh.why === 'withheld by the gate', 'without its certificate neither the flux map nor the lattice is drawn, and the reason is kept', JSON.stringify(wh));
   const fx = await evaluate(`(() => {
     VISUAL_CERTIFICATE.status(); projectTorus();
@@ -616,12 +616,12 @@ try {
   section('the fields around the construct');
   /* The magnetic and electric fields of the construct's sources, and the
      energy flow between them (FieldsAround.lean). Paused on one landed state
-     of the damper preset, the gate takes what the page asked the field worker
+     of the S9 · S11 · S29 preset, the gate takes what the page asked the field worker
      (sources, their places, the radius) and what it answered, and recomputes
      the answer independently: B by integrating Biot-Savart numerically along
      each straight piece (Gauss-Legendre, panels finer the nearer the point),
      not by the worker's closed form; E by Coulomb; S = E x B. */
-  await presetFromSeed('pre-damper'); await appliedNow();
+  await presetFromSeed('pre-9-11-29'); await appliedNow();
   await waitFor(`KERNEL_VIEW.state.frame >= 2`, 60000);
   await evaluate(`document.getElementById('btn-run').click()`);
   await sleep(1500);
@@ -954,7 +954,7 @@ try {
   await evaluate(`document.getElementById('btn-run').click()`);
   await evaluate(`document.getElementById('btn-fields').click()`);
   const q0 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
-  await evaluate(`document.getElementById('pre-checksum').click()`);
+  await evaluate(`document.getElementById('pre-9-12-18-24').click()`);
   const landed = await waitFor(`KERNEL_VIEW.appliedVersion > ${q0.v} && KERNEL_VIEW.state.frame >= 3`, 20000);
   const q1 = await evaluate(`({ sent: FIELDS.sent, v: KERNEL_VIEW.appliedVersion })`);
   await evaluate(`document.getElementById('btn-run').click()`);
@@ -969,7 +969,7 @@ try {
   /* One step a second, every step drawn in order, the surface moving to each
      state over its second and landing on it exactly, the next move starting
      where the last ended. */
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await sleep(3000);
   const mo = await evaluate(`new Promise(res => {
     const t0 = performance.now(), f0 = KERNEL_VIEW.state.frame, bad0 = DISPLAY.bad, n0 = DISPLAY.frames;
@@ -1020,16 +1020,16 @@ try {
   ok(mo.interior >= 0.3 * mo.frames, `the surface moves between steps: ${mo.interior} of ${mo.frames} frames drawn mid-move`);
   ok(mo.worstZoom <= 0.1, `the framing eases: never more than 10% between frames (worst ${(100 * mo.worstZoom).toFixed(2)}%)`);
   await setGlide(10);
-  await presetFromSeed('pre-damper');
+  await presetFromSeed('pre-9-11-29');
   await waitFor(`KERNEL_VIEW.state.frame >= 3 && KERNEL_VIEW.state.frame <= 6`, 20000);
   await setGlide(20);
   const gv = await evaluate(`KERNEL_VIEW.configVersion`);
   await waitFor(`KERNEL_VIEW.appliedVersion === ${gv}`, 20000);
-  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), from0: Q.eq(r.s, Q.mul(r.to, Q.mk(BigInt(r.k), BigInt(r.n)))), k: r.k, n: r.n })),
+  const rg = await evaluate(`({ ok: RAMP_VIEW.ok, rows: RAMP_VIEW.rows.map(r => ({ id: r.id, s: Q.toString(r.s), carries: [3, 4, 5, 6, 7].some(j => Q.eq(r.s, Q.mul(r.to, Q.add(Q.mk(BigInt(j), 10n), Q.mul(Q.mk(BigInt(10 - j), 10n), Q.mk(BigInt(r.k), BigInt(r.n))))))), k: r.k, n: r.n })),
                                  formula: KERNEL_VIEW.formula, dur: DISPLAY.dur })`);
   await setGlide(1);
-  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.from0) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
-     'a glide changed mid-way calculates the formula again from the field as it stands and puts it in from 0 over the new number of steps, still one step a second', JSON.stringify(rg));
+  ok(rg.ok && rg.rows.length === 3 && rg.rows.every(r => r.n === 20 && r.k >= 1 && r.k <= 3 && r.carries) && rg.formula && rg.formula.n === 20 && rg.formula.k === rg.rows[0].k && rg.dur === 1000,
+     'a glide changed mid-way calculates the formula again from the field less what the old one put in, and each strength carries on from where it stood over the new number of steps, still one step a second', JSON.stringify(rg));
 
   section('exports');
   /* saveJSON is replaced by a recorder, so the gate reads exactly the file the
@@ -1041,33 +1041,40 @@ try {
   await evaluate(`document.getElementById('btn-export').click()`);
   const gotStep = await waitFor(`(window.__saved || []).some(s => s.filename.includes('_step_'))`, 30000);
   const st = gotStep ? await evaluate(`(() => { const j = JSON.parse(window.__saved.find(s => s.filename.includes('_step_')).json), L = j.last;
-    const q = x => Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
-    const E = a => st(a).reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-    let magKeeps = null, rotKeeps = null, shareKeeps = null;
+    const q = x => 'lo' in x ? Object.freeze({ lo: q(x.lo), hi: q(x.hi) }) : Q.mk(BigInt(x.n), BigInt(x.d)), st = a => (Array.isArray(a) ? a : a.psi || a.values).map(q);
+    const ident = (x, y) => Q.isExact(x) ? Q.isExact(y) && x.n === y.n && x.d === y.d : !Q.isExact(y) && ident(x.lo, y.lo) && ident(x.hi, y.hi);
+    const tight = x => { if (Q.isExact(x)) return true; const wn = x.hi.n * x.lo.d - x.lo.n * x.hi.d, wd = x.hi.d * x.lo.d, ab = v => v < 0n ? -v : v;
+      return [[1n, 1n], [ab(x.lo.n), x.lo.d], [ab(x.hi.n), x.hi.d]].some(([mn, md]) => (wn << 200n) * md <= mn * wd); };
+    const near = (x, y) => Q.agree(x, y) && tight(x) && tight(y);
+    let magKeeps = null, rotKeeps = null, shareKeeps = null, bits = null;
+    const K = KERNEL, was = K.workBits();
     try {
-      const P = KERNEL_VIEW.params, K = KERNEL, store = p => p.map(K.storeQ), same = (x, y) => x.length === y.length && x.every((v, i) => Q.eq(v, y[i]));
+      bits = L.workBits;
+      K.setWorkBits(bits);
+      const P = KERNEL_VIEW.params, same = (x, y) => x.length === y.length && x.every((v, i) => ident(v, y[i]));
       const B0 = st(L.afterFormulaShare), G = st(L.afterMagnetism), M = st(L.afterMSTVQ), T = st(L.afterTGCR);
       const tau = K.magTau(L.magAIn.map(q), L.magChiIn.map(q), P), tT = K.tgcrTau(M, P);
-      const eB = B0.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO), eM = M.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
       const en = p => p.reduce((t, x) => Q.add(t, Q.mul(x, x)), Q.ZERO);
-      magKeeps = same(K.edgeRotate(B0, tau, store), G) && Q.eq(en(K.edgeRotate(B0, tau)), eB);
-      rotKeeps = same(K.edgeRotate(M, tT, store), T) && Q.eq(en(K.edgeRotate(M, tT)), eM);
+      magKeeps = same(K.edgeRotate(B0, tau), G) && near(en(G), en(B0));
+      rotKeeps = same(K.edgeRotate(M, tT), T) && near(en(T), en(M));
       const dF = st(L.formula.delta), part = q(L.formulaPart);
-      shareKeeps = same(st(L.input).map((x, i) => K.storeQ(Q.add(x, Q.mul(dF[i], part)))), B0) && same(st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i])), dF);
+      const tk = L.formula.taking ? st(L.formula.taking) : null, whole = st(L.formula.afterMSTVQCoupling).map((x, i) => Q.sub(x, st(L.formula.input)[i]));
+      shareKeeps = same(st(L.input).map((x, i) => Q.add(x, Q.mul(dF[i], part))), B0) && (tk ? whole.every((v, i) => near(v, Q.add(dF[i], tk[i]))) : same(whole, dF));
     } catch (e) { magKeeps = 'unreadable: ' + e.message; }
+    finally { K.setWorkBits(was); }
     return { schema: j.schema, fp: j.manifest && j.manifest.sourceFingerprint, params: !!L.params && 'appliedH' in L.params,
              dielectricIn: Array.isArray(L.dielectricIn) && L.dielectricIn.length === 16, stepError: !!L.stepError && 'delta' in L.stepError,
-             magKeeps, rotKeeps, shareKeeps,
+             magKeeps, rotKeeps, shareKeeps, bits, exactBits: L.exactBits, storeBits: L.storeBits,
              lambda: Array.isArray(L.lambdaIn) && L.lambdaIn.length === 4 && Array.isArray(L.lambdaOut) && L.lambdaOut.length === 4,
              records: Array.isArray(L.sutraRecord) && L.sutraRecord.length === L.formula.activeSutras.length * (L.formula.composition === 'SYMMETRIC_CONCURRENT' ? 2 : 1) || (Array.isArray(L.sutraRecord) ? L.sutraRecord.length + ' records for ' + L.formula.activeSutras.length + ' ' + L.formula.composition : 'none'),
              medium: typeof L.mayaPhaseIn === 'object' && Array.isArray(L.magAIn) && L.magAIn.length === 32 &&
                      Array.isArray(L.magChiIn) && L.magChiIn.length === 16 && typeof j.mayaPhase === 'object' &&
                      Array.isArray(j.magA) && j.magA.length === 32 && Array.isArray(j.magChi) && j.magChi.length === 16,
              maya: !!L.maya && 'factor' in L.maya && 'phase' in L.maya }; })()`) : {};
-  ok(gotStep && st.schema === 'vedic-step-export/6' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
-  ok(st.params && st.dielectricIn && st.stepError,
-     'the step export carries its parameters, starting dielectric and error budget', JSON.stringify(st));
-  ok(st.magKeeps === true && st.rotKeeps === true, 'the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit, and each rotation before storing keeps the energy exactly (rot_pair_energy)', JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
+  ok(gotStep && st.schema === 'vedic-step-export/8' && st.fp === fp, `the step export names this build (${st.schema}, fingerprint ${st.fp})`);
+  ok(st.params && st.dielectricIn && st.stepError && Number.isInteger(st.bits) && st.bits >= 256 && st.exactBits === 4096 && st.storeBits === null,
+     'the step export carries its parameters, starting dielectric, error budget and the precision it was certified at', JSON.stringify(st));
+  ok(st.magKeeps === true && st.rotKeeps === true, `the exported magnetism and TGCR stages are replayed here from the exported state and memory, bit for bit at the ${st.bits} bits the step records, and each rotation keeps the energy to the width of the intervals (rot_pair_energy)`, JSON.stringify({ magKeeps: st.magKeeps, rotKeeps: st.rotKeeps }));
   ok(st.lambda === true && st.records === true, 'the step export carries lambda in and out and one record per sutra in the formula', JSON.stringify({ lambda: st.lambda, records: st.records }));
   ok(st.shareKeeps === true, 'the step export carries the formula: its change is its field less the field it was calculated from, and the step put in exactly its share of it', JSON.stringify({ shareKeeps: st.shareKeeps }));
   ok(st.medium === true && st.maya === true, 'the step export carries the medium the step read and left (Maya phase, A, chi) and Maya\'s report');
@@ -1116,7 +1123,7 @@ try {
   await setGlide(1);
   let lawFrames = 0, lawBroken = [], turns = 0, turnSecs = 0;
   const turnsBy = [];
-  for (const id of ['pre-damper', 'pre-amplifier']) {
+  for (const id of ['pre-9-11-29', 'pre-1']) {
     await presetFromSeed(id);
     await sleep(6000);
     const br = await evaluate(`new Promise(res => {
@@ -1152,7 +1159,7 @@ try {
     turns += br.rev; turnSecs += br.secs; turnsBy.push(`${id.slice(4)} ${br.rev}`);
   }
   ok(lawBroken.length === 0 && lawFrames > 100,
-     `on a fresh page every one of ${lawFrames} frames over DAMPER and AMPLIFIER keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
+     `on a fresh page every one of ${lawFrames} frames over the S9 · S11 · S29 and S1 presets keeps the framing law (frame_hold; it turned ${(turns / turnSecs).toFixed(2)} times a second, ${turnsBy.join(', ')}, following the size where it truly jumps)`,
      JSON.stringify(lawBroken));
 
   section('on a phone');

@@ -1,8 +1,7 @@
 """Primitive exact-ℚ maps on Z₂⁴ — NOT the 29 sutras.
 
 **This module is not an implementation of the Vedic sutras.** The authority
-for those is ``sutras_canonical``, which ports the engine's
-``STRICT_SUTRA_KERNEL``. This file is kept because the conservation
+for those is ``sutras_canonical``. This file is kept because the conservation
 residuals, the interaction-matrix catalogue, the synthetic-data encoder and
 the committed fixtures are all built on these *unweighted* primitives, and
 they are a different mathematical layer from the α-weighted sutra operators.

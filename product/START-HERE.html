@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuanQonscious Simulation Suite</title>
+<style>
+:root { --bg: #f6f4ef; --ink: #1b1a17; --soft: #5d594f; --card: #ffffff; --line: #d9d4c7; --accent: #8a4b12; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121110; --ink: #ece8df; --soft: #a39d8f; --card: #1c1b19; --line: #34322d; --accent: #e3a35a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 Georgia, 'Times New Roman', serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
+h1 { font-size: 2rem; margin: 0 0 6px; letter-spacing: 0.01em; }
+p.lead { color: var(--soft); margin: 0 0 32px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+a.card { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px; color: inherit; text-decoration: none; }
+a.card:hover, a.card:focus { border-color: var(--accent); outline: none; }
+a.card h2 { margin: 0 0 8px; font-size: 1.25rem; color: var(--accent); }
+a.card p { margin: 0; color: var(--soft); font-size: 0.95rem; }
+ul.more { list-style: none; padding: 0; margin: 32px 0 0; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+ul.more a { color: var(--accent); }
+footer { margin-top: 40px; color: var(--soft); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+<h1>QuanQonscious Simulation Suite</h1>
+<p class="lead">Version 1.0.0. Two simulators that run in your browser, offline, with nothing to install.</p>
+<div class="grid">
+<a class="card" href="vedic-sutra-simulator.html">
+<h2>Vedic Sutra Simulator</h2>
+<p>The 29 methods of Tirthaji's Vedic Mathematics acting on a 16-point tesseract field, calculated in exact arithmetic and drawn as currents and flux on a torus.</p>
+</a>
+<a class="card" href="faraday-cell.html">
+<h2>Faraday Cell</h2>
+<p>A three-dimensional nonlinear Navier&ndash;Stokes solver for the free surface of a vibrated liquid in a circular cell, with the cell, the liquid and the drive set in SI units.</p>
+</a>
+</div>
+<ul class="more">
+<li><a href="GUIDE.html">User guide</a></li>
+<li><a href="LICENSE.txt">Licence</a></li>
+<li><a href="THIRD-PARTY-NOTICES.txt">Sources and notices</a></li>
+</ul>
+<footer>Use a desktop browser: Chrome, Edge, Firefox or Safari. The pictures need WebGL2. A file preview that does not run JavaScript will show the controls but not the simulation.</footer>
+</main>
+</body>
+</html>
