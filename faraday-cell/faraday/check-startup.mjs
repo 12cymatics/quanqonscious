@@ -9,7 +9,9 @@ assert(html.includes('Not started. Open index.html in a full browser'), 'static 
 assert(html.includes('<noscript>'), 'JavaScript-disabled browsers receive an explicit notice');
 assert(html.includes('name="viewport"'), 'mobile viewport is declared');
 assert(html.includes('<canvas id="scene3d"'), 'the interactive three-dimensional canvas exists');
-assert.match(html, /let useSolver = true;/, 'the visible application starts from nonlinear state');
+assert.match(html, /let useSolver = solverDiagnostic;/, 'the physical-fluid diagnostic is explicitly selected');
+assert.match(html, /const solverDiagnostic = new URLSearchParams\(location.search\).get\('solver'\) === '1';/, 'fluid mode requires the solver query');
+assert.match(html, /let view = solverDiagnostic \? 'height' : 'sand';/, 'the default visible application restores the sand view');
 const readinessStart = html.indexOf('  if(useSolver){\n    if(UNIFIED3D.tick(now)){');
 const readinessEnd = html.indexOf('}else FARADAY_STARTUP.ready();', readinessStart);
 assert(readinessStart >= 0 && readinessEnd > readinessStart, 'the loop gates startup on the real scene draw');
@@ -24,10 +26,10 @@ const context = vm.createContext({
   $: id => { assert.equal(id, 'experimentError'); return { textContent: '' }; },
   UNIFIED3D: { tick: () => { calls.push('draw'); return context.drawReady; } },
   CELL3D: { start: () => calls.push('start') },
-  URLSearchParams, location: { search: '' }, drawReady: false,
+  URLSearchParams, location: { search: '?solver=1' }, drawReady: false,
 });
 vm.runInContext(block[1], context);
-vm.runInContext('let useSolver = true, now = 0, clock = { err:null }, solverRequested = false, state = {};'
+vm.runInContext('let useSolver = true, solverDiagnostic = true, now = 0, clock = { err:null }, solverRequested = false, state = {};'
   + autostart[0], context);
 const ready = context.FARADAY_STARTUP.ready.bind(context.FARADAY_STARTUP);
 context.FARADAY_STARTUP.ready = () => { calls.push('ready'); ready(); };
@@ -48,6 +50,11 @@ context.location.search = '?paused=1';
 vm.runInContext(autostart[0].replace('let initialAutostart', 'initialAutostart'), context);
 vm.runInContext(readiness, context);
 assert.equal(calls.filter(call => call === 'start').length, 1, 'initial-state inspection does not start integration');
+vm.runInContext('solverDiagnostic=false;useSolver=false;initialAutostart=false;',context);
+context.FARADAY_STARTUP.drawn=false;
+vm.runInContext(readiness,context);
+assert.match(status.textContent,/Sand visualization ready/);
+assert.equal(calls.filter(call=>call==='start').length,1,'the default sand view cannot start the fluid solver');
 handlers.get('error')({ message: 'required kernel missing' });
 assert.match(status.textContent, /required kernel missing/);
 assert.match(status.textContent, /No substitute/);

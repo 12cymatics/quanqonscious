@@ -45,7 +45,7 @@ function harness() {
   const context = vm.createContext({
     $: id => {
       if (!elements.has(id)) elements.set(id, { value: '', textContent: '', disabled: false,
-        attributes: {}, setAttribute(key, value) { this.attributes[key] = value; } });
+        style:{}, attributes: {}, setAttribute(key, value) { this.attributes[key] = value; } });
       return elements.get(id);
     },
     FARADAY_SCENE3D: { ...sceneModule, create: () => scene },
@@ -75,6 +75,17 @@ await check('recording retains original physical timestamps and SI geometry', ()
   assert.equal(h.api.currentFrame().source.particleModel, 'passive-fluid-tracers');
   assert.equal(h.pauses(), 0);
   assert.equal(h.renders(), 1);
+});
+await check('native source retains physical grain provenance and excludes stale browser observations',()=>{
+  const h=harness();h.api.acceptFrame(frame(.1,4));h.api.setSource('native-recording');
+  assert.equal(h.api.acceptFrame(frame(.2,4)),false);
+  const f=frame(0,0);f.source={engine:'native-cpp-recording',caseJson:'actual recorded case provenance',parameters:{omegaD:0},pressureAvailable:false};
+  f.particleRadii=new Float64Array([.01,.02]);f.grainProvenance={model:'experimental-resolved-rigid-sphere-volume-constraints'};
+  assert.equal(h.api.acceptFrame(f),true);assert.equal(h.api.currentFrame().source.engine,'native-cpp-recording');
+  assert.equal(h.api.currentFrame().source.caseJson,f.source.caseJson);assert.equal(h.api.currentFrame().source.particleModel,f.grainProvenance.model);
+  assert.deepEqual(Array.from(h.api.currentFrame().particleRadii),[.01,.02]);
+  h.api.setSource('fluid');assert.equal(h.api.acceptFrame(f),false);assert.equal(h.api.acceptFrame(frame(0,5)),true);
+  assert.equal(h.elements.get('timeline').disabled,false);assert.equal(h.elements.get('liveView').disabled,false);
 });
 
 await check('accepted history is independent of the caller and returned snapshots', () => {

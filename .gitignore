@@ -30,6 +30,14 @@ vedic_capability_profile
 # file they are told to double-click.
 /faraday-cell-standalone.html
 
+# Explicit output directories used by native/README.md; native case results are
+# generated locally and are not part of the reproducible source package.
+/verification-run/
+/verification-manual/
+/faraday-cell/verification-run/
+/faraday-cell/verification-manual/
+/native/build/
+
 # faraday-cell/ and faraday-cell.zip are NOT ignored: they are committed, so the
 # simulation can be downloaded from the repository as one folder or one file.
 # They are build outputs (node faraday/build-zip.mjs), and a committed build output

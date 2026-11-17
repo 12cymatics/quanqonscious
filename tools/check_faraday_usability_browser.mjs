@@ -14,6 +14,12 @@ assert(engine,`Unknown browser: ${engineName}`);
 const out=resolve(process.env.FARADAY_QA_ARTIFACTS||join(tmpdir(),`faraday-unified-${engineName}`));
 await mkdir(out,{recursive:true});
 const results=[],failures=[];
+// Supply actual native CLI output to exercise the coupled recording path. This
+// optional gate does not invent native motion or require a compiler for fluid QA.
+const nativeRecordingPath=process.env.FARADAY_QA_NATIVE_RECORDING;
+const nativeRecording=nativeRecordingPath?await readFile(nativeRecordingPath,'utf8'):null;
+const nativeRecords=nativeRecording?nativeRecording.trim().split('\n').map(JSON.parse):null;
+const nativeFrames=nativeRecords?.filter(r=>r.type==='frame');
 const server=createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
@@ -62,6 +68,40 @@ async function visibleControls(selectors){
   for(const c of controls)assert(c.visible&&c.inViewport&&c.unobscured,`Unreachable first-viewport control: ${JSON.stringify(c)}`);
   return controls;
 }
+async function nativePlayback(){
+  assert(nativeFrames.length>1,'Native browser gate requires an actual multi-frame CLI recording');
+  if(!await page.locator('#experimentalDetails').evaluate(el=>el.open))await page.locator('#experimentalDetails > summary').click();
+  await page.locator('#nativeFile').setInputFiles(resolve(nativeRecordingPath));
+  await page.waitForFunction(()=>NATIVE_PLAYBACK.status().active&&!NATIVE_PLAYBACK.status().loading);
+  let observed=await page.evaluate(()=>({status:NATIVE_PLAYBACK.status(),history:UNIFIED3D.historyState(),frame:UNIFIED3D.currentFrame(),stats:UNIFIED3D.scene.stats(),options:UNIFIED3D.captureExport().options,clock:CELL3D.clocks()}));
+  assert.equal(observed.status.failure,null);assert.equal(observed.status.complete,true);assert.equal(observed.status.total,nativeFrames.length);
+  assert.equal(observed.history.currentTime,0);assert.equal(observed.stats.particleGeometry,'physical-radius spheres');assert.equal(observed.options.heightScale,1);
+  assert.equal(observed.clock.live,false);assert.equal(observed.clock.have,false);
+  assert.deepEqual(Object.values(observed.frame.particles),nativeFrames[0].grains.flatMap(g=>g.centre));
+  assert.deepEqual(Object.values(observed.frame.particleRadii),nativeFrames[0].grains.map(g=>g.radius));
+  assert.equal(observed.frame.source.engine,'native-cpp-recording');assert.equal(observed.frame.source.pressureAvailable,false);
+  assert(await page.locator('#runSolver').isDisabled());assert(await page.locator('#fnum').isDisabled());
+  await page.locator('#nextNative').click();assert.equal(await page.evaluate(()=>UNIFIED3D.currentFrame().time),nativeFrames[1].time);
+  await page.locator('#previousNative').click();assert.equal(await page.evaluate(()=>UNIFIED3D.currentFrame().time),0);
+  await page.locator('#timeline').focus();await page.locator('#timeline').press('End');
+  const last=nativeFrames.at(-1);observed=await page.evaluate(()=>UNIFIED3D.currentFrame());
+  assert.equal(observed.time,last.time);assert.equal(observed.steps,last.steps);
+  assert.deepEqual(Object.values(observed.particles),last.grains.flatMap(g=>g.centre));
+  assert.deepEqual(Object.values(observed.grainVelocities),last.grains.flatMap(g=>g.velocity));
+  const snapshot=await page.evaluate(()=>{const s=UNIFIED3D.captureExport();s.frame.particleRadii.fill(100);return UNIFIED3D.captureExport();});
+  assert.equal(snapshot.frame.particleRadii[0],last.grains[0].radius);assert.equal(snapshot.provenance.physicalTime,last.time);
+  await page.screenshot({path:join(out,scenario.name+'-native-grain-fluid.png')});
+  record('actual-native-recording-shares-grain-fluid-clock-and-retains-provenance',{file:nativeRecordingPath,frames:nativeFrames.length,time:last.time,steps:last.steps,scope:'Recorded native states only; not sediment validation'});
+  const partial=nativeRecords.slice(0,-1).map(JSON.stringify).join('\n')+'\n';
+  await page.locator('#nativeFile').setInputFiles({name:'recording.partial.jsonl',mimeType:'text/plain',buffer:Buffer.from(partial)});
+  await page.waitForFunction(()=>!NATIVE_PLAYBACK.status().loading&&!!NATIVE_PLAYBACK.status().failure);
+  assert.match(await page.locator('#nativeStatus').textContent(),/Failed \/ incomplete/);
+  assert.equal(await page.evaluate(()=>UNIFIED3D.historyState().frames.length),nativeFrames.length);
+  await page.locator('#returnFluid').click();
+  await page.waitForFunction(()=>!NATIVE_PLAYBACK.status().active&&UNIFIED3D.currentFrame()?.source.particleModel==='passive-fluid-tracers');
+  assert(await page.locator('#fnum').isEnabled());assert.equal(await page.evaluate(()=>CELL3D.clocks().live),false);
+  record('partial-native-file-retains-valid-frames-and-return-restores-paused-fluid-controls');
+}
 try{
   browser=await engine.launch({headless:true,...(process.env.FARADAY_BROWSER_EXECUTABLE?{executablePath:process.env.FARADAY_BROWSER_EXECUTABLE}:{}),
     ...(engineName==='chromium'?{args:['--enable-unsafe-swiftshader']}:{} )});
@@ -81,8 +121,8 @@ try{
         requestAnimationFrame(sample);}
       requestAnimationFrame(sample);
     });
-    console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}`}));
-    await page.goto(`${origin}/${entry}`,{waitUntil:'load',timeout:30000});
+    console.log(JSON.stringify({scenario:scenario.name,stage:'load',url:`${origin}/${entry}?solver=1`}));
+    await page.goto(`${origin}/${entry}?solver=1`,{waitUntil:'load',timeout:30000});
     assert.match(await page.title(),/Faraday|cymatic/i);assert.equal(new URL(page.url()).pathname,'/'+entry);
     await page.waitForFunction(()=>typeof UNIFIED3D!=='undefined'&&UNIFIED3D.scene?.stats().ready&&UNIFIED3D.scene.stats().renderCount>0,undefined,{timeout:30000});
     assert.equal(await page.locator('#scene3d').isVisible(),true);
@@ -129,6 +169,7 @@ try{
     await page.screenshot({path:join(out,scenario.name+'-orbited-paused.png')});
     record('real-orbit-and-zoom-preserve-frozen-physics',{beforeOrbit,afterOrbit,camera:await page.evaluate(()=>UNIFIED3D.scene.camera())});
 
+    await page.locator('#viewDetails > summary').click();
     const oldScale=await page.locator('#heightScale').inputValue();
     await page.locator('#heightScale').fill('1');await page.locator('#heightScale').press('Tab');
     await page.waitForFunction(()=>UNIFIED3D.scene.stats().heightScale===1);
@@ -241,6 +282,7 @@ try{
     await page.waitForTimeout(400);assert.deepEqual(await physics(),reset,'Reset did not hold the inspectable initial state');
     await page.locator('#runSolver').click();await page.waitForFunction(()=>{const c=CELL3D.clocks();if(c.err)throw new Error(c.err);return c.have&&c.physT>0;},undefined,{timeout:90000});
     await pause();record('reset-and-run-apply-to-the-whole-simulation',{reset});
+    if(nativeRecording)await nativePlayback();
     assert.deepEqual(pageErrors,[],`${scenario.name} runtime errors`);record('console-and-page-health',{errors:pageErrors});
     await context.close();page=null;
   }
@@ -253,6 +295,6 @@ try{
 }finally{
   if(browser)await browser.close();await new Promise(r=>server.close(r));
   const scope='HTTP desktop/mobile: one nonlinear 3D fluid/particle state, true camera and visual layers, actual solved motion, pause/resume/reset, real same-state 4K export; not sediment-contact validation';
-  await writeFile(join(out,'results.json'),JSON.stringify({engine:engineName,scope,results,failures},null,2));
+  await writeFile(join(out,'results.json'),JSON.stringify({engine:engineName,scope,nativeRecordingPath:nativeRecordingPath||null,results,failures},null,2));
   console.log(JSON.stringify({engine:engineName,scope,results,failures},null,2));
 }

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -118,6 +119,18 @@ GENERATED = {
     # of cymatic.html, kernel and all three solvers inlined, plus the compiled
     # period map as base64, so it opens by double-click with nothing fetched.
     "faraday-cell-standalone.html": "node faraday/build-standalone.mjs",
+    # native/README.md names the outputs of this explicit local launcher. The
+    # partial recording exists during execution and is retained on refusal;
+    # a successful run renames it to recording.jsonl.
+    "verification-run/preparation.json": (
+        "sh native/run-case.sh --case native/examples/single-sphere-verification.json --out verification-run"
+    ),
+    "verification-run/recording.jsonl": (
+        "sh native/run-case.sh --case native/examples/single-sphere-verification.json --out verification-run"
+    ),
+    "verification-run/recording.partial.jsonl": (
+        "sh native/run-case.sh --case native/examples/single-sphere-verification.json --out verification-run"
+    ),
 }
 
 HISTORICAL_REFERENCES = {
@@ -381,9 +394,12 @@ def test_every_generated_entry_names_the_command_that_writes_it():
     """A reader who cannot produce the file is looking at a dead pointer with
     an excuse attached."""
     for path, cmd in GENERATED.items():
-        assert cmd and cmd.split()[0] in ("node", "python", "python3", "bash", "sh", "make"), \
+        parts = shlex.split(cmd)
+        assert len(parts) >= 2 and parts[0] in ("node", "python", "python3", "bash", "sh", "make"), \
             f"GENERATED[{path!r}] = {cmd!r} is not a runnable command"
-        script = cmd.split()[-1]
+        # These entries invoke a tracked script directly. Later arguments may
+        # name inputs and an output directory; the last one is not the script.
+        script = parts[1]
         assert script in TRACKED, (
             f"GENERATED[{path!r}] says to run {script}, which is not tracked — "
             f"so the instruction cannot be followed from a fresh clone.")
