@@ -360,6 +360,31 @@ section('the statements each formula carries');
   const names = new Set();
   for (const entry of corpus) for (const r of entry.sutras) if (r.claims) for (const c of r.claims) names.add(c.name);
   ok(names.has('vedic_update_zero') && names.has('rot_pair_energy') && names.size === 2, 'two statements are decided for every method: it is the identity at strength zero, and it keeps the energy of the field');
+  const all29 = Array.from({ length: 29 }, (_, i) => i + 1);
+  let shown = true, why = '';
+  const still = [], movedOn = new Map(all29.map(id => [id, 0]));
+  for (const entry of corpus) for (const r of entry.sutras) {
+    if (r.refused) continue;
+    const operands = K.BOOK.operandsOf(r.id, entry.state), terms = K.BOOK.terms(r.id, operands);
+    const sameTerms = Array.isArray(r.terms) && r.terms.length === terms.length && r.terms.every((t, i) => Q.eq(t, terms[i]));
+    const sameOperands = JSON.stringify(K.serializeExact(r.operands)) === JSON.stringify(K.serializeExact(operands));
+    const alpha = Q.isExact(r.alpha) && r.alpha.n * 435n === BigInt(r.id) * r.alpha.d;
+    const out = K.BOOK.rotate(entry.state, terms, r.alpha);
+    const far = out.reduce((t, x, i) => Q.add(t, Q.mul(Q.sub(x, entry.state[i]), Q.sub(x, entry.state[i]))), Q.ZERO);
+    if (!(sameTerms && sameOperands && alpha && Q.agree(r.moved, far))) { shown = false; why = `S${r.id} on state ${entry.corpus}`; }
+    if (Q.isExact(r.moved) && r.moved.n === 0n) still.push(`S${r.id} on state ${entry.corpus} (terms ${r.terms.map(Q.toString).join(', ')})`);
+    else movedOn.set(r.id, movedOn.get(r.id) + 1);
+  }
+  ok(shown, 'every audit entry carries the operands it read from the field, alpha = id/435, the terms its method gave and how far it moved the field, and they are the kernel\'s own', why);
+  ok(all29.every(id => movedOn.get(id) >= 1), `every one of the 29 moves the field on at least one test state; not moved: ${still.join('; ') || 'none'}`);
+  {
+    const psi = corpus[1].state, al = Q.mk(3n, 145n), a = Q.mk(5n), b = Q.mk(-12n), c = Q.mk(7n);
+    const same = (x, y) => x.every((v, i) => Q.eq(v, y[i]));
+    const t1 = Q.mul(al, a), t2 = Q.mul(al, b), merged = Q.div(Q.div(Q.add(t1, t2), Q.sub(Q.ONE, Q.mul(t1, t2))), al);
+    ok(same(K.BOOK.rotate(psi, [a, b], al), K.BOOK.rotate(psi, [b, a], al)) && same(K.BOOK.rotate(psi, [a, b, c], al), K.BOOK.rotate(psi, [c, a, b], al)) &&
+       same(K.BOOK.rotate(psi, [a, b], al), K.BOOK.rotate(psi, [merged], al)) && same(K.BOOK.rotate(psi, [a, Q.neg(a)], al), psi),
+       'as vedic_field.py has it, every term turns every matched pair, so the field receives the sum of the terms\' angles: the order of the terms does not matter, two terms act as one with the angles added, and opposite terms cancel');
+  }
   const page = HTML.match(/sutra: \{\n\s*draws:[^\n]*\n\s*theorems: \[([^\]]*)\]/);
   const cited = page ? new Set([...page[1].matchAll(/'([^']+)'/g)].map(m => m[1])) : new Set();
   const missing = [...names].filter(n => !cited.has(n));

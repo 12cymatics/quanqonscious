@@ -1,4 +1,4 @@
-QuanQonscious Simulation Suite 1.0.1
+QuanQonscious Simulation Suite 1.0.2
 Sources and notices
 
 This file records where the material in this package comes from. It is a

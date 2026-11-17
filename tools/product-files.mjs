@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const NAME = 'QuanQonscious-Simulation-Suite';
-export const VERSION = '1.0.1';
+export const VERSION = '1.0.2';
 export const ZIP = join(REPO, 'product', 'dist', `${NAME}-${VERSION}.zip`);
 
 const SWAPS = [

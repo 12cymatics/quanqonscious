@@ -26,7 +26,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; 
 <body>
 <main>
 <h1>QuanQonscious Simulation Suite</h1>
-<p class="lead">User guide, version 1.0.1. <a href="START-HERE.html">Back to the start page</a></p>
+<p class="lead">User guide, version 1.0.2. <a href="START-HERE.html">Back to the start page</a></p>
 
 <h2>Running it</h2>
 <p>Extract the ZIP, open the folder and open <code>START-HERE.html</code> in a desktop browser. Chrome, Edge, Firefox and Safari all work. Nothing is installed, nothing is downloaded and no account is needed. Both simulators run entirely on your computer and send nothing anywhere.</p>
@@ -51,7 +51,8 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; 
 <tr><th>PAUSE, RESET</th><td>Stop and resume the steps, or return to the seed.</td></tr>
 <tr><th>LATTICE, FIELDS, CHARTS</th><td>Show or hide the currents and flux on the surface, the field lines around it, and the charts.</td></tr>
 <tr><th>EXPORT STEP</th><td>Saves the last step as a JSON file holding every exact value needed to replay it.</td></tr>
-<tr><th>AUDIT 29 EXACT, PROOF</th><td>Run and show the exact checks of all 29 methods.</td></tr>
+<tr><th>AUDIT 29 EXACT</th><td>Saves a JSON file that shows, for each of the 29 methods on three test fields, the operands it read, the terms its method gave, how far it moved the field, and the two statements checked: at strength 0 it changes nothing, and at full strength it keeps the field's energy.</td></tr>
+<tr><th>PROOF</th><td>Runs the same statements on the test fields and writes the results to the event log.</td></tr>
 </table>
 </div>
 
@@ -65,6 +66,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; 
 <ul>
 <li>It is an exact mathematical model. The arithmetic is exact fractions up to 4096 bits, then intervals that are guaranteed to contain the true value.</li>
 <li>The 29 methods follow the book and are checked against worked examples from it.</li>
+<li>Each term a method gives turns the same pairs of corners, so what reaches the field from a method is one angle, the sum of its terms' angles. The methods differ in how that angle is worked out, not in the kind of turn. Terms of opposite sign cancel.</li>
 <li>The words magnetism, vortex, flux and current name parts of this model. It is not a simulation of a physical magnet or of any laboratory apparatus, and it has not been compared with an experiment.</li>
 <li>It makes no claim about physics, medicine or consciousness.</li>
 </ul>

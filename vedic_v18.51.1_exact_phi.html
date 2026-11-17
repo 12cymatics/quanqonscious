@@ -176,7 +176,7 @@ canvas{position:absolute;top:0;left:0;width:100%;height:100%}
     <button id="btn-charts" type="button" class="active" title="Show or hide the charts drawn over the view: the composition comparison, the flux map, the vertex bars and the dynamo timeline">CHARTS ON</button>
     <button id="btn-proof" type="button" title="Exact proof run on the audit worker: every statement about each of the 29 formulas (SutraWS/VedicFormulas.lean) decided on the test states, and each refusal named. Results go to the EVENT LOG.">PROOF</button>
     <button id="btn-export" type="button" title="Export the exact state and every stage of the last step as JSON">EXPORT STEP</button>
-    <button id="btn-exact-operator-audit" type="button" title="The 29 formulas, their operands and every statement decided on the test states, exact, as JSON">AUDIT 29 EXACT</button>
+    <button id="btn-exact-operator-audit" type="button" title="The 29 formulas on the test states: the operands each read from the field, the terms its method gave, how far it moved the field and every statement decided, exact, as JSON">AUDIT 29 EXACT</button>
   </div>
   <div class="section">
     <h5>SŪTRA FORMULAS · λ · GRVQ · MSTVQ</h5>
@@ -316,7 +316,7 @@ const BUILD_VERSION = `vedic_${VERSION.string}_${VERSION.name}`;
 const BUILD_SOURCE  = VERSION.sourceFile;
 const SCHEMAS = Object.freeze({
   stepExport:    'vedic-step-export/8',
-  operatorAudit: 'vedic-operator-audit/2'
+  operatorAudit: 'vedic-operator-audit/3'
 });
 const VIEW_MOTION = Object.freeze({
   nominalFrameDtMs: 16.667,
@@ -1835,9 +1835,10 @@ const KERNEL_FACTORY = () => {
     const a = sutraArgs(id, arg), al = alphaOf(id, a, Q.ONE), R = [];
     const claim = (name, ok, detail) => { R.push({ name, ok: !!ok, detail: detail || '' }); };
     const out = vedicField(id, psiIn, a, al);
-    claim('vedic_update_zero', sameR(vedicField(id, psiIn, a, Q.ZERO).p, psiIn), `S${id} at α = 0`);
+    claim('vedic_update_zero', sameR(vedicField(id, psiIn, a, Q.ZERO).p, psiIn), `S${id} at strength 0`);
     claim('rot_pair_energy', Q.agree(energyR(out.p), energyR(psiIn)), `${out.terms.length} terms`);
-    return { id, type: SUTRA_TYPE[id], arguments: a, alpha: al, terms: out.terms, claims: R, ok: R.every(x => x.ok) };
+    const moved = energyR(out.p.map((x, i) => Q.sub(x, psiIn[i])));
+    return { id, type: SUTRA_TYPE[id], arguments: a, alpha: al, operands: out.operands, terms: out.terms, moved, claims: R, ok: R.every(x => x.ok) };
   };
   const grvqClaims = (rec, t) => {
     const R = [];
@@ -1953,7 +1954,7 @@ const KERNEL_FACTORY = () => {
             Array.from({ length: 16 }, (_, v) => Q.mk(BigInt((v * v * 37) % 101 - 50), BigInt(3 + v % 5)))];
   };
   const formulaCorpusAudit = ids => formulaCorpus().map((state, corpus) => ({ corpus, state, sutras: ids.map(id => {
-    try { const f = formulaClaims(id, state, Q.ONE); return { id, type: f.type, ok: f.ok, claims: f.claims }; }
+    try { const f = formulaClaims(id, state, Q.ONE); return { id, type: f.type, ok: f.ok, alpha: f.alpha, operands: f.operands, terms: f.terms, moved: f.moved, claims: f.claims }; }
     catch (e) { return { id, type: SUTRA_TYPE[id], refused: String(e.message || e) }; }
   }) }));
   const runSelfTests = () => {
@@ -5556,11 +5557,12 @@ async function saveTarget() {
   if (DOWNLOADS_CAP === undefined) DOWNLOADS_CAP = await window.claude.use('downloads');
   return DOWNLOADS_CAP;
 }
+const exportText = payload => JSON.stringify(payload, jsonReplacer, 2).replace(/[\u0080-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 async function saveJSON(payload, filename) {
-  const json = JSON.stringify(payload, jsonReplacer, 2);
+  const json = exportText(payload);
   const target = await saveTarget();
   if (target === 'browser') {
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.style.display = 'none';
     document.body.appendChild(a); a.click();
