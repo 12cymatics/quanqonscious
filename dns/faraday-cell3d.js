@@ -294,6 +294,7 @@ function cell3dGridLimits(drMin, dzMin, Hmin, rc0, nth, dth, g, accel, gamma, rh
 const CELL3D_SIZE_NR = [24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256];
 const CELL3D_SIZE_NZ = [12, 16, 20, 24, 32];
 const CELL3D_SIZE_ZSTRETCH = [2.2, 3.0, 3.8];
+const CELL3D_SIZE_RSTRETCH_RIM = [3.0, 3.8, 4.6];
 const CELL3D_MAX_CELLS = 250000;
 
 function cell3dTransformFriendly(nth){
@@ -326,12 +327,11 @@ function suggestCell3DGrid(o){
   const zMin = CELL3D_SIZE_NZ[0];
   const tried = [];
   let best = null, closest = null;
+  const search = stretchesOf => {
   for (const nr of CELL3D_SIZE_NR){
     if (nr*16*zMin > maxCells) break;
-    /* the radial grading as the two-dimensional sizing chooses it: milder as the mode's
-       radial wavelength shrinks, because the interior carries the wave */
     const perLambdaUniform = (2*Math.PI/k)/(R/nr);
-    const rStretch = perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8;
+    for (const rStretch of stretchesOf(perLambdaUniform)){
     const P = new FaradayCell3D({ nr, nth: 8, nz: 4, R, h, rho, nu, gamma, g, contact,
                                   rStretch, zStretch: 2.2 });
     /* small enough that every slope squared is below the rounding of 1 */
@@ -363,7 +363,7 @@ function suggestCell3DGrid(o){
     if (nth === null){
       const rec = { nr, nth: lastNth, rStretch, err: lastErr, surfaceOk: false };
       tried.push(rec);
-      if (!closest || rec.err < closest.err) closest = rec;
+      if (!closest || (!closest.surfaceOk && rec.err < closest.err)) closest = rec;
       continue;
     }
     let drMin = Infinity;
@@ -392,7 +392,11 @@ function suggestCell3DGrid(o){
           closest = rec;
       }
     }
+    }
   }
+  };
+  search(perLambdaUniform => [perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8]);
+  if (!best) search(() => CELL3D_SIZE_RSTRETCH_RIM);
   if (best) return Object.assign({}, best, { errTol, layerCells, maxCells, delta, tried });
   return { unreachable: true, errTol, layerCells, maxCells, delta, closest, tried };
 }

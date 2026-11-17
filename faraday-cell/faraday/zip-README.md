@@ -67,6 +67,22 @@ python3 dns/check-book-pressure.py
 python3 dns/check-book-surface.py
 ```
 
+## Grid update — 15 November 2026
+
+The 3D solver refused a 325 mm × 1 mm cell at 180 Hz (gravity 3 m/s², peak
+acceleration 9.8 m/s²): its grid search graded the radial cells toward the
+wall with a stretch of at most 2.2, which left 0.61 cells in the wall's
+Stokes layer where 2 are required. When the usual grading cannot meet that,
+the search now also tries stretches of 3.0, 3.8 and 4.6, each held to the
+same surface-operator and layer contract. That case now runs on 64 × 30 × 12
+cells with a stretch of 3.8: 2.05 cells in the wall layer, the surface
+operator to 0.93%. Every case the usual grading already met gets the same
+grid as before.
+
+That grid is sized to the seeded wave (m = 2, a third of a metre across). At
+180 Hz the Faraday wavelength in that cell is about 3.8 mm, some 86
+wavelengths across the dish, which no grid within 250 000 cells resolves.
+
 ## Drawing update — 11 November 2026
 
 The modal view drew every frequency on a fixed 381-pixel grid. At 4392 Hz in
