@@ -1,0 +1,78 @@
+QuanQonscious Simulation Suite 1.0.0
+End User Licence
+
+Copyright (c) 2025-2026 Daniel James Elliot Meyer. All rights reserved.
+
+By installing, copying or using this software you accept this licence. If you
+do not accept it, do not use the software.
+
+1. What you may do
+
+The licensor grants you, the person or organisation that paid for this copy,
+a non-exclusive, non-transferable, perpetual licence to:
+  (a) use the software on computers that you own or control;
+  (b) make copies for your own backup;
+  (c) use pictures, recordings and exported data that you make with the
+      software for any purpose, including publication and commercial work,
+      provided you do not present them as experimental measurements.
+
+A copy bought by one person is for that person. A copy bought by an
+organisation is for the number of users stated on the purchase.
+
+2. What you may not do
+
+You may not:
+  (a) sell, rent, lease, sublicense, publish or otherwise give the software,
+      or any part of its code, to anyone else;
+  (b) place it on a public website or server where others can use or
+      download it;
+  (c) remove or change any copyright, licence or source notice in it;
+  (d) use the name QuanQonscious, or the licensor's name, to promote
+      anything else without written permission.
+
+You may read the code and change your own copy for your own use. You may not
+distribute a changed copy.
+
+3. Ownership
+
+The software is licensed, not sold. The licensor keeps all rights in it that
+this licence does not expressly grant. Material from other sources is listed
+in THIRD-PARTY-NOTICES.txt and stays subject to its own terms.
+
+4. What the software is
+
+The software is a mathematical and numerical model. GUIDE.html states what
+each simulator does and does not represent, and that neither has been
+validated against an experiment. It is not a medical, safety, engineering
+design or financial tool, and its output must not be relied on where an
+error could cause injury, damage or loss.
+
+5. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NON-INFRINGEMENT, TO THE FULLEST EXTENT THE LAW ALLOWS.
+
+6. Limit of liability
+
+TO THE FULLEST EXTENT THE LAW ALLOWS, THE LICENSOR IS NOT LIABLE FOR ANY
+INDIRECT, INCIDENTAL, SPECIAL OR CONSEQUENTIAL LOSS, OR FOR LOSS OF DATA,
+PROFIT OR BUSINESS, ARISING FROM THE SOFTWARE OR ITS USE. THE LICENSOR'S TOTAL
+LIABILITY IS LIMITED TO THE PRICE YOU PAID FOR THIS COPY. Nothing in this
+licence limits rights that the consumer law of your country says cannot be
+limited.
+
+7. Ending
+
+This licence ends automatically if you break it. When it ends you must stop
+using the software and delete every copy you hold. Sections 3 to 6 continue
+after it ends.
+
+8. General
+
+If a court finds part of this licence unenforceable, the rest stays in force.
+This licence is the whole agreement about the software between you and the
+licensor.
+
+Questions about licensing, and requests for permissions this licence does not
+give, go to the contact shown where you bought this copy.

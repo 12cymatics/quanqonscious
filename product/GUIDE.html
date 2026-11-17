@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Guide</title>
+<style>
+:root { --bg: #f6f4ef; --ink: #1b1a17; --soft: #5d594f; --card: #ffffff; --line: #d9d4c7; --accent: #8a4b12; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121110; --ink: #ece8df; --soft: #a39d8f; --card: #1c1b19; --line: #34322d; --accent: #e3a35a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Georgia, 'Times New Roman', serif; }
+main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+h1 { font-size: 1.9rem; margin: 0 0 4px; }
+h2 { font-size: 1.35rem; margin: 40px 0 8px; color: var(--accent); border-top: 1px solid var(--line); padding-top: 24px; }
+h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+p, li { max-width: 68ch; }
+p.lead { color: var(--soft); margin-top: 0; }
+a { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--soft); font-weight: normal; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+<h1>QuanQonscious Simulation Suite</h1>
+<p class="lead">User guide, version 1.0.0. <a href="START-HERE.html">Back to the start page</a></p>
+
+<h2>Running it</h2>
+<p>Extract the ZIP, open the folder and open <code>START-HERE.html</code> in a desktop browser. Chrome, Edge, Firefox and Safari all work. Nothing is installed, nothing is downloaded and no account is needed. Both simulators run entirely on your computer and send nothing anywhere.</p>
+<p>The pictures need WebGL2, which every current desktop browser has. A file preview that does not run JavaScript, such as the one in a phone's Files app or an email attachment viewer, shows the controls but nothing moves. Open the file in the browser itself.</p>
+
+<h2>Vedic Sutra Simulator</h2>
+<p>The simulator holds a field of 16 numbers, one on each corner of a tesseract. Every number is an exact fraction, never a rounded decimal. The 29 methods of Bharati Krishna Tirthaji's <em>Vedic Mathematics</em>, 16 sutras and 13 sub-sutras, each read their operands from the field, work their method exactly as the book does, and turn the field by the result. Around them run the magnetism, vortex and drive stages. The torus shows the field: its shape follows the field, the lines on it are the currents along the 32 edges, and the patches are the flux through the 16 cells.</p>
+
+<h3>What you see at the start</h3>
+<p>Every sutra is off. The vortex is at 3 and the drive at 1, so currents flow from the first step. The model takes one step each second.</p>
+
+<h3>The controls</h3>
+<div class="scroll">
+<table>
+<tr><th>Sutra rows</th><td>One row for each of the 29. Click a name to switch it fully on or off, or set its strength from 0 to 100.</td></tr>
+<tr><th>ALL ON</th><td>Sets all 29 to 100% and starts the vortex and the drive if they are at 0.</td></tr>
+<tr><th>ALL OFF</th><td>Sets every sutra, the vortex and the drive to 0 and puts the field back at its seed.</td></tr>
+<tr><th>Presets</th><td>Named sets of sutras that work well together, such as S9 &middot; S11 &middot; S29.</td></tr>
+<tr><th>SERIES, PARALLEL, CONCURRENT</th><td>How the chosen sutras are combined. SERIES: one after another. PARALLEL: each from the same field, their changes added. CONCURRENT: each at half strength, through the list and then back in reverse order.</td></tr>
+<tr><th>Glide (steps)</th><td>How many steps a change takes to come in. A new setting comes in by an equal share each step until it is at full strength.</td></tr>
+<tr><th>vortex &omega;, drive, B field, dielectric, polarise</th><td>The strengths of the stages that run around the sutras.</td></tr>
+<tr><th>PAUSE, RESET</th><td>Stop and resume the steps, or return to the seed.</td></tr>
+<tr><th>LATTICE, FIELDS, CHARTS</th><td>Show or hide the currents and flux on the surface, the field lines around it, and the charts.</td></tr>
+<tr><th>EXPORT STEP</th><td>Saves the last step as a JSON file holding every exact value needed to replay it.</td></tr>
+<tr><th>AUDIT 29 EXACT, PROOF</th><td>Run and show the exact checks of all 29 methods.</td></tr>
+</table>
+</div>
+
+<h3>Switching a sutra off</h3>
+<p>When a sutra is switched off, what it put into the field is taken back out over the glide, exactly. With the vortex and the drive at 0, the field returns to the energy it started with.</p>
+
+<h3>The FAITHFUL badge</h3>
+<p>The badge reads FAITHFUL only while every part of the picture is drawn from the exact state and every check of that state holds. If any check fails the badge says so and the part it covers is withheld instead of being drawn wrongly.</p>
+
+<h3>What it is, and what it is not</h3>
+<ul>
+<li>It is an exact mathematical model. The arithmetic is exact fractions up to 4096 bits, then intervals that are guaranteed to contain the true value.</li>
+<li>The 29 methods follow the book and are checked against worked examples from it.</li>
+<li>The words magnetism, vortex, flux and current name parts of this model. It is not a simulation of a physical magnet or of any laboratory apparatus, and it has not been compared with an experiment.</li>
+<li>It makes no claim about physics, medicine or consciousness.</li>
+</ul>
+
+<h2>Faraday Cell</h2>
+<p>A liquid in a circular cell is shaken vertically and its surface forms standing waves. This simulator solves the three-dimensional nonlinear Navier&ndash;Stokes equations for an incompressible Newtonian liquid with a free surface, a pinned rim and a no-slip floor and wall. Diameter, depth, density, viscosity, surface tension, gravity and the drive are entered in SI units.</p>
+
+<h3>Using it</h3>
+<ul>
+<li>The page draws the initial surface at time 0 and then starts the solver. <strong>Pause</strong> keeps the computed state; <strong>Reset</strong> returns to the initial condition and waits for <strong>Run</strong>.</li>
+<li>Drag to orbit, scroll to zoom. <strong>Top view</strong> and <strong>3D view</strong> move the camera.</li>
+<li>The vertical scale starts at 5000&times; because the default displacement is microscopic next to the cell's diameter. Choose 1&times; for true scale. The scale changes only the drawing.</li>
+<li>The sand-coloured particles are passive tracers carried by the computed velocity. They are not a model of sediment.</li>
+<li>The physical clock and the measured wall time are both shown. The solver is not real-time at its accuracy grid: a millisecond of liquid time can take many seconds to compute.</li>
+</ul>
+
+<h3>What it is, and what it is not</h3>
+<ul>
+<li>It solves the full nonlinear equations on a finite grid. The page sizes the grid so the seeded mode is resolved to within 1% and refuses, with the numbers, when no grid of at most 250,000 cells can do that.</li>
+<li>The surface is single-valued. There are no jets, droplets, air entrainment or overturning waves; the solver stops and says so when the surface would break.</li>
+<li>It has not been compared with an experiment or with another published code. Its internal checks show the arithmetic is consistent; they do not validate it against the physical world.</li>
+<li>The apparatus presets and the pattern atlas are optional comparisons taken from a published paper (see <a href="THIRD-PARTY-NOTICES.txt">Sources and notices</a>). They do not drive the solver.</li>
+</ul>
+
+<h2>Requirements</h2>
+<ul>
+<li>A desktop or laptop computer with a current browser.</li>
+<li>WebGL2 for the pictures. All calculation is done on the processor in double precision or exact arithmetic.</li>
+<li>No network connection.</li>
+</ul>
+
+<h2>If something does not work</h2>
+<div class="scroll">
+<table>
+<tr><th>Nothing moves</th><td>The file is open in a preview, not a browser. Open it in Chrome, Edge, Firefox or Safari.</td></tr>
+<tr><th>The picture is blank</th><td>WebGL2 is off or unavailable. Turn on hardware acceleration in the browser's settings, or try another browser.</td></tr>
+<tr><th>The Vedic simulator steps slowly with many sutras on</th><td>Exact arithmetic grows with every step. Use a preset, or press RESET to return to the seed.</td></tr>
+<tr><th>The Faraday clock barely advances</th><td>That is the cost of the accuracy grid. Leave it running; the wall time and the physical time are both shown.</td></tr>
+</table>
+</div>
+</main>
+</body>
+</html>

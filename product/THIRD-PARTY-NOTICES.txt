@@ -1,0 +1,67 @@
+QuanQonscious Simulation Suite 1.0.0
+Sources and notices
+
+This file records where the material in this package comes from and what
+rights question, if any, is still open. It is a record, not legal advice.
+
+
+1. Software
+
+All program code in vedic-sutra-simulator.html and faraday-cell.html was
+written for this project. Neither page loads a script, font, style sheet or
+data file from anywhere else, and neither contains a third-party library.
+
+
+2. Vedic Sutra Simulator
+
+The 29 methods are those of:
+
+  Jagadguru Swami Sri Bharati Krishna Tirthaji Maharaja,
+  "Vedic Mathematics", ed. V. S. Agrawala, Motilal Banarsidass, 1965.
+
+The simulator implements the mathematical methods and uses the sutras'
+names. It reproduces no passage of the book. Worked examples used to check
+the methods were taken from:
+
+  Rajesh Kumar Thakur, "Advanced Vedic Mathematics", Rupa, 2019.
+
+Those examples are used in the project's own checks, which are not part of
+this package. Errors found in the printed examples were corrected before use.
+
+
+3. Faraday Cell
+
+The equations solved are the incompressible Navier-Stokes equations with a
+free surface. They are standard physics and belong to no one.
+
+The optional apparatus presets and the optional pattern atlas are taken from:
+
+  Merlin Sheldrake and Rupert Sheldrake, "Determinants of Faraday Wave-Patterns
+  in Water Samples Oscillated Vertically at a Range of Frequencies from 50-200
+  Hz", WATER 9, 2017. DOI 10.14294/WATER.2017.6
+
+What is embedded in faraday-cell.html from that paper:
+  - the three cell diameters and the drive settings it reports;
+  - for each frequency from 50 to 200 Hz, the fold symmetry the paper printed
+    for each photograph, and statistics measured from those photographs
+    (brightness, contrast, and radial and angular harmonics).
+No photograph and no text of the paper is included.
+
+OPEN QUESTION, to settle before selling: the licence under which that paper
+and its figures were published has not been confirmed. Reported facts such as
+a cell diameter or a printed symmetry number are not protected by copyright
+in most countries, but a table of measurements made from the paper's
+photographs may be treated as derived from them, and database rights differ
+between countries. Before this package is sold, do one of:
+  (a) confirm on the journal's page for the paper that its licence permits
+      commercial reuse, and keep a dated copy of that page;
+  (b) get written permission from the authors or the journal; or
+  (c) ship a build of faraday-cell.html with the atlas removed. The solver
+      does not use the atlas.
+
+
+4. Names
+
+"Vedic Mathematics" is the title of Tirthaji's book and a general term for
+his methods. This package is not published by, endorsed by or connected with
+his estate, his publishers, or the authors of any work named above.

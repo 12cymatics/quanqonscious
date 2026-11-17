@@ -12,7 +12,7 @@ package exposes:
   their definitions; `vedic/kernel/z2_primitives.py` holds the unweighted
   Z₂⁴ primitives the residuals and generators are built from, and is *not*
   the 29. **`sutras_canonical.py` holds nine distinct maps, not twenty-nine**:
-  `STRICT_SUTRA_KERNEL` dispatches through seven kind templates, two of which
+  `apply_sutra` dispatches through seven kind templates, two of which
   branch internally (REFL on `id == 5`, PERM on `axis = (id+1) & 3`), and
   between two ids of one class the only difference is the scalar
   α(n) = (n/435)·(strength/100). That is faithful — upstream is nine maps too,
@@ -23,19 +23,8 @@ package exposes:
   this repository** — `vedic/kernel/z2_primitives.py` (29 distinct, verified
   pairwise), `vedic_v18.51.1_exact_phi.html`, and `vedic_sutras_complete.hpp`.
 
-  `vedic/kernel/sutras_canonical.py` ports the SUTRA_KIND table, the
-  names and the §12Z operator *taxonomy* from `vedic_v18.24_full_kernel.html`,
-  which is **tracked at the root of this repository** — this line used to say
-  it "lives on the user's machine, not in this repository", and that was
-  wrong for as long as it stood. So is `vedic_v18.51.1_exact_phi.html`, a
-  later and far more exact revision that nothing here mentions.
-
-  All 29 names, all 29 kinds and all seven operator templates transcribe
-  exactly — verified against the file, operator by operator. The definition
-  is `STRICT_SUTRA_KERNEL` (line 6527), which is float-free; the
-  `SUTRAS[].evolve()` bodies in the same file are the display path and use
-  floats, epsilons and 1e-4 quantisation, which is why they are not what was
-  ported.
+  `vedic/kernel/sutras_canonical.py` holds the SUTRA_KIND table, the
+  names and the seven operator templates, exact and float-free.
 - A composition algebra (`vedic/kernel/composition.py`) that runs any sutra
   queue in **SERIES**, **PARALLEL**, **CONCURRENT** (BSP wavefront,
   W = ⌈√N⌉), **CANONICAL** or **COMPOSITE**, all in exact ℚ with a
@@ -94,11 +83,10 @@ text.
 | Blueprint gates  | yes         | 35 tests               |
 | Exact asset extensions | yes   | 154 tests              |
 | Kernel (torch)   | yes         | 22 buffer tests        |
-| External sidecar | yes         | 201 tests              |
-| Script validity  | yes         | 66 tests               |
+| External sidecar | yes         | 199 tests              |
+| Script validity  | yes         | 62 tests               |
 | Withdrawn numbers | yes        | 28 tests               |
-| Upstream agreement | yes       | 33 tests               |
-| Documented paths | yes         | 124 tests               |
+| Documented paths | yes         | 110 tests               |
 | Conservation (torch) | yes         | 42 tests               |
 | Audit closure    | yes         | 27 tests               |
 | Benchmark honesty | yes        | 31 tests               |
@@ -131,7 +119,7 @@ project, and three of those documents were still pointing at
 `vedic/kernel/sutras_exact.py` — the exact renamed path named in that gate's
 own docstring as the defect it was built to stop.
 
-2888 tests are collected and 2888 pass. **Nothing is skipped**, here or in
+2835 tests are collected and 2835 pass. **Nothing is skipped**, here or in
 CI. The counts above are *collected* rather than *passed* so that the same
 README is correct on every machine — a passed count moves with the
 environment, and a README that is right on one box and wrong on another is
@@ -304,12 +292,6 @@ are a regression reference. The distinction matters: an earlier version of
 this gate rebuilt its own missing fixtures, which made it unfalsifiable
 rather than merely narrow.
 
-Correctness against the upstream definition is a separate question, and this
-paragraph used to close it off by saying the upstream was "external to this
-repository". It is not — `vedic_v18.24_full_kernel.html` is tracked at the
-repository root, and the question is answerable. It has now been asked; see
-`docs/BIT_EXACT_PROTOCOL.md` for what the comparison found.
-
 The strict ℚ reference layer is what makes criterion 3 honest: float
 tolerance does not enter the verification path, and every comparison in
 `vedic/kernel/tests/` is exact rational equality. It is worth being clear
@@ -317,18 +299,13 @@ that this buys correctness of the *kernel*, not correctness of the
 *hypothesis* — criterion 1 shows those are separate questions, and the
 kernel passing tells you nothing about whether the sutras help.
 
-## Bit-exact protocol with v18.16
+## Bit-exact fixtures
 
-The Fraction kernel is the authoritative simulator. The committed
-fixtures (`fixtures/*.json`) are produced by
-`scripts/build_fixtures.py`. The user's `vedic_v18.16_strict_kernel.html` (an external file, not in
-this repository) implements the same operators in JavaScript over BigInt rationals; when
-the user runs `scripts/export_simulator_fixtures.py` against it, the
-exported JSON must equal the committed fixtures byte-for-byte. Any
-mismatch is a kernel bug.
-
-See `docs/BIT_EXACT_PROTOCOL.md` for the JavaScript hooks the simulator
-must expose (`window.exportFixtures(seed, n)`).
+The committed fixtures (`fixtures/*.json`) are produced by
+`scripts/build_fixtures.py` from the Fraction kernel, and
+`scripts/verify_bit_exact.py` requires the kernel to reproduce every record
+exactly. They are written by the kernel they are compared against, so they
+detect drift, not error. See `docs/BIT_EXACT_PROTOCOL.md`.
 
 ## Repository layout
 

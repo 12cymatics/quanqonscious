@@ -19,11 +19,6 @@ distinction that made the old regenerate-on-missing fallback worthless. What
 they give is a regression reference: if an operator's output changes, the
 gate says so instead of the change passing silently.
 
-The correctness cross-check is external and stays external: the user's
-`vedic_v18.24_full_kernel.html` is the upstream definition
-`sutras_canonical.py` was ported from, and agreement with it is checked by
-exporting from that file, not by anything in this repository.
-
 Two strengths are recorded per input. Strength 0 exercises the §12Y
 guarantee (α → 0 ⇒ identity) and would be satisfied by an operator that does
 nothing at all, so it is never recorded alone.

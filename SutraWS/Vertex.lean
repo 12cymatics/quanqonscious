@@ -7,7 +7,7 @@ import Mathlib.Tactic
 # The v18 vertex substrate
 
 Exact-ℚ transcription of `const VTX` from the v18 kernel
-(`vedic_v18.24_full_kernel.html:5479-5512`, also `simulation v18:3718` and `version18.5:3623`):
+(`simulation v18:3718` and `version18.5:3623`):
 
 ```js
 const VTX = {

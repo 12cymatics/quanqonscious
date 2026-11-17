@@ -1,11 +1,7 @@
 """Generate `fixtures/*.json` from the ℚ kernel.
 
-These JSON files are the bit-exact reference that every other consumer
-(``test_simulator_match.py``, the v18.16 simulator export, the
-verify_bit_exact gate) compares against. The Fraction kernel is the
-authoritative simulator: when the user runs the v18.16 HTML through
-``scripts/export_simulator_fixtures.py`` (Playwright) on their Mac, the
-JSON byte-stream MUST match what this script produced.
+These JSON files are the bit-exact reference that ``test_simulator_match.py``
+and the verify_bit_exact gate compare the Fraction kernel against.
 
 Rationals are serialised as ``{"num": int, "den": int}`` so there is no
 float round-trip and no precision loss.

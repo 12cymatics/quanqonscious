@@ -2,15 +2,13 @@
 
 How many formulas this module holds
 -----------------------------------
-Nine, not twenty-nine. ``STRICT_SUTRA_KERNEL`` dispatches on
+Nine, not twenty-nine. ``apply_sutra`` dispatches on
 ``SUTRA_KIND[id]`` through seven templates; two branch internally (REFL on
 ``id == 5``, PERM on ``axis = (id+1) & 3``), so seven become nine. Between two
 ids of the same class the *only* difference is the scalar
 α(n) = (n/435)·(strength/100).
 
-That is faithful to upstream — ``test_upstream_agreement.py`` matches the real
-JavaScript on 6,380 of 6,380 triples, and upstream is nine maps too. It is
-recorded here because nothing said it, and "the 29 sutras, canonically
+It is recorded here because nothing said it, and "the 29 sutras, canonically
 defined" (which is how this line read) invites the opposite reading.
 
 ``test_sutras_canonical.py::test_the_twenty_nine_ids_are_nine_distinct_maps``
@@ -22,20 +20,14 @@ repository**: ``vedic/kernel/z2_primitives.py`` is 29 distinct functions
 cases over the C4/K2(√5) extension, and ``vedic_sutras_complete.hpp`` has 29
 C++ implementations. This module is not those, and does not claim to be.
 
-Source of truth
----------------
-Ported from ``vedic_v18.24_full_kernel.html`` (tracked at the repository
-root, despite several documents having said it was not):
-
-* ``§12Z VERTEX-FIELD SUTRA OPERATORS``  (line 5544) — the seven operator types
-* ``STRICT_SUTRA_KERNEL``                (line 6527) — the exact, float-free path
-* ``SUTRA_KIND``                         (line 3558) — the id → kind dispatch
-* ``ALPHA.computeQ``                     — the α weight
-* ``§12Y STRUCTURAL SINGULARITY SUPPRESSION`` — the identity guarantee
-
-``STRICT_SUTRA_KERNEL`` is the canonical path (line 5449:
-``psi' = STRICT_SUTRA_KERNEL_i(psi, alpha_i)``). The ``SUTRAS[].evolve()``
-bodies are the float-contaminated display path and are NOT the definition.
+Contents
+--------
+* the seven operator types
+* ``apply_sutra`` — the exact, float-free path,
+  ``psi' = apply_sutra(i, psi, strength)``
+* ``SUTRA_KIND`` — the id → kind dispatch
+* ``ALPHA.computeQ`` — the α weight
+* §12Y structural singularity suppression — the identity guarantee
 
 Substrate
 ---------
@@ -89,7 +81,7 @@ FULL_MASK: int = 0b1111
 
 BIT_WIDTH: int = 4
 
-# id → kind, transcribed from SUTRA_KIND (vedic_v18.24_full_kernel.html:3558).
+# id → kind.
 # Index 0 is unused so that SUTRA_KIND[id] reads naturally with 1-based ids.
 SUTRA_KIND: Tuple[str, ...] = (
     "",
@@ -252,7 +244,7 @@ def alpha(sid: int, strength: Fraction) -> Fraction:
 
 
 def blend(current: Fraction, target: Fraction, w: Fraction) -> Fraction:
-    """blend(c, t, w) = c + (t − c)·w.   STRICT_SUTRA_KERNEL.blend."""
+    """blend(c, t, w) = c + (t − c)·w."""
     return current + (target - current) * w
 
 
@@ -362,7 +354,7 @@ _DISPATCH = {
 
 
 def apply_sutra(sid: int, psi: Q16, strength: Fraction) -> Q16:
-    """Apply sutra ``sid`` to Ψ at the given strength.  STRICT_SUTRA_KERNEL.applyOne.
+    """Apply sutra ``sid`` to Ψ at the given strength.
 
     Returns Ψ unchanged when α = 0 — the §12Y structural guarantee, checked
     explicitly rather than emerging from arithmetic.
