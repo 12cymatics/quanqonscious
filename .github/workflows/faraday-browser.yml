@@ -1,9 +1,9 @@
 name: Faraday browser execution
 on:
   push:
-    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', '.github/workflows/faraday-browser.yml']
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'package.json', 'package-lock.json', '.github/workflows/faraday-browser.yml']
   pull_request:
-    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', '.github/workflows/faraday-browser.yml']
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'package.json', 'package-lock.json', '.github/workflows/faraday-browser.yml']
   workflow_dispatch:
 permissions:
   contents: read

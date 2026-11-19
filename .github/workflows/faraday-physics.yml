@@ -1,9 +1,9 @@
 name: Faraday physics execution
 on:
   push:
-    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', '.github/workflows/faraday-physics.yml']
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', 'package.json', 'package-lock.json', '.github/workflows/faraday-physics.yml']
   pull_request:
-    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', '.github/workflows/faraday-physics.yml']
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', 'package.json', 'package-lock.json', '.github/workflows/faraday-physics.yml']
   workflow_dispatch:
 permissions:
   contents: read
