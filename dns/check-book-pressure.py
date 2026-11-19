@@ -14,14 +14,11 @@ BOOK_URL = 'https://archive.org/details/vedic-mathematics-bharati-krishna-tirth-
 CORRECTION_URL = 'https://github.com/12cymatics/quanqonscious/pull/172'
 CORRECTION_COMMIT = 'aee61f40a967ea08bf5e8879edd1da9c9e47d624'
 ZERO_EXPONENT = (0, 0, 0)
-
 class CheckFailure(RuntimeError):
     pass
-
 def require(condition, message):
     if not condition:
         raise CheckFailure(message)
-
 def load_book(path):
     source = path.read_bytes()
     actual = hashlib.sha1(b'blob ' + str(len(source)).encode('ascii') + b'\x00' + source).hexdigest()
@@ -37,14 +34,11 @@ def load_book(path):
     finally:
         sys.dont_write_bytecode = previous_bytecode_setting
     return module
-
 class CoordinatePolynomials:
-
     def __init__(self, book):
         self.book = book
         self.convolutions = 0
         self.derivative_fibres = 0
-
     def clean(self, terms):
         result = {}
         for exponents, coefficient in terms.items():
@@ -53,35 +47,28 @@ class CoordinatePolynomials:
             if value != 0:
                 result[exponents] = value
         return result
-
     def constant(self, value):
         return self.clean({ZERO_EXPONENT: value})
-
     def variable(self, axis):
         e = [0, 0, 0]
         e[axis] = 1
         return {tuple(e): sp.S.One}
-
     def add(self, *polynomials):
         out = {}
         for polynomial in polynomials:
             for exponent, value in polynomial.items():
                 out[exponent] = out.get(exponent, sp.S.Zero) + value
         return self.clean(out)
-
     def scale(self, polynomial, value):
         value = self.book.rational(value)
         return self.clean({e: value * c for e, c in polynomial.items()})
-
     def multiply(self, left, right):
         if not left or not right:
             return {}
         limits = [max((e[i] for e in left)) + max((e[i] for e in right)) for i in range(3)]
         radix_x, radix_y = (limits[0] + 1, limits[1] + 1)
-
         def index(e):
             return e[0] + radix_x * (e[1] + radix_y * e[2])
-
         def encode(p):
             encoded = [sp.S.Zero] * (max((index(e) for e in p)) + 1)
             for e, value in p.items():
@@ -99,7 +86,6 @@ class CoordinatePolynomials:
             require(all((e[i] <= limits[i] for i in range(3))), 'Convolution escaped exponent bounds')
             out[e] = coefficient
         return self.clean(out)
-
     def derivative(self, polynomial, axis):
         fibres = {}
         for exponents, value in polynomial.items():
@@ -117,11 +103,9 @@ class CoordinatePolynomials:
                 exponents[axis] = degree
                 out[tuple(exponents)] = value
         return self.clean(out)
-
     @staticmethod
     def expression(polynomial, variables):
         return sum((coefficient * sp.prod((v ** e for v, e in zip(variables, exponents))) for exponents, coefficient in polynomial.items()), sp.S.Zero)
-
 def derive_pressure(book):
     p = CoordinatePolynomials(book)
     h, amplitude, radius = (sp.Rational(1, 250), sp.Rational(1, 1000), sp.Rational(17, 1000))
@@ -166,7 +150,6 @@ def derive_pressure(book):
     require(bool(p.add(p.multiply(height, qx), p.scale(height, -a))), 'Fixture cannot detect an omitted x metric-slope term')
     require(bool(p.add(p.multiply(height, qy), p.scale(height, -b))), 'Fixture cannot detect an omitted y metric-slope term')
     return {'surface': 'H=h+A*(1-(x^2+y^2)/R^2)^2; z=sigma*H', 'pressure': 'q=q0+a*x+b*y+c*sigma*H', 'parameters': {k: str(v) for k, v in {'h': h, 'A': amplitude, 'R': radius, 'q0': q0, 'a': a, 'b': b, 'c': c}.items()}, 'physical_gradient': [str(v) for v in (a, b, c)], 'identities': ['H*q_x-sigma*H_x*q_sigma-a*H = 0', 'H*q_y-sigma*H_y*q_sigma-b*H = 0', 'q_sigma-c*H = 0'], 'residual_nonzero_coefficients': {name: len(value) for name, value in residuals.items()}, 'independent_symbolic_checks': len(independent) + 1, 'book_convolutions': p.convolutions, 'book_derivative_fibres': p.derivative_fibres, 'book_full_product_derivative_checks': product_rule_checks, 'pinned_rim_point_checks': rim_checks, 'symbolic_pinned_rim_check': 'PASS', 'omitted_metric_term_sensitivity': 'PASS, both horizontal directions'}
-
 def corrected_method_checks(book):
     X = sp.Symbol('x')
     examples = (((-12, 9, -7, -4), (-4, 2), (sp.Rational(-21, 2), sp.Rational(-15, 2), -2), (-54,)), ((-5, -1, 3), (-7, 3), (2, 1), (9,)))
@@ -191,7 +174,6 @@ def corrected_method_checks(book):
         else:
             raise CheckFailure(f'Invalid input accepted: {name}')
     return {'printed_page57_divisions': len(examples), 'printed_page19_constant_remainder': 'PASS', 'printed_cube9989': 'PASS', 'independent_cube_checks': cubes, 'invalid_operand_rejections': len(invalid)}
-
 def main():
     parser = argparse.ArgumentParser(description='Exact arithmetic checks for pressure in a surface-following coordinate.\n\nRun with the unchanged, pinned upstream arithmetic module:\n  python dns/check-book-pressure.py\nAn explicit --book /path/to/vedic_book.py can select the same pinned source.\n\nThe named book procedures are used as implemented in that module: coefficient\nconvolution (Urdhva), polynomial differentiation (Calana), and the complete\nfactor product derivative (Gunakasamuccaya). Coordinate bookkeeping and the\nchain rule retain their ordinary mathematical names. No fluid solver is\nreplaced, approximated, or relabelled by this verification program.\n\nThe manufactured surface is H=h+A*(1-(x*x+y*y)/R**2)**2, with h,A,R positive.\nIt has pinned elevation at the circular rim. Its additional zero rim slope\nbelongs to this test field and is not imposed as an extra solver condition.\nFor z=sigma*H and q=q0+a*x+b*y+c*sigma*H, the complete coordinate chain rule\nmust give the physical gradient (a,b,c), including every metric-slope term.\n\nThis verifies exact arithmetic and an analytic identity. It does not execute\nthe production discretization or establish convergence, fluid validation,\nor experimental agreement. Those remain separate, required solver checks.\n')
     parser.add_argument('--book', type=Path, default=Path(__file__).resolve().parent.parent / 'vedic_book.py', help='Unchanged vedic_book.py from the pinned upstream commit (default: repository root)')
