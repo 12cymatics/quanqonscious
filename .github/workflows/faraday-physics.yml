@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tree: ['.', 'faraday-cell']
+        tree: ['.', 'faraday-cell', 'archive']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,15 +30,44 @@ jobs:
           python -m pip install sympy==1.14.0
           npm install --prefix "${RUNNER_TEMP}/faraday-parser" --ignore-scripts acorn@8.18.0
           echo "ACORN=${RUNNER_TEMP}/faraday-parser/node_modules/acorn" >> "$GITHUB_ENV"
-      - name: Execute every nonbrowser suite against this tree
+      - name: Prepare selected source tree
         env:
-          SOURCE_TREE: ${{ matrix.tree }}
+          FARADAY_TARGET: ${{ matrix.tree }}
         run: |
           node --input-type=module <<'JS'
+          import {appendFileSync,mkdtempSync,realpathSync,statSync} from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          import {join,sep} from 'node:path';
+          const workspace=realpathSync(process.env.GITHUB_WORKSPACE);
+          const target=process.env.FARADAY_TARGET;
+          let root;
+          if(target==='archive'){
+            const unpacked=realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP,'faraday-archive-')));
+            if(unpacked===workspace||unpacked.startsWith(workspace+sep))throw new Error('Archive validation must run outside the checkout');
+            execFileSync('unzip',['-q',join(workspace,'faraday-cell.zip'),'-d',unpacked],{stdio:'inherit'});
+            root=realpathSync(join(unpacked,'faraday-cell'));
+            if(!root.startsWith(unpacked+sep))throw new Error('Extracted source escaped its isolated directory');
+          }else{
+            if(target!=='.'&&target!=='faraday-cell')throw new Error('Unknown source target: '+target);
+            root=realpathSync(join(workspace,target));
+          }
+          if(!statSync(join(root,'faraday/build-zip.mjs')).isFile())throw new Error('Required suite manifest is missing');
+          appendFileSync(process.env.GITHUB_ENV,'SOURCE_TREE='+root+'\n');
+          console.log('Selected '+target+' source tree: '+root);
+          JS
+      - name: Execute every nonbrowser suite against this tree
+        working-directory: ${{ env.SOURCE_TREE }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
           import {spawnSync} from 'node:child_process';
           import {resolve,join} from 'node:path';
-          import {SUITES} from './faraday/build-zip.mjs';
+          import {pathToFileURL} from 'node:url';
           const root=resolve(process.env.SOURCE_TREE);
+          assert.equal(process.cwd(),root);
+          const {SUITES}=await import(pathToFileURL(join(root,'faraday/build-zip.mjs')));
+          const {SUITES:required}=await import(pathToFileURL(join(process.env.GITHUB_WORKSPACE,'faraday/build-zip.mjs')));
+          assert.deepEqual(SUITES,required,'Selected tree must retain every required suite and argument');
           const selected=SUITES.filter(s=>!s.browser);
           if(!selected.length)throw new Error('No calculation suites selected');
           const failed=[];
