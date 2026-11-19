@@ -1089,7 +1089,7 @@ try {
              corpora: C.length, decided, failed, refused,
              shown: C.every(c => c.sutras.every(r => r.refused || (r.operands && typeof r.operands === 'object' && Array.isArray(r.terms) && r.terms.length > 0 && r.alpha && r.moved))),
              ascii: window.__saved.every(s => /^[\x00-\x7f]*$/.test(s.json)),
-             escapes: (() => { const src = String.fromCharCode(945, 32, 183, 32, 968, 32, 363), t = exportText({ a: src }); return /^[\x00-\x7f]*$/.test(t) && /\\u03b1/.test(t) && JSON.parse(t).a === src; })() }; })()`) : {};
+             escapes: (() => { const src = String.fromCharCode(945, 32, 183, 32, 968, 32, 363), t = exportText({ a: src }); return /^[\x00-\x7f]*$/.test(t) && t.includes(String.fromCharCode(92) + 'u03b1') && JSON.parse(t).a === src; })() }; })()`) : {};
   ok(gotAudit && au.schema === 'vedic-operator-audit/3' && au.fp === fp && au.n === 29, `the formula audit names this build (fingerprint ${au.fp}) and covers the 29 formulas`);
   ok(au.args === true, 'it lists each formula\'s operands by name, as the kernel declares them');
   ok(au.shown === true, 'for every formula on every test state it carries the operands read from the field, alpha, the terms the method gave and how far the field moved');
