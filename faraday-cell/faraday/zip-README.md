@@ -183,14 +183,19 @@ name and reporting a time that means something else.
 
 ```
 node run-checks.mjs --list      # what there is
-node run-checks.mjs --fast      # everything but the three-dimensional solver gate
+node run-checks.mjs --fast      # partial diagnostics; exit 2 if selected suites pass
 node run-checks.mjs             # everything
 ```
 
 `dns/check-cell3d.mjs` and `dns/check-cell3d-wasm.mjs` take minutes — the first
 integrates the solver over many grids to measure convergence orders, the second
 rebuilds the C++ and holds it to the JavaScript over a whole drive period — which
-is why `--fast` exists and why those two are the only things it leaves out. `dns/check-page.mjs` drives a real Chrome over
+is why `--fast` exists and why those two are the only things it leaves out.
+The runner names those omitted suites and reports an incomplete execution.
+It returns exit code 2 even when all selected suites pass; full verification requires
+running without `--fast`. The full run includes the free-contact wall-kinematics
+check through `dns/check-surface-pressure.mjs --audit-free`.
+`dns/check-page.mjs` drives a real Chrome over
 the DevTools protocol; it **refuses** rather than skipping if it cannot find one,
 and `CHROME=/path/to/chrome` tells it where to look. `faraday/check-clean.mjs` reads
 the comment-free build back with [acorn](https://github.com/acornjs/acorn), a parser
@@ -198,8 +203,10 @@ independent of the one that built it, and likewise refuses without it:
 `npm install --prefix /tmp/tok acorn@8.18.0`, then `ACORN=/tmp/tok/node_modules/acorn`.
 
 `node faraday/build-clean.mjs` followed by a name for the new file writes the single
-file again with every comment and every on-screen sentence taken out; the readings,
-controls and solvers are the same, and both gates above hold it to that.
+file again with code comments removed. Runtime error reasons, warnings, input
+provenance and model limitations remain visible. The token comparison uses the
+original full page, and the browser checks require computed warnings and error
+reasons to remain on screen.
 
 ## Two things to know before you file a bug
 
