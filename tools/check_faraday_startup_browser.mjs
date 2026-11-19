@@ -57,6 +57,9 @@ try{
     {name:'source-http',url:origin+'/cymatic.html'},...local,
     {name:'folder-mobile',url:origin+'/index.html',viewport:{width:390,height:844}}
   ]){
+    // The recovered default is the retained sand visualization. This existing
+    // gate explicitly exercises the fluid-only diagnostic.
+    scenario={...scenario,url:scenario.url+'?solver=1'};
     const context=await browser.newContext({viewport:scenario.viewport||{width:1440,height:1000}});
     page=await context.newPage();pageErrors=[];
     page.on('pageerror',e=>pageErrors.push(String(e.stack||e)));
@@ -102,7 +105,7 @@ try{
     await context.close();page=null;
   }
   const context=await browser.newContext({javaScriptEnabled:false});page=await context.newPage();
-  await page.goto(origin+'/index.html');assert.match(await page.locator('#startupStatus').innerText(),/Not started/);
+  await page.goto(origin+'/index.html?solver=1');assert.match(await page.locator('#startupStatus').innerText(),/Not started/);
   await page.screenshot({path:resolve(out,'javascript-disabled-notice.png'),fullPage:true});
   results.push({name:'javascript-disabled-preview',passed:true});await context.close();page=null;
 }catch(error){

@@ -6,7 +6,7 @@
   const DEFAULT_CAMERA = Object.freeze({ yaw: -0.72, elevation: 0.66, distance: 3.45, targetX: 0, targetY: 0 });
   const DEFAULT_OPTIONS = Object.freeze({ heightScale: 1, showSurface: true, showParticles: true,
     showVectors: false, showGrid: true, colorMode: 'water', pointSize: 3,
-    vectorScaleSeconds: 1, colorScaleM: null });
+    vectorScaleSeconds: 1, colorScaleM: null, surfaceOpacity: null });
   const finite = (n, name) => { if (!Number.isFinite(n)) throw new TypeError('3D view: ' + name + ' must be finite.'); return n; };
   function copyArray(a, Type, name, stride) {
     if (a == null) return new Type(0);
@@ -24,11 +24,12 @@
       source: frame.source == null ? null : JSON.parse(JSON.stringify(frame.source)), positions: copyArray(frame.positions, Float32Array, 'surface positions', 3),
       indices: copyArray(frame.indices, Uint32Array, 'surface triangles', 3),
       particles: copyArray(frame.particles, Float64Array, 'particle positions', 3),
+      particleRadii: frame.particleRadii == null ? null : copyArray(frame.particleRadii, Float64Array, 'particle radii', 1),
       flowPositions: copyArray(frame.flowPositions, Float32Array, 'flow positions', 3),
       flowVectors: copyArray(frame.flowVectors, Float32Array, 'flow vectors', 3),
       etaRange: frame.etaRange ? Array.from(frame.etaRange) : null,
       maxSpeed: frame.maxSpeed == null ? null : finite(frame.maxSpeed, 'maximum speed') };
-    for (const key of ['provenance', 'units', 'grid', 'flowSampling', 'displayTessellation', 'maxSpeedScope', 'tracerProvenance'])
+    for (const key of ['provenance', 'units', 'grid', 'flowSampling', 'displayTessellation', 'maxSpeedScope', 'tracerProvenance', 'grainProvenance'])
       if (frame[key] !== undefined) f[key] = JSON.parse(JSON.stringify(frame[key]));
     const n = f.positions.length / 3;
     if (!n || !f.indices.length) throw new RangeError('3D view: an actual surface mesh is required.');
@@ -37,6 +38,17 @@
         throw new RangeError('3D view: surface index lies outside its vertex array.');
     }
     if (f.flowVectors.length !== f.flowPositions.length) throw new RangeError('3D view: velocity and position counts differ.');
+    if (f.particleRadii) {
+      if (f.particleRadii.length !== f.particles.length / 3) throw new RangeError('3D view: particle radius and position counts differ.');
+      for (const radius of f.particleRadii) if (!(radius > 0)) throw new RangeError('3D view: particle radii must be positive metres.');
+    }
+    for (const [key,stride] of [['grainIds',1],['grainDensity',1],['grainVelocities',3],['grainAngularVelocities',3]]) {
+      if(frame[key]==null)continue;
+      f[key]=copyArray(frame[key],Float64Array,key,stride);
+      if(!f.particleRadii||f[key].length!==f.particles.length/3*stride)throw new RangeError('3D view: incorrect '+key+' count.');
+      if(key==='grainIds'&&Array.from(f[key]).some(id=>!Number.isSafeInteger(id)||id<0))throw new RangeError('3D view: grain IDs must be nonnegative safe integers.');
+      if(key==='grainDensity'&&Array.from(f[key]).some(d=>!(d>0)))throw new RangeError('3D view: grain density must be positive.');
+    }
     for (const [key, count] of [['surfaceDisplacement', n], ['particleDisplacement', f.particles.length / 3], ['flowDisplacement', f.flowPositions.length / 3]]) {
       f[key] = frame[key] == null ? null : copyArray(frame[key], Float32Array, key, 1);
       if (f[key] && f[key].length !== count) throw new RangeError('3D view: incorrect ' + key + ' count.');
@@ -55,6 +67,8 @@
     for (const key of ['heightScale', 'pointSize', 'vectorScaleSeconds'])
       if (!(finite(o[key], key) > 0)) throw new RangeError('3D view: ' + key + ' must be positive.');
     if (o.colorScaleM != null && !(finite(o.colorScaleM, 'colour scale') > 0)) throw new RangeError('3D view: colour scale must be positive.');
+    if (o.surfaceOpacity != null && !(finite(o.surfaceOpacity, 'surface opacity') >= 0 && o.surfaceOpacity <= 1))
+      throw new RangeError('3D view: surface opacity must lie between zero and one.');
     if (!['water', 'height', 'nodal'].includes(o.colorMode)) throw new RangeError('3D view: unknown surface colouring.');
     return o;
   }
@@ -68,6 +82,15 @@
     }
     for (let i = 0; i < out.length; i++) if (!Number.isFinite(out[i])) throw new RangeError('3D view: display coordinates overflow at the requested scale.');
     return out;
+  }
+  function displayedParticleRadii(frame) {
+    if (frame.particleRadii == null) return null;
+    const radii = new Float32Array(frame.particleRadii.length);
+    for (let i = 0; i < radii.length; i++) {
+      radii[i] = frame.particleRadii[i] / frame.R;
+      if (!(radii[i] > 0) || !Number.isFinite(radii[i])) throw new RangeError('3D view: particle display radius is not representable.');
+    }
+    return radii;
   }
   function normalsFor(p, indices) {
     const n = new Float32Array(p.length);
@@ -89,6 +112,28 @@
   function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
   function unit(a) { const n = Math.hypot(...a); return a.map(x => x / n); }
   function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  function cameraBasis(camera) {
+    const c = cameraValue(camera), target = [c.targetX, c.targetY, 0], cp = Math.cos(c.elevation);
+    const eye = [target[0] + c.distance * cp * Math.sin(c.yaw),
+      target[1] + c.distance * Math.sin(c.elevation), c.distance * cp * Math.cos(c.yaw)];
+    const back = unit(sub(eye, target)), right = unit(cross([0, 1, 0], back));
+    return { eye, right, up: cross(back, right), forward: back.map(x => -x) };
+  }
+  /* Exact perspective tangent bounds for a sphere, not a constant-pixel point.
+     A sphere crossing the eye plane uses the viewport as a conservative bound;
+     the fragment ray/sphere intersection still determines its actual silhouette. */
+  function projectedSphereBounds(centre, radius, camera, aspect) {
+    if (!(finite(radius, 'sphere radius') > 0)) throw new RangeError('3D view: sphere radius must be positive.');
+    const basis = cameraBasis(camera), d = sub(centre, basis.eye), depth = dot(d, basis.forward);
+    const q = [dot(d, basis.right), dot(d, basis.up)], scale = 1 / Math.tan(42 * Math.PI / 360);
+    if (!(depth > radius)) return { min: [-1, -1], max: [1, 1] };
+    const denominator = depth * depth - radius * radius;
+    const bounds = q.map((x, i) => {
+      const tangent = radius * Math.sqrt(denominator + x * x), f = i ? scale : scale / aspect;
+      return [(x * depth - tangent) * f / denominator, (x * depth + tangent) * f / denominator];
+    });
+    return { min: [bounds[0][0], bounds[1][0]], max: [bounds[0][1], bounds[1][1]] };
+  }
   function multiply(a, b) {
     const out = new Float32Array(16);
     for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++)
@@ -117,15 +162,46 @@ precision highp float;
 in vec3 aPosition;
 in vec3 aNormal;
 in float aValue;
+in vec3 aCenter;
+in float aRadius;
 uniform mat4 uMatrix;
 uniform float uPointSize;
+uniform int uInstanced;
+uniform vec3 uEye;
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform vec3 uForward;
+uniform vec2 uProjectionScale;
 out vec3 vNormal;
 out float vValue;
-void main(){vNormal=aNormal;vValue=aValue;gl_Position=uMatrix*vec4(aPosition,1.0);gl_PointSize=uPointSize;}`;
+flat out vec3 vCenter;
+flat out float vRadius;
+out vec3 vRay;
+void main(){
+ vNormal=aNormal;vValue=aValue;vCenter=aCenter;vRadius=aRadius;vRay=vec3(0.0);
+ if(uInstanced==1){
+   vec3 d=aCenter-uEye;float depth=dot(d,uForward);
+   vec2 c=vec2(dot(d,uRight),dot(d,uUp));vec2 lo=vec2(-1.0),hi=vec2(1.0);
+   float den=depth*depth-aRadius*aRadius;
+   if(depth>aRadius&&den>0.0){
+     vec2 tangent=aRadius*sqrt(vec2(den)+c*c);
+     lo=(c*depth-tangent)*uProjectionScale/den;hi=(c*depth+tangent)*uProjectionScale/den;
+   }
+   vec2 p=mix(lo,hi,aPosition.xy*0.5+0.5);
+   gl_Position=vec4(p,0.0,1.0);
+   vRay=uForward+uRight*(p.x/uProjectionScale.x)+uUp*(p.y/uProjectionScale.y);
+ }else gl_Position=uMatrix*vec4(aPosition,1.0);
+ gl_PointSize=uPointSize;
+}`;
   const FRAGMENT = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in float vValue;
+flat in vec3 vCenter;
+flat in float vRadius;
+in vec3 vRay;
+uniform vec3 uEye;
+uniform mat4 uMatrix;
 uniform vec4 uColor;
 uniform int uKind;
 uniform int uMode;
@@ -133,10 +209,33 @@ uniform float uColorScale;
 out vec4 fragColor;
 void main(){
  vec3 col=uColor.rgb;float alpha=uColor.a;
+#ifdef FINITE_GRAINS
+ gl_FragDepth=gl_FragCoord.z;
+#endif
  if(uKind==1){
    vec2 d=gl_PointCoord*2.0-1.0;float r2=dot(d,d);if(r2>1.0)discard;
    float shade=0.6+0.4*sqrt(1.0-r2);col*=shade;
- }else if(uKind==2){
+ }
+#ifdef FINITE_GRAINS
+ else if(uKind==3){
+   vec3 ray=normalize(vRay),toCenter=vCenter-uEye;
+   float along=dot(toCenter,ray);
+   vec3 perpendicular=toCenter-along*ray;
+   float disc=vRadius*vRadius-dot(perpendicular,perpendicular);
+   if(disc<0.0)discard;
+   float root=sqrt(disc),t=along-root;
+   vec4 clip=uMatrix*vec4(uEye+t*ray,1.0);float depth=clip.z/clip.w;
+   if(t<=0.0||clip.w<=0.0||depth< -1.0){
+     t=along+root;clip=uMatrix*vec4(uEye+t*ray,1.0);depth=clip.z/clip.w;
+   }
+   if(t<=0.0||clip.w<=0.0||depth< -1.0||depth>1.0)discard;
+   gl_FragDepth=0.5+0.5*depth;
+   vec3 n=normalize((t-along)*ray-perpendicular);
+   float diffuse=max(dot(n,normalize(vec3(-0.5,0.9,0.35))),0.0);
+   col*=0.45+0.55*diffuse;
+ }
+#endif
+ else if(uKind==2){
    vec3 n=normalize(vNormal);if(!gl_FrontFacing)n=-n;
    float diffuse=abs(dot(n,normalize(vec3(-0.5,0.9,0.35))));
    float light=0.44+0.56*diffuse;
@@ -211,7 +310,7 @@ void main(){
     if (!canvas || typeof canvas.getContext !== 'function') throw new TypeError('3D view requires a canvas.');
     callbacks = callbacks || {};
     let frame = null, options = optionsValue(callbacks.options), camera = cameraValue(callbacks.camera);
-    let gl = null, program = null, uniforms, buffers = [], layers = null, lost = false, disposed = false;
+    let gl = null, program = null, grainProgram = null, uniforms, grainUniforms, buffers = [], layers = null, lost = false, disposed = false;
     let revision = 0, renderCount = 0, drawCalls = 0, lastWidth = 0, lastHeight = 0, pixelRatio = 1, drag = null, resizeObserver = null;
     const report = error => { if (callbacks.onError) callbacks.onError(error); };
     function shader(type, source) {
@@ -223,12 +322,21 @@ void main(){
       gl = canvas.getContext('webgl2', { alpha: false, antialias: true, depth: true,
         preserveDrawingBuffer: true, premultipliedAlpha: false });
       if (!gl) throw new Error('The interactive 3D view requires WebGL 2. The fluid solver has not been replaced.');
-      const vs = shader(gl.VERTEX_SHADER, VERTEX), fs = shader(gl.FRAGMENT_SHADER, FRAGMENT);
-      program = gl.createProgram(); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
-      gl.deleteShader(vs); gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('3D shader link: ' + gl.getProgramInfoLog(program));
-      uniforms = {};
-      for (const name of ['uMatrix', 'uPointSize', 'uColor', 'uKind', 'uMode', 'uColorScale']) uniforms[name] = gl.getUniformLocation(program, name);
+      function link(fragment) {
+        const vs = shader(gl.VERTEX_SHADER, VERTEX), fs = shader(gl.FRAGMENT_SHADER, fragment);
+        const p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+        gl.deleteShader(vs); gl.deleteShader(fs);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('3D shader link: ' + gl.getProgramInfoLog(p));
+        const u = {};
+        for (const name of ['uMatrix', 'uPointSize', 'uColor', 'uKind', 'uMode', 'uColorScale', 'uInstanced', 'uEye', 'uRight', 'uUp', 'uForward', 'uProjectionScale']) u[name] = gl.getUniformLocation(p, name);
+        return { program: p, uniforms: u };
+      }
+      const standard = link(FRAGMENT);
+      program = standard.program; uniforms = standard.uniforms;
+      // A separate compiled variant confines explicit sphere depth to grains.
+      // Writing gl_FragDepth even unchanged changes MSAA on the existing layers.
+      const grains = link(FRAGMENT.replace('#version 300 es\n', '#version 300 es\n#define FINITE_GRAINS\n'));
+      grainProgram = grains.program; grainUniforms = grains.uniforms;
       lost = false;
       if (frame) rebuild();
     }
@@ -249,7 +357,16 @@ void main(){
       const eta = new Float32Array(p.length / 3);
       for (let i = 0; i < eta.length; i++) eta[i] = frame.surfaceDisplacement ? frame.surfaceDisplacement[i] : frame.positions[i * 3 + 2] - frame.h;
       const surface = layer(p, frame.indices, normalsFor(p, frame.indices), eta, gl.TRIANGLES);
-      const particles = layer(displayedPositions(frame.particles, frame.particleDisplacement, frame, options.heightScale, false), null, null, null, gl.POINTS);
+      const centres = displayedPositions(frame.particles, frame.particleDisplacement, frame, options.heightScale, false);
+      let particles;
+      if (frame.particleRadii) {
+        // Two triangles bound each exact ray-traced sphere. Geometry and fragment
+        // depth come from the supplied metre-valued radius, not the quad itself.
+        particles = layer(new Float32Array([-1,-1,0, 1,-1,0, 1,1,0, -1,1,0]), new Uint32Array([0,1,2,0,2,3]), null, null, gl.TRIANGLES);
+        particles.instances = frame.particleRadii.length;
+        particles.centres = buffer(centres, gl.ARRAY_BUFFER);
+        particles.radii = buffer(displayedParticleRadii(frame), gl.ARRAY_BUFFER);
+      } else particles = layer(centres, null, null, null, gl.POINTS);
       const level = frame.h / (2 * frame.R), floor = [], floorIndices = [], rim = [], grid = [];
       const segments = 128;
       floor.push(0, -level, 0);
@@ -289,18 +406,31 @@ void main(){
         flow: layer(new Float32Array(flow), null, null, null, gl.LINES) };
       revision++;
     }
-    function bind(l) {
+    function bind(l, active) {
       for (const [name, b, count] of [['aPosition', l.p, 3], ['aNormal', l.n, 3], ['aValue', l.v, 1]]) {
-        const a = gl.getAttribLocation(program, name); gl.bindBuffer(gl.ARRAY_BUFFER, b);
-        gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0);
+        const a = gl.getAttribLocation(active, name); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(a, 0);
+      }
+      for (const [name, b, count] of [['aCenter', l.centres, 3], ['aRadius', l.radii, 1]]) {
+        const a = gl.getAttribLocation(active, name);
+        if (b) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(a);
+          gl.vertexAttribPointer(a, count, gl.FLOAT, false, 0, 0); gl.vertexAttribDivisor(a, 1);
+        } else {
+          gl.disableVertexAttribArray(a); gl.vertexAttribDivisor(a, 0); gl.vertexAttrib4f(a, 0, 0, 0, 1);
+        }
       }
       if (l.indices) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, l.indices);
     }
     function draw(l, color, kind, depthWrite) {
-      if (!l.count) return;
-      drawCalls++; bind(l); gl.uniform4fv(uniforms.uColor, color); gl.uniform1i(uniforms.uKind, kind);
+      if (!l.count || l.instances === 0) return;
+      const active = kind === 3 ? grainProgram : program, u = kind === 3 ? grainUniforms : uniforms;
+      gl.useProgram(active);
+      drawCalls++; bind(l, active); gl.uniform4fv(u.uColor, color); gl.uniform1i(u.uKind, kind);
+      gl.uniform1i(u.uInstanced, l.instances == null ? 0 : 1);
       gl.depthMask(depthWrite);
-      if (l.indices) gl.drawElements(l.mode, l.count, gl.UNSIGNED_INT, 0); else gl.drawArrays(l.mode, 0, l.count);
+      if (l.instances != null) gl.drawElementsInstanced(l.mode, l.count, gl.UNSIGNED_INT, 0, l.instances);
+      else if (l.indices) gl.drawElements(l.mode, l.count, gl.UNSIGNED_INT, 0); else gl.drawArrays(l.mode, 0, l.count);
     }
     function resize(width, height, ratio) {
       if (disposed) return false;
@@ -318,15 +448,22 @@ void main(){
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.CULL_FACE);
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      gl.useProgram(program); gl.uniformMatrix4fv(uniforms.uMatrix, false, matrixFor(camera, canvas.width / canvas.height));
-      gl.uniform1f(uniforms.uPointSize, options.pointSize * (callbacks.interactive === false ? canvas.width / 800 : pixelRatio));
-      gl.uniform1i(uniforms.uMode, options.colorMode === 'height' ? 1 : options.colorMode === 'nodal' ? 2 : 0);
-      gl.uniform1f(uniforms.uColorScale, options.colorScaleM || frame.h);
+      const basis = cameraBasis(camera), scale = 1 / Math.tan(42 * Math.PI / 360);
+      for (const [active, u] of [[program, uniforms], [grainProgram, grainUniforms]]) {
+        gl.useProgram(active); gl.uniformMatrix4fv(u.uMatrix, false, matrixFor(camera, canvas.width / canvas.height));
+        for (const [name, value] of [['uEye', basis.eye], ['uRight', basis.right], ['uUp', basis.up], ['uForward', basis.forward]])
+          gl.uniform3fv(u[name], value);
+        gl.uniform2f(u.uProjectionScale, scale * canvas.height / canvas.width, scale);
+        gl.uniform1f(u.uPointSize, options.pointSize * (callbacks.interactive === false ? canvas.width / 800 : pixelRatio));
+        gl.uniform1i(u.uMode, options.colorMode === 'height' ? 1 : options.colorMode === 'nodal' ? 2 : 0);
+        gl.uniform1f(u.uColorScale, options.colorScaleM || frame.h);
+      }
       draw(layers.floor, [0.045, 0.071, 0.094, 1], 0, true);
       if (options.showGrid) draw(layers.grid, [0.14, 0.20, 0.25, 0.5], 0, false);
       if (options.showVectors) draw(layers.flow, [0.24, 0.79, 0.91, 0.95], 0, true);
-      if (options.showParticles) draw(layers.particles, [0.91, 0.77, 0.49, 1], 1, true);
-      if (options.showSurface) draw(layers.surface, [0.12, 0.52, 0.61, options.showParticles ? 0.42 : 0.82], 2, false);
+      if (options.showParticles) draw(layers.particles, [0.91, 0.77, 0.49, 1], frame.particleRadii ? 3 : 1, true);
+      const surfaceOpacity = options.surfaceOpacity == null ? options.showParticles ? 0.42 : 0.82 : options.surfaceOpacity;
+      if (options.showSurface && surfaceOpacity > 0) draw(layers.surface, [0.12, 0.52, 0.61, surfaceOpacity], 2, surfaceOpacity === 1);
       draw(layers.rim, [0.43, 0.60, 0.67, 0.75], 0, false);
       gl.depthMask(true); gl.flush(); renderCount++; return true;
     }
@@ -400,6 +537,7 @@ void main(){
       setCamera: next => { changeCamera({ ...camera, ...next }); return api; },
       resetCamera: () => { changeCamera(DEFAULT_CAMERA); return api; },
       topView: () => { changeCamera({ ...DEFAULT_CAMERA, yaw: 0, elevation: Math.PI / 2 - 0.001 }); return api; },
+      options: () => ({ ...options }),
       snapshot: () => { if (!frame) throw new Error('No solved or specified initial frame is available.'); return { frame: captureFrame(frame), camera: { ...camera }, options: { ...options },
           pointSizePerPixel: options.pointSize * pixelRatio / canvas.width, width: canvas.width, height: canvas.height }; },
       async exportCanvas(size, captured, capturedCamera) {
@@ -495,16 +633,17 @@ void main(){
       stats: () => ({ ready: !!frame && !lost && !disposed, lost, revision, renderCount, drawCalls,
         renderer: 'WebGL2 depth-tested 3D', surfaceVertices: frame ? frame.positions.length / 3 : 0,
         triangles: frame ? frame.indices.length / 3 : 0, particles: frame ? frame.particles.length / 3 : 0,
+        particleGeometry: frame && frame.particleRadii ? 'physical-radius spheres' : 'tracer points',
         time: frame ? frame.time : null, generation: frame ? frame.generation : null,
         steps: frame ? frame.steps : null, initial: frame ? frame.initial : null,
         heightScale: options.heightScale, camera: { ...camera }, width: canvas.width, height: canvas.height }),
       dispose(releaseContext) { if (disposed) return; if (resizeObserver) resizeObserver.disconnect(); for (const [t, fn, opts] of listeners) canvas.removeEventListener(t, fn, opts);
-        clearBuffers(); if (program && !lost) gl.deleteProgram(program); disposed = true;
+        clearBuffers(); if (!lost) { if (program) gl.deleteProgram(program); if (grainProgram) gl.deleteProgram(grainProgram); } disposed = true;
         if (releaseContext && !lost) { const extension = gl.getExtension('WEBGL_lose_context'); if (extension) extension.loseContext(); } }
     };
     return api;
   }
-  const api = Object.freeze({ create, captureFrame, displayedPositions, normalsFor, matrixFor, projectPoint, exportWorkerSource, DEFAULT_CAMERA, DEFAULT_OPTIONS });
+  const api = Object.freeze({ create, captureFrame, displayedPositions, displayedParticleRadii, projectedSphereBounds, normalsFor, matrixFor, projectPoint, exportWorkerSource, DEFAULT_CAMERA, DEFAULT_OPTIONS });
   root.FARADAY_SCENE3D = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
