@@ -1,1 +1,57 @@
-
+name: Faraday physics execution
+on:
+  push:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', '.github/workflows/faraday-physics.yml']
+  pull_request:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', 'vedic_book.py', '.github/workflows/faraday-physics.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  calculations:
+    name: Calculations in ${{ matrix.tree }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: ['.', 'faraday-cell']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install calculation and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld zip unzip
+          python -m pip install sympy==1.14.0
+          npm install --prefix "${RUNNER_TEMP}/faraday-parser" --ignore-scripts acorn@8.18.0
+          echo "ACORN=${RUNNER_TEMP}/faraday-parser/node_modules/acorn" >> "$GITHUB_ENV"
+      - name: Execute every nonbrowser suite against this tree
+        env:
+          SOURCE_TREE: ${{ matrix.tree }}
+        run: |
+          node --input-type=module <<'JS'
+          import {spawnSync} from 'node:child_process';
+          import {resolve,join} from 'node:path';
+          import {SUITES} from './faraday/build-zip.mjs';
+          const root=resolve(process.env.SOURCE_TREE);
+          const selected=SUITES.filter(s=>!s.browser);
+          if(!selected.length)throw new Error('No calculation suites selected');
+          const failed=[];
+          for(const s of selected){
+            console.log('Executing '+join(root,s.file));
+            const r=spawnSync(s.interpreter||process.execPath,[join(root,s.file),...(s.args||[])],{cwd:root,stdio:'inherit'});
+            if(r.status!==0||r.signal||r.error)failed.push({file:s.file,status:r.status,signal:r.signal,error:r.error?.message});
+          }
+          if(failed.length)throw new Error(JSON.stringify(failed,null,2));
+          console.log(`${selected.length} calculation and unit suites executed in ${root}. Browser execution is tested in a separate workflow and is not established by this result.`);
+          JS
+      - name: Verify packaged copies and archive
+        if: always() && matrix.tree == '.'
+        run: |
+          node faraday/check-zip.mjs
+          node faraday/check-bundle.mjs

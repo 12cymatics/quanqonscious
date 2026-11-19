@@ -235,8 +235,8 @@ class Page {
    search on the same arguments and must land on the same grid. The physical
    numbers (k, depth, drive, acceleration, water) come from the renderer's own
    resolved state and are mapped here independently. */
-const GRID_SRC = 'FARADAY_DISC.suggestGrid({';
-const GRID_SRC2 = 'omegaResponse: c.omegaD/2, omegaDrive: c.omegaD';
+const GRID_SRC = /\bFARADAY_DISC\s*\.\s*suggestGrid\s*\(\s*\{/;
+const GRID_SRC2 = /\bomegaResponse\s*:\s*c\s*\.\s*omegaD\s*\/\s*2\s*,\s*omegaDrive\s*:\s*c\s*\.\s*omegaD\b/;
 const PAGE_SRC = readFileSync(join(REPO, 'cymatic.html'), 'utf8');
 
 /* the drive period must divide into a whole number of steps at this dt for the
@@ -448,9 +448,9 @@ async function checkPage(url, name, expectInline, clean = false){
   }
 
   /* 4. the panel's inputs are the renderer's state, mapped */
-  ok(PAGE_SRC.includes(GRID_SRC) && PAGE_SRC.includes(GRID_SRC2),
+  ok(GRID_SRC.test(PAGE_SRC) && GRID_SRC2.test(PAGE_SRC),
      'the page still uses the discretisation this gate solves against',
-     `cymatic.html must contain "${GRID_SRC}" and "${GRID_SRC2}"`);
+     'cymatic.html must call FARADAY_DISC.suggestGrid with omegaResponse=c.omegaD/2 and omegaDrive=c.omegaD');
   const c = configFrom(s);
   const cells = await page.json(`(() => {
     const o = {};
@@ -475,14 +475,8 @@ async function checkPage(url, name, expectInline, clean = false){
      cells['azimuthal mode m']);
   ok(cells['contact line'] === c.contact,
      'the contact line shown is the one the control selects', cells['contact line']);
-  if (clean)
-    ok(cells['grid'] === '—',
-       'before a run the clean panel shows no grid, rather than naming one it has not '
-       + 'measured', cells['grid']);
-  else
-    ok(/sized to the mode when you press run/.test(cells['grid']),
-       'before a run the panel says the grid is sized to the mode, rather than '
-       + 'naming one it has not measured', cells['grid']);
+  ok(/sized to the mode when you press run/.test(cells['grid']),
+     'before a run the panel names no grid that has not been measured', cells['grid']);
 
   /* 5. inline versus fetched solver source */
   const tags = await page.json(`[...document.querySelectorAll('script')].map(t => ({
@@ -668,8 +662,8 @@ async function checkPage(url, name, expectInline, clean = false){
        failure the box is right to show. */
     const st = await page.json(`(s => ({ hidden: s.hidden, text: s.textContent,
       drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed }))(document.getElementById('startupStatus'))`);
-    ok(st.hidden && st.text === '' && st.drawn && !st.failed,
-       'the clean page drew, and its startup box is there, empty and hidden, with no failure to show',
+    ok(!st.hidden && st.text.includes('3D cell ready.') && st.drawn && !st.failed,
+       'the clean page retains its visible startup status after drawing',
        JSON.stringify(st));
   }
 
@@ -1326,6 +1320,40 @@ async function checkSolverThreads(page, label){
    in one breath must end in ONE run, with exactly that run's workers alive -- counted from
    every worker the page made and every one it ended, so a worker no list holds any more still
    shows -- and that run's surface the one-thread replay's to the bit. */
+async function checkRuntimeRequests(page){
+  section('invalid runtime requests preserve failures');
+  const saved=await page.json('({engine:cell3dEngine,threads:cell3dThreads,nr:CELL3D.lastRun().opts.nr})');
+  try {
+    const preview=await page.json(`(() => {
+      initialAutostart=false;CELL3D.pause();CELL3D.reset();CELL3D.preview(state);
+      const fields=[Float32Array.from(ETA),Float32Array.from(NX),Float32Array.from(NY)],generation=FIELD_GEN;
+      const invalid={...state,experiment:{...state.experiment,contact:'free'}};
+      const accepted=CELL3D.preview(invalid);
+      return {accepted,render:invalid.render,err:CELL3D.clocks().err,
+        unchanged:fields.every((a,j)=>a.every((v,i)=>Object.is(v,[ETA,NX,NY][j][i]))),
+        generationUnchanged:generation===FIELD_GEN,scene:CELL3D.sceneFrame(),recorded:UNIFIED3D.currentFrame()};
+    })()`);
+    ok(!preview.accepted && preview.render.drawn===0 && preview.render.failed && preview.err,
+       'an invalid initial condition is explicitly rejected',JSON.stringify(preview));
+    ok(preview.unchanged && preview.generationUnchanged && !preview.scene && !preview.recorded,
+       'failed preview generates no flat replacement surface or valid frame',JSON.stringify(preview));
+    await page.waitFor('document.getElementById("scene3d").style.visibility === "hidden"',15000,'invalid scene to be hidden');
+    const overlay=await page.json('document.getElementById("solverOverlay").textContent');
+    ok(overlay.includes(preview.err),'the actual preview error is visible',overlay);
+    for(const request of [{engine:'unknown-engine',threads:1},{engine:saved.engine,threads:0},
+      {engine:saved.engine,threads:1.5},{engine:saved.engine,threads:saved.nr+1}]){
+      await page.eval(`cell3dEngine=${JSON.stringify(request.engine)};cell3dThreads=${request.threads};CELL3D.start(state)`,true);
+      const c=await page.json('CELL3D.clocks()');
+      const expected=request.engine==='unknown-engine'?'Unsupported solver engine':request.threads>saved.nr?'the request was not reduced':'positive integer';
+      ok(c.err && c.err.includes(expected) && !c.live && !c.ready && c.stepsDone===0 && c.engine===null && c.threads===0,
+         'the requested engine and worker count are never substituted',JSON.stringify({request,err:c.err,steps:c.stepsDone}));
+    }
+  } finally {
+    await page.eval(`cell3dEngine=${JSON.stringify(saved.engine)};cell3dThreads=${saved.threads};CELL3D.start(state)`,true);
+    await page.waitFor('CELL3D.clocks().have && !CELL3D.clocks().err',90000,'valid request to resume actual solver');
+  }
+}
+
 async function checkStartRace(page){
   section('three runs asked for at once');
   await page.eval('(CELL3D.start(state), CELL3D.start(state), CELL3D.start(state), 0)');
@@ -1530,48 +1558,34 @@ async function driveAt(page, hz){
   await page.waitFor(`state.responseHz === ${hz/2}`, 15000, `the state recomputed at ${hz} Hz`);
 }
 
-async function checkCleanProse(page, removed, fullSentences){
-  section('the clean build shows no sentences');
+async function checkCleanProse(page, fullSentences){
+  section('the clean build preserves explanations and error reasons');
   await selectReferenceModal(page);
-  ok(fullSentences.length > 0,
-     'the sentence test finds sentences on the full single-file page, so it can see one',
-     `${fullSentences.length} found there`);
   const now = await page.json(SENTENCES);
-  ok(now.length === 0, 'no sentence is on the clean page after its runs',
-     JSON.stringify(now.slice(0, 3)));
-  const text = await page.json('document.body.innerText');
-  const left = removed.map(t => t.replace(/&amp;/g, '&')).filter(t => text.includes(t));
-  ok(left.length === 0, 'none of the removed sentences is on screen', JSON.stringify(left));
+  ok(fullSentences.length > 0 && now.length > 0,
+     'both builds retain explanatory text', JSON.stringify({full:fullSentences.length,clean:now.length}));
   const dom = await page.json(`({
     note: !!document.getElementById('dnsNote'), footer: !!document.querySelector('footer'),
     subtitle: !!document.querySelector('header p'),
     titles: [...document.querySelectorAll('#anchors button')].filter(b => b.hasAttribute('title')).length,
     anchors: document.querySelectorAll('#anchors button').length,
-    noscript: !!document.querySelector('noscript'),
-    startup: (s => s && { hidden: s.hidden, text: s.textContent })(document.getElementById('startupStatus')),
-    drawn: FARADAY_STARTUP.drawn, failed: FARADAY_STARTUP.failed })`);
-  ok(!dom.note && !dom.footer && !dom.subtitle,
-     'the note, the footer and the subtitle are not in the page', JSON.stringify(dom));
-  ok(dom.anchors > 0 && dom.titles === 0, 'the frequency anchors are there, without tooltips',
-     JSON.stringify(dom));
-  /* By now the sections above have lost the GPU context and killed threads on purpose,
-     so the box may be showing a failure. It shows it by name only, and the reason went
-     to the console rather than nowhere. */
-  const reasons = page.console.filter(t => /^error/.test(t));
-  console.log(`       startup box ${JSON.stringify(dom.startup)}; reasons logged: `
-    + JSON.stringify(reasons.slice(0, 3).map(t => t.slice(0, 160))));
-  ok(!dom.noscript && dom.startup
-     && (dom.failed ? !dom.startup.hidden && dom.startup.text === 'simulation error' && reasons.length > 0
-                    : dom.startup.hidden && dom.startup.text === ''),
-     'the startup box shows a failure by its name alone, with the reason in the console',
-     JSON.stringify({ ...dom, reasons: reasons.slice(0, 3).map(t => t.slice(0, 160)) }));
-  /* the warnings: a state the kernel warns about, where the full page shows its warning */
+    noscript: !!document.querySelector('noscript') })`);
+  ok(dom.note && dom.footer && dom.subtitle && dom.noscript,
+     'diagnostic notes, model limits, subtitle and JavaScript failure explanation remain', JSON.stringify(dom));
+  ok(dom.anchors > 0 && dom.titles === dom.anchors,
+     'frequency anchors retain every tooltip', JSON.stringify(dom));
   await driveAt(page, 5000);
   const w = await page.json(`({ n: state.warnings.length,
-    box: document.getElementById('warnBox').textContent, sentences: ${SENTENCES} })`);
-  ok(w.n > 0 && w.box === '' && w.sentences.length === 0,
-     'at 5000 Hz the kernel warns, and the clean page shows no warning', JSON.stringify(w));
+    shown: document.getElementById('warnBox').textContent,
+    expected: state.warnings.map(w => {const e=document.createElement('div');e.innerHTML=w.text;return e.textContent;}) })`);
+  ok(w.n > 0 && w.expected.every(message => w.shown.includes(message)),
+     'every computed warning is visible at 5000 Hz', JSON.stringify(w));
   await driveAt(page, 111);
+  const reason = 'clean build diagnostic propagation';
+  await page.eval(`FARADAY_STARTUP.fail(new Error(${JSON.stringify(reason)}))`);
+  const failure = await page.json(`(s => ({hidden:s.hidden,text:s.textContent,failed:FARADAY_STARTUP.failed}))(document.getElementById('startupStatus'))`);
+  ok(failure.failed && !failure.hidden && failure.text.includes(reason),
+     'the clean startup failure includes the actual error reason on screen', JSON.stringify(failure));
 }
 
 try {
@@ -1579,6 +1593,7 @@ try {
   await checkGpuRender(first, '');
   await checkSolverDraws(first);
   await checkSolverThreads(first, '');
+  await checkRuntimeRequests(first);
   await checkStartRace(first);
   await checkThreadDeath(first);
   /* and on the solver's field, whose rasters arrive from a different path */
@@ -1597,15 +1612,16 @@ try {
   await checkGpuRender(single, ', in the single-file build');
   await checkCppEngine(single, true);
   await checkSolverThreads(single, `, in the single-file build, over ${STANDALONE_TRANSPORT}`);
+  await checkRuntimeRequests(single);
   await selectReferenceModal(single);
   await driveAt(single, 5000);
   const fullSentences = await single.json(SENTENCES);
   await driveAt(single, 111);
 
-  /* The same page with its comments and its sentences taken out, by
+  /* The same page with only its comments taken out, by
      faraday/build-clean.mjs. faraday/check-clean.mjs holds its scripts to the full
      build's token for token; this holds the running page to the same numbers. */
-  const { buildClean, REMOVED_PROSE } = await import(join(REPO, 'faraday', 'build-clean.mjs'));
+  const { buildClean } = await import(join(REPO, 'faraday', 'build-clean.mjs'));
   const cleanHtml=buildClean().out;
   writeFileSync(cleanBuilt, cleanHtml); generatedPages.set('/__clean__.html',cleanHtml);
   const clean = await checkPage(generatedUrl('/__clean__.html',cleanBuilt), 'the clean single-file build', true, true);
@@ -1613,7 +1629,8 @@ try {
   await checkSolverDraws(clean);
   await checkCppEngine(clean, true);
   await checkSolverThreads(clean, `, in the clean build, over ${STANDALONE_TRANSPORT}`);
-  await checkCleanProse(clean, REMOVED_PROSE, fullSentences);
+  await checkRuntimeRequests(clean);
+  await checkCleanProse(clean, fullSentences);
 } finally {
   browser.close();
   srv.close();

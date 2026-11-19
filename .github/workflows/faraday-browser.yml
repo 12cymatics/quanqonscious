@@ -1,1 +1,31 @@
-
+name: Faraday browser execution
+on:
+  push:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', '.github/workflows/faraday-browser.yml']
+  pull_request:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'boundary/**', 'fsi/**', 'cymatic.html', '.github/workflows/faraday-browser.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Browser execution in ${{ matrix.tree }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: ['.', 'faraday-cell']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check browser prerequisite
+        run: |
+          test -x /usr/bin/google-chrome
+          /usr/bin/google-chrome --version
+      - name: Execute real browser, worker and rendering assertions
+        env:
+          CHROME: /usr/bin/google-chrome
+          SOURCE_TREE: ${{ matrix.tree }}
+        run: node "${SOURCE_TREE}/dns/check-page.mjs"

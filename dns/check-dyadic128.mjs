@@ -111,6 +111,17 @@ console.log('6. sine, cosine and exp satisfy their identities to a few ulps');
   for (const [v, want, name] of signs) ok(D.sign(v) === want, `${name} (quadrant signs)`);
 }
 
+{
+  const x = rat(1n, 1n << 200n);
+  const lower = rsub(x, rat(x.n*x.n*x.n, 6n*x.d*x.d*x.d));
+  const argument = D.fromRational(x.n, x.d), result = D.sin(argument);
+  ok(rcmp(ofDyadic(argument), x) === 0 && rcmp(x, rat(0n, 1n)) > 0
+    && rcmp(x, rat(1n, 1n)) < 0 && rcmp(lower, rat(0n, 1n)) > 0
+    && D.sign(result) > 0, 'representable positive tiny sine is nonzero',
+    'For x=2^-200 in 0<x<1, sin(x)>=x-x^3/6>0; the exact rational lower bound '
+    + `is ${lower.n}/${lower.d}, but the computed sine has sign ${D.sign(result)}.`);
+}
+
 console.log('7. expm1 and tanh against published digits and their series, with no cancellation near zero');
 {
   const E = rat(27182818284590452353602874713526624977572470936999595749669676277n, 10n**64n);

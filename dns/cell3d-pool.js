@@ -111,6 +111,8 @@ function cell3dRowRun(js, fam, a0, a1){
 
 /* Radial rows 0..nr-1 cut into `parts` contiguous bands, as evenly as the count allows. */
 function cell3dBands(nr, parts){
+  if (!(Number.isSafeInteger(nr) && nr >= 1)) throw new RangeError(
+    `the pool needs a positive whole number of radial rows; got ${nr}.`);
   if (!(Number.isInteger(parts) && parts >= 1)) throw new RangeError(
     `the pool needs a whole number of workers, at least one; got ${parts}.`);
   if (parts > nr) throw new RangeError(
@@ -209,16 +211,32 @@ class Cell3DPool {
     this.tail = Promise.resolve();
     this.lastWaitMs = 0; this.lastWorkMs = []; this.lastUnpackMs = [];
     channels.forEach((ch, w) => {
-      ch.onMessage(msg => this.receive(msg));
+      ch.onMessage(msg => this.receive(w, msg));
       if (ch.onFailure) ch.onFailure(reason => this.fail(w, reason));
     });
   }
 
-  receive(msg){
+  receive(w, msg){
+    if (!msg || !Number.isSafeInteger(msg.id)){
+      this.fail(w, 'sent a response without a valid request id.');
+      return;
+    }
     const p = this.pending.get(msg.id);
-    if (!p) return;
+    if (!p){
+      this.fail(w, `answered unknown request ${msg.id}.`);
+      return;
+    }
     this.pending.delete(msg.id);
+    if (p.w !== w){
+      const reason = `pool worker ${w} answered request ${msg.id} assigned to worker ${p.w}.`;
+      p.reject(new Error(reason));
+      this.fail(w, reason);
+      return;
+    }
     if (msg.kind === 'error') p.reject(new Error('a pool worker refused: ' + msg.message));
+    else if (msg.kind !== p.responseKind)
+      p.reject(new Error(`pool worker ${w} returned ${JSON.stringify(msg.kind)} for `
+        + `${p.requestKind}; expected ${p.responseKind}.`));
     else p.resolve(msg);
   }
 
@@ -241,19 +259,28 @@ class Cell3DPool {
         reject(new Error(`pool worker ${w} ${this.dead[w]}`));
         return;
       }
-      this.pending.set(id, { resolve, reject, w });
-      this.channels[w].post({ ...msg, id }, transfer);
+      const responseKind = msg.kind === 'init' ? 'ready' : msg.kind === 'explicit' ? 'rows' : null;
+      if (!responseKind){
+        reject(new Error(`unknown pool request ${JSON.stringify(msg.kind)}.`));
+        return;
+      }
+      this.pending.set(id, { resolve, reject, w, requestKind: msg.kind, responseKind });
+      try { this.channels[w].post({ ...msg, id }, transfer); }
+      catch (e){ this.fail(w, `could not receive the request: ${e && e.message || e}`); }
     });
   }
 
   /* Build each worker's cell and hold its grid to the owner's, element by element. */
   async start(options){
+    if (this.ready) throw new Error('the pool has already started.');
     const replies = await Promise.all(this.channels.map((ch, w) =>
       this.request(w, { kind: 'init', options })));
+    for (let w = 0; w < this.dead.length; w++) if (this.dead[w] !== null)
+      throw new Error(`pool worker ${w} ${this.dead[w]}`);
     for (let w = 0; w < replies.length; w++)
       for (const name of CELL3D_POOL_GRID){
-        const arr = replies[w].grid[name], mine = this.V.arr(name);
-        if (!arr || arr.length !== mine.length) throw new Error(
+        const arr = replies[w].grid && replies[w].grid[name], mine = this.V.arr(name);
+        if (!(arr instanceof Float64Array) || arr.length !== mine.length) throw new Error(
           `pool worker ${w} built ${name} with ${arr && arr.length} values against the `
           + `owner's ${mine.length}: not the same cell.`);
         for (let i = 0; i < arr.length; i++) if (!Object.is(arr[i], mine[i])) throw new Error(
@@ -293,17 +320,30 @@ class Cell3DPool {
       E.stepExplicit(this.ownBand[0], this.ownBand[1]);
       this.lastOwnMs = cell3dClock() - t0;
       const replies = await asked;
+      for (let w = 0; w < this.dead.length; w++) if (this.dead[w] !== null)
+        throw new Error(`pool worker ${w} ${this.dead[w]}`);
       this.lastWaitMs = cell3dClock() - t0;
       this.lastWorkMs = replies.map(r => r.workMs);
       this.lastUnpackMs = replies.map(r => r.unpackMs);
-      for (const r of replies)
-        CELL3D_POOL_OUT.forEach(([name, fam], j) => {
-          const [lo, hi] = cell3dRowRun(V.js, fam, r.a0, r.a1);
-          if (r.runs[j].length !== hi - lo) throw new Error(
-            `pool rows ${r.a0}..${r.a1} of ${name} came back with ${r.runs[j].length} values `
+      const validated = [];
+      for (let w = 0; w < replies.length; w++){
+        const r = replies[w], [a0, a1] = this.bands[w];
+        if (r.a0 !== a0 || r.a1 !== a1) throw new Error(
+          `pool worker ${w} returned rows ${r.a0}..${r.a1}; requested rows ${a0}..${a1}.`);
+        if (!Array.isArray(r.runs) || r.runs.length !== CELL3D_POOL_OUT.length)
+          throw new Error(`pool worker ${w} did not return all ${CELL3D_POOL_OUT.length} required arrays.`);
+        for (let j = 0; j < CELL3D_POOL_OUT.length; j++){
+          const [name, fam] = CELL3D_POOL_OUT[j];
+          const [lo, hi] = cell3dRowRun(V.js, fam, a0, a1), run = r.runs[j];
+          if (!(run instanceof Float64Array) || run.length !== hi - lo) throw new Error(
+            `pool rows ${a0}..${a1} of ${name} came back with ${run && run.length} values `
             + `where ${hi - lo} were asked for.`);
-          V.arr(name).set(r.runs[j], lo);
-        });
+          for (let i = 0; i < run.length; i++) if (!Number.isFinite(run[i]))
+            throw new Error(`pool worker ${w} returned non-finite ${name}[${lo + i}].`);
+          validated.push({ name, lo, run });
+        }
+      }
+      for (const { name, lo, run } of validated) V.arr(name).set(run, lo);
       E.stepFinish(dt);
       return E;
     } catch (e){

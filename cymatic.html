@@ -2124,6 +2124,7 @@ function loop(now){
   const inputError = $('experimentError').textContent;
   const blocked = inputError || (useSolver && clock.err);
   $('solverOverlay').style.display = blocked ? 'block' : 'none';
+  $('scene3d').style.visibility = blocked && useSolver ? 'hidden' : 'visible';
   if (blocked) $('solverOverlay').textContent = inputError ? `Inputs invalid: ${inputError}` : `Solver failed: ${clock.err}`;
   if (useSolver){
     $('solverStatus').textContent = inputError ? `Inputs invalid: ${inputError}` : clock.err ? `Solver failed: ${clock.err}`
@@ -2152,7 +2153,7 @@ function loop(now){
     : 'Modal sand visualization · separate from the nonlinear liquid solver';
   if($('workspaceNote').textContent!==workspaceText)$('workspaceNote').textContent=workspaceText;
   if(useSolver){
-    if(UNIFIED3D.tick(now)){
+    if(!blocked && UNIFIED3D.tick(now)){
       FARADAY_STARTUP.ready();
       if(initialAutostart && !$('experimentError').textContent && !clock.err){
         initialAutostart=false;solverRequested=true;CELL3D.start(state);
@@ -2322,7 +2323,9 @@ const CELL3D = (function(){
                 letting two states alias. */
              if (W){ W.release(); W = null; }
              pool = null;
-             gen = d.gen; engine = d.engine === 'cpp' ? 'cpp' : 'js';
+             gen = d.gen;
+             if (d.engine !== 'cpp' && d.engine !== 'js') throw new Error('Unsupported solver engine: ' + String(d.engine));
+             engine = d.engine;
              if (engine === 'cpp'){
                W = new FARADAY_CELL3D_WASM.FaradayCell3DWasm(d.opts,
                      { bytes: d.wasmBytes });
@@ -2396,6 +2399,7 @@ const CELL3D = (function(){
          const d = e.data;
          if (d.cmd !== 'serve') return;
          const port = d.port, engine = d.engine, bytes = d.wasmBytes;
+         if (engine !== 'cpp' && engine !== 'js') throw new Error('Unsupported solver engine: ' + String(engine));
          FARADAY_CELL3D_POOL.cell3dPoolServe(
            { post: (m, t) => port.postMessage(m, t),
              onMessage: fn => { port.onmessage = ev => fn(ev.data); } },
@@ -2486,7 +2490,8 @@ const CELL3D = (function(){
       }
       return true;
     } catch(e){
-      err=String(e.message||e);initialPreview=null;ETA.fill(0);NX.fill(0);NY.fill(0);finishSurface(st);return false;
+      err=String(e.message||e);initialPreview=null;sceneFrame=null;running3d=false;starting3d=false;
+      st.render={drawn:0,failed:true,error:err};UNIFIED3D.reset();dirty=true;return false;
     }
   }
   function scheduleSlice(){
@@ -2505,6 +2510,7 @@ const CELL3D = (function(){
     const myGen = ++gen;
     const request={engine:cell3dEngine,threads:cell3dThreads};
     running3d=true;starting3d=true;workerReady=false;slicePending=false;err=null;
+    ranEngine=null;ranThreads=0;
     haveFrame=false;physT=wall=stepsDone=0;dirty=true;
     try {
       await new Promise(resolve => requestAnimationFrame(resolve));
@@ -2519,6 +2525,9 @@ const CELL3D = (function(){
   }
   async function startInner(st, myGen, request){
     err = null; haveFrame = false; physT = 0; wall = 0; stepsDone = 0; grid = null;
+    const {engine,threads}=request;
+    if (engine !== 'cpp' && engine !== 'js') throw new Error(`Unsupported solver engine: ${String(engine)}`);
+    if (!(Number.isInteger(threads) && threads >= 1)) throw new RangeError(`Requested thread count must be a positive integer: ${threads}.`);
     const e = st.experiment;
     if (!e) throw new Error('Nonlinear runs require General SI inputs and physical acceleration; an assumed apparatus mV calibration is not accepted.');
     if (e.contact !== 'pinned') throw new Error('Nonlinear free-contact dynamics require a compatible slip/contact-angle law. This simulator supports the pinned rim only.');
@@ -2549,6 +2558,7 @@ const CELL3D = (function(){
                    R, h, ...water, g: st.gravity,
                    accel: st.accelAssumed, omegaD: 2*Math.PI*e.frequencyHz,
                    contact: pinned ? 'pinned' : 'free' };
+    if (threads > opts.nr) throw new RangeError(`Requested ${threads} threads for ${opts.nr} radial rows. Choose at most ${opts.nr} threads; the request was not reduced.`);
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
     grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R,
              err: size.err, thinnest: size.thinnest, stepsPerPeriod: size.stepsPerPeriod };
@@ -2567,7 +2577,6 @@ const CELL3D = (function(){
        "solver starting" for good. So the workers this start makes are its own until it has
        won, and after each await it checks, and if it has been overtaken it ends them and
        leaves. */
-    const {engine,threads}=request;
     const wasmBytes = engine === 'cpp' ? await cellWasmBytes() : null;
     if (myGen !== gen) return;
     const w = await ensureWorker();
@@ -2575,7 +2584,7 @@ const CELL3D = (function(){
     if(worker !== w) throw new Error('The solver worker stopped during initialization. Press Run to create a new worker.');
     /* S11: the threads asked for, this one included, and never more than the radial rows
        there are to divide -- the pool refuses an idle worker rather than pretending. */
-    const want = Math.max(1, Math.min(threads, opts.nr));
+    const want = threads;
     const mine = [];
     for (let t = 1; t < want; t++){
       mine.push(await startHelper(engine, wasmBytes, myGen, t - 1));
@@ -2744,10 +2753,9 @@ let cell3dEngine = 'cpp';
 /* S11: how many threads the solver's explicit terms are spread over, this page's solver
    thread included. The answer is the same to the bit on any number -- dns/check-cell3d-pool.mjs
    asserts it and dns/check-page.mjs checks it again here -- so this is a choice about time.
-   Offered up to the cores the browser reports, and set by default to one fewer, which leaves
-   the drawing a core. */
+   Offered up to the cores the browser reports. */
 const CELL3D_CORES = Math.max(1, Math.floor(navigator.hardwareConcurrency || 1));
-let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
+let cell3dThreads = 1;
 {
   const counts = [...new Set([1, 2, 4, 8, CELL3D_CORES - 1, CELL3D_CORES])]
     .filter(n => n >= 1 && n <= CELL3D_CORES).sort((a, b) => a - b);

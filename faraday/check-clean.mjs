@@ -18,7 +18,7 @@
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import { buildStandalone } from './build-standalone.mjs';
-import { applyProse, buildClean, stripJs, PROSE_EDITS, REMOVED_PROSE } from './build-clean.mjs';
+import { buildClean, stripJs } from './build-clean.mjs';
 
 const require = createRequire(import.meta.url);
 let acorn;
@@ -41,7 +41,6 @@ const eq = (got, want, what) => {
 };
 
 const full = buildStandalone();
-const edited = applyProse(full);
 let clean;
 try { clean = buildClean(full); }
 catch (e) {
@@ -69,7 +68,7 @@ const isWorkerBody = (toks, i) => toks[i].type.label === 'template'
   && toks[i + 3] && toks[i + 3].type.label === '.'
   && toks[i + 4] && toks[i + 4].value === 'join';
 
-const before = scriptsOf(edited), after = scriptsOf(html);
+const before = scriptsOf(full), after = scriptsOf(html);
 let workerBodies = 0, commentsBefore = 0, shaders = 0, glslBefore = 0;
 
 check('the clean page has the same scripts, in the same order, with the same attributes', () => {
@@ -190,23 +189,11 @@ check('no HTML or CSS comment is left', () => {
   eq(styles.some(c => c.includes('/*')), false, 'a CSS comment in a <style>');
 });
 
-check('no comment marker is left anywhere in the file, outside the two encoded modules', () => {
-  /* The compiled WebAssembly travels as base64, whose alphabet has '/' in it, so a '//'
-     there is data. Everywhere else in this page none of the three markers occurs at all:
-     not in a string, a URL or a pattern either. */
-  const modules = html.match(/_BASE64 = "[A-Za-z0-9+/=]+"/g) || [];
-  eq(modules.length, 2, 'encoded modules found');
-  let rest = html;
-  for (const m of modules) rest = rest.replace(m, '');
-  const left = ['/*', '*/', '//', '<!--'].filter(t => rest.includes(t));
-  eq(left.length, 0, `markers left (${left.join(' ')})`);
-});
-
 check('the markup and the style are the page\'s, less their comments', () => {
   /* Every character outside the scripts is the edited page's, in order: the clean build
      only ever deletes there. */
   const outside = p => p.replace(/<script([^>]*)>[\s\S]*?<\/script>/g, '<script$1></script>');
-  const a = outside(edited), b = outside(html);
+  const a = outside(full), b = outside(html);
   let j = 0;
   for (let i = 0; i < b.length; i++){
     while (j < a.length && a[j] !== b[i]) j++;
@@ -218,21 +205,15 @@ check('the markup and the style are the page\'s, less their comments', () => {
   eq(b.replace(/\s+/g, ''), strippedMarkup, 'the markup, comments and whitespace aside');
 });
 
-check('every prose edit was made exactly once', () => {
-  let page = full;
-  for (const [what, find] of PROSE_EDITS){
-    const n = page.split(find).length - 1;
-    if (n !== 1) throw new Error(`${what}: found ${n} times in the full build`);
-    page = page.replace(find, '');
+check('runtime warnings, failure reasons and model explanations remain in the clean page', () => {
+  const required = ['Simulation error: ', 'No substitute simulation has been loaded',
+    'The Navier-Stokes check did not run', 'free-surface overturning',
+    'Initial values are editable examples, not measurements.', 'id="dnsNote"',
+    'id="warnBox"', 'g/mV — ${dc.source}'];
+  for (const fragment of required){
+    eq(full.toLowerCase().includes(fragment.toLowerCase()), true, `source includes ${fragment}`);
+    eq(html.toLowerCase().includes(fragment.toLowerCase()), true, `clean build retains ${fragment}`);
   }
-});
-
-check('none of the removed sentences is anywhere in the clean page', () => {
-  const left = REMOVED_PROSE.filter(t => html.includes(t));
-  eq(left.length, 0, `fragments still present (${left.map(t => JSON.stringify(t)).join(', ')})`);
-  /* and every one of them was really in the full build, so this is not vacuous */
-  const absent = REMOVED_PROSE.filter(t => !full.includes(t));
-  eq(absent.length, 0, `fragments the full build never had (${absent.map(t => JSON.stringify(t)).join(', ')})`);
 });
 
 check('the stripper keeps a comment-looking // or /* inside strings, templates and regexes', () => {

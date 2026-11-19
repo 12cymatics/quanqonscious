@@ -208,6 +208,8 @@ class FaradayCell3DWasm {
        factorisation, and the module only applies it. */
     this.js.buildPreconditioner();
     this.views.pcband.set(this.js._pcBand);
+    this.pushState();
+    this.refreshMetric();
     CELL3D_WASM_LIVE = this;
   }
 
@@ -237,6 +239,15 @@ class FaradayCell3DWasm {
       + 'whole step hangs off that number. The module clears it after every step '
       + 'rather than reusing the previous instant\'s.';
     if (code === 7) return 'the C++ module was given a non-positive time step.';
+    if (code === 8){
+      const fields = ['u', 'v', 'w', 'om', 'eta', 'H', 'Ht', 'p', 'divergence'];
+      const name = fields[X.cell3d_errorI()], index = X.cell3d_errorK();
+      return `maxDivergence: invalid state ${name}[${index}]; finite values and positive layer depths are required.`;
+    }
+    if (code === 9){
+      const packed = X.cell3d_errorK();
+      return `maxDivergence: invalid cell volume at (${X.cell3d_errorI()}, ${Math.floor(packed/this.js.nz)}, ${packed%this.js.nz}).`;
+    }
     if (code === 5) return 'famLaplacian: a family offers fewer than four values '
       + 'in sigma and the face derivative needs four. nz >= 4 guarantees them, so '
       + 'this is a descriptor error rather than a grid that is too coarse.';
@@ -429,7 +440,22 @@ class FaradayCell3DWasm {
 
   omegaFromW(){ this.inst.exports.cell3d_omegaFromW(); return this; }
   wFromOmega(){ this.inst.exports.cell3d_wFromOmega(); return this; }
-  maxDivergence(){ return this.inst.exports.cell3d_maxDivergence(); }
+  maxDivergence(){
+    const X = this.inst.exports;
+    if (!Number.isFinite(this.t)) throw new Error(`maxDivergence: non-finite physical time ${this.t}.`);
+    const existing = X.cell3d_error();
+    if (existing) throw new Error(this.errorMessage(existing));
+    try {
+      const value = X.cell3d_maxDivergence(), code = X.cell3d_error();
+      if (code) throw new Error(this.errorMessage(code));
+      if (!Number.isFinite(value)) throw new Error(`maxDivergence: non-finite divergence ${value}.`);
+      return value;
+    } catch (error){
+      const code = X.cell3d_error();
+      if (code) throw new Error(this.errorMessage(code), { cause: error });
+      throw error;
+    }
+  }
 
   release(){ if (CELL3D_WASM_LIVE === this) CELL3D_WASM_LIVE = null; return this; }
 }

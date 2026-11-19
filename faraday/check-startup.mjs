@@ -10,10 +10,12 @@ assert(html.includes('<noscript>'), 'JavaScript-disabled browsers receive an exp
 assert(html.includes('name="viewport"'), 'mobile viewport is declared');
 assert(html.includes('<canvas id="scene3d"'), 'the interactive three-dimensional canvas exists');
 assert.match(html, /let useSolver = true;/, 'the visible application starts from nonlinear state');
-const readinessStart = html.indexOf('  if(useSolver){\n    if(UNIFIED3D.tick(now)){');
-const readinessEnd = html.indexOf('}else FARADAY_STARTUP.ready();', readinessStart);
-assert(readinessStart >= 0 && readinessEnd > readinessStart, 'the loop gates startup on the real scene draw');
-const readiness = html.slice(readinessStart, readinessEnd + '}else FARADAY_STARTUP.ready();'.length);
+const readinessMatch = html.match(/if\s*\(useSolver\)\s*\{\s*if\s*\(!blocked\s*&&\s*UNIFIED3D\.tick\(now\)\)\s*\{/);
+assert(readinessMatch, 'the loop requires valid state and a successful real scene draw');
+const readinessStart = readinessMatch.index;
+const readinessTail = html.slice(readinessStart).match(/\}\s*else\s+FARADAY_STARTUP\.ready\(\);/);
+assert(readinessTail, 'the readiness branch has its expected modal alternative');
+const readiness = html.slice(readinessStart, readinessStart + readinessTail.index + readinessTail[0].length);
 const autostart = html.match(/let initialAutostart = new URLSearchParams\(location.search\)[^;]+;/);
 assert(autostart, 'the page supplies an explicit initial-state inspection option');
 const status = { textContent: '', style: {} }, handlers = new Map();
@@ -24,7 +26,7 @@ const context = vm.createContext({
   $: id => { assert.equal(id, 'experimentError'); return { textContent: '' }; },
   UNIFIED3D: { tick: () => { calls.push('draw'); return context.drawReady; } },
   CELL3D: { start: () => calls.push('start') },
-  URLSearchParams, location: { search: '' }, drawReady: false,
+  URLSearchParams, location: { search: '' }, drawReady: false, blocked:false,
 });
 vm.runInContext(block[1], context);
 vm.runInContext('let useSolver = true, now = 0, clock = { err:null }, solverRequested = false, state = {};'
@@ -37,6 +39,10 @@ vm.runInContext(readiness, context);
 assert.deepEqual(calls, ['draw'], 'an incomplete scene cannot announce ready or start integration');
 assert.equal(context.FARADAY_STARTUP.drawn, false);
 context.drawReady = true;
+context.blocked = true;
+vm.runInContext(readiness, context);
+assert.deepEqual(calls, ['draw'], 'invalid state cannot draw, announce ready or start integration');
+context.blocked = false;
 vm.runInContext(readiness, context);
 assert.deepEqual(calls, ['draw', 'draw', 'ready', 'start'], 'integration begins only after a successful scene draw');
 assert.match(status.textContent, /3D cell ready/);

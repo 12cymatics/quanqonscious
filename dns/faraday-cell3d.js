@@ -1355,14 +1355,30 @@ class FaradayCell3D {
   /* Largest absolute divergence, per unit volume, over the cells. Reported
      rather than assumed: it is the one number that says whether the projection
      did its job on this metric. */
+  assertFiniteState(operation){
+    if (!Number.isFinite(this.t)) throw new Error(`${operation}: non-finite physical time ${this.t}.`);
+    for (const name of ['u', 'v', 'w', 'om', 'eta', 'H', 'Ht', 'p']){
+      const field = this[name];
+      for (let i = 0; i < field.length; i++){
+        if (!Number.isFinite(field[i])) throw new Error(`${operation}: non-finite state ${name}[${i}] = ${field[i]}.`);
+        if (name === 'H' && !(field[i] > 0)) throw new Error(`${operation}: non-positive layer depth H[${i}] = ${field[i]}.`);
+      }
+    }
+  }
+
   maxDivergence(){
-    this.divergence(this.u, this.v, this.om, this._div);
+    this.assertFiniteState('maxDivergence');
+    this.omegaOf(this.u, this.v, this.w, this._gom);
+    this.divergence(this.u, this.v, this._gom, this._div);
     let worst = 0;
     for (let i = 0; i < this.nr; i++)
       for (let k = 0; k < this.nth; k++){
         const vol = this.rc[i]*this.drc[i]*this.dth*this.H[this.ie(i, k)];
         for (let j = 0; j < this.nz; j++){
-          const d = Math.abs(this._div[this.ip(i, k, j)])/(vol*this.dsc[j]);
+          const volume = vol*this.dsc[j];
+          if (!(Number.isFinite(volume) && volume > 0)) throw new Error(`maxDivergence: invalid cell volume at (${i}, ${k}, ${j}): ${volume}.`);
+          const d = Math.abs(this._div[this.ip(i, k, j)])/volume;
+          if (!Number.isFinite(d)) throw new Error(`maxDivergence: non-finite divergence at (${i}, ${k}, ${j}): ${d}.`);
           if (d > worst) worst = d;
         }
       }
@@ -3046,6 +3062,7 @@ class FaradayCell3D {
 
      Returned together, so a caller can see which one binds. */
   stepLimits(){
+    this.assertFiniteState('stepLimits');
     const nr = this.nr, nth = this.nth, nz = this.nz;
     let drMin = Infinity, dzMin = Infinity, Hmin = Infinity;
     for (let i = 0; i < nr; i++) drMin = Math.min(drMin, this.drc[i]);
@@ -3073,6 +3090,7 @@ class FaradayCell3D {
                             + ww/(H*this.dsc[j]));
         }
       }
+    if (!Number.isFinite(adv)) throw new Error(`stepLimits: non-finite advective rate ${adv}.`);
     return { capillary: L.capillary, viscous: L.viscous,
              advective: adv > 0 ? 1/adv : Infinity,
              gravity: L.gravity,
@@ -3099,6 +3117,7 @@ class FaradayCell3D {
      is a diagnostic of the state under the force acting on it rather than a state function.
      With accel = 0 and nu = 0 the total is conserved and that is the gate. */
   energy(){
+    this.assertFiniteState('energy');
     const nr = this.nr, nth = this.nth, nz = this.nz, rho = this.rho, dth = this.dth;
     let ke = 0;
     for (let i = 1; i < nr; i++)
@@ -3133,7 +3152,10 @@ class FaradayCell3D {
         hyd += 0.5*rho*g*e*e*this.rc[i]*this.drc[i]*dth;
       }
     const cap = this.gamma*this.surfaceExcessArea();
-    return { kinetic: ke, hydrostatic: hyd, capillary: cap, total: ke + hyd + cap };
+    const result = { kinetic: ke, hydrostatic: hyd, capillary: cap, total: ke + hyd + cap };
+    for (const [name, value] of Object.entries(result))
+      if (!Number.isFinite(value)) throw new Error(`energy: non-finite ${name} energy ${value}.`);
+    return result;
   }
 
   /* sigma (u dH/dr + (v/r) dH/dtheta) at a sigma face, with u and v averaged from

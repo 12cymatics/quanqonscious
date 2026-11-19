@@ -1006,13 +1006,28 @@ void cell3d_wFromOmega(){
 
 /* Largest absolute divergence, per unit volume, over the cells. */
 double cell3d_maxDivergence(){
-  cell3d_divergence(u, v, om, divw);
+  const double* fields[] = {u, v, w, om, eta, H, Ht, p};
+  const int lengths[] = {NU, NV, NW, NW, NE, NE, NE, NP};
+  for (int f = 0; f < 8; f++)
+    for (int c = 0; c < lengths[f]; c++)
+      if (!__builtin_isfinite(fields[f][c]) || (f == 5 && !(fields[f][c] > 0.0))){
+        lastError = 8; errI = f; errK = c; __builtin_trap();
+      }
+  cell3d_omegaOf(u, v, w, gom);
+  cell3d_divergence(u, v, gom, divw);
   double worst = 0.0;
   for (int i = 0; i < nr; i++)
     for (int k = 0; k < nth; k++){
       const double vol = rc[i]*drc[i]*dth*H[ie(i, k)];
       for (int j = 0; j < nz; j++){
-        double d = divw[ip(i, k, j)]/(vol*dsc[j]);
+        const double volume = vol*dsc[j];
+        if (!(__builtin_isfinite(volume) && volume > 0.0)){
+          lastError = 9; errI = i; errK = k*nz + j; __builtin_trap();
+        }
+        double d = divw[ip(i, k, j)]/volume;
+        if (!__builtin_isfinite(d)){
+          lastError = 8; errI = 8; errK = ip(i, k, j); __builtin_trap();
+        }
         if (d < 0.0) d = -d;
         if (d > worst) worst = d;
       }
