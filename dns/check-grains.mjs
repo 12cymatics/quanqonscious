@@ -131,7 +131,11 @@ console.log('6. a uniform oscillation with friction drives no net drift once the
 console.log('7. refusals');
 {
   const base = { count: 1, R, ...grain, ...fluid, muS: 0.5, muK: 0.4, g: 9.80665, accel: 0, omegaD: omega };
-  throwsLike(() => G.createGrains({ ...base, accel: 9.80665 }), /leaves the floor/, 'a drive reaching gravity is refused: flight is not modelled');
+  throwsLike(() => G.createGrains({ ...base, accel: 2*9.80665 }), /roughness/, 'a drive above gravity without the grain roughness is refused: the lift-off depends on it');
+  throwsLike(() => G.createGrains({ ...base, accel: 2*9.80665, roughness: grain.d }), /not below the grain radius/, 'a roughness as large as the radius is refused');
+  { const S = G.createGrains({ ...base, accel: 2*9.80665, roughness: 1e-6 });
+    const T = G.floorFieldTable({ mode: syntheticMode({ m: 1, multiplier: 1, U: () => 0, V: () => 0 }).mode, m: 1, Td, amplitude: 1, zGrain: grain.d/2 });
+    throwsLike(() => G.advanceGrains(S, T, Td, Td/256), /columnTable/, 'grains that can leave the floor without the flow at every height are refused'); }
   throwsLike(() => G.createGrains({ ...base, rhoP: 900 }), /does not rest on the floor/, 'a grain lighter than the liquid is refused');
   throwsLike(() => G.createGrains({ ...base, muK: 0.6 }), /sliding friction above static/, 'mu_k above mu_s is refused');
   throwsLike(() => G.floorFieldTable({ mode: syntheticMode({ m: 1, multiplier: 1, U: () => 0, V: () => 0 }).mode, m: 1, Td, amplitude: 1, zGrain: 1 }),
@@ -192,6 +196,162 @@ console.log('9. the polar streaming algebra agrees with a Cartesian evaluation o
     worst = Math.max(worst, Math.hypot(mx - ux, my - uy)); scale = Math.max(scale, Math.hypot(ux, uy));
   }
   ok(worst < 1e-3*scale, `polar against Cartesian at four points: worst ${worst.toExponential(2)} against a scale of ${scale.toExponential(2)}`);
+}
+
+const g0 = 9.80665, roughness = 2e-6, a0 = grain.d/2;
+const still = () => { const s = syntheticMode({ m: 1, multiplier: 1, U: () => 0, V: () => 0 });
+  const T = G.floorFieldTable({ mode: s.mode, m: 1, Td, amplitude: 1, zGrain: a0 });
+  T.column = G.columnTable({ table: T, mode: s.mode, m: 1, Td }); return T; };
+const Wb = (mp - mf);
+
+console.log('10. a grain leaves the floor when (m_p - m_f)(g + a cos wt) turns negative, and not before');
+{
+  const T = still();
+  for (const accel of [1.5*g0, 3*g0, 6*g0]){
+    const S = G.createGrains({ count: 1, R, ...grain, ...fluid, muS: 0.5, muK: 0.4, g: g0, accel, omegaD: omega, roughness, seed: 2 });
+    const dt = Td/4096;
+    G.advanceGrains(S, T, Td, dt);
+    const tStar = Math.acos(-g0/accel)/omega;
+    ok(S.liftoffs >= 1 && Math.abs(S.tLift[0] - tStar) <= dt/2 + 1e-15,
+       `at a = ${(accel/g0).toFixed(1)} g it leaves at ${S.tLift[0].toExponential(6)} s, the crossing is at ${tStar.toExponential(6)} s (step ${dt.toExponential(2)} s)`);
+  }
+  const S = G.createGrains({ count: 1, R, ...grain, ...fluid, muS: 0.5, muK: 0.4, g: g0, accel: 0.99*g0, omegaD: omega, seed: 2 });
+  G.advanceGrains(S, T, 4*Td, Td/1024);
+  ok(S.liftoffs === 0 && S.airSteps === 0, 'at 0.99 g it never leaves');
+}
+
+console.log('11. the flight off the floor agrees with an independent RK4 integration of the same equation');
+{
+  const T = still(), accel = 3*g0, tStar = Math.acos(-g0/accel)/omega;
+  const Cz0 = 3*Math.PI*fluid.mu*grain.d;
+  const mob = h => (6*h*h + 2*a0*h)/(6*h*h + 9*a0*h + 2*a0*a0);
+  const f = (t, s, w) => [w, (-Wb*(g0 + accel*Math.cos(omega*t)) - Cz0/mob(roughness + s)*w)/M];
+  let t = tStar, s = 0, w = 0, peak = 0, land = null;
+  const hr = Td/262144;
+  while (t < tStar + Td){
+    const k1 = f(t, s, w), k2 = f(t + hr/2, s + hr/2*k1[0], w + hr/2*k1[1]);
+    const k3 = f(t + hr/2, s + hr/2*k2[0], w + hr/2*k2[1]), k4 = f(t + hr, s + hr*k3[0], w + hr*k3[1]);
+    const sn = s + hr/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]), wn = w + hr/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    t += hr;
+    if (sn <= 0 && t > tStar + 10*hr){ land = t - hr*sn/(sn - s); break; }
+    s = sn; w = wn; peak = Math.max(peak, s);
+  }
+  ok(land !== null && peak > 0, `the reference grain rises ${peak.toExponential(4)} m and lands at ${land && land.toExponential(6)} s`);
+  const errs = [];
+  for (const div of [1024, 4096, 16384]){
+    const S = G.createGrains({ count: 1, R, ...grain, ...fluid, muS: 0.5, muK: 0.4, g: g0, accel, omegaD: omega, roughness, seed: 2 });
+    const dt = Td/div;
+    let landed = null, top = 0;
+    while (S.t < 2*Td && landed === null){
+      const wasAir = S.air[0];
+      G.advanceGrains(S, T, S.t + dt, dt);
+      top = Math.max(top, S.sep[0]);
+      if (wasAir && !S.air[0]) landed = S.t;
+    }
+    errs.push({ div, peak: Math.abs(top - peak)/peak, land: Math.abs(landed - land)/Td });
+  }
+  const last = errs[errs.length - 1];
+  ok(last.peak < 1e-2 && last.land < 1e-3, `at Td/16384 the peak separation is within ${(100*last.peak).toFixed(3)}% and the landing within ${(last.land).toExponential(2)} Td`,
+     JSON.stringify(errs));
+  ok(errs[0].peak > errs[1].peak && errs[1].peak > errs[2].peak, `the error falls as the step falls: ${errs.map(e => (100*e.peak).toFixed(3) + '%').join(', ')}`);
+  const rough = r => { const S = G.createGrains({ count: 1, R, ...grain, ...fluid, muS: 0.5, muK: 0.4, g: g0, accel, omegaD: omega, roughness: r, seed: 2 });
+    G.advanceGrains(S, T, 2*Td, Td/4096); return S.maxSeparation; };
+  const sm = rough(5e-7), lg = rough(5e-6);
+  ok(sm < lg, `a smoother grain is held closer by the lubrication: peak separation ${sm.toExponential(3)} m at 0.5 um roughness, ${lg.toExponential(3)} m at 5 um`);
+}
+
+console.log('12. a frictionless grain that leaves the floor every cycle still follows the analytic steady response');
+{
+  const U0 = 0.02;
+  const s = syntheticMode({ m: 1, multiplier: 1, U: (r, t) => U0*Math.cos(omega*t), V: (r, t) => -U0*Math.cos(omega*t) });
+  const T = G.floorFieldTable({ mode: s.mode, m: 1, Td, amplitude: 1, zGrain: a0 });
+  T.column = G.columnTable({ table: T, mode: s.mode, m: 1, Td });
+  const S = G.createGrains({ count: 1, R, ...grain, ...fluid, muS: 0, muK: 0, g: g0, accel: 3*g0, omegaD: omega, roughness, seed: 3 });
+  S.x[0] = 0; S.y[0] = 0;
+  G.advanceGrains(S, T, 40*Td, Td/2048);
+  const air0 = S.airSteps, steps0 = S.steps;
+  let xmin = Infinity, xmax = -Infinity;
+  while (S.t < 42*Td - 1e-12){ G.advanceGrains(S, T, S.t + Td/512, Td/2048); xmin = Math.min(xmin, S.x[0]); xmax = Math.max(xmax, S.x[0]); }
+  const num = { re: C, im: 1.5*mf*omega }, den = { re: C, im: M*omega };
+  const expected = Math.hypot(num.re, num.im)/Math.hypot(den.re, den.im)*U0/omega, measured = (xmax - xmin)/2;
+  const share = (S.airSteps - air0)/(S.steps - steps0);
+  ok(share > 0.2 && Math.abs(measured/expected - 1) < 5e-3,
+     `off the floor ${(100*share).toFixed(0)}% of the time, the displacement amplitude is ${measured.toExponential(5)} m against analytic ${expected.toExponential(5)} m`);
+}
+
+console.log('13. grains advanced together or in separate groups end bit for bit in the same place');
+{
+  const s = syntheticMode({ m: 2, multiplier: -1, U: (r, t) => 0.03*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2),
+                           V: (r, t) => 0.02*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2) });
+  const T = G.floorFieldTable({ mode: s.mode, m: 2, Td, amplitude: 1, zGrain: a0 });
+  T.streaming = G.floorStreaming({ mode: s.mode, m: 2, Td, amplitude: 1, nu: fluid.mu/fluid.rho, k: Math.PI/R, zGrain: a0 });
+  T.column = G.columnTable({ table: T, mode: s.mode, m: 2, Td });
+  const common = { R, ...grain, ...fluid, muS: 0.3, muK: 0.2, g: g0, accel: 2.5*g0, omegaD: omega, roughness };
+  const all = G.createGrains({ ...common, count: 200, seed: 23 });
+  const half = k => G.createGrains({ ...common, count: 100, positions: { x: all.x.slice(100*k, 100*k + 100), y: all.y.slice(100*k, 100*k + 100) } });
+  const H = [half(0), half(1)];
+  G.advanceGrains(all, T, 4*Td, Td/512);
+  for (const h of H) G.advanceGrains(h, T, 4*Td, Td/512);
+  let same = true;
+  for (let n = 0; n < 200; n++){ const h = H[n < 100 ? 0 : 1], q = n % 100; if (h.x[q] !== all.x[n] || h.y[q] !== all.y[n] || h.sep[q] !== all.sep[n]) same = false; }
+  ok(same && all.liftoffs > 0, `200 flying grains in one group and in two groups of 100: ${same ? 'identical' : 'different'} (${all.liftoffs} lift-offs)`);
+}
+
+console.log('14. once lifted, a grain is moved by a flow too weak to move it on the floor');
+{
+  const s = syntheticMode({ m: 2, multiplier: -1, U: (r, t) => 0.004*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2),
+                           V: (r, t) => 0.003*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2) });
+  const T = G.floorFieldTable({ mode: s.mode, m: 2, Td, amplitude: 1, zGrain: a0 });
+  T.streaming = G.floorStreaming({ mode: s.mode, m: 2, Td, amplitude: 1, nu: fluid.mu/fluid.rho, k: Math.PI/R, zGrain: a0 });
+  T.column = G.columnTable({ table: T, mode: s.mode, m: 2, Td });
+  const common = { count: 300, R, ...grain, ...fluid, muS: 0.8, muK: 0.6, g: g0, omegaD: omega, seed: 29 };
+  const below = G.createGrains({ ...common, accel: 0.4*g0 }), above = G.createGrains({ ...common, accel: 2*g0, roughness });
+  const x0 = Float64Array.from(below.x);
+  G.advanceGrains(below, T, 8*Td, Td/512); G.advanceGrains(above, T, 8*Td, Td/512);
+  let movedBelow = 0, movedAbove = 0;
+  for (let n = 0; n < 300; n++){ if (below.x[n] !== x0[n]) movedBelow++; if (above.x[n] !== x0[n]) movedAbove++; }
+  ok(movedBelow === 0 && movedAbove > 250, `at 0.4 g, where friction holds through the whole cycle, ${movedBelow} of 300 grains move; at 2 g, lifted every cycle, ${movedAbove} do`);
+  ok(above.maxImpactStokes > 0 && above.maxImpactStokes < 10, `they land at impact Stokes numbers up to ${above.maxImpactStokes.toExponential(2)}, far below the ~10 needed to rebound`);
+}
+
+console.log('15. the drift field: read back at its own probes, and settled in the step');
+{
+  const s = syntheticMode({ m: 2, multiplier: -1, U: (r, t) => 0.03*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2),
+                           V: (r, t) => 0.02*Math.sin(Math.PI*r/R)*Math.cos(omega*t/2) });
+  const T = G.floorFieldTable({ mode: s.mode, m: 2, Td, amplitude: 1, zGrain: a0 });
+  T.streaming = G.floorStreaming({ mode: s.mode, m: 2, Td, amplitude: 1, nu: fluid.mu/fluid.rho, k: Math.PI/R, zGrain: a0 });
+  T.column = G.columnTable({ table: T, mode: s.mode, m: 2, Td });
+  const gp = { R, ...grain, ...fluid, muS: 0.3, muK: 0.2, g: g0, accel: 2.5*g0, omegaD: omega, roughness };
+  const D1 = G.driftMap({ ...gp, table: T, nr: 12, nth: 6, settle: 4, measure: 4, stepsPerPeriod: 256 });
+  ok(D1.M === 4 && D1.flight.liftoffs > 0, `a subharmonic 2-fold mode gives a drift field of period pi/2 in angle (M = ${D1.M}), measured on flying probes (${D1.flight.liftoffs} lift-offs)`);
+  let worst = 0, scale = 0;
+  for (let n = 0; n < D1.UR.length; n++) scale = Math.max(scale, Math.hypot(D1.UR[n], D1.UT[n]));
+  const out = new Float64Array(2);
+  for (const [i, j] of [[3, 2], [5, 3], [8, 1], [9, 4]]){
+    const n = i*D1.nth + j, r = D1.rMax*i/(D1.nr - 1), th = Math.PI*j/((D1.nth - 1)*D1.M);
+    for (const [rot, mir] of [[0, 1], [1, 1], [3, 1], [0, -1], [2, -1]]){
+      const ang = th*mir + 2*Math.PI*rot/D1.M, ca = Math.cos(ang), sa = Math.sin(ang);
+      G.driftAtPoint(D1, r*ca, r*sa, out);
+      const ur = D1.UR[n], ut = mir*D1.UT[n];
+      worst = Math.max(worst, Math.abs(out[0] - (ur*ca - ut*sa)), Math.abs(out[1] - (ur*sa + ut*ca)));
+    }
+  }
+  ok(scale > 0 && worst <= 1e-9*scale, `at four probes, turned by multiples of 2 pi/M and mirrored, the drift read back is the probe's to ${(worst/scale).toExponential(2)} of the largest`);
+  const D2 = G.driftMap({ ...gp, table: T, nr: 12, nth: 6, settle: 4, measure: 4, stepsPerPeriod: 1024 });
+  let diff = 0;
+  for (let n = 0; n < D1.UR.length; n++) diff = Math.max(diff, Math.hypot(D1.UR[n] - D2.UR[n], D1.UT[n] - D2.UT[n]));
+  ok(diff < 0.05*scale, `256 against 1024 steps a period: the drift differs by at most ${(100*diff/scale).toFixed(2)}% of the largest`);
+  const sand = G.createSand({ drift: D1, count: 500, seed: 31 });
+  const x0 = Float64Array.from(sand.x), y0 = Float64Array.from(sand.y), v0 = [];
+  for (let n = 0; n < 500; n++) v0.push(sand.driftAt(n));
+  const dt = 1e-4;
+  sand.advect(1, dt);
+  let step = 0;
+  for (let n = 0; n < 500; n++){
+    const ex = x0[n] + v0[n].vx*dt, ey = y0[n] + v0[n].vy*dt, rr = Math.hypot(ex, ey), f = rr > D1.rMax ? D1.rMax/rr : 1;
+    step = Math.max(step, Math.abs(sand.x[n] - ex*f), Math.abs(sand.y[n] - ey*f));
+  }
+  ok(step === 0, 'one sand step moves each grain by its drift times the step, held inside R - d/2');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

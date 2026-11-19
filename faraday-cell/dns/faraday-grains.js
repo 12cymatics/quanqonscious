@@ -3,19 +3,27 @@
 const O_NEILL_WALL_SHEAR_FACTOR = 1.7009;
 
 const GRAIN_MODEL = Object.freeze({
-  name: 'grains resting on the floor in the Floquet-mode flow',
-  equation: '(m_p + m_f/2) dv/dt = C_w 3 pi mu d (u - v) + (3/2) m_f du/dt + F_friction',
+  name: 'grains on the floor of the Floquet-mode flow, leaving it when the drive exceeds gravity',
+  equation: '(m_p + m_f/2) dv/dt = C_w 3 pi mu d (u(z) - v) + (3/2) m_f du/dt + F_friction (on the floor)',
+  vertical: '(m_p + m_f/2) dw/dt = -(m_p - m_f)(g + a cos(omega_d t)) - 3 pi mu d w / f_perp(gap), while off the floor',
   wallDragFactor: O_NEILL_WALL_SHEAR_FACTOR,
   wallDragSource: "O'Neill (1968), sphere touching a plane wall in linear shear, Stokes flow",
-  fluidVelocityAt: 'grain centre height d/2 above the floor',
-  normalForce: '(m_p - m_f)(g + a cos(omega_d t))',
+  perpendicularDragSource: 'Bevan and Prieve (2000), J. Chem. Phys. 113, 1228: f_perp(h) = (6h^2 + 2ah)/(6h^2 + 9ah + 2a^2), '
+    + 'h the gap and a the radius; it tends to Reynolds lubrication 6 pi mu a^2/h as h -> 0',
+  fluidVelocityAt: 'the grain centre: d/2 above the floor while on it, d/2 + separation while off it',
+  normalForce: '(m_p - m_f)(g + a cos(omega_d t)); the grain leaves the floor when it turns negative',
+  liftOff: 'from the roughness gap, against the lubrication drag, which is what holds a grain to a wall in a liquid',
+  landing: 'inelastic: the impact Stokes number St = rho_p d w/(9 mu) is recorded; rebound needs St above about 10 '
+    + '(Gondret, Lance and Petit 2002, Phys. Fluids 14, 643)',
   friction: 'Coulomb: stick while |F| <= mu_s N, slide against mu_k N',
   streaming: 'steady streaming inside the floor Stokes layer, u = (1/w) Re[a(z/delta) (U.grad)U* + b(z/delta) (div U) U*], '
     + 'driven by the response-frequency component of the mode\'s flow taken 4 Stokes depths above the floor and carried '
     + 'to the floor with cosh(k z); edge values reproduce Schlichting (standing) and Longuet-Higgins 1953 (progressive)',
   neglected: ['Basset history force', 'lift', 'grain-grain contact', 'grain feedback on the fluid',
               'mean flow driven at the free surface and in the interior', 'higher harmonics of the mode in the streaming',
-              'flight off the floor']
+              'the vertical fluid velocity at the grain, which is second order in height at the no-slip floor',
+              'the change of the parallel wall-drag factor with separation, held at its contact value; the separations reached are recorded',
+              'the change of the added mass near the wall', 'rebound on landing']
 });
 
 function requirePositive(v, name){
@@ -200,6 +208,43 @@ function mulberry32(seed){
   };
 }
 
+function columnTable(o){
+  const T = o.table, mode = o.mode;
+  if (!T || !mode) throw new TypeError('columnTable: the floor table and the mode it was built from are required.');
+  const { m, Td } = o;
+  const zc = mode.grid.zc, nz = zc.length;
+  const L = nz + 1, faces = T.faces, samples = T.samples, plane = samples*faces;
+  const z = new Float64Array(L);
+  const U = new Float64Array(L*plane), V = new Float64Array(L*plane);
+  const dU = new Float64Array(L*plane), dV = new Float64Array(L*plane);
+  for (let j = 0; j < nz; j++){
+    const Tj = floorFieldTable({ mode, m, Td, amplitude: T.amplitude, zGrain: zc[j] });
+    if (Tj.samples !== samples || Tj.faces !== faces || Tj.period !== T.period) throw new RangeError(
+      'columnTable: a level came out on a different sampling from the floor table.');
+    z[j + 1] = zc[j];
+    U.set(Tj.U, (j + 1)*plane); V.set(Tj.V, (j + 1)*plane);
+    dU.set(Tj.dU, (j + 1)*plane); dV.set(Tj.dV, (j + 1)*plane);
+  }
+  let S = null;
+  if (T.streaming){
+    const SM = T.streaming;
+    const PrCC = new Float64Array(L*faces), PrSS = new Float64Array(L*faces), PtSC = new Float64Array(L*faces);
+    const QrCC = new Float64Array(L*faces), QtSC = new Float64Array(L*faces);
+    for (let l = 0; l < L; l++){
+      const prof = streamingProfile(z[l]/SM.delta);
+      const c = streamingCoefficients({ rf: SM.rf, m: SM.m, A: SM.A, B: SM.B, omega: SM.omega, profile: prof });
+      PrCC.set(c.PrCC, l*faces); PrSS.set(c.PrSS, l*faces); PtSC.set(c.PtSC, l*faces);
+      QrCC.set(c.QrCC, l*faces); QtSC.set(c.QtSC, l*faces);
+    }
+    S = { PrCC, PrSS, PtSC, QrCC, QtSC };
+  }
+  return { L, z, U, V, dU, dV, streaming: S };
+}
+
+function perpendicularMobility(gap, a){
+  return (6*gap*gap + 2*a*gap)/(6*gap*gap + 9*a*gap + 2*a*a);
+}
+
 function createGrains(o){
   const count = o.count;
   if (!(Number.isSafeInteger(count) && count > 0)) throw new RangeError(`count = ${count}: a positive whole number of grains.`);
@@ -213,24 +258,44 @@ function createGrains(o){
   const omegaD = requirePositive(o.omegaD, 'omegaD');
   if (!(rhoP > rho)) throw new RangeError(
     `rhoP = ${rhoP} kg/m^3 is not above the liquid's ${rho}: such a grain does not rest on the floor.`);
-  if (accel >= g) throw new RangeError(
-    `peak acceleration ${accel} m/s^2 reaches gravity ${g} m/s^2, so a grain leaves the floor once a cycle. `
-    + `Flight off the floor is not modelled; refusing rather than holding the grain down.`);
   if (d/2 >= R) throw new RangeError('the grain is wider than the cell.');
+  const canFly = accel > g;
+  let roughness = null;
+  if (canFly){
+    if (o.roughness === undefined) throw new RangeError(
+      `peak acceleration ${accel} m/s^2 exceeds gravity ${g} m/s^2, so the grain leaves the floor once a cycle. `
+      + 'Leaving a wall in a liquid is resisted by lubrication, which grows without bound as the gap closes; '
+      + 'the gap a grain starts from is its surface roughness, and that has to be given (roughness, in metres).');
+    roughness = requirePositive(o.roughness, 'roughness');
+    if (roughness >= d/2) throw new RangeError(`roughness ${roughness} m is not below the grain radius ${d/2} m.`);
+  }
   const vol = Math.PI*d*d*d/6;
   const mp = rhoP*vol, mf = rho*vol;
-  const rand = mulberry32(o.seed === undefined ? 1 : o.seed);
   const rMax = R - d/2;
   const x = new Float64Array(count), y = new Float64Array(count);
+  if (o.positions){
+    const px = o.positions.x, py = o.positions.y;
+    if (!(px && py && px.length === count && py.length === count)) throw new RangeError('positions: one x and one y per grain.');
+    for (let n = 0; n < count; n++){
+      x[n] = px[n]; y[n] = py[n];
+      if (!(Number.isFinite(x[n]) && Number.isFinite(y[n]))) throw new RangeError(`positions[${n}] is not finite.`);
+      if (Math.hypot(x[n], y[n]) > rMax*(1 + 1e-12)) throw new RangeError(`positions[${n}] lies beyond R - d/2 = ${rMax} m.`);
+    }
+  } else {
+    const rand = mulberry32(o.seed === undefined ? 1 : o.seed);
+    for (let n = 0; n < count; n++){
+      const r = rMax*Math.sqrt(rand()), th = 2*Math.PI*rand();
+      x[n] = r*Math.cos(th); y[n] = r*Math.sin(th);
+    }
+  }
   const vx = new Float64Array(count), vy = new Float64Array(count);
   const stuck = new Uint8Array(count).fill(1);
-  for (let n = 0; n < count; n++){
-    const r = rMax*Math.sqrt(rand()), th = 2*Math.PI*rand();
-    x[n] = r*Math.cos(th); y[n] = r*Math.sin(th);
-  }
-  return { count, R, d, rMax, rhoP, rho, mu, muS, muK, g, accel, omegaD,
-           mp, mf, M: mp + mf/2, C: O_NEILL_WALL_SHEAR_FACTOR*3*Math.PI*mu*d,
-           x, y, vx, vy, stuck, t: 0, steps: 0, slidSteps: 0 };
+  const air = new Uint8Array(count), sep = new Float64Array(count), vz = new Float64Array(count);
+  const tLift = new Float64Array(count).fill(NaN);
+  return { count, R, d, a: d/2, rMax, rhoP, rho, mu, muS, muK, g, accel, omegaD, canFly, roughness,
+           mp, mf, M: mp + mf/2, C: O_NEILL_WALL_SHEAR_FACTOR*3*Math.PI*mu*d, Cz0: 3*Math.PI*mu*d,
+           x, y, vx, vy, stuck, air, sep, vz, tLift, t: 0, steps: 0, slidSteps: 0,
+           airSteps: 0, liftoffs: 0, landings: 0, maxSeparation: 0, maxImpactStokes: 0 };
 }
 
 function advanceGrains(G, T, tEnd, dt){
@@ -246,11 +311,34 @@ function advanceGrains(G, T, tEnd, dt){
   }
   const Ut = new Float64Array(faces), Vt = new Float64Array(faces);
   const dUt = new Float64Array(faces), dVt = new Float64Array(faces);
-  const { x, y, vx, vy, stuck, C, M, mf, mp, muS, muK, g, accel, omegaD, rMax } = G;
+  const { x, y, vx, vy, stuck, air, sep, vz, tLift, C, M, mf, mp, muS, muK, g, accel, omegaD, rMax } = G;
   const buoyant = mp - mf;
   const SM = T.streaming || null;
   if (SM && (SM.faces !== faces || SM.m !== m || SM.rf.some((v, i) => v !== rf[i]))) throw new RangeError(
     'advanceGrains: the streaming field was built on a different grid or mode from the oscillatory table.');
+  const col = G.canFly ? T.column : null;
+  if (G.canFly && !col) throw new RangeError(
+    'advanceGrains: these grains leave the floor, so the flow is needed at every height they reach: '
+    + 'attach columnTable({ table, mode, m, Td }) to the table as table.column.');
+  if (col && SM && !col.streaming) throw new RangeError(
+    'advanceGrains: the floor table carries streaming but its column does not; build the column after attaching table.streaming.');
+  const L = col ? col.L : 0, plane = samples*faces;
+  const Uc = col ? new Float64Array(L*faces) : null, Vc = col ? new Float64Array(L*faces) : null;
+  const dUc = col ? new Float64Array(L*faces) : null, dVc = col ? new Float64Array(L*faces) : null;
+  const zTop = col ? col.z[L - 1] : 0, CSa = col ? col.streaming : null;
+  const a = G.a, eps = G.roughness, Cz0 = G.Cz0, rhoP = G.rhoP, d = G.d, mu = G.mu;
+  let nAir = 0;
+  for (let n = 0; n < G.count; n++) nAir += air[n];
+  const angular = (c, s) => {
+    let cr = 1, ci = 0, br = c, bi = s, e = m;
+    while (e > 0){
+      if (e & 1){ const t = cr*br - ci*bi; ci = cr*bi + ci*br; cr = t; }
+      const t = br*br - bi*bi; bi = 2*br*bi; br = t;
+      e >>= 1;
+    }
+    ANG[0] = cr; ANG[1] = ci;
+  };
+  const ANG = new Float64Array(2);
   while (G.t < tEnd - 1e-15*period){
     const h = Math.min(dt, tEnd - G.t), tm = G.t + h/2;
     const ph = ((tm % period) + period) % period/period*samples;
@@ -261,22 +349,83 @@ function advanceGrains(G, T, tEnd, dt){
       dUt[i] = w0*T.dU[k0*faces + i] + w1*T.dU[k1*faces + i];
       dVt[i] = w0*T.dV[k0*faces + i] + w1*T.dV[k1*faces + i];
     }
-    const N = buoyant*(g + accel*Math.cos(omegaD*tm));
+    const geff = g + accel*Math.cos(omegaD*tm);
+    const N = buoyant*geff;
     const stickLimit = muS*N, slideFriction = muK*N;
+    const lifting = G.canFly && N < 0;
+    if (col && (lifting || nAir > 0)){
+      for (let l = 0; l < L; l++){
+        const o0 = l*plane + k0*faces, o1 = l*plane + k1*faces, oc = l*faces;
+        for (let i = 0; i < faces; i++){
+          Uc[oc + i] = w0*col.U[o0 + i] + w1*col.U[o1 + i];
+          Vc[oc + i] = w0*col.V[o0 + i] + w1*col.V[o1 + i];
+          dUc[oc + i] = w0*col.dU[o0 + i] + w1*col.dU[o1 + i];
+          dVc[oc + i] = w0*col.dV[o0 + i] + w1*col.dV[o1 + i];
+        }
+      }
+    }
     for (let n = 0; n < G.count; n++){
       const px = x[n], py = y[n];
       const r = Math.hypot(px, py);
-      let ufx = 0, ufy = 0, afx = 0, afy = 0;
-      {
-        const b = Math.min(bins, Math.floor(r/rf[nr]*bins));
-        let i = binOf[b];
-        while (i < nr - 1 && rf[i + 1] < r) i++;
-        while (i > 0 && rf[i] > r) i--;
-        const wR = (r - rf[i])/(rf[i + 1] - rf[i]), wL = 1 - wR;
+      const b = Math.min(bins, Math.floor(r/rf[nr]*bins));
+      let i = binOf[b];
+      while (i < nr - 1 && rf[i + 1] < r) i++;
+      while (i > 0 && rf[i] > r) i--;
+      const wR = (r - rf[i])/(rf[i + 1] - rf[i]), wL = 1 - wR;
+      const c = r > 0 ? px/r : 1, s = r > 0 ? py/r : 0;
+      angular(c, s);
+      const cm = ANG[0], sm = ANG[1];
+      if (!air[n] && lifting){
+        air[n] = 1; sep[n] = 0; vz[n] = 0; stuck[n] = 0; tLift[n] = G.t;
+        nAir++; G.liftoffs++;
+      }
+      if (air[n]){
+        const zc = a + sep[n];
+        if (!(zc < zTop)) throw new RangeError(
+          `advanceGrains: a grain's centre reached ${zc} m above the floor, above the top cell centre ${zTop} m `
+          + 'where the column is tabulated. Refusing rather than inventing the flow there.');
+        let l = 0;
+        while (l < L - 2 && col.z[l + 1] <= zc) l++;
+        const wz = (zc - col.z[l])/(col.z[l + 1] - col.z[l]), wz0 = 1 - wz;
+        const p00 = l*faces + i, p01 = p00 + 1, p10 = p00 + faces, p11 = p10 + 1;
+        const c00 = wz0*wL, c01 = wz0*wR, c10 = wz*wL, c11 = wz*wR;
+        const ur = c00*Uc[p00] + c01*Uc[p01] + c10*Uc[p10] + c11*Uc[p11];
+        const ut = c00*Vc[p00] + c01*Vc[p01] + c10*Vc[p10] + c11*Vc[p11];
+        const ar = c00*dUc[p00] + c01*dUc[p01] + c10*dUc[p10] + c11*dUc[p11];
+        const at = c00*dVc[p00] + c01*dVc[p01] + c10*dVc[p10] + c11*dVc[p11];
+        let vr = ur*cm, vt = ut*sm;
+        const qr = ar*cm, qt = at*sm;
+        if (CSa){
+          const prcc = c00*(CSa.PrCC[p00] + CSa.QrCC[p00]) + c01*(CSa.PrCC[p01] + CSa.QrCC[p01])
+                     + c10*(CSa.PrCC[p10] + CSa.QrCC[p10]) + c11*(CSa.PrCC[p11] + CSa.QrCC[p11]);
+          const prss = c00*CSa.PrSS[p00] + c01*CSa.PrSS[p01] + c10*CSa.PrSS[p10] + c11*CSa.PrSS[p11];
+          const ptsc = c00*(CSa.PtSC[p00] + CSa.QtSC[p00]) + c01*(CSa.PtSC[p01] + CSa.QtSC[p01])
+                     + c10*(CSa.PtSC[p10] + CSa.QtSC[p10]) + c11*(CSa.PtSC[p11] + CSa.QtSC[p11]);
+          vr += prcc*cm*cm + prss*sm*sm;
+          vt += ptsc*sm*cm;
+        }
+        const ufx = vr*c - vt*s, ufy = vr*s + vt*c;
+        const afx = qr*c - qt*s, afy = qr*s + qt*c;
+        const fx = C*ufx + 1.5*mf*afx, fy = C*ufy + 1.5*mf*afy;
+        vx[n] = (M*vx[n] + h*fx)/(M + h*C);
+        vy[n] = (M*vy[n] + h*fy)/(M + h*C);
+        const Cz = Cz0/perpendicularMobility(eps + sep[n], a);
+        const w = (M*vz[n] - h*N)/(M + h*Cz);
+        const sNew = sep[n] + h*w;
+        x[n] += vx[n]*h; y[n] += vy[n]*h;
+        G.airSteps++;
+        if (sNew <= 0){
+          const St = rhoP*d*Math.abs(w)/(9*mu);
+          if (St > G.maxImpactStokes) G.maxImpactStokes = St;
+          sep[n] = 0; vz[n] = 0; air[n] = 0; stuck[n] = 0;
+          nAir--; G.landings++;
+        } else {
+          sep[n] = sNew; vz[n] = w;
+          if (sNew > G.maxSeparation) G.maxSeparation = sNew;
+        }
+      } else {
         const ur = wL*Ut[i] + wR*Ut[i + 1], ut = wL*Vt[i] + wR*Vt[i + 1];
         const ar = wL*dUt[i] + wR*dUt[i + 1], at = wL*dVt[i] + wR*dVt[i + 1];
-        const c = r > 0 ? px/r : 1, s = r > 0 ? py/r : 0, th = r > 0 ? Math.atan2(py, px) : 0;
-        const cm = Math.cos(m*th), sm = Math.sin(m*th);
         let vr = ur*cm, vt = ut*sm;
         const qr = ar*cm, qt = at*sm;
         if (SM){
@@ -284,29 +433,29 @@ function advanceGrains(G, T, tEnd, dt){
               + (wL*SM.PrSS[i] + wR*SM.PrSS[i + 1])*sm*sm;
           vt += (wL*(SM.PtSC[i] + SM.QtSC[i]) + wR*(SM.PtSC[i + 1] + SM.QtSC[i + 1]))*sm*cm;
         }
-        ufx = vr*c - vt*s; ufy = vr*s + vt*c;
-        afx = qr*c - qt*s; afy = qr*s + qt*c;
-      }
-      const fx = C*ufx + 1.5*mf*afx, fy = C*ufy + 1.5*mf*afy;
-      if (stuck[n]){
-        const fs = Math.hypot(fx, fy);
-        if (fs <= stickLimit) continue;
-        stuck[n] = 0;
-        const nx = vx[n] = (h*(fx - slideFriction*fx/fs))/(M + h*C);
-        const ny = vy[n] = (h*(fy - slideFriction*fy/fs))/(M + h*C);
-        x[n] += nx*h; y[n] += ny*h;
-      } else {
-        const sp = Math.hypot(vx[n], vy[n]);
-        const dx = sp > 0 ? vx[n]/sp : 0, dy = sp > 0 ? vy[n]/sp : 0;
-        const nvx = (M*vx[n] + h*(fx - slideFriction*dx))/(M + h*C);
-        const nvy = (M*vy[n] + h*(fy - slideFriction*dy))/(M + h*C);
-        if (sp > 0 && nvx*vx[n] + nvy*vy[n] <= 0){
-          vx[n] = 0; vy[n] = 0;
-          const fsNow = Math.hypot(fx, fy);
-          stuck[n] = fsNow <= stickLimit ? 1 : 0;
-        } else { vx[n] = nvx; vy[n] = nvy; }
-        x[n] += vx[n]*h; y[n] += vy[n]*h;
-        G.slidSteps++;
+        const ufx = vr*c - vt*s, ufy = vr*s + vt*c;
+        const afx = qr*c - qt*s, afy = qr*s + qt*c;
+        const fx = C*ufx + 1.5*mf*afx, fy = C*ufy + 1.5*mf*afy;
+        if (stuck[n]){
+          const fs = Math.hypot(fx, fy);
+          if (fs <= stickLimit) continue;
+          stuck[n] = 0;
+          const nx = vx[n] = (h*(fx - slideFriction*fx/fs))/(M + h*C);
+          const ny = vy[n] = (h*(fy - slideFriction*fy/fs))/(M + h*C);
+          x[n] += nx*h; y[n] += ny*h;
+        } else {
+          const sp = Math.hypot(vx[n], vy[n]);
+          const dx = sp > 0 ? vx[n]/sp : 0, dy = sp > 0 ? vy[n]/sp : 0;
+          const nvx = (M*vx[n] + h*(fx - slideFriction*dx))/(M + h*C);
+          const nvy = (M*vy[n] + h*(fy - slideFriction*dy))/(M + h*C);
+          if (sp > 0 && nvx*vx[n] + nvy*vy[n] <= 0){
+            vx[n] = 0; vy[n] = 0;
+            const fsNow = Math.hypot(fx, fy);
+            stuck[n] = fsNow <= stickLimit ? 1 : 0;
+          } else { vx[n] = nvx; vy[n] = nvy; }
+          x[n] += vx[n]*h; y[n] += vy[n]*h;
+          G.slidSteps++;
+        }
       }
       const rr = Math.hypot(x[n], y[n]);
       if (rr > rMax){
@@ -321,7 +470,123 @@ function advanceGrains(G, T, tEnd, dt){
   return G;
 }
 
+function driftMap(o){
+  const T = o.table, m = T.m;
+  const nr = o.nr === undefined ? 64 : o.nr, nthIn = o.nth === undefined ? 16 : o.nth;
+  const settle = o.settle === undefined ? 12 : o.settle, measure = o.measure === undefined ? 12 : o.measure;
+  const P = o.stepsPerPeriod === undefined ? 256 : o.stepsPerPeriod;
+  for (const [k, v, lo] of [['nr', nr, 2], ['nth', nthIn, 4], ['settle', settle, 0], ['measure', measure, 1], ['stepsPerPeriod', P, 8]])
+    if (!Number.isSafeInteger(v) || v < lo) throw new RangeError(`driftMap: ${k} = ${v}: a whole number of at least ${lo} is required.`);
+  const sign = Math.sign(T.multiplier);
+  const M = m === 0 ? 0 : (sign < 0 ? 2*m : m), nth = m === 0 ? 1 : nthIn;
+  const rMax = o.R - o.d/2;
+  const xs = new Float64Array(nr*nth), ys = new Float64Array(nr*nth);
+  const dirC = new Float64Array(nr*nth), dirS = new Float64Array(nr*nth);
+  for (let i = 0; i < nr; i++){
+    const r = rMax*i/(nr - 1);
+    for (let j = 0; j < nth; j++){
+      const th = nth === 1 ? 0 : Math.PI*j/((nth - 1)*M);
+      const c = Math.cos(th), s = Math.sin(th), n = i*nth + j;
+      xs[n] = r*c; ys[n] = r*s; dirC[n] = c; dirS[n] = s;
+    }
+  }
+  const probe = createGrains({ ...o, count: nr*nth, positions: { x: xs, y: ys } });
+  const period = T.period, dt = period/P;
+  advanceGrains(probe, T, settle*period, dt);
+  const bx = Float64Array.from(probe.x), by = Float64Array.from(probe.y);
+  advanceGrains(probe, T, (settle + measure)*period, dt);
+  const span = measure*period;
+  const UR = new Float64Array(nr*nth), UT = new Float64Array(nr*nth), Gm = new Float64Array(nr*nth);
+  const Cj = Float64Array.from({ length: nth }, (_, j) => nth === 1 ? 1 : Math.cos(Math.PI*j/(nth - 1)));
+  const Sj = Float64Array.from({ length: nth }, (_, j) => nth === 1 ? 0 : Math.sin(Math.PI*j/(nth - 1)));
+  for (let i = 1; i < nr; i++) for (let j = 0; j < nth; j++){
+    const n = i*nth + j, c = dirC[n], s = dirS[n];
+    const ux = (probe.x[n] - bx[n])/span, uy = (probe.y[n] - by[n])/span;
+    UR[n] = ux*c + uy*s;
+    UT[n] = uy*c - ux*s;
+    if (nth > 1 && j > 0 && j < nth - 1) Gm[n] = UT[n]/Sj[j];
+  }
+  if (nth > 1) for (let i = 1; i < nr; i++){
+    for (const [edge, ja, jb] of [[0, 1, 2], [nth - 1, nth - 2, nth - 3]]){
+      const ga = Gm[i*nth + ja], gb = Gm[i*nth + jb];
+      Gm[i*nth + edge] = ga + (ga - gb)*(Cj[edge] - Cj[ja])/(Cj[ja] - Cj[jb]);
+    }
+  }
+  return { m, M, nr, nth, rMax, dr: rMax/(nr - 1), UR, UT, G: Gm, C: Cj, period, settle, measure, stepsPerPeriod: P,
+           probes: { before: { x: bx, y: by }, after: { x: Float64Array.from(probe.x), y: Float64Array.from(probe.y) } },
+           flight: { canFly: probe.canFly, liftoffs: probe.liftoffs, landings: probe.landings, airSteps: probe.airSteps,
+                     maxSeparation: probe.maxSeparation, maxImpactStokes: probe.maxImpactStokes, radius: probe.a } };
+}
+
+function driftAtPoint(Dm, x, y, out){
+  const r2 = x*x + y*y;
+  if (r2 === 0){ out[0] = 0; out[1] = 0; return; }
+  const r = Math.sqrt(r2), c0 = x/r, s0 = y/r;
+  let wc = 1, ws = 0;
+  if (Dm.nth > 1){
+    let cr = 1, ci = 0, br = c0, bi = s0, e = Dm.M;
+    while (e > 0){
+      if (e & 1){ const t = cr*br - ci*bi; ci = cr*bi + ci*br; cr = t; }
+      const t = br*br - bi*bi; bi = 2*br*bi; br = t;
+      e >>= 1;
+    }
+    wc = cr; ws = ci;
+  }
+  const fr = r/Dm.dr;
+  let i = Math.floor(fr);
+  if (i > Dm.nr - 2) i = Dm.nr - 2;
+  const wr = fr - i, wr0 = 1 - wr;
+  let ur, g = 0;
+  if (Dm.nth > 1){
+    let lo = 0, hi = Dm.nth - 2;
+    while (lo < hi){ const mid = (lo + hi + 1) >> 1; if (Dm.C[mid] >= wc) lo = mid; else hi = mid - 1; }
+    const j = lo;
+    const wt = (Dm.C[j] - wc)/(Dm.C[j] - Dm.C[j + 1]), wt0 = 1 - wt;
+    const A = Dm.UR, B = Dm.G, nth = Dm.nth;
+    const a00 = i*nth + j, a01 = a00 + 1, a10 = a00 + nth, a11 = a10 + 1;
+    ur = wr0*(wt0*A[a00] + wt*A[a01]) + wr*(wt0*A[a10] + wt*A[a11]);
+    g = wr0*(wt0*B[a00] + wt*B[a01]) + wr*(wt0*B[a10] + wt*B[a11]);
+  } else ur = wr0*Dm.UR[i] + wr*Dm.UR[i + 1];
+  const ut = ws*g;
+  out[0] = ur*c0 - ut*s0;
+  out[1] = ur*s0 + ut*c0;
+}
+
+function createSand(o){
+  const Dm = o.drift, count = o.count;
+  if (!Dm || !Dm.UR) throw new TypeError('createSand: a drift map is required.');
+  if (!Number.isSafeInteger(count) || count < 1) throw new RangeError(`count = ${count}: a positive whole number of grains.`);
+  const x = new Float64Array(count), y = new Float64Array(count);
+  if (o.positions){
+    if (o.positions.x.length !== count || o.positions.y.length !== count) throw new RangeError('positions: one x and one y per grain.');
+    x.set(o.positions.x); y.set(o.positions.y);
+  } else {
+    const rand = mulberry32(o.seed === undefined ? 1 : o.seed);
+    for (let n = 0; n < count; n++){
+      const r = Dm.rMax*Math.sqrt(rand()), th = 2*Math.PI*rand();
+      x[n] = r*Math.cos(th); y[n] = r*Math.sin(th);
+    }
+  }
+  const out = new Float64Array(2), rMax2 = Dm.rMax*Dm.rMax;
+  const sand = { count, x, y, t: 0,
+    advect(nSteps, dt){
+      requirePositive(dt, 'dt');
+      for (let k = 0; k < nSteps; k++){
+        for (let n = 0; n < count; n++){
+          driftAtPoint(Dm, x[n], y[n], out);
+          x[n] += out[0]*dt; y[n] += out[1]*dt;
+          const rr2 = x[n]*x[n] + y[n]*y[n];
+          if (rr2 > rMax2){ const f = Dm.rMax/Math.sqrt(rr2); x[n] *= f; y[n] *= f; }
+        }
+        sand.t += dt;
+      }
+    },
+    driftAt(n){ driftAtPoint(Dm, x[n], y[n], out); return { vx: out[0], vy: out[1] }; }
+  };
+  return sand;
+}
+
 const FARADAY_GRAINS = { GRAIN_MODEL, O_NEILL_WALL_SHEAR_FACTOR, floorFieldTable, floorStreaming, streamingProfile, streamingAt, streamingCoefficients,
-                         createGrains, advanceGrains, mulberry32 };
+                         columnTable, perpendicularMobility, createGrains, advanceGrains, driftMap, driftAtPoint, createSand, mulberry32 };
 if (typeof module !== 'undefined' && module.exports) module.exports = FARADAY_GRAINS;
 if (typeof globalThis !== 'undefined') globalThis.FARADAY_GRAINS = FARADAY_GRAINS;

@@ -165,6 +165,16 @@ console.log('7. the same grains in the same flow and streaming, against the floa
   }
   ok(travel > 1e-6 && worst <= 1e-9*travel, `200 grains over 20 periods with streaming: positions within ${worst.toExponential(2)} m of the float integrator's, against travel up to ${travel.toExponential(2)} m`);
   console.log(`       sliding steps ${GQ.slidSteps()} here, ${GF.slidSteps} in the float integrator: a stick decision differs only where the force sits on mu_s N within float rounding`);
+  const shape = { nr: 6, nth: 5, settle: 2, measure: 3, stepsPerPeriod: 128 };
+  const DF = FG.driftMap({ ...gF, table: { ...Tf, multiplier: 1 }, ...shape });
+  const DQ = GD.driftMap({ ...Object.fromEntries(Object.entries(gF).map(([k, v]) => [k, String(v)])), table: Tq, streaming: Sq, ...shape });
+  let dWorst = 0, dScale = 0;
+  for (let n = 0; n < DF.UR.length; n++){
+    dScale = Math.max(dScale, Math.abs(DF.UR[n]), Math.abs(DF.UT[n]));
+    dWorst = Math.max(dWorst, Math.abs(DF.UR[n] - N(DQ.UR[n])), Math.abs(DF.UT[n] - N(DQ.UT[n])));
+  }
+  ok(DF.M === DQ.M && dScale > 0 && dWorst <= 1e-6*dScale,
+     `the float drift field on ${DF.UR.length} probes is the 128-bit one to ${(dWorst/dScale).toExponential(2)} of the largest drift`);
 }
 
 console.log('8. the streaming profile reaches its classical limits and agrees with the float profile');
