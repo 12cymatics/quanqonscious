@@ -1,0 +1,29 @@
+test_changed_command_without_signature_rejected (test_gate.GateTests.test_changed_command_without_signature_rejected) ... ok
+test_changed_instruction_even_with_valid_signature_rejected (test_gate.GateTests.test_changed_instruction_even_with_valid_signature_rejected) ... ok
+test_changed_operation_without_signature_rejected (test_gate.GateTests.test_changed_operation_without_signature_rejected) ... ok
+test_changed_parent_rejected (test_gate.GateTests.test_changed_parent_rejected) ... ok
+test_child_requires_actual_accepted_parent (test_gate.GateTests.test_child_requires_actual_accepted_parent) ... ok
+test_duplicate_json_key_rejected (test_gate.GateTests.test_duplicate_json_key_rejected) ... ok
+test_failed_command_is_consumed (test_gate.GateTests.test_failed_command_is_consumed) ... ok
+test_invalid_signature_rejected (test_gate.GateTests.test_invalid_signature_rejected) ... ok
+test_journal_truncation_rejected_by_external_head (test_gate.GateTests.test_journal_truncation_rejected_by_external_head) ... ok
+test_lean_rejects_false_claims (test_gate.GateTests.test_lean_rejects_false_claims) ... ok
+test_missing_original_rejected (test_gate.GateTests.test_missing_original_rejected) ... ok
+test_modified_script_rejected_before_execution (test_gate.GateTests.test_modified_script_rejected_before_execution) ... ok
+test_noncanonical_envelope_rejected (test_gate.GateTests.test_noncanonical_envelope_rejected) ... ok
+test_receipt_tamper_rejected (test_gate.GateTests.test_receipt_tamper_rejected) ... ok
+test_replay_rejected_after_real_execution (test_gate.GateTests.test_replay_rejected_after_real_execution) ... ok
+test_resigned_duplicate_id_rejected (test_gate.GateTests.test_resigned_duplicate_id_rejected) ... ok
+test_root_executes_and_signs_receipts (test_gate.GateTests.test_root_executes_and_signs_receipts) ... ok
+test_sealed_script_is_actual_executed_script (test_gate.GateTests.test_sealed_script_is_actual_executed_script) ... ok
+test_seals_prevent_mutating_executed_bytes (test_gate.GateTests.test_seals_prevent_mutating_executed_bytes) ... ok
+test_snapshot_mode_change_is_rejected (test_gate.GateTests.test_snapshot_mode_change_is_rejected) ... ok
+test_source_snapshot_preserves_real_relative_imports (test_gate.GateTests.test_source_snapshot_preserves_real_relative_imports) ... ok
+test_source_snapshot_tamper_prevents_execution (test_gate.GateTests.test_source_snapshot_tamper_prevents_execution) ... ok
+test_wrong_authority_pin_rejected (test_gate.GateTests.test_wrong_authority_pin_rejected) ... ok
+test_wrong_expected_digest_rejected (test_gate.GateTests.test_wrong_expected_digest_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 8.569s
+
+OK

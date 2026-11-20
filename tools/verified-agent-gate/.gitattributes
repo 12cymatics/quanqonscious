@@ -1,0 +1,4 @@
+originals/** -text
+originals/*.bin binary
+originals/*.pub binary
+originals/*.sig binary

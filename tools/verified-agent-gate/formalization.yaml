@@ -1,0 +1,58 @@
+version: "v0.4"
+project:
+  name: "ByteGate acceptance statements"
+  description: "Exact-byte acceptance and rejection statements for the execution gate."
+sources:
+  - title: "ByteGate executable acceptance predicate"
+    id: Defs.lean
+    type: software
+status:
+  scope: "Lean-compiled, axiom-audited; not Comparator-verified because required Landlock protection is unavailable. See docs/scope.md."
+  main_results:
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.check_sound
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.check_complete
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.byte_preservation
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.length_preservation
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.changed_bytes_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.replay_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.bad_signature_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.bad_digest_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.noncanonical_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.changed_code_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.wrong_parent_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.unknown_parent_rejected
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.accepted_once
+      file: Gate.lean
+    - comparator_config: ComparatorChallenges/Gate.json
+      declaration: ByteGate.chain_preserves_bytes
+      file: Gate.lean
+automation:
+  methods:
+    - method: agent
+review:
+  status: unchecked
