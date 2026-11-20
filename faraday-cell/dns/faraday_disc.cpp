@@ -137,7 +137,7 @@ const double fluxOut = (i == nr - 1)
 const double radial = (fluxOut - fluxIn)/vol;
 const double below = (j == 1) ? (wc - 0.0)/dzc[0]
 : (wc - w[iw(i, j-1)])/dzc[j-1];
-const double above = (j == nz) ? below + 2.0*(wzSurface(i) - below)
+const double above = (j == nz) ? wzSurface(i)
 : (w[iw(i, j+1)] - wc)/dzc[j];
 const double vertical = (above - below)/dzf[j];
 out[c] = radial + vertical - (double)m*m*wc/(r*r);

@@ -55,6 +55,26 @@ the exact book-derived verification needs Python 3 and SymPy 1.14.0, and rebuild
 the WebAssembly checks needs clang with the wasm32 target and lld. The application
 itself does not call an external API or require those verification tools.
 
+## Book polynomial methods
+
+All 29 named book methods and their derived polynomial extensions are mapped in
+`docs/BOOK_POLYNOMIAL_METHODS.md`. The executable modules in `dns/vedic-*.js`
+construct exact rational interpolation, derivative, moment and flux coefficients.
+The selected JavaScript or WebAssembly solver consumes the numerical tables in
+its pressure, viscosity, traction and adaptive time-step calculations.
+
+The line below the solver status reports polynomial integrals for the displayed
+frame. **Save polynomial coefficients and frame integrals** downloads a JSON
+record containing exact rational coefficients, the actual runtime stencil bytes,
+frame values and a SHA-256 digest of the serialized coefficient payload. Recorded
+playback exports the selected recorded frame. An analytic preview before solver
+initialization has no computed integral export.
+
+The coefficient arithmetic is exact. The fluid state and time stepping use
+binary64 arithmetic and remain a numerical discretization. SHA-256 checks byte
+integrity, not physical correctness. Independent symbolic, numerical, backend,
+worker and browser checks are included in the complete test runner.
+
 ## Nonlinear model and corrections
 
 `dns/MODEL.md` specifies every bulk equation and the normal, tangential,
@@ -227,10 +247,9 @@ grid, physical step and measured progress appear in the diagnostics. Historical
 timings for earlier apparatus defaults in `dns/PLAN-cell3d.md` are not promises
 for the current inputs or your computer.
 
-**The physics is in double precision on the CPU, and stays there.** No GPU on an
-Intel Mac has a double-precision type — Metal has no `double`, so WGSL has no
-`f64` — so the GPU is used for *drawing*, where single precision is correct
-because the output is an 8-bit pixel, and never for the field.
+**The fluid calculation uses double precision on the CPU.** WebGL draws the
+computed fields in single precision. Rendering never supplies the velocity,
+pressure or surface evolution used by the solver.
 
 **Drawing the 3D scene.** `faraday/scene3d.js` uses WebGL2 for perspective,
 depth testing, lighting and point rendering. Camera orbit, zoom, layer visibility
@@ -250,52 +269,45 @@ field renderer has its own CPU/GPU parity checks; those are separate from the
 three-dimensional geometry checks and are not claimed as validation of grain
 material physics.
 
-## What this is, and what it is not
+## Physical reference and numerical scope
 
-Historical measurements are in `dns/PLAN-cell3d.md`, stage by stage, with the
-numbers. They describe their recorded revisions and must not be treated as
-fresh validation of later changes. In that record the discrete operators converge
-at second order against calculus; its projection drives the divergence to the
-solve tolerance; its advection telescopes exactly and conserves energy in the
-inviscid limit; its curvature is the exact variational derivative of its own
-discrete surface area; and at small amplitude its growth rates agree with the
-two-dimensional solver next door — 2.06 against 2.09 on the driven Floquet
-problem, and a quarter-period energy decay within 2.1% at 20 × 12, the gap closing
-at every refinement.
+`docs/PINNED_CYLINDER_REFERENCE.md` derives the coupled pinned-cylinder reference,
+including the surface/potential basis overlap, depth-dependent mass, convergence
+and independent Floquet calculation. The physical tests use that reference and
+the actual evolved velocity and surface fields. They retain the original
+accuracy targets and refine the grids where the former grids were insufficient.
 
-What has **not** been done, stated plainly because the list matters more than the
-agreements:
+For the documented pinned m = 3 example, restoring-acceleration error falls from
+10.79% to 0.56% over the four tested meshes. The near-inviscid quarter-period run
+changes total discrete energy by -0.0495% and transfers 99.08% into kinetic energy.
+The refined damping comparison closes from 7.456% through 2.743% to 1.376%, with
+an h-squared extrapolated difference of -0.1654%. The second m = 1 mode's decay
+agrees within 0.70%. The driven multiplier comparison is within 2.98% and the
+growth-rate comparison within 6.67%; the independent reference multiplier is
+1.56280794 at the documented timestep refinement.
 
-- **No comparison against an experiment.** Not one.
-- **No comparison against any other published code or benchmark.** Both solvers
-  here were written by the same author, so their agreement rules out arithmetic
-  slips and rules out nothing about a shared misconception.
-- **One mode is resolved to 1%, not every mode.** The page sizes its grid for the
-  mode it seeds: the surface operator within 1% on that mode, measured with this
-  solver's own operator, and two cells in every Stokes layer, refusing with the
-  numbers where no grid of at most 250 000 cells holds. Other modes on the same grid
-  carry their own error, larger for finer patterns, and the terminal runner runs
-  whatever grid it is given. The convergence studies in the suites run from
-  16 × 24 × 10 to 32 × 48 × 20; at `nth = 16` the m = 5 mode reads 32.6% low there,
-  which is the grid and not the physics.
-- **The surface is single-valued and the solver refuses when the layer breaks.**
-  No jets, no droplet pinch-off, no air entrainment, no overturning. A real cell
-  driven hard does all four.
-- **Open order losses are recorded, not hidden.** The surface row's accuracy is
-  limited by a reconstruction whose stencil changes between adjacent columns;
-  measured orders on four probes are 2.41/1.74, 1.42/1.17, 2.35/1.99 and
-  2.02/1.59 where second order is wanted throughout. The pinned contact line is
-  first order at the rim. Both are written up in the plan with the fix each needs.
+These results concern the stated modes, grids, material parameters and time
+intervals. They do not establish equal accuracy for arbitrary input or a
+comparison with a laboratory experiment. The numerical model is a Newtonian,
+incompressible liquid with a single-valued graph surface, stationary no-slip
+walls and a pinned contact line. It does not describe overturning, droplet
+pinch-off, entrained air or a moving contact line. An unsupported moving-contact
+request fails before time or state is advanced.
 
-It is not the most accurate Faraday-wave simulation in existence and nothing here
-should be read as claiming that.
+The page sizes the grid for the selected initial mode's surface-operator target
+and Stokes-layer requirement and reports when the cell budget cannot satisfy
+them. Higher spatial modes can have larger errors on the same grid. Exact
+rational coefficient construction preserves the algebra used to build each
+operator; the finite spatial grid and binary64 time integration still introduce
+numerical error. `dns/PLAN-cell3d.md` retains measurements of earlier revisions
+as history, separately from the current pinned reference.
 
 ## The one rule the suites are built on
 
-A test that has never been seen to fail is not known to work. Every gate in here
-was proven able to fail by injecting the defect it claims to catch **on a
-disposable copy**, requiring red, then removing it and requiring green — and the
-record of which defect, for which gate, is in `dns/PLAN-cell3d.md`. Several of
-those injections found that a gate which had been passing all along could not
-see its own defect. Nothing skips, nothing is marked expected-to-fail, and no
-tolerance was widened to make something green.
+The suites compare actual outputs against independent algebraic and physical
+references. Coefficient and worker fault injections also verify that changed
+inputs affect the consumed result or cause a visible failure. Historical mutation
+experiments are recorded in `dns/PLAN-cell3d.md`; current polynomial-consumption
+checks are in `dns/check-vedic-integration.mjs` and `dns/check-vedic-fluid.mjs`.
+The full runner executes every listed suite. A requested partial selection
+reports the omitted suites and cannot return full-verification success.

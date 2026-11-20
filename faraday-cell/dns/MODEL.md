@@ -246,9 +246,27 @@ These corrections are recorded in commit
 [Claude's PR #172](https://github.com/12cymatics/quanqonscious/pull/172) and are independently
 checked in this work.
 
-Exact coefficient convolution and differentiation from those book procedures
-are used to derive manufactured pressure/coordinate identities in
-`check-book-pressure.py`. They are algebraic verification of the numerical
-implementation; the Navier–Stokes momentum law, stress balance and pressure
-projection are not relabelled as sutras. A book arithmetic identity is not by
-itself a derivation or empirical validation of fluid dynamics.
+The 29 book procedures and their explicitly derived polynomial extensions are
+implemented in `vedic-polynomial.js` and mapped individually in
+[`BOOK_POLYNOMIAL_METHODS.md`](../docs/BOOK_POLYNOMIAL_METHODS.md). Exact rational
+coefficient construction supplies interpolation and differentiation stencils,
+positive mass and curvature forms, energy-flux tensors, normal-traction
+quadratics, and reciprocal pressure symbols. Both production backends consume
+these coefficients. Missing coefficient tables or missing methods fail during
+initialization; the native solver has no alternate stencil constructor.
+
+The positive polynomial mass forms also bound reconstructed velocity in the
+actual adaptive time-step calculation. Each worker frame carries its polynomial
+kinetic energy, integrated vertical energy transport, vertical advective kinetic
+power, and vertical viscous-curvature measure. The displayed values follow the
+displayed physical frame during live operation and recorded playback. The JSON
+export includes exact rational coefficients, the numerical stencil bytes used by
+the selected backend, the frame values and a SHA-256 digest of the serialized
+coefficient payload. This digest authenticates bytes; it does not prove the
+continuum model or the whole simulator mathematically correct.
+
+Coefficient identities are exact. State arrays, the coefficient conversion and
+subsequent time evolution use explicitly identified binary64 arithmetic. The
+Navier–Stokes momentum law, stress balance and pressure projection retain their
+physical meanings. Book arithmetic identities alone do not derive or
+experimentally validate fluid dynamics.

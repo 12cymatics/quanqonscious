@@ -2,10 +2,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from math import gcd
 from typing import Tuple
-
 import sympy as sp
-
-
 BOOK = {
     "author": "Bharati Krishna Tirthaji",
     "title": "Vedic Mathematics",
@@ -13,16 +10,12 @@ BOOK = {
     "url": "https://archive.org/details/vedic-mathematics-bharati-krishna-tirth-ji-maharaj",
     "pagination": "printed",
 }
-
-
 @dataclass(frozen=True)
 class Sutra:
     id: int
     name: str
     application: str
     pages: Tuple[int, ...]
-
-
 SUTRAS = (
     Sutra(1, "Ekadhikena Purvena", "nine_ender_repetend", (2, 3, 4)),
     Sutra(2, "Nikhilam Navatascaramam Dasatah", "near_base_product", (12, 13)),
@@ -54,41 +47,29 @@ SUTRAS = (
     Sutra(28, "Vilokanam", "observed_reciprocal_pair", (147, 148)),
     Sutra(29, "Gunitasamuccayah Samuccayagunitah", "coefficient_sum_identity", (76,)),
 )
-
-
 def rational(value):
     if isinstance(value, bool) or not isinstance(value, (int, Fraction, sp.Rational)):
         raise TypeError("An exact integer or rational is required")
     if isinstance(value, Fraction):
         return sp.Rational(value.numerator, value.denominator)
     return sp.Rational(value)
-
-
 def integer(value):
     value = rational(value)
     if value.q != 1:
         raise ValueError("An integer is required")
     return int(value)
-
-
 def coefficients(values):
     values = tuple(rational(v) for v in values)
     if not values:
         raise ValueError("A nonempty coefficient sequence is required")
     return values
-
-
 def crosswise(a, b):
     a, b = coefficients(a), coefficients(b)
     return tuple(sum((a[i] * b[k - i] for i in range(len(a))
                       if 0 <= k - i < len(b)), sp.S.Zero)
                  for k in range(len(a) + len(b) - 1))
-
-
 def polynomial(values, variable):
     return sp.Add(*(v * variable ** i for i, v in enumerate(values)), evaluate=False)
-
-
 def nine_ender_repetend(denominator):
     denominator = integer(denominator)
     if denominator < 9 or denominator % 10 != 9:
@@ -101,24 +82,16 @@ def nine_ender_repetend(denominator):
         carry, digit = divmod(multiplier * digit + carry, 10)
         if (digit, carry) == (1, 0):
             return tuple(reversed(reversed_digits))
-
-
 @dataclass(frozen=True)
 class Evaluation:
     sutra: Sutra
     value: object
     spectral_coefficients: Tuple[sp.Rational, ...]
-
-
 def evaluation(sid, value, terms):
     return Evaluation(SUTRAS[sid - 1], value, coefficients(terms))
-
-
 def ekadhikena(denominator):
     digits = nine_ender_repetend(denominator)
     return evaluation(1, digits, digits)
-
-
 def nikhilam(a, b, base):
     a, b, base = map(rational, (a, b, base))
     if base <= 0:
@@ -126,13 +99,9 @@ def nikhilam(a, b, base):
     da, db = base - a, base - b
     cross, right = (a - db) * base, da * db
     return evaluation(2, cross + right, (da, db, cross, right))
-
-
 def urdhva(a, b):
     result = crosswise(a, b)
     return evaluation(3, result, result)
-
-
 def paravartya(dividend, divisor):
     dividend, divisor = coefficients(dividend), coefficients(divisor)
     if divisor[-1] == 0:
@@ -150,8 +119,6 @@ def paravartya(dividend, divisor):
     quotient = tuple(quotient)
     remainder = tuple(remainder[:len(divisor) - 1]) or (sp.S.Zero,)
     return evaluation(4, (quotient, remainder), quotient + remainder)
-
-
 def shunyam(a, b, c, d):
     a, b, c, d = map(rational, (a, b, c, d))
     if a * b != c * d:
@@ -159,8 +126,6 @@ def shunyam(a, b, c, d):
     difference = a + b - c - d
     result = sp.S.Complexes if difference == 0 else sp.FiniteSet(0)
     return evaluation(5, result, (a * b, c * d, difference))
-
-
 def anurupye(a, b, c, d, e, f):
     a, b, c, d, e, f = map(rational, (a, b, c, d, e, f))
     determinant = a * e - b * d
@@ -173,8 +138,6 @@ def anurupye(a, b, c, d, e, f):
     else:
         raise ValueError("Neither coefficient column is proportional to the right-hand side")
     return evaluation(6, result, (determinant,) + result)
-
-
 def sankalana(a, b, c, d):
     a, b, c, d = map(rational, (a, b, c, d))
     if a + b == 0 or a - b == 0:
@@ -183,8 +146,6 @@ def sankalana(a, b, c, d):
     difference = (c - d) / (a - b)
     result = ((total + difference) / 2, (total - difference) / 2)
     return evaluation(7, result, (total, difference) + result)
-
-
 def purana(a, b, c):
     a, b, c = map(rational, (a, b, c))
     if a == 0:
@@ -193,14 +154,10 @@ def purana(a, b, c):
     k = c - b * b / (4 * a)
     roots = (h - sp.sqrt(-k / a), h + sp.sqrt(-k / a))
     return evaluation(8, (a, h, k, roots), (a, h, k))
-
-
 def calana(p):
     p = coefficients(p)
     result = tuple(i * p[i] for i in range(1, len(p))) or (sp.S.Zero,)
     return evaluation(9, result, result)
-
-
 def yavadunam(n, base):
     n, base = map(rational, (n, base))
     if base <= 0:
@@ -208,8 +165,6 @@ def yavadunam(n, base):
     deficiency = base - n
     left, right = (n - deficiency) * base, deficiency * deficiency
     return evaluation(10, left + right, (deficiency, left, right))
-
-
 def vyashti(a, b, total):
     a, b, total = map(rational, (a, b, total))
     middle, half_difference = (a + b) / 2, (a - b) / 2
@@ -218,8 +173,6 @@ def vyashti(a, b, total):
     roots = tuple(-middle + sign * sp.sqrt(-3 * n ** 2 + branch * delta)
                   for branch in (-1, 1) for sign in (-1, 1))
     return evaluation(11, roots, (middle, n, 2, 12 * n ** 2, 2 * n ** 4 - total))
-
-
 def sesanyankena(denominator):
     denominator = integer(denominator)
     if denominator <= 1 or gcd(denominator, 10) != 1:
@@ -232,8 +185,6 @@ def sesanyankena(denominator):
         if remainder == 1:
             break
     return evaluation(12, tuple(digits), digits)
-
-
 def sopantya(first, difference):
     first, difference = coefficients(first), coefficients(difference)
     if len(first) != 2 or len(difference) != 2:
@@ -259,8 +210,6 @@ def sopantya(first, difference):
             candidates.append(-d0 / d1)
         result = sp.FiniteSet(*(r for r in candidates if r not in excluded))
     return evaluation(13, result, (d0, d1, constant, linear))
-
-
 def ekanyunena(n, places):
     n, places = integer(n), integer(places)
     if places < 1:
@@ -268,8 +217,6 @@ def ekanyunena(n, places):
     base = 10 ** places
     left, right = (n - 1) * base, base - n
     return evaluation(14, left + right, (left, right))
-
-
 def gunitasamuccaya(factors):
     factors = tuple(coefficients(f) for f in factors)
     if not factors:
@@ -281,8 +228,6 @@ def gunitasamuccaya(factors):
     if sum(result) != total:
         raise ArithmeticError("The coefficient-sum identity failed")
     return evaluation(15, total, result)
-
-
 def gunakasamuccaya(factors):
     factors = tuple(coefficients(f) for f in factors)
     if not factors:
@@ -297,8 +242,6 @@ def gunakasamuccaya(factors):
             if coefficient != 0:
                 result[k] += coefficient
     return evaluation(16, tuple(result), result)
-
-
 def anurupyena(a, b, reference_base, ratio):
     a, b, reference_base, ratio = map(rational, (a, b, reference_base, ratio))
     if reference_base <= 0 or ratio <= 0:
@@ -307,8 +250,6 @@ def anurupyena(a, b, reference_base, ratio):
     da, db = base - a, base - b
     left, right = (a - db) * ratio, da * db
     return evaluation(17, left * reference_base + right, (ratio, da, db, left, right))
-
-
 def shishyate(dividend, divisors):
     dividend = integer(dividend)
     divisors = tuple(integer(d) for d in divisors)
@@ -318,8 +259,6 @@ def shishyate(dividend, divisors):
     if len({r for q, r in pairs}) != 1:
         raise ValueError("These divisions do not have a constant remainder")
     return evaluation(18, pairs, tuple(v for pair in pairs for v in pair))
-
-
 def shishyate_divisor(dividend, divisor):
     dividend, divisor = coefficients(dividend), coefficients(divisor)
     if len(divisor) < 2 or divisor[-1] == 0:
@@ -330,8 +269,6 @@ def shishyate_divisor(dividend, divisor):
     reduced_quotient, remainder = paravartya(dividend, tuple(c / lead for c in divisor)).value
     quotient = tuple(c / lead for c in reduced_quotient)
     return evaluation(18, (quotient, remainder), quotient + remainder)
-
-
 def adyam(quadratic, factor):
     c, b, a = coefficients(quadratic)
     q, p = coefficients(factor)
@@ -341,8 +278,6 @@ def adyam(quadratic, factor):
     if crosswise((q, p), result) != (c, b, a):
         raise ValueError("The supplied binomial is not a factor")
     return evaluation(19, result, (q, p) + result)
-
-
 def kevalaih(numerator):
     numerator = integer(numerator)
     if not 1 <= numerator <= 6:
@@ -350,8 +285,6 @@ def kevalaih(numerator):
     block = numerator * 143 * (1000 - 1)
     digits = tuple(int(d) for d in str(block).zfill(6))
     return evaluation(20, digits, digits)
-
-
 def osculate(n, divisor):
     n, divisor = integer(n), integer(divisor)
     if n < 0 or divisor <= 1 or gcd(divisor, 10) != 1:
@@ -360,8 +293,6 @@ def osculate(n, divisor):
     negative = divisor - positive
     prefix, digit = divmod(n, 10)
     return positive, negative, (prefix + positive * digit, prefix - negative * digit)
-
-
 def vestanam(n, divisor):
     positive, negative, _ = osculate(n, divisor)
     chains = []
@@ -378,16 +309,12 @@ def vestanam(n, divisor):
     if divisible != (chains[1][-1] % divisor == 0):
         raise ArithmeticError("Positive and negative osculation disagree")
     return evaluation(21, (divisible,) + tuple(chains), (positive, negative) + chains[0] + chains[1])
-
-
 def lessen(n, base):
     n, base = rational(n), rational(base)
     if base <= 0:
         raise ValueError("The base must be positive")
     deficiency = base - n
     return evaluation(22, n - deficiency, (n, deficiency, n - deficiency))
-
-
 def tavadunam_cube(n, base):
     n, base = rational(n), rational(base)
     if base <= 0:
@@ -395,13 +322,9 @@ def tavadunam_cube(n, base):
     deficiency = base - n
     left, middle, right = n - 2 * deficiency, 3 * deficiency * deficiency, -deficiency ** 3
     return evaluation(22, left * base * base + middle * base + right, (deficiency, left, middle, right))
-
-
 def extended_square(n, base):
     result = yavadunam(n, base)
     return evaluation(23, result.value, result.spectral_coefficients)
-
-
 def antyayordasakepi(a, b):
     a, b = integer(a), integer(b)
     if a >= 0 and b >= 0:
@@ -413,13 +336,9 @@ def antyayordasakepi(a, b):
                 left, right = pa * (pa + 1), da * db
                 return evaluation(24, base * base * left + right, (left, right))
     raise ValueError("Equal nonnegative prefixes and last parts totalling a power of ten are required")
-
-
 def samuccayagunitah(a, b):
     result = crosswise(a, b)
     return evaluation(26, sum(result), result)
-
-
 def lopana(a, b, c, xy, yz, zx):
     a, b, c, xy, yz, zx = map(rational, (a, b, c, xy, yz, zx))
     if a == 0:
@@ -435,8 +354,6 @@ def lopana(a, b, c, xy, yz, zx):
                 result = ((sp.S.One, p, q), (a, r, s))
                 return evaluation(27, result, result[0] + result[1])
     raise ValueError("The retained factors do not reconstruct the yz coefficient")
-
-
 def vilokanam(total, split, numerator=(0, 1), denominator=(1, 0), sign=1):
     total, split = rational(total), rational(split)
     sign = integer(sign)
@@ -456,8 +373,6 @@ def vilokanam(total, split, numerator=(0, 1), denominator=(1, 0), sign=1):
                        for ratio in (split, sign / split)))
     return evaluation(28, sp.Complement(roots, excluded),
                       (total, split, sign / split) + numerator + denominator)
-
-
 def antyayoreva(a, b, common, numerator_last, denominator_last):
     a, b = coefficients(a), coefficients(b)
     common = coefficients(common)
@@ -479,13 +394,9 @@ def antyayoreva(a, b, common, numerator_last, denominator_last):
         root = -constant / linear
         result = sp.S.EmptySet if B.subs(x, root) == 0 or (B * C + e).subs(x, root) == 0 else sp.FiniteSet(root)
     return evaluation(25, result, (d, e, constant, linear))
-
-
 def gunitasamuccaya_samuccayagunitah(factors):
     result = gunitasamuccaya(factors)
     return evaluation(29, (result.value, sum(result.spectral_coefficients)), result.spectral_coefficients)
-
-
 OPERATIONS = (
     ekadhikena, nikhilam, urdhva, paravartya, shunyam, anurupye, sankalana,
     purana, calana, yavadunam, vyashti, sesanyankena, sopantya, ekanyunena,
@@ -493,8 +404,6 @@ OPERATIONS = (
     vestanam, tavadunam_cube, extended_square, antyayordasakepi, antyayoreva,
     samuccayagunitah, lopana, vilokanam, gunitasamuccaya_samuccayagunitah,
 )
-
-
 def evaluate(sid, **parameters):
     sid = integer(sid)
     if not 1 <= sid <= 29:

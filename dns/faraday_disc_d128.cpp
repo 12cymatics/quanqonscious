@@ -134,7 +134,7 @@ const D128 wc = w[c];
 D128 radial = i == nr - 1 ? dNeg(dMul(bOut[i], wc)) : dMul(bOut[i], dSub(w[iw(i + 1, j)], wc));
 if (i > 0) radial = dSub(radial, dMul(bIn[i], dSub(wc, w[iw(i - 1, j)])));
 const D128 below = j == 1 ? dMul(wc, idzc[0]) : dMul(dSub(wc, w[iw(i, j - 1)]), idzc[j - 1]);
-const D128 vertical = j == nz ? dMul(dScale2(dSub(wz, below), 1), idzf[j])
+const D128 vertical = j == nz ? dMul(dSub(wz, below), idzf[j])
 : dMul(dSub(dMul(dSub(w[iw(i, j + 1)], wc), idzc[j]), below), idzf[j]);
 lw[c] = dSub(dAdd(radial, vertical), dMul(sM[i], wc));
 }

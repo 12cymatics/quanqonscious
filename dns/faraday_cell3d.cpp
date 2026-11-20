@@ -37,6 +37,9 @@ static double *fsr, *fst, *fsz, *kap, *psurf;
 static double *rbU, *sbW, *axEx;
 static double *hcolP, *hcolU, *hcolV, *hcolW;
 static double *fRlo, *fRhi, *fT, *fS;
+static const int POLYNOMIAL_STRIDE = 35;
+static double *polynomialTable = 0, *polynomialHash = 0;
+static int polynomialRows = 0, polynomialHashSize = 0, polynomialReady = 0;
 static const int IARENA = 400000;
 static int iarena[IARENA];
 static int iarenaUsed = 0;
@@ -76,6 +79,7 @@ int cell3d_init(int nr_, int nth_, int nz_, int pinned_,
 double R_, double h_, double rho_, double nu_,
 double gamma__, double g_, double dth_){
 arenaUsed = 0; lastError = 0; errI = -1; errK = -1;
+polynomialTable = 0; polynomialHash = 0; polynomialRows = 0; polynomialHashSize = 0; polynomialReady = 0;
 nr = nr_; nth = nth_; nz = nz_; nw = nz_ + 1; pinned = pinned_;
 R = R_; h = h_; rho = rho_; nu = nu_; gamma_ = gamma__; gBase = g_; dth = dth_;
 NU = (nr + 1)*nth*nz; NV = nr*nth*nz; NW = nr*nth*nw;
@@ -118,6 +122,86 @@ fRlo = take(nth*(nz + 1)); fRhi = take(nth*(nz + 1)); fT = take(nth*(nz + 1));
 fS = take(nz + 2);
 cgIters = 0; cgResidual = 0.0;
 return lastError;
+}
+static unsigned int polynomialKey(const double* nodes, int n){
+unsigned int hash = 2166136261u ^ (unsigned int)n;
+for (int i = 0; i < n; i++){
+union { double value; unsigned long long bits; } item;
+item.value = nodes[i] == 0.0 ? 0.0 : nodes[i];
+hash = (hash ^ (unsigned int)item.bits)*16777619u;
+hash = (hash ^ (unsigned int)(item.bits >> 32))*16777619u;
+}
+return hash;
+}
+static int polynomialSame(const double* row, const double* nodes, int n){
+if (row[0] != (double)n) return 0;
+for (int j = 0; j < n; j++) if (row[3+j] != nodes[j]) return 0;
+return 1;
+}
+double* cell3d_polynomialAllocate(int count){
+if (polynomialTable || count <= 0 || count > ARENA/POLYNOMIAL_STRIDE){ lastError = 10; return 0; }
+int capacity = 1;
+while (capacity < 2*count) capacity *= 2;
+if (arenaUsed + count*POLYNOMIAL_STRIDE + capacity > ARENA){ lastError = 1; return 0; }
+polynomialRows = count; polynomialHashSize = capacity;
+polynomialTable = take(count*POLYNOMIAL_STRIDE);
+polynomialHash = take(capacity);
+return polynomialTable;
+}
+double* cell3d_polynomialPtr(){ return polynomialTable; }
+int cell3d_polynomialRows(){ return polynomialRows; }
+int cell3d_polynomialCommit(){
+polynomialReady = 0;
+if (!polynomialTable || !polynomialHash || polynomialRows <= 0){ lastError = 10; return lastError; }
+for (int i = 0; i < polynomialHashSize; i++) polynomialHash[i] = 0.0;
+for (int i = 0; i < polynomialRows; i++){
+const double* row = polynomialTable + i*POLYNOMIAL_STRIDE;
+for (int j = 0; j < POLYNOMIAL_STRIDE; j++) if (!__builtin_isfinite(row[j])){ lastError = 10; errI = i; errK = j; return lastError; }
+if (row[0] < 1.0 || row[0] > 4.0 || !(row[2] > 0.0)){ lastError = 10; errI = i; errK = -1; return lastError; }
+const int n = (int)row[0];
+if (row[0] != (double)n){ lastError = 10; errI = i; errK = -1; return lastError; }
+for (int j = 0; j < n; j++) for (int k = 0; k < j; k++) if (row[3+j] == row[3+k]){ lastError = 10; errI = i; errK = j; return lastError; }
+unsigned int slot = polynomialKey(row+3,n)&(unsigned int)(polynomialHashSize-1);
+while (polynomialHash[slot] != 0.0){
+const int existing = (int)polynomialHash[slot]-1;
+if (polynomialSame(polynomialTable+existing*POLYNOMIAL_STRIDE,row+3,n)){ lastError = 10; errI = i; errK = existing; return lastError; }
+slot = (slot+1u)&(unsigned int)(polynomialHashSize-1);
+}
+polynomialHash[slot] = (double)(i+1);
+}
+polynomialReady = 1;
+return lastError;
+}
+static const double* polynomialLookup(const double* nodes, int n){
+if (!polynomialReady){ lastError = 11; __builtin_trap(); }
+if (n < 1 || n > 4){ lastError = 12; errI = n; __builtin_trap(); }
+unsigned int slot = polynomialKey(nodes,n)&(unsigned int)(polynomialHashSize-1);
+while (polynomialHash[slot] != 0.0){
+const int row = (int)polynomialHash[slot]-1;
+const double* entry = polynomialTable+row*POLYNOMIAL_STRIDE;
+if (polynomialSame(entry,nodes,n)) return entry;
+slot = (slot+1u)&(unsigned int)(polynomialHashSize-1);
+}
+lastError = 12; errI = n; errK = -1; __builtin_trap();
+}
+double cell3d_polynomialAt(const double* nodes, const double* values, int n, double x, int derivative){
+if (derivative != 0 && derivative != 1){ lastError = 12; errI = derivative; __builtin_trap(); }
+const double* row = polynomialLookup(nodes,n);
+if (!__builtin_isfinite(x)){ lastError = 13; __builtin_trap(); }
+for (int j = 0; j < n; j++) if (!__builtin_isfinite(values[j])){ lastError = 13; __builtin_trap(); }
+const double coordinate = (x-row[1])/row[2];
+const double a = values[0], b = values[n-1];
+const double anchor = a == b ? a : ((a >= 0) == (b >= 0) ? a+(b-a)*0.5 : a*0.5+b*0.5);
+double total = derivative ? 0.0 : anchor;
+for (int j = 0; j < n; j++){
+const double* coefficients = row+(derivative ? 23+j*3 : 7+j*4);
+const int degree = derivative ? n-2 : n-1;
+double weight = 0.0;
+for (int k = degree; k >= 0; k--) weight = weight*coordinate+coefficients[k];
+total += derivative ? weight*((values[j]-anchor)/row[2]) : weight*(values[j]-anchor);
+}
+if (!__builtin_isfinite(total)){ lastError = 13; __builtin_trap(); }
+return total;
 }
 int cell3d_error(){ return lastError; }
 int cell3d_errorI(){ return errI; }
@@ -269,6 +353,7 @@ default: return -1;
 }
 }
 void cell3d_buildFamilies(){
+if (!polynomialReady){ lastError = 11; return; }
 iarenaUsed = 0;
 rbU[0] = 0.0;
 for (int i = 0; i < nr; i++) rbU[i+1] = rc[i];
@@ -795,22 +880,8 @@ if (d > worst) worst = d;
 return worst;
 }
 static double polyDerivAt(const double* xs, const double* ys, int n, double x){
-double d = 0.0;
-for (int j = 0; j < n; j++){
-double den = 1.0;
-for (int m = 0; m < n; m++) if (m != j) den *= xs[j] - xs[m];
-double num = 0.0;
-for (int i = 0; i < n; i++){
-if (i == j) continue;
-double prod = 1.0;
-for (int m = 0; m < n; m++) if (m != j && m != i) prod *= x - xs[m];
-num += prod;
+return cell3d_polynomialAt(xs,ys,n,x,1);
 }
-d += ys[j]*num/den;
-}
-return d;
-}
-static const int TH_NODE[4] = { -2, -1, 1, 2 };
 static double HatHBr(int a, double r, double th){
 const double r0 = rx[a], r1 = rx[a+1];
 const double fr = (r - r0)/(r1 - r0);
@@ -878,14 +949,7 @@ j0 = lo - 1;
 } else j0 = (hasLev ? lev : 1) - 1;
 if (j0 + n > nJ) j0 = nJ - n;
 if (j0 < 0) j0 = 0;
-double v = 0.0;
-for (int i = 0; i < n; i++){
-double L = 1.0;
-for (int m = 0; m < n; m++)
-if (m != i) L *= (ss - sn[j0 + m])/(sn[j0 + i] - sn[j0 + m]);
-v += f[base + j0 + i]*L;
-}
-return sign*v;
+return sign*cell3d_polynomialAt(sn+j0,f+base+j0,n,ss,0);
 }
 static double colDerivAtZ(const double* f, const Fam& fam, int a, int k,
 double z, int lev, int hasLev){
@@ -989,8 +1053,11 @@ surfaceNormal(rc[i], (k + 0.5)*dth, n);
 double E[6];
 surfaceStrain(i, k, E);
 const double a = n[3], b = n[4], c = n[5];
-const double nEn = E[0]*a*a + E[1]*b*b + E[2]*c*c
-+ 2*(E[3]*a*b + E[4]*a*c + E[5]*b*c);
+const double qx = E[0]*a*a, qy = E[1]*b*b, qz = E[2]*c*c;
+const double qxy = (qx+qy)+(2*E[3]*a)*b;
+const double qyz = (qy+qz)+(2*E[5]*b)*c;
+const double qzx = (qz+qx)+(2*E[4]*a)*c;
+const double nEn = ((qxy+qyz)+qzx)-((qx+qy)+qz);
 return 2*rho*nu*nEn;
 }
 static void refreshSurfaceFluxRows(int i0, int i1){
@@ -1100,10 +1167,16 @@ ry4[m] = a2 > nI - 1 ? 0.0 : colValueAtZ(f, fam, a2, k, z, 0, 0, 1);
 }
 const double dSigR = polyDerivAt(rx4, ry4, 4, rn[a]);
 for (int m = 0; m < 4; m++){
-tx4[m] = (k + TH_NODE[m])*dth;
-ty4[m] = colValueAtZ(f, fam, a, k + TH_NODE[m], z, 0, 0, 1);
+tx4[m] = m-2;
+ty4[m] = colValueAtZ(f, fam, a, k+m-2, z, 0, 0, 1);
 }
-const double dSigTh = polyDerivAt(tx4, ty4, 4, k*dth);
+const double derivativeLeft = polyDerivAt(tx4, ty4, 4, 0);
+for (int m = 0; m < 4; m++){
+tx4[m] = m-1;
+ty4[m] = colValueAtZ(f, fam, a, k+m-1, z, 0, 0, 1);
+}
+const double derivativeRight = polyDerivAt(tx4, ty4, 4, 0);
+const double dSigTh = 0.5*(derivativeLeft+derivativeRight)/dth;
 fS[B - sLo] = proj*( dsg/hA[0]
 - sface*midS[0]*dSigR
 - (sface*midS[1]/(rn[a]*rn[a]))*dSigTh );
@@ -1126,6 +1199,7 @@ double* t = lo; lo = hi; hi = t;
 }
 }
 void cell3d_viscousRows(int hasBc, int i0, int i1){
+if (!polynomialReady){ lastError = 11; return; }
 refreshSurfaceFluxRows(i0 - 1, i1);
 famLaplacian(u, lapU, FAMU, hasBc, 1, i0, i1);
 famLaplacian(v, lapV, FAMV, hasBc, 2, i0, i1);
@@ -1386,6 +1460,7 @@ static double gEff = CELL3D_GRAVITY_UNSET;
 void cell3d_setGravity(double g){ gEff = g; }
 double cell3d_gravity(){ return gEff; }
 int cell3d_surfacePressure(double* out){
+if (!polynomialReady){ lastError = 11; return lastError; }
 if (gEff == CELL3D_GRAVITY_UNSET){ lastError = 6; return lastError; }
 const double g = gEff;
 cell3d_curvature(kap);
@@ -1397,20 +1472,26 @@ out[e] = rho*g*eta[e] - gamma_*kap[e] + surfaceNormalStress(i, k);
 return lastError;
 }
 int cell3d_stepBegin(double dt){
-if (!(dt > 0)){ lastError = 7; return lastError; }
+if (!pinned){ lastError = 14; return lastError; }
+if (!polynomialReady){ lastError = 11; return lastError; }
+if (!__builtin_isfinite(dt) || !(dt > 0)){ lastError = 7; return lastError; }
 cell3d_omegaFromW();
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++) Ht[ie(i, k)] = om[iw(i, k, nz)];
 return cell3d_surfacePressure(psurf);
 }
 int cell3d_stepExplicit(int i0, int i1){
+if (!pinned){ lastError = 14; return lastError; }
+if (!polynomialReady){ lastError = 11; return lastError; }
 cell3d_viscousRows(1, i0, i1);
 if (lastError) return lastError;
 cell3d_advectRows(i0, i1);
 return lastError;
 }
 int cell3d_stepFinish(double dt){
-if (!(dt > 0)){ lastError = 7; return lastError; }
+if (!pinned){ lastError = 14; return lastError; }
+if (!polynomialReady){ lastError = 11; return lastError; }
+if (!__builtin_isfinite(dt) || !(dt > 0)){ lastError = 7; return lastError; }
 for (int i = 1; i < nr; i++)
 for (int k = 0; k < nth; k++)
 for (int j = 0; j < nz; j++){
