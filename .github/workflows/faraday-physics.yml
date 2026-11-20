@@ -77,7 +77,7 @@ jobs:
             if(r.status!==0||r.signal||r.error)failed.push({file:s.file,status:r.status,signal:r.signal,error:r.error?.message});
           }
           if(failed.length)throw new Error(JSON.stringify(failed,null,2));
-          console.log(`${selected.length} calculation and unit suites executed in ${root}. Browser execution is tested in a separate workflow and is not established by this result.`);
+          console.log(`${selected.length} calculation suites executed`);
           JS
       - name: Verify packaged copies and archive
         if: always() && matrix.tree == '.'
