@@ -1,0 +1,24 @@
+Building ComparatorChallenges.Gate
+⚠ [3/3] Built ComparatorChallenges.Gate (1.1s)
+warning: ComparatorChallenges/Gate.lean:3:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:4:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:5:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:6:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:7:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:8:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:9:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:10:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:11:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:12:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:13:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:14:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:15:8: declaration uses `sorry`
+warning: ComparatorChallenges/Gate.lean:16:8: declaration uses `sorry`
+Build completed successfully (3 jobs).
+Exporting #[Quot, Quot.mk, Quot.lift, Quot.ind, ByteGate.check_sound, ByteGate.check_complete, ByteGate.byte_preservation, ByteGate.length_preservation, ByteGate.changed_bytes_rejected, ByteGate.replay_rejected, ByteGate.bad_signature_rejected, ByteGate.bad_digest_rejected, ByteGate.noncanonical_rejected, ByteGate.changed_code_rejected, ByteGate.wrong_parent_rejected, ByteGate.unknown_parent_rejected, ByteGate.accepted_once, ByteGate.chain_preserves_bytes, propext, Quot.sound, Classical.choice, Nat.add, Nat.sub, Nat.mul, Nat.pow, Nat.gcd, Nat.div, Nat.mod, Nat.beq, Nat.ble, Nat.land, Nat.lor, Nat.xor, Nat.shiftLeft, Nat.shiftRight, String.ofList, Char.ofNat, List, eagerReduce, Nat, String, String.mk, Char, optParam, autoParam, semiOutParam, outParam] from ComparatorChallenges.Gate
+Building Gate
+Build completed successfully (4 jobs).
+Exporting #[Quot, Quot.mk, Quot.lift, Quot.ind, ByteGate.check_sound, ByteGate.check_complete, ByteGate.byte_preservation, ByteGate.length_preservation, ByteGate.changed_bytes_rejected, ByteGate.replay_rejected, ByteGate.bad_signature_rejected, ByteGate.bad_digest_rejected, ByteGate.noncanonical_rejected, ByteGate.changed_code_rejected, ByteGate.wrong_parent_rejected, ByteGate.unknown_parent_rejected, ByteGate.accepted_once, ByteGate.chain_preserves_bytes, propext, Quot.sound, Classical.choice, Nat.add, Nat.sub, Nat.mul, Nat.pow, Nat.gcd, Nat.div, Nat.mod, Nat.beq, Nat.ble, Nat.land, Nat.lor, Nat.xor, Nat.shiftLeft, Nat.shiftRight, String.ofList, Char.ofNat, List, eagerReduce, Nat, String, String.mk, Char, optParam, autoParam, semiOutParam, outParam] from Gate
+Running Lean default kernel on solution.
+Lean default kernel accepts the solution
+Your solution is okay!

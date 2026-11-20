@@ -1,0 +1,26 @@
+Build this exactly
+
+MANDATORY BYTE-EXACT CRYPTOGRAPHIC DELEGATION CONTRACT
+
+1. Treat the first line of this file, excluding its terminating newline, as the original three-word instruction. Its exact UTF-8 bytes in hexadecimal are:
+42 75 69 6c 64 20 74 68 69 73 20 65 78 61 63 74 6c 79
+
+2. Preserve the complete UTF-8 bytes of this entire instruction file as the authoritative specification. Do not paraphrase, normalize Unicode, change line endings, trim whitespace, re-encode, or substitute summaries. Use the attached original file bytes, not reconstructed text.
+
+3. Before any delegation, compute SHA-256 over the authoritative file bytes. Store the byte length and digest in a versioned manifest. Bind the manifest and original bytes using an Ed25519 signature generated with a protected signing key. Never invent a digest or signature; calculate them from the actual bytes. Verify the signature against a pinned trusted public key.
+
+4. Serialize every handoff in a canonical, versioned byte format. Include the exact authoritative instruction bytes, source byte length, SHA-256 digest, assigned operation as a separate field, parent-envelope digest, unique handoff identifier, and signing-key identifier. Define the canonical encoding precisely, including Unicode handling, field ordering, integer representation, and signature scope.
+
+5. Before execution, every receiving agent must verify the envelope signature, canonical encoding, byte length, SHA-256 digest, and byte-for-byte equality against the trusted authoritative instruction. Reject missing, altered, unsigned, replayed, mis-parented, or unverifiable handoffs. Fail closed; do not run a substitute task.
+
+6. An assigned operation may narrow the immediate work allocation but must not redefine, omit, weaken, or replace any original completion requirement. Every downstream agent must receive the original bytes and an independently authenticated handoff. Preserve an append-only audit trail of handoffs and verified receipt acknowledgments.
+
+7. Implement a Lean 4 formal model and mechanically check proofs for byte preservation, handoff-chain invariants, and rejection conditions. Connect the formal model to executable code using an explicit verified refinement or clearly identify any unverified trust boundary. Do not describe uncompiled Lean files as verified proofs.
+
+8. Implement the actual production enforcement gate, not merely a document, example, test harness, or advisory instruction. No agent action may begin until its authenticated handoff passes validation. Provide reproducible positive and adversarial tests, including changed bytes, changed task, changed parent, invalid signature, replay, and missing original bytes.
+
+9. The objective is a functioning, enforced Lean 4 plus executable cryptographic handoff system. Passing tests, reports, code cleanup, packaging, and partial demonstrations are not substitutes for working enforcement. Never claim completion unless every stated acceptance condition is satisfied.
+
+10. Do not claim cryptography proves semantic obedience or mathematical correctness. Separately verify that the delivered implementation performs the user's actual requested functionality. Report any unproved trust assumptions without presenting them as completed verification.
+
+11. Before beginning any execution or delegation, repeat the original three-word instruction exactly and ask for the user's permission to continue. Do not start until the user explicitly authorizes continuation.

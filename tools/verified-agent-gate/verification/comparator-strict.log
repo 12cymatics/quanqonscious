@@ -1,0 +1,3 @@
+Building ComparatorChallenges.Gate
+[landrun:error] 2026/11/20 14:16:14 Failed to apply sandbox: failed to apply Landlock restrictions: missing kernel Landlock support. Got Landlock ABI v0, wanted {Landlock V9; FS: all; Net: all; Scoped: all}
+uncaught exception: Child exited with 1

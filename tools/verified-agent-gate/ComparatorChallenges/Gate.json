@@ -1,0 +1,25 @@
+{
+  "challenge_module": "ComparatorChallenges.Gate",
+  "solution_module": "Gate",
+  "theorem_names": [
+    "ByteGate.check_sound",
+    "ByteGate.check_complete",
+    "ByteGate.byte_preservation",
+    "ByteGate.length_preservation",
+    "ByteGate.changed_bytes_rejected",
+    "ByteGate.replay_rejected",
+    "ByteGate.bad_signature_rejected",
+    "ByteGate.bad_digest_rejected",
+    "ByteGate.noncanonical_rejected",
+    "ByteGate.changed_code_rejected",
+    "ByteGate.wrong_parent_rejected",
+    "ByteGate.unknown_parent_rejected",
+    "ByteGate.accepted_once",
+    "ByteGate.chain_preserves_bytes"
+  ],
+  "permitted_axioms": [
+    "propext",
+    "Quot.sound",
+    "Classical.choice"
+  ]
+}

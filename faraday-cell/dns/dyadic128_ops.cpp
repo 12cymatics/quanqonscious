@@ -1,9 +1,7 @@
 #include "dyadic128.hpp"
-
 static const int CAP = 8192;
 static D128 A[CAP], B[CAP], O[CAP];
 static i32 C[CAP];
-
 extern "C" {
 D128 *bufA(){ return A; }
 D128 *bufB(){ return B; }

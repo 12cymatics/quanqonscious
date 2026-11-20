@@ -1,0 +1,7 @@
+✔ [2/8] Built Defs (1.8s)
+✔ [3/8] Built Defs:c.o (594ms)
+✔ [4/8] Built Gate (945ms)
+✔ [5/8] Built Gate:c.o (97ms)
+✔ [6/8] Built Main (3.5s)
+✔ [8/8] Built bytegate:exe (2.5s)
+Build completed successfully (8 jobs).

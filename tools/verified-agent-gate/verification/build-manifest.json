@@ -1,0 +1,67 @@
+[
+  {
+    "bytes": 28330,
+    "path": "gate.py",
+    "sha256": "fc9744e1fbd390e486d99c7d6ae9929862c68bd6b79d5d87103bc1016c28944f"
+  },
+  {
+    "bytes": 4477,
+    "path": "snapshot.py",
+    "sha256": "1062f63355a696fe43b9f47864100ab3b84484263a50c1fbb8ab9fb6cd629ab4"
+  },
+  {
+    "bytes": 1278,
+    "path": "Defs.lean",
+    "sha256": "16133c43fbe1eadb4a95108f1845490fb8b5c227c73effe5e6af78dda2bf84e9"
+  },
+  {
+    "bytes": 2449,
+    "path": "Gate.lean",
+    "sha256": "d2b07b48f9b153e3105e4df456c3e3ff0fa17d07bc0424d7c5dfe49f4a5fe7d5"
+  },
+  {
+    "bytes": 1640,
+    "path": "Main.lean",
+    "sha256": "28b896646a15cb3a7a70bbcecd1a18ea47a075fcee93543e8dc1870d4ef97f7f"
+  },
+  {
+    "bytes": 607,
+    "path": "Audit.lean",
+    "sha256": "3bd7f05b8f614a4e9c5de67df1496138b38c287d9279171b356c2364920d1e19"
+  },
+  {
+    "bytes": 232,
+    "path": "lakefile.lean",
+    "sha256": "3ac806ca554119c9fb3ffb4e7e7203f7df16aa2bacd8fb8103b3d8ee70a6ded9"
+  },
+  {
+    "bytes": 25,
+    "path": "lean-toolchain",
+    "sha256": "d5edba4e4b8faad9c1baeadb265716d20d03be4d1a2647dc5e35b0c0325bea7b"
+  },
+  {
+    "bytes": 21,
+    "path": "requirements.txt",
+    "sha256": "56e6301f491d336997805ec0e824b163ce5797a708440d68f52b6c3e60d63909"
+  },
+  {
+    "bytes": 10167,
+    "path": "test_gate.py",
+    "sha256": "17fffa63667af34052cf360005135805f8d885dcc901f542e66b9b37841df128"
+  },
+  {
+    "bytes": 1442,
+    "path": "ComparatorChallenges/Gate.lean",
+    "sha256": "bbc63ba535412001c1ba541e1e7aa1491feb13db56a3ccbd1ce492de2c847d60"
+  },
+  {
+    "bytes": 690,
+    "path": "ComparatorChallenges/Gate.json",
+    "sha256": "2dd224ea3f8d9c3369b8ee4553629483b60aa577de85383a3eee372f5ea78641"
+  },
+  {
+    "bytes": 82164512,
+    "path": ".lake/build/bin/bytegate",
+    "sha256": "594ebf19f9976139245d3f1829bf394204e0c3bbd5e293bf50557b215a0ab62b"
+  }
+]

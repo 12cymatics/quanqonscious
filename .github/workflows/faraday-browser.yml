@@ -1,1 +1,82 @@
-
+name: Faraday browser execution
+on:
+  push:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'package.json', 'package-lock.json', '.github/workflows/faraday-browser.yml']
+  pull_request:
+    paths: ['dns/**', 'faraday/**', 'faraday-cell/**', 'faraday-cell.zip', 'boundary/**', 'fsi/**', 'cymatic.html', 'package.json', 'package-lock.json', '.github/workflows/faraday-browser.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Browser execution in ${{ matrix.tree }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: ['.', 'faraday-cell', 'archive']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install archive extraction prerequisite
+        if: matrix.tree == 'archive'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+      - name: Prepare selected source tree
+        env:
+          FARADAY_TARGET: ${{ matrix.tree }}
+        run: |
+          node --input-type=module <<'JS'
+          import {appendFileSync,mkdtempSync,realpathSync,statSync} from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          import {join,sep} from 'node:path';
+          const workspace=realpathSync(process.env.GITHUB_WORKSPACE);
+          const target=process.env.FARADAY_TARGET;
+          let root;
+          if(target==='archive'){
+            const unpacked=realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP,'faraday-archive-')));
+            if(unpacked===workspace||unpacked.startsWith(workspace+sep))throw new Error('Archive validation must run outside the checkout');
+            execFileSync('unzip',['-q',join(workspace,'faraday-cell.zip'),'-d',unpacked],{stdio:'inherit'});
+            root=realpathSync(join(unpacked,'faraday-cell'));
+            if(!root.startsWith(unpacked+sep))throw new Error('Extracted source escaped its isolated directory');
+          }else{
+            if(target!=='.'&&target!=='faraday-cell')throw new Error('Unknown source target: '+target);
+            root=realpathSync(join(workspace,target));
+          }
+          if(!statSync(join(root,'faraday/build-zip.mjs')).isFile())throw new Error('Required suite manifest is missing');
+          appendFileSync(process.env.GITHUB_ENV,'SOURCE_TREE='+root+'\n');
+          console.log('Selected '+target+' source tree: '+root);
+          JS
+      - name: Check browser prerequisite
+        run: |
+          test -x /usr/bin/google-chrome
+          /usr/bin/google-chrome --version
+      - name: Execute real browser, worker and rendering assertions
+        working-directory: ${{ env.SOURCE_TREE }}
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {spawnSync} from 'node:child_process';
+          import {resolve,join} from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          const root=resolve(process.env.SOURCE_TREE);
+          assert.equal(process.cwd(),root);
+          const {SUITES}=await import(pathToFileURL(join(root,'faraday/build-zip.mjs')));
+          const {SUITES:required}=await import(pathToFileURL(join(process.env.GITHUB_WORKSPACE,'faraday/build-zip.mjs')));
+          assert.deepEqual(SUITES,required,'Selected tree must retain every required suite and argument');
+          const selected=SUITES.filter(s=>s.browser);
+          if(!selected.length)throw new Error('No browser suites selected');
+          const failed=[];
+          for(const s of selected){
+            console.log('Executing '+join(root,s.file));
+            const r=spawnSync(s.interpreter||process.execPath,[join(root,s.file),...(s.args||[])],{cwd:root,stdio:'inherit'});
+            if(r.status!==0||r.signal||r.error)failed.push({file:s.file,status:r.status,signal:r.signal,error:r.error?.message});
+          }
+          if(failed.length)throw new Error(JSON.stringify(failed,null,2));
+          console.log(`${selected.length} browser suites executed in ${root}. Calculation suites are tested in a separate workflow and are not established by this result.`);
+          JS
