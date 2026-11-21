@@ -10,6 +10,10 @@ import sympy as sp
 UPSTREAM_COMMIT = 'efcbaa6869028abb633878b8997610bdd5f6b019'
 UPSTREAM_BLOB = 'dc1064e70c0ef68b3ed9cce31601f3dc2a0aade8'
 UPSTREAM_URL = 'https://github.com/12cymatics/quanqonscious/blob/' + UPSTREAM_COMMIT + '/vedic_book.py'
+SOURCE_COMMIT = '0e890a3282e464e635fbe1e7f2f595013552f0d1'
+SOURCE_BLOB = '6988cad41bb0d27f92e5a4ddcf50bdd6ab227cd9'
+SOURCE_SHA256 = 'f689f551817bbf8d77b0536ebb73ad3b478b5d3835c22275089c796b9ee9e944'
+SOURCE_URL = 'https://github.com/12cymatics/quanqonscious/blob/' + SOURCE_COMMIT + '/vedic_book.py'
 BOOK_URL = 'https://archive.org/details/vedic-mathematics-bharati-krishna-tirth-ji-maharaj'
 CORRECTION_URL = 'https://github.com/12cymatics/quanqonscious/pull/172'
 CORRECTION_COMMIT = 'aee61f40a967ea08bf5e8879edd1da9c9e47d624'
@@ -22,7 +26,9 @@ def require(condition, message):
 def load_book(path):
     source = path.read_bytes()
     actual = hashlib.sha1(b'blob ' + str(len(source)).encode('ascii') + b'\x00' + source).hexdigest()
-    require(actual == UPSTREAM_BLOB, f'Book source differs from pinned Git blob: {actual}; expected {UPSTREAM_BLOB}')
+    require(actual == SOURCE_BLOB, f'Book source differs from pinned Git blob: {actual}; expected {SOURCE_BLOB}')
+    digest = hashlib.sha256(source).hexdigest()
+    require(digest == SOURCE_SHA256, f'Book source differs from pinned SHA-256: {digest}; expected {SOURCE_SHA256}')
     spec = importlib.util.spec_from_file_location('pressure_verified_book', path)
     require(spec is not None and spec.loader is not None, 'Cannot load pinned book module')
     module = importlib.util.module_from_spec(spec)
@@ -175,11 +181,11 @@ def corrected_method_checks(book):
             raise CheckFailure(f'Invalid input accepted: {name}')
     return {'printed_page57_divisions': len(examples), 'printed_page19_constant_remainder': 'PASS', 'printed_cube9989': 'PASS', 'independent_cube_checks': cubes, 'invalid_operand_rejections': len(invalid)}
 def main():
-    parser = argparse.ArgumentParser(description='Exact arithmetic checks for pressure in a surface-following coordinate.\n\nRun with the unchanged, pinned upstream arithmetic module:\n  python dns/check-book-pressure.py\nAn explicit --book /path/to/vedic_book.py can select the same pinned source.\n\nThe named book procedures are used as implemented in that module: coefficient\nconvolution (Urdhva), polynomial differentiation (Calana), and the complete\nfactor product derivative (Gunakasamuccaya). Coordinate bookkeeping and the\nchain rule retain their ordinary mathematical names. No fluid solver is\nreplaced, approximated, or relabelled by this verification program.\n\nThe manufactured surface is H=h+A*(1-(x*x+y*y)/R**2)**2, with h,A,R positive.\nIt has pinned elevation at the circular rim. Its additional zero rim slope\nbelongs to this test field and is not imposed as an extra solver condition.\nFor z=sigma*H and q=q0+a*x+b*y+c*sigma*H, the complete coordinate chain rule\nmust give the physical gradient (a,b,c), including every metric-slope term.\n\nThis verifies exact arithmetic and an analytic identity. It does not execute\nthe production discretization or establish convergence, fluid validation,\nor experimental agreement. Those remain separate, required solver checks.\n')
-    parser.add_argument('--book', type=Path, default=Path(__file__).resolve().parent.parent / 'vedic_book.py', help='Unchanged vedic_book.py from the pinned upstream commit (default: repository root)')
+    parser = argparse.ArgumentParser(description='Exact arithmetic checks for pressure in a surface-following coordinate.\n\nRun with the pinned, blank-line-cleaned arithmetic module:\n  python dns/check-book-pressure.py\nAn explicit --book /path/to/vedic_book.py can select the same pinned source.\n\nThe named book procedures are used as implemented in that module: coefficient\nconvolution (Urdhva), polynomial differentiation (Calana), and the complete\nfactor product derivative (Gunakasamuccaya). Coordinate bookkeeping and the\nchain rule retain their ordinary mathematical names. No fluid solver is\nreplaced, approximated, or relabelled by this verification program.\n\nThe manufactured surface is H=h+A*(1-(x*x+y*y)/R**2)**2, with h,A,R positive.\nIt has pinned elevation at the circular rim. Its additional zero rim slope\nbelongs to this test field and is not imposed as an extra solver condition.\nFor z=sigma*H and q=q0+a*x+b*y+c*sigma*H, the complete coordinate chain rule\nmust give the physical gradient (a,b,c), including every metric-slope term.\n\nThis verifies exact arithmetic and an analytic identity. It does not execute\nthe production discretization or establish convergence, fluid validation,\nor experimental agreement. Those remain separate, required solver checks.\n')
+    parser.add_argument('--book', type=Path, default=Path(__file__).resolve().parent.parent / 'vedic_book.py', help='Exact vedic_book.py bytes from the pinned cleaned source commit (default: repository root)')
     args = parser.parse_args()
     book = load_book(args.book)
-    report = {'status': 'PASS', 'notice': 'Exact arithmetic and analytic coordinate identity only; production solver and physical validation are separate.', 'book': {'title': 'Vedic Mathematics', 'author': 'Bharati Krishna Tirthaji', 'edition': '1992 revised edition, 2010/2012 reprint', 'url': BOOK_URL, 'method_pages': {'coefficient_convolution': [33, 34, 35, 36], 'polynomial_derivative': [145, 175, 176, 177, 178], 'full_factor_product_derivative': [175, 176, 177, 178]}}, 'unchanged_source': {'url': UPSTREAM_URL, 'commit': UPSTREAM_COMMIT, 'git_blob': UPSTREAM_BLOB}, 'historical_correction': {'url': CORRECTION_URL, 'commit': CORRECTION_COMMIT, 'attribution': 'Claude-authored correction; independently checked here', 'printed_pages': [19, 57, 288, 289], 'introductory_cube_page': 'xliii'}, 'pressure_derivation': derive_pressure(book), 'corrected_arithmetic_regressions': corrected_method_checks(book)}
+    report = {'status': 'PASS', 'notice': 'Exact arithmetic and analytic coordinate identity only; production solver and physical validation are separate.', 'book': {'title': 'Vedic Mathematics', 'author': 'Bharati Krishna Tirthaji', 'edition': '1992 revised edition, 2010/2012 reprint', 'url': BOOK_URL, 'method_pages': {'coefficient_convolution': [33, 34, 35, 36], 'polynomial_derivative': [145, 175, 176, 177, 178], 'full_factor_product_derivative': [175, 176, 177, 178]}}, 'verified_source': {'url': SOURCE_URL, 'commit': SOURCE_COMMIT, 'git_blob': SOURCE_BLOB, 'sha256': SOURCE_SHA256}, 'source_provenance': {'upstream_url': UPSTREAM_URL, 'upstream_commit': UPSTREAM_COMMIT, 'upstream_git_blob': UPSTREAM_BLOB, 'transformation': 'Removed 91 empty lines; every other source byte is unchanged.'}, 'historical_correction': {'url': CORRECTION_URL, 'commit': CORRECTION_COMMIT, 'attribution': 'Claude-authored correction; independently checked here', 'printed_pages': [19, 57, 288, 289], 'introductory_cube_page': 'xliii'}, 'pressure_derivation': derive_pressure(book), 'corrected_arithmetic_regressions': corrected_method_checks(book)}
     print(json.dumps(report, indent=2, ensure_ascii=False))
 if __name__ == '__main__':
     try:

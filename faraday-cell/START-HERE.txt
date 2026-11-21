@@ -1,4 +1,4 @@
-Open index.html in a full desktop browser. It contains the simulator and embedded solvers.
+Open index.html in a full browser with JavaScript, Web Workers and WebAssembly. It contains the simulator and embedded solvers.
 Do not open it in a static attachment or Files preview.
 No installation or server is needed for index.html.
 The source page cymatic.html requires a local HTTP server.

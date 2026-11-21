@@ -5,7 +5,7 @@ The velocity arrows are visible by default. Their fixed drawing scale is 1000 se
 ## Start here
 
 Extract the ZIP, open the faraday-cell folder, then open **index.html** in a
-full desktop browser such as Safari, Chrome or Firefox. This is the complete
+full browser such as Safari, Chrome or Firefox. This is the complete
 standalone simulator, not a link or a launcher requiring Node. No installation
 is needed. A static attachment or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
@@ -19,8 +19,10 @@ show or hide layers of this scene; they do not switch to another simulation.
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
 server described below. Running from a folder does not itself accelerate the
-numerical solver. The 3D drawing requires WebGL2; all fluid calculations remain
-in double precision on the CPU.
+numerical solver. The 3D view uses WebGL2 when available and otherwise draws the
+same computed geometry with the Canvas2D software renderer. The active renderer
+is shown in the interface. Both display the same physical frames, camera and
+layers; all fluid calculations remain in double precision on the CPU.
 
 The page draws the specified initial surface at **t = 0**, then starts the
 nonlinear solver. **Pause/Resume** retains the computed fluid and particle state;
@@ -50,7 +52,9 @@ depth, density, viscosity, surface tension, gravity and drive acceleration are
 explicit inputs. The reference paper's apparatus presets and atlas are optional
 comparisons. They do not determine the general experiment's nonlinear physics.
 
-The packaged application needs a desktop browser. JavaScript checks need Node;
+The packaged application needs a browser that executes JavaScript, Web Workers
+and WebAssembly. Use the hosted page on mobile devices whose file previews do
+not execute applications. JavaScript checks need Node;
 the exact book-derived verification needs Python 3 and SymPy 1.14.0, and rebuilding
 the WebAssembly checks needs clang with the wasm32 target and lld. The application
 itself does not call an external API or require those verification tools.
@@ -140,7 +144,7 @@ The solvers:
 | `dns/faraday-cell3d.js` | The three-dimensional **nonlinear** solver: every azimuthal mode at once and coupled, in a domain that follows the surface. This is what the page draws. |
 | `dns/cell3d-observation.js` | Physical-height velocity reconstruction and geometry from the actual staggered solver fields. |
 | `dns/cell3d-tracers.js` | Passive fluid-tracer transport on the solver clock. |
-| `faraday/scene3d.js` | The WebGL2 vessel, surface, particle and velocity-vector renderer, orbit camera and captured-state image export. |
+| `faraday/scene3d.js` | WebGL2 and Canvas2D rendering of the same vessel, surface, particles and velocity vectors, with the shared orbit camera and captured-state image export. |
 | `dns/faraday_disc.cpp`, `dns/faraday_disc.wasm` | The two-dimensional solver again in C++, compiled to WebAssembly, bit for bit against the JavaScript. `dns/build-wasm.sh` rebuilds it. |
 | `dns/faraday_cell3d.cpp`, `dns/faraday_cell3d.wasm` | **The three-dimensional solver in C++**, likewise compiled to WebAssembly and likewise bit for bit — operator by operator and then over a whole drive period, 894 steps at 12 × 24 × 8, every element by `Object.is`. `dns/build-wasm-cell3d.sh` rebuilds it; neither needs Emscripten, only `clang` with the wasm32 target and `lld`. |
 | `dns/faraday-floquet.js`, `dns/faraday-dns.js` | The Floquet machinery and the periodic-box solver the disc one was built from. |
@@ -179,8 +183,8 @@ Faraday waves live on), `periods`, `frames`, `contact` (`pinned`),
 **Threads.** The page's *solver threads* control, and `--threads N` in
 `dns/run-cell3d.mjs`, spread each step's viscous and advective terms over that
 many threads, the solver's own included. The page offers up to the number of
-cores the browser reports and starts at one fewer, which leaves the drawing a
-core. The answer is the same to the bit on any number of threads:
+cores the browser reports and starts with one solver thread. The answer is the
+same to the bit on any number of threads:
 `dns/check-cell3d-pool.mjs` holds it to the single-threaded step with `Object.is`
 on one to five workers in both engines, and `dns/check-page.mjs` replays the
 page's own threaded run on one thread and compares again. What changes is the
