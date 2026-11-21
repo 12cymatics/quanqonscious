@@ -2,5 +2,5 @@ Open index.html in a full browser with JavaScript, Web Workers and WebAssembly. 
 Do not open it in a static attachment or Files preview.
 No installation or server is needed for index.html.
 The source page cymatic.html requires a local HTTP server.
-The nonlinear Navier-Stokes solver is not real-time at its strict accuracy grid.
+The liquid evolves on the selected numerical grid; the display reports computed physical time.
 See README.md for modes, tests and numerical limitations.

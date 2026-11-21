@@ -1,6 +1,6 @@
 # faraday-cell
 
-The velocity arrows are visible by default. Their fixed drawing scale is 1000 seconds: arrow length equals velocity multiplied by that scale, not a predicted particle trajectory. The displacement magnification is likewise display-only; neither scale changes the computed fluid or tracer coordinates.
+The original stone basin and its controls are restored around the current nonlinear liquid solver. TOP, 3D and MICRO inspect the same computed surface. Stone material, wall and base controls update the rigid basin; frequency, stroke and liquid controls feed the actual simulation. See `docs/BASIN_RESTORATION.md` for source provenance, unit conversions and numerical resolution.
 
 ## Start here
 
@@ -10,11 +10,11 @@ standalone simulator, not a link or a launcher requiring Node. No installation
 is needed. A static attachment or iPhone Files preview may display the controls
 without executing JavaScript; the startup notice will remain visible there.
 
-The app opens one **3D Navier–Stokes** scene. Its free surface, sand-coloured
-flow tracers and velocity vectors share the same computed state and physical
-clock. Drag to orbit, scroll to zoom, and use the view controls to inspect the
-vessel from above or return to the initial camera. Surface and particle controls
-show or hide layers of this scene; they do not switch to another simulation.
+The app opens the original **stone water basin** with the current Navier–Stokes
+free surface. Optional flow tracers and velocity vectors share that state and
+physical clock. Drag to orbit, scroll to zoom, or choose TOP, 3D or MICRO. The
+microscope field is specified in micrometres. The material, wall and base controls
+change the visible rigid vessel immediately.
 
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
@@ -32,10 +32,21 @@ clock and measured wall time make progress visible. The C++ and JavaScript
 engines solve the same discretized equations. Detailed fluid, geometry,
 initial-condition and numerical settings remain explicit inputs.
 
-The vertical displacement scale is a visible drawing setting, initially
-**5000×**, because the default initial displacement is microscopic relative to
-the vessel diameter. Select **1×** for metric displacement. This fixed setting
-never changes the solver or renormalizes a new frame to its own peak.
+The restored vertical displacement scale is **100×**, with a fixed surface
+colour scale of **0.1 µm**. Both are visible display settings. Select **1×** for
+metric displacement. Neither setting changes the solver or renormalizes a new
+frame to its own peak. Velocity arrows, when enabled, use their explicit drawing
+scale; they are not predicted particle trajectories.
+
+The original **12 × 24 × 8** mesh is shown explicitly and can be changed. At the
+original 4,392 Hz drive, this mesh is too coarse to resolve the approximately
+0.456 mm capillary wavelength. The interface displays that resolution and retains
+the automatic grid calculation. Restoring the controls does not turn the coarse
+original setting into a convergence-validated high-frequency solution.
+
+Changing valid physical settings restarts a running experiment with the new
+values. A deliberately paused experiment remains paused. Material, display
+scale and camera edits do not restart the liquid computation.
 
 The sand-coloured particles are **passive flow tracers**, advected by the actual
 computed fluid velocity and physical time. They reveal the same flow as the
