@@ -76,11 +76,16 @@ All 29 named book methods and their derived polynomial extensions are mapped in
 `docs/BOOK_POLYNOMIAL_METHODS.md`. The executable modules in `dns/vedic-*.js`
 construct exact rational interpolation, derivative, moment and flux coefficients.
 The selected JavaScript or WebAssembly solver consumes the numerical tables in
-its pressure, viscosity, traction and adaptive time-step calculations.
+its conservative momentum transport, pressure, viscosity, traction and adaptive
+time-step calculations. Transport uses the polynomial projection and its transpose
+together, preserving the discrete kinetic-energy identity without field clipping.
+The per-method consumers and independent calculations are listed in
+`docs/SUTRA_EVOLUTION_VERIFICATION.md`.
 
 The line below the solver status reports polynomial integrals for the displayed
 frame. **Save polynomial coefficients and frame integrals** downloads a JSON
-record containing exact rational coefficients, the actual runtime stencil bytes,
+record containing exact rational coefficients, the actual runtime interpolation
+and momentum-transport coefficient bytes,
 frame values and a SHA-256 digest of the serialized coefficient payload. Recorded
 playback exports the selected recorded frame. An analytic preview before solver
 initialization has no computed integral export.

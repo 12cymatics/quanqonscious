@@ -11,6 +11,7 @@ for (unsigned long i = 0; i < n; i++) d[i] = q[i];
 return dst;
 }
 #define CELL3D_GRAVITY_UNSET (-1.0e308)
+static double gEff = CELL3D_GRAVITY_UNSET;
 static const int ARENA = 12000000;
 static double arena[ARENA];
 static int arenaUsed = 0;
@@ -40,11 +41,15 @@ static double *fRlo, *fRhi, *fT, *fS;
 static const int POLYNOMIAL_STRIDE = 35;
 static double *polynomialTable = 0, *polynomialHash = 0;
 static int polynomialRows = 0, polynomialHashSize = 0, polynomialReady = 0;
+static const int TRANSPORT_STRIDE = 35;
+static double* transportTable = 0;
+static int transportRows = 0, transportReady = 0;
 static const int IARENA = 400000;
 static int iarena[IARENA];
 static int iarenaUsed = 0;
 static int* itake(int n){
-if (iarenaUsed + n > IARENA){ lastError = 1; return iarena; }
+if (lastError) __builtin_trap();
+if (n < 0 || n > IARENA - iarenaUsed){ lastError = 1; __builtin_trap(); }
 int* q = iarena + iarenaUsed; iarenaUsed += n;
 for (int i = 0; i < n; i++) q[i] = 0;
 return q;
@@ -61,7 +66,8 @@ double* Hcol;
 };
 static Fam FAMP, FAMU, FAMV, FAMW;
 static double* take(int n){
-if (arenaUsed + n > ARENA){ lastError = 1; return arena; }
+if (lastError) __builtin_trap();
+if (n < 0 || n > ARENA - arenaUsed){ lastError = 1; __builtin_trap(); }
 double* q = arena + arenaUsed; arenaUsed += n;
 for (int i = 0; i < n; i++) q[i] = 0.0;
 return q;
@@ -80,6 +86,13 @@ double R_, double h_, double rho_, double nu_,
 double gamma__, double g_, double dth_){
 arenaUsed = 0; lastError = 0; errI = -1; errK = -1;
 polynomialTable = 0; polynomialHash = 0; polynomialRows = 0; polynomialHashSize = 0; polynomialReady = 0;
+transportTable = 0; transportRows = 0; transportReady = 0;
+gEff = CELL3D_GRAVITY_UNSET;
+if (nr_ < 4 || nth_ < 8 || (nth_ & 1) || nz_ < 4 || nr_ > ARENA || nth_ > ARENA || nz_ > ARENA){ lastError = 18; return lastError; }
+if (nr_ > ARENA/nth_ || nr_*nth_ > ARENA/(nz_+1)){ lastError = 1; return lastError; }
+if (nr_ > ARENA/nz_ || nr_*nz_ > ARENA/(nz_+1) || nr_*nz_*(nz_+1) > ARENA/((nth_ >> 1)+1)){ lastError = 1; return lastError; }
+const double parameters[] = {R_,h_,rho_,nu_,gamma__,g_,dth_};
+for (int i = 0; i < 7; i++) if (!__builtin_isfinite(parameters[i]) || (i == 5 ? parameters[i] < 0.0 : !(parameters[i] > 0.0))){ lastError = 18; errI = i; return lastError; }
 nr = nr_; nth = nth_; nz = nz_; nw = nz_ + 1; pinned = pinned_;
 R = R_; h = h_; rho = rho_; nu = nu_; gamma_ = gamma__; gBase = g_; dth = dth_;
 NU = (nr + 1)*nth*nz; NV = nr*nth*nz; NW = nr*nth*nw;
@@ -139,6 +152,7 @@ for (int j = 0; j < n; j++) if (row[3+j] != nodes[j]) return 0;
 return 1;
 }
 double* cell3d_polynomialAllocate(int count){
+if (lastError) return 0;
 if (polynomialTable || count <= 0 || count > ARENA/POLYNOMIAL_STRIDE){ lastError = 10; return 0; }
 int capacity = 1;
 while (capacity < 2*count) capacity *= 2;
@@ -151,6 +165,7 @@ return polynomialTable;
 double* cell3d_polynomialPtr(){ return polynomialTable; }
 int cell3d_polynomialRows(){ return polynomialRows; }
 int cell3d_polynomialCommit(){
+if (lastError) return lastError;
 polynomialReady = 0;
 if (!polynomialTable || !polynomialHash || polynomialRows <= 0){ lastError = 10; return lastError; }
 for (int i = 0; i < polynomialHashSize; i++) polynomialHash[i] = 0.0;
@@ -173,6 +188,7 @@ polynomialReady = 1;
 return lastError;
 }
 static const double* polynomialLookup(const double* nodes, int n){
+if (lastError) __builtin_trap();
 if (!polynomialReady){ lastError = 11; __builtin_trap(); }
 if (n < 1 || n > 4){ lastError = 12; errI = n; __builtin_trap(); }
 unsigned int slot = polynomialKey(nodes,n)&(unsigned int)(polynomialHashSize-1);
@@ -185,6 +201,7 @@ slot = (slot+1u)&(unsigned int)(polynomialHashSize-1);
 lastError = 12; errI = n; errK = -1; __builtin_trap();
 }
 double cell3d_polynomialAt(const double* nodes, const double* values, int n, double x, int derivative){
+if (lastError) __builtin_trap();
 if (derivative != 0 && derivative != 1){ lastError = 12; errI = derivative; __builtin_trap(); }
 const double* row = polynomialLookup(nodes,n);
 if (!__builtin_isfinite(x)){ lastError = 13; __builtin_trap(); }
@@ -203,10 +220,49 @@ total += derivative ? weight*((values[j]-anchor)/row[2]) : weight*(values[j]-anc
 if (!__builtin_isfinite(total)){ lastError = 13; __builtin_trap(); }
 return total;
 }
+static int windowStart(int start, int count){
+if (start < 0) return 0;
+return start > count-4 ? count-4 : start;
+}
+double* cell3d_transportAllocate(int count){
+if (lastError) return 0;
+if (transportTable || count != 2*nr+2*nz+4 || count <= 0 || count > ARENA/TRANSPORT_STRIDE){ lastError = 15; return 0; }
+transportRows = count;
+transportTable = take(count*TRANSPORT_STRIDE);
+return transportTable;
+}
+double* cell3d_transportPtr(){ return transportTable; }
+int cell3d_transportRows(){ return transportRows; }
+int cell3d_transportCommit(){
+if (lastError) return lastError;
+transportReady = 0;
+if (!transportTable || transportRows != 2*nr+2*nz+4){ lastError = 15; return lastError; }
+for (int row = 0; row < transportRows; row++){
+const double* entry = transportTable+row*TRANSPORT_STRIDE;
+for (int j = 0; j < TRANSPORT_STRIDE; j++) if (!__builtin_isfinite(entry[j])){ lastError = 15; errI = row; errK = j; return lastError; }
+int qa, qb, fs;
+if (row < nr){
+qa = windowStart(row-2,nr); qb = windowStart(row-1,nr); fs = windowStart(row-1,nr+1);
+} else if (row <= 2*nr){
+const int face = row-nr;
+qa = windowStart(face-2,nr+1); qb = windowStart(face-1,nr+1); fs = windowStart(face-2,nr);
+} else if (row == 2*nr+1){
+qa = -2; qb = -1; fs = -2;
+} else if (row <= 2*nr+nz+2){
+const int face = row-(2*nr+2);
+qa = windowStart(face-2,nz+1); qb = windowStart(face-1,nz+1); fs = windowStart(face-2,nz);
+} else {
+const int face = row-(2*nr+nz+3);
+qa = windowStart(face-2,nz+1); qb = windowStart(face-1,nz+1); fs = windowStart(face-1,nz+1);
+}
+if (entry[0] != qa || entry[1] != qb || entry[2] != fs){ lastError = 15; errI = row; errK = -1; return lastError; }
+}
+transportReady = 1;
+return lastError;
+}
 int cell3d_error(){ return lastError; }
 int cell3d_errorI(){ return errI; }
 int cell3d_errorK(){ return errK; }
-void cell3d_clearError(){ lastError = 0; errI = -1; errK = -1; }
 int cell3d_arenaUsed(){ return arenaUsed; }
 double* cell3d_ptr(int which){
 switch (which){
@@ -353,6 +409,7 @@ default: return -1;
 }
 }
 void cell3d_buildFamilies(){
+if (lastError) return;
 if (!polynomialReady){ lastError = 11; return; }
 iarenaUsed = 0;
 rbU[0] = 0.0;
@@ -391,11 +448,12 @@ fam.hBr = br;
 }
 static double HatHBr(int a, double r, double th);
 int cell3d_refreshMetric(){
+if (lastError) return lastError;
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++){
 const int e = ie(i, k);
 H[e] = h + eta[e];
-if (!(H[e] > 0)){ lastError = 3; errI = i; errK = k; return lastError; }
+if (!(H[e] > 0) || !__builtin_isfinite(H[e])){ lastError = 3; errI = i; errK = k; return lastError; }
 }
 for (int k = 0; k < nth; k++){
 Hr[0*nth + k] = H[ie(0, k)];
@@ -509,6 +567,7 @@ return lastError;
 }
 void cell3d_divergence(const double* uu, const double* vv, const double* omm,
 double* out){
+if (lastError) __builtin_trap();
 for (int i = 0; i < nr; i++){
 const double rci = rc[i], dr = drc[i], rIn = rf[i], rOut = rf[i+1];
 for (int k = 0; k < nth; k++){
@@ -607,14 +666,17 @@ ow[b + j] /= -(rc[i]*drc[i]*dth*Hc*dsf[j]);
 }
 }
 void cell3d_gradient(const double* q, double* ou, double* ov, double* ow){
+if (lastError) __builtin_trap();
 gradientWithSurface(q, ou, ov, ow, 0);
 }
 void cell3d_gradientSurface(const double* q, const double* surfaceP,
 double* ou, double* ov, double* ow){
+if (lastError) __builtin_trap();
 gradientWithSurface(q, ou, ov, ow, surfaceP);
 }
 void cell3d_omegaOf(const double* uu, const double* vv, const double* ww,
 double* out){
+if (lastError) __builtin_trap();
 for (int i = 0; i < nr; i++){
 const double rci = rc[i];
 for (int k = 0; k < nth; k++){
@@ -638,6 +700,7 @@ out[c] = ww[c] - sv*(ua*hr + (va/rci)*hth);
 }
 }
 void cell3d_applyL(const double* q, double* out){
+if (lastError) __builtin_trap();
 cell3d_gradient(q, gu, gv, gw);
 cell3d_omegaOf(gu, gv, gw, gom);
 cell3d_divergence(gu, gv, gom, out);
@@ -789,36 +852,77 @@ z[rb + (2*n + 1)*nz + j] = -(Zi[n*nz + j]/L);
 }
 }
 }
-void cell3d_applyPreconditioner(const double* r, double* z){ applyPreconditioner(r, z); }
+void cell3d_applyPreconditioner(const double* r, double* z){
+if (lastError) __builtin_trap(); applyPreconditioner(r, z); }
+static double pressureFailure(int iterations){
+lastError = 2; cgIters = iterations; cgResidual = __builtin_inf(); return cgResidual;
+}
+static double pressureTrueResidual(const double* rhs, double scale){
+cell3d_applyL(p,cgq);
+double value = 0.0;
+for (int i = 0; i < NP; i++){
+cgr[i] = (rhs[i]-cgq[i])/scale;
+if (!__builtin_isfinite(cgr[i])){ lastError = 2; return __builtin_inf(); }
+value += cgr[i]*cgr[i];
+}
+return value;
+}
 double cell3d_solveP(const double* rhs, double tol, int maxIt){
+if (lastError) return __builtin_nan("");
+if (!__builtin_isfinite(tol) || !(tol > 0.0) || maxIt < 0) return pressureFailure(0);
 const int n = NP;
-cell3d_applyL(p, cgq);
-double rr = 0.0;
-for (int i = 0; i < n; i++){ cgr[i] = rhs[i] - cgq[i]; rr += cgr[i]*cgr[i]; }
-const double rr0 = rr;
-if (rr0 == 0.0){ cgIters = 0; cgResidual = 0.0; return 0.0; }
-applyPreconditioner(cgr, cgz);
+cell3d_applyL(p,cgq);
+double residualScale = 0.0;
+for (int i = 0; i < n; i++){
+cgr[i] = rhs[i]-cgq[i];
+if (!__builtin_isfinite(cgr[i])) return pressureFailure(0);
+const double magnitude = cgr[i] < 0.0 ? -cgr[i] : cgr[i];
+if (magnitude > residualScale) residualScale = magnitude;
+}
+if (residualScale == 0.0){ cgIters = 0; cgResidual = 0.0; return 0.0; }
+double rr0 = 0.0;
+for (int i = 0; i < n; i++){
+cgr[i] /= residualScale;
+rr0 += cgr[i]*cgr[i];
+}
+applyPreconditioner(cgr,cgz);
 double rz = 0.0;
 for (int i = 0; i < n; i++){ cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
 int it = 0;
-for (; it < maxIt; it++){
-cell3d_applyL(cgd, cgq);
+for (; it < maxIt;){
+cell3d_applyL(cgd,cgq);
 double dq = 0.0;
 for (int i = 0; i < n; i++) dq += cgd[i]*cgq[i];
+if (!__builtin_isfinite(dq) || !__builtin_isfinite(rz)) return pressureFailure(it);
 if (dq == 0.0) break;
 const double alpha = rz/dq;
-double rr2 = 0.0;
+if (!__builtin_isfinite(alpha)) return pressureFailure(it);
+double rr = 0.0;
 for (int i = 0; i < n; i++){
-p[i] += alpha*cgd[i]; cgr[i] -= alpha*cgq[i]; rr2 += cgr[i]*cgr[i]; }
-if (__builtin_sqrt(rr2/rr0) < tol){ rr = rr2; it++; break; }
-applyPreconditioner(cgr, cgz);
+p[i] += (alpha*cgd[i])*residualScale;
+cgr[i] -= alpha*cgq[i];
+if (!__builtin_isfinite(p[i]) || !__builtin_isfinite(cgr[i])) return pressureFailure(it);
+rr += cgr[i]*cgr[i];
+}
+it++;
+if (__builtin_sqrt(rr/rr0) < tol){
+rr = pressureTrueResidual(rhs,residualScale);
+if (lastError) return pressureFailure(it);
+if (__builtin_sqrt(rr/rr0) < tol) break;
+applyPreconditioner(cgr,cgz); rz = 0.0;
+for (int i = 0; i < n; i++){ cgd[i] = cgz[i]; rz += cgr[i]*cgz[i]; }
+continue;
+}
+applyPreconditioner(cgr,cgz);
 double rz2 = 0.0;
 for (int i = 0; i < n; i++) rz2 += cgr[i]*cgz[i];
-const double beta = rz2/rz; rz = rz2; rr = rr2;
-for (int i = 0; i < n; i++) cgd[i] = cgz[i] + beta*cgd[i];
+const double beta = rz2/rz;
+if (!__builtin_isfinite(beta)) return pressureFailure(it);
+rz = rz2;
+for (int i = 0; i < n; i++) cgd[i] = cgz[i]+beta*cgd[i];
 }
-cgIters = it; cgResidual = __builtin_sqrt(rr/rr0);
-if (!(cgResidual < tol)) lastError = 2;
+cgIters = it; cgResidual = __builtin_sqrt(pressureTrueResidual(rhs,residualScale)/rr0);
+if (!__builtin_isfinite(cgResidual) || !(cgResidual < tol)) lastError = 2;
 return cgResidual;
 }
 int cell3d_cgIters(){ return cgIters; }
@@ -835,6 +939,7 @@ const double va = 0.25*(vv[iv(i, k, jm)] + vv[iv(i, k+1, jm)]
 return sv*(ua*Hdr[e] + (va/rc[i])*Hdth[e]);
 }
 void cell3d_omegaFromW(){
+if (lastError) __builtin_trap();
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++)
 for (int j = 0; j <= nz; j++){
@@ -843,6 +948,7 @@ om[c] = w[c] - slopeTermOf(u, v, i, k, j);
 }
 }
 void cell3d_wFromOmega(){
+if (lastError) __builtin_trap();
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++)
 for (int j = 0; j <= nz; j++){
@@ -851,6 +957,7 @@ w[c] = om[c] + slopeTermOf(u, v, i, k, j);
 }
 }
 double cell3d_maxDivergence(){
+if (lastError) __builtin_trap();
 const double* fields[] = {u, v, w, om, eta, H, Ht, p};
 const int lengths[] = {NU, NV, NW, NW, NE, NE, NE, NP};
 for (int f = 0; f < 8; f++)
@@ -969,6 +1076,7 @@ for (int m = 0; m < n; m++){ sx[m] = sn[j0 + m]; sy[m] = f[base + j0 + m]; }
 return sign*polyDerivAt(sx, sy, n, ss)/Hc;
 }
 void cell3d_axisU(){
+if (lastError) __builtin_trap();
 const int half = nth >> 1;
 const double r1 = rf[1], r2 = rf[2];
 double* ex = axEx;
@@ -1070,7 +1178,8 @@ const int e = ie(i, k);
 fsr[e] = t3[0]; fst[e] = t3[1]; fsz[e] = t3[2];
 }
 }
-void cell3d_refreshSurfaceFluxes(){ refreshSurfaceFluxRows(0, nr - 1); }
+void cell3d_refreshSurfaceFluxes(){
+if (lastError) __builtin_trap(); refreshSurfaceFluxRows(0, nr - 1); }
 static double surfaceFluxFace(int which, int a, int k){
 if (which == 2) return 0.5*(fst[ie(a, k - 1)] + fst[ie(a, k)]);
 if (which == 3) return fsz[ie(a, k)];
@@ -1199,6 +1308,7 @@ double* t = lo; lo = hi; hi = t;
 }
 }
 void cell3d_viscousRows(int hasBc, int i0, int i1){
+if (lastError) return;
 if (!polynomialReady){ lastError = 11; return; }
 refreshSurfaceFluxRows(i0 - 1, i1);
 famLaplacian(u, lapU, FAMU, hasBc, 1, i0, i1);
@@ -1253,9 +1363,135 @@ return rc[i]*drc[i]*dth*sf[b]*Ht[ie(i, k)];
 static inline double fluxS(int i, int k, int b){
 return fluxSabs(i, k, b) - fluxSmesh(i, k, b);
 }
+static double transportQ(int component, int axis, int i, int k, int b, int face){
+if (axis == 0){
+if (component == 0) return 0.5*(fluxR(face,k,b)+fluxR(face+1,k,b));
+if (component == 1) return 0.5*(fluxR(face,k-1,b)+fluxR(face,k,b));
+return 0.5*(fluxR(face,k,b-1)+(b == nz ? 0.0 : fluxR(face,k,b)));
+}
+if (axis == 1){
+if (component == 0) return 0.5*(fluxTh(i-1,face,b)+fluxTh(i,face,b));
+if (component == 1) return 0.5*(fluxTh(i,face-1,b)+fluxTh(i,face,b));
+return 0.5*(fluxTh(i,face,b-1)+(b == nz ? 0.0 : fluxTh(i,face,b)));
+}
+if (component == 0) return 0.5*(fluxS(i-1,k,face)+fluxS(i,k,face));
+if (component == 1) return 0.5*(fluxS(i,k-1,face)+fluxS(i,k,face));
+return face == nz ? fluxS(i,k,nz) : 0.5*(fluxS(i,k,face)+fluxS(i,k,face+1));
+}
+static double transportSample(int component, int axis, int i, int k, int b, int coordinate){
+if (axis == 0) i = coordinate;
+else if (axis == 1) k = coordinate;
+else b = coordinate;
+return component == 0 ? u[iu(i,k,b)] : component == 1 ? v[iv(i,k,b)] : w[iw(i,k,b)];
+}
+static void transportAccumulate(double value, double& sum, double& correction){
+if (!__builtin_isfinite(value)){ lastError = 17; __builtin_trap(); }
+const double y = value-correction, total = sum+y;
+correction = (total-sum)-y;
+sum = total;
+}
+double cell3d_transportFace(int component, int axis, int i, int k, int b, int face){
+if (lastError) __builtin_trap();
+if (!transportReady){ lastError = 16; __builtin_trap(); }
+if (component < 0 || component > 2 || axis < 0 || axis > 2 || i < 0 || i > (component == 0 ? nr : nr-1) || b < (component == 2 ? 1 : 0) || b > (component == 2 ? nz : nz-1)){
+lastError = 17; errI = component; errK = axis; __builtin_trap();
+}
+if ((axis != 0 && component == 0 && (i == 0 || i == nr)) || (axis == 0 && (face < 0 || face > (component == 0 ? nr-1 : nr))) || (axis == 2 && (face < 0 || face > nz))){
+lastError = 17; errI = i; errK = face; __builtin_trap();
+}
+if ((axis == 0 && component != 0 && (face == 0 || face == nr)) || (axis == 2 && ((component != 2 && (face == 0 || face == nz)) || (component == 2 && face == nz)))) return 0.0;
+int row;
+if (axis == 0) row = (component == 0 ? 0 : nr)+face;
+else if (axis == 1) row = 2*nr+1;
+else row = (component == 2 ? 2*nr+nz+3 : 2*nr+2)+face;
+const double* entry = transportTable+row*TRANSPORT_STRIDE;
+const int fieldStart = (int)entry[2];
+double fields[4];
+for (int j = 0; j < 4; j++){
+fields[j] = transportSample(component,axis,i,k,b,fieldStart+j+(axis == 1 ? face : 0));
+if (!__builtin_isfinite(fields[j])){ lastError = 17; errI = row; errK = j; __builtin_trap(); }
+}
+const double anchor = fields[1] == fields[2] ? fields[1] : 0.5*fields[1]+0.5*fields[2];
+const double target = transportQ(component,axis,i,k,b,face);
+double sum = target*anchor, correction = 0.0;
+if (!__builtin_isfinite(sum)){ lastError = 17; errI = row; __builtin_trap(); }
+for (int half = 0; half < 2; half++){
+const int qstart = (int)entry[half]+(axis == 1 ? face : 0);
+const double* weights = entry+3+16*half;
+for (int j = 0; j < 4; j++){
+const double q = transportQ(component,axis,i,k,b,qstart+j);
+if (!__builtin_isfinite(q)){ lastError = 17; errI = row; errK = j; __builtin_trap(); }
+for (int m = 0; m < 4; m++) transportAccumulate((weights[4*j+m]*q)*(fields[m]-anchor),sum,correction);
+}
+}
+if (!__builtin_isfinite(sum)){ lastError = 17; errI = row; __builtin_trap(); }
+return sum;
+}
+double cell3d_transportMomentum(int component, int i, int k, int b){
+if (lastError) __builtin_trap();
+if (!transportReady){ lastError = 16; __builtin_trap(); }
+if (component < 0 || component > 2 || i < (component == 0 ? 1 : 0) || i >= nr || b < (component == 2 ? 1 : 0) || b > (component == 2 ? nz : nz-1)){
+lastError = 17; errI = component; errK = i; __builtin_trap();
+}
+const double value = transportSample(component,0,i,k,b,i);
+if (!__builtin_isfinite(value)){ lastError = 17; __builtin_trap(); }
+double fields[4], coefficients[4], errors[4];
+double result = 0.0, roundoff = 0.0;
+for (int axis = 0; axis < 3; axis++){
+const int location = axis == 0 ? i : axis == 1 ? k : b;
+const int staggered = axis == 0 ? component == 0 : axis == 2 ? component == 2 : 0;
+const int shift = staggered ? 1 : 2;
+const int nf = axis == 0 ? nr+(component == 0 ? 1 : 0) : axis == 2 ? nz+(component == 2 ? 1 : 0) : nth;
+const int nq = axis == 0 ? nr+(component == 0 ? 0 : 1) : nz+1;
+const int first = axis == 1 ? location-1 : location <= 3 ? 0 : location-3+shift;
+const int last = axis == 1 ? location+2 : location >= nf-4 ? nq-1 : location+shift;
+const int faceLow = staggered ? location-1 : location, faceHigh = faceLow+1;
+for (int face = first; face <= last; face++){
+if ((axis == 0 && component != 0 && (face == 0 || face == nr)) || (axis == 2 && (component == 2 ? face == nz : face == 0 || face == nz))) continue;
+const int row = axis == 0 ? (component == 0 ? face : nr+face) : axis == 1 ? 2*nr+1 : component == 2 ? 2*nr+nz+3+face : 2*nr+2+face;
+const double* entry = transportTable+row*TRANSPORT_STRIDE;
+const double firstField = entry[2]+(axis == 1 ? face : 0);
+const int fieldStart = (int)firstField, slot = location-fieldStart;
+if (firstField != (double)fieldStart || slot < 0 || slot >= 4){ lastError = 17; errI = row; errK = slot; __builtin_trap(); }
+for (int m = 0; m < 4; m++){
+fields[m] = transportSample(component,axis,i,k,b,fieldStart+m);
+if (!__builtin_isfinite(fields[m])){ lastError = 17; errI = row; errK = m; __builtin_trap(); }
+coefficients[m] = 0.0; errors[m] = 0.0;
+}
+const double target = transportQ(component,axis,i,k,b,face);
+const double anchor = fields[1] == fields[2] ? fields[1] : 0.5*fields[1]+0.5*fields[2];
+double flux = target*anchor, fluxError = 0.0;
+for (int half = 0; half < 2; half++){
+const int start = (int)entry[half]+(axis == 1 ? face : 0);
+for (int j = 0; j < 4; j++){
+const double q = transportQ(component,axis,i,k,b,start+j);
+if (!__builtin_isfinite(q)){ lastError = 17; errI = row; errK = j; __builtin_trap(); }
+for (int m = 0; m < 4; m++){
+const double coefficient = entry[3+16*half+4*j+m]*q;
+const double cy = coefficient-errors[m], ct = coefficients[m]+cy;
+errors[m] = (ct-coefficients[m])-cy; coefficients[m] = ct;
+const double fy = coefficient*(fields[m]-anchor)-fluxError, ft = flux+fy;
+fluxError = (ft-flux)-fy; flux = ft;
+}
+}
+}
+const double defect = target-((coefficients[0]+coefficients[1])+coefficients[2]+coefficients[3]);
+coefficients[1] += 0.5*defect; coefficients[2] += 0.5*defect;
+const int left = staggered ? face : face-1, right = left+1;
+if (face == faceLow) transportAccumulate(0.5*(flux+target*value),result,roundoff);
+if (face == faceHigh) transportAccumulate(-0.5*(flux+target*value),result,roundoff);
+const double rightValue = transportSample(component,axis,i,k,b,right), leftValue = transportSample(component,axis,i,k,b,left);
+if (!__builtin_isfinite(rightValue) || !__builtin_isfinite(leftValue)){ lastError = 17; errI = row; __builtin_trap(); }
+transportAccumulate(-0.5*coefficients[slot]*(rightValue-leftValue),result,roundoff);
+}
+}
+if (!__builtin_isfinite(result)){ lastError = 17; __builtin_trap(); }
+return result;
+}
 void cell3d_viscous(int hasBc){ cell3d_viscousRows(hasBc, 0, nr - 1); }
 void cell3d_advectTransportRows(int i0, int i1){
-const int half = nth >> 1;
+if (lastError) return;
+if (!transportReady){ lastError = 16; return; }
 const int lo0 = i0 > 0 ? i0 : 0, lo1 = i0 > 1 ? i0 : 1;
 const int hiU = i1 >= nr - 1 ? nr : i1, hiV = i1 < nr - 1 ? i1 : nr - 1;
 for (int i = lo0*nth*nz; i < (hiU + 1)*nth*nz; i++) advU[i] = 0.0;
@@ -1265,25 +1501,13 @@ for (int i = lo1; i <= hiV; i++){
 for (int k = 0; k < nth; k++){
 const double Hf = Hr[i*nth + kw(k)];
 for (int b = 0; b < nz; b++){
-const int c = iu(i, k, b);
+const int c = iu(i,k,b);
 const double V = rf[i]*drf[i]*dth*Hf*dsc[b];
-const double QrIn = 0.5*(fluxR(i-1, k, b) + fluxR(i, k, b));
-const double QrOut = 0.5*(fluxR(i, k, b) + fluxR(i+1, k, b));
-const double QtLo = 0.5*(fluxTh(i-1, k, b) + fluxTh(i, k, b));
-const double QtHi = 0.5*(fluxTh(i-1, k+1, b) + fluxTh(i, k+1, b));
-const double QsLo = 0.5*(fluxS(i-1, k, b) + fluxS(i, k, b));
-const double QsHi = 0.5*(fluxS(i-1, k, b+1) + fluxS(i, k, b+1));
-const double QmLo = 0.5*(fluxSmesh(i-1, k, b) + fluxSmesh(i, k, b));
-const double QmHi = 0.5*(fluxSmesh(i-1, k, b+1) + fluxSmesh(i, k, b+1));
-const double uDn = b == 0 ? 0.0 : u[iu(i, k, b-1)];
-const double uUp = b == nz - 1 ? u[c] : u[iu(i, k, b+1)];
-const double f = QrOut*0.5*(u[c] + u[iu(i+1, k, b)])
-- QrIn *0.5*(u[iu(i-1, k, b)] + u[c])
-+ QtHi *0.5*(u[c] + u[iu(i, k+1, b)])
-- QtLo *0.5*(u[iu(i, k-1, b)] + u[c])
-+ QsHi *0.5*(u[c] + uUp)
-- QsLo *0.5*(uDn + u[c]);
-advU[c] = -(f + u[c]*(QmHi - QmLo))/V;
+const double QmLo = 0.5*(fluxSmesh(i-1,k,b)+fluxSmesh(i,k,b));
+const double QmHi = 0.5*(fluxSmesh(i-1,k,b+1)+fluxSmesh(i,k,b+1));
+const double momentum = cell3d_transportMomentum(0,i,k,b);
+advU[c] = (momentum-u[c]*(QmHi-QmLo))/V;
+if (!__builtin_isfinite(advU[c])){ lastError = 17; errI = 0; errK = c; __builtin_trap(); }
 }
 }
 }
@@ -1291,62 +1515,34 @@ for (int i = lo0; i <= hiV; i++){
 for (int k = 0; k < nth; k++){
 const double Hf = Hth[i*nth + kw(k)];
 for (int b = 0; b < nz; b++){
-const int c = iv(i, k, b);
+const int c = iv(i,k,b);
 const double V = rc[i]*drc[i]*dth*Hf*dsc[b];
-const double QrIn = 0.5*(fluxR(i, k-1, b) + fluxR(i, k, b));
-const double QrOut = 0.5*(fluxR(i+1, k-1, b) + fluxR(i+1, k, b));
-const double QtLo = 0.5*(fluxTh(i, k-1, b) + fluxTh(i, k, b));
-const double QtHi = 0.5*(fluxTh(i, k, b) + fluxTh(i, k+1, b));
-const double QsLo = 0.5*(fluxS(i, k-1, b) + fluxS(i, k, b));
-const double QsHi = 0.5*(fluxS(i, k-1, b+1) + fluxS(i, k, b+1));
-const double QmLo = 0.5*(fluxSmesh(i, k-1, b) + fluxSmesh(i, k, b));
-const double QmHi = 0.5*(fluxSmesh(i, k-1, b+1) + fluxSmesh(i, k, b+1));
-const double vIn = i == 0 ? -v[iv(0, k + half, b)] : v[iv(i-1, k, b)];
-const double vOut = i == nr - 1 ? 0.0 : v[iv(i+1, k, b)];
-const double vDn = b == 0 ? 0.0 : v[iv(i, k, b-1)];
-const double vUp = b == nz - 1 ? v[c] : v[iv(i, k, b+1)];
-const double f = QrOut*0.5*(v[c] + vOut)
-- QrIn *0.5*(vIn + v[c])
-+ QtHi *0.5*(v[c] + v[iv(i, k+1, b)])
-- QtLo *0.5*(v[iv(i, k-1, b)] + v[c])
-+ QsHi *0.5*(v[c] + vUp)
-- QsLo *0.5*(vDn + v[c]);
-advV[c] = -(f + v[c]*(QmHi - QmLo))/V;
+const double QmLo = 0.5*(fluxSmesh(i,k-1,b)+fluxSmesh(i,k,b));
+const double QmHi = 0.5*(fluxSmesh(i,k-1,b+1)+fluxSmesh(i,k,b+1));
+const double momentum = cell3d_transportMomentum(1,i,k,b);
+advV[c] = (momentum-v[c]*(QmHi-QmLo))/V;
+if (!__builtin_isfinite(advV[c])){ lastError = 17; errI = 1; errK = c; __builtin_trap(); }
 }
 }
 }
 for (int i = lo0; i <= hiV; i++){
 for (int k = 0; k < nth; k++){
-const double Hc = H[ie(i, k)];
+const double Hc = H[ie(i,k)];
 for (int b = 1; b <= nz; b++){
-const int c = iw(i, k, b);
+const int c = iw(i,k,b);
 const double V = rc[i]*drc[i]*dth*Hc*dsf[b];
-const int top = b == nz;
-const double QrIn = 0.5*(fluxR(i, k, b-1) + (top ? 0.0 : fluxR(i, k, b)));
-const double QrOut = 0.5*(fluxR(i+1, k, b-1) + (top ? 0.0 : fluxR(i+1, k, b)));
-const double QtLo = 0.5*(fluxTh(i, k, b-1) + (top ? 0.0 : fluxTh(i, k, b)));
-const double QtHi = 0.5*(fluxTh(i, k+1, b-1) + (top ? 0.0 : fluxTh(i, k+1, b)));
-const double QsLo = 0.5*(fluxS(i, k, b-1) + fluxS(i, k, b));
-const double QsHi = top ? fluxS(i, k, nz) : 0.5*(fluxS(i, k, b) + fluxS(i, k, b+1));
-const double QmLo = 0.5*(fluxSmesh(i, k, b-1) + fluxSmesh(i, k, b));
-const double QmHi = top ? fluxSmesh(i, k, nz)
-: 0.5*(fluxSmesh(i, k, b) + fluxSmesh(i, k, b+1));
-const double wIn = i == 0 ? w[iw(0, k + half, b)] : w[iw(i-1, k, b)];
-const double wOut = i == nr - 1 ? 0.0 : w[iw(i+1, k, b)];
-const double wUp = top ? w[c] : w[iw(i, k, b+1)];
-const double f = QrOut*0.5*(w[c] + wOut)
-- QrIn *0.5*(wIn + w[c])
-+ QtHi *0.5*(w[c] + w[iw(i, k+1, b)])
-- QtLo *0.5*(w[iw(i, k-1, b)] + w[c])
-+ QsHi *0.5*(w[c] + wUp)
-- QsLo *0.5*(w[iw(i, k, b-1)] + w[c]);
-advW[c] = -(f + w[c]*(QmHi - QmLo))/V;
+const double QmLo = 0.5*(fluxSmesh(i,k,b-1)+fluxSmesh(i,k,b));
+const double QmHi = b == nz ? fluxSmesh(i,k,nz) : 0.5*(fluxSmesh(i,k,b)+fluxSmesh(i,k,b+1));
+const double momentum = cell3d_transportMomentum(2,i,k,b);
+advW[c] = (momentum-w[c]*(QmHi-QmLo))/V;
+if (!__builtin_isfinite(advW[c])){ lastError = 17; errI = 2; errK = c; __builtin_trap(); }
 }
 }
 }
 }
 void cell3d_advectTransport(){ cell3d_advectTransportRows(0, nr - 1); }
 void cell3d_advectCurvatureRows(int i0, int i1){
+if (lastError) return;
 const int lo0 = i0 > 0 ? i0 : 0, lo1 = i0 > 1 ? i0 : 1, hiV = i1 < nr - 1 ? i1 : nr - 1;
 for (int i = lo1; i <= hiV; i++)
 for (int k = 0; k < nth; k++){
@@ -1409,6 +1605,7 @@ return sl[4]*sl[0]*sl[0] + sl[5]*sl[1]*sl[1]
 + 0.5*(sl[2]*sl[2] + sl[3]*sl[3])/(r*r);
 }
 double cell3d_surfaceArea(){
+if (lastError) __builtin_trap();
 double A = 0.0;
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++)
@@ -1416,6 +1613,7 @@ A += rc[i]*drc[i]*dth*__builtin_sqrt(surfaceMetric(i, k));
 return A;
 }
 double cell3d_surfaceExcessArea(){
+if (lastError) __builtin_trap();
 double dA = 0.0;
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++){
@@ -1425,6 +1623,7 @@ dA += rc[i]*drc[i]*dth*(q/(1 + __builtin_sqrt(1 + q)));
 return dA;
 }
 void cell3d_curvature(double* out){
+if (lastError) __builtin_trap();
 for (int c = 0; c < NE; c++) out[c] = 0.0;
 double sl[6];
 for (int i = 0; i < nr; i++)
@@ -1456,10 +1655,14 @@ const double vol = rc[i]*drc[i]*dth;
 for (int k = 0; k < nth; k++) out[ie(i, k)] /= -vol;
 }
 }
-static double gEff = CELL3D_GRAVITY_UNSET;
-void cell3d_setGravity(double g){ gEff = g; }
+void cell3d_setGravity(double g){
+if (lastError) return;
+if (!__builtin_isfinite(g)){ lastError = 6; return; }
+gEff = g;
+}
 double cell3d_gravity(){ return gEff; }
 int cell3d_surfacePressure(double* out){
+if (lastError) return lastError;
 if (!polynomialReady){ lastError = 11; return lastError; }
 if (gEff == CELL3D_GRAVITY_UNSET){ lastError = 6; return lastError; }
 const double g = gEff;
@@ -1472,26 +1675,32 @@ out[e] = rho*g*eta[e] - gamma_*kap[e] + surfaceNormalStress(i, k);
 return lastError;
 }
 int cell3d_stepBegin(double dt){
+if (lastError) return lastError;
 if (!pinned){ lastError = 14; return lastError; }
 if (!polynomialReady){ lastError = 11; return lastError; }
 if (!__builtin_isfinite(dt) || !(dt > 0)){ lastError = 7; return lastError; }
+if (!transportReady){ lastError = 16; return lastError; }
 cell3d_omegaFromW();
 for (int i = 0; i < nr; i++)
 for (int k = 0; k < nth; k++) Ht[ie(i, k)] = om[iw(i, k, nz)];
 return cell3d_surfacePressure(psurf);
 }
 int cell3d_stepExplicit(int i0, int i1){
+if (lastError) return lastError;
 if (!pinned){ lastError = 14; return lastError; }
 if (!polynomialReady){ lastError = 11; return lastError; }
+if (!transportReady){ lastError = 16; return lastError; }
 cell3d_viscousRows(1, i0, i1);
 if (lastError) return lastError;
 cell3d_advectRows(i0, i1);
 return lastError;
 }
 int cell3d_stepFinish(double dt){
+if (lastError) return lastError;
 if (!pinned){ lastError = 14; return lastError; }
 if (!polynomialReady){ lastError = 11; return lastError; }
 if (!__builtin_isfinite(dt) || !(dt > 0)){ lastError = 7; return lastError; }
+if (!transportReady){ lastError = 16; return lastError; }
 for (int i = 1; i < nr; i++)
 for (int k = 0; k < nth; k++)
 for (int j = 0; j < nz; j++){

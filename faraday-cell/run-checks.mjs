@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import{spawnSync}from'node:child_process';import{dirname,join}from'node:path';import{fileURLToPath}from'node:url';const HERE=dirname(fileURLToPath(import.meta.url));const SUITES=[  {"name":"dns/check-vedic-polynomial.mjs","file":"dns/check-vedic-polynomial.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},
   {"name":"dns/check-vedic-operators.mjs","file":"dns/check-vedic-operators.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},
+  {"name":"dns/check-vedic-evolution.mjs","file":"dns/check-vedic-evolution.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},
   {"name":"dns/check-vedic-integration.mjs","file":"dns/check-vedic-integration.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},
   {"name":"dns/check-vedic-fluid.mjs","file":"dns/check-vedic-fluid.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},
   {"name":"faraday/check-startup.mjs","file":"faraday/check-startup.mjs","slow":false,"browser":false,"interpreter":null,"args":[]},

@@ -12,6 +12,8 @@ The distinction between a procedure printed in the book and a derived polynomial
 4. Jean-Paul Berrut and Lloyd N. Trefethen, [Barycentric Lagrange Interpolation](https://doi.org/10.1137/S0036144502417715), *SIAM Review* 46 (2004), 501–517. This supplies the cardinal-polynomial interpolation setting.
 5. Eitan Tadmor, [Fourier differentiation matrix](https://math.umd.edu/~tadmor/lecture-notes/hyperbolic/node17.html). This supplies the Fourier-symbol setting for periodic differentiation operators.
 6. NIST Digital Library of Mathematical Functions, [Table 18.3.1](https://dlmf.nist.gov/18.3#T1) and [18.14.1](https://dlmf.nist.gov/18.14.E1). The shifted-Legendre norm and the Legendre bound are used to derive the polynomial speed bound below.
+7. Seth C. Spiegel, H. T. Huynh and James R. DeBonis, [De-Aliasing through Over-Integration Applied to the Flux Reconstruction and Discontinuous Galerkin Methods](https://ntrs.nasa.gov/api/citations/20150018404/downloads/20150018404.pdf), NASA Glenn Research Center. Sections III and III.A describe polynomial flux projection and its mass-matrix construction. The shared-face finite-volume construction below is derived here; it is not identified as the paper's complete discontinuous Galerkin scheme. The paper also explains why exact flux integration alone does not establish stability for an under-resolved flow.
+8. R. W. C. P. Verstappen and A. E. P. Veldman, [Symmetry-preserving discretization of turbulent flow](https://research.rug.nl/en/publications/symmetry-preserving-discretization-of-turbulent-flow/), *Journal of Computational Physics* 187 (2003), 343–368, and Oleg V. Vasilyev, [On the construction of high order finite difference schemes on non-uniform meshes with good conservation properties](https://web.stanford.edu/group/ctr/ResBriefs98/vasilyev.pdf), Stanford Center for Turbulence Research (1998). These supply the numerical principle of matching discrete adjoint symmetry to momentum and kinetic-energy conservation. The particular projected-face split and moving-volume identity below are derived explicitly for this implementation.
 
 ## Exact algebra and numerical state
 
@@ -65,12 +67,12 @@ The S labels denote the sixteen principal methods. US1–US13 denote the thirtee
 
 | ID | Name and book location | Implementation and consumed result |
 |---|---|---|
-| S1 | Ekadhikena Purvena, pp2–4 | `ekadhikena` constructs the exact repeating block for a denominator ending in nine. `unitMoment` converts the block back to a rational; the ninth denominator occurs in the integration of cubic triple products. The half-shift square helper is also available, but is not counted as a separate production consumer. |
+| S1 | Ekadhikena Purvena, pp2–4 | `ekadhikena` constructs the exact repeating block for a denominator ending in nine. `unitMoment` converts the block back to a rational; the ninth denominator occurs in the cubic triple products consumed by the projected momentum-transport flux. The half-shift square helper is also available, but is not counted as a separate production consumer. |
 | S2 | Nikhilam, pp12–13 | `nikhilam(P,Q,B)` computes \(PQ=B(P+Q-B)+(B-P)(B-Q)\). `compileMoments` consumes these products for off-diagonal mass entries, with an actual leading monomial as the base. |
 | S3 | Urdhva Tiryagbhyam, pp33–36 | `urdhva` forms each product coefficient by the crosswise sum \(\sum_{i+j=k}p_iq_j\). Its products construct nodal factors, derivatives and moment integrands. |
 | S4 | Paravartya Yojayet, pp53–58 | `paravartya` performs exact leading-coefficient elimination and returns quotient and remainder. The cardinal construction consumes the quotient of a zero-constant affine factor and rejects a nonzero remainder. |
 | S5 | Sunyam Samyasamuccaye, pp98–113 | The derived `shunyamCoefficient` aggregate construction supplies the final cardinal polynomial and its derivatives from partition of unity. Equal aggregates follow from distinct-node interpolation, not from an arbitrary numerical tolerance. |
-| S6 | Anurupye Sunyamanyat, pp130–132 | The derived `nodalWeights` specialization returns a unit solution when the interpolation right-hand side is an existing Vandermonde column. Endpoint advector reconstruction consumes these values. Non-nodal evaluation uses actual cardinal polynomial values. |
+| S6 | Anurupye Sunyamanyat, pp130–132 | The derived `nodalWeights` specialization returns a unit solution when the interpolation right-hand side is an existing Vandermonde column. The momentum-transport compiler uses that vector to evaluate the projected flux at an actual flux node. It supplies the right-hand side of the exact mass solve, so it determines the consumed bilinear face coefficients. Non-nodal field reconstruction uses actual cardinal polynomial values. |
 | S7 | Sankalana Vyavakalanabhyam, p132 | `symmetricTranslate` forms the sum and difference of the two centered evaluations. Their even and odd pieces both determine endpoint mass forms; the sum also determines the integral. This parity extension is separate from the book's two-equation solver. |
 | S8 | Puranapuranabhyam, pp155–156 | `translate` groups a polynomial into quadratic blocks, calls `purana` for each nondegenerate block and combines the shifted blocks with powers of \((x+c)^3\). Completed-square outputs directly construct translated integrands. |
 | S9 | Calana Kalanabhyam, pp145,175–178 | `calana` differentiates coefficients exactly. Factor differentiation builds the consumed first and second derivative tables. |
@@ -81,16 +83,16 @@ The S labels denote the sixteen principal methods. US1–US13 denote the thirtee
 | S14 | Ekanyunena Purvena, pp29–32 | `ekanyunena` computes \(P(B-1)=PB-P\). `kevalaih` consumes the resulting all-nines block to construct the seventh denominator used in the moment tensors. |
 | S15 | Gunitasamuccayah, pp76,81–85 | `gunitasamuccaya` computes the product of factor coefficient sums. That value supplies the actual missing nodal-product coefficient in US13. |
 | S16 | Gunakasamuccayah, pp175–178 | `gunakasamuccaya` constructs product derivatives by differentiating factors and summing the resulting products. Its output is the general cardinal derivative numerator. |
-| US1 /17 | Anurupyena, pp17–22 | `anurupyena` uses a real scaled working base in the product identity. Distinct-index triple products consume the output in the cubic flux tensor. |
+| US1 /17 | Anurupyena, pp17–22 | `anurupyena` uses a real scaled working base in the product identity. Distinct-index triple products consume the output in the cubic flux tensor, which determines the projected momentum-transport coefficients. |
 | US2 /18 | Sisyate Sesasamjnah, pp19,57 | `shishyateKnownLinear` normalizes an actual nonmonic divisor, obtains its quotient and scales that quotient back. The cardinal basis consumes it; the original divisor is not replaced by a different mathematical problem. |
 | US3 /19 | Adyamadyenantyamantyena, pp74–75 | `adyamDivide` derives the first and last quotient coefficients from the corresponding dividend and factor coefficients, fills the interior by recurrence and rejects a residual mismatch. Nonzero-constant cardinal factors use this general polynomial extension. |
 | US4 /20 | Kevalaih Saptakam Gunyat, p202 | `kevalaih` uses the exact seventh repetend construction \(1/7=143\cdot999/999999\). `unitMoment(6)` consumes it for a degree-six antiderivative coefficient. This method is specifically about sevenths. |
 | US5 /21 | Vestanam, pp259–266 | `osculateEvaluate` uses the reverse recurrence and restores its power-of-node scale. Cardinal quotient normalization and derivative evaluation consume the restored polynomial value. Zero-node evaluation returns the constant coefficient. |
 | US6 /22 | Yavadunam Tavadunam, pp288–289 | `tavadunamCube` computes \(P^3=B^2(P-2d)+3Bd^2-d^3\). It supplies equal-index cubic flux integrands and the cube needed to combine translated quadratic blocks. |
-| US7 /23 | Yavadunam Tavadunikrtya Varganca Yojayet, pp24–27 | `extendedSquare` implements the shared deficiency-square identity. The repeated-pair branch of the cubic flux tensor consumes the square before multiplying by the third basis function. |
+| US7 /23 | Yavadunam Tavadunikrtya Varganca Yojayet, pp24–27 | `extendedSquare` implements the shared deficiency-square identity. The repeated-pair branch of the cubic flux tensor consumes the square before multiplying by the third basis function. The projected momentum flux consumes these tensor entries. |
 | US8 /24 | Antyayordasakepi, pp28–29 | `product` pairs actual affine factors with equal slopes and nonzero sum of constants. `antyayordasakepi` constructs their product by the complementary-parts identity below. Remaining products use convolution. |
 | US9 /25 | Antyayoreva, pp138–143 | `antyayorevaProductSecond` supplies \((BCD)''=6C\) for three consecutive monic factors. The second-derivative cardinal basis consumes it in the bending Gram matrix where applicable and in the exact integer second-difference stencil used for the radial and vertical timestep bounds. |
-| US10 /26 | Samuccayagunitah, p76 | `coefficientSum` adds existing coefficients. In `momentProfile`, the sums of scaled even and odd polynomials determine both endpoint values, which become consumed endpoint energy forms. |
+| US10 /26 | Samuccayagunitah, p76 | `coefficientSum` evaluates scaled antiderivatives at the integration endpoints. The fundamental theorem of calculus then supplies the mass and triple-product entries used by momentum transport, along with the other exact integrals. The same method determines the endpoint energy forms from the scaled even and odd polynomials. |
 | US11 /27 | Lopanasthapanabhyam, pp77–79 | `retainedQuadratic` and `retainedQuadraticNumber` apply the derived retained-coordinate-plane identity to the actual strain quadratic. General irreducible forms are supported by reconstruction; the literal rational factorizer remains a distinct restricted operation. |
 | US12 /28 | Vilokanam, pp147–148 | `reciprocalPolynomial` reduces a symmetric stencil to a polynomial in \(z+z^{-1}\). `compileSymmetricSymbol` and `evaluateSymbol` supply its pressure-preconditioner symbol. Asymmetric inputs are rejected. |
 | US13 /29 | Gunitasamuccayah Samuccayagunitah, pp76,82 | `gunitasamuccayaSamuccayagunitah` omits one coefficient during convolution and obtains it from the product of factor sums minus the remaining coefficient sum. The result is the nodal polynomial used by the cardinal construction. |
@@ -246,6 +248,135 @@ Adding the component inequalities gives
 \]
 
 Thus the exact-derived mass form supplies a conservative polynomial speed estimate for the advective timestep. For four-node cubic reconstruction the factor is four. This bound applies inside the integration interval. It does not justify arbitrary extrapolation and is not a theorem of stability for every coupled pressure, boundary and time-integration operation.
+
+## Polynomial momentum transport through shared faces
+
+The momentum update consumes the cubic product tensor through an exact-coefficient local projection and its conservative, energy-compatible split. This replaces the arithmetic product interpolation in the transport operator. It uses the actual volume fluxes and current velocity samples in each coordinate direction. The independent energy-reporting contraction remains available, but it is not the consumer that establishes momentum integration.
+
+Let the normal volume-flux samples be \(q_j\) at four distinct coordinates \(x_j\), and let the transported velocity samples be \(f_k\) at four distinct, possibly staggered coordinates \(y_k\). The target face \(x_*\) must be one of the \(x_j\). Normalize the positive integration interval \([a,b]\) to \(t=(x-a)/(b-a)\), and denote the corresponding cardinal bases by \(L_j\) and \(F_k\). Define
+
+\[
+q_h=\sum_jq_jL_j,\qquad f_h=\sum_kf_kF_k,\qquad
+C_{lk}=F_k(x_l).
+\]
+
+Since both bases span the cubic polynomials, \(f_h=\sum_l(Cf)_lL_l\) exactly. The coefficients \(p_i\) of the \(L^2\) projection \(p_h=\Pi_3(q_hf_h)\) satisfy
+
+\[
+\sum_iM_{ri}p_i=\sum_{jl}T_{rjl}q_j(Cf)_l,
+\qquad M_{ri}=\int_0^1L_rL_i\,dt,
+\qquad T_{rjl}=\int_0^1L_rL_jL_l\,dt.
+\]
+
+Let \(e_i=L_i(x_*)\). `nodalWeights` constructs this vector from the exact existing-node specialization. Solve \(M\lambda=e\) with the exact positive \(LDL^T\) factors and define
+
+\[
+W_{jk}=\sum_{r=0}^3\sum_{l=0}^3\lambda_rT_{rjl}C_{lk}.
+\]
+
+Then the projected face flux is
+
+\[
+F_*=p_h(x_*)=\sum_{jk}W_{jk}q_jf_k.
+\]
+
+The sixteen coefficients are computed as reduced rationals before conversion to the numerical transport table. The runtime reads the real volume-flux and velocity arrays and contracts those coefficients. It does not construct a second diagnostic-only result in place of the flux supplied to momentum.
+
+The implementation evaluates this basis-independent projection using a fixed cardinal basis \(\phi_i\) at the exact rational nodes \(0,1/3,2/3,1\). Its mass and triple-product tensors are constructed once per module. Exact interpolation matrices \(A_{mj}=L_j(t_m)\) and \(B_{mk}=F_k(t_m)\) map the current physical-grid samples to that basis. The target vector is formed by composing the actual-node unit weights with \(\phi_i(x_j)\). If \(R_{mn}=\sum_r\lambda_rT_{rmn}\) in this canonical basis, the same face matrix is \(W=A^TRB\). This is an exact change of polynomial basis. The canonical tensors, actual coordinate transformations, target weights and final rational coefficients are all retained for serialization; repeated exact integration on large dyadic node fractions is unnecessary.
+
+### Constant fields and the moving mesh
+
+For constant transported velocity \(f_k=c\), the product \(cq_h\) is already cubic. Its projection is itself, giving \(F_*=c q_h(x_*)=cQ_*\), with \(Q_*\) the actual sampled volume flux at the target face. Equivalently,
+
+\[
+\sum_kW_{jk}=e_j.
+\]
+
+The compiler checks this rational identity. The runtime evaluates the equivalent anchored form
+
+\[
+F_*=Q_*\bar f+\sum_{jk}W_{jk}q_j(f_k-\bar f),
+\]
+
+with \(\bar f\) the arithmetic mean of the adjacent transported samples. This expression preserves a constant field numerically because every deviation is exactly zero. The anchor neither limits the field nor selects a different equation. A mismatched target flux and sampled target-node flux is an error.
+
+The sigma-coordinate relative flux remains
+
+\[
+Q_\sigma=r\,\Delta r\,\Delta\theta\,(\omega-\sigma H_t),
+\]
+
+and the existing moving-volume term \(-f\,\Delta Q_{\mathrm{mesh}}/V\) remains in the update. Replacing that term with a fixed-grid advective derivative would lose the geometric conservation relation. This construction retains the original volume flux and its mesh-motion contribution.
+
+Two neighboring four-node flux windows, beginning two indices and one index below the face, are projected and averaged with equal weight. They use the same transported-field stencil; each projection integrates over its own window from its first flux node to its fourth flux node. These intervals are reflections of one another about the face on a uniform grid. Equal averaging preserves the constant-field identity and restores reflection symmetry for uniform periodic geometry. An interior face is a single geometric entity: both adjacent finite volumes use the same windows, samples and projection order. Its contributions therefore cancel in the volume-weighted conservative sum.
+
+Only physical boundaries that impose zero through-flow have zero boundary flux. A zero instantaneous \(Q_*\) at an ordinary interior face does not skip its polynomial reconstruction. The projection of a higher-degree product can differ at a point from the unprojected pointwise product; that is the explicitly defined finite-dimensional projection, not a reason to conceal a coefficient or suppress an update.
+
+### Coefficient sums in the consumed integrals
+
+For \(A'=P\), coefficient summation after scaling gives
+
+\[
+\int_a^bP(t)\,dt
+=A(b)-A(a)
+=\operatorname{sumcoeff}(A(bt))-\operatorname{sumcoeff}(A(at)).
+\]
+
+`integralByCoefficientSum` uses this identity for all centered moment integrals. Thus the coefficient-sum method determines both \(M\) and \(T\). The ninth reciprocal denominator, proportional-base triple products and repeated-factor squares also determine \(T\); changing them changes the momentum flux coefficients. The existing-node method determines \(e\), the right-hand side of the mass solve.
+
+### Conservative split and the discrete kinetic-energy identity
+
+A projected conservative flux by itself does not guarantee the existing discrete kinetic-energy identity. Let \(C(Q)\) be the volume-weighted conservative transport matrix assembled from the projected face fluxes, with the current volume flux \(Q\) held fixed. For a face joining nodes \(L,R\), let \(a\) be its effective field-coefficient vector, including the anchored-form coefficient correction. The face contribution is
+
+\[
+C_{\mathrm{face}}=(e_R-e_L)a^T,\qquad a^T\mathbf1=Q_*.
+\]
+
+The transpose below is the transpose of this fixed-flux linear transport operator, not the nonlinear Jacobian of \(C(Q(f))f\). With all face endpoints retained in the assembly, \(\mathbf1^TC=0\). Define
+
+\[
+d=C\mathbf1,\qquad
+B=\tfrac12(C-C^T)+\tfrac12\operatorname{diag}(d).
+\]
+
+Direct multiplication gives
+
+\[
+B\mathbf1=d,\qquad \mathbf1^TB=0,\qquad
+f^TBf=\tfrac12\sum_i f_i^2d_i.
+\]
+
+The forward and transpose parts both consume the same projected coefficients. Their paired use removes the spurious symmetric energy contribution of the raw projected operator. It is an algebraic transport discretization, not a correction that clips the solved field or changes the measured energy afterward.
+
+For one face, its action can be evaluated without constructing a dense matrix:
+
+\[
+B_{\mathrm{face}}f
+=\tfrac12\big[(e_R-e_L)F_*-a(f_R-f_L)\big]
++\tfrac12\operatorname{diag}((e_R-e_L)Q_*)f.
+\]
+
+The transpose distributes to every transported-field sample used by that face. Omitting non-adjacent stencil samples would fail to implement \(C^T\). Partitioned execution gathers all contributing faces for each owned output row, so it reads neighboring input data without racing to write a neighboring partition's output.
+
+Let \(N_i\) be the outward grid-relative volume-flux net and \(M_i\) the outward mesh-volume-flux net. Then \(d_i=-N_i\), and the actual transport update is
+
+\[
+V_i\dot f_i=(Bf)_i-M_i f_i.
+\]
+
+For a constant field this becomes \(V_i\dot f_i=-(N_i+M_i)f_i\), the absolute volume-flux net required by geometric conservation. Its kinetic-energy contraction is
+
+\[
+\sum_i f_iV_i\dot f_i
+=-\tfrac12\sum_i f_i^2(N_i+2M_i)
+=-\tfrac12\sum_i f_i^2(D_i+M_i),
+\]
+
+where \(D_i=N_i+M_i\) is the absolute volume-flux net. On a discretely divergence-free field, only the mesh-volume term remains. Cylindrical component-curvature terms retain their separately paired cancellation.
+
+Staggered boundary nodes remain part of the algebra when a momentum control face lies between an active node and a constrained node. Their supplied values are read, while inactive output rows are not advanced. Homogeneous constrained-node values contribute no boundary energy work. The radial axis value can be a nonzero regularity reconstruction; it must not be replaced with zero to manufacture an identity. The full-node conservation identity and the boundary-work terms must be interpreted with these actual constraints.
+
+The identities above establish the semidiscrete transport properties. Finite-grid resolution, floating-point accumulation, explicit time integration, viscous terms, pressure projection and physical boundary conditions still determine the accuracy and stability of the complete evolution. They are not a proof of exact continuum evolution or unconditional stability of the time-discrete simulation.
 
 ## Reciprocal stencil symbols
 
