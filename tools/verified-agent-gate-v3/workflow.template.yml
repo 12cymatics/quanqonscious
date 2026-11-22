@@ -47,8 +47,10 @@ jobs:
         run: bash hosted/bootstrap.sh
       - name: Exercise full signed dispatch and audit
         run: '"$GATE_PYTHON" -m unittest discover -s tests -v'
-      - name: Exercise hosted routing, public export, and browser enrollment
+      - name: Exercise hosted routing and signed public export
         run: '"$GATE_PYTHON" -m unittest discover -s hosted -p "test_*.py" -v'
+      - name: Check browser enrollment against Node and Python Ed25519
+        run: '"$GATE_PYTHON" hosted/test_enrollment.py'
 
   run:
     name: Run the authorized agent task

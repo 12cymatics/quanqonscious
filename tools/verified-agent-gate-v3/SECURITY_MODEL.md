@@ -12,7 +12,7 @@ The threat model treats the submitted project, worker code, worker outputs, and 
 
 Initialization rejects existing state. It records the exact source bytes and length, source and authorization hashes, authority identity, audit identity, and selected runtime hashes in a signed configuration. Source and authorization records are checked on subsequent controller operations. The current source is exactly 3494 bytes, SHA-256 `b801c62880a6862d716a6107909494e58cf9a6c0c58921eff89296bf293e5fd2`.
 
-`source/continuation-authorization.txt` preserves the user's authorization of the package work. The operator of a new deployment must separately record the authority and scope for that deployment. A nonempty text file is a recorded human assertion; the program does not infer legal authority or semantic consent from arbitrary prose.
+The original downloadable package preserves the user's historical continuation authorization; that private conversation record is omitted from the public source distribution. Tests use a synthetic test-only authorization fixture. The hosted controller binds the authenticated manual workflow request, its exact task bytes, selected model, and run identity in its signed authorization record. A nonempty text file alone is a recorded assertion; the program does not infer legal authority or semantic consent from arbitrary prose.
 
 State and signing keys must be kept outside worker source trees and system runtime mounts. Initialization rejects protected state or authority-key placement under `/usr`, `/lib`, or `/lib64`. Job creation rejects overlap between the source project and controller state. Filesystem isolation prevents the managed worker from accessing the controller's private state; it does not remove the operator's access.
 
@@ -99,7 +99,7 @@ An interrupted job remains consumed. `audit` reports started handoffs without a 
 
 ## Mechanically checked proof boundary
 
-The controller calls the executable compiled from `lean/Main.lean`; it does not substitute a separate Python implementation for the proved acceptance functions. Lean 4.36.0 mechanically checked the retained source. The repository includes compiler output, native build hashes, and toolchain provenance.
+The controller calls the executable compiled from `lean/Main.lean`; it does not substitute a separate Python implementation for the proved acceptance functions. Lean 4.36.0 mechanically checks the source during the hosted build, which records runtime hashes and toolchain provenance before execution. The downloadable original package retains the earlier build's compiler output and evidence.
 
 The checked theorems establish properties of successful executions of the modeled encoder/verifier: exact instruction preservation, binding to trusted policy/source/parent values, canonical reserialization, accepted-field shapes, relevant rejection conditions, and handoff inheritance. Successful encoding is checked by the runtime roundtrip; its theorem is a soundness result for accepted encodings, not unconditional totality for arbitrarily large input.
 

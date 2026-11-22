@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
@@ -162,7 +163,8 @@ class GateAcceptance(unittest.TestCase):
         self.output('result.json')
 
     def test_interrupted_dispatch_cannot_be_replayed(self):
-        envelope, _ = self.issue(TIMEOUT, limits={'timeout_seconds': 3})
+        envelope, _ = self.issue(TIMEOUT, limits={'timeout_seconds': 10})
+        worker_marker = self.state / 'results' / envelope.parent.name / 'output' / 'started.txt'
         command = [sys.executable, str(ROOT / 'gate3.py'), 'dispatch',
                    '--state', str(self.state), '--envelope', str(envelope)]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -170,14 +172,15 @@ class GateAcceptance(unittest.TestCase):
         try:
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline:
-                if b'"event":"started"' in (self.state / 'audit.jsonl').read_bytes():
+                if worker_marker.is_file() and worker_marker.read_bytes() == b'started':
                     break
                 if process.poll() is not None:
-                    self.fail('dispatch ended before its durable execution record')
+                    self.fail('dispatch ended before the actual worker confirmed execution')
                 time.sleep(0.01)
             else:
-                self.fail('dispatch did not durably reserve its handoff')
-            os.killpg(process.pid, signal.SIGKILL)
+                self.fail('the actual worker did not confirm execution')
+            self.assertIsNone(process.poll(), 'worker dispatch ended before interruption')
+            process.kill()
             process.communicate(timeout=10)
         finally:
             if process.poll() is None:
@@ -186,8 +189,41 @@ class GateAcceptance(unittest.TestCase):
         resumed = self.Gate(self.state)
         with self.assertRaises(Exception):
             resumed.dispatch(envelope)
-        events = resumed.audit_verify()['events']
+        audit = resumed.audit_verify()
+        events = audit['events']
         self.assertEqual(events.count('started'), 1)
+        self.assertEqual(events.count('completed'), 0)
+        self.assertEqual(audit['unfinished_handoffs'], [envelope.parent.name])
+
+    def test_interrupted_audit_checkpoint_blocks_launch_and_recovery(self):
+        import gate3
+        envelope, _ = self.issue(TIMEOUT)
+        checkpoint = self.state / 'anchor.json'
+        original_checkpoint = checkpoint.read_bytes()
+        atomic = gate3.atomic
+        def lose_checkpoint_write(path, raw, **kwargs):
+            if Path(path) == checkpoint:
+                raise OSError('injected checkpoint write failure')
+            return atomic(path, raw, **kwargs)
+        with patch.object(gate3, 'atomic', side_effect=lose_checkpoint_write):
+            with self.assertRaisesRegex(OSError, 'injected checkpoint write failure'):
+                self.gate.dispatch(envelope)
+        self.assertEqual(checkpoint.read_bytes(), original_checkpoint)
+        last_line = (self.state / 'audit.jsonl').read_bytes().splitlines()[-1]
+        last_event = gate3.check_signed(gate3.AUDIT_DOMAIN, gate3.parse(last_line), self.gate.audit_public)
+        self.assertEqual(last_event['event'], 'started')
+        result = self.state / 'results' / envelope.parent.name
+        self.assertEqual(list((result / 'output').iterdir()), [])
+        self.assertFalse((result / 'stdout.bin').exists())
+        self.assertFalse((result / 'stderr.bin').exists())
+        resumed = self.Gate(self.state)
+        with self.assertRaisesRegex(gate3.Rejected, 'audit checkpoint mismatch'):
+            resumed.audit_verify()
+        with self.assertRaisesRegex(gate3.Rejected, 'audit checkpoint mismatch'):
+            resumed.verify(envelope)
+        with self.assertRaisesRegex(gate3.Rejected, 'audit checkpoint mismatch'):
+            resumed.dispatch(envelope)
+        self.assertEqual(list((result / 'output').iterdir()), [])
 
     def test_edits_to_source_directory_do_not_change_signed_execution(self):
         envelope, source = self.issue()

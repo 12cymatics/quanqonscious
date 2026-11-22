@@ -10,7 +10,7 @@ The repository distribution contains source. Its hosted bootstrap compiles the L
 
 Verified Agent Gate 3 executes an authenticated Python job inside an enforced Linux process boundary. The controller verifies the signed instruction, assignment, executable snapshot, parent record, runtime identity, expiry, and replay state before the job starts. Every job receives the complete authoritative instruction bytes and its authenticated assignment metadata.
 
-The package includes the Python controller, the executed Lean serialization/verifier kernel, the native sandbox launcher and worker bootstrap, compiled Linux x86-64 binaries, source, and adversarial integration checks. The implementation is an operational local handoff system. Its protected execution interface is `gate3.py dispatch`.
+The implementation includes the Python controller, the executed Lean serialization/verifier kernel, the native sandbox launcher and worker bootstrap, and adversarial integration checks. Its protected execution interface is `gate3.py dispatch`; the hosted controller routes every model-requested execution through this interface.
 
 ## Authoritative source
 
@@ -215,7 +215,7 @@ Extract the new envelope path from `child-issued.json`, then verify and dispatch
 
 ## Proofs and rebuilds
 
-[`lean/Main.lean`](lean/Main.lean) contains the functions executed by the compiled kernel and mechanically checked theorems for accepted-byte preservation, trusted-field and parent binding, canonical serialization, and rejection conditions. [`lean/PROTOCOL.md`](lean/PROTOCOL.md) defines the wire format and precise proof scope. Compiler output, toolchain provenance, and build-artifact hashes are retained beside the source.
+[`lean/Main.lean`](lean/Main.lean) contains the functions executed by the compiled kernel and mechanically checked theorems for accepted-byte preservation, trusted-field and parent binding, canonical serialization, and rejection conditions. [`lean/PROTOCOL.md`](lean/PROTOCOL.md) defines the wire format and precise proof scope. The hosted build rechecks the proofs, compiles the kernel, and records its toolchain identity and artifact hashes in build provenance. The original downloadable package also retains its earlier compiler output and build evidence.
 
 To rebuild with the pinned toolchain available:
 
