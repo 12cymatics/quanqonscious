@@ -1,0 +1,23 @@
+{
+  "numerators_hex": [
+    "0x24e673fba5cbe832935fcf9b6837a69232ddff17f9a00000",
+    "0x2be2bac791cea1ef74a85b9d1d21cfbd04405dcce50fd010",
+    "0x2ebc110c081132603bc57ed3cc293bdcd95771de14126e08",
+    "0x2f7c953dabc3a3f090047e84b43b5ec4581c8c51bfc5ad1a",
+    "0x2fecf60c9b49ca8866be1cfadb1f6e924fda6e7b7c7c7851",
+    "0x30fbd72d45eb87341c7ddd5c175566d57fb6e6d8f6000000",
+    "0x33450ee6fbe16a67406806c5ffeed4bcfd650f5c1c09642f",
+    "0x36d2cf2ea289786e15f98e6ae5fd7e13bab76c9b0aaefb30",
+    "0x3973d3b029c84cbc76be10338f0c2e0142eff7cf4d2534f8",
+    "0x385973ebc8e1a58b473fb8f905911a8301479a18a04780c8",
+    "0x34380c4f780aa1449a49cf0b23507d2bff2f59b9ac600000",
+    "0x303ca73999bd230b01eecc46191118776b535cac3b9d4b1e",
+    "0x2e7a77bf52b9f82ed59c699f092a934282920bf7faa87c27",
+    "0x2e4964fe8f9a6460e5ca364442e1ae9b2df7a8bf725632e0",
+    "0x2c53ffdc5effa9e72f1cc43c5fb9f1266f89d3c82e49c49d",
+    "0x241e9f04f7b940dd6a16a5860db80e038452a66ddb000000"
+  ],
+  "denominator_hex": "0x73755b53823e8c39fcc2fb455ac9ec09d35b0cf540000000",
+  "normalization": "amplitude_i / sqrt(sum_j amplitude_j**2)",
+  "basis_index": "sum_q bit(q)*2**q"
+}

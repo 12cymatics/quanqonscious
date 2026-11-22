@@ -1,0 +1,89 @@
+{
+  "audit_date": "2026-11-22",
+  "recommendation": "Prefer current quanqonscious actual ansatz and true_sutras/vedic_book code over the other original repositories for the requested update; older repos supply historical baselines only.",
+  "repositories": [
+    {
+      "repo": "12cymatics/vedic-limitless",
+      "head_sha": "392987f5a2188d223c436603b9e299c88abeb84b",
+      "head_date": "2026-08-24T22:34:25Z",
+      "branches": [
+        "main",
+        "commercial/exactwave-launch"
+      ],
+      "source": "import_payload/chunk-00.b64 through chunk-08.b64",
+      "recovered_root": "research/other_repos/vedic-limitless/recovered/vedic_exact_studio",
+      "archive_sha256": "24ca1c63ff1ec261b543371ec24284c0ae498423341176a4970afe1476c5d182",
+      "reconstruction": "Concatenate 00,01,02,03,04,06,07,08; chunk05 is already contained in chunk04. Base64-decode. 74197-byte ZIP, 52 entries/43 files, all CRCs pass.",
+      "actual_mathematics": [
+        "Exact BigInt Q, Q(sqrt2,sqrt5), complex extension",
+        "Canonical 16-state Q4 field",
+        "29 project-defined finite operators; S4 equals S15, several operators ignore strength",
+        "Exact Cayley phase and pair rotation",
+        "GRVQ dimensional edge rotations, MSTVQ complement rotations, TGCR Walsh spectral phase",
+        "Maya affine bit permutation plus Cayley phase",
+        "Radial R4 computed as diagnostic only",
+        "ansatzEnergy returns unnormalized quadratic form <psi|(L+V_D)|psi>"
+      ],
+      "limitations": [
+        "No variational optimization loop found",
+        "Must normalize energy by state norm for nonunitary operations",
+        "Project-specific operator assignment is not itself an authentic mapping of all 29 traditional arithmetic methods",
+        "Proof obligations explicitly remain draft/blocked; exact arithmetic is not formal runtime refinement"
+      ]
+    },
+    {
+      "repo": "12cymatics/Hi-Lee",
+      "head_sha": "caf712eedc5e67f8d5e217f5157d3bc4b72288d6",
+      "head_date": "2026-07-07T08:38:12Z",
+      "source_path": "simulator/hybrid_simulator.cpp",
+      "source_blob": "a6bd96934eb76c195337e9ba11f67a4d3343db41",
+      "source_commit": "f0c2e8340f3a15c1cb3ba3a9a9d026a9319974cf",
+      "source_date": "2026-02-06T23:47:40Z",
+      "actual_mathematics": [
+        "Handcoded statevector H/X/Ry/Rz/CNOT",
+        "29 fixed rational arithmetic examples produce numeric degrees",
+        "Serial/concurrent/parallel modes change circuit gate placement/topology, not just scheduling"
+      ],
+      "limitations": [
+        "No variational parameters/objective optimizer",
+        "Different circuits confound execution-mode comparison",
+        "Header is inside archive by setup script; archive not inspected here, so do not claim absent implementation"
+      ],
+      "local_root": "research/other_repos/Hi-Lee"
+    }
+  ],
+  "benchmark_module": {
+    "path": "experiments/grvq_ansatz_comparison/hamiltonians.py",
+    "exact_domain": "real Fraction state amplitudes and sparse rational symmetric matrices",
+    "models": [
+      "Q_n graph Laplacian + explicit diagonal potential",
+      "Pauli TFIM chain/ring",
+      "Pauli XXZ chain/ring + longitudinal field",
+      "periodic Cartesian torus finite-difference graph + explicit diagonal potential",
+      "1D second-order finite-grid Schrodinger operator with Dirichlet or periodic boundary"
+    ],
+    "source_topology": [
+      "vedic_trainer/vedic/kernel/q4_complex.py:neighbours",
+      "core/lattice.py:ToroidalHypercube.wrap_index and iterate_all"
+    ],
+    "interpretation": "Declared objective-level experiment models; no claim these are the complete GRVQ field PDE or chemistry Hamiltonians.",
+    "validation": {
+      "exact_analytical_eigenpairs": 16,
+      "independent_pauli_kronecker_dimension_checks": [
+        2,
+        4,
+        6
+      ],
+      "negative_domain_checks": [
+        "float parameter",
+        "bool parameter",
+        "non-power-of-two torus",
+        "mismatched potential length",
+        "zero state energy"
+      ]
+    },
+    "precision": "Matrix arithmetic, state contraction, energy, variance exact Fraction. dense_float is explicit numerical diagnostic only."
+  },
+  "additional_private_repositories_reviewed": 2,
+  "private_source_contents_included": false
+}
