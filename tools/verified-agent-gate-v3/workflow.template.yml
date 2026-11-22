@@ -1,0 +1,97 @@
+name: Verified Agent Gate
+
+on:
+  push:
+    paths:
+      - 'tools/verified-agent-gate-v3/**'
+      - '.github/workflows/verified-agent-gate.yml'
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Exact task to authorize. Public repository inputs/results may be visible; do not paste secrets.'
+        required: true
+        type: string
+      model:
+        description: 'API model identifier you authorize for this run'
+        required: true
+        type: string
+      max_turns:
+        description: 'Maximum API turns, from 1 through 32'
+        required: true
+        type: number
+        default: 8
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verified-agent-gate-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Build and verify without secrets
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: tools/verified-agent-gate-v3
+        shell: bash
+    steps:
+      - name: Check out the exact workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Build source and exercise the mandatory sandbox
+        run: bash hosted/bootstrap.sh
+      - name: Exercise full signed dispatch and audit
+        run: '"$GATE_PYTHON" -m unittest discover -s tests -v'
+      - name: Exercise hosted routing, public export, and browser enrollment
+        run: '"$GATE_PYTHON" -m unittest discover -s hosted -p "test_*.py" -v'
+
+  run:
+    name: Run the authorized agent task
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    environment: verified-gate
+    defaults:
+      run:
+        working-directory: tools/verified-agent-gate-v3
+        shell: bash
+    steps:
+      - name: Check out the reviewed workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Rebuild and preflight this independent runner without secrets
+        run: bash hosted/bootstrap.sh
+      - name: Authorize, execute, audit, and export one batch
+        id: batch
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GATE_AUTHORITY_KEY_B64: ${{ secrets.GATE_AUTHORITY_KEY_B64 }}
+          GATE_AUTHORITY_FINGERPRINT: ${{ vars.GATE_AUTHORITY_FINGERPRINT }}
+          GATE_TASK: ${{ inputs.task }}
+          GATE_MODEL: ${{ inputs.model }}
+          GATE_MAX_TURNS: ${{ inputs.max_turns }}
+        run: |
+          "$GATE_PYTHON" hosted/run_batch.py \
+            --model "$GATE_MODEL" \
+            --max-turns "$GATE_MAX_TURNS" \
+            --results "$RUNNER_TEMP/verified-agent-gate-results" \
+            --artifacts "$RUNNER_TEMP/verified-agent-gate-artifacts"
+      - name: Retain only the public signed result archive
+        if: always() && steps.batch.outputs.exported == 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: verified-agent-gate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verified-agent-gate-artifacts/verified-agent-gate-run.tar.gz
+            ${{ runner.temp }}/verified-agent-gate-artifacts/verified-agent-gate-run.sha256
+          if-no-files-found: error
+          retention-days: 30
+          include-hidden-files: false

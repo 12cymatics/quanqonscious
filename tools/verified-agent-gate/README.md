@@ -1,3 +1,5 @@
+> **Browser-hosted execution:** The [current hosted runner](../verified-agent-gate-v3/hosted/README.md) runs on GitHub-provided Ubuntu machines and connects its model tool loop directly to the signed native execution gate. No local Linux computer is needed.
+
 # Byte-preserving execution gate v3
 
 This component authenticates a handoff and its full instruction bytes before it executes the signed command. It preserves the uploaded files in `originals/`, binds command files to their actual bytes, records signed acceptance and outcome receipts, rejects replay, and calls a compiled Lean acceptance predicate on every dispatch.

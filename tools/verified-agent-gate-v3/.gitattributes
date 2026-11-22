@@ -1,0 +1,8 @@
+source/verified_delegation_instruction.txt -text
+tests/authorization.txt -text
+*.py text eol=lf
+*.sh text eol=lf
+*.lean text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.yml text eol=lf

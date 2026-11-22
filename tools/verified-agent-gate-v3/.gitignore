@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.operator-state/
+*.key
+lean/gate-kernel
+lean/Main.olean
+lean/Main.c
+lean/proof-check.txt
+native/gate-sandbox
+native/libgate_seccomp.so

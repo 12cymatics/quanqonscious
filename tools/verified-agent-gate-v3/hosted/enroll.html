@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vLMBQVggFes2NeTIdtEz9gTpad+ES/9C0eWIvMnSMSc='; style-src 'sha256-yjp9F2CGjk3bOAzo76WTwgKVEeAbqHReU9d8fGiNilI='; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'">
+  <title>Set up your browser-operated gate</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.6 system-ui, sans-serif; color: #172333; background: #f3f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px 18px 64px; }
+    main { max-width: 820px; margin: auto; }
+    .eyebrow { color: #3d5f8b; font-size: .78rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { font-size: clamp(1.85rem, 5vw, 2.6rem); line-height: 1.15; margin: 10px 0 20px; letter-spacing: -.035em; }
+    h2 { font-size: 1.22rem; margin: 0 0 12px; }
+    h3 { font-size: 1rem; margin: 22px 0 8px; }
+    p { margin: 0 0 14px; }
+    section, .notice { background: #fff; border: 1px solid #d5dfeb; border-radius: 14px; padding: 24px; margin-top: 20px; }
+    .notice { border-left: 4px solid #34659c; background: #eaf1fa; }
+    .notice p:last-child, section p:last-child { margin-bottom: 0; }
+    .small { font-size: .88rem; color: #44566c; }
+    .steps { padding-left: 24px; margin-bottom: 0; }
+    .steps li { margin: 10px 0; padding-left: 6px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 12px; }
+    button { border: 1px solid #275b94; background: #285e9a; color: #fff; border-radius: 8px; padding: 11px 17px; font: inherit; font-weight: 650; cursor: pointer; }
+    button.secondary { background: #fff; color: #244b78; border-color: #a7b9cf; }
+    a { color: #215489; text-underline-offset: 3px; }
+    a:focus-visible { outline: 3px solid #df9b22; outline-offset: 3px; }
+    .link-button { display: inline-block; color: #244b78; border: 1px solid #a7b9cf; border-radius: 8px; padding: 10px 16px; font-weight: 650; text-decoration: none; background: #fff; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    button:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid #df9b22; outline-offset: 3px; }
+    label { display: block; font-weight: 650; margin: 15px 0 6px; }
+    .toggle { display: flex; gap: 10px; align-items: center; font-weight: 500; }
+    input[type="text"], input[type="password"] { width: 100%; min-width: 0; border: 1px solid #b8c5d5; background: #f8fafc; border-radius: 7px; padding: 12px; font: .87rem/1.4 ui-monospace, monospace; color: #172333; }
+    input[type="checkbox"] { width: 18px; height: 18px; }
+    code { font: .88em ui-monospace, monospace; overflow-wrap: anywhere; }
+    #status { margin: 12px 0 0; font-weight: 550; overflow-wrap: anywhere; }
+    #status.error { color: #a12323; }
+    .badge { display: inline-block; border: 1px solid #c4d1e1; padding: 2px 8px; border-radius: 5px; font-size: .72rem; color: #40546b; font-weight: 700; letter-spacing: .03em; }
+    details { border-top: 1px solid #d5dfeb; padding-top: 16px; margin-top: 22px; }
+    summary { cursor: pointer; font-weight: 650; }
+    details p { margin-top: 12px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 520px) { body { padding: 22px 12px 40px; } section, .notice { padding: 19px; } button { width: 100%; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Verified Agent Gate · Browser setup</div>
+    <h1>Set up your signing authority</h1>
+    <p>Use your browser to configure the gated runner in <strong>12cymatics/quanqonscious</strong>. GitHub supplies the Linux runner; you do not need a Linux computer or a terminal.</p>
+    <p>Generate a new Ed25519 key here, then enroll its public fingerprint separately in GitHub. This page contains no supplied authority key.</p>
+  </header>
+
+  <div class="notice">
+    <p><strong>Open a copy of this page whose source you trust.</strong> A fingerprint identifies a public key; a fingerprint supplied by an untrusted page does not establish the key's origin.</p>
+    <p class="small">The key-generation code makes no network requests and does not use browser storage, external libraries, or telemetry. It uses your browser's native WebCrypto implementation. The links below open GitHub or OpenAI only when you choose them. No OpenAI API key is entered on this page.</p>
+  </div>
+
+  <section aria-labelledby="create-heading">
+    <h2 id="create-heading">1. Generate a new authority</h2>
+    <p>A modern browser with native Ed25519 support and a secure context is required. Open this trusted downloaded HTML file directly, or serve the trusted file over HTTPS. If your browser does not support the required features, generation stops with an error.</p>
+    <div class="actions">
+      <button id="generate" type="button" disabled>Generate authority</button>
+      <button id="clear" class="secondary" type="button" disabled>Clear this page</button>
+    </div>
+    <p id="status" role="status" aria-live="polite">No key has been generated.</p>
+    <noscript><p>JavaScript is required. No key can be generated while JavaScript is disabled.</p></noscript>
+  </section>
+
+  <section id="key-section" aria-labelledby="enroll-heading" hidden>
+    <h2 id="enroll-heading">2. Enroll the fingerprint and secret separately</h2>
+    <p>In <strong>12cymatics/quanqonscious</strong>, open <strong>Settings → Environments</strong>. Create or open the environment named <code>verified-gate</code>. Set its deployment branches to the reviewed trusted branch you will run. If required reviewers are configured, their approval is needed before the job receives its secrets.</p>
+    <div class="actions"><a class="link-button" href="https://github.com/12cymatics/quanqonscious/settings/environments" target="_blank" rel="noopener noreferrer">Open GitHub environment settings</a></div>
+    <p>Save the fingerprint under <strong>Environment variables → Add variable</strong> and the private key under <strong>Environment secrets → Add secret</strong>, using the exact names below. Keep the fingerprint in a separate trusted record so you can check later receipts. This page does not configure GitHub for you.</p>
+
+    <h3><span class="badge">PUBLIC · ENVIRONMENT VARIABLE</span></h3>
+    <label for="fingerprint">GATE_AUTHORITY_FINGERPRINT</label>
+    <input id="fingerprint" type="text" readonly autocomplete="off" spellcheck="false" aria-describedby="fingerprint-help">
+    <p id="fingerprint-help" class="small">64 lowercase hexadecimal characters: SHA-256 of the 32 raw public-key bytes.</p>
+    <div class="actions"><button id="copy-fingerprint" class="secondary" type="button">Copy fingerprint</button></div>
+
+    <h3><span class="badge">PRIVATE · ENVIRONMENT SECRET</span></h3>
+    <label for="private-key">GATE_AUTHORITY_KEY_B64</label>
+    <input id="private-key" type="password" value="" placeholder="Hidden — copy explicitly when ready" readonly autocomplete="off" spellcheck="false" aria-describedby="private-help">
+    <p id="private-help" class="small">Standard Base64 encoding of the 32-byte private seed. Anyone holding this secret can sign as this authority. Paste it only into the intended GitHub Actions secret or your trusted secret manager; never into a repository file, issue, workflow input, or chat.</p>
+    <label class="toggle"><input id="reveal" type="checkbox"> Reveal private seed on this page</label>
+    <div class="actions"><button id="copy-private" type="button">Copy private seed</button></div>
+
+    <details>
+      <summary>Public verification key and format</summary>
+      <label for="public-key">Raw Ed25519 public key · Base64</label>
+      <input id="public-key" type="text" readonly autocomplete="off" spellcheck="false">
+      <div class="actions"><button id="copy-public" class="secondary" type="button">Copy public key</button></div>
+      <p class="small">WebCrypto generates the key pair. The private seed is the Base64url-decoded <code>d</code> member of the exported Ed25519 JWK, re-encoded as standard Base64. The public key is exported in <code>raw</code> format. The page imports the exported seed again and verifies a test signature before displaying the results.</p>
+    </details>
+  </section>
+
+  <section aria-labelledby="api-heading">
+    <h2 id="api-heading">3. Add your OpenAI API key in GitHub</h2>
+    <p>Open your OpenAI API project and create a project API key for this runner. In the same GitHub environment, <code>verified-gate</code>, save that value as the environment secret <code>OPENAI_API_KEY</code>. Enter it directly in GitHub; this setup page never asks for or receives it.</p>
+    <div class="actions">
+      <a class="link-button" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Open OpenAI API keys</a>
+      <a class="link-button" href="https://github.com/12cymatics/quanqonscious/settings/environments" target="_blank" rel="noopener noreferrer">Open GitHub environment settings</a>
+    </div>
+    <p class="small">The API project needs available API credits. Eligible ChatGPT Pro and Business subscriptions may claim included credits through OpenAI's current benefit. A ChatGPT login does not automatically provide this workflow with a project API key. <a href="https://developers.openai.com/api/docs/guides/chatgpt-api-credits" target="_blank" rel="noopener noreferrer">Check eligibility and activate API credits</a>.</p>
+  </section>
+
+  <section aria-labelledby="launch-heading">
+    <h2 id="launch-heading">4. Run a task in GitHub</h2>
+    <p>After the reviewed workflow is on the repository's default branch and the environment is configured, open <strong>Actions → Verified Agent Gate → Run workflow</strong>. Choose the reviewed branch, enter the requested task and a model available to your API project, then start the run.</p>
+    <div class="actions"><a class="link-button" href="https://github.com/12cymatics/quanqonscious/actions/workflows/verified-agent-gate.yml" target="_blank" rel="noopener noreferrer">Open the gate workflow</a></div>
+    <p class="small">The workflow file is <code>.github/workflows/verified-agent-gate.yml</code>; the controller source is under <code>tools/verified-agent-gate-v3</code>. Opening this link does not start a run. The live run must pass its checks before any model-requested work is dispatched, and its results appear on that run's GitHub page.</p>
+  </section>
+
+  <section aria-labelledby="finish-heading">
+    <h2 id="finish-heading">5. Save, then clear</h2>
+    <p>The key exists only in this page's live memory until you copy or save it. Generation does not copy, download, submit, or enroll anything automatically.</p>
+    <p>After saving both authority values, choose <strong>Clear this page</strong> and close the tab. The page also clears its values and references when the browser delivers its page-leave event. It cannot guarantee physical memory erasure, clear your clipboard, remove saved copies, or control browser extensions and device backups.</p>
+    <p class="small">Clearing before saving loses this key. Generating another authority creates a different identity and does not update GitHub automatically.</p>
+  </section>
+</main>
+<script>
+"use strict";
+
+// BEGIN ENROLLMENT CRYPTO: exercised directly by test_enrollment.py.
+function bytesToBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function base64urlToBytes(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("WebCrypto returned an invalid Base64url key.");
+  }
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
+  const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+  if (bytesToBase64(bytes).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_") !== value) {
+    throw new Error("WebCrypto returned a noncanonical key encoding.");
+  }
+  return bytes;
+}
+
+async function createAuthority(nativeCrypto) {
+  let seed = null;
+  let jwk = null;
+  try {
+    const pair = await nativeCrypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    jwk = await nativeCrypto.subtle.exportKey("jwk", pair.privateKey);
+    if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519") {
+      throw new Error("WebCrypto returned an unexpected key type.");
+    }
+    seed = base64urlToBytes(jwk.d);
+    const publicRaw = new Uint8Array(await nativeCrypto.subtle.exportKey("raw", pair.publicKey));
+    const jwkPublic = base64urlToBytes(jwk.x);
+    if (seed.length !== 32 || publicRaw.length !== 32 || jwkPublic.length !== 32 ||
+        !publicRaw.every((value, index) => value === jwkPublic[index])) {
+      throw new Error("WebCrypto returned an unexpected Ed25519 key encoding.");
+    }
+    const importedPrivate = await nativeCrypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["sign"]);
+    const importedPublic = await nativeCrypto.subtle.importKey("raw", publicRaw, { name: "Ed25519" }, false, ["verify"]);
+    const challenge = new TextEncoder().encode("VERIFIED-AGENT-GATE-V3\0authority-enrollment-self-check");
+    const signature = await nativeCrypto.subtle.sign({ name: "Ed25519" }, importedPrivate, challenge);
+    if (!await nativeCrypto.subtle.verify({ name: "Ed25519" }, importedPublic, signature, challenge)) {
+      throw new Error("Exported authority key failed its verification check.");
+    }
+    const digest = new Uint8Array(await nativeCrypto.subtle.digest("SHA-256", publicRaw));
+    const fingerprint = Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+    return { seed, privateB64: bytesToBase64(seed), publicB64: bytesToBase64(publicRaw), fingerprint };
+  } catch (error) {
+    if (seed) seed.fill(0);
+    throw error;
+  } finally {
+    if (jwk) jwk.d = "";
+  }
+}
+// END ENROLLMENT CRYPTO.
+
+const elements = Object.fromEntries([
+  "generate", "clear", "status", "key-section", "fingerprint", "private-key", "public-key",
+  "reveal", "copy-fingerprint", "copy-private", "copy-public"
+].map(id => [id, document.getElementById(id)]));
+
+let authority = null;
+let generation = 0;
+const environmentReady = window.isSecureContext === true && window.top === window.self &&
+  typeof window.crypto === "object" && !!window.crypto.subtle;
+
+function setStatus(message, error = false) {
+  elements.status.textContent = message;
+  elements.status.classList.toggle("error", error);
+}
+
+function clearAuthority(message = "Page values cleared. Clipboard and saved copies are unchanged.") {
+  generation += 1;
+  if (authority) {
+    authority.seed.fill(0);
+    authority.privateB64 = "";
+    authority.publicB64 = "";
+    authority.fingerprint = "";
+  }
+  authority = null;
+  elements["private-key"].value = "";
+  elements["private-key"].type = "password";
+  elements["public-key"].value = "";
+  elements.fingerprint.value = "";
+  elements.reveal.checked = false;
+  elements["key-section"].hidden = true;
+  elements.generate.disabled = !environmentReady;
+  elements.clear.disabled = true;
+  setStatus(message);
+}
+
+elements.generate.addEventListener("click", async () => {
+  if (!environmentReady || elements.generate.disabled) return;
+  clearAuthority("Generating a fresh Ed25519 authority in this browser…");
+  const current = generation;
+  elements.generate.disabled = true;
+  elements.clear.disabled = false;
+  try {
+    const created = await createAuthority(window.crypto);
+    if (current !== generation) {
+      created.seed.fill(0);
+      created.privateB64 = "";
+      return;
+    }
+    authority = created;
+    elements.fingerprint.value = authority.fingerprint;
+    elements["public-key"].value = authority.publicB64;
+    elements["key-section"].hidden = false;
+    setStatus("Authority generated and its export checked. Nothing has been copied or enrolled.");
+  } catch (error) {
+    if (current !== generation) return;
+    clearAuthority();
+    const reason = error && error.name === "NotSupportedError"
+      ? "This browser does not support native Ed25519. Use a current browser with native WebCrypto Ed25519 support."
+      : "Native key generation or verification failed. No authority is available. Use a supported, trusted browser and retry.";
+    setStatus(reason, true);
+  }
+});
+
+elements.clear.addEventListener("click", () => clearAuthority());
+elements.reveal.addEventListener("change", () => {
+  elements["private-key"].type = elements.reveal.checked ? "text" : "password";
+  elements["private-key"].value = authority && elements.reveal.checked ? authority.privateB64 : "";
+});
+
+async function copyValue(field, label) {
+  if (!authority) return;
+  const current = generation;
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    setStatus("Clipboard copying is unavailable. Select the public value manually, or explicitly reveal the private seed before selecting it.", true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(authority[field]);
+    if (current === generation) setStatus(label + " copied at your request. Paste it into the intended GitHub setting.");
+  } catch (error) {
+    if (current === generation) setStatus("The browser denied clipboard access. Select the public value manually, or explicitly reveal the private seed before selecting it.", true);
+  }
+}
+
+elements["copy-fingerprint"].addEventListener("click", () => copyValue("fingerprint", "Public fingerprint"));
+elements["copy-private"].addEventListener("click", () => copyValue("privateB64", "Private seed"));
+elements["copy-public"].addEventListener("click", () => copyValue("publicB64", "Public key"));
+window.addEventListener("pagehide", () => clearAuthority("Page values cleared. Generate a fresh authority if needed."));
+
+if (!environmentReady) {
+  setStatus("Generation is disabled: open this trusted file directly in a supported secure browser context, outside an embedded frame. Native WebCrypto is required; there is no fallback.", true);
+} else {
+  elements.generate.disabled = false;
+}
+</script>
+</body>
+</html>

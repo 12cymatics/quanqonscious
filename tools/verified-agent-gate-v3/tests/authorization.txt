@@ -1,0 +1,4 @@
+TEST-ONLY AUTHORIZATION FIXTURE
+Build this exactly
+Authorize the deterministic automated acceptance tests only.
+This synthetic fixture is not the user's authorization for any live deployment or task.
