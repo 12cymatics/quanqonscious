@@ -1270,9 +1270,106 @@ sc.addEventListener('click', e => {
 });
 
 let exporting = false;
+
+/* The retained export has bounded outer chunks, but a single pinned-basis or
+   dense-neighbor chunk can still occupy the window thread for more than a
+   second. Execute that same function in a dedicated worker, including PNG
+   encoding. Every function below is copied from its live implementation; no
+   second rendering algorithm, reduced grain count or shortened settling run
+   is introduced. The original function remains callable for pixel parity. */
+async function originalSandExportWorkerJob(event){
+  self.onmessage = null;
+  try {
+    if (typeof OffscreenCanvas !== 'function'
+        || typeof OffscreenCanvas.prototype.convertToBlob !== 'function')
+      throw new Error('Background image export requires worker OffscreenCanvas with PNG encoding support.');
+    ({ state, view, phaseSign, agitation, freq } = event.data.snapshot);
+    const result = await exportDiagnosticImage(event.data.size,
+      message => self.postMessage({ type:'progress', message }));
+    self.postMessage({ type:'progress', message:'encoding PNG' });
+    const blob = await result.canvas.convertToBlob({ type:'image/png' });
+    if (!(blob instanceof Blob) || blob.type !== 'image/png' || !blob.size)
+      throw new Error('Background image export did not produce a PNG.');
+    delete result.canvas;
+    self.postMessage({ type:'complete', result:{ ...result, blob } });
+  } catch (error){
+    self.postMessage({ type:'error', message:error && error.message || String(error) });
+  }
+}
+
+async function exportDiagnosticInWorker(SIZE, onProgress = () => {}){
+  if ($('experimentError').textContent) throw new Error($('experimentError').textContent);
+  if (dirty) recompute();
+  if (typeof Worker !== 'function') throw new Error('This browser does not support background image export.');
+  /* Capture the complete input this calculation reads before starting the job.
+     postMessage copies these arrays; controls can never change a running export. */
+  const snapshot = { view, phaseSign, agitation, freq, state:{
+    cellDiameterMm:state.cellDiameterMm, expression:state.expression,
+    visualSignature:state.visualSignature, damping:state.damping,
+    wavelength:state.wavelength, experiment:state.experiment,
+    states:state.states.map(mode => ({ m:mode.m, weight:mode.weight, phi:mode.phi,
+      radial:{ m:mode.radial.m, jp:mode.radial.jp,
+        pinned:mode.radial.pinned ? { coefficients:mode.radial.pinned.coefficients } : mode.radial.pinned,
+        pinnedZeros:mode.radial.pinnedZeros } }))
+  } };
+  const constants = { EXPORT_SEED, EXPORT_TABLE_BUDGET_BYTES, RES_GATE, RR, NP,
+    DRIFT, DAMP, AGIT, QUAD_R, PROFILE_TAIL_TOL, PHASE_FLUX_GAIN_AT_REFERENCE,
+    STOKES_RATIO_AT_REFERENCE, CENTRE_BIAS_SLOPE };
+  const functions = { millerAll, besselJ, besselPair, pinnedBasisTable,
+    radialProfilePinned, simpsonR, finestZeroOf, centreBiasEnvelope,
+    transportCoefficients, mulberry32, tone, exportDiagnosticImage,
+    originalSandExportWorkerJob };
+  const source = '"use strict";\n'
+    + Object.entries(constants).map(([name,value]) => `const ${name}=${JSON.stringify(value)};`).join('\n')
+    + '\nlet state,view,phaseSign,agitation,freq;const useSolver=false,dirty=false;\n'
+    + 'const PIN_BASIS_TABLE=new Map();\n'
+    + 'const $=id=>{if(id!=="experimentError")throw new Error("Unexpected export DOM lookup: "+id);return {textContent:""};};\n'
+    + 'const document={createElement:tag=>{if(tag!=="canvas")throw new Error("Unexpected export element: "+tag);return new OffscreenCanvas(0,0);}};\n'
+    + Object.entries(functions).map(([name,fn]) => `const ${name}=(${fn.toString()});`).join('\n')
+    + '\nself.onmessage=originalSandExportWorkerJob;';
+  const url = URL.createObjectURL(new Blob([source], { type:'application/javascript' }));
+  let worker;
+  try { worker = new Worker(url); }
+  catch (error){ URL.revokeObjectURL(url); throw error; }
+  return new Promise((resolve,reject) => {
+    let settled = false;
+    const cleanup = () => {
+      worker.terminate(); URL.revokeObjectURL(url);
+      window.removeEventListener('pagehide', interrupted);
+    };
+    const finish = (error,result) => {
+      if (settled) return;
+      settled = true; cleanup();
+      if (error) reject(error); else resolve(result);
+    };
+    const interrupted = () => finish(new Error('Image export was interrupted by navigation.'));
+    window.addEventListener('pagehide', interrupted, { once:true });
+    worker.onerror = event => {
+      event.preventDefault(); finish(new Error(event.message || 'Background image export failed.'));
+    };
+    worker.onmessageerror = () => finish(new Error('The background image result could not be read.'));
+    worker.onmessage = event => {
+      const data = event.data;
+      try {
+        if (data.type === 'progress') onProgress(data.message);
+        else if (data.type === 'error') finish(new Error(data.message));
+        else if (data.type === 'complete'){
+          if (!(data.result.blob instanceof Blob) || data.result.blob.type !== 'image/png')
+            throw new Error('The background image result is not a PNG.');
+          finish(null,data.result);
+        } else throw new Error('Unrecognized background image response.');
+      } catch (error){ finish(error); }
+    };
+    try {
+      worker.postMessage({ size:SIZE, snapshot });
+      onProgress('starting background image renderer');
+    } catch (error){ finish(error); }
+  });
+}
+
 async function exportImage(SIZE, onProgress = () => {}){
   if (!useSolver){
-    const result=await exportDiagnosticImage(SIZE,onProgress);
+    const result=await exportDiagnosticInWorker(SIZE,onProgress);
     result.source={...result.source,model:'original-sand-visualization',grainModel:result.label.view==='sand'?'empirical-drift-agitation-packing':null,physicalGrainFluidCoupling:false};
     return result;
   }
@@ -1754,7 +1851,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
   try {
     const res = await exportImage(requestedSize, msg => { btn.textContent = msg; });
     btn.textContent = 'encoding PNG';
-    const blob = await new Promise(r => res.canvas.toBlob(r, 'image/png'));
+    const blob = res.blob || await new Promise(r => res.canvas.toBlob(r, 'image/png'));
     const exportLabel = res.label;
     const name = `faraday-${exportLabel.diameterMm.toFixed(2)}mm-${exportLabel.frequencyHz}Hz-${exportLabel.model}${exportLabel.fieldTag ? "-"+exportLabel.fieldTag : ""}-${exportLabel.view}-${requestedSize}.png`;
     if (saver){ await saver.save({ filename: name, data: blob }); }

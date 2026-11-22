@@ -2,9 +2,9 @@
 
 This source prototype couples finite spherical grains to the existing three-dimensional liquid solver. It follows the selected resolved-fluid route: rigid volume constraints exchange momentum with the liquid, without an empirical particle drag law. The browser imports its recorded states into the same interactive 3D scene as the liquid surface and velocity field.
 
-**This is not a completed beach-sand simulator or a commercially validated product.** The included verification case covers two accepted steps, totalling **10 nanoseconds**, in a deliberately small vessel. It checks execution and output, not settling, pattern formation, deposition or experimental agreement. Motion over this interval is extremely small; playback does not invent more motion.
+**This is not a completed beach-sand simulator or a commercially validated product.** The included default verification case covers two accepted steps, totalling **10 nanoseconds**, in a deliberately small vessel. Longer one-grain tests and an optional joint surface/grain integrator are now available. They verify numerical evolution and boundary constraints; they do not establish a depositing sand bed, pattern formation or experimental agreement. Playback preserves the actual recorded motion and physical time.
 
-A separate 20-step, 100 ns execution of this geometry completed in about 20 seconds on the shared Linux development host, using 81 volume markers. That is a limited execution observation, not a portable performance benchmark. It already shows that the present implementation is far too slow for useful full-vessel sand evolution.
+The moving-geometry correction removes an unnecessary reduction toward nanosecond steps. The optional joint method solves surface height, normal-stress pressure and rigid-grain constraints together. Its cached constraint preconditioner accelerates the same physical equations and checks the true residual after every solve. See [TESTING.md](TESTING.md) for measured refinement, timing and scope. These changes do not yet establish practical dense-bed performance.
 
 The current mesh must resolve grains and positive liquid gaps. It refuses an approaching grain when its lubrication gap becomes unresolved. Consequently this fixed-mesh prototype cannot yet carry settling grains through that unresolved region into a deposited sand bed. More RAM alone does not remove this limitation.
 
@@ -28,6 +28,33 @@ sh native/run-case.sh \
 ```
 
 The output directory must be new, and its parent directory must exist. The launcher builds the program, prepares exactly the supplied case, and runs it. It never chooses a grain count, coarsens the grid, substitutes fluid or material properties, or accepts an input time step above the fluid stability bound. Accepted steps can be shorter than `dt` during contact-event or constraint-residual refinement, and at the final duration. Their actual duration and refinement count are recorded.
+
+To select the joint method for separated grains, add the same explicit option to
+the launcher. This seeded example runs ten 100 ns steps to 1 microsecond and
+saves six frames; it remains a numerical verification case:
+
+```sh
+sh native/run-case.sh \
+  --case native/examples/single-sphere-joint-verification.json \
+  --out joint-verification-run \
+  --integrator joint-implicit
+```
+
+`explicit` remains the default. `joint-implicit` solves the nonlinear endpoint
+surface geometry, capillary/gravity pressure, normal viscous stress and rigid
+constraints together, with a cached projected constraint preconditioner. It
+retains explicit interior advection and viscous acceleration, including viscous
+boundary fluxes. It is first order in time, with independent timestep-refinement
+tests. The capillary restriction is removed only for this method; the launcher
+retains a factor of 0.4 on the viscosity, advection and gravity step bounds.
+Active contacts and unresolved positive gaps still refuse. It does not silently
+switch methods or reduce a failed joint step. The final step may be shorter to
+reach the requested end time exactly.
+
+The recording header preserves the selected method and constraint preconditioner.
+Evolved joint frames include measured kinematic and normal-pressure residuals.
+The initial frame has no invented endpoint-stress diagnostic. Older recordings
+remain readable, with absent numerical-method provenance left unspecified.
 
 The directory contains:
 
@@ -60,7 +87,7 @@ verification-manual/faraday-native verification-manual/prepared.fns \
   2> verification-manual/solver.log
 ```
 
-With these manual commands, the filename alone does not indicate success: check the exit status and the final `complete` record. Preparation requires both `--case` and `--out`; the native executable takes one prepared-case path. Running `build.sh` without entry sources only compiles the fluid object, not the coupled executable.
+With these manual commands, the filename alone does not indicate success: check the exit status and the final `complete` record. Preparation requires both `--case` and `--out`; the native executable takes one prepared-case path. For the joint method, pass `--integrator joint-implicit` to both preparation and the executable (after the prepared-case path). The executable independently rechecks the selected method's step bound. Running `build.sh` without entry sources only compiles the fluid object, not the coupled executable.
 
 ## View the recording
 
@@ -95,6 +122,8 @@ An error record, malformed tail or interrupted file is visibly reported. Earlier
 | `duration`, `dt`, `outputInterval` | Positive seconds; `dt` must satisfy the fluid stability bound |
 
 Coordinates use the cylinder axis as x=y=0 and the floor as z=0. Grains must be denser than the liquid for the present positive excess-inertia formulation. Overlapping initial grains, vessel penetration, inadequate local resolution and unsupported submerged geometry are refused. The seeded Bessel surface is only an initial condition; it does not prescribe later fluid patterns.
+
+The command-line runner measures the supplied initial incompressibility and rigid no-slip constraints before emitting a physical frame. An incompatible initial state is rejected without changing its velocities or advancing time. The JSON preparer's `flat` and `seed` options initialize the fluid velocity to zero, so moving or spinning grains require compatible fluid initial fields, which those two options do not generate. Numerical regression tests that explicitly condition an incompatible test state report that conditioning separately; it is not a hidden initializer in the application.
 
 The supplied example has a **1 mm diameter, 0.5 mm deep vessel**, a `20 × 64 × 20` grid, and one **250 µm diameter sphere** with density **2650 kg/m³**. These are illustrative silica-rich material and sphere inputs. They are not measurements of south-east Queensland beach-sand shape, purity, grading, loading, friction or restitution. The vessel differs from the original 30 mm experiment. The example's contact coefficients are explicit inputs but its tiny separated-grain run does not exercise bed contact. A `16 × 64 × 16` version of this geometry fails the current support-resolution check.
 
@@ -133,6 +162,8 @@ The discrete constraint system uses fluid interpolation J, rigid motion K, liqui
 ```
 
 `v` here collects all grain translation/rotation components. The transpose spreading gives opposite force and torque exchange; the mass-weighted projection couples incompressibility to rigidity. If a trial velocity increment b has `P b = b − Gφ` with `DGφ = Db`, adding `s P b` to the physical velocity requires reduced-pressure update `q += s ρ φ / dt`. The initial rigid correction has `s = −1`; its pressure correction has the same negative sign. Contact-induced liquid corrections use their corresponding signed potential. The C++ `CoupledStepReport.rigidImpulse` includes hydrodynamic impulses induced by contact as well as the initial rigid correction; `contactImpulse` separately contains the direct contact impulses. These impulse arrays are internal reports, not fields in recording version 1.
+
+The moving-geometry integrator is a first-order split. It computes a constrained drift velocity, advances grain centres and the free surface, then enforces incompressibility and rigidity on the updated geometry. The endpoint correction accumulates its pressure and body impulses and reconstructs the dependent axis velocity and surface rate. It does not move centres a second time or repair overlaps. The internal `driftVelocity` report distinguishes the velocity used to advance positions from the corrected endpoint velocity. This replaces the earlier attempt to make a temporal splitting error pass an algebraic tolerance by repeatedly shrinking the time step. It is not a second-order method or an exact energy-conservation claim.
 
 The free surface is the single-valued height `z = h + η(r,θ,t)`. It obeys the kinematic condition `∂tη + u_h·∇hη = w`, zero tangential viscous traction, and the reduced normal-stress boundary value
 

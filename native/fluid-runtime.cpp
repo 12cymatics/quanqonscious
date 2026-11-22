@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -30,6 +31,104 @@ void checkSpan(std::span<double> values,std::size_t count,const char* name){
 void releaseStorage(){
   ::nativeDoubleBlocks.clear(); ::nativeIntBlocks.clear();
   ::arenaUsed=0; ::iarenaUsed=0; ::nativeBytes=0;
+}
+
+double vectorNorm(std::span<const double> a){
+  double scale=0,sum=1;
+  for(double x:a){
+    if(!std::isfinite(x))throw std::runtime_error("implicit surface vector contains a non-finite value");
+    if(x!=0){const double value=std::abs(x);
+    if(scale<value){const double r=scale/value;sum=1+sum*r*r;scale=value;}
+    else {const double r=value/scale;sum+=r*r;}}}
+  const double result=scale*std::sqrt(sum);
+  if(!std::isfinite(result))throw std::runtime_error("implicit surface vector norm overflowed");
+  return result;
+}
+double vectorMaximum(std::span<const double> a){
+  double result=0;for(double value:a){
+    if(!std::isfinite(value))throw std::runtime_error("implicit surface vector contains a non-finite value");
+    result=std::max(result,std::abs(value));}return result;
+}
+double vectorDot(std::span<const double> a,std::span<const double> b){
+  double result=0;for(std::size_t i=0;i<a.size();i++)result+=a[i]*b[i];
+  if(!std::isfinite(result))throw std::runtime_error("implicit surface dot product is non-finite");
+  return result;
+}
+
+// Exact directional derivative of the canonical discrete-area curvature.
+// Differentiating its existing scatter retains all nonlinear slope terms and
+// the pinned-rim contribution; this is not a small-slope surface replacement.
+void curvatureDirection(std::span<const double> at,std::span<const double> direction,
+                        std::span<double> out){
+  std::fill(out.begin(),out.end(),0);
+  struct RestoreEta {double* saved;~RestoreEta(){::eta=saved;}} restore{::eta};
+  for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++){
+    double sl[6],ds[6];
+    ::eta=const_cast<double*>(at.data());::etaSlopes(i,k,sl);
+    ::eta=const_cast<double*>(direction.data());::etaSlopes(i,k,ds);
+    const int e=::ie(i,k);const double rr=::rc[i]*::rc[i];
+    const double X=1+sl[4]*sl[0]*sl[0]+sl[5]*sl[1]*sl[1]
+      +.5*(sl[2]*sl[2]+sl[3]*sl[3])/rr;
+    const double dX=2*sl[4]*sl[0]*ds[0]+2*sl[5]*sl[1]*ds[1]
+      +(sl[2]*ds[2]+sl[3]*ds[3])/rr;
+    const double wt=::rc[i]*::drc[i]*::dth/(2*std::sqrt(X));
+    const double dwt=-.5*wt*dX/X;
+    const double ci=2*sl[4]*(dwt*sl[0]+wt*ds[0]);
+    const double co=2*sl[5]*(dwt*sl[1]+wt*ds[1]);
+    if(i>0){out[e]+=ci/::drf[i];out[::ie(i-1,k)]-=ci/::drf[i];}
+    if(i<::nr-1){out[e]-=co/::drf[i+1];out[::ie(i+1,k)]+=co/::drf[i+1];}
+    else if(::pinned)out[e]-=co/::drf[::nr];
+    const double cl=(dwt*sl[2]+wt*ds[2])/rr,ch=(dwt*sl[3]+wt*ds[3])/rr;
+    out[e]+=(cl-ch)/::dth;out[::ie(i,k-1)]-=cl/::dth;out[::ie(i,k+1)]+=ch/::dth;
+  }
+  for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++)
+    out[::ie(i,k)]/=-::rc[i]*::drc[i]*::dth;
+}
+
+// Restarted, reorthogonalized GMRES. The surface response need not be symmetric
+// in an unweighted Euclidean norm. Every successful return checks A*x-b itself;
+// a small recursively updated Arnoldi residual alone is insufficient.
+std::vector<double> surfaceGmres(const std::function<std::vector<double>(std::span<const double>)>& apply,
+    std::span<const double> rhs,double tolerance,std::size_t restart,std::size_t maximum,
+    std::size_t& iterations){
+  const std::size_t n=rhs.size();std::vector<double> x(n),r(rhs.begin(),rhs.end());
+  iterations=0;
+  while(vectorNorm(r)>tolerance){
+    if(iterations>=maximum)throw std::runtime_error("Implicit surface linear solve did not converge");
+    const std::size_t m=std::min(restart,maximum-iterations);
+    std::vector<std::vector<double>> v(m+1,std::vector<double>(n));
+    std::vector<double> h((m+1)*m),cs(m),sn(m),g(m+1),y(m);
+    const double beta=vectorNorm(r);g[0]=beta;
+    for(std::size_t j=0;j<n;j++)v[0][j]=r[j]/beta;
+    std::size_t used=0;
+    for(std::size_t j=0;j<m;j++){
+      auto w=apply(v[j]);
+      // A second MGS pass keeps the Krylov basis usable at the strict surface
+      // residual, without adding a diagonal shift to the physical operator.
+      for(int pass=0;pass<2;pass++)for(std::size_t i=0;i<=j;i++){
+        const double q=vectorDot(w,v[i]);h[i*m+j]+=q;
+        for(std::size_t k=0;k<n;k++)w[k]-=q*v[i][k];
+      }
+      const double next=vectorNorm(w);h[(j+1)*m+j]=next;
+      if(next>0)for(std::size_t k=0;k<n;k++)v[j+1][k]=w[k]/next;
+      for(std::size_t i=0;i<j;i++){
+        const double a=h[i*m+j],b=h[(i+1)*m+j];
+        h[i*m+j]=cs[i]*a+sn[i]*b;h[(i+1)*m+j]=-sn[i]*a+cs[i]*b;
+      }
+      const double a=h[j*m+j],b=h[(j+1)*m+j],length=std::hypot(a,b);
+      if(!(length>0&&std::isfinite(length)))throw std::runtime_error("Implicit surface Krylov operator broke down");
+      cs[j]=a/length;sn[j]=b/length;h[j*m+j]=length;h[(j+1)*m+j]=0;
+      g[j+1]=-sn[j]*g[j];g[j]*=cs[j];iterations++;used=j+1;
+      if(std::abs(g[j+1])<=tolerance||next==0)break;
+    }
+    for(std::size_t ii=used;ii-->0;){
+      double q=g[ii];for(std::size_t j=ii+1;j<used;j++)q-=h[ii*m+j]*y[j];
+      y[ii]=q/h[ii*m+ii];
+    }
+    for(std::size_t j=0;j<used;j++)for(std::size_t k=0;k<n;k++)x[k]+=y[j]*v[j][k];
+    const auto ax=apply(x);for(std::size_t k=0;k<n;k++)r[k]=rhs[k]-ax[k];
+  }
+  return x;
 }
 }
 
@@ -132,6 +231,13 @@ void NativeFluid::refreshMetric(){
   ::cell3d_refreshMetric(); checkError("native metric refresh");
 }
 
+void NativeFluid::synchronizeVelocity(){
+  requireReady();
+  ::cell3d_axisU();::cell3d_omegaFromW();checkError("native velocity synchronization");
+  for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++)
+    ::Ht[::ie(i,k)]=::om[::iw(i,k,::nz)];
+}
+
 void NativeFluid::enableRigidProjection(){
   requireReady();
   if (pending_) throw std::logic_error("enable rigid projection before starting a coupled step");
@@ -179,6 +285,8 @@ void NativeFluid::restore(const FluidCheckpoint& saved){
 
 void NativeFluid::step(double dt,double effectiveGravity){
   requireReady(); positiveFinite(dt,"dt");
+  if(!(std::isfinite(time_+dt)&&time_+dt>time_))
+    throw std::invalid_argument("dt must advance the representable physical clock");
   if (pending_) throw std::logic_error("finish the pending coupled step before starting another");
   if (!std::isfinite(effectiveGravity)) throw std::invalid_argument("effective gravity must be finite");
   ::cell3d_setGravity(effectiveGravity);
@@ -186,8 +294,188 @@ void NativeFluid::step(double dt,double effectiveGravity){
   time_+=dt;
 }
 
+std::size_t NativeFluid::implicitSurfaceWorkspaceBytes(const ImplicitSurfaceOptions& options) const {
+  requireReady();
+  const long double count=8.L*(::NU+static_cast<long double>(::NV)+::NW+::NP)
+    +(2.L*static_cast<long double>(options.krylovDimension)+40.L)*::NE
+    +2.L*(static_cast<long double>(options.krylovDimension)+5.L)*options.krylovDimension;
+  const long double bytes=count*sizeof(double);
+  if(!(bytes<=std::numeric_limits<std::size_t>::max()))
+    throw std::length_error("implicit surface workspace size overflows size_t");
+  return static_cast<std::size_t>(bytes);
+}
+
+ImplicitSurfaceReport NativeFluid::stepImplicitSurface(double dt,double effectiveGravity,
+    const ImplicitSurfaceOptions& options,const SurfaceResponseCallback& response){
+  requireReady();positiveFinite(dt,"dt");
+  if(!(std::isfinite(time_+dt)&&time_+dt>time_))
+    throw std::invalid_argument("dt must advance the representable physical clock");
+  if(pending_)throw std::logic_error("finish the pending coupled step before an implicit surface step");
+  if(!std::isfinite(effectiveGravity))throw std::invalid_argument("effective gravity must be finite");
+  positiveFinite(options.absoluteSurfaceTolerance,"absolute surface tolerance");
+  positiveFinite(options.relativeSurfaceTolerance,"relative surface tolerance");
+  positiveFinite(options.absolutePressureTolerance,"absolute surface pressure tolerance");
+  positiveFinite(options.relativePressureTolerance,"relative surface pressure tolerance");
+  positiveFinite(options.linearRelativeTolerance,"linear surface tolerance");
+  if(options.relativeSurfaceTolerance>=1||options.relativePressureTolerance>=1||options.linearRelativeTolerance>=1
+      ||!options.maximumNewtonIterations||!options.maximumLinearIterations||!options.krylovDimension)
+    throw std::invalid_argument("implicit surface tolerances and iteration limits must be positive and meaningful");
+  const auto limits=stepLimits(effectiveGravity-config_.g);
+  if(dt>std::min({limits.viscous,limits.advective,limits.gravity}))
+    throw std::invalid_argument("implicit capillarity does not remove viscous, advective or gravity step limits");
+  // Budget temporary checkpoint, predictor, Krylov vectors and simultaneous
+  // residual/Jacobian/line-search work before allocating any of them.
+  if(implicitSurfaceWorkspaceBytes(options)>config_.memoryBudgetBytes-allocatedBytes())
+    throw std::length_error("implicit surface workspace exceeds the requested memory budget; grid unchanged");
+  const bool oldProjection=rigidProjection_;
+  const auto beforeMode=checkpoint();
+  ImplicitSurfaceReport report;report.dt=dt;
+  try {
+    enableRigidProjection();
+    ::cell3d_setGravity(effectiveGravity);::cell3d_stepBegin(dt);checkError("implicit surface step begin");
+    ::cell3d_stepExplicit(0,::nr-1);checkError("implicit surface explicit momentum terms");
+    ::cell3d_nativePredictor(dt);checkError("implicit surface momentum predictor");
+    std::array<std::vector<double>,3> predictor;
+    for(int component=0;component<3;component++){
+      const auto values=array(9+component);predictor[component].assign(values.begin(),values.end());
+    }
+    const auto& oldEta=beforeMode.state[5];std::vector<double> trial=oldEta,curvature(::NE);
+    auto pressureAt=[&](std::span<const double> elevation){
+      struct RestoreEta {double* saved;~RestoreEta(){::eta=saved;}} restore{::eta};
+      ::eta=const_cast<double*>(elevation.data());::cell3d_curvature(curvature.data());
+      for(int e=0;e<::NE;e++)::psurf[e]=config_.rho*effectiveGravity*elevation[e]
+        -config_.gamma*curvature[e];
+    };
+    auto projectPressure=[&](bool momentum){
+      for(int component=0;component<3;component++){
+        auto values=array(9+component);
+        if(momentum)std::copy(predictor[component].begin(),predictor[component].end(),values.begin());
+        else std::fill(values.begin(),values.end(),0);
+      }
+      ::cell3d_axisU();::cell3d_omegaFromW();
+      ::cell3d_nativeProject(dt);checkError("implicit surface pressure response");report.pressureSolves++;
+      if(response)response(momentum?SurfaceResponseKind::physical:SurfaceResponseKind::tangent);
+      for(int key:{9,10,11,13})for(double value:array(key))
+        if(!std::isfinite(value))throw std::runtime_error("implicit joint response produced non-finite velocity or pressure");
+      ::cell3d_axisU();::cell3d_omegaFromW();checkError("implicit joint surface response");
+    };
+    auto normalStress=[&](){
+      std::vector<double> value(::NE);
+      for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++)value[::ie(i,k)]=::surfaceNormalStress(i,k);
+      vectorMaximum(value);return value;
+    };
+    auto pressureResponse=[&](bool momentum){
+      // At one fixed trial geometry the normal stress N is linear in velocity,
+      // and the pressure/rigid response is affine: u(q)=U0+Lq. Therefore the
+      // complete endpoint condition q=q_cap+Nu(q) is solved by
+      //     (I-NL) correction = N u(q_cap).
+      // N is the full canonical n.E.n contraction. No flat-normal, lagged
+      // velocity, diagonal shift or empirical stress coefficient is substituted.
+      const std::vector<double> capillaryPressure(::psurf,::psurf+::NE);
+      projectPressure(momentum);
+      const auto rhs=normalStress();
+      const double tolerance=options.absolutePressureTolerance+options.relativePressureTolerance
+        *std::max(vectorMaximum(capillaryPressure),vectorMaximum(rhs));
+      auto apply=[&](std::span<const double> value){
+        std::copy(value.begin(),value.end(),::psurf);projectPressure(false);
+        auto result=normalStress();
+        for(std::size_t e=0;e<result.size();e++)result[e]=value[e]-result[e];
+        return result;
+      };
+      std::size_t iterations=0;
+      const auto correction=surfaceGmres(apply,rhs,.25*tolerance,options.krylovDimension,
+        options.maximumLinearIterations,iterations);
+      report.normalStressIterations+=iterations;
+      for(int e=0;e<::NE;e++)::psurf[e]=capillaryPressure[e]+correction[e];
+      projectPressure(momentum);
+      const auto actual=normalStress();
+      double defect=0;
+      for(int e=0;e<::NE;e++)defect=std::max(defect,std::abs(::psurf[e]-capillaryPressure[e]-actual[e]));
+      if(!(std::isfinite(defect)&&defect<=tolerance))
+        throw std::runtime_error("implicit surface endpoint normal stress failed its true residual");
+    };
+    auto residual=[&](std::span<const double> elevation){
+      for(double z:elevation)if(!std::isfinite(z)||!(config_.h+z>0))
+        throw std::runtime_error("implicit surface trial leaves the single-valued wet domain");
+      std::copy(elevation.begin(),elevation.end(),::eta);
+      ::cell3d_refreshMetric();checkError("implicit trial endpoint metric");
+      pressureAt(elevation);pressureResponse(true);
+      std::vector<double> r(::NE);
+      for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++){
+        const int e=::ie(i,k);r[e]=elevation[e]-oldEta[e]-dt*::om[::iw(i,k,::nz)];
+      }
+      return r;
+    };
+    auto r=residual(trial);
+    for(;;){
+      const double tolerance=options.absoluteSurfaceTolerance+options.relativeSurfaceTolerance
+        *std::max(vectorMaximum(oldEta),vectorMaximum(trial));
+      report.surfaceResidual=vectorMaximum(r);
+      if(report.surfaceResidual<=tolerance)break;
+      if(report.newtonIterations>=options.maximumNewtonIterations)
+        throw std::runtime_error("implicit nonlinear surface/pressure solve did not converge");
+      auto jacobian=[&](std::span<const double> direction){
+        curvatureDirection(trial,direction,curvature);
+        for(int e=0;e<::NE;e++)::psurf[e]=config_.rho*effectiveGravity*direction[e]-config_.gamma*curvature[e];
+        pressureResponse(false);std::vector<double> result(direction.begin(),direction.end());
+        for(int i=0;i<::nr;i++)for(int k=0;k<::nth;k++)result[::ie(i,k)]-=dt*::om[::iw(i,k,::nz)];
+        return result;
+      };
+      std::vector<double> rhs=r;for(double& value:rhs)value=-value;
+      std::size_t iterations=0;
+      const double linearTolerance=std::max(.05*tolerance,options.linearRelativeTolerance*vectorNorm(rhs));
+      const auto correction=surfaceGmres(jacobian,rhs,linearTolerance,options.krylovDimension,
+        options.maximumLinearIterations,iterations);
+      report.linearIterations+=iterations;
+      const double before=vectorNorm(r);double fraction=1;bool accepted=false;
+      for(int backtrack=0;backtrack<32;backtrack++,fraction*=.5){
+        std::vector<double> candidate=trial;
+        bool wet=true;for(std::size_t e=0;e<candidate.size();e++){
+          candidate[e]+=fraction*correction[e];wet=wet&&std::isfinite(candidate[e])&&config_.h+candidate[e]>0;
+        }
+        if(!wet)continue;
+        auto next=residual(candidate);
+        if(vectorNorm(next)<=(1-1e-4*fraction)*before||vectorMaximum(next)<=tolerance){
+          trial=std::move(candidate);r=std::move(next);accepted=true;break;
+        }
+      }
+      if(!accepted)throw std::runtime_error("implicit surface Newton line search did not decrease its true residual");
+      report.newtonIterations++;
+    }
+    // Evaluate the converged state's velocity/pressure once more: a Jacobian
+    // response must never be mistaken for the physical accepted velocity.
+    r=residual(trial);report.surfaceResidual=vectorMaximum(r);
+    if(report.surfaceResidual>options.absoluteSurfaceTolerance+options.relativeSurfaceTolerance
+        *std::max(vectorMaximum(oldEta),vectorMaximum(trial)))
+      throw std::runtime_error("implicit accepted surface failed its independently recomputed residual");
+    std::vector<double> acceptedPressure(::psurf,::psurf+::NE);
+    // The converged trial metric already carries this velocity's pressure and
+    // continuity solve. Advancing eta again, or projecting after changing the
+    // metric, would break the coupled equation just solved. Accept its bounded
+    // kinematic residual and retain that exact endpoint geometry instead.
+    synchronizeVelocity();
+    pressureAt(array(FluidArray::eta));
+    const auto finalNormal=normalStress();
+    for(int e=0;e<::NE;e++)report.surfacePressureResidual=std::max(report.surfacePressureResidual,
+      std::abs(acceptedPressure[e]-::psurf[e]-finalNormal[e]));
+    const double pressureTolerance=options.absolutePressureTolerance+options.relativePressureTolerance
+      *std::max(vectorMaximum(acceptedPressure),vectorMaximum(finalNormal));
+    if(report.surfacePressureResidual>pressureTolerance)
+      throw std::runtime_error("accepted implicit surface does not satisfy endpoint normal stress");
+    std::copy(acceptedPressure.begin(),acceptedPressure.end(),::psurf);
+    ::gEff=CELL3D_GRAVITY_UNSET;time_+=dt;
+    return report;
+  } catch (...) {
+    ::nativeRigidProjection=oldProjection;rigidProjection_=oldProjection;generation_=beforeMode.ownerGeneration;
+    restore(beforeMode);
+    throw;
+  }
+}
+
 void NativeFluid::predictor(double dt,double effectiveGravity){
   requireReady(); positiveFinite(dt,"dt");
+  if(!(std::isfinite(time_+dt)&&time_+dt>time_))
+    throw std::invalid_argument("dt must advance the representable physical clock");
   if (pending_) throw std::logic_error("a coupled native predictor is already pending");
   if (!std::isfinite(effectiveGravity)) throw std::invalid_argument("effective gravity must be finite");
   ::cell3d_setGravity(effectiveGravity);
@@ -261,7 +549,7 @@ double NativeFluid::velocityMass(int component,std::size_t index) const {
   const std::size_t j=index%stride, column=index/stride, k=column%static_cast<std::size_t>(::nth), i=column/static_cast<std::size_t>(::nth);
   if (component==0){
     if (i==0 || i==static_cast<std::size_t>(::nr)) return 0;
-    return ::rho*(::rf[i]*::drf[i]*::dth*::Hr[column]*::dsc[j]);
+    return ::rho*(::radialDualColumnVolume(i,k)*::dsc[j]);
   }
   if (component==1) return ::rho*(::rc[i]*::drc[i]*::dth*::Hth[column]*::dsc[j]);
   if (j==0) return 0;
@@ -279,13 +567,21 @@ StepLimits NativeFluid::stepLimits(double peakAcceleration) const {
   if (!std::isfinite(peakAcceleration)) throw std::invalid_argument("peak acceleration must be finite");
   double drMin=std::numeric_limits<double>::infinity();
   double dzMin=std::numeric_limits<double>::infinity(), Hmin=std::numeric_limits<double>::infinity();
+  double massRateFactor=1;
   for (int i=0;i<::nr;i++) drMin=std::min(drMin,::drc[i]);
   for (int i=0;i<::nr;i++) for (int k=0;k<::nth;k++){
     const double depth=::H[::ie(i,k)]; Hmin=std::min(Hmin,depth);
     for (int j=0;j<::nz;j++) dzMin=std::min(dzMin,depth*::dsc[j]);
   }
-  // Transcription of cell3dGridLimits. These are operator stability bounds,
-  // not a particle-speed cap or a modification of a physical coefficient.
+  for(int i=1;i<::nr;i++)for(int k=0;k<::nth;k++)
+    massRateFactor=std::max(massRateFactor,
+      ::rf[i]*::drf[i]*::dth*::Hr[::ie(i,k)]/::radialDualColumnVolume(i,k));
+  // Transcription of cell3dGridLimits, including the JS dual-mass correction.
+  // Replacing a diagonal inertial mass by a smaller one increases a momentum
+  // rate by at most max(M_old/M_new), and a wave frequency by its square root.
+  // These retain the existing full-stencil stability estimates; this ratio
+  // accounts for changed inertia and is not a new spectral proof for every ALE
+  // geometry. It changes step admission only, never a physical coefficient.
   const double kr2=4/(drMin*drMin), kz2=4/(dzMin*dzMin);
   const double mMax=static_cast<double>(::nth>>1), ka2=(mMax*mMax)/(::rc[0]*::rc[0]);
   const double kSurf2=kr2+ka2, kSurf=std::sqrt(kSurf2);
@@ -305,9 +601,10 @@ StepLimits NativeFluid::stepLimits(double peakAcceleration) const {
       adv=std::max(adv,uu/::drc[i]+vv/(radius*::dth)+ww/(depth*::dsc[j]));
     }
   }
-  return {2/omegaSurf,2/(::nu*(kr2+kz2+ka2)),
-    adv>0?1/adv:std::numeric_limits<double>::infinity(),
-    std::min(drMin,::rc[0]*::dth)/std::sqrt(gravityBound*Hmin),
+  const double frequencyFactor=std::sqrt(massRateFactor);
+  return {(2/omegaSurf)/frequencyFactor,(2/(::nu*(kr2+kz2+ka2)))/massRateFactor,
+    adv>0?(1/adv)/massRateFactor:std::numeric_limits<double>::infinity(),
+    (std::min(drMin,::rc[0]*::dth)/std::sqrt(gravityBound*Hmin))/frequencyFactor,
     std::sqrt(kr2),std::sqrt(kz2),std::sqrt(ka2)};
 }
 
@@ -315,6 +612,11 @@ double NativeFluid::stableStep(double peakAcceleration,double safety) const {
   positiveFinite(safety,"step safety factor");
   const auto limits=stepLimits(peakAcceleration);
   return safety*std::min({limits.capillary,limits.viscous,limits.advective,limits.gravity});
+}
+
+double NativeFluid::implicitSurfaceStepLimit(double peakAcceleration) const {
+  const auto limits=stepLimits(peakAcceleration);
+  return std::min({limits.viscous,limits.advective,limits.gravity});
 }
 
 int NativeFluid::pressureIterations() const noexcept { return ::cell3d_cgIters(); }

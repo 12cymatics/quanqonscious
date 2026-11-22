@@ -13,7 +13,7 @@ permissions:
 jobs:
   native:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +23,8 @@ jobs:
         run: node native/check-case-schema.mjs
       - name: Canonical native fluid parity and pressure projection
         run: node native/check-fluid-runtime.mjs
+      - name: Moving-grid mass and operator conservation
+        run: node dns/check-cell3d-gcl.mjs
       - name: Conservative interpolation and contact modules
         run: |
           c++ -std=c++20 -O2 -ffp-contract=off -fno-fast-math -Wall -Wextra -Werror native/rigid-interpolation.cpp native/check-interpolation.cpp -o "$RUNNER_TEMP/check-interpolation"
@@ -31,6 +33,19 @@ jobs:
           "$RUNNER_TEMP/check-contact"
       - name: Coupled constraints and transactional failures
         run: node native/check-coupler.mjs
+      - name: Independent moving-geometry temporal refinement
+        run: node native/check-coupled-convergence.mjs
+      - name: Joint surface and grain endpoint equations and temporal refinement
+        env:
+          FARADAY_IMPLICIT_MODE: cached
+        run: node native/check-implicit-coupled.mjs
+      - name: Exact positive-gap geometry and conservation identities
+        run: node native/check-resolved-gap.mjs
+      - name: Resolved full Navier-Stokes gap equations and physical boundaries
+        run: |
+          node native/check-resolved-gap-flow.mjs
+          node native/check-resolved-gap-boundary.mjs
+          node native/check-resolved-gap-join.mjs
       - name: Native command-line output and refusal protocol
         run: node native/check-cli.mjs
       - name: Exact native recording import

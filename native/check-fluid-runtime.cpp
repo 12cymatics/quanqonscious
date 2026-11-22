@@ -161,6 +161,18 @@ void checkProjection(NativeFluid& fluid,bool rigid,double dt){
     const double divAfter=fluid.maxDivergence();
     check(divAfter<1e-5 && std::abs(divAfter-divBefore)<1e-10,
       "rigid projection diverges after dependent-axis reconstruction");
+    const std::vector<double> expectedAxis(fluid.array(9).begin(),fluid.array(9).end());
+    const auto geometryBefore=fluid.checkpoint();
+    for(int k=0;k<fluid.nth();k++)for(int j=0;j<fluid.nz();j++)
+      fluid.array(9)[k*fluid.nz()+j]=17;
+    fluid.synchronizeVelocity();
+    check(std::equal(expectedAxis.begin(),expectedAxis.end(),fluid.array(9).begin()),
+      "velocity synchronization differs from independent axis reconstruction");
+    check(fluid.time()==geometryBefore.time&&fluid.checkpoint().state[5]==geometryBefore.state[5],
+      "velocity synchronization advanced surface or time");
+    for(int i=0;i<fluid.nr();i++)for(int k=0;k<fluid.nth();k++)
+      check(fluid.array(20)[i*fluid.nth()+k]==fluid.array(12)[(i*fluid.nth()+k)*(fluid.nz()+1)+fluid.nz()],
+        "velocity synchronization left a stale surface rate");
     fluid.restore(saved);
     fluid.predictor(dt,9.80665);
     const double predictorBefore=fluid.maxDivergence();
@@ -178,9 +190,52 @@ void checkProjection(NativeFluid& fluid,bool rigid,double dt){
 
 void advance(NativeFluid& fluid,const std::string& mode,double dt,double gravity){
   if (mode=="full") fluid.step(dt,gravity);
+  else if(mode=="surface-explicit"){
+    fluid.enableRigidProjection();fluid.step(dt,gravity);
+  } else if(mode=="surface-implicit"){
+    const auto result=fluid.stepImplicitSurface(dt,gravity);
+    std::cout<<"IMPLICIT "<<result.newtonIterations<<' '<<result.linearIterations<<' '
+      <<result.pressureSolves<<' '<<result.surfaceResidual<<' '<<result.surfacePressureResidual<<' '
+      <<result.normalStressIterations<<'\n';
+  } else if(mode=="surface-refusal"){
+    const bool oldMode=fluid.rigidProjectionEnabled();const auto saved=fluid.checkpoint();
+    const auto limits=fluid.stepLimits(gravity-fluid.config().g);
+    check(fluid.implicitSurfaceStepLimit(gravity-fluid.config().g)==std::min({limits.viscous,limits.advective,limits.gravity}),
+      "implicit surface step limit removed a non-capillary restriction");
+    expectFailure<std::invalid_argument>([&]{fluid.stepImplicitSurface(2*limits.viscous,gravity);},
+      "implicit surface bypassed the explicit viscous stability bound");
+    ImplicitSurfaceOptions oversized;oversized.krylovDimension=std::numeric_limits<std::size_t>::max();
+    expectFailure<std::length_error>([&]{fluid.stepImplicitSurface(dt,gravity,oversized);},
+      "implicit surface allocated an overflowing Krylov workspace");
+    ImplicitSurfaceOptions limited;limited.maximumLinearIterations=1;
+    expectFailure<std::runtime_error>([&]{fluid.stepImplicitSurface(dt,gravity,limited);},
+      "implicit surface unexpectedly accepted the deliberately insufficient Krylov budget");
+    check(fluid.time()==saved.time&&fluid.checkpoint().state==saved.state,
+      "failed implicit surface step altered the accepted physical state");
+    check(fluid.rigidProjectionEnabled()==oldMode,"failed implicit surface step changed projection mode");
+    ImplicitSurfaceOptions invalidStress;invalidStress.absolutePressureTolerance=NAN;
+    expectFailure<std::invalid_argument>([&]{fluid.stepImplicitSurface(dt,gravity,invalidStress);},
+      "implicit surface accepted an invalid normal-stress tolerance");
+    fluid.restore(saved); // also proves the pre-call checkpoint generation remains valid
+    expectFailure<std::runtime_error>([&]{
+      fluid.stepImplicitSurface(dt,gravity,{},[&](SurfaceResponseKind){fluid.array(FluidArray::w)[fluid.array(FluidArray::w).size()-1]=NAN;});
+    },"implicit surface accepted a non-finite joint response");
+    check(fluid.time()==saved.time&&fluid.checkpoint().state==saved.state&&fluid.rigidProjectionEnabled()==oldMode,
+      "non-finite joint callback did not roll back the original state and mode");
+    std::cout<<"IMPLICIT_ROLLBACK passed\n";
+  }
   else if (mode=="split") { fluid.predictor(dt,gravity); fluid.finish(dt); }
   else if (mode=="checkpoint"){
     const auto saved=fluid.checkpoint();
+    auto coarseClock=saved;coarseClock.time=1;fluid.restore(coarseClock);
+    for(int route=0;route<3;route++)expectFailure<std::invalid_argument>([&]{
+      if(route==0)fluid.step(1e-20,gravity);
+      else if(route==1)fluid.predictor(1e-20,gravity);
+      else fluid.stepImplicitSurface(1e-20,gravity);
+    },"a positive dt that does not advance physical time was accepted");
+    check(fluid.time()==1&&fluid.checkpoint().state==coarseClock.state,
+      "non-advancing time refusal changed the physical state");
+    fluid.restore(saved);
     expectFailure<std::logic_error>([&]{ fluid.finish(dt); },
       "surface advance without a pending predictor was accepted");
     auto bad=saved; bad.state[0][0]=NAN;

@@ -394,7 +394,14 @@ function suggestCell3DGrid(o){
         const thinnest = Math.min(layers.floor, layers.surface, layers.rim);
         const L = cell3dGridLimits(drMin, dzMin, h, P.rc[0], nth, 2*Math.PI/nth, g, accel,
                                    gamma, rho, nu);
-        const dt = 0.4*Math.min(L.capillary, L.viscous, L.gravity);
+        let massRateFactor = 1;
+        const candidateDth = 2*Math.PI/nth;
+        for (let i = 1; i < nr; i++) massRateFactor = Math.max(massRateFactor,
+          P.rf[i]*P.drf[i]*candidateDth*h
+          / (.5*(P.rc[i-1]*P.drc[i-1]*h+P.rc[i]*P.drc[i]*h)*candidateDth));
+        const massFrequencyFactor = Math.sqrt(massRateFactor);
+        const dt = 0.4*Math.min(L.capillary/massFrequencyFactor,
+          L.viscous/massRateFactor, L.gravity/massFrequencyFactor);
         const cells = nr*nth*nz, stepsPerPeriod = period/dt;
         const rec = { nr, nth, nz, rStretch, zStretch, err, layers, thinnest,
                       layersOk: thinnest >= layerCells, surfaceOk: true, dt, cells,
@@ -735,6 +742,17 @@ class FaradayCell3D {
   ip(i, k, j){ return (i*this.nth + this.kw(k))*this.nz + j; }
   ie(i, k){ return i*this.nth + this.kw(k); }
 
+  /* Radial momentum's mass is transferred from the two pressure cells by the
+     same half-cell incidence as its transport fluxes. Its time derivative is
+     therefore exactly the net mesh flux, including on a graded grid. Hr remains
+     the distance-interpolated physical FACE depth; replacing that geometry by
+     a volume-weighted depth would change the divergence and surface slopes.
+     Only interior radial velocity rows have an independent kinetic mass. */
+  radialDualColumnVolume(i, k){
+    return 0.5*(this.rc[i-1]*this.drc[i-1]*this.H[this.ie(i-1, k)]
+              + this.rc[i]*this.drc[i]*this.H[this.ie(i, k)])*this.dth;
+  }
+
   /* H and its derivatives from the current eta. Called whenever eta changes,
      because every operator below is written against this metric and a stale one
      would solve last step's geometry with this step's fields. */
@@ -1070,9 +1088,9 @@ class FaradayCell3D {
       }
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = Hrm[i*nth + k], b = (i*nth + k)*nz;
+        const volume = this.radialDualColumnVolume(i, k), b = (i*nth + k)*nz;
         for (let j = 0; j < nz; j++)
-          gu[b + j] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
+          gu[b + j] /= -(volume*dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){
@@ -2139,7 +2157,12 @@ class FaradayCell3D {
           flux += fT[kp*nb + c];
           if (!sSkip(b)) flux += -fS[c];
           if (!sSkip(b + 1)) flux += fS[c + 1];
-          out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
+          /* The radial kinetic mass uses the same pressure-cell transfer as
+             advection and projection. Preserve the integrated shared viscous
+             flux; only its conversion from force to acceleration changes. */
+          const volume = fam === this.FAM.u ? this.radialDualColumnVolume(a, k)
+                                            : rn[a]*dra*dth*mid[0];
+          out[idx(a, k, b)] = flux/(volume*dsb);
         }
       }
       const t = fRlo; fRlo = fRhi; fRhi = t;
@@ -2236,6 +2259,9 @@ class FaradayCell3D {
       const r = this.rf[i], inv = 1/(r*r);
       for (let k = 0; k < nth; k++){
         const Hu = this.HatH(r, (k + 0.5)*this.dth);
+        /* Integrate the cylindrical source with the same geometric quadrature
+           as the scalar viscous flux, then divide by the kinetic dual mass. */
+        const volumeRatio = r*this.drf[i]*this.dth*Hu/this.radialDualColumnVolume(i, k);
         for (let j = 0; j < nz; j++){
           const c = this.iu(i, k, j);
           const z = this.sc[j]*Hu;
@@ -2245,7 +2271,7 @@ class FaradayCell3D {
                         + (i <= nr - 1 ? this.colValueAtZ(this.v, FV, i, k, z, j) : 0));
           const vB = 0.5*(this.colValueAtZ(this.v, FV, i - 1, k + 1, z, j)
                         + (i <= nr - 1 ? this.colValueAtZ(this.v, FV, i, k + 1, z, j) : 0));
-          outU[c] += -inv*this.u[c] - 2*inv*(vB - vA)/this.dth;
+          outU[c] += volumeRatio*(-inv*this.u[c] - 2*inv*(vB - vA)/this.dth);
         }
       }
     }
@@ -2389,10 +2415,10 @@ class FaradayCell3D {
        mean of those two cells' fluxes there. Only the sigma faces move. */
     for (let i = lo(1); i <= hi(nr - 1); i++){
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hr[i*nth + this.kw(k)];
+        const volume = this.radialDualColumnVolume(i, k);
         for (let b = 0; b < nz; b++){
           const c = this.iu(i, k, b);
-          const V = rf[i]*drf[i]*dth*Hf*dsc[b];
+          const V = volume*dsc[b];
           const QrIn  = 0.5*(Qr(i-1, k, b) + Qr(i, k, b));
           const QrOut = 0.5*(Qr(i, k, b)   + Qr(i+1, k, b));
           const QtLo  = 0.5*(Qt(i-1, k, b) + Qt(i, k, b));
@@ -2542,11 +2568,11 @@ class FaradayCell3D {
 
     for (let i = lo(1); i <= hi(nr - 1); i++)
       for (let k = 0; k < nth; k++){
-        const Hf = this.Hr[i*nth + this.kw(k)];
+        const volume = this.radialDualColumnVolume(i, k);
         for (let b = 0; b < nz; b++)
           outU[this.iu(i, k, b)] +=
             0.5*(Vcell(i-1, k, b)*Gv(i-1, k, b) + Vcell(i, k, b)*Gv(i, k, b))
-            / (rf[i]*drf[i]*dth*Hf*dsc[b]);
+            / (volume*dsc[b]);
       }
     for (let i = lo(0); i <= hi(nr - 1); i++)
       for (let k = 0; k < nth; k++){
@@ -3057,6 +3083,17 @@ class FaradayCell3D {
       }
     const L = cell3dGridLimits(drMin, dzMin, Hmin, this.rc[0], nth, this.dth, this.g,
                                this.accel, this.gamma, this.rho, this.nu);
+    /* The radial row now divides its integrated force by transferred mass.
+       Relative to the geometric mass behind the estimates above, its rate can
+       increase by oldMass/newMass. Bound that amplification over all rows;
+       oscillation frequencies scale with its square root. This changes only
+       timestep admission, never a physical field or coefficient. */
+    let massRateFactor = 1;
+    for (let i = 1; i < nr; i++) for (let k = 0; k < nth; k++)
+      massRateFactor = Math.max(massRateFactor,
+        this.rf[i]*this.drf[i]*this.dth*this.Hr[this.ie(i, k)]
+        / this.radialDualColumnVolume(i, k));
+    const massFrequencyFactor = Math.sqrt(massRateFactor);
 
     let adv = 0;
     for (let i = 0; i < nr; i++)
@@ -3073,9 +3110,10 @@ class FaradayCell3D {
                             + ww/(H*this.dsc[j]));
         }
       }
-    return { capillary: L.capillary, viscous: L.viscous,
-             advective: adv > 0 ? 1/adv : Infinity,
-             gravity: L.gravity,
+    return { capillary: L.capillary/massFrequencyFactor, viscous: L.viscous/massRateFactor,
+             advective: adv > 0 ? (1/adv)/massRateFactor : Infinity,
+             gravity: L.gravity/massFrequencyFactor,
+             massRateFactor,
              kRadial: Math.sqrt(L.kr2), kVertical: Math.sqrt(L.kz2),
              kAzimuthal: Math.sqrt(L.ka2) };
   }
@@ -3103,7 +3141,7 @@ class FaradayCell3D {
     let ke = 0;
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const vol = this.rf[i]*this.drf[i]*dth*this.Hr[i*nth + this.kw(k)];
+        const vol = this.radialDualColumnVolume(i, k);
         for (let j = 0; j < nz; j++){
           const a = this.u[this.iu(i, k, j)];
           ke += 0.5*rho*a*a*vol*this.dsc[j];

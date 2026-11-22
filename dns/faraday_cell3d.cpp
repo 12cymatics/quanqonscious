@@ -228,6 +228,13 @@ static inline int iv(int i, int k, int j){ return (i*nth + kw(k))*nz + j; }
 static inline int iw(int i, int k, int j){ return (i*nth + kw(k))*nw + j; }
 static inline int ip(int i, int k, int j){ return (i*nth + kw(k))*nz + j; }
 static inline int ie(int i, int k){ return i*nth + kw(k); }
+
+/* Transfer radial kinetic mass by the same half-cell incidence as momentum
+   transport. Keep Hr as the physical face depth, separately from this mass. */
+static inline double radialDualColumnVolume(int i, int k){
+  return 0.5*(rc[i-1]*drc[i-1]*H[ie(i-1, k)]
+            + rc[i]*drc[i]*H[ie(i, k)])*dth;
+}
 /* Every family's index map is the same expression with its own sigma stride:
    nz for p, u and v, nz + 1 for w, whose nodes are the sigma faces. */
 static inline int famIdx(const Fam& f, int a, int k, int b){
@@ -814,10 +821,10 @@ static void gradientWithSurface(const double* q, double* ou, double* ov, double*
     }
   for (int i = 1; i < nr; i++)
     for (int k = 0; k < nth; k++){
-      const double Hf = Hr[i*nth + k];
+      const double volume = radialDualColumnVolume(i, k);
       const int b = (i*nth + k)*nz;
       for (int j = 0; j < nz; j++)
-        ou[b + j] /= -(rf[i]*drf[i]*dth*Hf*dsc[j]);
+        ou[b + j] /= -(volume*dsc[j]);
     }
   for (int i = 0; i < nr; i++)
     for (int k = 0; k < nth; k++){
@@ -1696,7 +1703,9 @@ static void famLaplacian(const double* f, double* out, const Fam& fam,
         flux += fT[kp*nb + c];
         if (!sSkip(b)) flux += -fS[c];
         if (!sSkip(b + 1)) flux += fS[c + 1];
-        out[famIdx(fam, a, k, b)] = flux/(rn[a]*dra*dth*hA[0]*dsb);
+        const double volume = &fam == &FAMU ? radialDualColumnVolume(a, k)
+                                            : rn[a]*dra*dth*hA[0];
+        out[famIdx(fam, a, k, b)] = flux/(volume*dsb);
       }
     }
     double* t = lo; lo = hi; hi = t;
@@ -1737,6 +1746,7 @@ void cell3d_viscousRows(int hasBc, int i0, int i1){
     const double r = rf[i], inv = 1/(r*r);
     for (int k = 0; k < nth; k++){
       const double Hu = HatH(r, (k + 0.5)*dth);
+      const double volumeRatio = r*drf[i]*dth*Hu/radialDualColumnVolume(i, k);
       for (int j = 0; j < nz; j++){
         const int c = iu(i, k, j);
         const double z = sc[j]*Hu;
@@ -1744,7 +1754,7 @@ void cell3d_viscousRows(int hasBc, int i0, int i1){
                              + (i <= nr - 1 ? colValueAtZ(v, FAMV, i, k, z, j, 1, 0) : 0.0));
         const double vB = 0.5*(colValueAtZ(v, FAMV, i - 1, k + 1, z, j, 1, 0)
                              + (i <= nr - 1 ? colValueAtZ(v, FAMV, i, k + 1, z, j, 1, 0) : 0.0));
-        lapU[c] += -inv*u[c] - 2*inv*(vB - vA)/dth;
+        lapU[c] += volumeRatio*(-inv*u[c] - 2*inv*(vB - vA)/dth);
       }
     }
   }
@@ -1847,10 +1857,10 @@ void cell3d_advectTransportRows(int i0, int i1){
      move. */
   for (int i = lo1; i <= hiV; i++){
     for (int k = 0; k < nth; k++){
-      const double Hf = Hr[i*nth + kw(k)];
+      const double volume = radialDualColumnVolume(i, k);
       for (int b = 0; b < nz; b++){
         const int c = iu(i, k, b);
-        const double V = rf[i]*drf[i]*dth*Hf*dsc[b];
+        const double V = volume*dsc[b];
         const double QrIn  = 0.5*(fluxR(i-1, k, b) + fluxR(i, k, b));
         const double QrOut = 0.5*(fluxR(i, k, b)   + fluxR(i+1, k, b));
         const double QtLo  = 0.5*(fluxTh(i-1, k, b) + fluxTh(i, k, b));
@@ -1969,7 +1979,7 @@ void cell3d_advectCurvatureRows(int i0, int i1){
   const int lo0 = i0 > 0 ? i0 : 0, lo1 = i0 > 1 ? i0 : 1, hiV = i1 < nr - 1 ? i1 : nr - 1;
   for (int i = lo1; i <= hiV; i++)
     for (int k = 0; k < nth; k++){
-      const double Hf = Hr[i*nth + kw(k)];
+      const double volume = radialDualColumnVolume(i, k);
       for (int b = 0; b < nz; b++){
         const double vA = 0.5*(v[iv(i-1, k, b)] + v[iv(i-1, k+1, b)]);
         const double GvA = vA*vA/rc[i-1];
@@ -1978,7 +1988,7 @@ void cell3d_advectCurvatureRows(int i0, int i1){
         const double VA = rc[i-1]*drc[i-1]*dth*H[ie(i-1, k)]*dsc[b];
         const double VB = rc[i]*drc[i]*dth*H[ie(i, k)]*dsc[b];
         advU[iu(i, k, b)] += 0.5*(VA*GvA + VB*GvB)
-                           / (rf[i]*drf[i]*dth*Hf*dsc[b]);
+                           / (volume*dsc[b]);
       }
     }
   for (int i = lo0; i <= hiV; i++)
