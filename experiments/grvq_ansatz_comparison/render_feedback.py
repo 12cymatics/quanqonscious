@@ -223,12 +223,23 @@ def render(directory=BASE / "latest_hybrid_results"):
         summary["qbraid_verification"] = {k:v for k,v in verification.items() if k!="comparisons"}
         summary["qbraid_verification_sha256"] = hashlib.sha256(qfile.read_bytes()).hexdigest()
         (directory/"analysis_summary.json").write_text(json.dumps(summary,indent=2)+"\n")
-        provider = (f'<p><strong>{verification["circuits"]} actual circuit simulations</strong> cover the Z basis for all '
-                    f'{verification["frames_checked_in_z"]} frames, plus selected X, Y and mixed-basis checks.</p>'
+        provider = (f'<p><strong>{verification["logical_circuits"]} logical circuit exports verified</strong> through '
+                    f'<strong>{verification["actual_simulator_calls"]} successful simulator executions</strong>: '
+                    f'{verification["direct_circuits"]} individual four-qubit executions, plus '
+                    f'{verification["batched_circuits"]} independent four-qubit circuits in '
+                    f'{verification["batch_programs"]} twelve-qubit batch programs. All four exported measurement bases are verified for each of the '
+                    f'{verification["frames_checked_in_z"]} completed frames.</p>'
+                    +f'<p>The complete twelve-qubit joint distributions were checked against exact tensor products '
+                    f'({verification["joint_probabilities_checked"]:,} joint outcomes), and their four-qubit marginals were derived by exact summation. '
+                    'The raw individual and batch responses are retained separately.</p>'
+                    +table(["Measurement basis","Verified circuits"],[[basis,verification["circuits_by_basis"][basis]]
+                        for basis in ("ZZZZ","XXXX","YYYY","XYZX")])
                     +table(["Comparison","Maximum absolute discrepancy"],[
-                        ["Bitstring probabilities",f'{verification["maximum_probability_error"]:.4g}'],
-                        ["Current Hamiltonian energy",f'{verification["maximum_energy_error"]:.4g}'],
-                        ["Feedback increment",f'{verification["maximum_feedback_increment_error"]:.4g}']])
+                        ["Logical four-qubit bitstring probabilities",f'{verification["maximum_probability_error"]:.4g}'],
+                        ["Current Hamiltonian energy discrepancy (upper bound)",f'{verification["maximum_energy_error"]:.4g}'],
+                        ["Computed feedback −⟨Zq⟩/1000",f'{verification["maximum_feedback_increment_error"]:.4g}'],
+                        ["Applied feedback, including off controls",f'{verification["maximum_applied_feedback_increment_error"]:.4g}']])
+                    +'<p>These are decimal displays. Exact error fractions and energy bounds are retained in the verification record.</p>'
                     +f'<p>Recorded provider: {html.escape(verification["provider"])}. Credits spent: {verification["credits_spent"]}. '
                     '<a href="qbraid_verification.json">Complete verification record</a> · <a href="qbraid_results.json">Provider responses</a>.</p>')
     else:

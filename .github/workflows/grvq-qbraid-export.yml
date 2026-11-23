@@ -1,0 +1,89 @@
+name: Verify qBraid circuits and export the completed sweep
+on:
+  push:
+    branches: ['exports/grvq-qbraid-verified-2026-11-23']
+    paths:
+      - '.github/workflows/grvq-qbraid-export.yml'
+      - 'experiments/grvq_ansatz_comparison/provider_checks/**'
+      - 'experiments/grvq_ansatz_comparison/latest_hybrid_results/qbraid_manifest.json'
+      - 'experiments/grvq_ansatz_comparison/latest_hybrid_results/provider_responses/**'
+      - 'experiments/grvq_ansatz_comparison/latest_hybrid_results/provider_batches/**'
+      - 'experiments/grvq_ansatz_comparison/latest_hybrid_results/provider_attempt_history/**'
+      - 'experiments/grvq_ansatz_comparison/latest_hybrid_results/provider_batch_programs/**'
+      - 'experiments/grvq_ansatz_comparison/render_feedback.py'
+      - 'experiments/grvq_ansatz_comparison/pack_feedback_export.py'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: grvq-qbraid-export-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verified-export:
+    if: github.ref == 'refs/heads/exports/grvq-qbraid-verified-2026-11-23'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install the declared report and notebook dependencies
+        run: python -m pip install -r experiments/grvq_ansatz_comparison/requirements-feedback.txt
+      - name: Verify the retained complete sweep and its unchanged executable identities
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          p = Path('experiments/grvq_ansatz_comparison')
+          data = p / 'latest_hybrid_results/results.json'
+          assert hashlib.sha256(data.read_bytes()).hexdigest() == '2c1989a6ebc91c735161f530d9566434223bb19257ff78c9f365a19afb35c2d1'
+          r = json.loads(data.read_text())
+          assert r['status'] == 'complete' and len(r['cases']) == 36 and r['total_frames'] == 72
+          for name, wanted in r['configuration']['code_sha256'].items():
+              assert hashlib.sha256((p / name).read_bytes()).hexdigest() == wanted, name
+          for case in r['cases']:
+              f = p / 'latest_hybrid_results' / case['result_file']
+              assert hashlib.sha256(f.read_bytes()).hexdigest() == case['result_sha256'], case['case_id']
+          print('Retained all 36 completed trajectories, 72 coupled frames and unchanged solver code.')
+          PY
+      - name: Verify every returned qBraid joint distribution, marginal and feedback observable
+        run: python experiments/grvq_ansatz_comparison/provider_checks/verify_qbraid.py
+      - name: Refresh the report and execute the complete notebook
+        run: python experiments/grvq_ansatz_comparison/build_feedback_notebook.py --execute --executor jupyter
+      - name: Package and verify the complete export
+        run: python experiments/grvq_ansatz_comparison/pack_feedback_export.py
+      - name: Retain the complete qBraid verified download
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GRVQ_Quantum_Feedback_Sweep_qBraid_Verified_2026-11-23
+          path: |
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.zip
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.sha256
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
+      - name: Preserve the generated verification, report and notebook
+        run: |
+          git add --force experiments/grvq_ansatz_comparison/latest_hybrid_results experiments/grvq_ansatz_comparison/START_HERE.ipynb
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Retain complete qBraid joint-distribution verification and executed report'
+          git push origin HEAD:refs/heads/exports/grvq-qbraid-verified-2026-11-23
+      - name: Retain explicit failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GRVQ_qBraid_export_failure_records
+          path: |
+            experiments/grvq_ansatz_comparison/latest_hybrid_results/qbraid_verification.json
+            experiments/grvq_ansatz_comparison/latest_hybrid_results/qbraid_results.json
+          if-no-files-found: warn
+          retention-days: 90

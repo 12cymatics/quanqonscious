@@ -37,7 +37,7 @@ def main():
     for f in EXP.iterdir():
         if f.is_file() and f.suffix in {".py", ".cjs", ".md", ".txt", ".ipynb"}:
             selected.add(f)
-    for name in ["source_audit", "recovery", "latest_hybrid_results", "latest_hybrid_validation", "latest_hybrid_backend_validation"]:
+    for name in ["source_audit", "recovery", "latest_hybrid_results", "latest_hybrid_validation", "latest_hybrid_backend_validation", "provider_checks"]:
         directory = EXP / name
         if not directory.is_dir():
             raise FileNotFoundError(f"Required deliverable directory missing: {directory}")

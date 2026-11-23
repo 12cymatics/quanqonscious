@@ -1,0 +1,101 @@
+{
+  "case_id": "PARALLEL__s1_58__seed43__feedback_on",
+  "step": 1,
+  "basis": "YYYY",
+  "qasm_sha256": "bf279f86470f63b069b8d257d2ba6d5a872bfe01ea031d2e35530b06b4b4f0fe",
+  "source_commit": "f2f3bc798294e1fe56b3dacbecb0f494a6d6d8bd",
+  "response_file": "provider_responses/PARALLEL__s1_58__seed43__feedback_on__step_001_YYYY.json",
+  "qasm": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[4];\ncreg c[4];\nry(0.9799146525074566166883299248451032436566) q[0];\nry(-1.435082681082288881583680255705841999108) q[1];\nry(1.854590436003224464857024925844857608114) q[2];\nry(1.435082681082288881583680255705841999108) q[3];\ncx q[0],q[1];\ncx q[1],q[2];\ncx q[2],q[3];\nry(-0.9799146525074566166883299248451032436566) q[0];\nry(0.0) q[1];\nry(0.0) q[2];\nry(0.0) q[3];\ncx q[0],q[1];\ncx q[1],q[2];\ncx q[2],q[3];\nry(0.9799146525074566166883299248451032436566) q[0];\nry(1.435082681082288881583680255705841999108) q[1];\nry(-1.435082681082288881583680255705841999108) q[2];\nry(-1.435082681082288881583680255705841999108) q[3];\ncx q[0],q[1];\ncx q[1],q[2];\ncx q[2],q[3];\nrz(-pi/2) q[0];\nry(-pi/2) q[0];\nrz(-pi/2) q[1];\nry(-pi/2) q[1];\nrz(-pi/2) q[2];\nry(-pi/2) q[2];\nrz(-pi/2) q[3];\nry(-pi/2) q[3];\nmeasure q -> c;\n",
+  "started_utc": "2026-11-23T07:19:37.870Z",
+  "provider": "qBraid built-in state-vector simulator",
+  "credits": 0,
+  "qpu": false,
+  "raw_validation": {
+    "content": [
+      {
+        "type": "text",
+        "text": "McpServerError: rate_limited"
+      }
+    ],
+    "structuredContent": {
+      "error": "McpServerError: rate_limited",
+      "error_code": "RATE_LIMITED",
+      "error_data": {
+        "type": "http_error",
+        "code": 429,
+        "message": "rate_limited",
+        "payload": {
+          "error": "rate_limited"
+        },
+        "upstream_error_code": "rate_limited",
+        "retry_after": "300",
+        "url": "https://mcp.qbraid.com/chatgpt/mcp"
+      },
+      "retry_after": "300",
+      "retry_after_seconds": 300
+    },
+    "isError": true
+  },
+  "validation": {
+    "error": "McpServerError: rate_limited",
+    "error_code": "RATE_LIMITED",
+    "error_data": {
+      "type": "http_error",
+      "code": 429,
+      "message": "rate_limited",
+      "payload": {
+        "error": "rate_limited"
+      },
+      "upstream_error_code": "rate_limited",
+      "retry_after": "300",
+      "url": "https://mcp.qbraid.com/chatgpt/mcp"
+    },
+    "retry_after": "300",
+    "retry_after_seconds": 300
+  },
+  "raw_simulation": {
+    "content": [
+      {
+        "type": "text",
+        "text": "McpServerError: rate_limited"
+      }
+    ],
+    "structuredContent": {
+      "error": "McpServerError: rate_limited",
+      "error_code": "RATE_LIMITED",
+      "error_data": {
+        "type": "http_error",
+        "code": 429,
+        "message": "rate_limited",
+        "payload": {
+          "error": "rate_limited"
+        },
+        "upstream_error_code": "rate_limited",
+        "retry_after": "298",
+        "url": "https://mcp.qbraid.com/chatgpt/mcp"
+      },
+      "retry_after": "298",
+      "retry_after_seconds": 298
+    },
+    "isError": true
+  },
+  "simulation": {
+    "error": "McpServerError: rate_limited",
+    "error_code": "RATE_LIMITED",
+    "error_data": {
+      "type": "http_error",
+      "code": 429,
+      "message": "rate_limited",
+      "payload": {
+        "error": "rate_limited"
+      },
+      "upstream_error_code": "rate_limited",
+      "retry_after": "298",
+      "url": "https://mcp.qbraid.com/chatgpt/mcp"
+    },
+    "retry_after": "298",
+    "retry_after_seconds": 298
+  },
+  "completed_utc": "2026-11-23T07:19:42.782Z",
+  "status": "error"
+}
