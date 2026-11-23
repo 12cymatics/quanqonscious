@@ -6,8 +6,22 @@ const hash=x=>crypto.createHash("sha256").update(x).digest("hex");
 async function verify(output=path.join(__dirname,"latest_hybrid_validation")){
   fs.mkdirSync(output,{recursive:true});const files=[];
   const save=(name,value)=>{const data=zlib.gzipSync(JSON.stringify(value)+"\n",{mtime:0});fs.writeFileSync(path.join(output,name),data);files.push({path:name,bytes:data.length,sha256:hash(data)});};
-  const expanded=E.loadKernel(),dag=E.loadKernel({arithmetic:"exact_dag"});
+  const expanded=E.loadKernel({matrixRepresentation:"source_dense"}),dag=E.loadKernel({arithmetic:"exact_dag"});
   const a=expanded.initState(),b=dag.initState(),rows=[];
+  const longPeriods=[];
+  for(const [id,denominator] of [[1,4269n],[12,4267n]]){
+    const terms=expanded.BOOK.terms(id,{denominator:expanded.Q.mk(denominator)});
+    const digits=[];let remainder=1n;
+    do{const numerator=10n*remainder;digits.push(numerator/denominator);remainder=numerator%denominator;}while(remainder!==1n);
+    assert.equal(terms.length,digits.length);
+    for(let i=0;i<digits.length;i++){assert.equal(terms[i].n,digits[i]);assert.equal(terms[i].d,1n);}
+    const numerator=BigInt(digits.map(String).join(""));
+    assert.equal(numerator*denominator,10n**BigInt(digits.length)-1n);
+    const field=a.slice();field[0]=expanded.Q.mk(-426n);
+    assert.equal(expanded.BOOK.operandsOf(id,field).denominator.n,denominator);
+    longPeriods.push({id,denominator:denominator.toString(),complete_period_length:terms.length,
+      digits:digits.map(String).join(""),independent_long_division_equal:true,exact_reconstruction_equal:true});
+  }
   for(let id=1;id<=29;id++){
     const raw=[],compressed=[];
     const expected=expanded.applySutra(id,a,expanded.Q.parse("1/29"),{t:expanded.Q.ZERO,record:raw});
@@ -41,6 +55,7 @@ async function verify(output=path.join(__dirname,"latest_hybrid_validation")){
   const result={schema:"grvq-latest-source-validation/v2",status:"complete",source:E.SOURCE_INFO,
     arithmetic_sha256:dag.arithmetic_sha256,executor_sha256:hash(fs.readFileSync(path.join(__dirname,"latest_hybrid_executor.cjs"))),
     exact_source_value_equalities:29*16,identical_operand_sets:29,identical_term_sets:29,
+    domain_extensions:dag.domain_extensions,long_period_checks:longPeriods,
     complete_modes:Object.fromEntries(E.COMPOSITIONS.map(mode=>[mode,{core_applications:modeResults[mode].sutra_records.length,
       distributed_grvq_applications:modeResults[mode].distributed_grvq_records.length,elapsed_ms:modeResults[mode].elapsed_ms,
       expression_nodes:modeResults[mode].final_complexity.nodes,interval_values_in_state:0}])),

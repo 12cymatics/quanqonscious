@@ -1,3 +1,15 @@
+# Quantum ansatz–GRVQ feedback trajectories — 23 November 2026
+
+This continuation connects the selected complete 29-method BOOK/GRVQ/MSTVQ field formula to the recovered three-layer, four-qubit Ry/CNOT ansatz. The default sweep contains **36 trajectories and 72 outer steps** across SERIES, PARALLEL and SYMMETRIC_CONCURRENT, two method strengths, three deterministic circuit starts and paired quantum-feedback controls.
+
+Read [FEEDBACK_SWEEP.md](FEEDBACK_SWEEP.md) for the equations and execution protocol. Within the completed export, open the [feedback result report](latest_hybrid_results/feedback_report.html) and [START_HERE.ipynb](START_HERE.ipynb). These files are generated from the actual new run after all selected trajectories finish and the output checks pass. The notebook exposes every comparison control and separates mathematical composition from CPU scheduling.
+
+The restored quantum runner and coordinator have **new provenance**. An earlier local sweep completed before its execution environment became unavailable; its observed measurements are preserved separately in [the historical observation record](recovery/completed_sweep_observation_2026-11-23.json). They are not substituted for current raw outputs or used to claim a new run has completed. [The source ledger](source_audit/hybrid_lineage_audit.json) records the preserved source, reconstruction, feedback repair and current evidence policy.
+
+The following sections preserve the earlier fixed-objective product-comparison documentation. Its dataset references belong to that separate benchmark; the feedback export is scoped to the new trajectory experiment and does not promise earlier large archives.
+
+---
+
 # GRVQ ansatz comparison — 22 November 2026
 
 This is a working, source-derived simulation of the GRVQ product ansatz, its four-shell R2/R4 variants, exact controlled Cayley refinements, and conventional circuit controls. The 29 Vedic methods participate in the actual polynomial coefficient pipeline. All optimization decisions use exact rational energies. The included results were obtained by executing the implementation.

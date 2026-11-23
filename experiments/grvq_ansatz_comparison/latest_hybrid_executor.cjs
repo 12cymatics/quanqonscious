@@ -31,15 +31,87 @@ function replaceOnce(source, before, after) {
   return source.replace(before, after);
 }
 
+// Every source matching is a complete, consistently oriented hypercube axis.
+// Its eight matchings repeat each of the four axes twice. Rotations on
+// different axes commute, and rotations on one axis are SO(2) factors.
+// Consequently the *same integer matrix*, including its unreduced denominator,
+// is the fourfold tensor power of the product of all local Gaussian factors.
+// This changes only multiplication order: every returned coefficient retains
+// its exact multiplicity, including repeated repetend digits.
+function createTensorMatrix(matchings, R, getQ) {
+  if (!Array.isArray(matchings) || matchings.length !== 8) throw new Error("The source must have eight proven hypercube matchings");
+  const axisCounts = [0,0,0,0], axes = [];
+  for (const matching of matchings) {
+    if (matching.length !== 8) throw new Error("A source matching must cover all sixteen vertices");
+    const seen = new Set(); let axis = null;
+    for (const [l,r] of matching) {
+      const difference = l ^ r, bit = [1,2,4,8].indexOf(difference);
+      if (bit < 0 || l >= r || l < 0 || r > 15 || seen.has(l) || seen.has(r) || (axis !== null && axis !== bit))
+        throw new Error("The source matching no longer proves the tensor identity");
+      axis = bit; seen.add(l); seen.add(r);
+    }
+    if (seen.size !== 16) throw new Error("The source matching is incomplete");
+    axes.push(axis); axisCounts[axis]++;
+  }
+  if (axisCounts.some(n=>n!==2)) throw new Error("Each source hypercube axis must occur exactly twice");
+  const gcd = (a,b)=>{a=a<0n?-a:a;b=b<0n?-b:b;while(b){const r=a%b;a=b;b=r;}return a;};
+  const multiply = (a,b)=>[a[0]*b[0]-a[1]*b[1],a[0]*b[1]+a[1]*b[0],a[2]*b[2]];
+  const power = (factor,n)=>{let result=[1n,0n,1n],base=factor;while(n>0){if(n%2===1)result=multiply(result,base);n=Math.floor(n/2);if(n)base=multiply(base,base);}return result;};
+  const popcount = n=>{let count=0;while(n){count+=n&1;n>>>=1;}return count;};
+  const cache = new Map();
+  return (coefficients,strength)=>{
+    if(!getQ().isExact(strength))throw new TypeError("The strength of a book rotation is an exact rational");
+    const key=`${strength.n}/${strength.d}|${coefficients.map(c=>`${c.n}/${c.d}`).join(',')}`;
+    const kept=cache.get(key);if(kept)return kept;
+    const groups=new Map();let zeroTerms=0,visited=0;
+    for(const coefficient of coefficients){
+      visited++;
+      const t=R.mul(strength,coefficient),p=t.n,q=t.d;
+      if(p===0n){zeroTerms++;continue;}
+      let base=q*q+p*p,cos=q*q-p*p,sin=2n*p*q;
+      const g=gcd(gcd(base,cos),sin);base/=g;cos/=g;sin/=g;
+      const factorKey=`${cos},${sin},${base}`,group=groups.get(factorKey);
+      if(group)group.count++;else groups.set(factorKey,{factor:[cos,sin,base],count:1});
+    }
+    let products=Array.from(groups.values(),group=>power(group.factor,2*group.count));
+    if(products.length===0)products=[[1n,0n,1n]];
+    while(products.length>1){const next=[];for(let i=0;i<products.length;i+=2)next.push(i+1<products.length?multiply(products[i],products[i+1]):products[i]);products=next;}
+    const [C,S,Dsingle]=products[0];
+    if(C*C+S*S!==Dsingle*Dsingle)throw new Error("Exact Gaussian product failed its norm identity");
+    const cp=[1n,C],sp=[1n,S];for(let i=2;i<=4;i++){cp.push(cp[i-1]*C);sp.push(sp[i-1]*S);}
+    const magnitudes=Array.from({length:5},(_,h)=>cp[4-h]*sp[h]);
+    const N=Array.from({length:16},(_,i)=>Object.freeze(Array.from({length:16},(_,j)=>{
+      const n=magnitudes[popcount(i^j)];return popcount((~i)&j&15)%2?-n:n;
+    })));
+    const out=Object.freeze({N:Object.freeze(N),D:Dsingle**4n,tensor_certificate:Object.freeze({
+      representation:"exact_commuting_gaussian_tensor",matching_axes:axes,axis_multiplicities:axisCounts,
+      visited_terms:visited,zero_identity_terms:zeroTerms,nonzero_terms:visited-zeroTerms,
+      total_source_matching_rotations:8*(visited-zeroTerms),unique_gaussian_factors:groups.size,
+      grouped_multiplicities:Array.from(groups.values(),g=>g.count),single_axis_numerator:[C,S],single_axis_denominator:Dsingle,
+      exact_norm_identity:true,unreduced_source_denominator_preserved:true})});
+    if(cache.size>=64)cache.clear();cache.set(key,out);return out;
+  };
+}
+
 function loadKernel(options = {}) {
   const arithmetic = options.arithmetic || "expanded_rational";
   if (!["expanded_rational", "exact_dag"].includes(arithmetic)) throw new RangeError("Select expanded_rational or exact_dag explicitly");
   const dagOptions = options.dagOptions || {};
+  const matrixRepresentation = options.matrixRepresentation || "commuting_tensor";
+  if(!["commuting_tensor","source_dense"].includes(matrixRepresentation))throw new RangeError("Select the exact tensor representation or the explicit original source oracle");
   const arena = arithmetic === "exact_dag" ? require("./exact_dag.cjs").createExactDag(dagOptions) : null;
   let source = FACTORY_SOURCE;
+  source = replaceOnce(source,
+    "      const period = d => d <= 999n ? d : refuse(`the repetend of 1/${d} can run to ${d - 1n} digits; above three digits it is refused`);",
+    "      const period = d => d > 1n && gcdZ(d, 10n) === 1n ? d : refuse('a repetend denominator must exceed one and be coprime to ten');");
   source = replaceOnce(source, "return Object.freeze({sourcesData,",
     "return Object.freeze({makeKeep,narrow,TGCR_KAPPA_FEED," + (arena ? "setArithmetic:q=>{Q=q;}," : "") + "sourcesData,");
   const representationEdits = [];
+  if(matrixRepresentation === "commuting_tensor"){
+    source=replaceOnce(source,"    const matrixOf = (coefficients, strength) => {","    const sourceMatrixOf = (coefficients, strength) => {");
+    source=replaceOnce(source,"    const rotate = (psi, coefficients, strength) => {","    const matrixOf = __EXACT_MATRIX(MATCHINGS, R, () => Q);\n    const rotate = (psi, coefficients, strength) => {");
+    representationEdits.push("BOOK.matrixOf uses the proven exact Gaussian product and fourfold tensor representation of all eight source matchings, preserving every coefficient multiplicity and the original unreduced N and D");
+  }
   if (arena) {
     source = replaceOnce(source, "  const Q = Object.freeze({", "  let Q = Object.freeze({");
     const signStart = source.indexOf("  const sgnQ = x => {"), signEnd = source.indexOf("  const SUTRA_SUM",signStart);
@@ -54,15 +126,16 @@ function loadKernel(options = {}) {
       "    };\n"+source.slice(rotateEnd);
     representationEdits.push("Q is rebound after original source initialization to exact rational DAG operations",
       "sgnQ obtains its exact sign from Q.sign instead of directly inspecting an expanded numerator",
-      "BOOK.rotate applies the unchanged exact matrixOf(N,D) using exact DAG linearMap");
+      "BOOK.rotate applies the identical exact matrixOf(N,D) using exact DAG linearMap");
   }
-  const factory = vm.runInNewContext(source+"\nKERNEL_FACTORY;", { __EXACT_ARENA: arena }, { filename: SOURCE_PATH });
+  const factory = vm.runInNewContext(source+"\nKERNEL_FACTORY;", { __EXACT_ARENA: arena, __EXACT_MATRIX:createTensorMatrix }, { filename: SOURCE_PATH });
   const kernel = factory();
   kernel.setExactBits(null);
   if (arena) kernel.setArithmetic(arena.Q);
   if (kernel.exactBits() !== null) throw new Error("Source unlimited exact arithmetic was not enabled");
   return Object.freeze({ ...kernel, Q: arena ? arena.Q : kernel.Q, exactDag: arena,
-    arithmetic, dagOptions, representation_edits: representationEdits,
+    arithmetic, dagOptions, matrix_representation:matrixRepresentation, representation_edits: representationEdits,
+    domain_extensions: ["S1/S12 retain their full exact repetend algorithms for every source-generated valid denominator; the prior denominator<=999 workload refusal is removed"],
     arithmetic_sha256: arena ? hash(fs.readFileSync(path.join(__dirname,"exact_dag.cjs"))) : null });
 }
 
@@ -135,7 +208,7 @@ class WorkerPool {
   constructor(size,K){
     this.K=K;this.queue=[];this.slots=[];this.closed=false;
     for(let i=0;i<size;i++){
-      const worker=new Worker(__filename,{workerData:{latestHybridWorker:true,arithmetic:K.arithmetic,dagOptions:K.dagOptions}});
+      const worker=new Worker(__filename,{workerData:{latestHybridWorker:true,arithmetic:K.arithmetic,dagOptions:K.dagOptions,matrixRepresentation:K.matrix_representation}});
       const slot={worker,ready:false,job:null};this.slots.push(slot);
       worker.on("message",message=>{
         if(message.ready){slot.ready=true;this.dispatch();return;}
@@ -187,6 +260,11 @@ async function execute(request,options={}){
       source_zero_term_rule:"Exact zero terms are identity rotations in source BOOK.matrixOf",
       grvq,mstvq_book_field_diagnostic:raw.B,energy_change_exact:raw.dE,
       consumed_by:cfg.composition==="PARALLEL"?"common_input_displacement_sum":"next ordered method or distributed_GRVQ"};
+    if(K.matrix_representation==="commuting_tensor"){
+      const {single_axis_numerator,single_axis_denominator,...certificate}=K.BOOK.matrixOf(raw.info.terms,raw.alpha).tensor_certificate;
+      if(certificate.visited_terms!==raw.info.terms.length)throw new Error("The exact matrix did not consume all source coefficients");
+      record.exact_matrix_representation=certificate;
+    }
     records.push(record);previous=after;journal({stage:"sutra",record});
     progress({stage:"sutra",sequence:record.sequence,id:raw.id,elapsed_ms:performance.now()-started});
   };
@@ -225,7 +303,7 @@ async function execute(request,options={}){
   const result={schema:"quanqonscious.latest-hybrid-execution.v2",source:SOURCE_INFO,
     case_id:request.case_id||null,mathematical_composition:cfg.composition,cpu_backend:cfg.backend,
     workers:cfg.backend==="workers"?cfg.workers:0,arithmetic:K.arithmetic,arithmetic_module_sha256:K.arithmetic_sha256,
-    representation_edits:K.representation_edits,exact_bits:null,intervals_used:false,
+    representation_edits:K.representation_edits,matrix_representation:K.matrix_representation,domain_extensions:K.domain_extensions,exact_bits:null,intervals_used:false,
     composition_equation:cfg.composition==="PARALLEL"?"psi + sum_s (U_s(psi)-psi)":cfg.composition==="SERIES"?
       "Ascending ordered full-gain composition":"Ascending half-gain composition followed by descending half-gain composition",
     input:cfg.state,active:cfg.active,time:cfg.time,source_time_step:K.SIM_DT,
@@ -263,7 +341,7 @@ async function executeBatch(requests,options={}){
 }
 
 if(!isMainThread&&workerData?.latestHybridWorker){
-  const K=loadKernel({arithmetic:workerData.arithmetic,dagOptions:workerData.dagOptions});
+  const K=loadKernel({arithmetic:workerData.arithmetic,dagOptions:workerData.dagOptions,matrixRepresentation:workerData.matrixRepresentation});
   parentPort.on("message",async message=>{
     try{
       if(message.encoded){const ids=K.exactDag.importGraph(message.expression_graph);message=K.exactDag.decodeImported(message.encoded,ids);}
