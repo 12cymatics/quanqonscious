@@ -4,13 +4,14 @@ set -eu
 
 usage() {
   printf '%s\n' \
-    'Usage: sh native/run-case.sh --case input.json --out NEW_OUTPUT_DIRECTORY' \
+    'Usage: sh native/run-case.sh --case input.json --out NEW_OUTPUT_DIRECTORY [--integrator explicit|joint-implicit]' \
     'Requires Node.js and a C++20 compiler. The output directory must not exist.' \
     'Builds, prepares the declared case, then runs it without changing its grid or physics.'
 }
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 CASE_PATH=
 OUTPUT_DIR=
+INTEGRATOR=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
@@ -22,9 +23,15 @@ while [ "$#" -gt 0 ]; do
       [ -z "$OUTPUT_DIR" ] || fail '--out was supplied more than once.'
       [ "$#" -ge 2 ] || fail '--out requires a new directory path.'
       OUTPUT_DIR=$2; shift 2 ;;
+    --integrator)
+      [ -z "$INTEGRATOR" ] || fail '--integrator was supplied more than once.'
+      [ "$#" -ge 2 ] || fail '--integrator requires explicit or joint-implicit.'
+      case "$2" in explicit|joint-implicit) INTEGRATOR=$2 ;; *) fail 'Unknown integrator.' ;; esac
+      shift 2 ;;
     *) usage >&2; fail "Unknown argument: $1" ;;
   esac
 done
+INTEGRATOR=${INTEGRATOR:-explicit}
 [ -n "$CASE_PATH" ] && [ -n "$OUTPUT_DIR" ] || { usage >&2; exit 1; }
 case "$CASE_PATH" in /*) ;; *) CASE_PATH="$PWD/$CASE_PATH" ;; esac
 case "$OUTPUT_DIR" in /*) ;; *) OUTPUT_DIR="$PWD/$OUTPUT_DIR" ;; esac
@@ -44,14 +51,14 @@ else
   fail 'Native build failed; the output directory and log were retained.'
 fi
 printf 'Preparing the declared case. Log: %s/preparation.log\n' "$OUTPUT_DIR"
-if node "$NATIVE_DIR/prepare-case.mjs" --case "$CASE_PATH" --out "$OUTPUT_DIR/prepared.fns" \
+if node "$NATIVE_DIR/prepare-case.mjs" --case "$CASE_PATH" --out "$OUTPUT_DIR/prepared.fns" --integrator "$INTEGRATOR" \
     >"$OUTPUT_DIR/preparation.json" 2>"$OUTPUT_DIR/preparation.log"; then :
 else
   cat "$OUTPUT_DIR/preparation.log" >&2
   fail 'Case preparation refused; no native calculation was started.'
 fi
 printf 'Running the native calculation. Progress: %s/solver.log\n' "$OUTPUT_DIR"
-if "$OUTPUT_DIR/faraday-native" "$OUTPUT_DIR/prepared.fns" \
+if "$OUTPUT_DIR/faraday-native" "$OUTPUT_DIR/prepared.fns" --integrator "$INTEGRATOR" \
     >"$OUTPUT_DIR/recording.partial.jsonl" 2>"$OUTPUT_DIR/solver.log"; then
   mv -- "$OUTPUT_DIR/recording.partial.jsonl" "$OUTPUT_DIR/recording.jsonl"
   printf 'Completed the declared interval. Import: %s/recording.jsonl\n' "$OUTPUT_DIR"

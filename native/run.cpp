@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <set>
+#include <sstream>
 #include <string>
 
 using namespace faraday_native;
@@ -22,23 +23,35 @@ struct Reader {
 void quoted(std::ostream& o,const std::string& text){o<<'"';for(unsigned char c:text){if(c=='"'||c=='\\')o<<'\\'<<char(c);else if(c=='\n')o<<"\\n";else if(c=='\r')o<<"\\r";else if(c=='\t')o<<"\\t";else if(c<32)o<<"\\u00"<<std::hex<<std::setw(2)<<std::setfill('0')<<int(c)<<std::dec;else o<<char(c);}o<<'"';}
 void vector(std::ostream& o,Vec3 v){o<<'['<<v.x<<','<<v.y<<','<<v.z<<']';}
 void array(std::ostream& o,std::span<const double> a){o<<'[';for(std::size_t i=0;i<a.size();i++){if(i)o<<',';if(!std::isfinite(a[i]))throw std::runtime_error("Non-finite native output field");o<<a[i];}o<<']';}
-void frame(std::ostream& o,const NativeFluid& f,const RigidCoupler& coupled,std::size_t steps,const CoupledStepReport& report){
+void frame(std::ostream& o,const NativeFluid& f,const RigidCoupler& coupled,std::size_t steps,const CoupledStepReport& report,const ImplicitSurfaceReport* surface=nullptr){
   const int keys[]={0,2,1,3,14,20,9,10,11};const char* names[]={"rf","rc","sf","sc","eta","Ht","u","v","w"};
   // Refuse before starting a JSON line, preserving parseable accepted frames.
   for(const int key:keys)for(const double x:f.array(key))if(!std::isfinite(x))throw std::runtime_error("Non-finite native output field");
   for(const auto& g:coupled.grains())g.validate();
+  for(const double value:{report.dt,report.slipResidual,report.divergence})if(!std::isfinite(value)||value<0)throw std::runtime_error("Invalid native output diagnostic");
+  if(surface)for(const double value:{surface->surfaceResidual,surface->surfacePressureResidual})if(!std::isfinite(value)||value<0)throw std::runtime_error("Invalid native surface diagnostic");
   o<<"{\"type\":\"frame\",\"time\":"<<f.time()<<",\"steps\":"<<steps<<",\"initial\":"<<(steps?"false":"true")<<",\"nr\":"<<f.nr()<<",\"nth\":"<<f.nth()<<",\"nz\":"<<f.nz()<<",\"R\":"<<f.config().R<<",\"h\":"<<f.config().h<<",\"contact\":\"pinned\"";
   for(std::size_t i=0;i<9;i++){o<<",\""<<names[i]<<"\":";array(o,f.array(keys[i]));}
   o<<",\"grains\":[";
   for(std::size_t i=0;i<coupled.grains().size();i++){const auto& g=coupled.grains()[i];if(i)o<<',';o<<"{\"id\":"<<g.id<<",\"centre\":";vector(o,g.centre);o<<",\"radius\":"<<g.radius<<",\"density\":"<<g.density<<",\"velocity\":";vector(o,g.velocity);o<<",\"omega\":";vector(o,g.omega);o<<'}';}
-  o<<"],\"diagnostics\":{\"dt\":"<<report.dt<<",\"slipResidual\":"<<report.slipResidual<<",\"divergence\":"<<report.divergence<<",\"constraintIterations\":"<<report.constraintIterations<<",\"markers\":"<<report.markerCount<<",\"eventRefinements\":"<<report.eventRefinements<<",\"contacts\":"<<report.contacts<<"}}\n";o.flush();if(!o)throw std::runtime_error("Cannot write complete native frame");
+  o<<"],\"diagnostics\":{\"dt\":"<<report.dt<<",\"slipResidual\":"<<report.slipResidual<<",\"divergence\":"<<report.divergence<<",\"constraintIterations\":"<<report.constraintIterations<<",\"markers\":"<<report.markerCount<<",\"eventRefinements\":"<<report.eventRefinements<<",\"contacts\":"<<report.contacts;
+  if(surface)o<<",\"surface\":{\"kinematicResidualMetres\":"<<surface->surfaceResidual<<",\"pressureResidualPa\":"<<surface->surfacePressureResidual<<",\"newtonIterations\":"<<surface->newtonIterations<<",\"linearIterations\":"<<surface->linearIterations<<",\"pressureSolves\":"<<surface->pressureSolves<<'}';
+  o<<"}}\n";o.flush();if(!o)throw std::runtime_error("Cannot write complete native frame");
 }
 }
 
 int main(int argc,char** argv){
   std::cout<<std::setprecision(17);std::cerr<<std::setprecision(17);
   try{
-    if(argc!=2)throw std::invalid_argument("Usage: faraday-native prepared-case.fns > result.jsonl");
+    const char* usage="Usage: faraday-native prepared-case.fns [--integrator explicit|joint-implicit] > result.jsonl";
+    if(argc!=2&&argc!=4)throw std::invalid_argument(usage);
+    std::string integrator="explicit";
+    if(argc==4){
+      if(std::string(argv[2])!="--integrator")throw std::invalid_argument(usage);
+      integrator=argv[3];
+      if(integrator!="explicit"&&integrator!="joint-implicit")throw std::invalid_argument(usage);
+    }
+    const bool implicit=integrator=="joint-implicit";
     Reader input(argv[1]);if(input.bytes(8)!="FNSCASE1"||input.u32()!=1)throw std::invalid_argument("Unsupported prepared native case format/version");
     FluidConfig c;const auto readDimension=[&](){const auto n=input.u32();if(n>std::uint32_t(std::numeric_limits<int>::max()))throw std::length_error("Native dimension outside signed index range");return static_cast<int>(n);};
     c.nr=readDimension();c.nth=readDimension();c.nz=readDimension();if(input.u32()!=1)throw std::invalid_argument("Native case must use pinned contact line");
@@ -46,6 +59,7 @@ int main(int argc,char** argv){
     c.R=input.real();c.h=input.real();c.rho=input.real();c.nu=input.real();c.gamma=input.real();c.g=input.real();c.dtheta=input.real();
     const double omega=input.real(),acceleration=input.real(),duration=input.real(),dt=input.real(),outputInterval=input.real();
     CouplingOptions options;options.friction=input.real();options.restitution=input.real();
+    if(implicit)options.preconditioner=ConstraintPreconditioner::projectedCached;
     if(!(omega>=0&&duration>0&&dt>0&&dt<=duration&&outputInterval>0&&std::ceil(duration/dt)<=9007199254740991.0&&std::ceil(duration/outputInterval)<=9007199254740991.0))throw std::invalid_argument("Invalid or unrepresentable native drive/time controls");
     const auto grainCount=input.u32(),arrayCount=input.u32(),jsonBytes=input.u32();
     if(arrayCount!=19||jsonBytes>16*1024*1024)throw std::invalid_argument("Invalid native array count or provenance record length");
@@ -63,25 +77,42 @@ int main(int argc,char** argv){
     }
     if(input.stream.peek()!=std::char_traits<char>::eof())throw std::invalid_argument("Trailing bytes after native case");
     fluid.initialize();
-    if(dt>fluid.stableStep(acceleration))throw std::invalid_argument("Requested dt exceeds the native fluid stability bound; no silent time-step substitution");
+    const auto stepBound=[&](){return implicit?.4*fluid.implicitSurfaceStepLimit(acceleration):fluid.stableStep(acceleration);};
+    if(dt>stepBound())throw std::invalid_argument("Requested dt exceeds the selected native integrator stability bound; no silent time-step substitution");
     RigidCoupler coupled(fluid,std::move(grains),options);
+    const auto initial=coupled.stateDiagnostics();
+    if(!initial.compatible){
+      std::ostringstream message;message<<std::setprecision(17)
+        <<"Initial fluid/grain velocities violate the coupled constraints: slip="<<initial.slipResidual
+        <<" (tolerance "<<initial.slipTolerance<<"), divergence="<<initial.divergence
+        <<" (limit "<<initial.maximumDivergence<<"). Supply compatible initial fields; no velocity projection or physical-time advance was substituted.";
+      throw std::invalid_argument(message.str());
+    }
     std::cerr<<"{\"stage\":\"native-working-arrays\",\"conservativeBytes\":"<<coupled.workingArrayBytes()<<",\"resourceBudgetBytes\":"<<c.memoryBudgetBytes<<"}\n";
-    std::cout<<"{\"type\":\"native-case\",\"format\":\"faraday-native-recording\",\"version\":1,\"caseJson\":";quoted(std::cout,provenance);std::cout<<",\"nativeFluidBytes\":"<<fluid.allocatedBytes()<<"}\n";
-    std::size_t steps=0;CoupledStepReport report;frame(std::cout,fluid,coupled,steps,report);double nextOutput=outputInterval;
+    std::cout<<"{\"type\":\"native-case\",\"format\":\"faraday-native-recording\",\"version\":1,\"caseJson\":";quoted(std::cout,provenance);std::cout<<",\"nativeFluidBytes\":"<<fluid.allocatedBytes()<<",\"integration\":{\"method\":";quoted(std::cout,integrator);std::cout<<",\"constraintPreconditioner\":";quoted(std::cout,implicit?"projected-cached":"diagonal");std::cout<<",\"temporalOrder\":1}}\n";
+    std::size_t steps=0;CoupledStepReport report;ImplicitSurfaceReport surface;
+    report.time=initial.time;report.slipResidual=initial.slipResidual;
+    report.divergence=initial.divergence;report.markerCount=initial.markerCount;
+    frame(std::cout,fluid,coupled,steps,report);double nextOutput=outputInterval;
     while(fluid.time()<duration){
       const double remaining=duration-fluid.time(),step=std::min(dt,remaining);
       if(!(step>0&&fluid.time()+step>fluid.time()))throw std::runtime_error("Physical time step no longer advances representably");
-      if(step>fluid.stableStep(acceleration))throw std::runtime_error("Current flow requires a smaller time step; last accepted frame retained");
-      report=coupled.step(step,c.g+acceleration*std::cos(omega*fluid.time()));steps++;
+      if(step>stepBound())throw std::runtime_error("Current flow requires a smaller time step; last accepted frame retained");
+      const double effectiveGravity=c.g+acceleration*std::cos(omega*fluid.time());
+      if(implicit){const auto accepted=coupled.stepImplicitSurface(step,effectiveGravity);report=accepted.coupling;surface=accepted.surface;}
+      else report=coupled.step(step,effectiveGravity);
+      steps++;
       std::cerr<<"{\"steps\":"<<steps<<",\"time\":"<<fluid.time()<<",\"dt\":"<<report.dt<<",\"slip\":"<<report.slipResidual<<",\"divergence\":"<<report.divergence<<",\"constraintIterations\":"<<report.constraintIterations<<"}\n";
       if(fluid.time()>=nextOutput||fluid.time()>=duration){
-        frame(std::cout,fluid,coupled,steps,report);
+        frame(std::cout,fluid,coupled,steps,report,implicit?&surface:nullptr);
         if(fluid.time()<duration){
           nextOutput=(std::floor(fluid.time()/outputInterval)+1)*outputInterval;
           if(!(nextOutput>fluid.time()))throw std::runtime_error("Output interval no longer advances representably");
         }
       }
     }
-    std::cout<<"{\"type\":\"complete\",\"time\":"<<fluid.time()<<",\"steps\":"<<steps<<"}\n";return 0;
+    std::cout<<"{\"type\":\"complete\",\"time\":"<<fluid.time()<<",\"steps\":"<<steps<<"}\n";
+    std::cout.flush();if(!std::cout)throw std::runtime_error("Cannot write native completion record");
+    return 0;
   }catch(const std::exception& e){std::cerr<<"Native calculation refused: "<<e.what()<<'\n';std::cout<<"{\"type\":\"error\",\"message\":";quoted(std::cout,e.what());std::cout<<"}\n";return 1;}
 }

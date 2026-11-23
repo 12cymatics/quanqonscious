@@ -146,6 +146,7 @@ int main(int argc,char** argv){
     test("nonzero coupled momentum and reduced pressure match independent dense energy oracle",[&]{denseOracle(input);});
     test("default resolved sphere advances with two-way reactions and measured residuals",[&]{
       auto f=input.fresh();RigidCoupler coupled(*f,input.grains);const double initialZ=input.grains[0].centre.z;double minimumDt=std::numeric_limits<double>::infinity(),maximumSlip=0,maximumDivergence=0;std::size_t refinements=0;
+      require(coupled.stateDiagnostics().compatible,"Supplied resting fluid and grain state was not compatible");
       const auto start=std::chrono::steady_clock::now();
       for(unsigned step=0;step<20;step++){
         const auto old=coupled.grains()[0];const double gravity=input.config.g+input.acceleration*std::cos(input.omega*f->time());const auto result=coupled.step(input.dt,gravity);const auto& now=coupled.grains()[0];
@@ -163,7 +164,34 @@ int main(int argc,char** argv){
     });
     test("finite settling speed records actual progress without projecting grain positions",[&]{
       auto f=input.fresh();auto grains=input.grains;grains[0].velocity.z=-.001;RigidCoupler coupled(*f,grains);const double initialZ=grains[0].centre.z;double minDt=input.dt;std::size_t refinements=0;const auto start=std::chrono::steady_clock::now();
-      for(unsigned i=0;i<3;i++){const auto old=coupled.grains()[0];const auto r=coupled.step(input.dt,input.config.g);const auto& now=coupled.grains()[0];require(now.centre.z==old.centre.z+r.dt*now.velocity.z,"Accepted centre has been projected or clipped");require(r.dt>0&&r.time==f->time(),"Finite-speed case stopped advancing");minDt=std::min(minDt,r.dt);refinements+=r.eventRefinements;}
+      const auto supplied=f->checkpoint();const auto initial=coupled.stateDiagnostics();
+      require(!initial.compatible&&std::abs(initial.slipResidual-.001)<1e-15,"Incompatible supplied velocity was reported as a valid initial state");
+      require(same(supplied,f->checkpoint())&&sameGrains(grains,coupled.grains()),"Initial-state diagnostics changed the supplied physical state");
+      // This deliberately inconsistent algebra fixture exercises its initial
+      // constrained impulse. A production trajectory must start compatible;
+      // the CLI rejects this input instead of presenting its first correction
+      // as measured physical sediment motion.
+      for(unsigned i=0;i<3;i++){
+        const auto old=coupled.grains()[0];const auto r=coupled.step(input.dt,input.config.g);const auto& now=coupled.grains()[0];
+        require(r.driftVelocity.size()==1,"Position drift velocity is not reported");
+        for(std::size_t d=0;d<3;d++)require(now.centre[d]==old.centre[d]+r.dt*r.driftVelocity[0][d],"Accepted centre has been projected or clipped");
+        require(r.dt==input.dt&&r.eventRefinements==0,"Moving-geometry slip still collapses the requested finite-speed step");
+        require(r.time==f->time(),"Finite-speed case stopped advancing");
+        const double me=(now.density-input.config.rho)*now.volume();
+        for(std::size_t d=0;d<3;d++){
+          const double momentum=me*(now.velocity[d]-old.velocity[d]+(d==2?r.dt*input.config.g:0));
+          require(std::abs(momentum-r.rigidImpulse[0][d])<1e-24+1e-8*std::abs(momentum),"Endpoint body momentum omits a hydrodynamic correction impulse");
+        }
+        // Rebuild the endpoint operator independently, rather than accepting
+        // only the residual stored by the step that is under test.
+        const auto dofs=independentFluidDofs(*f);RigidInterpolation endpoint(dofs,coupled.grains());
+        auto actual=endpoint.applyJ(pack(*f,dofs));const auto rigid=endpoint.applyK({rigidVelocity(now)});
+        double maximum=0,scale=0;for(std::size_t marker=0;marker<actual.size();marker++){maximum=std::max(maximum,norm(actual[marker]-rigid[marker]));scale=std::max({scale,norm(actual[marker]),norm(rigid[marker])});}
+        require(maximum<=1e-13+1e-9*scale,"Independent moved-geometry rigid slip exceeds unchanged tolerance");
+        require(f->maxDivergence()<=1e-8,"Moved free-surface geometry is not incompressible");
+        require(coupled.stateDiagnostics().compatible,"Accepted endpoint state failed public constraint diagnostics");
+        minDt=std::min(minDt,r.dt);refinements+=r.eventRefinements;
+      }
       std::cout<<"{\"metric\":\"finite-speed-settling\",\"steps\":3,\"physicalTime\":"<<f->time()<<",\"wallSeconds\":"<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<",\"minimumDt\":"<<minDt<<",\"refinements\":"<<refinements<<",\"displacementMetres\":"<<initialZ-coupled.grains()[0].centre.z<<"}\n";
     });
     test("supported floor sphere balances weight contact and hydrodynamic impulses",[&]{
@@ -175,7 +203,7 @@ int main(int argc,char** argv){
         require(r.contactImpulse[0][2]>0,"Floor impulse does not oppose the excess weight");
         const double me=(now.density-input.config.rho)*now.volume(),momentum=me*(now.velocity.z-before.velocity.z+r.dt*input.config.g),impulse=r.rigidImpulse[0][2]+r.contactImpulse[0][2];
         require(std::abs(momentum-impulse)<1e-25+1e-8*std::abs(momentum),"Supported body momentum omits contact-induced hydrodynamic impulse");
-        require(now.centre.z==before.centre.z+r.dt*now.velocity.z,"Supported centre has been projected");
+        require(r.driftVelocity.size()==1&&now.centre.z==before.centre.z+r.dt*r.driftVelocity[0][2],"Supported centre has been projected");
         require(now.centre.z>=initialZ,"Supported sphere penetrated floor");
         // Gravity and the normal support are collinear body impulses. Their
         // exact constrained responses cancel, leaving the fluid at rest.

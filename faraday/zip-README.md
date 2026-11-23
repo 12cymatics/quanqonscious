@@ -48,6 +48,11 @@ calculation requires a C++20 compiler and Node; the browser
 does not run it. The supplied tiny verification case is not a working beach-sand
 deposition demonstration. The current fixed mesh cannot resolve narrowing gaps
 all the way to a sand bed, and full-vessel performance remains unfinished.
+The optional `--integrator joint-implicit` native launcher mode solves grain
+constraints, surface motion and endpoint normal stress together. Its recording
+preserves the chosen method and measured residuals. Resolved gap meshes now
+have separate physical-boundary and conservative joining tests; they are not
+yet connected to the vessel's moving grains.
 
 The ZIP includes both index.html and faraday-cell-standalone.html with identical
 contents. The source cymatic.html is also included, but requires the local HTTP
@@ -142,7 +147,7 @@ and camera motion do not claim real-time fluid computation.
 | `faraday-cell-standalone.html` | The same self-contained application as index.html. No server, no siblings, nothing fetched. |
 | `cymatic.html` | The same page as it lives in the repository, loading its scripts from `faraday/` and `dns/`. Needs a local server (below). |
 | `dns/run-cell3d.mjs` | The three-dimensional solver in a terminal, no browser: an ASCII plan view of the surface, the energy split, and the clocks. |
-| `run-checks.mjs` | Runs the packaged browser/fluid suites. Optional native compiler checks are documented in `native/README.md`. |
+| `run-checks.mjs` | Runs the packaged browser, fluid, native coupling and resolved-gap suites. Native checks require a C++20 compiler; see `native/README.md`. |
 | `dns/PLAN-cell3d.md` | The working record: what each stage measured, what is still open, and every expectation measurement has overturned. |
 
 The solvers:
@@ -218,14 +223,19 @@ name and reporting a time that means something else.
 
 ```
 node run-checks.mjs --list      # what there is
-node run-checks.mjs --fast      # everything but the three-dimensional solver gate
+node run-checks.mjs --fast      # omit the explicitly named slow suites
 node run-checks.mjs             # everything
 ```
 
 `dns/check-cell3d.mjs` and `dns/check-cell3d-wasm.mjs` take minutes — the first
 integrates the solver over many grids to measure convergence orders, the second
 rebuilds the C++ and holds it to the JavaScript over a whole drive period — which
-is why `--fast` exists and why those two are the only things it leaves out. `dns/check-page.mjs` drives a real Chrome over
+is why `--fast` exists. It also omits the longer native runtime, coupled
+refinement and dense resolved-gap suites. `--list` names every suite and marks
+these slow checks explicitly; a normal run executes all of them. Native checks
+need a C++20 compiler even in `--fast` mode. The book checks need Python and
+SymPy, and the WebAssembly build checks need the toolchain documented in their
+build scripts. `dns/check-page.mjs` drives a real Chrome over
 the DevTools protocol; it **refuses** rather than skipping if it cannot find one,
 and `CHROME=/path/to/chrome` tells it where to look. `faraday/check-clean.mjs` reads
 the comment-free build back with [acorn](https://github.com/acornjs/acorn), a parser

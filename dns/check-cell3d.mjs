@@ -957,7 +957,8 @@ function meshNet(S, which, i, k, b){
   return b < S.nz ? 0.5*(Q(i,k,b+1) - Q(i,k,b-1))
                   : Q(i,k,S.nz) - 0.5*(Q(i,k,S.nz-1) + Q(i,k,S.nz));
 }
-const volU = (S,i,k,b) => S.rf[i]*S.drf[i]*S.dth*S.Hr[i*S.nth + S.kw(k)]*S.dsc[b];
+const volU = (S,i,k,b) => 0.5*(S.rc[i-1]*S.drc[i-1]*S.H[S.ie(i-1,k)]
+                            + S.rc[i]*S.drc[i]*S.H[S.ie(i,k)])*S.dth*S.dsc[b];
 const volV = (S,i,k,b) => S.rc[i]*S.drc[i]*S.dth*S.Hth[i*S.nth + S.kw(k)]*S.dsc[b];
 const volW = (S,i,k,b) => S.rc[i]*S.drc[i]*S.dth*S.H[S.ie(i,k)]*S.dsf[b];
 
@@ -1266,107 +1267,43 @@ section('6f. on a divergence-free field the only energy it moves is the mesh vol
      `${eTight.abs.toExponential(3)} against ${eTight.scale.toExponential(3)} of terms`);
 }
 
-section('6g. the one energy term a moving surface leaves, and its order');
-/* The energy identity holds exactly while the surface is still. While it moves, one term
- * is left, and it is measured here rather than asserted away. (The other thing the
- * identity leaves open is the axis row, which is not about the surface moving at all and
- * is pinned in closed form in 6i.)
- *
- * THE RADIAL VOLUME WEIGHTING. The volume of a u cell is rf drf dth Hr dsigma, the
- * same product gradient() and famLaplacian() use, and its time derivative is not
- * exactly the net of the mesh fluxes through its faces, which is half the sum of the
- * two pressure cells'. The two differ because Hr is the DISTANCE-weighted
- * interpolation of H, which is what makes it a consistent face value, while the
- * volume sum wants the volume-weighted one; no single interpolation is both. The v
- * and w families have no such gap -- for them the two coincide to the last bit,
- * because sc and Hth are exact midpoints -- so this is the radial family alone, and
- * it is the one term by which kinetic energy fails to be conserved exactly while the
- * surface is moving. Measured under refinement rather than argued. */
-{
-  const setup = (nr, nth, nz) => {
-    const S = new FaradayCell3D({ nr, nth, nz, ...CELL });
-    for (let i = 0; i < nr; i++) for (let k = 0; k < nth; k++){
-      const x = S.rc[i]/S.R, th = (k + 0.5)*S.dth;
-      S.eta[S.ie(i,k)] = 0.35*S.h*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
-      S.Ht[S.ie(i,k)] = 0.11*(x*x*Math.cos(2*th) + 0.5*x*Math.sin(th + 0.4));
-    }
-    S.refreshMetric();
-    /* a fixed smooth field, so the same physical state is sampled on both grids */
-    const H = (r, th) => S.Hat(r, th).H;
-    const KZ = 520;
-    for (let i = 0; i <= nr; i++) for (let k = 0; k < nth; k++) for (let b = 0; b < nz; b++){
-      const th = (k + 0.5)*S.dth, z = S.sc[b]*H(S.rf[i], th);
-      S.u[S.iu(i,k,b)] = 1e-3*Math.cos(2*th)*Math.sin(KZ*z)*(S.rf[i]/S.R);
-    }
-    return S;
-  };
-  const gap = S => {
-    const num = kahan(), den = kahan();
-    for (let i = 1; i < S.nr; i++) for (let k = 0; k < S.nth; k++)
-      for (let b = 0; b < S.nz; b++){
-        const q = S.u[S.iu(i,k,b)];
-        /* d/dt of the coded volume, exactly: Hr is linear in the two cell values, so
-           its rate is the same interpolation of their rates */
-        const a = S.drc[i-1], c = S.drc[i];
-        const HrDot = (c*S.Ht[S.ie(i-1,k)] + a*S.Ht[S.ie(i,k)])/(a + c);
-        const Vdot = S.rf[i]*S.drf[i]*S.dth*HrDot*S.dsc[b];
-        const mesh = meshNet(S, 'u', i, k, b);
-        num.add(0.5*q*q*(Vdot - mesh));
-        den.add(Math.abs(0.5*q*q*mesh));
-      }
-    return Math.abs(num.sum)/den.sum;
-  };
-  const coarse = gap(setup(16, 24, 16)), fine = gap(setup(32, 48, 32));
-  const order = Math.log(coarse/fine)/Math.log(2);
-  console.log(`       radial volume-rate gap ${coarse.toExponential(2)} -> `
-    + `${fine.toExponential(2)}, order ${order.toFixed(2)}`);
-  ok(order > 1.8,
-     'the radial volume-rate gap, the one energy term a moving surface leaves, is '
-     + 'second order',
-     `${coarse.toExponential(3)} then ${fine.toExponential(3)}, order `
-     + `${order.toFixed(3)}`);
-  /* and for the other two families it is not second order, it is nothing */
-  const S = setup(16, 24, 16);
-  const ULP = 8*Number.EPSILON;
-  let worstV = 0, worstW = 0, nV = 0, nW = 0;
-  const Q = (i,k,bb) => meshFlux(S, i, k, bb);
-  for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
-    for (let b = 0; b < S.nz; b++){
-      const HthDot = 0.5*(S.Ht[S.ie(i,k-1)] + S.Ht[S.ie(i,k)]);
-      const want = S.rc[i]*S.drc[i]*S.dth*HthDot*S.dsc[b];
-      const mag = Math.max(Math.abs(Q(i,k-1,b)), Math.abs(Q(i,k,b)),
-                           Math.abs(Q(i,k-1,b+1)), Math.abs(Q(i,k,b+1)));
-      if (mag > 0){
-        worstV = Math.max(worstV,
-          Math.abs(want - meshNet(S, 'v', i, k, b))/(ULP*mag));
-        nV++;
-      }
-    }
-    for (let b = 1; b <= S.nz; b++){
-      const want = S.rc[i]*S.drc[i]*S.dth*S.Ht[S.ie(i,k)]*S.dsf[b];
-      const mag = Math.max(Math.abs(Q(i,k,b-1)), Math.abs(Q(i,k,b)),
-                           Math.abs(Q(i,k,Math.min(b+1, S.nz))));
-      if (mag > 0){
-        worstW = Math.max(worstW,
-          Math.abs(want - meshNet(S, 'w', i, k, b))/(ULP*mag));
-        nW++;
-      }
-    }
+section('6g. the kinetic mass derivative equals the mesh flux on every family');
+/* The radial mass is transferred from its two pressure cells by the same half-
+ * cell incidence as transport. Hr is still the physical face depth; it is not
+ * substituted for a kinetic-volume weight. This removes the previous radial
+ * volume-rate defect, rather than only bounding its spatial truncation order. */
+for (const rStretch of [0, 2.2, 4]){
+  const S = new FaradayCell3D({nr:16,nth:24,nz:16,rStretch,...CELL});
+  for(let i=0;i<S.nr;i++)for(let k=0;k<S.nth;k++){
+    const x=S.rc[i]/S.R,th=(k+.5)*S.dth;
+    S.eta[S.ie(i,k)]=.35*S.h*(1-x*x)*(1+.5*x*x*Math.cos(2*th));
+    S.Ht[S.ie(i,k)]=.11*(1-x*x)*(1+.5*x*x*Math.cos(2*th));
   }
-  /* This asked for exactly zero and read 3.9e-23, then for a fixed fraction of the
-     term and read 2.2e-13 of it. Both expectations were wrong and the code was not.
-     The two expressions are the same number but not the same SEQUENCE of operations:
-     one multiplies a width, the other differences two mesh fluxes that are nearly
-     equal, and on a grid graded towards both ends the widths are a thousandth of the
-     fluxes being differenced. The loss is the cancellation in that difference, so the
-     bound has to be relative to the FLUXES and not to the width -- which is where it
-     is, at well under one unit in their last place. */
-  ok(worstV < 1 && worstW < 1,
-     'while the azimuthal and vertical families have no gap beyond the round-off of '
-     + 'differencing the mesh fluxes themselves, so the term above is the radial '
-     + 'weighting alone',
-     `azimuthal ${worstV.toExponential(2)} of eight units in the last place over `
-     + `${nV} nodes; vertical ${worstW.toExponential(2)} over ${nW}`);
+  S.refreshMetric();
+  const ULP=8*Number.EPSILON;
+  const Q=(i,k,b)=>meshFlux(S,i,k,b);
+  for(const family of ['u','v','w']){
+    let worst=0,count=0;
+    for(const [i,k,b] of nodesOf(S,family)){
+      let want,mag;
+      if(family==='u'){
+        want=.5*(S.rc[i-1]*S.drc[i-1]*S.Ht[S.ie(i-1,k)]
+                 +S.rc[i]*S.drc[i]*S.Ht[S.ie(i,k)])*S.dth*S.dsc[b];
+        mag=Math.max(Math.abs(Q(i-1,k,b)),Math.abs(Q(i,k,b)),
+                     Math.abs(Q(i-1,k,b+1)),Math.abs(Q(i,k,b+1)));
+      }else if(family==='v'){
+        want=S.rc[i]*S.drc[i]*S.dth*.5*(S.Ht[S.ie(i,k-1)]+S.Ht[S.ie(i,k)])*S.dsc[b];
+        mag=Math.max(Math.abs(Q(i,k-1,b)),Math.abs(Q(i,k,b)),
+                     Math.abs(Q(i,k-1,b+1)),Math.abs(Q(i,k,b+1)));
+      }else{
+        want=S.rc[i]*S.drc[i]*S.dth*S.Ht[S.ie(i,k)]*S.dsf[b];
+        mag=Math.max(Math.abs(Q(i,k,b-1)),Math.abs(Q(i,k,b)),Math.abs(Q(i,k,Math.min(b+1,S.nz))));
+      }
+      if(mag>0){worst=Math.max(worst,Math.abs(want-meshNet(S,family,i,k,b))/(ULP*mag));count++;}
+    }
+    ok(worst<1, `${family} mass rate equals the mesh-flux net at radial stretch ${rStretch}`,
+       `${worst.toExponential(3)} of eight ulps of flux over ${count} nodes`);
+  }
 }
 
 section('6h. the advection is the advective term, against calculus, under refinement');
@@ -1547,7 +1484,10 @@ section('6i. what the axis costs, in closed form');
  *   A_r = -U^2 [ a cos^2(th) - cos(a/2) sin(a) cos(2 th) ] / (rf a)
  *         + U^2 sin^2(th) cos^2(a/2) / rf
  *
- * where the second term is the curvature pair's own contribution. Expanded in a this
+ * where the second term is the curvature pair's own contribution. The radial
+ * transferred mass multiplies this expression by
+ * rf*drf / (.5*(rc_left*drc_left+rc_right*drc_right)); it is one on a uniform
+ * radial grid and tends to one under smooth-grid refinement. Expanded in a this
  * is -U^2 a^2 [1/8 + cos(2 th)/6] / rf + O(a^4): SECOND ORDER IN THE AZIMUTHAL
  * SPACING, DIVIDED BY THE RADIUS. At a fixed radius it is second order like everything
  * else. At the first cell, where rf is itself a spacing, it is first order, and no
@@ -1570,8 +1510,11 @@ section('6i. what the axis costs, in closed form');
     /* the closed form above */
     const want = (i, k) => {
       const th = (k + 0.5)*a, c = Math.cos(th), s = Math.sin(th);
-      return -U*U*(a*c*c - Math.cos(a/2)*Math.sin(a)*Math.cos(2*th))/(S.rf[i]*a)
-             + U*U*s*s*Math.cos(a/2)*Math.cos(a/2)/S.rf[i];
+      const integrated = -U*U*(a*c*c - Math.cos(a/2)*Math.sin(a)*Math.cos(2*th))/(S.rf[i]*a)
+                       + U*U*s*s*Math.cos(a/2)*Math.cos(a/2)/S.rf[i];
+      const massRatio = S.rf[i]*S.drf[i]
+        / (.5*(S.rc[i-1]*S.drc[i-1]+S.rc[i]*S.drc[i]));
+      return integrated*massRatio;
     };
     /* Compared against the size of the TERMS, not of the answer. Both the scheme and
        the closed form reach the answer by subtracting two quantities of size U^2/rf
@@ -2218,9 +2161,9 @@ section('8e. the hook that puts a flux on the surface face, exactly');
 /* `surfaceLapFluxes` is gated in 8d and famLaplacian is gated in 4e and 4f, but the HOOK
    between them is neither's business, and it is live: `viscous` uses it for u and v. So it is
    checked on its own terms, and exactly rather than under refinement. The sigma = 1 face's
-   contribution is side*proj*sFlux and the operator divides by rn*dra*dtheta*H*dsigma, so
-   changing the supplied flux by C must change the surface row by exactly C/(H dsigma) and
-   must change nothing else at all. */
+   contribution is side*proj*sFlux and the operator divides by the transferred kinetic
+   volume, so changing the supplied flux by C must change the surface row by exactly
+   C*proj/V_dual and must change nothing else at all. */
 {
   const S = deform(new FaradayCell3D({ nr: 12, nth: 16, nz: 10, ...CELL }), 0.4);
   const r = rnd(8123);
@@ -2232,11 +2175,11 @@ section('8e. the hook that puts a flux on the surface face, exactly');
   let worstTop = 0, worstRest = 0, scale = 0;
   for (let i = fam.rLo; i <= fam.rHi; i++)
     for (let k = 0; k < S.nth; k++){
-      const H = S.Hat(S.rf[i], (k + 0.5)*S.dth).H;
+      const projectedArea=S.rf[i]*S.drf[i]*S.dth;
       for (let b = 0; b < S.nz; b++){
         const c = S.iu(i, k, b), d = a1[c] - a0[c];
         if (b === S.nz - 1){
-          const want = C/(H*S.dsc[b]);
+          const want = C*projectedArea/volU(S,i,k,b);
           worstTop = Math.max(worstTop, Math.abs(d - want));
           scale = Math.max(scale, Math.abs(want));
         } else worstRest = Math.max(worstRest, Math.abs(d));
@@ -2791,7 +2734,10 @@ function plainFamLaplacian(S, f, out, fam, bc, sFlux){
                             - sface*midS.Hr*dSigR(a, k, z)
                             - (sface*midS.Hth/(rn[a]*rn[a]))*dSigTh(a, k, z) );
         }
-        out[idx(a, k, b)] = flux/(rn[a]*dra*dth*mid[0]*dsb);
+        const volume = fam === S.FAM.u
+          ? .5*(S.rc[a-1]*S.drc[a-1]*S.H[S.ie(a-1,k)]+S.rc[a]*S.drc[a]*S.H[S.ie(a,k)])*dth
+          : rn[a]*dra*dth*mid[0];
+        out[idx(a, k, b)] = flux/(volume*dsb);
       }
     }
   }
@@ -3006,9 +2952,10 @@ section('10. the hoisted operators are the same operators, bit for bit');
       for (let j = 0; j < nz; j++){ wu[S.iu(0, k, j)] = 0; wu[S.iu(nr, k, j)] = 0; }
     for (let i = 1; i < nr; i++)
       for (let k = 0; k < nth; k++){
-        const Hf = S.Hr[i*nth + S.kw(k)];
+        const volume = .5*(S.rc[i-1]*S.drc[i-1]*S.H[S.ie(i-1,k)]
+                          +S.rc[i]*S.drc[i]*S.H[S.ie(i,k)])*S.dth;
         for (let j = 0; j < nz; j++)
-          wu[S.iu(i, k, j)] /= -(S.rf[i]*S.drf[i]*S.dth*Hf*S.dsc[j]);
+          wu[S.iu(i, k, j)] /= -(volume*S.dsc[j]);
       }
     for (let i = 0; i < nr; i++)
       for (let k = 0; k < nth; k++){

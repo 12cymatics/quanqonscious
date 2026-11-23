@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <array>
 #include <span>
 #include <vector>
@@ -44,6 +45,25 @@ struct StepLimits {
   double kRadial=0, kVertical=0, kAzimuthal=0;
 };
 
+struct ImplicitSurfaceOptions {
+  double absoluteSurfaceTolerance=1e-15; // metres, nonlinear kinematic residual
+  double relativeSurfaceTolerance=1e-10;
+  double absolutePressureTolerance=1e-10; // pascals, endpoint normal-stress residual
+  double relativePressureTolerance=1e-10;
+  double linearRelativeTolerance=1e-10;
+  std::size_t maximumNewtonIterations=16;
+  std::size_t maximumLinearIterations=192;
+  std::size_t krylovDimension=32;
+};
+
+struct ImplicitSurfaceReport {
+  std::size_t newtonIterations=0, linearIterations=0, pressureSolves=0, normalStressIterations=0;
+  double surfaceResidual=0, surfacePressureResidual=0, dt=0;
+};
+
+enum class SurfaceResponseKind { physical, tangent };
+using SurfaceResponseCallback=std::function<void(SurfaceResponseKind)>;
+
 // The current canonical solver has one global field arena. This wrapper permits
 // exactly one live instance and releases every native allocation on destruction.
 // It is not thread-safe; parallel explicit rows must be coordinated externally.
@@ -71,6 +91,9 @@ public:
   // are initially zero, or may be copied from a canonical initial condition.
   void initialize();
   void refreshMetric();
+  // Reconstruct dependent axis velocity, grid-relative flux and surface rate after
+  // external conservative velocity corrections, without advancing eta or time.
+  void synchronizeVelocity();
   // Opt in when a rigid-grain constraint solve is present. The pressure
   // operator then eliminates the dependent axis velocity and includes that
   // elimination's transpose. Ordinary zero-grain/WASM arithmetic is unchanged.
@@ -83,6 +106,29 @@ public:
   // Identical zero-grain step; effective gravity is supplied by the caller so
   // native and JS/WASM comparisons use identical transcendental values.
   void step(double dt, double effectiveGravity);
+
+  // Native first-order implicit capillary/gravity step. The complete
+  // nonlinear curvature and endpoint kinematic condition are solved together
+  // through the pressure response. Normal viscous stress uses the final velocity
+  // and geometry, with its pressure feedback solved as a linear Schur system.
+  // Advection and viscous acceleration, including the viscous boundary flux,
+  // are evaluated at the old state; their stability/accuracy limits still apply.
+  // This does not enforce a fully implicit endpoint tangential stress tensor.
+  // The pressure projection and kinematic residual use each trial endpoint's
+  // metric. Its curvature tangent holds metric derivatives fixed (quasi-Newton),
+  // but convergence checks the complete updated-metric residual. Optional joint
+  // grain response runs after every pressure response: physical callbacks reset
+  // body predictors/rebuild trial geometry, tangent callbacks constrain a zero
+  // body increment on that geometry. Callback changes to external body state
+  // must be rolled back by its owner if this method fails. No later uncoupled
+  // grain impulse correction is compatible with the solved surface balance.
+  // This explicit opt-in API does not change step()/predictor()/finish() parity.
+  // Failure restores the accepted fluid state rather than reducing dt silently.
+  ImplicitSurfaceReport stepImplicitSurface(double dt, double effectiveGravity,
+      const ImplicitSurfaceOptions& options={},const SurfaceResponseCallback& response={});
+  // Conservative simultaneous temporary allocation, excluding this fluid's
+  // persistent arrays. Coupled owners add it to their own live working budget.
+  std::size_t implicitSurfaceWorkspaceBytes(const ImplicitSurfaceOptions& options={}) const;
 
   // Canonical predictor AND inhomogeneous free-surface pressure projection.
   // Leaves a divergence-free predictor and stores surface pressure at old eta.
@@ -115,6 +161,9 @@ public:
   // Supply the drive's peak acceleration, rather than instantaneous gravity.
   StepLimits stepLimits(double peakAcceleration=0) const;
   double stableStep(double peakAcceleration=0,double safety=0.4) const;
+  // Implicit capillarity removes only the explicit capillary restriction.
+  // This bound still includes explicit viscous/advection and gravity limits.
+  double implicitSurfaceStepLimit(double peakAcceleration=0) const;
   int pressureIterations() const noexcept;
   double pressureResidual() const noexcept;
 

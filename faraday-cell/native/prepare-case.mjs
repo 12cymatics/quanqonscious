@@ -12,7 +12,8 @@ const K=require('../faraday/kernel.js');
 
 export function solverOptions(c){return {nr:c.grid.nr,nth:c.grid.nth,nz:c.grid.nz,rStretch:c.grid.rStretch,zStretch:c.grid.zStretch,R:c.fluid.radius,h:c.fluid.depth,rho:c.fluid.density,nu:c.fluid.dynamicViscosity/c.fluid.density,gamma:c.fluid.surfaceTension,g:c.fluid.gravity,accel:c.drive.acceleration,omegaD:2*Math.PI*c.drive.frequency,contact:c.fluid.contactLine};}
 
-export function prepareState(input,{availableMemoryBytes=process.availableMemory?.()??freemem(),progress=()=>{}}={}){
+export function prepareState(input,{availableMemoryBytes=process.availableMemory?.()??freemem(),progress=()=>{},integrator='explicit'}={}){
+  if(!['explicit','joint-implicit'].includes(integrator))throw new TypeError('integrator must be explicit or joint-implicit');
   const c=validateCase(input),estimate=assertPreparationBudget(c,availableMemoryBytes);
   progress({stage:'resource-preflight',...resourceReport(c.grid),resourceBudgetBytes:c.resourceBudgetBytes});
   // No FaradayCell3D (including its flat twin and O(NP*nz) pressure factor)
@@ -26,14 +27,15 @@ export function prepareState(input,{availableMemoryBytes=process.availableMemory
   // Canonical stepLimits already uses g+abs(accel), the worst forcing gravity,
   // and the initial field's advective bound. Future moving-grain and field
   // limits still have to be checked by the native integrator at every step.
-  const stableDt=cell.stableStep();
+  const limits=cell.stepLimits();
+  const stableDt=integrator==='joint-implicit'?.4*Math.min(limits.viscous,limits.advective,limits.gravity):cell.stableStep();
   if(!(Number.isFinite(stableDt)&&stableDt>0))throw new RangeError('canonical initial stableStep is not finite and positive');
-  if(c.dt>stableDt)throw new RangeError('dt='+c.dt+' exceeds the canonical initial stableStep='+stableDt+'; the requested step is not reduced');
-  progress({stage:'preconditioner',stableDt,requestedDt:c.dt});
+  if(c.dt>stableDt)throw new RangeError('dt='+c.dt+' exceeds the '+integrator+' initial stableStep='+stableDt+'; the requested step is not reduced');
+  progress({stage:'preconditioner',integrator,stableDt,requestedDt:c.dt});
   cell.buildPreconditioner();
   const arrays=ARRAY_FIELDS.map(([key,name])=>({key,name,values:cell[name]}));
   for(const a of arrays){if(!(a.values instanceof Float64Array))throw new TypeError('canonical array '+a.name+' is missing');for(const v of a.values)if(!Number.isFinite(v))throw new RangeError('canonical array '+a.name+' contains a nonfinite value');}
-  return {case:c,cell,arrays,stableDt,estimate};
+  return {case:c,cell,arrays,stableDt,estimate,integrator};
 }
 
 /* Portable case format, read field-by-field (never a compiler struct):
@@ -67,7 +69,7 @@ export async function writePreparedCase(prepared,outputPath){
     const chunk=Buffer.alloc(65536),arrayHeader=Buffer.alloc(12);
     for(const a of prepared.arrays){arrayHeader.writeUInt32LE(a.key,0);arrayHeader.writeBigUInt64LE(BigInt(a.values.length),4);await write(arrayHeader);for(let start=0;start<a.values.length;start+=chunk.length/8){const n=Math.min(chunk.length/8,a.values.length-start);for(let j=0;j<n;j++)chunk.writeDoubleLE(a.values[start+j],j*8);await write(chunk.subarray(0,n*8));}}
     await file.sync();await file.close();file=null;await rename(temporary,destination);
-    return {path:destination,format:BINARY_MAGIC,version:BINARY_VERSION,arrayCount:prepared.arrays.length,grainCount:c.grains.length,stableDt:prepared.stableDt,requestedDt:c.dt,...resourceReport(c.grid),materialNotice:c.materialProvenance.kind==='illustrative'?MATERIAL_NOTICE:'Material measurements are supplied by the case author; their source is recorded without independent certification.',scope:'Resource preflight covers preparation and native fluid arrays. Coupling workspace, grain resolution, gaps and evolving stability require native runtime checks. No coarse grid or substitute force law was generated.'};
+    return {path:destination,format:BINARY_MAGIC,version:BINARY_VERSION,arrayCount:prepared.arrays.length,grainCount:c.grains.length,integrator:prepared.integrator,stableDt:prepared.stableDt,requestedDt:c.dt,...resourceReport(c.grid),materialNotice:c.materialProvenance.kind==='illustrative'?MATERIAL_NOTICE:'Material measurements are supplied by the case author; their source is recorded without independent certification.',scope:'Resource preflight covers preparation and native fluid arrays. Coupling workspace, grain resolution, gaps and evolving stability require native runtime checks. No coarse grid or substitute force law was generated.'};
   }catch(error){if(file)await file.close();await rm(temporary,{force:true});throw error;}
 }
 export async function prepareCaseFile(casePath,outputPath,options={}){
@@ -76,5 +78,5 @@ export async function prepareCaseFile(casePath,outputPath,options={}){
   const input=JSON.parse(await readFile(casePath,'utf8'));
   return writePreparedCase(prepareState(input,options),outputPath);
 }
-function parseArgs(argv){const args={};for(let i=0;i<argv.length;i++){const key=argv[i];if(!['--case','--out'].includes(key)||Object.hasOwn(args,key))throw new Error('usage: node native/prepare-case.mjs --case input.json --out prepared.fns');const value=argv[++i];if(!value||value.startsWith('--'))throw new Error(key+' requires a path');args[key]=value;}if(!args['--case']||!args['--out'])throw new Error('both --case and --out are required; no example is run by default');return args;}
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){try{const args=parseArgs(process.argv.slice(2));const result=await prepareCaseFile(args['--case'],args['--out'],{progress:event=>process.stderr.write(JSON.stringify(event)+'\n')});process.stdout.write(JSON.stringify(result,null,2)+'\n');}catch(error){process.stderr.write('Native case preparation refused: '+error.message+'\n');process.exitCode=1;}}
+function parseArgs(argv){const args={};for(let i=0;i<argv.length;i++){const key=argv[i];if(!['--case','--out','--integrator'].includes(key)||Object.hasOwn(args,key))throw new Error('usage: node native/prepare-case.mjs --case input.json --out prepared.fns [--integrator explicit|joint-implicit]');const value=argv[++i];if(!value||value.startsWith('--'))throw new Error(key+' requires a value');args[key]=value;}if(!args['--case']||!args['--out'])throw new Error('both --case and --out are required; no example is run by default');return args;}
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){try{const args=parseArgs(process.argv.slice(2));const result=await prepareCaseFile(args['--case'],args['--out'],{integrator:args['--integrator']??'explicit',progress:event=>process.stderr.write(JSON.stringify(event)+'\n')});process.stdout.write(JSON.stringify(result,null,2)+'\n');}catch(error){process.stderr.write('Native case preparation refused: '+error.message+'\n');process.exitCode=1;}}

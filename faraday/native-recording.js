@@ -157,10 +157,18 @@
         return Object.freeze({type:'error',message:record.message,framesRetained:frames});
       }
       if(!header){
-        keys(record,['type','format','version','caseJson','nativeFluidBytes'],'header');
+        keys(record,['type','format','version','caseJson','nativeFluidBytes',...(Object.hasOwn(record,'integration')?['integration']:[])],'header');
         if(record.type!=='native-case'||record.format!==FORMAT||record.version!==VERSION)throw new TypeError('The first record must be a supported native-case header.');
         const c=readCase(record.caseJson,limits);integer(record.nativeFluidBytes,'nativeFluidBytes',1);
         if(record.nativeFluidBytes>c.resourceBudgetBytes)throw new RangeError('Recorded native allocation exceeds the declared case budget.');
+        if(Object.hasOwn(record,'integration')){
+          const method=record.integration;
+          keys(method,['method','constraintPreconditioner','temporalOrder'],'integration');
+          if(!['explicit','joint-implicit'].includes(method.method)||method.temporalOrder!==1)
+            throw new RangeError('Unsupported native integration method or temporal order.');
+          if(method.constraintPreconditioner!==(method.method==='joint-implicit'?'projected-cached':'diagonal'))
+            throw new RangeError('Native constraint preconditioner differs from the declared integration method.');
+        }
         caseValue=c;grainIdentities=new Map(c.grains.map(g=>[g.id,g]));
         header=Object.freeze({...record,case:copy(c),scope:SCOPE,pressureAvailable:false});
         return Object.freeze({type:'header',header:copy(header)});
@@ -196,10 +204,18 @@
           if(g.radius!==original.radius||g.density!==original.density)throw new RangeError('Native grain size or density changed within a rigid-grain recording.');
           if(frames===0)for(const name of ['centre','velocity','omega'])for(let k=0;k<3;k++)if(g[name][k]!==original[name][k])throw new RangeError('Initial native grain state differs from the declared case.');
         }
-        keys(record.diagnostics,['dt','slipResidual','divergence','constraintIterations','markers','eventRefinements','contacts'],'diagnostics');
+        const hasSurface=header.integration?.method==='joint-implicit'&&!record.initial;
+        keys(record.diagnostics,['dt','slipResidual','divergence','constraintIterations','markers','eventRefinements','contacts',...(hasSurface?['surface']:[])],'diagnostics');
         for(const name of ['dt','slipResidual','divergence'])nonnegative(record.diagnostics[name],'diagnostics.'+name);
         for(const name of ['constraintIterations','markers','eventRefinements','contacts'])integer(record.diagnostics[name],'diagnostics.'+name);
         if(record.initial?record.diagnostics.dt!==0:!(record.diagnostics.dt>0))throw new RangeError('Native step diagnostics do not match the initial/evolved frame clock.');
+        if(hasSurface){
+          const surface=record.diagnostics.surface;
+          keys(surface,['kinematicResidualMetres','pressureResidualPa','newtonIterations','linearIterations','pressureSolves'],'diagnostics.surface');
+          for(const name of ['kinematicResidualMetres','pressureResidualPa'])nonnegative(surface[name],'diagnostics.surface.'+name);
+          for(const name of ['newtonIterations','linearIterations','pressureSolves'])integer(surface[name],'diagnostics.surface.'+name);
+          if(record.diagnostics.contacts||record.diagnostics.eventRefinements)throw new RangeError('Joint implicit recordings cannot claim unsupported contact steps or silent step refinement.');
+        }
         const physical={...record,generation};
         for(const name of Object.keys(lengths))physical[name]=Float64Array.from(record[name]);
         const count=record.grains.length,particles=new Float64Array(count*3),radii=new Float64Array(count),density=new Float64Array(count),grainIds=new Float64Array(count),velocity=new Float64Array(count*3),omega=new Float64Array(count*3);
@@ -210,7 +226,7 @@
         const frame=Object.freeze({...observed,particleRadii:radii,grainIds,grainDensity:density,grainVelocities:velocity,grainAngularVelocities:omega,
           grainProvenance:{model:'experimental-resolved-rigid-sphere-volume-constraints',geometry:'spheres',motion:'recorded-native-state',physicalTime:record.time,steps:record.steps,
             material:copy(caseValue.materialProvenance),contact:copy(caseValue.contact),scope:SCOPE},
-          source:{engine:'native-cpp-recording',format:FORMAT,version:VERSION,caseJson:header.caseJson,nativeFluidBytes:header.nativeFluidBytes,
+          source:{engine:'native-cpp-recording',format:FORMAT,version:VERSION,caseJson:header.caseJson,nativeFluidBytes:header.nativeFluidBytes,integration:header.integration?copy(header.integration):null,
             parameters:{R:record.R,h:record.h,rho:caseValue.fluid.density,nu:caseValue.fluid.dynamicViscosity/caseValue.fluid.density,gamma:caseValue.fluid.surfaceTension,g:caseValue.fluid.gravity,omegaD:2*Math.PI*caseValue.drive.frequency,accel:caseValue.drive.acceleration,contact:'pinned'},
             diagnostics:copy(record.diagnostics),pressureAvailable:false},
           provenance:{...observed.provenance,source:'native-recording',grainModel:'experimental-resolved-rigid-sphere-volume-constraints'},

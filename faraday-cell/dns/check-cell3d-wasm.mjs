@@ -28,7 +28,9 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
@@ -133,8 +135,8 @@ try {
   const freshPath = join(work, 'faraday_cell3d.wasm');
   let log = '';
   try {
-    log = execFileSync('sh', [join(HERE, 'build-wasm-cell3d.sh'), freshPath],
-                       { encoding: 'utf8' });
+    ({stdout:log} = await execFileAsync('sh', [join(HERE, 'build-wasm-cell3d.sh'), freshPath],
+                                       { encoding: 'utf8' }));
   } catch (e){
     console.log('\nThe module could not be rebuilt from dns/faraday_cell3d.cpp:\n');
     console.log(String(e.stderr || e.message));
