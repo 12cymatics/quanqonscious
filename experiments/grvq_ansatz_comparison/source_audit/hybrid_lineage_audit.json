@@ -1,0 +1,88 @@
+{
+  "schema": "grvq-feedback-source-lineage/v1",
+  "recorded_utc": "2026-11-23",
+  "source_kernel": {
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "sha256": "84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518",
+    "source_commit": "13ec5d881b1447a8bf9de87a1f0dec1773dcef3c",
+    "declared_version": "18.52.0",
+    "date_utc": "2026-11-17T02:24:40Z",
+    "selected_functions": [
+      "BOOK.operandsOf",
+      "BOOK.terms",
+      "BOOK.matrixOf",
+      "applySutraCore",
+      "distributedGRVQ",
+      "distributedMSTVQ",
+      "inverseL",
+      "injectLambda"
+    ]
+  },
+  "source_circuit": {
+    "title": "vedic_v21 4.html",
+    "library_file_id": "libfile_b8d902b1cd0081919c708e5dcf75a4ba",
+    "file_id": "file_00000000c37c71fa908729af9a581d51",
+    "created_utc": "2026-04-18T22:08:11.225406Z",
+    "read_lines": [
+      3229,
+      3383
+    ],
+    "prior_full_file_sha256": "1ea3d56f01541181ba2ffafa536f00405198afcfddc5518e3a2e29f8731aeccd",
+    "prior_hash_status": "Recorded in the preceding source audit; this run reread the retained Library source excerpt.",
+    "excerpt_file": "april_ansatz_source_excerpt.json",
+    "nqubits": 4,
+    "layers": 3,
+    "initial_state": "|0000>",
+    "layer_gate_order": [
+      "Ry(0)",
+      "Ry(1)",
+      "Ry(2)",
+      "Ry(3)",
+      "CX(0,1)",
+      "CX(1,2)",
+      "CX(2,3)"
+    ],
+    "final_layer_entanglers": true,
+    "hamiltonian": "sum(q=0..3,lambda[q]*Z[q]) + 1/2*sum(q=0..2,Z[q]*Z[q+1])"
+  },
+  "feedback_repair": {
+    "intended_source_expression": "delta_lambda[q] = -0.001 * expectation(Z[q])",
+    "old_executed_expression": "round(-expectation(Z[q])) / 1000000, subject to floating-point energy and nudge thresholds",
+    "Bi_source_line": 395,
+    "new_exact_expression": "delta_lambda[q] = -expectation(Z[q]) / 1000",
+    "state_update": "injectLambda(afterB,q,delta_lambda[q]) for all four q",
+    "exclusions_removed": [
+      "probability < 1e-15 skip in source computeEnergy",
+      "abs(energy) < 1e-12 feedback skip",
+      "abs(nudge) <= 1e-10 skip",
+      "floating-point/BigInt quantization of feedback"
+    ]
+  },
+  "research_schedule": {
+    "outer_step": "one complete source formula pass, fixed-lambda quantum coordinate optimization, then all four quantum-feedback injections",
+    "time_increment": "source SIM_DT=16667/50000",
+    "source_UI_schedule": "Original UI invokes energy/feedback every30 cycles, parameter-shift updates every60; selected sutra hooks have additional schedules. The research outer-step schedule is explicitly different.",
+    "optimizer": "Declared finite rational Cayley candidate grid, with exact comparisons. It is not the source floating-point parameter-shift optimizer."
+  },
+  "interpretation": {
+    "lambda_modes": "Four signed source inverseL coefficients from a16-component field. These are not silently identified with four positive radial widths.",
+    "radial_product_comparison": "Earlier R2/R4 product benchmarks are separately retained. Their results do not establish a closed-loop advantage.",
+    "diagnostic_ground_energy": "Exact minimum of16 current diagonal Hamiltonian levels. Used only as a diagnostic; it does not choose variational parameters.",
+    "energy_across_steps": "Hamiltonian coefficients change between steps; raw energies across those steps are not fixed-objective improvement measures.",
+    "unintegrated_browser_stages": [
+      "MAG",
+      "TGCR",
+      "ZPE",
+      "Maya auxiliary evolution"
+    ],
+    "mstvq_records": "S2/S3/S29 book B records are source diagnostics; distributedMSTVQ recomputes the consumed stress from the final field."
+  },
+  "prior_export_recovery": {
+    "searched_names": [
+      "GRVQ_Hybrid_Runnable_2026-11-22.zip",
+      "GRVQ_Hybrid_Full_Data_2026-11-22.zip",
+      "refinement_report.html"
+    ],
+    "result": "No matching exact-title search or recent Library metadata entry was found; the current feedback implementation is reconstructed from pinned source and the retained mathematical specification. Historical trajectory results are not invented."
+  }
+}

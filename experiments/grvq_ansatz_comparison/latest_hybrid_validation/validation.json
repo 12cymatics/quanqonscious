@@ -1,0 +1,84 @@
+{
+  "schema": "grvq-latest-source-validation/v2",
+  "status": "complete",
+  "source": {
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "source_commit": "13ec5d881b1447a8bf9de87a1f0dec1773dcef3c",
+    "declared_version": "v18.52.0",
+    "sha256": "84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518",
+    "kernel_factory_sha256": "1ebabaf584049b705450138d957940eabf708a518ad2286fa737da7275d29d61",
+    "scope": "Source formulaOf: BOOK transforms, variable GRVQ, and MSTVQ stress; not the additional browser stagesFrom evolution"
+  },
+  "arithmetic_sha256": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1",
+  "executor_sha256": "98db40b45214309c79f5008106911fbd64a75a3f257cacd2e26ae82498bf68b2",
+  "exact_source_value_equalities": 464,
+  "identical_operand_sets": 29,
+  "identical_term_sets": 29,
+  "complete_modes": {
+    "SERIES": {
+      "core_applications": 29,
+      "distributed_grvq_applications": 25,
+      "elapsed_ms": 393.7056869999999,
+      "expression_nodes": 6445,
+      "interval_values_in_state": 0
+    },
+    "PARALLEL": {
+      "core_applications": 29,
+      "distributed_grvq_applications": 25,
+      "elapsed_ms": 864.8635450000002,
+      "expression_nodes": 6961,
+      "interval_values_in_state": 0
+    },
+    "SYMMETRIC_CONCURRENT": {
+      "core_applications": 58,
+      "distributed_grvq_applications": 25,
+      "elapsed_ms": 1061.619272,
+      "expression_nodes": 8722,
+      "interval_values_in_state": 0
+    }
+  },
+  "parallel_serial_worker_exact_digest_equality": true,
+  "actual_worker_ids": [
+    1,
+    2
+  ],
+  "three_mathematical_outputs_distinct": true,
+  "independent_mode_concurrency": {
+    "backend": "workers",
+    "workers": 2,
+    "completed_modes": 3,
+    "elapsed_ms": 1165.9564120000005
+  },
+  "files": [
+    {
+      "path": "individual_source_parity.json.gz",
+      "bytes": 264490,
+      "sha256": "bc624b318ec099cd1d0d6fa73ceae66eb9754e4a65484f94691fa3645fe6e05e"
+    },
+    {
+      "path": "SERIES.json.gz",
+      "bytes": 147451,
+      "sha256": "be081fbe0d490cde6d46137640511d8ab6aff7086bbcfdf2b71cc33a9fec281a"
+    },
+    {
+      "path": "PARALLEL.json.gz",
+      "bytes": 452597,
+      "sha256": "4b3be910397c74414fd3c24672e1799af7d186290e471381a38de27545886e30"
+    },
+    {
+      "path": "SYMMETRIC_CONCURRENT.json.gz",
+      "bytes": 925683,
+      "sha256": "03565d401e13d8c643e2d192b638c50d20d3ab37ba8f8e524a568fb6f9d7e955"
+    },
+    {
+      "path": "PARALLEL_workers.json.gz",
+      "bytes": 430469,
+      "sha256": "1e4279350ab930c1fa4cf9982cb92729ae22e9e1456d0a9cd18894d55c418097"
+    },
+    {
+      "path": "independent_modes_concurrent.json.gz",
+      "bytes": 838334,
+      "sha256": "0a85441d8817a52b29999c111691fea3378d6625531334f73f2b1c8a6dbcbd09"
+    }
+  ]
+}
