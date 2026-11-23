@@ -1,0 +1,1013 @@
+[
+  {
+    "path": "Untitled5.ipynb",
+    "code_cells": 98,
+    "candidate_cells": [
+      {
+        "cell_index": 6,
+        "definitions": [
+          "hybrid_ansatz",
+          "mayasutra_encrypt"
+        ]
+      },
+      {
+        "cell_index": 7,
+        "definitions": [
+          "MayaSutraCipher",
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 8,
+        "definitions": [
+          "MayaSutraCipher",
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 10,
+        "definitions": [
+          "MayaSutraCipher",
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 11,
+        "definitions": [
+          "MayaSutraCipher",
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 12,
+        "definitions": [
+          "MayaSutraCipher",
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 30,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 31,
+        "definitions": [
+          "MayaCipher"
+        ]
+      },
+      {
+        "cell_index": 32,
+        "definitions": [
+          "ansatz"
+        ]
+      },
+      {
+        "cell_index": 34,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 36,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 48,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian",
+          "hybrid_vqe_ansatz_circuit",
+          "run_vqe_test_effective"
+        ]
+      },
+      {
+        "cell_index": 50,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian_6",
+          "hybrid_vqe_ansatz_circuit_3qubits",
+          "run_vqe_test_effective_6"
+        ]
+      },
+      {
+        "cell_index": 51,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian_6",
+          "hybrid_vqe_ansatz_circuit_3qubits",
+          "run_vqe_test_effective_6"
+        ]
+      },
+      {
+        "cell_index": 53,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "radial_suppression",
+          "maya_vyastisamastih",
+          "get_h2_hamiltonian",
+          "grvq_ansatz",
+          "maya_entangler",
+          "maya_zne"
+        ]
+      },
+      {
+        "cell_index": 55,
+        "definitions": [
+          "MayaSutraCipher",
+          "test_maya_sutra_cipher_speed"
+        ]
+      },
+      {
+        "cell_index": 85,
+        "definitions": [
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction",
+          "test_hybrid_ansatz"
+        ]
+      },
+      {
+        "cell_index": 86,
+        "definitions": [
+          "MayaSutraCipher"
+        ]
+      },
+      {
+        "cell_index": 88,
+        "definitions": [
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 89,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 90,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 92,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 93,
+        "definitions": [
+          "build_h2_4x4_hamiltonian",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "build_ansatz_circuit",
+          "run_vqe_h2"
+        ]
+      },
+      {
+        "cell_index": 95,
+        "definitions": [
+          "vqe_energy"
+        ]
+      },
+      {
+        "cell_index": 96,
+        "definitions": [
+          "maya_encrypt",
+          "maya_decrypt"
+        ]
+      },
+      {
+        "cell_index": 97,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 98,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 103,
+        "definitions": [
+          "maya_watermark"
+        ]
+      },
+      {
+        "cell_index": 107,
+        "definitions": [
+          "add_dynamic_ansatz_layer"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Another copy of Untitled38.ipynb",
+    "code_cells": 34,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 5,
+        "definitions": [
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 6,
+        "definitions": [
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 7,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 11,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 12,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 15,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 16,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 17,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 18,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 19,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 21,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 22,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 24,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Copy of Untitled5.ipynb",
+    "code_cells": 59,
+    "candidate_cells": [
+      {
+        "cell_index": 1,
+        "definitions": [
+          "construct_ansatz",
+          "construct_hamiltonian",
+          "run_VQE"
+        ]
+      },
+      {
+        "cell_index": 12,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian",
+          "hybrid_vqe_ansatz_circuit",
+          "run_vqe_test_effective"
+        ]
+      },
+      {
+        "cell_index": 14,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian_6",
+          "hybrid_vqe_ansatz_circuit_3qubits",
+          "run_vqe_test_effective_6"
+        ]
+      },
+      {
+        "cell_index": 15,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "get_effective_hamiltonian_6",
+          "hybrid_vqe_ansatz_circuit_3qubits",
+          "run_vqe_test_effective_6"
+        ]
+      },
+      {
+        "cell_index": 17,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "radial_suppression",
+          "maya_vyastisamastih",
+          "get_h2_hamiltonian",
+          "grvq_ansatz",
+          "maya_entangler",
+          "maya_zne"
+        ]
+      },
+      {
+        "cell_index": 19,
+        "definitions": [
+          "MayaSutraCipher",
+          "test_maya_sutra_cipher_speed"
+        ]
+      },
+      {
+        "cell_index": 47,
+        "definitions": [
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction",
+          "test_hybrid_ansatz"
+        ]
+      },
+      {
+        "cell_index": 48,
+        "definitions": [
+          "MayaSutraCipher"
+        ]
+      },
+      {
+        "cell_index": 50,
+        "definitions": [
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 51,
+        "definitions": [
+          "VedicWaveFunction",
+          "HybridAnsatz",
+          "hpc_evaluate_wavefunction"
+        ]
+      },
+      {
+        "cell_index": 55,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 56,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 57,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      },
+      {
+        "cell_index": 58,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "build_ansatz_circuit",
+          "partial_hamiltonian_eval",
+          "run_vqe_h2"
+        ]
+      },
+      {
+        "cell_index": 59,
+        "definitions": [
+          "build_h2_4x4_hamiltonian",
+          "maya_vyastisamastih",
+          "maya_entangler",
+          "build_ansatz_circuit",
+          "run_vqe_h2"
+        ]
+      },
+      {
+        "cell_index": 65,
+        "definitions": [
+          "maya_vyastisamastih",
+          "maya_entangler"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled19.ipynb",
+    "code_cells": 1,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "mayasutra_encrypt"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled28.ipynb",
+    "code_cells": 25,
+    "candidate_cells": [
+      {
+        "cell_index": 2,
+        "definitions": [
+          "four_factor_radius_suppression",
+          "HybridGRVQEngine"
+        ]
+      },
+      {
+        "cell_index": 4,
+        "definitions": [
+          "MayaProjection"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled32.ipynb",
+    "code_cells": 2,
+    "candidate_cells": []
+  },
+  {
+    "path": "Untitled21.ipynb",
+    "code_cells": 5,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled44.ipynb",
+    "code_cells": 18,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "VedicHybridAnsatz"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "VedicHybridAnsatz"
+        ]
+      },
+      {
+        "cell_index": 3,
+        "definitions": [
+          "HypercubeAnsatz"
+        ]
+      },
+      {
+        "cell_index": 4,
+        "definitions": [
+          "HardwareOptimizedAnsatz"
+        ]
+      },
+      {
+        "cell_index": 6,
+        "definitions": [
+          "HardwareOptimizedAnsatz"
+        ]
+      },
+      {
+        "cell_index": 8,
+        "definitions": [
+          "CudaQHypercubeAnsatz",
+          "VQEOptimizer",
+          "CudaQHypercubeAnsatz",
+          "VQEOptimizer"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled10.ipynb",
+    "code_cells": 8,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "nikhilam_error_suppress",
+          "radial_suppression",
+          "maya_vyastisamastih",
+          "get_h2_hamiltonian",
+          "grvq_ansatz",
+          "maya_entangler",
+          "maya_zne"
+        ]
+      },
+      {
+        "cell_index": 6,
+        "definitions": [
+          "radial_suppression"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled11.ipynb",
+    "code_cells": 4,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "GRVQAnsatz"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "GRVQAnsatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled46.ipynb",
+    "code_cells": 4,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "radial_geometry_entropy"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "radial_geometry_entropy"
+        ]
+      },
+      {
+        "cell_index": 2,
+        "definitions": [
+          "radial_geometry_entropy"
+        ]
+      },
+      {
+        "cell_index": 3,
+        "definitions": [
+          "radial_geometry_entropy"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Copy of Untitled24.ipynb",
+    "code_cells": 6,
+    "candidate_cells": [
+      {
+        "cell_index": 3,
+        "definitions": [
+          "GRVQAnsatz",
+          "MayaCipher"
+        ]
+      },
+      {
+        "cell_index": 4,
+        "definitions": [
+          "MayaCipher",
+          "GRVQAnsatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled15.ipynb",
+    "code_cells": 10,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      },
+      {
+        "cell_index": 5,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      },
+      {
+        "cell_index": 6,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      },
+      {
+        "cell_index": 9,
+        "definitions": [
+          "MayaPerceptionEngine"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled39.ipynb",
+    "code_cells": 2,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled7.ipynb",
+    "code_cells": 14,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 2,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 4,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 7,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 8,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 9,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      },
+      {
+        "cell_index": 10,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled20.ipynb",
+    "code_cells": 23,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "GRVQAnsatz"
+        ]
+      },
+      {
+        "cell_index": 13,
+        "definitions": [
+          "GRVQAnsatz"
+        ]
+      },
+      {
+        "cell_index": 14,
+        "definitions": [
+          "GRVQAnsatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Copy of Untitled38.ipynb",
+    "code_cells": 34,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 5,
+        "definitions": [
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 6,
+        "definitions": [
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 7,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 11,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 12,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 15,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 16,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 17,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 18,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 19,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 21,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz",
+          "maya_sutra_watermark"
+        ]
+      },
+      {
+        "cell_index": 22,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      },
+      {
+        "cell_index": 24,
+        "definitions": [
+          "maya_sutra_watermark",
+          "optimize_quantum_ansatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled12.ipynb",
+    "code_cells": 8,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "hybrid_ansatz_circuit",
+          "hybrid_ansatz",
+          "mayasutra_encrypt"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "hybrid_ansatz_circuit",
+          "hybrid_ansatz",
+          "mayasutra_encrypt"
+        ]
+      },
+      {
+        "cell_index": 7,
+        "definitions": [
+          "QuantumClassicalAnsatzTest",
+          "MayaSutraCryptographyTest"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled35.ipynb",
+    "code_cells": 3,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "MayaCipher"
+        ]
+      },
+      {
+        "cell_index": 1,
+        "definitions": [
+          "MayaCipher"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled26.ipynb",
+    "code_cells": 4,
+    "candidate_cells": [
+      {
+        "cell_index": 0,
+        "definitions": [
+          "GRVQAnsatz",
+          "MayaCipher"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled1.ipynb",
+    "code_cells": 8,
+    "candidate_cells": []
+  },
+  {
+    "path": "Untitled13.ipynb",
+    "code_cells": 1,
+    "candidate_cells": []
+  },
+  {
+    "path": "Untitled24.ipynb",
+    "code_cells": 6,
+    "candidate_cells": [
+      {
+        "cell_index": 3,
+        "definitions": [
+          "GRVQAnsatz",
+          "MayaCipher"
+        ]
+      },
+      {
+        "cell_index": 4,
+        "definitions": [
+          "MayaCipher",
+          "GRVQAnsatz"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Untitled31.ipynb",
+    "code_cells": 13,
+    "candidate_cells": []
+  }
+]

@@ -1,0 +1,454 @@
+{
+  "model": "vedic_spectral_2d",
+  "family": "grvq_R2",
+  "seed": 7,
+  "nqubits": 4,
+  "parameter_count": 4,
+  "objective_evaluations": 385,
+  "initial_energy_exact": "1379613585272351844586543894818929169479784804564974692924092204165907890825725399353345322451999941824/160378861181380246027031519843848698727004013186255214433256772050637142381221445220441862961894770125",
+  "initial_energy": 8.602215872527488,
+  "parameters": [
+    "365/64",
+    "-27/64",
+    "-19/32",
+    "227/128"
+  ],
+  "final_step": "1/128",
+  "seconds": 0.0646496709996427,
+  "trace": [
+    {
+      "evaluation": 1,
+      "energy": 8.602215872527488,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 3,
+      "energy": 8.148224017120269,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 7,
+      "energy": 7.459028486897842,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 9,
+      "energy": 6.884239581006313,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 11,
+      "energy": 6.149973621009907,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 17,
+      "energy": 5.634579259589311,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 19,
+      "energy": 4.957141963326834,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 25,
+      "energy": 4.523895179424621,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 27,
+      "energy": 3.9251287428715367,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 33,
+      "energy": 3.5955097529679256,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 35,
+      "energy": 3.095610238718626,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 41,
+      "energy": 2.8877107940658235,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 43,
+      "energy": 2.503263943951185,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 49,
+      "energy": 2.4297833354185614,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 51,
+      "energy": 2.1720205788677434,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 59,
+      "energy": 1.9932925934171504,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 65,
+      "energy": 1.9634075529897996,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 67,
+      "energy": 1.8118472181904763,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 75,
+      "energy": 1.740555247155954,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 81,
+      "energy": 1.697340477603831,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 83,
+      "energy": 1.6547568816874574,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 89,
+      "energy": 1.6539265713674534,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 91,
+      "energy": 1.641658127368545,
+      "step": "1/2"
+    },
+    {
+      "evaluation": 107,
+      "energy": 1.6374812300463497,
+      "step": "1/4"
+    },
+    {
+      "evaluation": 123,
+      "energy": 1.6369892875235297,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 125,
+      "energy": 1.6184170879336208,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 127,
+      "energy": 1.6177957229620832,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 129,
+      "energy": 1.607518790493814,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 131,
+      "energy": 1.6012922984219333,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 133,
+      "energy": 1.5730396023353028,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 137,
+      "energy": 1.5690305617160545,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 139,
+      "energy": 1.5643980405681859,
+      "step": "1/8"
+    },
+    {
+      "evaluation": 155,
+      "energy": 1.5639782473029542,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 157,
+      "energy": 1.532371192454425,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 161,
+      "energy": 1.5308676895361668,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 163,
+      "energy": 1.5283851101524295,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 169,
+      "energy": 1.5278717926534644,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 171,
+      "energy": 1.5259053416755606,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 179,
+      "energy": 1.525255706447733,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 185,
+      "energy": 1.5249504672449634,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 187,
+      "energy": 1.5248242114054467,
+      "step": "1/16"
+    },
+    {
+      "evaluation": 203,
+      "energy": 1.5247225033427028,
+      "step": "1/32"
+    },
+    {
+      "evaluation": 223,
+      "energy": 1.5193758439030403,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 225,
+      "energy": 1.5188023882588162,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 227,
+      "energy": 1.5185501219463555,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 233,
+      "energy": 1.5180421625661176,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 235,
+      "energy": 1.5178214758632926,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 241,
+      "energy": 1.51737878487352,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 243,
+      "energy": 1.517189593041356,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 249,
+      "energy": 1.5168119435426417,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 251,
+      "energy": 1.51665416265167,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 257,
+      "energy": 1.5163413287178795,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 259,
+      "energy": 1.5162148756462563,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 265,
+      "energy": 1.5159666323236536,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 267,
+      "energy": 1.5158714247552783,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 273,
+      "energy": 1.5156875480616236,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 275,
+      "energy": 1.5156235044842554,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 281,
+      "energy": 1.5155037714078745,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 283,
+      "energy": 1.5154708111112483,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 289,
+      "energy": 1.5154149996100705,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 291,
+      "energy": 1.5154130426840127,
+      "step": "1/64"
+    },
+    {
+      "evaluation": 307,
+      "energy": 1.5154039091007092,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 311,
+      "energy": 1.5143966795828194,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 313,
+      "energy": 1.514259775709622,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 315,
+      "energy": 1.51418854557362,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 317,
+      "energy": 1.5133131820259882,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 321,
+      "energy": 1.5132632976239133,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 323,
+      "energy": 1.5132299579078237,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 329,
+      "energy": 1.5131958025714451,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 331,
+      "energy": 1.5131701228799082,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 335,
+      "energy": 1.5131255424108876,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 337,
+      "energy": 1.5129716645915263,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 339,
+      "energy": 1.5128875093003964,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 341,
+      "energy": 1.5123431829110467,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 345,
+      "energy": 1.5122744570081064,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 347,
+      "energy": 1.5122279990546184,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 353,
+      "energy": 1.5121747819077496,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 355,
+      "energy": 1.5121358977885297,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 361,
+      "energy": 1.5120981629925248,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 363,
+      "energy": 1.512066842918489,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 369,
+      "energy": 1.512044564127197,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 371,
+      "energy": 1.5120207983581544,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 377,
+      "energy": 1.512013949284445,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 379,
+      "energy": 1.5119977281290409,
+      "step": "1/128"
+    },
+    {
+      "evaluation": 385,
+      "energy": 1.5119977281290409,
+      "step": "1/128"
+    }
+  ],
+  "complete_trace": "vedic_spectral_2d__grvq_R2__7.jsonl.gz",
+  "energy_exact": "278994161524659293541537171924067673336379072372234899871870990089077863671868873025812435471399393876045313028767/184520225351058627267015959013982204671546335507219930686735229396668595215965241984915474307512641647504184784000",
+  "energy": 1.5119977281290409,
+  "ground_energy_error": 0.09238326541112762,
+  "ground_subspace_fidelity": 0.992303132064912,
+  "generalized_residual_squared_numeric": 3.879334546861144,
+  "maximum_amplitude_numerator_bits": 181,
+  "amplitude_denominator_bits": 182,
+  "state_file": "states/vedic_spectral_2d__grvq_R2__7.json"
+}

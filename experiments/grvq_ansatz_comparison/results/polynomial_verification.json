@@ -1,0 +1,109 @@
+{
+  "schema": "grvq-polynomial-reference-checks-v1",
+  "comparisons": [
+    {
+      "quantity": "basis",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "first_derivatives",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "second_derivatives",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "mass",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "stiffness",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "bending",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "triple",
+      "entries": 64,
+      "equal": 64
+    },
+    {
+      "quantity": "mean",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "endpoint_left",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "endpoint_mass_left",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "endpoint_right",
+      "entries": 4,
+      "equal": 4
+    },
+    {
+      "quantity": "endpoint_mass_right",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "mass_factor_reconstruction",
+      "entries": 16,
+      "equal": 16
+    },
+    {
+      "quantity": "shape_samples",
+      "entries": 260,
+      "equal": 260
+    },
+    {
+      "quantity": "potential_3d",
+      "entries": 64,
+      "equal": 64
+    },
+    {
+      "quantity": "reciprocal_symbol_identity",
+      "entries": 1,
+      "equal": 1
+    },
+    {
+      "quantity": "reciprocal_symbol_endpoints",
+      "entries": 2,
+      "equal": 2
+    }
+  ],
+  "entries_compared": 511,
+  "all_equal": true,
+  "mass_leading_minors": [
+    "8/105",
+    "1161/44800",
+    "2187/224000",
+    "2187/3584000"
+  ],
+  "reference": "Independent SymPy cardinal products, symbolic derivatives and exact integrals",
+  "source_hashes": [
+    {
+      "path": "dns/vedic-polynomial.js",
+      "sha256": "05b773f8188bd168ad03ebc3f00e87f91802a9aab08bf11e6a75b9b2e70bd8f0"
+    },
+    {
+      "path": "dns/vedic-operators.js",
+      "sha256": "55c4203b39b63368bccc198433438258fed371a97839ccc53310f55a8ba9a1fc"
+    }
+  ]
+}
