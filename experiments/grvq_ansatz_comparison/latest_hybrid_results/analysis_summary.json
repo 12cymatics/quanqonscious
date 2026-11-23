@@ -1,0 +1,365 @@
+{
+  "schema": "grvq-feedback-analysis/v1",
+  "status": "complete",
+  "sweep_results_sha256": "2c1989a6ebc91c735161f530d9566434223bb19257ff78c9f365a19afb35c2d1",
+  "trajectories": 36,
+  "frames": 72,
+  "all_frames_consumed_all29": true,
+  "energy_change_status": {
+    "certified_lower": 64,
+    "exactly_equal_expression": 8
+  },
+  "totals": {
+    "core_method_calls": 2784,
+    "distributed_grvq_updates": 1800,
+    "coordinate_lines": 3456,
+    "circuit_evaluations": 35613,
+    "candidate_energy_comparisons": 58752,
+    "accepted_updates": 644
+  },
+  "elapsed_seconds": 212.08760716700004,
+  "by_mode": [
+    {
+      "composition": "SERIES",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 696,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 0.1498072380609352,
+      "minimum_energy_gap_display": 0.0006541340554639169,
+      "maximum_energy_gap_display": 0.6943818730285184,
+      "median_ground_fidelity_exact": "3829575085405652975616/3914478156531337890625",
+      "median_ground_fidelity_display": 0.9783105007281689,
+      "minimum_ground_fidelity_exact": "4202433655134680510403574399108929/5952398844150921020403760500390625",
+      "maximum_ground_fidelity_exact": "51744998527631718429083040000/52426658424536059044393816049",
+      "minimum_ground_fidelity_display": 0.7060067319353389,
+      "maximum_ground_fidelity_display": 0.9869978381726248,
+      "exact_zero_gap_frames": 0
+    },
+    {
+      "composition": "PARALLEL",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 696,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 68.20405240062452,
+      "minimum_energy_gap_display": 5.643030930170978,
+      "maximum_energy_gap_display": 4190.0674367642505,
+      "median_ground_fidelity_exact": "38857543392661250284615708562841/40361626470819675513456641559961",
+      "median_ground_fidelity_display": 0.9627348248900268,
+      "minimum_ground_fidelity_exact": "137080635855438399292469906309376/40238216186460226097929420982640625",
+      "maximum_ground_fidelity_exact": "25806452118596235288019218494016/26254274287629798625038579705625",
+      "minimum_ground_fidelity_display": 0.003406727455815119,
+      "maximum_ground_fidelity_display": 0.9829428852564185,
+      "exact_zero_gap_frames": 0
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 1392,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 0.2620937169513601,
+      "minimum_energy_gap_display": 0.05841914741032439,
+      "maximum_energy_gap_display": 4.594928084204261,
+      "median_ground_fidelity_exact": "99760282590180165512860224/103734240000651872298215281",
+      "median_ground_fidelity_display": 0.9616909767647911,
+      "minimum_ground_fidelity_exact": "53338797911507639995215065664/3731659252109807277501538605765625",
+      "maximum_ground_fidelity_exact": "1877997601190192335728779025/1912801954890912897844945441",
+      "minimum_ground_fidelity_display": 1.4293587465509056e-05,
+      "maximum_ground_fidelity_display": 0.9818045179158627,
+      "exact_zero_gap_frames": 0
+    }
+  ],
+  "paired_feedback": [
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.019191319262290563,
+        0.019318904718602425,
+        0.018862178103063343,
+        0.01899764505742496
+      ],
+      "max_absolute_difference_display": 0.019318904718602425,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.01971425277383787,
+        0.019534804730255928,
+        0.017261217271880014,
+        0.01928147272383285
+      ],
+      "max_absolute_difference_display": 0.01971425277383787,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.019736567824111262,
+        0.019563998479270595,
+        0.019412110239045433,
+        0.01954352109305546
+      ],
+      "max_absolute_difference_display": 0.019736567824111262,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.019952650609866396,
+        0.020018802785216394,
+        0.019831574876434388,
+        0.01991074388342895
+      ],
+      "max_absolute_difference_display": 0.020018802785216394,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.02051853809189197,
+        0.020414046641462846,
+        0.018271156399578103,
+        0.020247776547648755
+      ],
+      "max_absolute_difference_display": 0.02051853809189197,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.02057242654836955,
+        0.020471368751486807,
+        0.020415269284285387,
+        0.020489928072265684
+      ],
+      "max_absolute_difference_display": 0.02057242654836955,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.0012655852541135562,
+        0.00110591740933998,
+        -0.0012265780696776515,
+        0.0007341892330676621
+      ],
+      "max_absolute_difference_display": 0.0012655852541135562,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.0011805530109231036,
+        0.0007838124032269987,
+        -0.0011096822851779913,
+        0.0007816540798028255
+      ],
+      "max_absolute_difference_display": 0.0011805530109231036,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.0011607035353684639,
+        0.0007878617784273373,
+        -0.0011570035141637864,
+        0.0007855659676122805
+      ],
+      "max_absolute_difference_display": 0.0011607035353684639,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        2.7962787096291004,
+        2.493147087593421,
+        2.183810463668783,
+        1.8849998165157935
+      ],
+      "max_absolute_difference_display": 2.7962787096291004,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        2.796239829635296,
+        2.4931796058004054,
+        2.183812642419209,
+        1.885006358437621
+      ],
+      "max_absolute_difference_display": 2.796239829635296,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        2.796237782742229,
+        2.493210565126065,
+        2.183771479602804,
+        1.8850456729590006
+      ],
+      "max_absolute_difference_display": 2.796237782742229,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.002024308506660563,
+        0.0012299385328837786,
+        0.0013100341623561995,
+        0.001302639652486448
+      ],
+      "max_absolute_difference_display": 0.002024308506660563,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.11916028813101139,
+        0.12440873105711825,
+        0.12926694620924994,
+        0.13802679298522058
+      ],
+      "max_absolute_difference_display": 0.13802679298522058,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        0.11892134369389805,
+        0.12300339531098281,
+        0.1293059690443239,
+        0.13803574427347165
+      ],
+      "max_absolute_difference_display": 0.13803574427347165,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 7,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.0005832689961287052,
+        -0.00046850104379903,
+        -0.0005680477490161984,
+        -0.0005659896051339874
+      ],
+      "max_absolute_difference_display": 0.0005832689961287052,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 19,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        -0.0004892568627017368,
+        -0.0004807527435577441,
+        -0.000460223862939646,
+        -0.0004597538725834571
+      ],
+      "max_absolute_difference_display": 0.0004892568627017368,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 43,
+      "same_first_formula_field": true,
+      "feedback_checkpoint_consumed": true,
+      "final_lambda_difference_display": [
+        3.071119576742888,
+        3.5068634877977063,
+        3.9447159731979076,
+        4.393639586596597
+      ],
+      "max_absolute_difference_display": 4.393639586596597,
+      "display_difference_note": "Difference of decimal display projections, used only for plotting and summary; the exact values retain independent bounds.",
+      "final_field_root_digests_differ": true
+    }
+  ],
+  "interpretation": "The fixed-current-Hamiltonian quantum solve is assessed separately at each step. Changing raw energies across steps do not establish fixed-objective convergence. Figures use display projections only."
+}

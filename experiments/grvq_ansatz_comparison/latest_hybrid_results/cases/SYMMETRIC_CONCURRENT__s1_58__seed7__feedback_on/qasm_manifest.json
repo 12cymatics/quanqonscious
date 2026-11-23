@@ -1,0 +1,63 @@
+{
+  "schema": "grvq-feedback-qasm-exports/v1",
+  "circuits": [
+    {
+      "step": 0,
+      "basis": "ZZZZ",
+      "qasm": "qasm/step_000_ZZZZ.qasm",
+      "qasm_sha256": "6f76a8ad56691fbd35d7fe833ab4ea693018fff8f36ffc25bcf73bdf822d646b",
+      "expected": "qasm/step_000_ZZZZ.expected.json"
+    },
+    {
+      "step": 0,
+      "basis": "XXXX",
+      "qasm": "qasm/step_000_XXXX.qasm",
+      "qasm_sha256": "44c34ea526cbae4a5180f8095ac2cc2d772c370b7582bd7ae608f7fd01cff333",
+      "expected": "qasm/step_000_XXXX.expected.json"
+    },
+    {
+      "step": 0,
+      "basis": "YYYY",
+      "qasm": "qasm/step_000_YYYY.qasm",
+      "qasm_sha256": "927da4f53590d9e914b178b83100add39bc77b145f8d7d0ff691ba7249908849",
+      "expected": "qasm/step_000_YYYY.expected.json"
+    },
+    {
+      "step": 0,
+      "basis": "XYZX",
+      "qasm": "qasm/step_000_XYZX.qasm",
+      "qasm_sha256": "777537102f724eb04d2dd4f874c168cd08b476d10911a946f84307cb11700c62",
+      "expected": "qasm/step_000_XYZX.expected.json"
+    },
+    {
+      "step": 1,
+      "basis": "ZZZZ",
+      "qasm": "qasm/step_001_ZZZZ.qasm",
+      "qasm_sha256": "6ea8ca3ff972e392c1cc30af2b9bcf60db35ccf20984c405053e1c71b888fcec",
+      "expected": "qasm/step_001_ZZZZ.expected.json"
+    },
+    {
+      "step": 1,
+      "basis": "XXXX",
+      "qasm": "qasm/step_001_XXXX.qasm",
+      "qasm_sha256": "213d90974402364aa61e78e39c6b13408c42a507121c02c2103c56e2c46ec8a7",
+      "expected": "qasm/step_001_XXXX.expected.json"
+    },
+    {
+      "step": 1,
+      "basis": "YYYY",
+      "qasm": "qasm/step_001_YYYY.qasm",
+      "qasm_sha256": "0e7fb520150cb89a8ad6300802a5e795491c3f64b2479f29c583ad616af00ed2",
+      "expected": "qasm/step_001_YYYY.expected.json"
+    },
+    {
+      "step": 1,
+      "basis": "XYZX",
+      "qasm": "qasm/step_001_XYZX.qasm",
+      "qasm_sha256": "08da13e236301c7f6ce49a7f2425d9db8f08ff21ade072ab38c0bfd8e90fe3c7",
+      "expected": "qasm/step_001_XYZX.expected.json"
+    }
+  ],
+  "status": "prepared; provider execution is separate",
+  "angles": "40-digit decimal output projection of exact Cayley parameters"
+}

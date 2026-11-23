@@ -1,0 +1,46 @@
+{
+  "schema": "grvq-feedback-parallel-backend-equivalence/v1",
+  "status": "passed",
+  "serial_directory": "latest_hybrid_results/cases/PARALLEL__s1_29__seed7__feedback_on",
+  "workers_directory": "latest_hybrid_backend_validation/workers_case",
+  "serial_result_sha256": "1973bd1008c44b2ab19ff19d31f0a356bbf535f5912e40bc5a392fca080c54ec",
+  "workers_result_sha256": "2ef6f84773231a9ed113a5a7afd368a48fa071393286c6c151a42c52de14e8d1",
+  "same_executable_code": true,
+  "serial_code_sha256": {
+    "hybrid_quantum.cjs": "b7c41dde9e288f67c977dda30ea0f6e92edaeca3080b4a4830cdbfe2caa4cb1d",
+    "latest_hybrid_executor.cjs": "8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c",
+    "exact_dag.cjs": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1"
+  },
+  "workers_code_sha256": {
+    "hybrid_quantum.cjs": "b7c41dde9e288f67c977dda30ea0f6e92edaeca3080b4a4830cdbfe2caa4cb1d",
+    "latest_hybrid_executor.cjs": "8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c",
+    "exact_dag.cjs": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "exact_input_field_digest_equalities": 16,
+      "exact_after_formula_field_digest_equalities": 16,
+      "exact_feedback_field_digest_equalities": 16,
+      "actual_worker_thread_ids": [
+        1,
+        2
+      ],
+      "all29_worker_receipts": true,
+      "identical_exact_parameters_amplitudes_probabilities_and_moments": true
+    },
+    {
+      "step": 1,
+      "exact_input_field_digest_equalities": 16,
+      "exact_after_formula_field_digest_equalities": 16,
+      "exact_feedback_field_digest_equalities": 16,
+      "actual_worker_thread_ids": [
+        3,
+        4
+      ],
+      "all29_worker_receipts": true,
+      "identical_exact_parameters_amplitudes_probabilities_and_moments": true
+    }
+  ],
+  "complete_previous_feedback_state_consumed": true
+}

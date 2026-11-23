@@ -10,29 +10,50 @@
     "scope": "Source formulaOf: BOOK transforms, variable GRVQ, and MSTVQ stress; not the additional browser stagesFrom evolution"
   },
   "arithmetic_sha256": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1",
-  "executor_sha256": "98db40b45214309c79f5008106911fbd64a75a3f257cacd2e26ae82498bf68b2",
+  "executor_sha256": "8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c",
   "exact_source_value_equalities": 464,
   "identical_operand_sets": 29,
   "identical_term_sets": 29,
+  "domain_extensions": [
+    "S1/S12 retain their full exact repetend algorithms for every source-generated valid denominator; the prior denominator<=999 workload refusal is removed"
+  ],
+  "long_period_checks": [
+    {
+      "id": 1,
+      "denominator": "4269",
+      "complete_period_length": 158,
+      "digits": "00023424689622862497071913797142187866010775357226516748653080346685406418364956664324197704380416959475286952447880065589130944014991801358631998126024830171",
+      "independent_long_division_equal": true,
+      "exact_reconstruction_equal": true
+    },
+    {
+      "id": 12,
+      "denominator": "4267",
+      "complete_period_length": 400,
+      "digits": "0002343566908835247246308882118584485587063510663229435200374970705413639559409421138973517693930161706116709632059995312866182329505507382235762831028825872978673541129599250058589172720881181157722052964612139676587766580735880009374267635340988985235528474337942348254042652917740801499882821654558237637684555894070775720646824466838528239981251464729318022029528943051324115303491914694164518397",
+      "independent_long_division_equal": true,
+      "exact_reconstruction_equal": true
+    }
+  ],
   "complete_modes": {
     "SERIES": {
       "core_applications": 29,
       "distributed_grvq_applications": 25,
-      "elapsed_ms": 393.7056869999999,
+      "elapsed_ms": 312.1276359999997,
       "expression_nodes": 6445,
       "interval_values_in_state": 0
     },
     "PARALLEL": {
       "core_applications": 29,
       "distributed_grvq_applications": 25,
-      "elapsed_ms": 864.8635450000002,
+      "elapsed_ms": 694.161396,
       "expression_nodes": 6961,
       "interval_values_in_state": 0
     },
     "SYMMETRIC_CONCURRENT": {
       "core_applications": 58,
       "distributed_grvq_applications": 25,
-      "elapsed_ms": 1061.619272,
+      "elapsed_ms": 816.5122590000001,
       "expression_nodes": 8722,
       "interval_values_in_state": 0
     }
@@ -47,7 +68,7 @@
     "backend": "workers",
     "workers": 2,
     "completed_modes": 3,
-    "elapsed_ms": 1165.9564120000005
+    "elapsed_ms": 1659.9343800000006
   },
   "files": [
     {
@@ -57,28 +78,28 @@
     },
     {
       "path": "SERIES.json.gz",
-      "bytes": 147451,
-      "sha256": "be081fbe0d490cde6d46137640511d8ab6aff7086bbcfdf2b71cc33a9fec281a"
+      "bytes": 147937,
+      "sha256": "f350bd8615f2497f652343f68f8f4c84a017a54cd38361c2fc2f347348f32dae"
     },
     {
       "path": "PARALLEL.json.gz",
-      "bytes": 452597,
-      "sha256": "4b3be910397c74414fd3c24672e1799af7d186290e471381a38de27545886e30"
+      "bytes": 453168,
+      "sha256": "86244606b1933ac217befdb7d399577924bac12d90495c7c3698a03dacfa1f47"
     },
     {
       "path": "SYMMETRIC_CONCURRENT.json.gz",
-      "bytes": 925683,
-      "sha256": "03565d401e13d8c643e2d192b638c50d20d3ab37ba8f8e524a568fb6f9d7e955"
+      "bytes": 927047,
+      "sha256": "9bb854bd62d5ebcdb8c718de3df134c4456160427a29e91cb21f3bec60ab3842"
     },
     {
       "path": "PARALLEL_workers.json.gz",
-      "bytes": 430469,
-      "sha256": "1e4279350ab930c1fa4cf9982cb92729ae22e9e1456d0a9cd18894d55c418097"
+      "bytes": 431408,
+      "sha256": "16794a3793546f3cee5c6753d8b9f3ea80ee193d804d4f068d2d53e023ed704d"
     },
     {
       "path": "independent_modes_concurrent.json.gz",
-      "bytes": 838334,
-      "sha256": "0a85441d8817a52b29999c111691fea3378d6625531334f73f2b1c8a6dbcbd09"
+      "bytes": 841005,
+      "sha256": "fc6ecd8859eb37f27acfa3afa33a159b6066a3995b2fe159773794f9ed966534"
     }
   ]
 }

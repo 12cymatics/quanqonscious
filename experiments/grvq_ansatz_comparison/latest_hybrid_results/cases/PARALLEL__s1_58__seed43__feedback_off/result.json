@@ -1,0 +1,688 @@
+{
+  "schema": "grvq-quantum-feedback-case/v2",
+  "status": "complete",
+  "configuration": {
+    "case_id": "PARALLEL__s1_58__seed43__feedback_off",
+    "composition": "PARALLEL",
+    "strength": "1/58",
+    "seed": 43,
+    "feedback": false,
+    "steps": 2,
+    "sweeps": 4,
+    "grid_denominator": 8,
+    "branch_workers": 2,
+    "backend": "serial",
+    "initial_parameters": [
+      "-3/8",
+      "-1/8",
+      "1/4",
+      "3/8",
+      "-1/4",
+      "0",
+      "-1/8",
+      "1/4",
+      "1/4",
+      "3/8",
+      "-3/8",
+      "0"
+    ]
+  },
+  "source": {
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "source_commit": "13ec5d881b1447a8bf9de87a1f0dec1773dcef3c",
+    "declared_version": "v18.52.0",
+    "sha256": "84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518",
+    "kernel_factory_sha256": "1ebabaf584049b705450138d957940eabf708a518ad2286fa737da7275d29d61",
+    "scope": "Source formulaOf: BOOK transforms, variable GRVQ, and MSTVQ stress; not the additional browser stagesFrom evolution"
+  },
+  "arithmetic_module_sha256": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1",
+  "quantum_source": {
+    "name": "vedic_v21 4.html",
+    "sha256": "1ea3d56f01541181ba2ffafa536f00405198afcfddc5518e3a2e29f8731aeccd",
+    "qubits": 4,
+    "layers": 3,
+    "cayley_parameters": 12,
+    "initial_state": "0000",
+    "gate_order": "Ry q0,q1,q2,q3; CX0->1,CX1->2,CX2->3 after every layer including the last",
+    "hamiltonian": "sum(q=0..3,lambda[q]*Z[q]) + 1/2*sum(q=0..2,Z[q]*Z[q+1])"
+  },
+  "reconstruction": {
+    "kind": "byte-recovered mathematical prefix with reconstructed trajectory I/O",
+    "previous_implementation_sha256": "3f9980523a0724615ea0ffd8cee26ac36afaf3f535fcad0b5bc1415ff0f30c01",
+    "previous_results_not_recreated_by_assertion": true,
+    "current_results": "computed by this execution"
+  },
+  "integration": {
+    "field": "complete source formulaOf stages",
+    "feedback": "exact -<Zq>/1000; disabled paired control applies zero",
+    "schedule": "one complete source formula, frozen-H coordinate optimization, exact feedback, source SIM_DT advance",
+    "diagnostic": "sixteen diagonal basis energies are diagnostic only"
+  },
+  "created_utc": "2026-11-23T03:42:04.727Z",
+  "runtime": {
+    "node": "v24.22.3",
+    "platform": "linux",
+    "architecture": "x64"
+  },
+  "code_sha256": {
+    "hybrid_quantum.cjs": "b7c41dde9e288f67c977dda30ea0f6e92edaeca3080b4a4830cdbfe2caa4cb1d",
+    "latest_hybrid_executor.cjs": "8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c",
+    "exact_dag.cjs": "0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1"
+  },
+  "steps": [
+    {
+      "step": 0,
+      "time": {
+        "_expr": 0
+      },
+      "frame_file": "frame_000.json.gz",
+      "quantum_file": "quantum_000.json",
+      "input_field_digests": [
+        "2c885ee686eae6f260658226605fe77b13d465ac7839fcd3dbe2c5c8f5fc9a0b",
+        "9cae080145c023061fc232b3f5cdecfd0a48f98c15f4204d8e5c8ef32a5a20f7",
+        "1117008597015d75b9a51debe6f74d778f40d193ee73d0539cab002e88e6de40",
+        "452cb0d596e434c3c7f823645bb6a0ffb2e8d26316bace521c0faa6124a6d752",
+        "a6169c9bc54afc8216df3475aa6ccd95896f8002d26414db04a9d2bf5cfe2168",
+        "d530ffaed1373fb2fcd66fda5461edd279e575305613f16f614cee6da2d7a9d2",
+        "3f3341938d713884143248cdd275181ff5918ed006fbb31b5155b5a17e452793",
+        "873d36b9fb3e1f116acc7053784373665252632da89db00c2b8705984e6f9c3c",
+        "b55402a744ea24ff15db7ada09a35408881ad57677f1039017aa6d3ff6f636e5",
+        "3f3341938d713884143248cdd275181ff5918ed006fbb31b5155b5a17e452793",
+        "149356c6828e02f0a997858417e1d3e0db8f23d165e5e80398d9a0421cb36135",
+        "613019de4fe089bae05e43eb05b956198539825ec387225f57b11c5d684dc54c",
+        "a89c4ba3d0d8101374d7b9e5a54c6c1cb36d859ca89f7b356479b5a6f40c4112",
+        "e68d6a2f2f2f0c26c9237f33e9a4e7040fe844a51af828935e19509960ef7cfe",
+        "b7599dd0ad09104d42ecd7add8fe948e7139cb540da1a5453b2673b1207f3a81",
+        "fea5fbc910de9c5e4e9bfcfa4ddcfd38e4bece0791982d2f58e765136a2aeee7"
+      ],
+      "after_formula_field_digests": [
+        "2b60dc34a439444f8b485603e121f7a2631e3758598c64a8b9b06b3e9e30ab01",
+        "581aa145edc088ad221128610dba16dc381e5fac10236e36c5889a4dee7c39b3",
+        "7962aa5faeb17b3232b5a03be2059e25a711ca28f3977ca17dcb96389f9083b4",
+        "2f3cf825e076a6686de51ee5dab3f92a1b8731a1bf5ee4aa0236614d0548f1bf",
+        "c8c5921a4bd0496caa5b286a14eacfb81f594f0822fd87d46ac798fc6dfbd7fd",
+        "aaf3fe11b3a2480955f7228572d97c0ac57cfb4157b809c9b2048b13db0015ed",
+        "15fbe2f843ad1b994bb737aac728c19c15a040ef3d4a7a6db9272e77fb8164f3",
+        "e2ec63d85cf72854b0f0887b33634c59a483e79792a2f059e3ec3f5e24ef2c83",
+        "b43790d493f62851e2b42f99f76d2899d92eb27049eb76d5146f9f931da4058c",
+        "26aebff23d11c3c0c56215b01a2e97f92e3098890c02fbc78a2dcbd82489c577",
+        "ee26d4135709d25aa475d49ad74b7c559a85d7c89386ca70d649b1434fc7e8e5",
+        "86a8a6691c2c24d95d97204732bff40e25e174163325849b1a023e43331d5605",
+        "7100c1b545286a80097c67d3f71c61069c753aafd7a786871caf7a6e8a78ab37",
+        "400a54fdac83c8e3217b21253a13aa5c65b442a4d04685d9a9cb11048fa5ecba",
+        "58aca2f3cd76af8402e783bcd0faa08c0a6f88a86982451765d096eaeac9b3c8",
+        "67f77e8c5a599d40e5f0e5c2342999bdbb0acbc701371027ae65893454bed202"
+      ],
+      "next_field_digests": [
+        "2b60dc34a439444f8b485603e121f7a2631e3758598c64a8b9b06b3e9e30ab01",
+        "581aa145edc088ad221128610dba16dc381e5fac10236e36c5889a4dee7c39b3",
+        "7962aa5faeb17b3232b5a03be2059e25a711ca28f3977ca17dcb96389f9083b4",
+        "2f3cf825e076a6686de51ee5dab3f92a1b8731a1bf5ee4aa0236614d0548f1bf",
+        "c8c5921a4bd0496caa5b286a14eacfb81f594f0822fd87d46ac798fc6dfbd7fd",
+        "aaf3fe11b3a2480955f7228572d97c0ac57cfb4157b809c9b2048b13db0015ed",
+        "15fbe2f843ad1b994bb737aac728c19c15a040ef3d4a7a6db9272e77fb8164f3",
+        "e2ec63d85cf72854b0f0887b33634c59a483e79792a2f059e3ec3f5e24ef2c83",
+        "b43790d493f62851e2b42f99f76d2899d92eb27049eb76d5146f9f931da4058c",
+        "26aebff23d11c3c0c56215b01a2e97f92e3098890c02fbc78a2dcbd82489c577",
+        "ee26d4135709d25aa475d49ad74b7c559a85d7c89386ca70d649b1434fc7e8e5",
+        "86a8a6691c2c24d95d97204732bff40e25e174163325849b1a023e43331d5605",
+        "7100c1b545286a80097c67d3f71c61069c753aafd7a786871caf7a6e8a78ab37",
+        "400a54fdac83c8e3217b21253a13aa5c65b442a4d04685d9a9cb11048fa5ecba",
+        "58aca2f3cd76af8402e783bcd0faa08c0a6f88a86982451765d096eaeac9b3c8",
+        "67f77e8c5a599d40e5f0e5c2342999bdbb0acbc701371027ae65893454bed202"
+      ],
+      "lambda_in": [
+        {
+          "_expr": 7
+        },
+        {
+          "_expr": 3
+        },
+        {
+          "_expr": 11
+        },
+        {
+          "_expr": 14
+        }
+      ],
+      "lambda_out": [
+        {
+          "_expr": 6883
+        },
+        {
+          "_expr": 6903
+        },
+        {
+          "_expr": 6920
+        },
+        {
+          "_expr": 6664
+        }
+      ],
+      "lambda_after_feedback": [
+        {
+          "_expr": 6883
+        },
+        {
+          "_expr": 6903
+        },
+        {
+          "_expr": 6920
+        },
+        {
+          "_expr": 6664
+        }
+      ],
+      "energy_initial": {
+        "_expr": 6976
+      },
+      "energy_final": {
+        "_expr": 10735
+      },
+      "exact_ground_energy": {
+        "_expr": 13778
+      },
+      "energy_gap": {
+        "_expr": 13774
+      },
+      "energy_gap_is_exactly_zero": false,
+      "ground_fidelity_rational": "1877997601190192335728779025/1912801954890912897844945441",
+      "feedback_deltas": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "computed_feedback_deltas": [
+        "-58274274451673/59296237164025000",
+        "-96966166226658262121/99053460786890498825000",
+        "-14107411393686290892793/14357680276906833536085160",
+        "-15069772175884818766309621/15302415639127303182759563528"
+      ],
+      "core_method_calls": 29,
+      "distributed_grvq_updates": 25,
+      "all29_consumed": true,
+      "quantum_costs": {
+        "circuit_evaluations": 369,
+        "candidate_energy_comparisons": 816,
+        "coordinate_lines": 48,
+        "accepted_updates": 6
+      },
+      "display": {
+        "lambda_in": [
+          {
+            "value": 3,
+            "certificate": {
+              "lower_integer": "1020847100762815390390123822295304634368",
+              "upper_integer": "1020847100762815390390123822295304634368",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 4,
+            "certificate": {
+              "lower_integer": "1361129467683753853853498429727072845824",
+              "upper_integer": "1361129467683753853853498429727072845824",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 5,
+            "certificate": {
+              "lower_integer": "1701411834604692317316873037158841057280",
+              "upper_integer": "1701411834604692317316873037158841057280",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 6,
+            "certificate": {
+              "lower_integer": "2041694201525630780780247644590609268736",
+              "upper_integer": "2041694201525630780780247644590609268736",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "lambda_out": [
+          {
+            "value": -67.92632446409705,
+            "certificate": {
+              "lower_integer": "-23114130464882591170642678180956567079455",
+              "upper_integer": "-23114130464882591170642678180956567079111",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -76.30085392626447,
+            "certificate": {
+              "lower_integer": "-25963835172118052467890316414722968145083",
+              "upper_integer": "-25963835172118052467890316414722968144793",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -84.28525668472004,
+            "certificate": {
+              "lower_integer": "-28680786641215385350558443591624629353584",
+              "upper_integer": "-28680786641215385350558443591624629352903",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -93.11883536738031,
+            "certificate": {
+              "lower_integer": "-31686697703733367294931820158905151956178",
+              "upper_integer": "-31686697703733367294931820158905151956086",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "lambda_after_feedback": [
+          {
+            "value": -67.92632446409705,
+            "certificate": {
+              "lower_integer": "-23114130464882591170642678180956567079455",
+              "upper_integer": "-23114130464882591170642678180956567079111",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -76.30085392626447,
+            "certificate": {
+              "lower_integer": "-25963835172118052467890316414722968145083",
+              "upper_integer": "-25963835172118052467890316414722968144793",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -84.28525668472004,
+            "certificate": {
+              "lower_integer": "-28680786641215385350558443591624629353584",
+              "upper_integer": "-28680786641215385350558443591624629352903",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -93.11883536738031,
+            "certificate": {
+              "lower_integer": "-31686697703733367294931820158905151956178",
+              "upper_integer": "-31686697703733367294931820158905151956086",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "energy_initial": {
+          "value": -118.07274130196274,
+          "certificate": {
+            "lower_integer": "-40178071879075528689841476083073913390849",
+            "upper_integer": "-40178071879075528689841476083073913389879",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "energy_final": {
+          "value": -314.4882395122909,
+          "certificate": {
+            "lower_integer": "-107014802510041343230566679048153937521386",
+            "upper_integer": "-107014802510041343230566679048153937519677",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "ground_energy": {
+          "value": -320.13127044246187,
+          "certificate": {
+            "lower_integer": "-108935026431567988588828196435061664217116",
+            "upper_integer": "-108935026431567988588828196435061664215709",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "energy_gap": {
+          "value": 5.643030930170978,
+          "certificate": {
+            "lower_integer": "1920223921526645358261517386907726695706",
+            "upper_integer": "1920223921526645358261517386907726696057",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        }
+      }
+    },
+    {
+      "step": 1,
+      "time": {
+        "_expr": 13830
+      },
+      "frame_file": "frame_001.json.gz",
+      "quantum_file": "quantum_001.json",
+      "input_field_digests": [
+        "2b60dc34a439444f8b485603e121f7a2631e3758598c64a8b9b06b3e9e30ab01",
+        "581aa145edc088ad221128610dba16dc381e5fac10236e36c5889a4dee7c39b3",
+        "7962aa5faeb17b3232b5a03be2059e25a711ca28f3977ca17dcb96389f9083b4",
+        "2f3cf825e076a6686de51ee5dab3f92a1b8731a1bf5ee4aa0236614d0548f1bf",
+        "c8c5921a4bd0496caa5b286a14eacfb81f594f0822fd87d46ac798fc6dfbd7fd",
+        "aaf3fe11b3a2480955f7228572d97c0ac57cfb4157b809c9b2048b13db0015ed",
+        "15fbe2f843ad1b994bb737aac728c19c15a040ef3d4a7a6db9272e77fb8164f3",
+        "e2ec63d85cf72854b0f0887b33634c59a483e79792a2f059e3ec3f5e24ef2c83",
+        "b43790d493f62851e2b42f99f76d2899d92eb27049eb76d5146f9f931da4058c",
+        "26aebff23d11c3c0c56215b01a2e97f92e3098890c02fbc78a2dcbd82489c577",
+        "ee26d4135709d25aa475d49ad74b7c559a85d7c89386ca70d649b1434fc7e8e5",
+        "86a8a6691c2c24d95d97204732bff40e25e174163325849b1a023e43331d5605",
+        "7100c1b545286a80097c67d3f71c61069c753aafd7a786871caf7a6e8a78ab37",
+        "400a54fdac83c8e3217b21253a13aa5c65b442a4d04685d9a9cb11048fa5ecba",
+        "58aca2f3cd76af8402e783bcd0faa08c0a6f88a86982451765d096eaeac9b3c8",
+        "67f77e8c5a599d40e5f0e5c2342999bdbb0acbc701371027ae65893454bed202"
+      ],
+      "after_formula_field_digests": [
+        "dd3432fd6d25cb5372e30c16dff37aeb2e084ae0bc676932a332126838c73112",
+        "e219bc33c4d5c299e76b2248e1a7a6c8f25a48160fd40ee8d9202581bf951f09",
+        "7a13bcb844f717ece2b24532afa154d75fd9f82a550e78bb1102c605451c8142",
+        "b2475324dbd530e3b642fd55bb239d76847f165642f65406eb39f44a3e8f0424",
+        "ee28375a0d59b0be637266ff871a421c2fec30e8d780e4504ed1118e4bfa4ca5",
+        "622a5e44693efa002e3fdb20add3cf7d74a360ac1a7dbcd5591663551fd688c0",
+        "35834bacca0a34e36bcd9d3e3dd068669ac91499fe5213d2fcefbdf88b8ec9c2",
+        "11d8696c1574860f1170e722252453151601af5ac898d6faa0a8ae5baa563567",
+        "73d89f5273fedaddc10a4be49aafe300156ea0117aa5d0574b2e873c4c436352",
+        "aef07b6d09a298f652e1e111762f49575e77fa65741b127162a343b6bbcb04cd",
+        "e1a84281cd7c16459229075f4fa5ec5be4b47468a51703044989bc0d096db148",
+        "f1a9a846bf6cb01b8f6bdc395708211ebe1ffca6f32c263c469c2ca0067726ce",
+        "edec3bf9ab62cc3f57ee973bd8fa38f1192b2fd4cdbcfcb2628adbbf705c8f98",
+        "7e323f21d5ea6e4538d84316b9fc14bef24ba497069daf5125ab465e8d35f06e",
+        "01208af5e481bf7ae30f3be6d4e70705c99fb757c8bd7ea08fd692b47a1c2a15",
+        "5e4ed23ab8d934216584f8b54338f25342a9457d89c9da3de806c5847d8f00af"
+      ],
+      "next_field_digests": [
+        "dd3432fd6d25cb5372e30c16dff37aeb2e084ae0bc676932a332126838c73112",
+        "e219bc33c4d5c299e76b2248e1a7a6c8f25a48160fd40ee8d9202581bf951f09",
+        "7a13bcb844f717ece2b24532afa154d75fd9f82a550e78bb1102c605451c8142",
+        "b2475324dbd530e3b642fd55bb239d76847f165642f65406eb39f44a3e8f0424",
+        "ee28375a0d59b0be637266ff871a421c2fec30e8d780e4504ed1118e4bfa4ca5",
+        "622a5e44693efa002e3fdb20add3cf7d74a360ac1a7dbcd5591663551fd688c0",
+        "35834bacca0a34e36bcd9d3e3dd068669ac91499fe5213d2fcefbdf88b8ec9c2",
+        "11d8696c1574860f1170e722252453151601af5ac898d6faa0a8ae5baa563567",
+        "73d89f5273fedaddc10a4be49aafe300156ea0117aa5d0574b2e873c4c436352",
+        "aef07b6d09a298f652e1e111762f49575e77fa65741b127162a343b6bbcb04cd",
+        "e1a84281cd7c16459229075f4fa5ec5be4b47468a51703044989bc0d096db148",
+        "f1a9a846bf6cb01b8f6bdc395708211ebe1ffca6f32c263c469c2ca0067726ce",
+        "edec3bf9ab62cc3f57ee973bd8fa38f1192b2fd4cdbcfcb2628adbbf705c8f98",
+        "7e323f21d5ea6e4538d84316b9fc14bef24ba497069daf5125ab465e8d35f06e",
+        "01208af5e481bf7ae30f3be6d4e70705c99fb757c8bd7ea08fd692b47a1c2a15",
+        "5e4ed23ab8d934216584f8b54338f25342a9457d89c9da3de806c5847d8f00af"
+      ],
+      "lambda_in": [
+        {
+          "_expr": 6883
+        },
+        {
+          "_expr": 6903
+        },
+        {
+          "_expr": 6920
+        },
+        {
+          "_expr": 6664
+        }
+      ],
+      "lambda_out": [
+        {
+          "_expr": 20582
+        },
+        {
+          "_expr": 20602
+        },
+        {
+          "_expr": 20619
+        },
+        {
+          "_expr": 20366
+        }
+      ],
+      "lambda_after_feedback": [
+        {
+          "_expr": 20582
+        },
+        {
+          "_expr": 20602
+        },
+        {
+          "_expr": 20619
+        },
+        {
+          "_expr": 20366
+        }
+      ],
+      "energy_initial": {
+        "_expr": 20670
+      },
+      "energy_final": {
+        "_expr": 21646
+      },
+      "exact_ground_energy": {
+        "_expr": 25369
+      },
+      "energy_gap": {
+        "_expr": 25313
+      },
+      "energy_gap_is_exactly_zero": false,
+      "ground_fidelity_rational": "99760282590180165512860224/103734240000651872298215281",
+      "feedback_deltas": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "computed_feedback_deltas": [
+        "24234694211/25725821040200",
+        "136800361537205639/146113613164494057640",
+        "472339767904104698287207/486649652845993020727225000",
+        "2523023477204917467318046103/2593356000016296807455382025000"
+      ],
+      "core_method_calls": 29,
+      "distributed_grvq_updates": 25,
+      "all29_consumed": true,
+      "quantum_costs": {
+        "circuit_evaluations": 225,
+        "candidate_energy_comparisons": 816,
+        "coordinate_lines": 48,
+        "accepted_updates": 2
+      },
+      "display": {
+        "lambda_in": [
+          {
+            "value": -67.92632446409705,
+            "certificate": {
+              "lower_integer": "-23114130464882591170642678180956567079455",
+              "upper_integer": "-23114130464882591170642678180956567079111",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -76.30085392626447,
+            "certificate": {
+              "lower_integer": "-25963835172118052467890316414722968145083",
+              "upper_integer": "-25963835172118052467890316414722968144793",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -84.28525668472004,
+            "certificate": {
+              "lower_integer": "-28680786641215385350558443591624629353584",
+              "upper_integer": "-28680786641215385350558443591624629352903",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": -93.11883536738031,
+            "certificate": {
+              "lower_integer": "-31686697703733367294931820158905151956178",
+              "upper_integer": "-31686697703733367294931820158905151956086",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "lambda_out": [
+          {
+            "value": 1398.8372466472363,
+            "certificate": {
+              "lower_integer": "475999649226290154652308139769894237670154",
+              "upper_integer": "475999649226290154652308139769894237787244",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1535.54669786222,
+            "certificate": {
+              "lower_integer": "522519464866187380156748594117225588053852",
+              "upper_integer": "522519464866187380156748594117225588162577",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1665.715209781353,
+            "certificate": {
+              "lower_integer": "566813514200606329134783580630232750832245",
+              "upper_integer": "566813514200606329134783580630232750960737",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1814.394797510336,
+            "certificate": {
+              "lower_integer": "617406556225853988563814489379005217702221",
+              "upper_integer": "617406556225853988563814489379005217809651",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "lambda_after_feedback": [
+          {
+            "value": 1398.8372466472363,
+            "certificate": {
+              "lower_integer": "475999649226290154652308139769894237670154",
+              "upper_integer": "475999649226290154652308139769894237787244",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1535.54669786222,
+            "certificate": {
+              "lower_integer": "522519464866187380156748594117225588053852",
+              "upper_integer": "522519464866187380156748594117225588162577",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1665.715209781353,
+            "certificate": {
+              "lower_integer": "566813514200606329134783580630232750832245",
+              "upper_integer": "566813514200606329134783580630232750960737",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          },
+          {
+            "value": 1814.394797510336,
+            "certificate": {
+              "lower_integer": "617406556225853988563814489379005217702221",
+              "upper_integer": "617406556225853988563814489379005217809651",
+              "denominator_power": 128
+            },
+            "purpose": "display only; never an arithmetic input"
+          }
+        ],
+        "energy_initial": {
+          "value": 6302.8876941126755,
+          "certificate": {
+            "lower_integer": "2144761542989517339650307149545392039594788",
+            "upper_integer": "2144761542989517339650307149545392040054763",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "energy_final": {
+          "value": -6135.886053435548,
+          "certificate": {
+            "lower_integer": "-2087933829420224081000119715702947684805363",
+            "upper_integer": "-2087933829420224081000119715702947684357614",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "ground_energy": {
+          "value": -6412.993951801145,
+          "certificate": {
+            "lower_integer": "-2182228760968556444812459741985210142403025",
+            "upper_integer": "-2182228760968556444812459741985210141941288",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        },
+        "energy_gap": {
+          "value": 277.10789836559746,
+          "certificate": {
+            "lower_integer": "94294931548332363812340026282262457577254",
+            "upper_integer": "94294931548332363812340026282262457604082",
+            "denominator_power": 128
+          },
+          "purpose": "display only; never an arithmetic input"
+        }
+      }
+    }
+  ],
+  "totals": {
+    "core_method_calls": 58,
+    "distributed_grvq_updates": 50,
+    "coordinate_lines": 96,
+    "circuit_evaluations": 594,
+    "candidate_energy_comparisons": 1632,
+    "accepted_updates": 8
+  },
+  "elapsed_seconds": 48.004970766,
+  "exact_arithmetic_statistics": {
+    "arithmetic_operations": 60492,
+    "exact_leaf_operations": 9062,
+    "structural_identity_decisions": 2010,
+    "certified_decisions": 7116,
+    "maximum_certificate_bits": 128,
+    "nodes": 25371,
+    "retained_certificates": 1483,
+    "interval_values_in_state": 0,
+    "rational_leaf_bit_budget": 4096,
+    "certificate_start_bits": 128,
+    "certificate_max_bits": 65536
+  },
+  "artifact_sha256": {
+    "checkpoint.json": "216f28993ab7de4e94937fc71ef165e9371a99aeb699ddf3365b497d2a25a00c",
+    "exact_graph.json.gz": "696d8fdd2f8458816651fefd0e4bfb668d887f401305c01c99cb49b7ed0b1299",
+    "frame_000.json.gz": "cd4fa297172660bee06d6201aa1677ff096aa0e8dad64cadd966718a99f54f65",
+    "frame_001.json.gz": "ed99e2776ea69605d83f06f1966d0bab57f29bfae1c33ce62908c295fb3deef8",
+    "journal.jsonl.gz": "ba87f345e505ca1c42b5ed0cc2b4c0f8b6b5bd82a72acf5fef5a0685fa4f66e8",
+    "quantum_000.json": "6fdfa98ac571d8772f2617014622c0094f952658b19eef62409258189c6ec859",
+    "quantum_001.json": "119375e9e8832f9b388053399e857249f013d8b49d71207316023886fd030883",
+    "request.json": "50fef778351a30a0e5123ed0475d5ba28dbe25ccb27aa34520049e96806eff90"
+  }
+}

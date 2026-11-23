@@ -1,0 +1,26 @@
+{
+  "case_id": "PARALLEL__s1_58__seed19__feedback_on",
+  "composition": "PARALLEL",
+  "strength": "1/58",
+  "seed": 19,
+  "feedback": true,
+  "steps": 2,
+  "sweeps": 4,
+  "grid_denominator": 8,
+  "branch_workers": 2,
+  "backend": "serial",
+  "initial_parameters": [
+    "1/4",
+    "-3/8",
+    "3/8",
+    "1/8",
+    "-3/8",
+    "1/8",
+    "-1/4",
+    "0",
+    "-1/8",
+    "1/8",
+    "-1/8",
+    "1/8"
+  ]
+}
