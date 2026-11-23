@@ -83,6 +83,84 @@ async function picture(){return page.evaluate(()=>{
   for(let i=0;i<p.length;i+=4){lo=Math.min(lo,p[i]);hi=Math.max(hi,p[i]);if(p[i]+p[i+1]+p[i+2]>150)lit++;hash=Math.imul(hash^p[i],16777619);}
   return{width:GR,height:GR,spread:hi-lo,lit,hash:hash>>>0};
 });}
+/* A small height-image fixture checks worker transport/lifecycle without another
+   long sand run. The full-resolution sand download below still uses every
+   production mode, all 60,000 grains and all 520 settling steps. */
+async function checkExportWorker(){
+  const evidence=await page.evaluate(async()=>{
+    const saved={state,view,freq,phaseSign,agitation,exporting};
+    const preview=__sandQA.snapshot(),OriginalWorker=window.Worker;
+    const createURL=URL.createObjectURL,revokeURL=URL.revokeObjectURL;
+    const workers=new Set(),urls=new Set();let created=0,terminated=0;
+    class TrackedWorker extends OriginalWorker{
+      constructor(...args){super(...args);workers.add(this);created++;}
+      terminate(){if(workers.delete(this))terminated++;return super.terminate();}
+    }
+    URL.createObjectURL=function(blob){const u=createURL.call(URL,blob);urls.add(u);return u;};
+    URL.revokeObjectURL=function(u){urls.delete(u);return revokeURL.call(URL,u);};
+    window.Worker=TrackedWorker;
+    exporting=true;
+    try{
+      // Two retained Bessel components provide a cheap pinned-profile fixture.
+      // This tests image arithmetic and structured cloning, not sediment physics.
+      state={...saved.state,expression:1,experiment:{testFixture:'export-worker-snapshot'},
+        states:[{m:0,weight:1,phi:.37,radial:{m:0,jp:3.8317059702075125,
+          pinned:{coefficients:new Float64Array([1,.1])},
+          pinnedZeros:new Float64Array([3.8317059702075125,7.015586669815619])}}]};
+      view='height';phaseSign=1;
+      const size=65,reference=await exportDiagnosticImage(size,()=>{});
+      const expected=reference.canvas.getContext('2d').getImageData(0,0,size,size).data;
+      const metadata={...reference};delete metadata.canvas;
+      let changed=false;
+      const result=await exportDiagnosticInWorker(size,()=>{
+        if(changed)return;changed=true;
+        freq+=7;view='optical';phaseSign=-1;agitation+=.5;
+        state.states[0].radial.pinned.coefficients[0]+=.25;
+        state.expression=0;
+      });
+      const blobURL=URL.createObjectURL(result.blob),image=new Image();
+      try{image.src=blobURL;await image.decode();}finally{URL.revokeObjectURL(blobURL);}
+      const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+      const context=canvas.getContext('2d');context.drawImage(image,0,0);
+      const actual=context.getImageData(0,0,size,size).data;
+      let different=0;for(let i=0;i<actual.length;i++)if(actual[i]!==expected[i])different++;
+      const resultMetadata={...result};delete resultMetadata.blob;
+      const snapshot={different,channels:actual.length,
+        metadataEqual:JSON.stringify(metadata)===JSON.stringify(resultMetadata),mutationApplied:changed};
+      state={...saved.state,states:[]};view=saved.view;
+      let refusal='',callbackFailure='',constructorFailure='',unavailable='';
+      try{await exportDiagnosticInWorker(size,()=>{});}catch(error){refusal=error.message;}
+      state=saved.state;
+      try{await exportDiagnosticInWorker(size,()=>{throw new Error('intentional progress callback failure');});}
+      catch(error){callbackFailure=error.message;}
+      window.Worker=class {constructor(){throw new Error('intentional worker construction failure');}};
+      try{await exportDiagnosticInWorker(size,()=>{});}catch(error){constructorFailure=error.message;}
+      window.Worker=undefined;
+      try{await exportDiagnosticInWorker(size,()=>{});}catch(error){unavailable=error.message;}
+      // Restore the user state before comparing every preview array and control.
+      ({state,view,freq,phaseSign,agitation,exporting}=saved);
+      return{snapshot,refusal,callbackFailure,constructorFailure,unavailable,
+        created,terminated,activeWorkers:workers.size,activeURLs:urls.size,
+        previewDifferences:__sandQA.diff(preview,__sandQA.snapshot())};
+    }finally{
+      for(const worker of workers)worker.terminate();
+      for(const url of urls)revokeURL.call(URL,url);
+      window.Worker=OriginalWorker;URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;
+      ({state,view,freq,phaseSign,agitation,exporting}=saved);
+    }
+  });
+  assert.equal(evidence.snapshot.different,0,'Worker PNG pixels differ from retained direct export');
+  assert(evidence.snapshot.metadataEqual&&evidence.snapshot.mutationApplied,'Worker read changing export inputs');
+  assert.match(evidence.refusal,/every mode is below the resolution gate/);
+  assert.equal(evidence.callbackFailure,'intentional progress callback failure');
+  assert.equal(evidence.constructorFailure,'intentional worker construction failure');
+  assert.match(evidence.unavailable,/does not support background image export/);
+  assert.equal(evidence.activeWorkers,0);assert.equal(evidence.created,evidence.terminated);
+  assert.equal(evidence.activeURLs,0);assert.deepEqual(evidence.previewDifferences,[]);
+  await page.waitForFunction(()=>lastDrawnView===view&&!dirty);
+  record('worker-export-exact-pixels-frozen-inputs-and-failure-cleanup',evidence);
+}
+
 async function nativeRoundTrip(resume){
   if((await page.evaluate(()=>running))!==resume)await page.locator('#play').click();
   await openControl('#importNative');
@@ -168,7 +246,9 @@ try{
     const image=await picture();assert(image.spread>10&&image.lit>1000,'Restored sand canvas is blank');
     await page.screenshot({path:join(out,scenario.name+'-restored-sand.png'),fullPage:true});
     record('default-original-60000-grain-sand-moves',{initial,start,moved,image,sourceDigests:originalFunctions});
-    await pause();await snapshot('renderer');
+    await pause();
+    if(scenario.name==='desktop')await checkExportWorker();
+    await snapshot('renderer');
     await page.evaluate(()=>{__sandQA.cpuPixels=ctx.getImageData(0,0,GR,GR).data.slice();});
     await openControl('#engSeg [data-e="gpu"]');await page.locator('#engSeg [data-e="gpu"]').click();
     await page.waitForFunction(()=>renderEngine==='gpu'&&GPU_SURFACE.ready&&!dirty&&!renderError);

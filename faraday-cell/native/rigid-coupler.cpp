@@ -35,6 +35,7 @@ std::vector<FluidDof> independentFluidDofs(const NativeFluid& f){
 RigidCoupler::RigidCoupler(NativeFluid& f,std::vector<RigidGrain> g,CouplingOptions o):fluid_(f),grains_(std::move(g)),options_(o){
   if(!(std::isfinite(o.relativeTolerance)&&o.relativeTolerance>0&&std::isfinite(o.absoluteVelocityTolerance)&&o.absoluteVelocityTolerance>0&&std::isfinite(o.maximumDivergence)&&o.maximumDivergence>0&&o.maximumIterations>0&&o.maximumEventRefinements>0))throw std::invalid_argument("Invalid rigid constraint tolerances");
   if(!(std::isfinite(o.friction)&&o.friction>=0&&std::isfinite(o.restitution)&&o.restitution>=0&&o.restitution<=1&&std::isfinite(o.resolvedGapCells)&&o.resolvedGapCells>0))throw std::invalid_argument("Contact coefficients and gap resolution must be explicitly physical");
+  if(o.preconditioner!=ConstraintPreconditioner::diagonal&&o.preconditioner!=ConstraintPreconditioner::unprojectedDense&&o.preconditioner!=ConstraintPreconditioner::projectedCached)throw std::invalid_argument("Unknown rigid constraint preconditioner");
   requireMemory(baseWorkingArrayBytes(),f.config().memoryBudgetBytes);
   if(grains_.empty())return;
   const double rho=f.config().rho;
@@ -51,6 +52,12 @@ RigidCoupler::RigidCoupler(NativeFluid& f,std::vector<RigidGrain> g,CouplingOpti
 }
 
 void RigidCoupler::rebuild(){
+  // A projected SPD factor may remain as a numerical preconditioner as geometry
+  // moves. Its bytes stay reserved by baseWorkingArrayBytes during rebuilds.
+  // The cheaper unprojected candidate is assembled afresh at each geometry.
+  if(options_.preconditioner!=ConstraintPreconditioner::projectedCached){
+    std::vector<double>().swap(denseFactor_);denseDimension_=0;
+  }
   const auto baseBytes=baseWorkingArrayBytes();
   requireMemory(baseBytes,fluid_.config().memoryBudgetBytes);
   interpolation_.reset();dofs_=independentFluidDofs(fluid_);
@@ -68,6 +75,104 @@ void RigidCoupler::rebuild(){
       diagonal_[3*n+d]=a;
     }
   }
+  if(options_.preconditioner==ConstraintPreconditioner::unprojectedDense)buildDensePreconditioner();
+}
+void RigidCoupler::buildDensePreconditioner(){
+  const auto& markers=interpolation_->markers();const auto& stencils=interpolation_->stencils();
+  const std::size_t n=memoryProduct(markers.size(),3),entries=memoryProduct(n,n);
+  requireMemory(memorySum({workingArrayBytes(),memoryProduct(entries,sizeof(double))}),fluid_.config().memoryBudgetBytes);
+  denseFactor_.assign(entries,0);
+  // B=J M_f^-1 J^T+K M_ex^-1 K^T is assembled as a symmetric kinetic Gram
+  // matrix. It approximates only the PRECONDITIONER by omitting P there. The
+  // pressure-projected S used in every PCG matvec/true residual is unchanged.
+  for(std::size_t a=0;a<markers.size();a++)for(std::size_t b=0;b<=a;b++){
+    double block[3][3]{};
+    if(markers[a].grain==markers[b].grain){
+      const auto grain=markers[a].grain;const auto ra=markers[a].offset,rb=markers[b].offset;
+      const double rr=dot(ra,rb);
+      for(std::size_t c=0;c<3;c++)for(std::size_t d=0;d<3;d++)
+        block[c][d]=(c==d?inverseMass_[grain]:0)+inverseInertia_[grain]*((c==d?rr:0)-ra[d]*rb[c]);
+    }
+    // Both stencil lists are sorted by DOF. Shared entries contribute their
+    // actual coefficient product divided by the physical staggered cell mass.
+    std::size_t i=0,j=0;
+    while(i<stencils[a].entries.size()&&j<stencils[b].entries.size()){
+      const auto& left=stencils[a].entries[i];const auto& right=stencils[b].entries[j];
+      if(left.dof<right.dof){i++;continue;}if(right.dof<left.dof){j++;continue;}
+      for(std::size_t c=0;c<3;c++)for(std::size_t d=0;d<3;d++)block[c][d]+=left.coefficient[c]*right.coefficient[d]/dofs_[left.dof].mass;
+      i++;j++;
+    }
+    for(std::size_t c=0;c<3;c++)for(std::size_t d=0;d<3;d++){
+      const auto row=3*a+c,column=3*b+d;if(column>row)continue;
+      denseFactor_[row*n+column]=block[c][d];
+    }
+  }
+  factorDensePreconditioner(n);denseAsymmetry_=0;denseBuilds_++;
+}
+void RigidCoupler::factorDensePreconditioner(std::size_t n){
+  for(std::size_t i=0;i<n;i++)for(std::size_t j=0;j<=i;j++){
+    double value=denseFactor_[i*n+j];
+    for(std::size_t k=0;k<j;k++)value-=denseFactor_[i*n+k]*denseFactor_[j*n+k];
+    if(i==j){
+      if(!(value>0&&std::isfinite(value)))throw std::runtime_error("Dense kinetic preconditioner is not positive definite; no diagonal regularization applied");
+      denseFactor_[i*n+i]=std::sqrt(value);
+    }else denseFactor_[i*n+j]=value/denseFactor_[j*n+j];
+  }
+  denseDimension_=n;
+}
+void RigidCoupler::ensureProjectedPreconditioner(){
+  if(options_.preconditioner!=ConstraintPreconditioner::projectedCached)return;
+  const auto& markers=interpolation_->markers();const auto& spacing=interpolation_->grainSpacing();
+  const std::size_t n=memoryProduct(markers.size(),3);
+  requireMemory(memorySum({workingArrayBytes(),memoryProduct(markers.size(),sizeof(std::array<long long,4>))}),fluid_.config().memoryBudgetBytes);
+  std::vector<std::array<long long,4>> layout;layout.reserve(markers.size());
+  for(const auto& marker:markers){
+    const double step=spacing[marker.grain]*options_.interpolation.markerSpacingFactor;
+    layout.push_back({static_cast<long long>(marker.grain),std::llround(marker.offset.x/step),std::llround(marker.offset.y/step),std::llround(marker.offset.z/step)});
+  }
+  if(denseDimension_==n&&denseLayout_==layout)return;
+  // Invalidate a changed marker lattice before allocating its replacement.
+  // Continuous changes of metric/position may reuse an old SPD factor; actual
+  // current applySchur() and its true residual still define the solved physics.
+  std::vector<double>().swap(denseFactor_);std::vector<std::array<long long,4>>().swap(denseLayout_);denseDimension_=0;
+  const auto entries=memoryProduct(n,n);
+  requireMemory(memorySum({workingArrayBytes(),memoryProduct(entries,sizeof(double)),memoryProduct(layout.capacity(),sizeof(std::array<long long,4>))}),fluid_.config().memoryBudgetBytes);
+  denseFactor_.assign(entries,0);
+  std::vector<Vec3> unit(markers.size());
+  for(std::size_t column=0;column<n;column++){
+    unit[column/3][column%3]=1;const auto applied=applySchur(unit);unit[column/3][column%3]=0;
+    for(std::size_t row=0;row<n;row++)denseFactor_[row*n+column]=applied[row/3][row%3];
+  }
+  double scale=0,asymmetry=0;
+  for(std::size_t row=0;row<n;row++)for(std::size_t column=0;column<n;column++){
+    const double value=denseFactor_[row*n+column];
+    if(!std::isfinite(value))throw std::runtime_error("Sampled constraint preconditioner contains a non-finite response");
+    scale=std::max(scale,std::abs(value));asymmetry=std::max(asymmetry,std::abs(value-denseFactor_[column*n+row]));
+  }
+  denseAsymmetry_=scale>0?asymmetry/scale:0;
+  // Factor the symmetric surrogate defined by the sampled lower triangle.
+  // Finite pressure tolerance can make sampled S slightly asymmetric: report
+  // that defect rather than averaging or modifying the physical operator.
+  // Cholesky must be strictly positive with no diagonal shift. This factor is
+  // only an approximate preconditioner, never the accepted constraint solution.
+  factorDensePreconditioner(n);denseLayout_=std::move(layout);denseBuilds_++;
+}
+void RigidCoupler::precondition(const std::vector<Vec3>& r,std::vector<Vec3>& z) const {
+  if(options_.preconditioner==ConstraintPreconditioner::diagonal){
+    for(std::size_t i=0;i<r.size();i++)for(std::size_t j=0;j<3;j++)z[i][j]=r[i][j]/diagonal_[3*i+j];
+    return;
+  }
+  const std::size_t n=memoryProduct(r.size(),3);
+  if(denseFactor_.size()!=memoryProduct(n,n))throw std::logic_error("Dense constraint preconditioner does not match current marker geometry");
+  std::vector<double> value(n);for(std::size_t i=0;i<n;i++)value[i]=r[i/3][i%3];
+  for(std::size_t i=0;i<n;i++){
+    for(std::size_t j=0;j<i;j++)value[i]-=denseFactor_[i*n+j]*value[j];
+    value[i]/=denseFactor_[i*n+i];
+  }
+  for(std::size_t i=n;i-->0;){
+    for(std::size_t j=i+1;j<n;j++)value[i]-=denseFactor_[j*n+i]*value[j];
+    value[i]/=denseFactor_[i*n+i];z[i/3][i%3]=value[i];
+  }
 }
 std::size_t RigidCoupler::baseWorkingArrayBytes() const {
   if(grains_.empty())return fluid_.allocatedBytes();
@@ -81,11 +186,31 @@ std::size_t RigidCoupler::baseWorkingArrayBytes() const {
   // and container allowance. Stencils and marker vectors are added separately.
   return memorySum({fluid_.allocatedBytes(),checkpoint,scratch,
     memoryProduct(independent,2*sizeof(FluidDof)+16*sizeof(double)),
-    memoryProduct(grains_.size(),16*sizeof(RigidGrain)+32*sizeof(Six)),4096});
+    memoryProduct(grains_.size(),16*sizeof(RigidGrain)+32*sizeof(Six)),4096,reservedWorkingBytes_,
+    memoryProduct(denseFactor_.capacity(),sizeof(double)),memoryProduct(denseLayout_.capacity(),sizeof(std::array<long long,4>))});
 }
 std::size_t RigidCoupler::workingArrayBytes() const {
   return memorySum({baseWorkingArrayBytes(),interpolation_?interpolation_->allocatedBytes():0,
     interpolation_?memoryProduct(interpolation_->markers().size(),24*sizeof(Vec3)):0});
+}
+CoupledStateDiagnostics RigidCoupler::stateDiagnostics(){
+  CoupledStateDiagnostics result;result.time=fluid_.time();
+  result.slipTolerance=options_.absoluteVelocityTolerance;
+  result.maximumDivergence=options_.maximumDivergence;
+  for(int key:{9,10,11})for(double value:fluid_.array(key))if(!std::isfinite(value))
+    throw std::runtime_error("Cannot assess a non-finite fluid velocity state");
+  if(!grains_.empty()&&!interpolation_)throw std::runtime_error("Rigid geometry is not initialized for state diagnostics");
+  if(interpolation_){
+    auto fluid=interpolation_->applyJ(packFluid());const auto rigid=interpolation_->applyK(velocities(grains_));
+    for(std::size_t i=0;i<fluid.size();i++)if(!finite(fluid[i])||!finite(rigid[i]))
+      throw std::runtime_error("Cannot assess a non-finite interpolated rigid constraint");
+    result.slipTolerance+=options_.relativeTolerance*std::max(markerMax(fluid),markerMax(rigid));
+    for(std::size_t i=0;i<fluid.size();i++)fluid[i]=fluid[i]-rigid[i];
+    result.slipResidual=markerMax(fluid);result.markerCount=interpolation_->markers().size();
+  }
+  result.divergence=fluid_.maxDivergence();
+  result.compatible=std::isfinite(result.divergence)&&result.slipResidual<=result.slipTolerance&&result.divergence<=result.maximumDivergence;
+  return result;
 }
 std::vector<double> RigidCoupler::packFluid() const {
   std::vector<double> a(dofs_.size());for(std::size_t i=0;i<a.size();i++)a[i]=fluid_.array(9+dofs_[i].family)[dofs_[i].index];return a;
@@ -110,7 +235,8 @@ std::vector<Vec3> RigidCoupler::solve(const std::vector<Vec3>& rhs,std::size_t& 
   const double tolerance=options_.absoluteVelocityTolerance+options_.relativeTolerance*markerMax(rhs);
   std::vector<Vec3> x(rhs.size()),r=rhs,z(rhs.size()),d(rhs.size());iterations=0;
   if(markerMax(r)<=tolerance)return x;
-  for(std::size_t i=0;i<r.size();i++)for(std::size_t j=0;j<3;j++)z[i][j]=r[i][j]/diagonal_[3*i+j];
+  ensureProjectedPreconditioner();
+  precondition(r,z);
   d=z;double rz=markerDot(r,z);
   for(;iterations<options_.maximumIterations;){
     const auto q=applySchur(d);const double denominator=markerDot(d,q);
@@ -123,10 +249,10 @@ std::vector<Vec3> RigidCoupler::solve(const std::vector<Vec3>& rhs,std::size_t& 
       if(markerMax(r)<=tolerance)return x;
       // A fresh search after true-residual replacement avoids retaining a
       // direction conjugate to a recursively accumulated residual.
-      for(std::size_t i=0;i<r.size();i++)for(std::size_t j=0;j<3;j++)z[i][j]=r[i][j]/diagonal_[3*i+j];
+      precondition(r,z);
       d=z;rz=markerDot(r,z);continue;
     }
-    for(std::size_t i=0;i<r.size();i++)for(std::size_t j=0;j<3;j++)z[i][j]=r[i][j]/diagonal_[3*i+j];
+    precondition(r,z);
     const double next=markerDot(r,z),beta=next/rz;rz=next;
     for(std::size_t i=0;i<d.size();i++)d[i]=z[i]+beta*d[i];
   }
@@ -295,18 +421,53 @@ CoupledStepReport RigidCoupler::step(double requestedDt,double effectiveGravity)
   // A grain initially touching and at rest is a support contact, not a new
   // impact caused by the next gravity predictor.
   if(sustainedContacts_.empty())for(const auto& c:touchingContacts())if(relativeContactVelocity(c,oldGrains).x>=0)sustainedContacts_.push_back(c);
+  const auto initialSustainedContacts=sustainedContacts_;
   try{
     for(std::size_t attempt=0;attempt<=options_.maximumEventRefinements;attempt++){
       if(attempt){fluid_.restore(saved);grains_=oldGrains;}
+      sustainedContacts_=initialSustainedContacts;
       report={};report.eventRefinements=attempt;pendingDt_=dt;rebuild();validateGeometry();
       fluid_.predictor(dt,effectiveGravity);auto body=velocities(grains_);
       for(auto& q:body)q[2]-=dt*effectiveGravity;
       constrain(body,report);applyContacts(body,report);assignVelocities(grains_,body);
       const double event=firstImpact(dt);
       if(event<dt){dt=event;continue;}
+      report.driftVelocity=body;
+      const auto driftContacts=touchingContacts();
       for(auto& g:grains_)g.centre=g.centre+dt*g.velocity;
       // No post-step position projection or grain redistribution is permitted.
       validateSweptGaps(oldGrains,dt);validateGeometry();fluid_.finish(dt);rebuild();validateGeometry();
+      // A first-order split advances geometry with the constrained drift
+      // velocity, then enforces the velocity constraints on that NEW geometry.
+      // Testing J_new u_old - K v_old against a linear-solve tolerance instead
+      // makes the accepted dt proportional to that algebra tolerance. Shrinking
+      // dt is not a solve of the moved constraints.
+      //
+      // Moving the free surface also changes D. First remove its full velocity
+      // divergence: adding divergence-free rigid corrections alone cannot do
+      // so. The homogeneous pressure increment preserves the prescribed surface
+      // pressure, with q += rho*phi/dt when u is changed by -G phi.
+      {
+        const auto beforeProjection=packFluid();auto endpointCorrection=project(beforeProjection);
+        for(std::size_t i=0;i<endpointCorrection.size();i++)endpointCorrection[i]-=beforeProjection[i];
+        addFluid(endpointCorrection,1);
+        const auto endpointPotential=fluid_.lastProjectionPotential();auto endpointPressure=fluid_.array(FluidArray::p);
+        for(std::size_t i=0;i<endpointPressure.size();i++)endpointPressure[i]+=fluid_.config().rho*endpointPotential[i]/dt;
+      }
+      // An impact already handled before the drift must not receive another
+      // restitution impulse merely because velocity is projected a second time.
+      // Contacts reached for the first time at the endpoint retain restitution.
+      for(const auto& c:driftContacts)if(std::none_of(sustainedContacts_.begin(),sustainedContacts_.end(),[&](const auto& old){return old.kind==c.kind&&old.a==c.a&&old.b==c.b;}))sustainedContacts_.push_back(c);
+      CoupledStepReport endpoint;
+      constrain(body,endpoint);applyContacts(body,endpoint);assignVelocities(grains_,body);
+      report.constraintIterations+=endpoint.constraintIterations;
+      report.contacts=std::max(report.contacts,endpoint.contacts);
+      if(report.contactImpulse.empty()&&!endpoint.contactImpulse.empty())report.contactImpulse.resize(grains_.size());
+      for(std::size_t g=0;g<grains_.size();g++)for(std::size_t d=0;d<6;d++){
+        report.rigidImpulse[g][d]+=endpoint.rigidImpulse[g][d];
+        if(!endpoint.contactImpulse.empty())report.contactImpulse[g][d]+=endpoint.contactImpulse[g][d];
+      }
+      fluid_.synchronizeVelocity();
       auto finalSlip=interpolation_->applyJ(packFluid());const auto finalRigid=interpolation_->applyK(body);
       const double scale=std::max(markerMax(finalSlip),markerMax(finalRigid));for(std::size_t i=0;i<finalSlip.size();i++)finalSlip[i]=finalSlip[i]-finalRigid[i];
       report.slipResidual=markerMax(finalSlip);report.divergence=fluid_.maxDivergence();
@@ -315,6 +476,65 @@ CoupledStepReport RigidCoupler::step(double requestedDt,double effectiveGravity)
       return report;
     }
     throw std::runtime_error("Contact event refinement did not converge; no position repair applied");
-  }catch(...){fluid_.restore(saved);grains_=oldGrains;sustainedContacts_=oldContacts;throw;}
+  }catch(...){fluid_.restore(saved);grains_=oldGrains;sustainedContacts_=oldContacts;rebuild();throw;}
+}
+CoupledImplicitSurfaceReport RigidCoupler::stepImplicitSurface(double dt,double effectiveGravity,
+    const ImplicitSurfaceOptions& options){
+  if(!(std::isfinite(dt)&&dt>0&&std::isfinite(effectiveGravity)))throw std::invalid_argument("Invalid implicit coupled step or gravity");
+  CoupledImplicitSurfaceReport result;
+  if(grains_.empty()){
+    result.surface=fluid_.stepImplicitSurface(dt,effectiveGravity,options);
+    result.coupling.dt=dt;result.coupling.time=fluid_.time();result.coupling.divergence=fluid_.maxDivergence();
+    return result;
+  }
+  const auto initial=stateDiagnostics();
+  if(!initial.compatible)throw std::invalid_argument("Implicit grain-fluid step requires a compatible supplied velocity state; no initial projection substituted");
+  if(!touchingContacts().empty())throw std::invalid_argument("Experimental implicit grain-fluid step does not yet support active contacts");
+  const auto implicitWorkspace=fluid_.implicitSurfaceWorkspaceBytes(options);
+  requireMemory(memorySum({workingArrayBytes(),implicitWorkspace}),fluid_.config().memoryBudgetBytes);
+  const auto saved=fluid_.checkpoint();const auto oldGrains=grains_;const auto oldContacts=sustainedContacts_;
+  const auto oldReservation=reservedWorkingBytes_;
+  const auto drift=velocities(grains_);auto freeBody=drift;
+  for(auto& q:freeBody)q[2]-=dt*effectiveGravity;
+  std::size_t totalIterations=0;
+  CoupledStepReport accepted;
+  try{
+    reservedWorkingBytes_=memorySum({oldReservation,implicitWorkspace});
+    pendingDt_=dt;
+    // This explicit position drift is the first-order position discretization,
+    // not a relocation to repair penetration. The new positions stay fixed
+    // while the fluid surface and both velocity fields are solved jointly.
+    for(auto& g:grains_)g.centre=g.centre+dt*g.velocity;
+    validateSweptGaps(oldGrains,dt);rebuild();validateGeometry();
+    if(!touchingContacts().empty())throw std::runtime_error("Implicit position drift reached an unsupported active contact");
+    const auto response=[&](SurfaceResponseKind kind){
+      CoupledStepReport trial;
+      if(kind==SurfaceResponseKind::physical){
+        rebuild();validateGeometry();
+        auto body=freeBody;
+        constrain(body,trial);assignVelocities(grains_,body);
+        // Each nonlinear trial starts from the same free body predictor. Only
+        // the final physical evaluation's impulses belong to the accepted step.
+        accepted=trial;
+      }else{
+        // The fixed-trial-geometry tangent acts on pressure-induced increments.
+        // It has no gravity kick, initial body velocity or contact active set.
+        std::vector<Six> body(grains_.size());constrain(body,trial);
+      }
+      totalIterations+=trial.constraintIterations;
+      fluid_.synchronizeVelocity();
+    };
+    result.surface=fluid_.stepImplicitSurface(dt,effectiveGravity,options,response);
+    validateGeometry();
+    const auto final=stateDiagnostics();
+    if(!final.compatible)throw std::runtime_error("Implicit grain-fluid endpoint violates its unchanged rigid or divergence tolerance");
+    result.coupling=std::move(accepted);result.coupling.dt=dt;result.coupling.time=fluid_.time();
+    result.coupling.slipResidual=final.slipResidual;result.coupling.divergence=final.divergence;
+    result.coupling.markerCount=final.markerCount;result.coupling.constraintIterations=totalIterations;
+    result.coupling.driftVelocity=drift;
+    sustainedContacts_.clear();
+    reservedWorkingBytes_=oldReservation;
+    return result;
+  }catch(...){fluid_.restore(saved);grains_=oldGrains;sustainedContacts_=oldContacts;reservedWorkingBytes_=oldReservation;rebuild();throw;}
 }
 } // namespace faraday_native

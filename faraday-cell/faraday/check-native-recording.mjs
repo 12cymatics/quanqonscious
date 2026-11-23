@@ -43,6 +43,36 @@ check('chunk boundaries including split JSON strings preserve complete records',
   out.push(...reader.finish());assert.equal(out.length,4);assert.equal(reader.status().terminal,'complete');assert.equal(reader.status().closed,true);
   assert.equal(reader.lastFrame().time,f.next.time);
 });
+check('joint implicit method and measured endpoint diagnostics survive recording import',()=>{
+  const f=fixture();
+  f.header.integration={method:'joint-implicit',constraintPreconditioner:'projected-cached',temporalOrder:1};
+  f.next.diagnostics.surface={kinematicResidualMetres:2e-16,pressureResidualPa:3e-11,newtonIterations:2,linearIterations:5,pressureSolves:9};
+  const reader=N.createSession({maxFlowGlyphs:0});
+  const out=[...reader.feed(lines([f.header,f.initial,f.next,f.complete])),...reader.finish()];
+  assert.deepEqual(out[2].frame.source.integration,f.header.integration);
+  assert.deepEqual(out[2].frame.source.diagnostics.surface,f.next.diagnostics.surface);
+  assert.equal(out[1].frame.source.diagnostics.surface,undefined,'No invented initial endpoint-stress residual');
+  out[2].frame.source.integration.method='changed';
+  out[2].frame.source.diagnostics.surface.pressureResidualPa=5;
+  assert.equal(reader.lastFrame().source.integration.method,'joint-implicit');
+  assert.equal(reader.lastFrame().source.diagnostics.surface.pressureResidualPa,3e-11);
+  assert.equal(reader.header().integration.method,'joint-implicit');
+  const historical=fixture();
+  assert.equal(events([historical.header,historical.initial,historical.next,historical.complete])[1].frame.source.integration,null);
+});
+check('unsupported numerical provenance or incomplete implicit diagnostics are refused',()=>{
+  const base=()=>{
+    const f=fixture();f.header.integration={method:'joint-implicit',constraintPreconditioner:'projected-cached',temporalOrder:1};
+    f.next.diagnostics.surface={kinematicResidualMetres:0,pressureResidualPa:0,newtonIterations:0,linearIterations:0,pressureSolves:1};return f;
+  };
+  for(const change of [f=>{f.header.integration.method='unknown';},f=>{f.header.integration.temporalOrder=2;},
+    f=>{f.header.integration.constraintPreconditioner='diagonal';},f=>{delete f.next.diagnostics.surface;},
+    f=>{f.next.diagnostics.surface.pressureResidualPa=-1;},f=>{f.next.diagnostics.surface.kinematicResidualMetres=null;},
+    f=>{f.next.diagnostics.contacts=1;},f=>{f.next.diagnostics.eventRefinements=1;},
+    f=>{f.initial.diagnostics.surface=copy(f.next.diagnostics.surface);}]){
+    const f=base();change(f);assert.throws(()=>events([f.header,f.initial,f.next,f.complete]));
+  }
+});
 check('returned snapshots and provenance cannot mutate the retained native frame',()=>{
   const f=fixture(),s=N.createSession({maxFlowGlyphs:0}),out=[...s.feed(lines([f.header,f.initial,f.next]))];
   out[0].header.case.fluid.density=1;out[2].frame.particles.fill(9);out[2].frame.particleRadii.fill(9);

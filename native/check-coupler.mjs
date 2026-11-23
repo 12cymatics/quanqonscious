@@ -5,8 +5,13 @@ import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname,resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {spawnSync} from 'node:child_process';
+import {execFile} from 'node:child_process';
 import {prepareState,writePreparedCase} from './prepare-case.mjs';
+
+const runChild=(file,args)=>new Promise(resolve=>{
+  execFile(file,args,{encoding:'utf8',maxBuffer:8*1024*1024},(error,stdout,stderr)=>
+    resolve({status:error?(typeof error.code==='number'?error.code:null):0,error,stdout,stderr}));
+});
 
 const here=dirname(fileURLToPath(import.meta.url));
 const out=process.env.FARADAY_NATIVE_QA?resolve(process.env.FARADAY_NATIVE_QA):await mkdtemp(join(tmpdir(),'faraday-coupler-'));
@@ -20,11 +25,11 @@ const input={format:'faraday-native-case',version:1,
 const fixture=join(out,'verification-case.fns'),exe=join(out,'check-coupler');
 await writeFile(join(out,'verification-case.json'),JSON.stringify(input,null,2));
 await writePreparedCase(prepareState(input),fixture);
-const build=spawnSync(join(here,'build.sh'),[exe,join(here,'check-coupler.cpp'),join(here,'rigid-coupler.cpp'),join(here,'rigid-contact.cpp'),join(here,'rigid-interpolation.cpp')],{encoding:'utf8',maxBuffer:8*1024*1024});
+const build=await runChild(join(here,'build.sh'),[exe,join(here,'check-coupler.cpp'),join(here,'rigid-coupler.cpp'),join(here,'rigid-contact.cpp'),join(here,'rigid-interpolation.cpp')]);
 process.stdout.write(build.stdout??'');process.stderr.write(build.stderr??'');
 await writeFile(join(out,'build.log'),(build.stdout??'')+(build.stderr??''));
 assert.equal(build.status,0,'Native coupling check compilation failed; evidence: '+out);
-const run=spawnSync(exe,[fixture],{encoding:'utf8',maxBuffer:8*1024*1024});
+const run=await runChild(exe,[fixture]);
 process.stdout.write(run.stdout??'');process.stderr.write(run.stderr??'');
 await writeFile(join(out,'check-coupler.log'),(run.stdout??'')+(run.stderr??''));
 const entries=(run.stdout??'').split('\n').filter(s=>s.startsWith('{')).map(s=>JSON.parse(s));

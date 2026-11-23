@@ -1,14 +1,26 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm,stat,open} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {validateCase,estimateResources,assertPreparationBudget,ARRAY_FIELDS,BINARY_MAGIC,MATERIAL_NOTICE} from './case-schema.mjs';
 import {prepareState,writePreparedCase,prepareCaseFile,solverOptions} from './prepare-case.mjs';
 const require=createRequire(import.meta.url),{FaradayCell3D}=require('../dns/faraday-cell3d.js');
 const root=dirname(fileURLToPath(import.meta.url)),folder=await mkdtemp(resolve(tmpdir(),'faraday-native-case-'));
+async function runPreparation(args){
+ // File descriptors retain exact child output on runtimes whose child Node
+ // pipe handles are unavailable. The real CLI still runs in a separate process.
+ const logs=await mkdtemp(resolve(folder,'cli-'));
+ const stdout=await open(resolve(logs,'stdout'),'w'),stderr=await open(resolve(logs,'stderr'),'w');
+ let status;
+ try{status=await new Promise((yes,no)=>{
+  const child=spawn(process.execPath,[resolve(root,'prepare-case.mjs'),...args],{stdio:['ignore',stdout.fd,stderr.fd]});
+  child.once('error',no);child.once('close',(code,signal)=>signal?no(new Error('Preparation terminated by '+signal)):yes(code));
+ });}finally{await Promise.all([stdout.close(),stderr.close()]);}
+ return {status,stdout:await readFile(resolve(logs,'stdout'),'utf8'),stderr:await readFile(resolve(logs,'stderr'),'utf8')};
+}
 const base=()=>({format:'faraday-native-case',version:1,fluid:{radius:.015,depth:.004,density:1000,dynamicViscosity:.001,surfaceTension:.0728,gravity:9.80665,contactLine:'pinned'},drive:{frequency:111,acceleration:7},grid:{nr:4,nth:8,nz:4,rStretch:0,zStretch:0},initial:{type:'flat'},grains:[],materialProvenance:{kind:'illustrative',description:'Silica-rich spherical grains and density are illustrative, not measured SE Queensland sand.',source:'Declared verification inputs, not sample measurements'},contact:{friction:.5,restitution:.3},resourceBudgetBytes:134217728,duration:1e-5,dt:1e-6,outputInterval:5e-6});
 const grain=()=>({id:0,centre:[0,0,.002],radius:.000125,density:2650,velocity:[0,0,0],omega:[0,0,0]});
 let passed=0;const check=async(name,fn)=>{await fn();passed++;console.log('ok '+name);};
@@ -75,9 +87,9 @@ await check('portable binary is little endian, complete and preserves all canoni
  for(const [key,name] of ARRAY_FIELDS){assert.equal(u32(),key);assert.equal(u64(),BigInt(p.cell[name].length));for(const value of p.cell[name])assert(Object.is(f64(),value));}assert.equal(at,bytes.length);
 });
 await check('CLI requires paths, never overwrites input JSON and emits a preparation audit',async()=>{
- const noargs=spawnSync(process.execPath,[resolve(root,'prepare-case.mjs')],{encoding:'utf8'});assert.notEqual(noargs.status,0);assert.match(noargs.stderr,/both --case and --out/);
+ const noargs=await runPreparation([]);assert.equal(noargs.status,1);assert.match(noargs.stderr,/both --case and --out/);
  const path=resolve(folder,'good.json');await writeFile(path,JSON.stringify(base()));await assert.rejects(prepareCaseFile(path,path),/must not overwrite/);
- const out=resolve(folder,'cli.fns'),run=spawnSync(process.execPath,[resolve(root,'prepare-case.mjs'),'--case',path,'--out',out],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);const report=JSON.parse(run.stdout);assert.equal(report.arrayCount,19);assert.match(report.scope,/grain resolution/);assert.match(report.materialNotice,/not measured/);assert.match(run.stderr,/resource-preflight/);
+ const out=resolve(folder,'cli.fns'),run=await runPreparation(['--case',path,'--out',out]);assert.equal(run.status,0,run.stderr);const report=JSON.parse(run.stdout);assert.equal(report.arrayCount,19);assert.equal(report.integrator,'explicit');assert.match(report.scope,/grain resolution/);assert.match(report.materialNotice,/not measured/);assert.match(run.stderr,/resource-preflight/);
 });
 console.log(passed+' passed, 0 failed');
 }finally{await rm(folder,{recursive:true,force:true});}

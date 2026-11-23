@@ -12,13 +12,13 @@
  * So this builds one, unpacks it into a temp directory, and from inside that
  * directory: compares every file against the checkout byte for byte, rebuilds the
  * standalone page and compares it, reads the README and requires every path it
- * names to resolve, runs the terminal runner, and runs the fast suites.
+ * names to resolve, runs the terminal runner, and runs four selected
+ * cross-directory suites.
  *
  * The slow suites and the browser one are NOT run here, because running them would
- * make this gate unrunnable by hand. They ARE run from an unpack: CI's `unpacked` job
- * (.github/workflows/javascript.yml) unzips the committed faraday-cell.zip outside the
- * checkout and runs every suite in it with the unpack's own run-checks.mjs. What is
- * asserted here is that they travel, that they are in the unpack's runner, and that the
+ * make this gate unrunnable by hand. They can be run from an unpack with its own
+ * run-checks.mjs. This gate does not establish that those executions passed.
+ * What is asserted here is that they travel, that they are in the unpack's runner, and that the
  * runner's --fast flag is the only thing that leaves the slow ones out.
  */
 
@@ -32,6 +32,13 @@ import { buildStandalone } from './build-standalone.mjs';
 import { buildZip, stage, MANIFEST, SUITES, TOP, runChecksSource } from './build-zip.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SLOW_SUITES = [
+  'dns/check-cell3d-wasm.mjs', 'dns/check-cell3d.mjs',
+  'native/check-fluid-runtime.mjs', 'native/check-coupler.mjs',
+  'native/check-coupled-convergence.mjs', 'native/check-implicit-coupled.mjs',
+  'native/check-resolved-gap-flow.mjs', 'native/check-resolved-gap-boundary.mjs',
+  'native/check-resolved-gap-join.mjs'
+].sort();
 
 let pass = 0; const failures = [];
 function ok(cond, label, detail){
@@ -59,7 +66,7 @@ section('1. the manifest describes the checkout');
      thing a runner must not do. check-zip.mjs itself is the single exception and
      the exception is named here, not implied: run from inside an unpack it would
      build a zip of the unpack and unpack that, without end. */
-  const dirs = ['faraday', 'dns', 'boundary', 'fsi'];
+  const dirs = ['faraday', 'dns', 'native', 'boundary', 'fsi'];
   const found = [];
   for (const d of dirs)
     for (const f of readdirSync(resolve(REPO, d)))
@@ -105,7 +112,7 @@ section('1. the manifest describes the checkout');
      dropping it fails 2 of that suite's 36 checks from the unpack. It was covered
      all along.)
 
-     So: every source file in these four directories travels, and the list of
+     So: every source file in these five directories travels, and the list of
      things deliberately left out is EMPTY. A file added to one of them fails this
      check until someone decides whether it belongs in the zip. That is the
      intended cost: a decision made once, rather than a glob that would have swept
@@ -115,22 +122,19 @@ section('1. the manifest describes the checkout');
   const should = [];
   for (const d of dirs)
     for (const f of readdirSync(resolve(REPO, d)))
-      if (/\.(mjs|js|html|json|md|cpp|wasm|sh|py)$/.test(f)) should.push(`${d}/${f}`);
+      if (/\.(mjs|js|html|json|md|cpp|hpp|wasm|sh|py)$/.test(f)) should.push(`${d}/${f}`);
   const omitted = should.filter(p => !carried.has(p) && !EXCLUDED.has(p));
   ok(omitted.length === 0,
      `all ${should.length} source files in ${dirs.join('/, ')}/ travel in the zip`,
      omitted.length ? `not in MANIFEST: ${omitted.join(', ')}` : '');
   ok(EXCLUDED.size === 0, 'nothing is deliberately left out', [...EXCLUDED].join(', '));
 
-  /* The slow ones are the two that integrate the three-dimensional solver over
-     many grids and many steps: its own gate, and the gate that holds the C++
-     transcription to the JavaScript bit for bit over a whole drive period. Named
-     here rather than counted, so that a third suite becoming slow is a decision
-     and not a drift. */
+  /* Long fluid trajectories, repeated native compilation/refinement and dense
+     resolved-gap solves are explicitly named. A suite becoming slow therefore
+     requires a reviewed change here; it cannot silently disappear from --fast. */
   const slow = SUITES.filter(s => s.slow).map(s => s.file).sort();
-  ok(slow.length === 2 && slow[0] === 'dns/check-cell3d-wasm.mjs'
-     && slow[1] === 'dns/check-cell3d.mjs',
-     'the slow suites are the two three-dimensional solver gates and only those',
+  ok(JSON.stringify(slow) === JSON.stringify(SLOW_SUITES),
+     'only the declared long fluid, coupled and resolved-gap gates are slow',
      slow.join(', '));
 }
 
@@ -255,10 +259,9 @@ section('6. the runner inside the unpack');
   const fast = spawnSync(process.execPath, [join(U, 'run-checks.mjs'), '--list', '--fast'],
                          { encoding: 'utf8' });
   const fastNamed = fast.stdout.split('\n').map(s => s.trim().split('   ')[0]).filter(Boolean);
-  ok(fastNamed.length === SUITES.length - 2
-     && !fastNamed.includes('dns/check-cell3d.mjs')
-     && !fastNamed.includes('dns/check-cell3d-wasm.mjs'),
-     '--fast leaves out exactly the two slow suites', fastNamed.join(', '));
+  const fastExpected=SUITES.filter(s=>!SLOW_SUITES.includes(s.file)).map(s=>s.name).sort();
+  ok(fast.status === 0 && JSON.stringify(fastNamed.sort())===JSON.stringify(fastExpected),
+     '--fast leaves out exactly the declared slow suites', fastNamed.join(', '));
 
   const bad = spawnSync(process.execPath, [join(U, 'run-checks.mjs'), '--nope'],
                         { encoding: 'utf8' });
