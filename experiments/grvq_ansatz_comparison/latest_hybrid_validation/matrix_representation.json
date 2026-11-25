@@ -1,0 +1,2086 @@
+{
+  "schema": "exact-book-matrix-representation-proof/v1",
+  "status": "complete",
+  "source": {
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "source_commit": "13ec5d881b1447a8bf9de87a1f0dec1773dcef3c",
+    "declared_version": "v18.52.0",
+    "sha256": "84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518",
+    "kernel_factory_sha256": "1ebabaf584049b705450138d957940eabf708a518ad2286fa737da7275d29d61",
+    "scope": "Source formulaOf: BOOK transforms, variable GRVQ, and MSTVQ stress; not the additional browser stagesFrom evolution"
+  },
+  "executor_sha256": "8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c",
+  "identity": "For every exact t=p/q, normalize (c,s,d)=(q^2-p^2,2pq,q^2+p^2) by the same source gcd. Each of the four complete oriented hypercube axes occurs twice. Their rotations commute, so C+iS=product_terms(c+i*s)^2 and D1=product_terms d^2. The original N[i,j]=(-1)^popcount((~i)&j&15)*C^(4-popcount(i xor j))*S^popcount(i xor j), and original D=D1^4. Grouping identical factors retains every coefficient multiplicity.",
+  "matching_axes": [
+    0,
+    1,
+    2,
+    3,
+    0,
+    1,
+    2,
+    3
+  ],
+  "axis_multiplicities": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "representation_selection": "Universal deterministic tensor representation; source_dense is an explicit validation oracle, never a workload fallback",
+  "exact_integer_matrix_entry_equalities": 17920,
+  "exact_cross_multiplied_matrix_entry_equalities": 17920,
+  "bounded_cases": [
+    {
+      "label": "field-derived S1",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S1",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S2",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "82",
+          "d": "1"
+        },
+        {
+          "n": "-10000",
+          "d": "1"
+        },
+        {
+          "n": "9676",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S2",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "82",
+          "d": "1"
+        },
+        {
+          "n": "-10000",
+          "d": "1"
+        },
+        {
+          "n": "9676",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S3",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "108",
+          "d": "1"
+        },
+        {
+          "n": "54",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "1"
+        },
+        {
+          "n": "-172",
+          "d": "1"
+        },
+        {
+          "n": "-171",
+          "d": "1"
+        },
+        {
+          "n": "-331",
+          "d": "1"
+        },
+        {
+          "n": "-441",
+          "d": "1"
+        },
+        {
+          "n": "-685",
+          "d": "1"
+        },
+        {
+          "n": "-405",
+          "d": "1"
+        },
+        {
+          "n": "-275",
+          "d": "1"
+        },
+        {
+          "n": "-107",
+          "d": "1"
+        },
+        {
+          "n": "-116",
+          "d": "1"
+        },
+        {
+          "n": "54",
+          "d": "1"
+        },
+        {
+          "n": "90",
+          "d": "1"
+        },
+        {
+          "n": "108",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S3",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "108",
+          "d": "1"
+        },
+        {
+          "n": "54",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "1"
+        },
+        {
+          "n": "-172",
+          "d": "1"
+        },
+        {
+          "n": "-171",
+          "d": "1"
+        },
+        {
+          "n": "-331",
+          "d": "1"
+        },
+        {
+          "n": "-441",
+          "d": "1"
+        },
+        {
+          "n": "-685",
+          "d": "1"
+        },
+        {
+          "n": "-405",
+          "d": "1"
+        },
+        {
+          "n": "-275",
+          "d": "1"
+        },
+        {
+          "n": "-107",
+          "d": "1"
+        },
+        {
+          "n": "-116",
+          "d": "1"
+        },
+        {
+          "n": "54",
+          "d": "1"
+        },
+        {
+          "n": "90",
+          "d": "1"
+        },
+        {
+          "n": "108",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S4",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "202124652",
+          "d": "1"
+        },
+        {
+          "n": "-11229148",
+          "d": "1"
+        },
+        {
+          "n": "623841",
+          "d": "1"
+        },
+        {
+          "n": "-34658",
+          "d": "1"
+        },
+        {
+          "n": "1925",
+          "d": "1"
+        },
+        {
+          "n": "-107",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "-3638243754",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S4",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "202124652",
+          "d": "1"
+        },
+        {
+          "n": "-11229148",
+          "d": "1"
+        },
+        {
+          "n": "623841",
+          "d": "1"
+        },
+        {
+          "n": "-34658",
+          "d": "1"
+        },
+        {
+          "n": "1925",
+          "d": "1"
+        },
+        {
+          "n": "-107",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "-3638243754",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S5",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "102",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S5",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "102",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S6",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-305",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S6",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-305",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S7",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "13",
+          "d": "59"
+        },
+        {
+          "n": "7",
+          "d": "11"
+        },
+        {
+          "n": "278",
+          "d": "649"
+        },
+        {
+          "n": "-135",
+          "d": "649"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S7",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "13",
+          "d": "59"
+        },
+        {
+          "n": "7",
+          "d": "11"
+        },
+        {
+          "n": "278",
+          "d": "649"
+        },
+        {
+          "n": "-135",
+          "d": "649"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S8",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "19"
+        },
+        {
+          "n": "-154",
+          "d": "19"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S8",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "19"
+        },
+        {
+          "n": "-154",
+          "d": "19"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S9",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-12",
+          "d": "1"
+        },
+        {
+          "n": "-20",
+          "d": "1"
+        },
+        {
+          "n": "-9",
+          "d": "1"
+        },
+        {
+          "n": "-32",
+          "d": "1"
+        },
+        {
+          "n": "-5",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "42",
+          "d": "1"
+        },
+        {
+          "n": "-48",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "30",
+          "d": "1"
+        },
+        {
+          "n": "88",
+          "d": "1"
+        },
+        {
+          "n": "60",
+          "d": "1"
+        },
+        {
+          "n": "130",
+          "d": "1"
+        },
+        {
+          "n": "168",
+          "d": "1"
+        },
+        {
+          "n": "270",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S9",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-12",
+          "d": "1"
+        },
+        {
+          "n": "-20",
+          "d": "1"
+        },
+        {
+          "n": "-9",
+          "d": "1"
+        },
+        {
+          "n": "-32",
+          "d": "1"
+        },
+        {
+          "n": "-5",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "42",
+          "d": "1"
+        },
+        {
+          "n": "-48",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "30",
+          "d": "1"
+        },
+        {
+          "n": "88",
+          "d": "1"
+        },
+        {
+          "n": "60",
+          "d": "1"
+        },
+        {
+          "n": "130",
+          "d": "1"
+        },
+        {
+          "n": "168",
+          "d": "1"
+        },
+        {
+          "n": "270",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S10",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "-13600",
+          "d": "1"
+        },
+        {
+          "n": "13924",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S10",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "-13600",
+          "d": "1"
+        },
+        {
+          "n": "13924",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S11",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "-18",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "209964",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S11",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "-18",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "3888",
+          "d": "1"
+        },
+        {
+          "n": "209964",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S12",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "1"
+        },
+        {
+          "n": "4",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S12",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "1"
+        },
+        {
+          "n": "4",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S13",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-10",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "1"
+        },
+        {
+          "n": "-124",
+          "d": "1"
+        },
+        {
+          "n": "-111",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S13",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-10",
+          "d": "1"
+        },
+        {
+          "n": "-6",
+          "d": "1"
+        },
+        {
+          "n": "-124",
+          "d": "1"
+        },
+        {
+          "n": "-111",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S14",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-1900",
+          "d": "1"
+        },
+        {
+          "n": "118",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S14",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-1900",
+          "d": "1"
+        },
+        {
+          "n": "118",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S15",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "6480",
+          "d": "1"
+        },
+        {
+          "n": "-30240",
+          "d": "1"
+        },
+        {
+          "n": "51840",
+          "d": "1"
+        },
+        {
+          "n": "-38880",
+          "d": "1"
+        },
+        {
+          "n": "10800",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S15",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "6480",
+          "d": "1"
+        },
+        {
+          "n": "-30240",
+          "d": "1"
+        },
+        {
+          "n": "51840",
+          "d": "1"
+        },
+        {
+          "n": "-38880",
+          "d": "1"
+        },
+        {
+          "n": "10800",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S16",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "6480",
+          "d": "1"
+        },
+        {
+          "n": "-12960",
+          "d": "1"
+        },
+        {
+          "n": "6480",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S16",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "6480",
+          "d": "1"
+        },
+        {
+          "n": "-12960",
+          "d": "1"
+        },
+        {
+          "n": "6480",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S17",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "1",
+          "d": "5"
+        },
+        {
+          "n": "38",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "-4",
+          "d": "1"
+        },
+        {
+          "n": "76",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S17",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "1",
+          "d": "5"
+        },
+        {
+          "n": "38",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "-4",
+          "d": "1"
+        },
+        {
+          "n": "76",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S18",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-1",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S18",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-1",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S19",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-13",
+          "d": "1"
+        },
+        {
+          "n": "-10",
+          "d": "1"
+        },
+        {
+          "n": "-4",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S19",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-13",
+          "d": "1"
+        },
+        {
+          "n": "-10",
+          "d": "1"
+        },
+        {
+          "n": "-4",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S20",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "4",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S20",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "4",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "8",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        },
+        {
+          "n": "7",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S21",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "131",
+          "d": "1"
+        },
+        {
+          "n": "56",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S21",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "131",
+          "d": "1"
+        },
+        {
+          "n": "56",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        },
+        {
+          "n": "18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S22",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "-254",
+          "d": "1"
+        },
+        {
+          "n": "41772",
+          "d": "1"
+        },
+        {
+          "n": "-1643032",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S22",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "118",
+          "d": "1"
+        },
+        {
+          "n": "-254",
+          "d": "1"
+        },
+        {
+          "n": "41772",
+          "d": "1"
+        },
+        {
+          "n": "-1643032",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S23",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "82",
+          "d": "1"
+        },
+        {
+          "n": "-6400",
+          "d": "1"
+        },
+        {
+          "n": "6724",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S23",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "82",
+          "d": "1"
+        },
+        {
+          "n": "-6400",
+          "d": "1"
+        },
+        {
+          "n": "6724",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S24",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "342",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S24",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "342",
+          "d": "1"
+        },
+        {
+          "n": "9",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S25",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "98",
+          "d": "1"
+        },
+        {
+          "n": "68",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S25",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "6",
+          "d": "1"
+        },
+        {
+          "n": "98",
+          "d": "1"
+        },
+        {
+          "n": "68",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S26",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "144",
+          "d": "1"
+        },
+        {
+          "n": "114",
+          "d": "1"
+        },
+        {
+          "n": "74",
+          "d": "1"
+        },
+        {
+          "n": "-86",
+          "d": "1"
+        },
+        {
+          "n": "-79",
+          "d": "1"
+        },
+        {
+          "n": "-63",
+          "d": "1"
+        },
+        {
+          "n": "-18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S26",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "144",
+          "d": "1"
+        },
+        {
+          "n": "114",
+          "d": "1"
+        },
+        {
+          "n": "74",
+          "d": "1"
+        },
+        {
+          "n": "-86",
+          "d": "1"
+        },
+        {
+          "n": "-79",
+          "d": "1"
+        },
+        {
+          "n": "-63",
+          "d": "1"
+        },
+        {
+          "n": "-18",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S27",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "19"
+        },
+        {
+          "n": "8",
+          "d": "19"
+        },
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "228",
+          "d": "1"
+        },
+        {
+          "n": "190",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S27",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "3",
+          "d": "19"
+        },
+        {
+          "n": "8",
+          "d": "19"
+        },
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "228",
+          "d": "1"
+        },
+        {
+          "n": "190",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S28",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "-362",
+          "d": "19"
+        },
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-1",
+          "d": "19"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S28",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "-362",
+          "d": "19"
+        },
+        {
+          "n": "-19",
+          "d": "1"
+        },
+        {
+          "n": "-1",
+          "d": "19"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S29",
+      "strength": "1/29",
+      "terms": [
+        {
+          "n": "311040",
+          "d": "1"
+        },
+        {
+          "n": "-2695680",
+          "d": "1"
+        },
+        {
+          "n": "8916480",
+          "d": "1"
+        },
+        {
+          "n": "-13478400",
+          "d": "1"
+        },
+        {
+          "n": "6220800",
+          "d": "1"
+        },
+        {
+          "n": "8501760",
+          "d": "1"
+        },
+        {
+          "n": "-13893120",
+          "d": "1"
+        },
+        {
+          "n": "7672320",
+          "d": "1"
+        },
+        {
+          "n": "-1555200",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "field-derived S29",
+      "strength": "-2/7",
+      "terms": [
+        {
+          "n": "311040",
+          "d": "1"
+        },
+        {
+          "n": "-2695680",
+          "d": "1"
+        },
+        {
+          "n": "8916480",
+          "d": "1"
+        },
+        {
+          "n": "-13478400",
+          "d": "1"
+        },
+        {
+          "n": "6220800",
+          "d": "1"
+        },
+        {
+          "n": "8501760",
+          "d": "1"
+        },
+        {
+          "n": "-13893120",
+          "d": "1"
+        },
+        {
+          "n": "7672320",
+          "d": "1"
+        },
+        {
+          "n": "-1555200",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "signed distinct rational coefficients",
+      "strength": "1",
+      "terms": [
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "13",
+          "d": "11"
+        },
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "signed distinct rational coefficients",
+      "strength": "-3/4",
+      "terms": [
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "13",
+          "d": "11"
+        },
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "signed distinct rational coefficients",
+      "strength": "0",
+      "terms": [
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "13",
+          "d": "11"
+        },
+        {
+          "n": "2",
+          "d": "3"
+        },
+        {
+          "n": "-7",
+          "d": "5"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "all source identity coefficients",
+      "strength": "1",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "all source identity coefficients",
+      "strength": "-3/4",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "all source identity coefficients",
+      "strength": "0",
+      "terms": [
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        },
+        {
+          "n": "0",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "quarter-turn signs and orientation",
+      "strength": "1",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "-1",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "-3",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "quarter-turn signs and orientation",
+      "strength": "-3/4",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "-1",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "-3",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "quarter-turn signs and orientation",
+      "strength": "0",
+      "terms": [
+        {
+          "n": "1",
+          "d": "1"
+        },
+        {
+          "n": "-1",
+          "d": "1"
+        },
+        {
+          "n": "2",
+          "d": "1"
+        },
+        {
+          "n": "-3",
+          "d": "1"
+        },
+        {
+          "n": "5",
+          "d": "1"
+        }
+      ],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "empty exact identity",
+      "strength": "1",
+      "terms": [],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "empty exact identity",
+      "strength": "-3/4",
+      "terms": [],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    },
+    {
+      "label": "empty exact identity",
+      "strength": "0",
+      "terms": [],
+      "equal_integer_entries": 256,
+      "identical_unreduced_denominator": true
+    }
+  ],
+  "long_period": {
+    "sutra": 1,
+    "denominator": "3709",
+    "coefficient_count": 3708,
+    "independent_long_division_equal": true,
+    "exact_repetend_reconstruction": true,
+    "digits_sha256": "bd6b623d771ca6a807c009128cda16895cbe7b03b224c72b69462fdaa4b44fd1",
+    "matrix_construction_ms": 25.53682299999997,
+    "denominator_bits": 283543,
+    "visited_terms": 3708,
+    "zero_identity_terms": 370,
+    "nonzero_terms": 3338,
+    "source_matching_rotations": 26704,
+    "grouped_multiplicities": [
+      371,
+      371,
+      370,
+      371,
+      371,
+      371,
+      371,
+      371,
+      371
+    ],
+    "exact_gaussian_norm_identity": true,
+    "exact_split_recomposition_identity": true,
+    "split_after_coefficient": 1733,
+    "no_coefficients_omitted": true,
+    "unreduced_source_denominator_preserved": true
+  }
+}

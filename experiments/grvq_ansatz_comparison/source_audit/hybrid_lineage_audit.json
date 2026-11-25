@@ -1,0 +1,167 @@
+{
+  "schema": "grvq-feedback-source-lineage/v2",
+  "recorded_utc": "2026-11-23",
+  "restoration": {
+    "status": "restored source; new executions must supply their own actual results and hashes",
+    "preserved_commit": "8d21a1e",
+    "cause": "The original completed local execution became inaccessible when the shared execution environment was lost.",
+    "executable_provenance": "The quantum runner and coordinator were reconstructed under new provenance. They are not claimed to be byte-identical to the inaccessible original files.",
+    "presentation_provenance": "The report and notebook builders were recovered from the retained complete source text and edits, then updated to describe this restoration. Original file bytes cannot be independently rehashed.",
+    "actual_output_policy": "Reports and notebooks read only genuine outputs produced by the new executable run. Historical measurements are never inserted into a new results.json.",
+    "historical_observation_file": "../recovery/completed_sweep_observation_2026-11-23.json",
+    "executable_hash_policy": "Each actual run records hashes of its current source files and its runtime versions.",
+    "original_raw_output_recovered": false
+  },
+  "source_kernel": {
+    "path": "vedic_v18.51.1_exact_phi.html",
+    "sha256": "84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518",
+    "source_commit": "13ec5d881b1447a8bf9de87a1f0dec1773dcef3c",
+    "declared_version": "18.52.0",
+    "date_utc": "2026-11-17T02:24:40Z",
+    "selected_functions": [
+      "BOOK.operandsOf",
+      "BOOK.terms",
+      "BOOK.matrixOf",
+      "applySutraCore",
+      "distributedGRVQ",
+      "distributedMSTVQ",
+      "inverseL",
+      "injectLambda"
+    ],
+    "scope": "Source formulaOf: BOOK transformations, variable GRVQ and MSTVQ stress; not the remaining browser stagesFrom evolution."
+  },
+  "source_circuit": {
+    "title": "vedic_v21 4.html",
+    "library_file_id": "libfile_b8d902b1cd0081919c708e5dcf75a4ba",
+    "file_id": "file_00000000c37c71fa908729af9a581d51",
+    "created_utc": "2026-04-18T22:08:11.225406Z",
+    "read_lines": [
+      3229,
+      3383
+    ],
+    "prior_full_file_sha256": "1ea3d56f01541181ba2ffafa536f00405198afcfddc5518e3a2e29f8731aeccd",
+    "prior_hash_status": "Inherited full-file hash; the prior local run reread the source excerpt, not the full bytes for a new hash.",
+    "excerpt_file": "april_ansatz_source_excerpt.json",
+    "excerpt_preserved_commit": "8d21a1e",
+    "excerpt_blob_sha": "8b60af34419a8c491e85c15c3e91d1809f10fc68",
+    "nqubits": 4,
+    "layers": 3,
+    "initial_state": "|0000>",
+    "layer_gate_order": [
+      "Ry(0)",
+      "Ry(1)",
+      "Ry(2)",
+      "Ry(3)",
+      "CX(0,1)",
+      "CX(1,2)",
+      "CX(2,3)"
+    ],
+    "final_layer_entanglers": true,
+    "hamiltonian": "sum(q=0..3,lambda[q]*Z[q]) + 1/2*sum(q=0..2,Z[q]*Z[q+1])",
+    "exact_rotation": "Ry(4 atan(t)) = [[1-t^2,-2t],[2t,1-t^2]]/(1+t^2)"
+  },
+  "feedback_repair": {
+    "intended_source_expression": "delta_lambda[q] = -0.001 * expectation(Z[q])",
+    "old_executed_expression": "round(-expectation(Z[q])) / 1000000, subject to floating-point energy and nudge thresholds",
+    "Bi_source_line": 395,
+    "new_exact_expression": "delta_lambda[q] = -expectation(Z[q]) / 1000",
+    "state_update": "injectLambda(afterB,q,delta_lambda[q]) for all four q",
+    "exclusions_removed": [
+      "probability < 1e-15 skip in source computeEnergy",
+      "abs(energy) < 1e-12 feedback skip",
+      "abs(nudge) <= 1e-10 skip",
+      "floating-point/BigInt quantization of feedback"
+    ]
+  },
+  "research_schedule": {
+    "outer_step": "one complete source formula pass, fixed-lambda quantum coordinate optimization, then all four quantum-feedback injections",
+    "time_increment": "source SIM_DT=16667/50000",
+    "source_UI_schedule": "The April UI invoked energy/feedback every30 cycles and parameter-shift updates every60, with additional selected-sutra hooks. This experiment declares a different outer-step schedule.",
+    "optimizer": "Finite rational Cayley coordinate grid, exact energy comparisons, twelve coordinates and four default sweeps; not the source floating-point parameter-shift optimizer.",
+    "default_factors": {
+      "modes": [
+        "SERIES",
+        "PARALLEL",
+        "SYMMETRIC_CONCURRENT"
+      ],
+      "strengths": [
+        "1/29",
+        "1/58"
+      ],
+      "seeds": [
+        7,
+        19,
+        43
+      ],
+      "feedback": "both",
+      "steps": 2,
+      "sweeps": 4,
+      "grid_denominator": 8
+    },
+    "scheduling": "Mathematical composition is independent of case-worker and PARALLEL branch-worker scheduling."
+  },
+  "repetend_domain_repair": {
+    "source_guard": "period10 rejected denominators greater than 999",
+    "repair": "Remove the artificial three-digit guard and compute every required complete base-10 repetend. No lambda scaling, clipping or replacement operand.",
+    "retained_mathematical_examples": [
+      {
+        "denominator": 4269,
+        "period": 158
+      },
+      {
+        "denominator": 4267,
+        "period": 400
+      },
+      {
+        "denominator": 3709,
+        "period": 3708
+      }
+    ],
+    "scope": "BOOK equations and matrix coefficients retain their source semantics; the accepted computational domain is extended."
+  },
+  "exact_matrix_representation": {
+    "identity": "For source-normalized (c,s,d)=(q^2-p^2,2pq,q^2+p^2)/g, the four complete oriented hypercube axes occur twice. C+iS=product_terms(c+i*s)^2 and D1=product_terms d^2. N[i,j]=(-1)^popcount((~i)&j&15)*C^(4-popcount(i xor j))*S^popcount(i xor j), D=D1^4.",
+    "matching_axes": [
+      0,
+      1,
+      2,
+      3,
+      0,
+      1,
+      2,
+      3
+    ],
+    "selection": "Universal deterministic tensor representation; explicit source-dense multiplication serves as the validation oracle.",
+    "preservation": "Every coefficient multiplicity, source-defined exact-zero identity, and all256 matrix entries are retained. Literal dense multiplication organization changes; the exact source matrix and denominator do not.",
+    "new_evidence_policy": "Use only actually regenerated source-parity, matrix, backend and independent-output proof files. Their own status and source hashes are authoritative.",
+    "expected_evidence_files": [
+      "../latest_hybrid_validation/validation.json",
+      "../latest_hybrid_validation/matrix_representation.json",
+      "../latest_hybrid_backend_validation/backend_equivalence.json",
+      "../latest_hybrid_results/independent_output_audit.json"
+    ],
+    "unavailable_historical_proof": "The original twenty-trajectory dense-to-tensor equivalence checkpoints are unavailable. Their observed counts are historical only; no current equivalence file is linked or claimed."
+  },
+  "interpretation": {
+    "lambda_modes": "Four signed source inverseL coefficients from a16-component field; not four positive radial shell widths.",
+    "radial_product_comparison": "Earlier R2/R4 product benchmarks and the unavailable refinement export remain separate from this feedback experiment.",
+    "diagnostic_ground_energy": "Exact minimum of16 current diagonal Hamiltonian levels, used diagnostically; it does not choose variational parameters.",
+    "energy_across_steps": "The Hamiltonian changes between steps and modes. Raw energy comparisons do not establish fixed-objective convergence or a universal best ansatz.",
+    "unintegrated_browser_stages": [
+      "MAG",
+      "TGCR",
+      "ZPE",
+      "Maya auxiliary evolution"
+    ],
+    "mstvq_records": "S2/S3/S29 book B records are source diagnostics; distributedMSTVQ recomputes consumed stress from the final field."
+  },
+  "prior_export_recovery": {
+    "searched_names": [
+      "GRVQ_Hybrid_Runnable_2026-11-22.zip",
+      "GRVQ_Hybrid_Full_Data_2026-11-22.zip",
+      "refinement_report.html"
+    ],
+    "result": "Prior exact-title search and recent Library metadata listing found no matching earlier export. No recovery of the historical336-case refinement is claimed.",
+    "current_scope": "Genuine newly executed primary36-trajectory feedback sweep, with complete actual outputs."
+  }
+}

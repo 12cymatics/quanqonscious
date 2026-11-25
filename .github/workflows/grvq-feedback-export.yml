@@ -1,0 +1,121 @@
+name: Complete quantum GRVQ feedback export
+on:
+  push:
+    branches: ['research/grvq-ansatz-comparison-2026-11-22']
+    paths:
+      - '.github/workflows/grvq-feedback-export.yml'
+      - 'experiments/grvq_ansatz_comparison/*.py'
+      - 'experiments/grvq_ansatz_comparison/*.cjs'
+      - 'tests/test_exact_expression_dag.py'
+      - 'tests/test_feedback_trajectories.py'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: grvq-feedback-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  complete:
+    if: github.ref == 'refs/heads/research/grvq-ansatz-comparison-2026-11-22'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install declared dependencies
+        run: |
+          python -m pip install -r experiments/grvq_ansatz_comparison/requirements-feedback.txt
+      - name: Verify recovered field and arithmetic identities
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected = {
+              'vedic_v18.51.1_exact_phi.html': '84f90f7cee7592c2cb5ee6d4719e5b5a3d3bd3c4f00c787d00ee3481cfaa0518',
+              'experiments/grvq_ansatz_comparison/exact_dag.cjs': '0d2c4e5a777821fa6853d814975627503913aa8fc77b20831f3bdd08630e26b1',
+              'experiments/grvq_ansatz_comparison/latest_hybrid_executor.cjs': '8fc00d08111601d700c48f7257e00e69d2d4858fdaf000f1cb82fa83a11c0c5c',
+          }
+          for name, wanted in expected.items():
+              actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              assert actual == wanted, (name, actual, wanted)
+              print(name, actual)
+          PY
+      - name: Execute exact arithmetic and circuit tests
+        run: |
+          node --check experiments/grvq_ansatz_comparison/hybrid_quantum.cjs
+          python -m pytest -q tests/test_exact_expression_dag.py tests/test_feedback_trajectories.py
+      - name: Execute all source and matrix identity controls
+        run: |
+          node experiments/grvq_ansatz_comparison/verify_latest_hybrid.cjs
+          node experiments/grvq_ansatz_comparison/verify_matrix_representation.cjs
+      - name: Execute the complete 36 trajectory sweep
+        run: |
+          python -m experiments.grvq_ansatz_comparison.run_latest_hybrid --output experiments/grvq_ansatz_comparison/latest_hybrid_results --workers 2
+      - name: Audit every exact quantum state and feedback transition
+        run: |
+          python experiments/grvq_ansatz_comparison/verify_feedback_outputs.py
+      - name: Execute and verify the two worker coupled control
+        run: |
+          python -m experiments.grvq_ansatz_comparison.run_latest_hybrid --workers-control --sweep-input experiments/grvq_ansatz_comparison/latest_hybrid_results --output experiments/grvq_ansatz_comparison/latest_hybrid_backend_validation/workers_case
+          python experiments/grvq_ansatz_comparison/verify_backend_equivalence.py
+      - name: Record the actual execution environment
+        run: |
+          python - <<'PY'
+          import json, os, platform, subprocess
+          from pathlib import Path
+          record = {
+              'execution': 'github_actions',
+              'source_commit': os.environ['GITHUB_SHA'],
+              'workflow_run': 'https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
+              'python': platform.python_version(),
+              'node': subprocess.check_output(['node', '--version'], text=True).strip(),
+              'packages': subprocess.check_output(['python', '-m', 'pip', 'freeze'], text=True).splitlines(),
+              'provenance': 'A newly executed full sweep after restoration of the byte-identical field executor and reconstruction of the quantum runner. Original local-run observations are preserved separately; these are newly generated result bytes.',
+              'qbraid': 'No returned provider verification is claimed for this run.'
+          }
+          Path('experiments/grvq_ansatz_comparison/latest_hybrid_results/execution_environment.json').write_text(json.dumps(record, indent=2) + '\n')
+          PY
+      - name: Build and execute the complete notebook
+        run: |
+          python experiments/grvq_ansatz_comparison/build_feedback_notebook.py --execute --executor jupyter
+      - name: Package and verify the complete standalone export
+        run: |
+          python experiments/grvq_ansatz_comparison/pack_feedback_export.py
+      - name: Retain the verified standalone archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GRVQ_Quantum_Feedback_Sweep_2026-11-23
+          path: |
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.zip
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.sha256
+            dist/GRVQ_Quantum_Feedback_Sweep_2026-11-23.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
+      - name: Preserve all completed data on the research branch
+        run: |
+          git add --force experiments/grvq_ansatz_comparison/latest_hybrid_results experiments/grvq_ansatz_comparison/latest_hybrid_validation experiments/grvq_ansatz_comparison/latest_hybrid_backend_validation experiments/grvq_ansatz_comparison/START_HERE.ipynb
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Retain complete exact quantum GRVQ feedback trajectories and executed notebook'
+          git push origin HEAD:refs/heads/research/grvq-ansatz-comparison-2026-11-22
+      - name: Retain actual diagnostic records on any failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: GRVQ_feedback_failure_records
+          path: |
+            experiments/grvq_ansatz_comparison/latest_hybrid_results/
+            experiments/grvq_ansatz_comparison/latest_hybrid_validation/
+            experiments/grvq_ansatz_comparison/latest_hybrid_backend_validation/
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 90

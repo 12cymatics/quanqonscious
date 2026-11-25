@@ -1,0 +1,152 @@
+{
+  "schema": "grvq-historical-completed-sweep-observation/v1",
+  "status": "historical_observation_only",
+  "observed_date_utc": "2026-11-23",
+  "scope": "The original local completed feedback sweep, before execution-environment loss.",
+  "evidence_basis": "Retained tool outputs, report analysis output, and agent audit messages observed during the original completed run.",
+  "original_raw_outputs_recovered": false,
+  "original_files_currently_accessible": false,
+  "original_file_hash_can_be_reverified": false,
+  "not_new_run_data": true,
+  "original_results_sha256": "378d9188fb150932050e3d0538e1b0f6fe7ee756aa34056aa02fa6ed34a06796",
+  "original_results_workspace_path": "/workspace/scratch/ce2b4590a32f/quanqonscious/experiments/grvq_ansatz_comparison/latest_hybrid_results/results.json",
+  "measured_completion": {
+    "status": "observed complete",
+    "trajectories": 36,
+    "frames": 72,
+    "failed_cases": 0,
+    "elapsed_seconds": 229.62960682799985,
+    "feedback_pairs": 18,
+    "qasm_circuits": 288
+  },
+  "configuration": {
+    "modes": [
+      "SERIES",
+      "PARALLEL",
+      "SYMMETRIC_CONCURRENT"
+    ],
+    "strengths": [
+      "1/29",
+      "1/58"
+    ],
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "feedback": "both",
+    "steps": 2,
+    "sweeps": 4,
+    "grid_denominator": 8,
+    "workers": 2,
+    "parallel_backend": "serial",
+    "branch_workers": 2
+  },
+  "measured_totals": {
+    "core_method_calls": 2784,
+    "distributed_grvq_updates": 1800,
+    "coordinate_lines": 3456,
+    "circuit_evaluations": 35613,
+    "candidate_energy_comparisons": 58752,
+    "accepted_updates": 644
+  },
+  "measured_energy_changes": {
+    "certified_lower": 64,
+    "exactly_equal_expression": 8,
+    "certified_higher": 0,
+    "unresolved_by_summary_bounds": 0
+  },
+  "measured_feedback": {
+    "pairs_sharing_initial_formula": 18,
+    "pairs_with_changed_second_step_input": 18,
+    "all_frames_consumed_all29": true
+  },
+  "measured_modes": [
+    {
+      "composition": "SERIES",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 696,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 0.1498072380609352,
+      "minimum_energy_gap_display": 0.0006541340554639169,
+      "maximum_energy_gap_display": 0.6943818730285184,
+      "median_ground_fidelity_exact": "3829575085405652975616/3914478156531337890625",
+      "median_ground_fidelity_display": 0.9783105007281689,
+      "minimum_ground_fidelity_display": 0.7060067319353389,
+      "maximum_ground_fidelity_display": 0.9869978381726248,
+      "exact_zero_gap_frames": 0
+    },
+    {
+      "composition": "PARALLEL",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 696,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 68.20405240062452,
+      "minimum_energy_gap_display": 5.643030930170978,
+      "maximum_energy_gap_display": 4190.0674367642505,
+      "median_ground_fidelity_exact": "38857543392661250284615708562841/40361626470819675513456641559961",
+      "median_ground_fidelity_display": 0.9627348248900268,
+      "minimum_ground_fidelity_display": 0.003406727455815119,
+      "maximum_ground_fidelity_display": 0.9829428852564185,
+      "exact_zero_gap_frames": 0
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "trajectories": 12,
+      "frames": 24,
+      "core_method_calls": 1392,
+      "distributed_grvq_updates": 600,
+      "median_energy_gap_display": 0.2620937169513601,
+      "minimum_energy_gap_display": 0.05841914741032439,
+      "maximum_energy_gap_display": 4.594928084204261,
+      "median_ground_fidelity_exact": "99760282590180165512860224/103734240000651872298215281",
+      "median_ground_fidelity_display": 0.9616909767647911,
+      "minimum_ground_fidelity_display": 0.000014293587465509056,
+      "maximum_ground_fidelity_display": 0.9818045179158627,
+      "exact_zero_gap_frames": 0
+    }
+  ],
+  "historical_validation_observations": {
+    "independent_output_audit": {
+      "frames": 72,
+      "exact_quantum_amplitudes": 1152,
+      "field_feedback_identities": 1152,
+      "projected_lambda_increments": 288,
+      "source_coefficient_occurrences": 45812,
+      "extended_repetend_occurrences": 24
+    },
+    "source_dense_matrix_comparison": {
+      "cases": 70,
+      "exact_integer_entry_equalities": 17920,
+      "exact_cross_multiplied_entry_equalities": 17920
+    },
+    "long_period": {
+      "denominator": 3709,
+      "coefficient_count": 3708,
+      "zero_identity_terms": 370,
+      "nonzero_terms": 3338,
+      "source_matching_rotations": 26704,
+      "independent_long_division_equal": true,
+      "exact_split_recomposition_identity": true
+    },
+    "original_trajectory_representation_equivalence": {
+      "completed_original_cases": 20,
+      "frames": 40,
+      "exact_field_digest_equalities": 1920,
+      "matrix_applications": 1160,
+      "identical_source_coefficient_occurrences": 19148,
+      "raw_checkpoints_available": false,
+      "current_proof_claimed": false
+    }
+  },
+  "original_notebook_observation": {
+    "actual_code_cells_executed": 9,
+    "errors": 0,
+    "widget_state_entries": 48,
+    "execution_engine": "IPython InteractiveShell in-process"
+  },
+  "provider_verification": "No completed qBraid verification record was recovered; no new provider verification is inferred.",
+  "interpretation": "Original measurements establish what was observed then. They do not substitute for new trajectory files, a new execution, current validation proofs, or present archive availability."
+}

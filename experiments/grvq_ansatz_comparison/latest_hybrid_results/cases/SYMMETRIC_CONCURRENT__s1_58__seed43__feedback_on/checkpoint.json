@@ -1,0 +1,97 @@
+{
+  "schema": "grvq-quantum-feedback-checkpoint/v2",
+  "next_step": 2,
+  "configuration": {
+    "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed43__feedback_on",
+    "composition": "SYMMETRIC_CONCURRENT",
+    "strength": "1/58",
+    "seed": 43,
+    "feedback": true,
+    "steps": 2,
+    "sweeps": 4,
+    "grid_denominator": 8,
+    "branch_workers": 2,
+    "backend": "serial",
+    "initial_parameters": [
+      "-3/8",
+      "-1/8",
+      "1/4",
+      "3/8",
+      "-1/4",
+      "0",
+      "-1/8",
+      "1/4",
+      "1/4",
+      "3/8",
+      "-3/8",
+      "0"
+    ]
+  },
+  "field": [
+    {
+      "_expr": 37474
+    },
+    {
+      "_expr": 37475
+    },
+    {
+      "_expr": 37476
+    },
+    {
+      "_expr": 37477
+    },
+    {
+      "_expr": 37478
+    },
+    {
+      "_expr": 37479
+    },
+    {
+      "_expr": 37480
+    },
+    {
+      "_expr": 37481
+    },
+    {
+      "_expr": 37482
+    },
+    {
+      "_expr": 37483
+    },
+    {
+      "_expr": 37484
+    },
+    {
+      "_expr": 37485
+    },
+    {
+      "_expr": 37486
+    },
+    {
+      "_expr": 37487
+    },
+    {
+      "_expr": 37488
+    },
+    {
+      "_expr": 37489
+    }
+  ],
+  "time": {
+    "_expr": 37569
+  },
+  "parameters": [
+    "1/8",
+    "-3/8",
+    "1/2",
+    "3/8",
+    "-3/8",
+    "0",
+    "-1",
+    "0",
+    "1/4",
+    "3/8",
+    "-3/8",
+    "-3/8"
+  ]
+}

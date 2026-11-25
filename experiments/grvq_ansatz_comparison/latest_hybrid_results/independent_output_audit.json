@@ -1,0 +1,599 @@
+{
+  "schema": "grvq-feedback-independent-output-audit/v1",
+  "status": "passed",
+  "suite_results_sha256": "2c1989a6ebc91c735161f530d9566434223bb19257ff78c9f365a19afb35c2d1",
+  "cases": [
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_29__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SERIES__s1_58__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_29__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed19__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed19__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed43__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed43__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed7__feedback_off",
+      "frames": 2,
+      "exact_checks_passed": true
+    },
+    {
+      "case_id": "SYMMETRIC_CONCURRENT__s1_58__seed7__feedback_on",
+      "frames": 2,
+      "exact_checks_passed": true
+    }
+  ],
+  "counts": {
+    "frames": 72,
+    "quantum_amplitude_equalities": 1152,
+    "field_feedback_equalities": 1152,
+    "lambda_feedback_equalities": 288,
+    "core_method_calls": 2784,
+    "distributed_grvq_updates": 1800,
+    "coordinate_lines": 3456,
+    "candidate_comparison_certificates": 58752,
+    "complete_source_coefficients_consumed": 45812
+  },
+  "paired_controls": [
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/29",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "PARALLEL",
+      "strength": "1/58",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/29",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SERIES",
+      "strength": "1/58",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/29",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 19,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 43,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    },
+    {
+      "composition": "SYMMETRIC_CONCURRENT",
+      "strength": "1/58",
+      "seed": 7,
+      "identical_initial_conditions": true,
+      "second_step_input_changed_by_feedback": true
+    }
+  ],
+  "source_projection_basis": {
+    "projection": [
+      [
+        "1",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "1",
+        "0",
+        "0"
+      ],
+      [
+        "0",
+        "0",
+        "1",
+        "0"
+      ],
+      [
+        "0",
+        "0",
+        "0",
+        "1"
+      ]
+    ],
+    "images": [
+      [
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1",
+        "-1",
+        "1"
+      ],
+      [
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "-1",
+        "-1",
+        "1",
+        "1"
+      ],
+      [
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      [
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "-1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ]
+    ]
+  },
+  "extended_repetend_checks": [
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed19__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed43__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "4269",
+      "complete_digits": 158
+    },
+    {
+      "case_id": "PARALLEL__s1_29__seed7__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "4267",
+      "complete_digits": 400
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed19__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed43__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_off",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_off",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_on",
+      "step": 1,
+      "id": 1,
+      "denominator": "3709",
+      "complete_digits": 3708
+    },
+    {
+      "case_id": "PARALLEL__s1_58__seed7__feedback_on",
+      "step": 1,
+      "id": 12,
+      "denominator": "3707",
+      "complete_digits": 336
+    }
+  ],
+  "arithmetic": "Python Fraction for quantum evolution and feedback identities; source exact-expression commitments and retained decision certificates"
+}

@@ -1,0 +1,97 @@
+{
+  "schema": "grvq-quantum-feedback-checkpoint/v2",
+  "next_step": 2,
+  "configuration": {
+    "case_id": "SERIES__s1_29__seed7__feedback_on",
+    "composition": "SERIES",
+    "strength": "1/29",
+    "seed": 7,
+    "feedback": true,
+    "steps": 2,
+    "sweeps": 4,
+    "grid_denominator": 8,
+    "branch_workers": 2,
+    "backend": "serial",
+    "initial_parameters": [
+      "-1/8",
+      "-1/4",
+      "0",
+      "1/4",
+      "-3/8",
+      "-3/8",
+      "3/8",
+      "1/8",
+      "-3/8",
+      "-1/8",
+      "1/8",
+      "-3/8"
+    ]
+  },
+  "field": [
+    {
+      "_expr": 38172
+    },
+    {
+      "_expr": 38173
+    },
+    {
+      "_expr": 38174
+    },
+    {
+      "_expr": 38175
+    },
+    {
+      "_expr": 38176
+    },
+    {
+      "_expr": 38177
+    },
+    {
+      "_expr": 38178
+    },
+    {
+      "_expr": 38179
+    },
+    {
+      "_expr": 38180
+    },
+    {
+      "_expr": 38181
+    },
+    {
+      "_expr": 38182
+    },
+    {
+      "_expr": 38183
+    },
+    {
+      "_expr": 38184
+    },
+    {
+      "_expr": 38185
+    },
+    {
+      "_expr": 38186
+    },
+    {
+      "_expr": 38187
+    }
+  ],
+  "time": {
+    "_expr": 38267
+  },
+  "parameters": [
+    "-1",
+    "-1/8",
+    "-1/4",
+    "-3/8",
+    "0",
+    "-1/2",
+    "3/4",
+    "0",
+    "-1",
+    "-1/4",
+    "1/2",
+    "-3/8"
+  ]
+}

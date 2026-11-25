@@ -1,0 +1,164 @@
+"use strict";
+
+// Exact quantum moments remain small rational numbers. The evolving GRVQ
+// coefficients stay in the source kernel's exact expression arena throughout.
+const fs = require("node:fs");
+const path = require("node:path");
+const crypto = require("node:crypto");
+const zlib = require("node:zlib");
+const { performance } = require("node:perf_hooks");
+const E = require("./latest_hybrid_executor.cjs");
+const hash = x => crypto.createHash("sha256").update(x).digest("hex");
+const QUANTUM_SOURCE_SHA256 = "1ea3d56f01541181ba2ffafa536f00405198afcfddc5518e3a2e29f8731aeccd";
+const abs = x => x < 0n ? -x : x;
+function gcd(a,b) { a=abs(a);b=abs(b);while(b)[a,b]=[b,a%b];return a; }
+function mk(n,d=1n) {
+  if(typeof n!=="bigint"||typeof d!=="bigint")throw new TypeError("Rational operands must use BigInt");
+  if(d===0n)throw new RangeError("Exact division by zero");if(d<0n){n=-n;d=-d;}
+  const g=gcd(n,d);return {n:n/g,d:d/g};
+}
+const ZERO=mk(0n),ONE=mk(1n),TWO=mk(2n),HALF=mk(1n,2n);
+function parse(x) { if(typeof x!=="string"||!/^[+-]?\d+(?:\/[+-]?\d+)?$/.test(x))throw new TypeError("Use an exact rational string");const a=x.split("/");return mk(BigInt(a[0]),a[1]===undefined?1n:BigInt(a[1])); }
+const textQ = q => q.d===1n?q.n.toString():`${q.n}/${q.d}`;
+function add(a,b) { const g=gcd(a.d,b.d);return mk(a.n*(b.d/g)+b.n*(a.d/g),(a.d/g)*b.d); }
+const neg = a => ({n:-a.n,d:a.d});
+const sub = (a,b) => add(a,neg(b));
+function mul(a,b) { const g=gcd(a.n,b.d),h=gcd(b.n,a.d);return {n:(a.n/g)*(b.n/h),d:(a.d/h)*(b.d/g)}; }
+const div = (a,b) => { if(!b.n)throw new RangeError("Exact division by zero");return mul(a,mk(b.d,b.n)); };
+const eq = (a,b) => a.n===b.n&&a.d===b.d;
+const sum = a => a.reduce(add,ZERO);
+const scalarQ = (Q,a) => Q.mk(a.n,a.d);
+
+function circuitState(parameters) {
+  if(!Array.isArray(parameters)||parameters.length!==12)throw new RangeError("The source circuit has exactly twelve Ry parameters");
+  parameters=parameters.map(p=>typeof p==="string"?parse(p):mk(p.n,p.d));
+  let state=Array.from({length:16},(_,i)=>i===0?ONE:ZERO);
+  for(let layer=0;layer<3;layer++) {
+    for(let q=0;q<4;q++) {
+      const t=parameters[layer*4+q],tt=mul(t,t),den=add(ONE,tt),c=div(sub(ONE,tt),den),s=div(mul(TWO,t),den);
+      const next=state.slice(),bit=1<<q;
+      for(let i=0;i<16;i++)if(!(i&bit)) { const j=i|bit,a=state[i],b=state[j];next[i]=sub(mul(c,a),mul(s,b));next[j]=add(mul(s,a),mul(c,b)); }
+      state=next;
+    }
+    for(let control=0;control<3;control++) {
+      const next=new Array(16);
+      for(let i=0;i<16;i++)next[(i&(1<<control))?i^(1<<(control+1)):i]=state[i];
+      state=next;
+    }
+  }
+  return state;
+}
+
+function moments(state) {
+  if(!Array.isArray(state)||state.length!==16)throw new RangeError("The circuit state must have sixteen amplitudes");
+  const probabilities=state.map(a=>mul(a,a)),norm=sum(probabilities);
+  if(!eq(norm,ONE))throw new Error("The exact Ry/CNOT circuit norm is not one");
+  const expectation=mask=>sum(probabilities.map((p,i)=>((i&mask).toString(2).split("1").length-1)%2?neg(p):p));
+  const z=[0,1,2,3].map(q=>expectation(1<<q)),zz=[0,1,2].map(q=>expectation((1<<q)|(1<<(q+1))));
+  return {state,probabilities,norm,z,zz,constant:mul(HALF,sum(zz))};
+}
+
+function bitCoefficients(index) {
+  const z=[0,1,2,3].map(q=>(index&(1<<q))?neg(ONE):ONE);
+  const zz=[0,1,2].map(q=>mul(z[q],z[q+1]));
+  return {z,zz,constant:mul(HALF,sum(zz))};
+}
+function energy(Q,lambda,m) {
+  if(lambda.length!==4)throw new RangeError("The Hamiltonian requires all four source lambda coefficients");
+  return m.z.reduce((e,z,q)=>Q.add(e,Q.mul(lambda[q],scalarQ(Q,z))),scalarQ(Q,m.constant));
+}
+function difference(Q,lambda,a,b) {
+  const z=a.z.map((x,q)=>sub(x,b.z[q])),constant=sub(a.constant,b.constant);
+  const value=z.reduce((e,c,q)=>Q.add(e,Q.mul(lambda[q],scalarQ(Q,c))),scalarQ(Q,constant));
+  return {value,z,constant,identically_zero:z.every(q=>q.n===0n)&&constant.n===0n};
+}
+function compareEnergy(Q,lambda,a,b) {
+  const d=difference(Q,lambda,a,b);
+  return {sign:d.identically_zero?0:Q.sign(d.value),difference:d.value,
+    proof:d.identically_zero?"identical exact rational Pauli coefficients":"certified exact expression comparison"};
+}
+function projected(arena,q) {
+  const b=arena.enclosure(q,128),den=2**128;
+  const lo=Number(b.lo)/den,hi=Number(b.hi)/den;
+  if(!Number.isFinite(lo)||!Number.isFinite(hi))throw new RangeError("The diagnostic decimal projection is outside Number range");
+  return {value:(lo+hi)/2,certificate:{lower_integer:b.lo.toString(),upper_integer:b.hi.toString(),denominator_power:128},purpose:"display only; never an arithmetic input"};
+}
+
+function independentDiagnostic(K,lambda,m) {
+  const Q=K.Q,levels=Array.from({length:16},(_,i)=>bitCoefficients(i));
+  let ground=0;
+  for(let i=1;i<16;i++)if(compareEnergy(Q,lambda,levels[i],levels[ground]).sign<0)ground=i;
+  const groundIndices=levels.flatMap((b,i)=>compareEnergy(Q,lambda,b,levels[ground]).sign===0?[i]:[]);
+  // Collect the full 16-outcome Rayleigh expression by its independent lambda
+  // coefficients before comparison. This proves equality for every lambda.
+  const z=[0,1,2,3].map(q=>sum(levels.map((b,i)=>mul(m.probabilities[i],b.z[q]))));
+  const c=sum(levels.map((b,i)=>mul(m.probabilities[i],b.constant)));
+  if(!z.every((x,q)=>eq(x,m.z[q]))||!eq(c,m.constant))throw new Error("The full sixteen-outcome and Pauli contractions disagree");
+  const gap=difference(Q,lambda,m,levels[ground]);
+  const gapSign=gap.identically_zero?0:Q.sign(gap.value);
+  if(gapSign<0)throw new Error("The variational state is below the exact diagonal ground energy");
+  const fidelity=sum(groundIndices.map(i=>m.probabilities[i]));
+  const eigenvalues=levels.map(b=>energy(Q,lambda,b));
+  return {method:"exact minimum of all sixteen diagonal energies; diagnostic only",
+    ground_indices:groundIndices,ground_energy:eigenvalues[ground],eigenvalues,
+    energy_gap:gap.value,energy_gap_is_exactly_zero:gapSign===0,ground_fidelity_rational:textQ(fidelity),
+    full_sixteen_outcome_rayleigh_identity:{proved:true,coefficient_field:"Q",lambda_coefficients:z.map(textQ),constant:textQ(c)},
+    display:{ground_energy:projected(K.exactDag,eigenvalues[ground]),energy_gap:projected(K.exactDag,gap.value)}};
+}
+
+function coordinateSearch(K,lambda,initial,{sweeps,gridDenominator,onProgress=()=>{}}) {
+  const Q=K.Q,parameters=initial.map(parse),grid=Array.from({length:2*gridDenominator+1},(_,i)=>mk(BigInt(i-gridDenominator),BigInt(gridDenominator)));
+  let current=moments(circuitState(parameters));const first=current,initialEnergy=energy(Q,lambda,current),lines=[];
+  const cache=new Map(),costs={circuit_evaluations:1,candidate_energy_comparisons:0,coordinate_lines:0,accepted_updates:0};
+  cache.set(parameters.map(textQ).join(","),current);
+  for(let sweep=0;sweep<sweeps;sweep++)for(let coordinate=0;coordinate<12;coordinate++) {
+    const old=parameters[coordinate],oldMoments=current,oldEnergy=energy(Q,lambda,current),trials=[];
+    let winner=old,best=current;
+    const candidates=[old,...grid.filter(t=>!eq(t,old))];
+    for(const t of candidates) {
+      const proposed=parameters.slice();proposed[coordinate]=t;
+      const key=proposed.map(textQ).join(",");let candidate=cache.get(key);
+      if(!candidate){candidate=moments(circuitState(proposed));cache.set(key,candidate);costs.circuit_evaluations++;}
+      const comparison=compareEnergy(Q,lambda,candidate,best);costs.candidate_energy_comparisons++;
+      const candidateEnergy=energy(Q,lambda,candidate);
+      trials.push({parameter:textQ(t),energy:candidateEnergy,z:candidate.z.map(textQ),zz:candidate.zz.map(textQ),
+        comparison_with_incumbent:comparison.sign,comparison_difference:comparison.difference,comparison_proof:comparison.proof});
+      if(comparison.sign<0){winner=t;best=candidate;}
+    }
+    parameters[coordinate]=winner;current=best;
+    const change=compareEnergy(Q,lambda,current,oldMoments);
+    if(change.sign>0)throw new Error("An exact coordinate update increased the frozen-Hamiltonian energy");
+    if(!eq(old,winner))costs.accepted_updates++;
+    const line={sweep,coordinate,parameter_before:textQ(old),parameter_after:textQ(winner),energy_before:oldEnergy,
+      energy_after:energy(Q,lambda,current),energy_change:change.difference,trials};
+    lines.push(line);costs.coordinate_lines++;
+    onProgress({stage:"quantum_coordinate",sweep,coordinate,costs:{...costs}});
+  }
+  return {parameters:parameters.map(textQ),moments:current,initial_moments:first,initial_energy:initialEnergy,
+    energy:energy(Q,lambda,current),lines,costs,completed_sweeps:sweeps,
+    stop_reason:"completed every declared sweep and coordinate",
+    search_space:{kind:"explicit finite exact rational coordinate grid",grid:grid.map(textQ),include_current:true,
+      ties:"retain incumbent",global_continuous_optimum_claim:false}};
+}
+
+function validateConfiguration(input) {
+  if(!input||typeof input!=="object"||Array.isArray(input))throw new TypeError("Supply a trajectory configuration");
+  const c={...input};
+  if(!E.COMPOSITIONS.includes(c.composition))throw new RangeError("Unknown mathematical composition");
+  for(const k of ["steps","sweeps","grid_denominator","branch_workers"])if(!Number.isInteger(c[k])||c[k]<1)throw new RangeError(`${k} must be a positive integer`);
+  if(!Number.isInteger(c.seed))throw new TypeError("Seed must be an integer");
+  if(typeof c.feedback!=="boolean")throw new TypeError("Feedback selection must be explicit");
+  if(!["serial","workers"].includes(c.backend))throw new RangeError("Select serial or workers backend");
+  if(c.backend==="workers"&&c.composition!=="PARALLEL")throw new RangeError("Within-field workers require PARALLEL composition");
+  const strength=parse(c.strength);if(strength.n<=0n||strength.n>strength.d)throw new RangeError("All29 require nonzero strength in (0,1]");
+  if(!Array.isArray(c.initial_parameters)||c.initial_parameters.length!==12)throw new RangeError("Supply twelve exact initial Cayley parameters");
+  c.initial_parameters=c.initial_parameters.map(x=>textQ(parse(x)));
+  if(!c.case_id||!/^[-A-Za-z0-9_]+$/.test(c.case_id))throw new RangeError("Use a safe nonempty case id");
+  return c;
+}
+function atomicJSON(filename,value,gzip=false) {
+  const text=JSON.stringify(value,null,2)+"\n",data=gzip?zlib.gzipSync(text,{level:6,mtime:0}):text;
+  fs.writeFileSync(filename+".tmp",data);fs.renameSync(filename+".tmp",filename);
+}
+function quantumRecord(m) { return {amplitudes:m.state.map(textQ),probabilities:m.probabilities.map(textQ),z:m.z.map(textQ),zz:m.zz.map(textQ),norm:textQ(m.norm)}; }
+
