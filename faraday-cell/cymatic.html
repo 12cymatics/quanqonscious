@@ -220,7 +220,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
     <div class="fld">
       <span class="lab">render</span>
       <div class="seg" id="viewSeg">
-        <button data-v="sand" aria-pressed="false" disabled>sand (modal only)</button>
+        <button data-v="sand" aria-pressed="false">sand</button>
         <button data-v="optical" aria-pressed="false">optical</button>
         <button data-v="height" aria-pressed="true">height</button>
         <button data-v="nodal" aria-pressed="false">nodal</button>
@@ -261,7 +261,7 @@ window.addEventListener('unhandledrejection', event => FARADAY_STARTUP.fail(even
       <input type="range" id="ag" min="0.15" max="2.4" step="0.01" value="1.15">
     </div>
     <div style="display:flex;gap:5px">
-      <button class="btn" id="sprinkleBtn" disabled title="Modal sand visualization only" style="flex:1">re-sprinkle</button>
+      <button class="btn" id="sprinkleBtn" style="flex:1">re-sprinkle</button>
       <button class="btn" id="play" disabled title="Modal playback only; nonlinear frames use solver time" aria-pressed="true" style="flex:1">running</button>
       <button class="btn" id="reset" disabled title="Modal re-excitation only; use Run to restart the nonlinear solver" style="flex:1">re-excite</button>
     </div>
@@ -485,11 +485,38 @@ function shapeOf(m, jp){
   SHAPE.set(key, rec); return rec;
 }
 
-let ETA, NX, NY, PGX, PGY, IMF, GIX, GIY;
+let ETA, NX, NY, PGX, PGY, IMF, GIX, GIY, MS, AGI, MS_AT = -1;
+const MS_PERIODS = 4;
 function allocateRasters(){
   ETA = new Float32Array(NSZ); NX = new Float32Array(NSZ); NY = new Float32Array(NSZ);
   PGX = new Float32Array(NSZ); PGY = new Float32Array(NSZ);
   IMF = new Float32Array(NSZ); GIX = new Float32Array(NSZ); GIY = new Float32Array(NSZ);
+  MS = new Float64Array(NSZ); AGI = new Float32Array(NSZ); MS_AT = -1;
+}
+function accumulateMeanSquare(t, periodS){
+  if (MS_AT < 0 || t < MS_AT){
+    for (let i = 0; i < NSZ; i++) MS[i] = COVER[i] > 0 ? ETA[i]*ETA[i] : 0;
+    MS_AT = t;
+    return;
+  }
+  if (t === MS_AT) return;
+  const w = 1 - Math.exp(-(t - MS_AT)/(MS_PERIODS*periodS));
+  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0) MS[i] += w*(ETA[i]*ETA[i] - MS[i]);
+  MS_AT = t;
+}
+function meanSquareTransport(){
+  PGX.fill(0); PGY.fill(0); AGI.fill(0);
+  let dmax = 0, amax = 0;
+  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0) amax = Math.max(amax, MS[i]);
+  for (let y = 1; y < GR - 1; y++) for (let x = 1; x < GR - 1; x++){
+    const i = y*GR + x;
+    if (COVER[i] <= 0) continue;
+    if (amax > 0) AGI[i] = Math.sqrt(MS[i]/amax);
+    if (COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
+    PGX[i] = -(MS[i+1] - MS[i-1])/2; PGY[i] = -(MS[i+GR] - MS[i-GR])/2;
+    dmax = Math.max(dmax, Math.hypot(PGX[i], PGY[i]));
+  }
+  if (dmax > 0){ const inv = 1/dmax; for (let i = 0; i < NSZ; i++){ PGX[i] *= inv; PGY[i] *= inv; } }
 }
 allocateRasters();
 
@@ -567,11 +594,13 @@ function finishSurface(state){
   const inv = mx > 0 ? 1/mx : 1, ginv = gx > 0 ? 1/gx : 1;
 
   if (useSolver){
+    meanSquareTransport();
     for (let i = 0; i < NSZ; i++){
       ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv;
-      IMF[i] = GIX[i] = GIY[i] = PGX[i] = PGY[i] = 0;
+      IMF[i] = GIX[i] = GIY[i] = 0;
     }
-    state.transport = null; FIELD_GEN++; return;
+    state.transport = { model: 'down the gradient of the solver surface\'s mean square', periods: MS_PERIODS };
+    FIELD_GEN++; return;
   }
   const tc = transportCoefficients(state.damping, state.wavelength);
   const stokes = tc.stokesRatio, KI = tc.intensityGain, KF = tc.fluxGain;
@@ -626,7 +655,7 @@ function stepGrains(gain){
     let x = PX[p], y = PY[p];
     const i = (y|0)*GR + (x|0);
 
-    const u = ETA[i]*gain;
+    const u = (useSolver ? AGI[i] : ETA[i])*gain;
     const a = Math.abs(u)*jitter;
     let vx = (VX[p] + DRIFT*PGX[i]*gain + (rnd()-0.5)*a)*DAMP;
     let vy = (VY[p] + DRIFT*PGY[i]*gain + (rnd()-0.5)*a)*DAMP;
@@ -1017,7 +1046,7 @@ function tfeOf(){
 
 function recompute(budgetMs = Infinity){
   let tablesPending = false;
-  for (const id of ['play','reset','sprinkleBtn']) $(id).disabled = useSolver;
+  for (const id of ['play','reset']) $(id).disabled = useSolver;
   $('play').textContent = useSolver ? 'modal playback' : running ? 'running' : 'paused';
   const experiment = experimentMode === 'general'
     ? { ...generalInput, frequencyHz: freq, contact: rim } : null;
@@ -1286,7 +1315,6 @@ seg('phaseSeg', b => {
   else { swapping = false; phaseSign = +b.dataset.p; }
 });
 seg('viewSeg', b => {
-  if (useSolver && b.dataset.v === 'sand') throw new Error('Sand transport is available only as a modal visualization.');
   view = b.dataset.v;
 });
 seg('engSeg', b => setRenderEngine(b.dataset.e));
@@ -1305,11 +1333,6 @@ seg('srcSeg', b => {
   cell3dEngine = eng;
   useSolver = want;
   CELL3D.reset(); solverRequested = false;
-  document.querySelector('#viewSeg [data-v="sand"]').disabled = want;
-  if (want && view === 'sand'){
-    view = 'height';
-    document.querySelectorAll('#viewSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === view)));
-  }
   dirty = true;
 });
 const bind = (id, out, fn, fmt) => $(id).addEventListener('input', e => {
@@ -1370,7 +1393,7 @@ async function exportImage(SIZE, onProgress){
   const rsqMax = (rr + 2)*(rr + 2);
   const st = state;
   const solverSnapshot = useSolver ? CELL3D.snapshot() : null;
-  if (solverSnapshot && view === 'sand') throw new Error('Sand transport is a modal visualization, not nonlinear fluid particle dynamics.');
+  if (solverSnapshot && view === 'sand') throw new Error('Sand from the 3D solver is drawn on screen only; export its height, optical or nodal view.');
 
   const exportView = view;
   const exportGain = solverSnapshot ? 1 : phaseSign*st.expression;
@@ -2597,7 +2620,7 @@ const CELL3D = (function(){
   function stop(){ running3d = false; }
   function reset(){
     running3d = false; haveFrame = false; err = null; gen++;
-    etaBuf = null; htBuf = null; dirty = true;
+    etaBuf = null; htBuf = null; dirty = true; MS_AT = -1;
   }
   function snapshot(){
     if (err || !haveFrame || !vessel || !lastRun)
@@ -2655,6 +2678,7 @@ const CELL3D = (function(){
     peakRaw = 0;
     for (let i = 0; i < NSZ; i++)
       if (COVER[i] > 0) peakRaw = Math.max(peakRaw, Math.abs(ETA[i]));
+    accumulateMeanSquare(physT, 1/freq);
     st.render = { drawn: 1, gatedRms: 0, gated: 0 };
     finishSurface(st);
     return true;

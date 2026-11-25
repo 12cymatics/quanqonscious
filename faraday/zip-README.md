@@ -67,6 +67,19 @@ python3 dns/check-book-pressure.py
 python3 dns/check-book-surface.py
 ```
 
+## Sand on the 3D solver — 25 November 2026
+
+The sand view now works with the 3D Navier-Stokes solver as well as with the
+modal diagnostic. Each solver frame updates a running mean of the surface
+height squared at every pixel, weighted over the last four drive periods of
+physical time. The grains drift down the gradient of that mean, toward where
+the solver's surface moves least, and are agitated in proportion to its
+root-mean-square. No harmonic or mode shape is assumed: the mean is taken
+from the solver's own frames. Re-sprinkle works in both models.
+
+Exporting the sand view from the solver is refused with a message; the
+height, optical and nodal views export as before.
+
 ## Grid update — 15 November 2026
 
 The 3D solver refused a 325 mm × 1 mm cell at 180 Hz (gravity 3 m/s², peak

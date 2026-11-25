@@ -63,6 +63,7 @@ try {
       overlay: getComputedStyle(document.getElementById('solverOverlay')).display }));
     assert.deepEqual(opened, { experimentMode: 'reference', useSolver: false, rim: 'free', view: 'sand', overlay: 'none' });
     results.push({ name: scenario.name + '-opens-on-sand', opened, passed: true });
+    await page.locator('#viewSeg [data-v="height"]').click();
     await page.locator('#configurationMode').selectOption('general');
     await page.locator('#rimSeg [data-r="pinned"]').click();
     await page.locator('#srcSeg [data-s="dns"]').click();

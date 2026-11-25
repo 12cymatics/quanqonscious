@@ -295,7 +295,8 @@ async function checkGeneralPending(page){
   ok(opened.experimentMode === 'reference' && !opened.useSolver && opened.rim === 'free'
      && opened.view === 'sand' && !opened.overlay,
      'the page opens on the modal sand pattern with a free rim, drawing', JSON.stringify(opened));
-  await page.eval(`document.getElementById('configurationMode').value = 'general';
+  await page.eval(`document.querySelector('#viewSeg [data-v="height"]').click();
+    document.getElementById('configurationMode').value = 'general';
     document.getElementById('configurationMode').dispatchEvent(new Event('change', {bubbles:true}));
     document.querySelector('#rimSeg [data-r="pinned"]').click();
     document.querySelector('#srcSeg [data-s="dns"]').click();
@@ -787,6 +788,48 @@ async function checkSolverDraws(page){
   ok(/sized for\s*initial m \d+, kR [\d.]+.*surface operator [\d.]+%.*Stokes layer/.test(deck),
      'and it states what the grid was sized to: the mode, its surface-operator error and '
      + 'its thinnest Stokes layer', deck.slice(0, 400));
+
+  await page.eval(`document.querySelector('#viewSeg [data-v="sand"]').click(); recompute(); true`);
+  const sand = await page.json(`(() => {
+    let worst = 0, scale = 0, n = 0, msMax = 0, negative = 0;
+    for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){ msMax = Math.max(msMax, MS[i]); if (MS[i] < 0) negative++; }
+    let dmax = 0;
+    const want = (i) => [-(MS[i+1] - MS[i-1])/2, -(MS[i+GR] - MS[i-GR])/2];
+    for (let y = 1; y < GR - 1; y++) for (let x = 1; x < GR - 1; x++){
+      const i = y*GR + x;
+      if (COVER[i] <= 0 || COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
+      const w = want(i); dmax = Math.max(dmax, Math.hypot(w[0], w[1]));
+    }
+    for (let y = 4; y < GR - 4; y += 7) for (let x = 4; x < GR - 4; x += 7){
+      const i = y*GR + x;
+      if (COVER[i] <= 0 || COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
+      const w = want(i);
+      worst = Math.max(worst, Math.abs(PGX[i] - w[0]/dmax), Math.abs(PGY[i] - w[1]/dmax));
+      n++;
+    }
+    running = true;
+    let all = 0, cells = 0;
+    for (let i = 0; i < NSZ; i++) if (COVER[i] === 1){ all += MS[i]; cells++; }
+    const under = () => { let u = 0; for (let q = 0; q < NP; q++) u += MS[(PY[q] | 0)*GR + (PX[q] | 0)]; return u/NP/(all/cells); };
+    sprinkle();
+    const fresh = under();
+    for (let k = 0; k < 120; k++) stepGrains(1);
+    return { view, at: MS_AT, physT: CELL3D.clocks().physT, msMax, negative, n, worst, fresh, settled: under(),
+             transport: state.transport };
+  })()`);
+  console.log(`       sand on the solver: drift against -grad of the surface's mean square at ${sand.n} pixels, `
+    + `worst ${sand.worst.toExponential(2)}; grains on ${(100*sand.fresh).toFixed(1)}% of the mean fresh, `
+    + `${(100*sand.settled).toFixed(1)}% after 120 steps`);
+  ok(sand.view === 'sand' && sand.at === sand.physT && sand.msMax > 0 && sand.negative === 0,
+     'sand is drawn with the solver on, from a mean square of its surface accumulated up to its last frame',
+     JSON.stringify(sand));
+  ok(sand.n > 200 && sand.worst < 1e-6,
+     'the grains\' drift is the downhill gradient of that mean square, normalised, at every sampled pixel',
+     JSON.stringify({ n: sand.n, worst: sand.worst }));
+  ok(sand.fresh > 0.9 && sand.fresh < 1.1 && sand.settled < sand.fresh/2,
+     'freshly sprinkled grains sit on the mean, and 120 steps later they have gathered where the solver\'s surface moves least',
+     JSON.stringify({ fresh: sand.fresh, settled: sand.settled }));
+  await page.eval(`document.querySelector('#viewSeg [data-v="height"]').click(); recompute(); true`);
 
   await page.shot(join(tmpdir(), 'check-page-solver.png'));
   await checkSolverExport(page);
