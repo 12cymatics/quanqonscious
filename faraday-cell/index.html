@@ -1146,10 +1146,7 @@ function resolveExperimentState(input){
     accelAssumed: experiment.acceleration,
     water: { rho: experiment.rho, mu: experiment.mu, nu: experiment.mu/experiment.rho, sigma: experiment.sigma },
     driveCalibration: { kind: 'acceleration', source: 'user supplied physical acceleration in m/s²', measured: false },
-    states: [], nearestTheoryModes: [], warnings: [], expression: 1,
-    selectedEmpiricalFold: null, empiricalConfidence: 0, transitionRisk: null,
-    replicates: null, transitionStudy: null, visualSignature: null,
-    responseHz: null, transport: null
+    states: [], nearestTheoryModes: [], warnings: [], expression: 1
   };
 }
 
@@ -4241,10 +4238,18 @@ function cell3dTransformFriendly(nth){
 }
 
 function suggestCell3DGrid(o){
-  const m = o.m;
-  if (!(Number.isInteger(m) && m >= 0)) throw new RangeError(
-    `suggestCell3DGrid: m = ${m} is not a non-negative azimuthal order.`);
-  const k = requireFinitePositive(o.k, 'k'), R = requireFinitePositive(o.R, 'R');
+  if (o.m !== undefined || o.k !== undefined) throw new TypeError(
+    'suggestCell3DGrid: the modes to carry are given as modes: [{ m, k }, ...], not as m and k.');
+  if (!(Array.isArray(o.modes) && o.modes.length > 0)) throw new RangeError(
+    'suggestCell3DGrid: modes must list at least one { m, k } the grid has to carry.');
+  const modes = o.modes.map((md, q) => {
+    if (!(md && Number.isInteger(md.m) && md.m >= 0)) throw new RangeError(
+      `suggestCell3DGrid: modes[${q}].m = ${md && md.m} is not a non-negative azimuthal order.`);
+    return { m: md.m, k: requireFinitePositive(md.k, `modes[${q}].k`) };
+  });
+  let kMax = 0;
+  for (const md of modes) if (md.k > kMax) kMax = md.k;
+  const R = requireFinitePositive(o.R, 'R');
   const h = requireFinitePositive(o.h, 'h'), rho = requireFinitePositive(o.rho, 'rho');
   const nu = requireFinitePositive(o.nu, 'nu'), gamma = requireFinitePositive(o.gamma, 'gamma');
   const g = o.g === undefined ? CELL3D_G0 : requireFinite(o.g, 'g');
@@ -4267,38 +4272,45 @@ function suggestCell3DGrid(o){
   const search = stretchesOf => {
   for (const nr of CELL3D_SIZE_NR){
     if (nr*16*zMin > maxCells) break;
-    const perLambdaUniform = (2*Math.PI/k)/(R/nr);
+    const perLambdaUniform = (2*Math.PI/kMax)/(R/nr);
     for (const rStretch of stretchesOf(perLambdaUniform)){
     const P = new FaradayCell3D({ nr, nth: 8, nz: 4, R, h, rho, nu, gamma, g, contact,
                                   rStretch, zStretch: 2.2 });
     /* small enough that every slope squared is below the rounding of 1 */
     const amp = 1e-12*R;
-    for (let i = 0; i < nr; i++){
-      const v = amp*o.besselJ(m, k*P.rc[i]);
-      for (let q = 0; q < 8; q++) P.eta[P.ie(i, q)] = v;
-    }
-    const radial = P.curvature(new Float64Array(nr*8));
+    const probes = modes.map(md => {
+      for (let i = 0; i < nr; i++){
+        const v = amp*o.besselJ(md.m, md.k*P.rc[i]);
+        for (let q = 0; q < 8; q++) P.eta[P.ie(i, q)] = v;
+      }
+      return { md, radial: P.curvature(new Float64Array(nr*8)), eta: Float64Array.from(P.eta) };
+    });
     const errAt = nth => {
       const dth = 2*Math.PI/nth;
-      const lam = m === 0 ? 0 : 2*(1 - Math.cos(m*dth))/(dth*dth);
-      let num = 0, den = 0;
-      for (let i = 0; i < nr; i++){
-        const e = P.ie(i, 0), w = P.rc[i]*P.drc[i];
-        const got = radial[e] - lam*P.eta[e]/(P.rc[i]*P.rc[i]), want = -k*k*P.eta[e];
-        num += (got - want)*(got - want)*w;
-        den += want*want*w;
+      let worstErr = -Infinity, worst = null;
+      for (const { md, radial, eta } of probes){
+        const lam = md.m === 0 ? 0 : 2*(1 - Math.cos(md.m*dth))/(dth*dth);
+        let num = 0, den = 0;
+        for (let i = 0; i < nr; i++){
+          const e = P.ie(i, 0), w = P.rc[i]*P.drc[i];
+          const got = radial[e] - lam*eta[e]/(P.rc[i]*P.rc[i]), want = -md.k*md.k*eta[e];
+          num += (got - want)*(got - want)*w;
+          den += want*want*w;
+        }
+        const e1 = Math.sqrt(num/den);
+        if (!(e1 <= worstErr)){ worstErr = e1; worst = md; }
       }
-      return Math.sqrt(num/den);
+      return { err: worstErr, worst };
     };
-    let nth = null, err = Infinity, lastErr = Infinity, lastNth = null;
+    let nth = null, err = Infinity, worst = null, lastErr = Infinity, lastNth = null, lastWorst = null;
     for (let n = 16; nr*n*zMin <= maxCells; n += 2){
       if (!cell3dTransformFriendly(n)) continue;
       const e = errAt(n);
-      lastErr = e; lastNth = n;
-      if (e <= errTol){ nth = n; err = e; break; }
+      lastErr = e.err; lastNth = n; lastWorst = e.worst;
+      if (e.err <= errTol){ nth = n; err = e.err; worst = e.worst; break; }
     }
     if (nth === null){
-      const rec = { nr, nth: lastNth, rStretch, err: lastErr, surfaceOk: false };
+      const rec = { nr, nth: lastNth, rStretch, err: lastErr, worst: lastWorst, surfaceOk: false };
       tried.push(rec);
       if (!closest || (!closest.surfaceOk && rec.err < closest.err)) closest = rec;
       continue;
@@ -4320,7 +4332,7 @@ function suggestCell3DGrid(o){
                                    gamma, rho, nu);
         const dt = 0.4*Math.min(L.capillary, L.viscous, L.gravity);
         const cells = nr*nth*nz, stepsPerPeriod = period/dt;
-        const rec = { nr, nth, nz, rStretch, zStretch, err, layers, thinnest,
+        const rec = { nr, nth, nz, rStretch, zStretch, err, worst, layers, thinnest,
                       layersOk: thinnest >= layerCells, surfaceOk: true, dt, cells,
                       stepsPerPeriod, work: cells*stepsPerPeriod };
         tried.push(rec);
@@ -4334,8 +4346,8 @@ function suggestCell3DGrid(o){
   };
   search(perLambdaUniform => [perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8]);
   if (!best) search(() => CELL3D_SIZE_RSTRETCH_RIM);
-  if (best) return Object.assign({}, best, { errTol, layerCells, maxCells, delta, tried });
-  return { unreachable: true, errTol, layerCells, maxCells, delta, closest, tried };
+  if (best) return Object.assign({}, best, { modes, errTol, layerCells, maxCells, delta, tried });
+  return { unreachable: true, modes, errTol, layerCells, maxCells, delta, closest, tried };
 }
 
 class FaradayCell3D {
@@ -4455,6 +4467,17 @@ class FaradayCell3D {
     this._r = new Float64Array(NP);
     this._d = new Float64Array(NP);
     this._q = new Float64Array(NP);
+    this._sur = new Float64Array(NE);
+    this._tv = new Float64Array(2);
+    this._sut = new Float64Array(NE);
+    this._sux = new Float64Array(NE);
+    this._suy = new Float64Array(NE);
+    this._cth = new Float64Array(nth);
+    this._sth = new Float64Array(nth);
+    for (let k = 0; k < nth; k++){
+      this._cth[k] = Math.cos((k + 0.5)*this.dth);
+      this._sth[k] = Math.sin((k + 0.5)*this.dth);
+    }
     this._z = new Float64Array(NP);
     this._div = new Float64Array(NP);
     this._gu = new Float64Array(NU);
@@ -6596,6 +6619,92 @@ class FaradayCell3D {
          + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
   }
 
+  surfaceVelocity(outR, outT){
+    const nr = this.nr, nth = this.nth, FU = this.FAM.u, FV = this.FAM.v;
+    const lu = FU.sn.length - 2;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k), z = this.H[e];
+        outR[e] = 0.5*(this.colValueAtZ(this.u, FU, i, k, z, lu)
+                     + this.colValueAtZ(this.u, FU, i + 1, k, z, lu));
+        outT[e] = 0.5*(this.colValueAtZ(this.v, FV, i, k, z, lu)
+                     + this.colValueAtZ(this.v, FV, i, k + 1, z, lu));
+      }
+    return this;
+  }
+
+  surfaceVelocityCartesian(){
+    const nth = this.nth, ur = this._sur, ut = this._sut, ux = this._sux, uy = this._suy;
+    this.surfaceVelocity(ur, ut);
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = i*nth + k, c = this._cth[k], sn = this._sth[k];
+        ux[e] = ur[e]*c - ut[e]*sn;
+        uy[e] = ur[e]*sn + ut[e]*c;
+      }
+    return this;
+  }
+
+  surfaceVelocityAtXY(x, y, out){
+    const nr = this.nr, nth = this.nth, rc = this.rc, R = this.R, dth = this.dth;
+    const ux = this._sux, uy = this._suy;
+    const r = Math.hypot(x, y);
+    if (!(r < R)) throw new RangeError(
+      `surfaceVelocityAtXY: (${x}, ${y}) is ${r} m from the axis, not inside the cell of radius ${R} m.`);
+    let th = Math.atan2(y, x);
+    if (th < 0) th += 2*Math.PI;
+    const s = th/dth - 0.5, kb = Math.floor(s), ft = s - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const along = (i, ka, kc) => {
+      const a = i*nth + ka, b = i*nth + kc;
+      out[0] = ux[a] + ft*(ux[b] - ux[a]);
+      out[1] = uy[a] + ft*(uy[b] - uy[a]);
+    };
+    if (r < rc[0]){
+      const half = nth >> 1;
+      along(0, this.kw(k0 + half), this.kw(k1 + half));
+      const ax = out[0], ay = out[1];
+      along(0, k0, k1);
+      const fr = (r + rc[0])/(2*rc[0]);
+      out[0] = ax + fr*(out[0] - ax);
+      out[1] = ay + fr*(out[1] - ay);
+      return out;
+    }
+    if (r >= rc[nr - 1]){
+      along(nr - 1, k0, k1);
+      const keep = (R - r)/(R - rc[nr - 1]);
+      out[0] *= keep; out[1] *= keep;
+      return out;
+    }
+    let lo = 0, hi = nr - 1;
+    while (hi - lo > 1){ const m = (lo + hi) >> 1; if (rc[m] <= r) lo = m; else hi = m; }
+    const fr = (r - rc[lo])/(rc[hi] - rc[lo]);
+    along(lo, k0, k1);
+    const ix = out[0], iy = out[1];
+    along(hi, k0, k1);
+    out[0] = ix + fr*(out[0] - ix);
+    out[1] = iy + fr*(out[1] - iy);
+    return out;
+  }
+
+  advanceSurfaceTracers(x, y, dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    if (x.length !== y.length) throw new RangeError(
+      `advanceSurfaceTracers: ${x.length} x positions against ${y.length} y positions.`);
+    this.surfaceVelocityCartesian();
+    const v = this._tv;
+    for (let p = 0; p < x.length; p++){
+      this.surfaceVelocityAtXY(x[p], y[p], v);
+      const nx = x[p] + dt*v[0], ny = y[p] + dt*v[1];
+      if (!(Math.hypot(nx, ny) < this.R)) throw new RangeError(
+        `advanceSurfaceTracers: tracer ${p} would cross the wall at r = ${Math.hypot(nx, ny)} m `
+        + `in a step of ${dt} s; the surface velocity there is (${v[0]}, ${v[1]}) m/s.`);
+      x[p] = nx; y[p] = ny;
+    }
+    return this;
+  }
+
   /* The outward unit normal of the free surface at an arbitrary position, from the
    * surface's own slopes. With z = H(r, theta) and h constant, eta_r is H_r and
    * eta_theta is H_theta, so
@@ -8048,38 +8157,11 @@ function shapeOf(m, jp){
   SHAPE.set(key, rec); return rec;
 }
 
-let ETA, NX, NY, PGX, PGY, IMF, GIX, GIY, MS, AGI, MS_AT = -1;
-const MS_PERIODS = 4;
+let ETA, NX, NY, PGX, PGY, IMF, GIX, GIY;
 function allocateRasters(){
   ETA = new Float32Array(NSZ); NX = new Float32Array(NSZ); NY = new Float32Array(NSZ);
   PGX = new Float32Array(NSZ); PGY = new Float32Array(NSZ);
   IMF = new Float32Array(NSZ); GIX = new Float32Array(NSZ); GIY = new Float32Array(NSZ);
-  MS = new Float64Array(NSZ); AGI = new Float32Array(NSZ); MS_AT = -1;
-}
-function accumulateMeanSquare(t, periodS){
-  if (MS_AT < 0 || t < MS_AT){
-    for (let i = 0; i < NSZ; i++) MS[i] = COVER[i] > 0 ? ETA[i]*ETA[i] : 0;
-    MS_AT = t;
-    return;
-  }
-  if (t === MS_AT) return;
-  const w = 1 - Math.exp(-(t - MS_AT)/(MS_PERIODS*periodS));
-  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0) MS[i] += w*(ETA[i]*ETA[i] - MS[i]);
-  MS_AT = t;
-}
-function meanSquareTransport(){
-  PGX.fill(0); PGY.fill(0); AGI.fill(0);
-  let dmax = 0, amax = 0;
-  for (let i = 0; i < NSZ; i++) if (COVER[i] > 0) amax = Math.max(amax, MS[i]);
-  for (let y = 1; y < GR - 1; y++) for (let x = 1; x < GR - 1; x++){
-    const i = y*GR + x;
-    if (COVER[i] <= 0) continue;
-    if (amax > 0) AGI[i] = Math.sqrt(MS[i]/amax);
-    if (COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
-    PGX[i] = -(MS[i+1] - MS[i-1])/2; PGY[i] = -(MS[i+GR] - MS[i-GR])/2;
-    dmax = Math.max(dmax, Math.hypot(PGX[i], PGY[i]));
-  }
-  if (dmax > 0){ const inv = 1/dmax; for (let i = 0; i < NSZ; i++){ PGX[i] *= inv; PGY[i] *= inv; } }
 }
 allocateRasters();
 
@@ -8157,12 +8239,8 @@ function finishSurface(state){
   const inv = mx > 0 ? 1/mx : 1, ginv = gx > 0 ? 1/gx : 1;
 
   if (useSolver){
-    meanSquareTransport();
-    for (let i = 0; i < NSZ; i++){
-      ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv;
-      IMF[i] = GIX[i] = GIY[i] = 0;
-    }
-    state.transport = { model: 'down the gradient of the solver surface\'s mean square', periods: MS_PERIODS };
+    for (let i = 0; i < NSZ; i++){ ETA[i] *= inv; NX[i] *= ginv; NY[i] *= ginv; }
+    state.transport = { model: 'floating tracers advected by the solver\'s own surface velocity' };
     FIELD_GEN++; return;
   }
   const tc = transportCoefficients(state.damping, state.wavelength);
@@ -8218,7 +8296,7 @@ function stepGrains(gain){
     let x = PX[p], y = PY[p];
     const i = (y|0)*GR + (x|0);
 
-    const u = (useSolver ? AGI[i] : ETA[i])*gain;
+    const u = ETA[i]*gain;
     const a = Math.abs(u)*jitter;
     let vx = (VX[p] + DRIFT*PGX[i]*gain + (rnd()-0.5)*a)*DAMP;
     let vy = (VY[p] + DRIFT*PGY[i]*gain + (rnd()-0.5)*a)*DAMP;
@@ -8630,7 +8708,7 @@ function recompute(budgetMs = Infinity){
   if (useSolver){
     if (GR !== GRID_SIZES[0]) setGrid(GRID_SIZES[0]);
     surfaceBuiltFor = null;
-    state.visualSignature = null;
+    delete state.visualSignature;
     state.expression = 1;
     const c = CELL3D.clocks();
     if (!c.err && c.have) CELL3D.build(state);
@@ -8677,12 +8755,13 @@ function paintDeck(){
       ['solver', c.engine === 'cpp' ? 'C++ · faraday_cell3d.wasm' : c.engine === 'js' ? 'JavaScript' : `requested ${cell3dEngine}; not running`],
       ['solver threads', c.threads ? `${c.threads} thread${c.threads === 1 ? '' : 's'}` : 'not running'],
       ['drawn on', renderEngine === 'gpu' ? 'GPU drawing only · WebGL2' : 'CPU · canvas 2D'],
-      ['display', 'normalized surface displacement; no reference-paper weighting'],
+      ['display', c.have ? `colour scale is the surface's own peak |η| = ${c.peak.toExponential(4)} m this frame; no reference-paper weighting` : 'no frame yet'],
+      ['sand', 'floating tracers advected each step by the solver\'s own surface velocity'],
       ['modal thresholds', 'not computed; select modal diagnostic separately']
     ];
     if (c.grid){
       rows.push(['grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} = ${c.grid.nr*c.grid.nth*c.grid.nz} cells`]);
-      rows.push(['sized for', `initial m ${c.grid.m}, kR ${c.grid.kR.toFixed(3)}; surface operator ${(c.grid.err*100).toFixed(2)}%; ${c.grid.thinnest.toFixed(2)} cells in thinnest Stokes layer; ${Math.round(c.grid.stepsPerPeriod)} steps per drive period`]);
+      rows.push(['sized for', `initial m ${c.grid.m}, kR ${c.grid.kR.toFixed(3)}; ${c.grid.band.text}; surface operator ${(c.grid.err*100).toFixed(2)}% at worst (m ${c.grid.worst.m}, kR ${(c.grid.worst.k*s.cellDiameterMm/2000).toFixed(2)}); ${c.grid.thinnest.toFixed(2)} cells in thinnest Stokes layer; ${Math.round(c.grid.stepsPerPeriod)} steps per drive period`]);
     }
     $('ro').innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd${k === 'drawn on' ? ' id="renderProcessor"' : ''}>${v}</dd>`).join('');
     $('warnBox').textContent = e.contact === 'pinned' ? '' : 'The nonlinear free-contact-line law is not implemented. No substitute run will be started.';
@@ -8777,7 +8856,7 @@ function paintDeck(){
          ['  grid', `${c.grid.nr} × ${c.grid.nth} × ${c.grid.nz} `
             + `<span class="u">= ${c.grid.nr*c.grid.nth*c.grid.nz} cells</span>`],
          /* what the grid was sized to, measured: suggestCell3DGrid's contract */
-         ['  sized for', `m ${c.grid.m}, kR ${c.grid.kR.toFixed(2)} <span class="u">· surface `
+         ['  sized for', `m ${c.grid.m}, kR ${c.grid.kR.toFixed(2)} <span class="u">· ${c.grid.band.text} · surface `
             + `operator ${(c.grid.err*100).toFixed(2)}% · ${c.grid.thinnest.toFixed(1)} cells in `
             + `the thinnest Stokes layer · ${Math.round(c.grid.stepsPerPeriod)} steps a `
             + `drive period</span>`],
@@ -8852,10 +8931,17 @@ function paintOverlay(){
   const pI = phaseSign > 0;
   $('oPh').className = 'ph' + (pI ? '' : ' two');
   $('oPhT').textContent = useSolver ? 'instantaneous field' : pI ? 'phase I' : 'phase II';
-  $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
-  $('oM').textContent = s.states.length ? s.states[0].m : '—';
-  $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
-  $('oRisk').textContent = s.transitionRisk === null ? 'no empirical prior' : 'risk ' + s.transitionRisk.toFixed(2);
+  if (useSolver){
+    $('oFold').textContent = '—';
+    $('oM').textContent = `${s.experiment?.seedMode ?? '—'} seed`;
+    $('oConf').textContent = '—';
+    $('oRisk').textContent = 'no empirical prior in the nonlinear run';
+  } else {
+    $('oFold').textContent = s.selectedEmpiricalFold ?? '—';
+    $('oM').textContent = s.states.length ? s.states[0].m : '—';
+    $('oConf').textContent = (s.empiricalConfidence*100).toFixed(0) + '%';
+    $('oRisk').textContent = s.transitionRisk === null ? 'no empirical prior' : 'risk ' + s.transitionRisk.toFixed(2);
+  }
   $('oExp').textContent = useSolver ? `solver time ${(CELL3D.clocks().physT*1000).toFixed(3)} ms` : 'expression ' + (s.expression*100).toFixed(0) + '%'
     + '  ·  steady: f/2 = ' + s.responseHz.toFixed(1) + ' Hz is above flicker fusion';
   const m = s.states.length ? s.states[0].radial : s.nearestTheoryModes[0];
@@ -8932,7 +9018,7 @@ $('a').addEventListener('input', e => {
 bind('t', 'tv', v => temp = v);
 bind('h', 'hv', v => depth = v, v => v.toFixed(1));
 bind('ag', 'agv', v => agitation = v, v => v.toFixed(2));
-$('sprinkleBtn').addEventListener('click', sprinkle);
+$('sprinkleBtn').addEventListener('click', () => { if (useSolver) CELL3D.sprinkleTracers(); else sprinkle(); });
 $('play').addEventListener('click', e => {
   if (!running) t0 = performance.now() - simT*1000;
   running = !running; e.target.setAttribute('aria-pressed', String(running));
@@ -8956,7 +9042,6 @@ async function exportImage(SIZE, onProgress){
   const rsqMax = (rr + 2)*(rr + 2);
   const st = state;
   const solverSnapshot = useSolver ? CELL3D.snapshot() : null;
-  if (solverSnapshot && view === 'sand') throw new Error('Sand from the 3D solver is drawn on screen only; export its height, optical or nodal view.');
 
   const exportView = view;
   const exportGain = solverSnapshot ? 1 : phaseSign*st.expression;
@@ -9077,7 +9162,28 @@ async function exportImage(SIZE, onProgress){
   }
 
   let sandBIN = null, sandInfo = null;
-  if (exportView === 'sand'){
+  if (exportView === 'sand' && solverSnapshot){
+    const T = solverSnapshot.tracers, N = T.x.length, ccE = cc - off;
+    const rg = Math.max(0.5, rr/RR_BASE/2), rg2 = rg + 0.7071;
+    onProgress('depositing the solver\'s surface tracers');
+    sandBIN = new Float32Array(SIZE*SIZE);
+    for (let p = 0; p < N; p++){
+      const px = ccE + 0.5 + rr*T.x[p]/T.R, py = ccE + 0.5 + rr*T.y[p]/T.R;
+      const x0 = Math.max(0, Math.floor(px - rg2)), x1 = Math.min(SIZE-1, Math.ceil(px + rg2));
+      const y0 = Math.max(0, Math.floor(py - rg2)), y1 = Math.min(SIZE-1, Math.ceil(py + rg2));
+      for (let y = y0; y <= y1; y++){
+        const dy2 = (y + 0.5 - py)*(y + 0.5 - py), row = y*SIZE;
+        for (let x = x0; x <= x1; x++){
+          const d = Math.sqrt((x + 0.5 - px)*(x + 0.5 - px) + dy2) - rg;
+          if (d >= 0.7071) continue;
+          sandBIN[row + x] += d <= -0.7071 ? 1 : 0.5 - d/1.41421356;
+        }
+      }
+    }
+    sandInfo = { grains: N, model: 'floating tracers advected by the solver\'s own surface velocity',
+                 physicalTime: solverSnapshot.provenance.physicalTime, steps: solverSnapshot.provenance.steps,
+                 tracerRadiusPx: rg };
+  } else if (exportView === 'sand'){
     const SCALE = rr/RR_BASE;
     onProgress('building the transport field');
     const PGXe = new Float32Array(SIZE*SIZE), PGYe = new Float32Array(SIZE*SIZE);
@@ -9347,7 +9453,7 @@ async function exportImage(SIZE, onProgress){
 
   cx.putImageData(out, 0, 0);
   return { canvas: cvx, label: exportLabel, modes: usable.length, litFraction: lit/Math.max(1, inside),
-           pxPerWave: solverSnapshot ? null : 2*Math.PI*rr/finestZeroOf(usable[0].radial), grid: g,
+           ...(solverSnapshot ? {} : { pxPerWave: 2*Math.PI*rr/finestZeroOf(usable[0].radial) }), grid: g,
            source: solverSnapshot ? solverSnapshot.provenance : { model: 'modal-diagnostic', experiment: st.experiment },
            sand: sandInfo };
 }
@@ -9387,7 +9493,7 @@ document.getElementById('expBtn').addEventListener('click', async () => {
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
     note.textContent = `${requestedSize}² · ${res.modes} modes · `
-      + `${res.pxPerWave === null ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
+      + `${res.pxPerWave === undefined ? 'solver snapshot' : res.pxPerWave.toFixed(1) + ' px/λ'} · ${((performance.now()-t0)/1000).toFixed(1)}s`
       + (res.sand ? ` · ${(res.sand.grains/1000).toFixed(0)}k grains of `
           + `${res.sand.grainUm.toFixed(1)} μm at ${res.sand.grainPx.toFixed(1)} px, `
           + `${res.sand.steps} steps, ${res.sand.toppleSweeps} topple sweeps, `
@@ -9779,6 +9885,7 @@ function loop(now){
   const clock = CELL3D.clocks();
   const inputError = $('experimentError').textContent;
   const pending = useSolver && (!clock.have || clock.err || inputError);
+  $('sprinkleBtn').disabled = useSolver && !(clock.live && clock.have && !clock.err);
   $('solverOverlay').style.display = pending ? 'flex' : 'none';
   if (pending){
     $('solverOverlay').textContent = inputError ? `Inputs invalid: ${inputError}` : clock.err ? `Solver failed: ${clock.err}` : solverRequested ? 'Nonlinear solver starting; no replacement surface is displayed.' : 'Nonlinear solver not started. Set the experiment inputs and press Run 3D solver.';
@@ -9797,8 +9904,8 @@ function loop(now){
     $('solverOverlay').textContent = `not drawn · ${best.toFixed(1)} px/λ · ${RES_GATE} needed · grid ${GR}`;
     paintOverlay(); FARADAY_STARTUP.ready(); return;
   }
-  if (view === 'sand' && running){
-    const gain = useSolver ? 1 : phaseSign*state.expression;
+  if (view === 'sand' && running && !useSolver){
+    const gain = phaseSign*state.expression;
     stepGrains(gain); stepGrains(gain); stepGrains(gain);
   }
   renderSurface(state);
@@ -9848,6 +9955,16 @@ const CELL3D = (function(){
      what was asked for, so the deck reports what ran and not what was requested. */
   let gen = 0, ranEngine = null, ranThreads = 0;
   let etaBuf = null, htBuf = null, haveFrame = false, peakRaw = 0;
+  let tracerX = null, tracerY = null, tracerSeededAt = 0;
+  const GOLDEN = Math.PI*(3 - Math.sqrt(5));
+  function seedTracers(R, n){
+    const x = new Float64Array(n), y = new Float64Array(n);
+    for (let p = 0; p < n; p++){
+      const r = R*Math.sqrt((p + 0.5)/n), th = p*GOLDEN;
+      x[p] = r*Math.cos(th); y[p] = r*Math.sin(th);
+    }
+    return { x, y };
+  }
   /* S11: the workers that form the explicit terms' rows beside the solver's own thread,
      and the previous run's, kept until the new run says it is ready -- the solver may
      still be finishing a slice on them when the page asks for a new run. */
@@ -9924,7 +10041,14 @@ const CELL3D = (function(){
     const body = [await sourceOf('dnsDisc'), await sourceOf('dnsCell3d'),
       await sourceOf('dnsCell3dWasm'), await sourceOf('dnsCell3dPool'),
       `let S = null, W = null, E = null, pool = null, dt = 0, sliceMs = 120, gen = -1,
-           engine = 'js';
+           engine = 'js', TX = null, TY = null, stepN = 0, seededAt = 0;
+       const takeTracers = (x, y) => {
+         if (!(x instanceof Float64Array && y instanceof Float64Array && x.length === y.length && x.length > 0))
+           throw new TypeError('cell3d worker: tracers need x and y as Float64Arrays of one nonzero length.');
+         for (let p = 0; p < x.length; p++) if (!(Math.hypot(x[p], y[p]) < S.R)) throw new RangeError(
+           'cell3d worker: tracer ' + p + ' at (' + x[p] + ', ' + y[p] + ') m is not inside the cell of radius ' + S.R + ' m.');
+         TX = Float64Array.from(x); TY = Float64Array.from(y);
+       };
        /* One command at a time, each to completion: a slice awaits the pool's workers,
           and an init arriving meanwhile must not replace the cell under it. */
        let chain = Promise.resolve();
@@ -9967,6 +10091,8 @@ const CELL3D = (function(){
                for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = d.eta0[i*S.nth + k];
              S.refreshMetric();
              if (W){ W.pushState(); W.refreshMetric(); }
+             takeTracers(d.tx0, d.ty0);
+             stepN = 0; seededAt = 0;
              dt = S.stableStep();
              /* S11: the explicit terms' rows over the ports the page sent, one per
                 worker it started; none means this thread forms every row. */
@@ -9986,22 +10112,30 @@ const CELL3D = (function(){
                rc: Array.from(S.rc), R: S.R, h: S.h });
              return;
            }
+           if (d.cmd === 'tracers'){
+             if (d.gen !== gen) return;
+             takeTracers(d.tx, d.ty);
+             seededAt = stepN;
+             return;
+           }
            if (d.cmd === 'slice'){
              if (d.gen !== gen) return;      /* a slice for a run that has ended */
              const t0 = Date.now(); let n = 0;
              while (Date.now() - t0 < sliceMs){
                if (W) W.pullState();
                dt = S.stableStep();
+               S.advanceSurfaceTracers(TX, TY, dt);
                if (pool) await pool.step(dt); else E.step(dt);
-               n++;
+               n++; stepN++;
              }
              const src = W ? W.views : S;
              const eta = new Float64Array(src.eta), ht = new Float64Array(src.Ht);
+             const tx = Float64Array.from(TX), ty = Float64Array.from(TY);
              self.postMessage({ ok: true, kind: 'frame', gen, engine,
                threads: pool ? pool.channels.length + 1 : 1,
                t: W ? W.t : S.t, steps: n,
-               ms: Date.now() - t0, eta, ht, cg: W ? W.cgIters : S.cgIters },
-               [eta.buffer, ht.buffer]);
+               ms: Date.now() - t0, eta, ht, tx, ty, seededAt, cg: W ? W.cgIters : S.cgIters },
+               [eta.buffer, ht.buffer, tx.buffer, ty.buffer]);
              return;
            }
            throw new Error('cell3d worker: unknown command ' + d.cmd);
@@ -10050,6 +10184,32 @@ const CELL3D = (function(){
     return { worker: h, port: ch.port2 };
   }
 
+  function pinnedZeroAtOrAbove(q, x){
+    let z = FARADAY_KERNEL.jZeroNear(q, Math.max(0.02, q - 2));
+    if (!(z > 0)) throw new Error(`Could not resolve the first zero of J_${q}.`);
+    if (z > x) return null;
+    while (z < x){
+      const next = FARADAY_KERNEL.jZeroNear(q, z + 0.9*Math.PI);
+      if (!(next > z + 3)) throw new Error(`Could not step past the zero ${z} of J_${q}.`);
+      z = next;
+    }
+    return z;
+  }
+  function faradayBand(R, h, water, gravity, f){
+    const hz = f/2, k = FARADAY_KERNEL.kOfOmega(2*Math.PI*hz, water.gamma, water.rho, h, gravity);
+    const modes = [];
+    for (let q = 0; ; q++){
+      const z = pinnedZeroAtOrAbove(q, k*R);
+      if (z === null) break;
+      modes.push({ m: q, k: z/R });
+    }
+    const harmonic = FARADAY_KERNEL.kOfOmega(2*Math.PI*f, water.gamma, water.rho, h, gravity)*R;
+    const text = `subharmonic tongue at ${hz} Hz, kR ${(k*R).toFixed(2)}: `
+      + (modes.length ? `pinned modes m 0 to ${modes.length - 1}, each at its first zero at or above it` : 'below the first zero of J_0')
+      + `; harmonic tongue at ${f} Hz, kR ${harmonic.toFixed(2)}, not covered by this grid`;
+    return { hz, kR: k*R, harmonicKR: harmonic, modes, text };
+  }
+
   /* The seed specifies an initial surface displacement, not a predicted response mode. */
   function seed(S, m, profile, amplitude = 1e-7){
     const AMP = amplitude, out = new Float64Array(S.nr*S.nth);
@@ -10090,19 +10250,22 @@ const CELL3D = (function(){
     const root = FARADAY_KERNEL.jZeroNear(m, Math.max(0.02, m - 2));
     if (!(root > 0)) throw new Error(`Could not resolve the pinned initial-condition root for m=${m}.`);
     const kTest = root/R;
+    const band = faradayBand(R, h, water, st.gravity, freq);
     const size = FARADAY_CELL3D.suggestCell3DGrid({
-      m, k: kTest, R, h, ...water, g: st.gravity, accel: st.accelAssumed,
+      modes: [{ m, k: kTest }, ...band.modes], R, h, ...water, g: st.gravity, accel: st.accelAssumed,
       contact: pinned ? 'pinned' : 'free',
       omegaResponse: 2*Math.PI*freq, omegaDrive: 2*Math.PI*freq,
       besselJ: FARADAY_KERNEL.besselJ });
     if (size.unreachable){
       const c = size.closest;
       throw new Error(
-        `no grid of at most ${size.maxCells.toLocaleString()} cells carries this mode to `
-        + `the contract the solver is held to. m = ${m}, kR = ${(kTest*R).toFixed(2)}`
+        `no grid of at most ${size.maxCells.toLocaleString()} cells carries the seed and the `
+        + `Faraday band to the contract the solver is held to. Seed m = ${m}, kR = ${(kTest*R).toFixed(2)}; `
+        + `${band.text}`
         + (c ? `; the closest, ${c.nr} radial x ${c.nth} azimuthal`
              + (c.nz ? ` x ${c.nz} vertical` : '') + `, gets the surface operator to `
              + `${(c.err*100).toFixed(2)}% against ${(size.errTol*100).toFixed(0)}%`
+             + (c.worst ? ` at m = ${c.worst.m}, kR = ${(c.worst.k*R).toFixed(2)}` : '')
              + (c.surfaceOk && !c.layersOk ? ` with ${c.thinnest.toFixed(2)} cells in its `
                 + `thinnest Stokes layer against ${size.layerCells}` : '') : '')
         + `. Refusing rather than running a grid that misstates the restoring force or `
@@ -10115,7 +10278,7 @@ const CELL3D = (function(){
                    accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
                    contact: pinned ? 'pinned' : 'free' };
     vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
-    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R,
+    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R, band, worst: size.worst,
              err: size.err, thinnest: size.thinnest, stepsPerPeriod: size.stepsPerPeriod };
     const profile = r => FARADAY_KERNEL.besselJ(m, root*r/R);
     const eta0 = seed(vessel, m, profile, e.seedFraction*h);
@@ -10150,7 +10313,9 @@ const CELL3D = (function(){
     retiring.push(...helpers);
     helpers = mine;
     ranEngine = null; ranThreads = 0;
-    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine };
+    const seeds = seedTracers(vessel.R, NP);
+    lastRun = { opts: { ...opts }, eta0: Float64Array.from(eta0), engine,
+                tx0: Float64Array.from(seeds.x), ty0: Float64Array.from(seeds.y) };
     w.onmessage = ev => {
       const d = ev.data;
       if (d.gen !== undefined && (d.gen !== myGen || myGen !== gen)) return;   /* a previous run's */
@@ -10167,7 +10332,8 @@ const CELL3D = (function(){
       }
       if (d.kind === 'frame'){
         ranEngine = d.engine; ranThreads = d.threads;
-        etaBuf = d.eta; htBuf = d.ht; physT = d.t; stepsDone += d.steps;
+        etaBuf = d.eta; htBuf = d.ht; tracerX = d.tx; tracerY = d.ty; tracerSeededAt = d.seededAt;
+        physT = d.t; stepsDone += d.steps;
         wall += d.ms/1000; perStep = d.ms/Math.max(1, d.steps);
         haveFrame = true; dirty = true;
         if (running3d) w.postMessage({ cmd: 'slice', gen: myGen });
@@ -10176,14 +10342,20 @@ const CELL3D = (function(){
     w.onerror = ev => { err = ev.message || 'worker failed'; running3d = false; };
     running3d = true;
     const ports = helpers.map(h => h.port);
-    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0,
+    w.postMessage({ cmd: 'init', gen: myGen, opts, eta0, tx0: seeds.x, ty0: seeds.y,
                     engine, wasmBytes, ports }, ports);
   }
 
   function stop(){ running3d = false; }
   function reset(){
     running3d = false; haveFrame = false; err = null; gen++;
-    etaBuf = null; htBuf = null; dirty = true; MS_AT = -1;
+    etaBuf = null; htBuf = null; tracerX = null; tracerY = null; tracerSeededAt = 0; dirty = true;
+  }
+  function sprinkleTracers(){
+    if (!worker || !vessel || !running3d || !haveFrame)
+      throw new Error('The nonlinear solver is not running, so there are no tracers on its surface to re-sprinkle.');
+    const seeds = seedTracers(vessel.R, NP);
+    worker.postMessage({ cmd: 'tracers', gen, tx: seeds.x, ty: seeds.y }, [seeds.x.buffer, seeds.y.buffer]);
   }
   function snapshot(){
     if (err || !haveFrame || !vessel || !lastRun)
@@ -10198,13 +10370,13 @@ const CELL3D = (function(){
       provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes',
         physicalTime: physT, steps: stepsDone, engine: ranEngine,
         parameters: { ...lastRun.opts }, initialCondition: { kind: 'first-root-bessel', m: grid.m, amplitudeM: state.experiment.seedFraction*state.depthMm/1000 }, display: 'normalized surface snapshot; image size is not solver resolution' },
+      tracers: { x: Float64Array.from(tracerX), y: Float64Array.from(tracerY), R: frozen.R },
       at(rho, th){
         const r = rho*frozen.R, theta = th < 0 ? th + 2*Math.PI : th;
         const a = frozen.etaSlopeAt(r, theta);
         const eR = a.Hr*frozen.R, eT = rho > 0 ? a.Hth/rho : 0;
         const c = Math.cos(theta), sn = Math.sin(theta);
-        return { Re: frozen.etaAt(r, theta), Im: 0,
-          gRx: eR*c - eT*sn, gRy: eR*sn + eT*c, gIx: 0, gIy: 0 };
+        return { Re: frozen.etaAt(r, theta), gRx: eR*c - eT*sn, gRy: eR*sn + eT*c };
       }
     };
   }
@@ -10222,7 +10394,7 @@ const CELL3D = (function(){
     vessel.refreshMetric();
     const R = vessel.R;
     for (let i = 0; i < NSZ; i++){
-      if (COVER[i] <= 0){ ETA[i] = IMF[i] = NX[i] = NY[i] = GIX[i] = GIY[i] = 0; continue; }
+      if (COVER[i] <= 0){ ETA[i] = NX[i] = NY[i] = 0; continue; }
       const rho = Math.min(1, RAD[i]), th = ANG[i] < 0 ? ANG[i] + 2*Math.PI : ANG[i];
       const r = rho*R;
       const re = vessel.etaAt(r, th);
@@ -10231,9 +10403,14 @@ const CELL3D = (function(){
          azimuthal part divides by rho rather than by r for the same reason */
       const c = Math.cos(th), sn = Math.sin(th), rr = Math.max(rho, 1e-6);
       const eR = gE.Hr*R, eT = gE.Hth/rr;
-      ETA[i] = re; IMF[i] = 0;
+      ETA[i] = re;
       NX[i]  = eR*c - eT*sn;  NY[i]  = eR*sn + eT*c;
-      GIX[i] = 0; GIY[i] = 0;
+    }
+    if (tracerX.length !== NP) throw new Error(
+      `cell3d: the solver carries ${tracerX.length} surface tracers and the ${GR} grid draws ${NP} grains.`);
+    for (let p = 0; p < NP; p++){
+      PX[p] = CC + 0.5 + RR*tracerX[p]/R;
+      PY[p] = CC + 0.5 + RR*tracerY[p]/R;
     }
     /* The raw peak over covered pixels, which is exactly what finishSurface divides
        the rasters by. Kept so a caller -- dns/check-page.mjs -- can ask what a pixel
@@ -10241,7 +10418,6 @@ const CELL3D = (function(){
     peakRaw = 0;
     for (let i = 0; i < NSZ; i++)
       if (COVER[i] > 0) peakRaw = Math.max(peakRaw, Math.abs(ETA[i]));
-    accumulateMeanSquare(physT, 1/freq);
     st.render = { drawn: 1, gatedRms: 0, gated: 0 };
     finishSurface(st);
     return true;
@@ -10255,7 +10431,7 @@ const CELL3D = (function(){
     return vessel.etaAt(Math.min(1, rho)*vessel.R, th)/peakRaw;
   }
 
-  const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err,
+  const clocks = () => ({ physT, wall, stepsDone, perStep, grid, err, peak: peakRaw,
                           live: running3d, have: haveFrame,
                           engine: ranEngine, asked: cell3dEngine,
                           threads: ranThreads, askedThreads: cell3dThreads,
@@ -10263,13 +10439,16 @@ const CELL3D = (function(){
   /* For dns/check-page.mjs: what this run started from, and the surface its last frame
      carried with the number of steps that produced it -- read together, so the two belong
      to one frame. */
-  const lastFrame = () => ({ steps: stepsDone, eta: etaBuf ? Float64Array.from(etaBuf) : null });
+  const lastFrame = () => ({ steps: stepsDone, eta: etaBuf ? Float64Array.from(etaBuf) : null,
+                             tx: tracerX ? Float64Array.from(tracerX) : null, ty: tracerY ? Float64Array.from(tracerY) : null,
+                             seededAt: tracerSeededAt });
   /* For dns/check-page.mjs: the row-forming workers alive -- this run's, and the previous
      run's still waiting to retire -- and this run's, to make one of them fail. */
   const threadWorkers = () => ({ live: helpers.length, retiring: retiring.length,
                                  made: helpersMade, ended: helpersEnded,
                                  workers: helpers.map(h => h.worker) });
-  return { start, stop, reset, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers,
+  return { start, stop, reset, snapshot, build, clocks, etaAtPixel, lastFrame, threadWorkers, sprinkleTracers,
+           tracers: () => tracerX ? { x: Float64Array.from(tracerX), y: Float64Array.from(tracerY), R: vessel.R } : null,
            lastRun: () => lastRun,
            vesselFor: () => vessel, isOn: () => running3d };
 })();

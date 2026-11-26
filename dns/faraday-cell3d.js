@@ -304,10 +304,18 @@ function cell3dTransformFriendly(nth){
 }
 
 function suggestCell3DGrid(o){
-  const m = o.m;
-  if (!(Number.isInteger(m) && m >= 0)) throw new RangeError(
-    `suggestCell3DGrid: m = ${m} is not a non-negative azimuthal order.`);
-  const k = requireFinitePositive(o.k, 'k'), R = requireFinitePositive(o.R, 'R');
+  if (o.m !== undefined || o.k !== undefined) throw new TypeError(
+    'suggestCell3DGrid: the modes to carry are given as modes: [{ m, k }, ...], not as m and k.');
+  if (!(Array.isArray(o.modes) && o.modes.length > 0)) throw new RangeError(
+    'suggestCell3DGrid: modes must list at least one { m, k } the grid has to carry.');
+  const modes = o.modes.map((md, q) => {
+    if (!(md && Number.isInteger(md.m) && md.m >= 0)) throw new RangeError(
+      `suggestCell3DGrid: modes[${q}].m = ${md && md.m} is not a non-negative azimuthal order.`);
+    return { m: md.m, k: requireFinitePositive(md.k, `modes[${q}].k`) };
+  });
+  let kMax = 0;
+  for (const md of modes) if (md.k > kMax) kMax = md.k;
+  const R = requireFinitePositive(o.R, 'R');
   const h = requireFinitePositive(o.h, 'h'), rho = requireFinitePositive(o.rho, 'rho');
   const nu = requireFinitePositive(o.nu, 'nu'), gamma = requireFinitePositive(o.gamma, 'gamma');
   const g = o.g === undefined ? CELL3D_G0 : requireFinite(o.g, 'g');
@@ -330,38 +338,45 @@ function suggestCell3DGrid(o){
   const search = stretchesOf => {
   for (const nr of CELL3D_SIZE_NR){
     if (nr*16*zMin > maxCells) break;
-    const perLambdaUniform = (2*Math.PI/k)/(R/nr);
+    const perLambdaUniform = (2*Math.PI/kMax)/(R/nr);
     for (const rStretch of stretchesOf(perLambdaUniform)){
     const P = new FaradayCell3D({ nr, nth: 8, nz: 4, R, h, rho, nu, gamma, g, contact,
                                   rStretch, zStretch: 2.2 });
     /* small enough that every slope squared is below the rounding of 1 */
     const amp = 1e-12*R;
-    for (let i = 0; i < nr; i++){
-      const v = amp*o.besselJ(m, k*P.rc[i]);
-      for (let q = 0; q < 8; q++) P.eta[P.ie(i, q)] = v;
-    }
-    const radial = P.curvature(new Float64Array(nr*8));
+    const probes = modes.map(md => {
+      for (let i = 0; i < nr; i++){
+        const v = amp*o.besselJ(md.m, md.k*P.rc[i]);
+        for (let q = 0; q < 8; q++) P.eta[P.ie(i, q)] = v;
+      }
+      return { md, radial: P.curvature(new Float64Array(nr*8)), eta: Float64Array.from(P.eta) };
+    });
     const errAt = nth => {
       const dth = 2*Math.PI/nth;
-      const lam = m === 0 ? 0 : 2*(1 - Math.cos(m*dth))/(dth*dth);
-      let num = 0, den = 0;
-      for (let i = 0; i < nr; i++){
-        const e = P.ie(i, 0), w = P.rc[i]*P.drc[i];
-        const got = radial[e] - lam*P.eta[e]/(P.rc[i]*P.rc[i]), want = -k*k*P.eta[e];
-        num += (got - want)*(got - want)*w;
-        den += want*want*w;
+      let worstErr = -Infinity, worst = null;
+      for (const { md, radial, eta } of probes){
+        const lam = md.m === 0 ? 0 : 2*(1 - Math.cos(md.m*dth))/(dth*dth);
+        let num = 0, den = 0;
+        for (let i = 0; i < nr; i++){
+          const e = P.ie(i, 0), w = P.rc[i]*P.drc[i];
+          const got = radial[e] - lam*eta[e]/(P.rc[i]*P.rc[i]), want = -md.k*md.k*eta[e];
+          num += (got - want)*(got - want)*w;
+          den += want*want*w;
+        }
+        const e1 = Math.sqrt(num/den);
+        if (!(e1 <= worstErr)){ worstErr = e1; worst = md; }
       }
-      return Math.sqrt(num/den);
+      return { err: worstErr, worst };
     };
-    let nth = null, err = Infinity, lastErr = Infinity, lastNth = null;
+    let nth = null, err = Infinity, worst = null, lastErr = Infinity, lastNth = null, lastWorst = null;
     for (let n = 16; nr*n*zMin <= maxCells; n += 2){
       if (!cell3dTransformFriendly(n)) continue;
       const e = errAt(n);
-      lastErr = e; lastNth = n;
-      if (e <= errTol){ nth = n; err = e; break; }
+      lastErr = e.err; lastNth = n; lastWorst = e.worst;
+      if (e.err <= errTol){ nth = n; err = e.err; worst = e.worst; break; }
     }
     if (nth === null){
-      const rec = { nr, nth: lastNth, rStretch, err: lastErr, surfaceOk: false };
+      const rec = { nr, nth: lastNth, rStretch, err: lastErr, worst: lastWorst, surfaceOk: false };
       tried.push(rec);
       if (!closest || (!closest.surfaceOk && rec.err < closest.err)) closest = rec;
       continue;
@@ -383,7 +398,7 @@ function suggestCell3DGrid(o){
                                    gamma, rho, nu);
         const dt = 0.4*Math.min(L.capillary, L.viscous, L.gravity);
         const cells = nr*nth*nz, stepsPerPeriod = period/dt;
-        const rec = { nr, nth, nz, rStretch, zStretch, err, layers, thinnest,
+        const rec = { nr, nth, nz, rStretch, zStretch, err, worst, layers, thinnest,
                       layersOk: thinnest >= layerCells, surfaceOk: true, dt, cells,
                       stepsPerPeriod, work: cells*stepsPerPeriod };
         tried.push(rec);
@@ -397,8 +412,8 @@ function suggestCell3DGrid(o){
   };
   search(perLambdaUniform => [perLambdaUniform > 16 ? 2.2 : perLambdaUniform > 8 ? 1.4 : 0.8]);
   if (!best) search(() => CELL3D_SIZE_RSTRETCH_RIM);
-  if (best) return Object.assign({}, best, { errTol, layerCells, maxCells, delta, tried });
-  return { unreachable: true, errTol, layerCells, maxCells, delta, closest, tried };
+  if (best) return Object.assign({}, best, { modes, errTol, layerCells, maxCells, delta, tried });
+  return { unreachable: true, modes, errTol, layerCells, maxCells, delta, closest, tried };
 }
 
 class FaradayCell3D {
@@ -518,6 +533,17 @@ class FaradayCell3D {
     this._r = new Float64Array(NP);
     this._d = new Float64Array(NP);
     this._q = new Float64Array(NP);
+    this._sur = new Float64Array(NE);
+    this._tv = new Float64Array(2);
+    this._sut = new Float64Array(NE);
+    this._sux = new Float64Array(NE);
+    this._suy = new Float64Array(NE);
+    this._cth = new Float64Array(nth);
+    this._sth = new Float64Array(nth);
+    for (let k = 0; k < nth; k++){
+      this._cth[k] = Math.cos((k + 0.5)*this.dth);
+      this._sth[k] = Math.sin((k + 0.5)*this.dth);
+    }
     this._z = new Float64Array(NP);
     this._div = new Float64Array(NP);
     this._gu = new Float64Array(NU);
@@ -2657,6 +2683,92 @@ class FaradayCell3D {
     const rc = this.rc[i];
     return s[4]*s[0]*s[0] + s[5]*s[1]*s[1]
          + 0.5*(s[2]*s[2] + s[3]*s[3])/(rc*rc);
+  }
+
+  surfaceVelocity(outR, outT){
+    const nr = this.nr, nth = this.nth, FU = this.FAM.u, FV = this.FAM.v;
+    const lu = FU.sn.length - 2;
+    for (let i = 0; i < nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = this.ie(i, k), z = this.H[e];
+        outR[e] = 0.5*(this.colValueAtZ(this.u, FU, i, k, z, lu)
+                     + this.colValueAtZ(this.u, FU, i + 1, k, z, lu));
+        outT[e] = 0.5*(this.colValueAtZ(this.v, FV, i, k, z, lu)
+                     + this.colValueAtZ(this.v, FV, i, k + 1, z, lu));
+      }
+    return this;
+  }
+
+  surfaceVelocityCartesian(){
+    const nth = this.nth, ur = this._sur, ut = this._sut, ux = this._sux, uy = this._suy;
+    this.surfaceVelocity(ur, ut);
+    for (let i = 0; i < this.nr; i++)
+      for (let k = 0; k < nth; k++){
+        const e = i*nth + k, c = this._cth[k], sn = this._sth[k];
+        ux[e] = ur[e]*c - ut[e]*sn;
+        uy[e] = ur[e]*sn + ut[e]*c;
+      }
+    return this;
+  }
+
+  surfaceVelocityAtXY(x, y, out){
+    const nr = this.nr, nth = this.nth, rc = this.rc, R = this.R, dth = this.dth;
+    const ux = this._sux, uy = this._suy;
+    const r = Math.hypot(x, y);
+    if (!(r < R)) throw new RangeError(
+      `surfaceVelocityAtXY: (${x}, ${y}) is ${r} m from the axis, not inside the cell of radius ${R} m.`);
+    let th = Math.atan2(y, x);
+    if (th < 0) th += 2*Math.PI;
+    const s = th/dth - 0.5, kb = Math.floor(s), ft = s - kb;
+    const k0 = this.kw(kb), k1 = this.kw(kb + 1);
+    const along = (i, ka, kc) => {
+      const a = i*nth + ka, b = i*nth + kc;
+      out[0] = ux[a] + ft*(ux[b] - ux[a]);
+      out[1] = uy[a] + ft*(uy[b] - uy[a]);
+    };
+    if (r < rc[0]){
+      const half = nth >> 1;
+      along(0, this.kw(k0 + half), this.kw(k1 + half));
+      const ax = out[0], ay = out[1];
+      along(0, k0, k1);
+      const fr = (r + rc[0])/(2*rc[0]);
+      out[0] = ax + fr*(out[0] - ax);
+      out[1] = ay + fr*(out[1] - ay);
+      return out;
+    }
+    if (r >= rc[nr - 1]){
+      along(nr - 1, k0, k1);
+      const keep = (R - r)/(R - rc[nr - 1]);
+      out[0] *= keep; out[1] *= keep;
+      return out;
+    }
+    let lo = 0, hi = nr - 1;
+    while (hi - lo > 1){ const m = (lo + hi) >> 1; if (rc[m] <= r) lo = m; else hi = m; }
+    const fr = (r - rc[lo])/(rc[hi] - rc[lo]);
+    along(lo, k0, k1);
+    const ix = out[0], iy = out[1];
+    along(hi, k0, k1);
+    out[0] = ix + fr*(out[0] - ix);
+    out[1] = iy + fr*(out[1] - iy);
+    return out;
+  }
+
+  advanceSurfaceTracers(x, y, dt){
+    if (!(typeof dt === 'number' && Number.isFinite(dt) && dt > 0)) throw new TypeError(
+      `dt = ${dt}: a finite positive time step is required.`);
+    if (x.length !== y.length) throw new RangeError(
+      `advanceSurfaceTracers: ${x.length} x positions against ${y.length} y positions.`);
+    this.surfaceVelocityCartesian();
+    const v = this._tv;
+    for (let p = 0; p < x.length; p++){
+      this.surfaceVelocityAtXY(x[p], y[p], v);
+      const nx = x[p] + dt*v[0], ny = y[p] + dt*v[1];
+      if (!(Math.hypot(nx, ny) < this.R)) throw new RangeError(
+        `advanceSurfaceTracers: tracer ${p} would cross the wall at r = ${Math.hypot(nx, ny)} m `
+        + `in a step of ${dt} s; the surface velocity there is (${v[0]}, ${v[1]}) m/s.`);
+      x[p] = nx; y[p] = ny;
+    }
+    return this;
   }
 
   /* The outward unit normal of the free surface at an arbitrary position, from the

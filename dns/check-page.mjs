@@ -303,7 +303,7 @@ async function checkGeneralPending(page){
     recompute(); true`);
   const pending = await page.json(`({ experimentMode, experiment: !!state.experiment,
     rim, useSolver, solverRequested, have: CELL3D.clocks().have,
-    comparePaper, signature: state.visualSignature,
+    comparePaper, signature: 'visualSignature' in state,
     empty: [ETA, IMF, NX, NY].every(a => a.every(v => v === 0)),
     overlay: getComputedStyle(document.getElementById('solverOverlay')).display !== 'none' })`);
   ok(pending.experimentMode === 'general' && pending.experiment,
@@ -312,7 +312,7 @@ async function checkGeneralPending(page){
      'the default surface is the nonlinear solver with a pinned rim', JSON.stringify(pending));
   ok(!pending.solverRequested && !pending.have && pending.empty && pending.overlay,
      'before an explicit run no worker frame or substitute modal surface is displayed', JSON.stringify(pending));
-  ok(!pending.comparePaper && pending.signature === null,
+  ok(!pending.comparePaper && pending.signature === false,
      'the pending nonlinear field has no reference-atlas texture or comparator enabled', JSON.stringify(pending));
   const exportError = await page.eval(`(async () => {
     try { await exportImage(129, () => {}); return ''; }
@@ -723,7 +723,14 @@ async function checkSolverDraws(page){
     const ctl = await page.json('({ ...generalInput, freq, rim })');
     const m = ctl.seedMode, R = ctl.diameterMm/2000;
     const kTest = K.jZeroNear(m,Math.max(.02,m-2))/R;
-    const want = C3.suggestCell3DGrid({ m, k: kTest, R, h: ctl.depthMm/1000,
+    const band = [];
+    const kF = K.kOfOmega(Math.PI*ctl.freq, ctl.sigma, ctl.rho, ctl.depthMm/1000, ctl.gravity);
+    for (let q = 0; K.jZeroNear(q, Math.max(.02, q - 2)) <= kF*R; q++){
+      let z = K.jZeroNear(q, Math.max(.02, q - 2));
+      while (z < kF*R) z = K.jZeroNear(q, z + 0.9*Math.PI);
+      band.push({ m: q, k: z/R });
+    }
+    const want = C3.suggestCell3DGrid({ modes: [{ m, k: kTest }, ...band], R, h: ctl.depthMm/1000,
       rho: ctl.rho, nu: ctl.mu/ctl.rho, gamma: ctl.sigma, g: ctl.gravity,
       accel: ctl.acceleration, contact: 'pinned',
       omegaResponse: 2*Math.PI*ctl.freq, omegaDrive: 2*Math.PI*ctl.freq,
@@ -731,13 +738,14 @@ async function checkSolverDraws(page){
     const run = await page.json('(() => { const r = CELL3D.lastRun(); return r && r.opts; })()');
     const same = !want.unreachable && run && run.nr === want.nr && run.nth === want.nth
       && run.nz === want.nz && run.rStretch === want.rStretch && run.zStretch === want.zStretch;
-    console.log(`       sized for m = ${m}, kR = ${(kTest*R).toFixed(3)}: `
+    console.log(`       sized for m = ${m}, kR = ${(kTest*R).toFixed(3)} and ${band.length} Faraday-band modes `
+      + `to m = ${Math.max(...band.map(b => b.m))}, worst m = ${want.worst.m}, kR = ${(want.worst.k*R).toFixed(3)}: `
       + `${want.nr} x ${want.nth} x ${want.nz}, surface operator `
       + `${(want.err*100).toFixed(2)}%, thinnest Stokes layer ${want.thinnest.toFixed(2)} cells`);
     ok(same && want.err <= 0.01 && want.thinnest >= 2
        && c.grid.err === want.err && c.grid.thinnest === want.thinnest,
-       'the solver runs on the grid the explicit pinned seed needs, recomputed here from the page\'s '
-       + 'controls: within 1% on the surface operator and two cells in every Stokes layer',
+       'the solver runs on the grid the explicit pinned seed and every pinned mode of the subharmonic tongue need, '
+       + 'recomputed here from the page\'s controls: within 1% on the surface operator and two cells in every Stokes layer',
        JSON.stringify({ run, want: { nr: want.nr, nth: want.nth, nz: want.nz,
          rStretch: want.rStretch, zStretch: want.zStretch, err: want.err }, grid: c.grid }));
   }
@@ -789,46 +797,49 @@ async function checkSolverDraws(page){
      'and it states what the grid was sized to: the mode, its surface-operator error and '
      + 'its thinnest Stokes layer', deck.slice(0, 400));
 
-  await page.eval(`document.querySelector('#viewSeg [data-v="sand"]').click(); recompute(); true`);
+  await page.waitFor('CELL3D.clocks().stepsDone >= 3', 120000, 'three solver steps, so the tracers have met a nonzero velocity');
+  await page.eval(`document.querySelector('#viewSeg [data-v="sand"]').click(); true`);
   const sand = await page.json(`(() => {
-    let worst = 0, scale = 0, n = 0, msMax = 0, negative = 0;
-    for (let i = 0; i < NSZ; i++) if (COVER[i] > 0){ msMax = Math.max(msMax, MS[i]); if (MS[i] < 0) negative++; }
-    let dmax = 0;
-    const want = (i) => [-(MS[i+1] - MS[i-1])/2, -(MS[i+GR] - MS[i-GR])/2];
-    for (let y = 1; y < GR - 1; y++) for (let x = 1; x < GR - 1; x++){
-      const i = y*GR + x;
-      if (COVER[i] <= 0 || COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
-      const w = want(i); dmax = Math.max(dmax, Math.hypot(w[0], w[1]));
+    recompute();
+    const T = CELL3D.tracers(), run = CELL3D.lastRun();
+    let drawn = 0, inside = 0;
+    for (let p = 0; p < NP; p++){
+      if (PX[p] === Math.fround(CC + 0.5 + RR*T.x[p]/T.R) && PY[p] === Math.fround(CC + 0.5 + RR*T.y[p]/T.R)) drawn++;
+      if (Math.hypot(T.x[p], T.y[p]) < T.R) inside++;
     }
-    for (let y = 4; y < GR - 4; y += 7) for (let x = 4; x < GR - 4; x += 7){
-      const i = y*GR + x;
-      if (COVER[i] <= 0 || COVER[i-1] <= 0 || COVER[i+1] <= 0 || COVER[i-GR] <= 0 || COVER[i+GR] <= 0) continue;
-      const w = want(i);
-      worst = Math.max(worst, Math.abs(PGX[i] - w[0]/dmax), Math.abs(PGY[i] - w[1]/dmax));
-      n++;
-    }
-    running = true;
-    let all = 0, cells = 0;
-    for (let i = 0; i < NSZ; i++) if (COVER[i] === 1){ all += MS[i]; cells++; }
-    const under = () => { let u = 0; for (let q = 0; q < NP; q++) u += MS[(PY[q] | 0)*GR + (PX[q] | 0)]; return u/NP/(all/cells); };
-    sprinkle();
-    const fresh = under();
-    for (let k = 0; k < 120; k++) stepGrains(1);
-    return { view, at: MS_AT, physT: CELL3D.clocks().physT, msMax, negative, n, worst, fresh, settled: under(),
-             transport: state.transport };
+    return { view, NP, n: T.x.length, seeds: run.tx0.length, drawn, inside, transport: state.transport };
   })()`);
-  console.log(`       sand on the solver: drift against -grad of the surface's mean square at ${sand.n} pixels, `
-    + `worst ${sand.worst.toExponential(2)}; grains on ${(100*sand.fresh).toFixed(1)}% of the mean fresh, `
-    + `${(100*sand.settled).toFixed(1)}% after 120 steps`);
-  ok(sand.view === 'sand' && sand.at === sand.physT && sand.msMax > 0 && sand.negative === 0,
-     'sand is drawn with the solver on, from a mean square of its surface accumulated up to its last frame',
+  const replay = await replayMatches(page);
+  console.log(`       sand on the solver: ${sand.n} tracers, ${sand.drawn} drawn where the solver carries them; `
+    + `replayed ${replay.steps} steps: ${replay.moved} moved, ${replay.tracerDiffer} differ`);
+  ok(sand.view === 'sand' && sand.n === sand.NP && sand.seeds === sand.NP && sand.drawn === sand.NP && sand.inside === sand.NP,
+     'every grain on screen is a tracer the solver carries, drawn at the pixel of its own position, all inside the wall',
      JSON.stringify(sand));
-  ok(sand.n > 200 && sand.worst < 1e-6,
-     'the grains\' drift is the downhill gradient of that mean square, normalised, at every sampled pixel',
-     JSON.stringify({ n: sand.n, worst: sand.worst }));
-  ok(sand.fresh > 0.9 && sand.fresh < 1.1 && sand.settled < sand.fresh/2,
-     'freshly sprinkled grains sit on the mean, and 120 steps later they have gathered where the solver\'s surface moves least',
-     JSON.stringify({ fresh: sand.fresh, settled: sand.settled }));
+  ok(replay.steps >= 3 && replay.seededAt === 0 && replay.tracerDiffer === 0 && replay.moved > 0.9*replay.tracers,
+     'and the tracers are, to the bit, the seeds advanced by the solver\'s own surface velocity every step it took',
+     JSON.stringify(replay));
+  const s0 = await page.json('CELL3D.clocks().stepsDone');
+  await page.eval(`document.getElementById('sprinkleBtn').click(); true`);
+  await page.waitFor(`CELL3D.lastFrame().seededAt > 0 && CELL3D.lastFrame().steps > CELL3D.lastFrame().seededAt + 1`, 120000,
+                     'two solver steps after the re-sprinkle');
+  const resown = await replayMatches(page);
+  ok(resown.seededAt >= s0 && resown.tracerDiffer === 0 && resown.differ === 0,
+     're-sprinkling puts the tracers back on their seeds at the step it arrives, and the solver carries them on from there, '
+     + 'to the bit of a replay that does the same', JSON.stringify(resown));
+  const still = await page.eval(`(async () => {
+    CELL3D.stop();
+    let s = -1;
+    while (s !== CELL3D.clocks().stepsDone){ s = CELL3D.clocks().stepsDone; await new Promise(r => setTimeout(r, 800)); }
+    running = true; recompute();
+    const held = Float32Array.from(PX);
+    for (let k = 0; k < 30; k++) await new Promise(r => requestAnimationFrame(r));
+    return { view, unchanged: PX.every((v, p) => Object.is(v, held[p])), transport: state.transport,
+             disabled: document.getElementById('sprinkleBtn').disabled };
+  })()`, true);
+  ok(still.view === 'sand' && still.unchanged && /solver's own surface velocity/.test(still.transport.model),
+     'with the solver stopped and the sand view playing, no grain moves: nothing but the solver carries them',
+     JSON.stringify(still));
+  ok(still.disabled, 'and with no run to carry them there is nothing to re-sprinkle', JSON.stringify(still));
   await page.eval(`document.querySelector('#viewSeg [data-v="height"]').click(); recompute(); true`);
 
   await page.shot(join(tmpdir(), 'check-page-solver.png'));
@@ -848,6 +859,7 @@ async function selectGeneralSolverFixture(page,engine){
       document.getElementById('configurationMode').dispatchEvent(new Event('change',{bubbles:true}));
       for(const [id,value] of Object.entries(values)) document.getElementById(id).value=String(value);
       document.getElementById('expAccel').dispatchEvent(new Event('change',{bubbles:true}));
+      setFreq(40);
     }
     document.querySelector('#rimSeg [data-r="pinned"]').click();
     document.querySelector('#srcSeg [data-s="${engine}"]').click();
@@ -908,6 +920,31 @@ async function checkSolverExport(page, changeControls = false){
      && (!changeControls || result.changed),
      changeControls ? 'export keeps its captured field, view and filename labels when controls change during rendering'
        : 'export labels describe the captured nonlinear field and view', JSON.stringify(result.label));
+  if (changeControls) return;
+  const sand = await page.eval(`(async () => {
+    const prev = view, T = CELL3D.snapshot().tracers;
+    view = 'sand';
+    try {
+      const size = 257, ex = await exportImage(size, () => {});
+      const px = ex.canvas.getContext('2d').getImageData(0, 0, size, size).data;
+      const cc = (size - 1)/2, rr = cc - 3, bare = tone(14) + tone(16) + tone(20);
+      let dark = 0, lit = 0, beyond = 0;
+      for (let p = 0; p < T.x.length; p++){
+        const x = Math.floor(cc + 0.5 + rr*T.x[p]/T.R), y = Math.floor(cc + 0.5 + rr*T.y[p]/T.R);
+        if (Math.hypot(x - cc, y - cc) > rr){ beyond++; continue; }
+        const i = (y*size + x)*4;
+        if (px[i] + px[i+1] + px[i+2] > bare) lit++; else dark++;
+      }
+      return { grains: ex.sand.grains, n: T.x.length, model: ex.sand.model, lit, dark, beyond,
+               steps: ex.sand.steps, source: ex.source.steps };
+    } finally { view = prev; }
+  })()`, true);
+  ok(sand.grains === sand.n && sand.dark === 0 && sand.lit + sand.beyond === sand.n && sand.beyond < sand.n/100
+     && /solver's own surface velocity/.test(sand.model)
+     && sand.steps === sand.source,
+     'the sand view exports from the solver: every tracer of the frozen frame lights the pixel the solver carried it to, '
+     + 'except those within half a pixel of the wall, whose pixel lies outside the drawn disc',
+     JSON.stringify(sand));
 }
 
 async function checkGeneralSolver(page){
@@ -925,14 +962,14 @@ async function checkGeneralSolver(page){
   await page.waitFor('CELL3D.clocks().have || !!CELL3D.clocks().err',90000,
     'a frame from the independent SI experiment');
   const run=await page.json(`({clocks:CELL3D.clocks(),opts:CELL3D.lastRun()&&CELL3D.lastRun().opts,
-    modes:state.states.length,signature:state.visualSignature})`);
+    modes:state.states.length,signature:'visualSignature' in state})`);
   ok(run.clocks.have && !run.clocks.err && run.clocks.stepsDone>0 && run.clocks.engine==='cpp',
     'the independent SI experiment advances real nonlinear physics in the requested engine',JSON.stringify(run.clocks));
   if(!run.clocks.have || run.clocks.err) return;
   for(const [key,want] of Object.entries({R:.0175,h:.005,rho:1100,nu:.022/1100,
     gamma:.05,g:1.62,accel:.3,omegaD:2*Math.PI*23.75}))
     rel(run.opts[key],want,14,`the worker receives independently specified ${key}`);
-  ok(run.opts.contact==='pinned' && run.modes===0 && run.signature===null,
+  ok(run.opts.contact==='pinned' && run.modes===0 && run.signature===false,
     'the general nonlinear run uses its pinned boundary without modal selection or atlas shaping',JSON.stringify(run));
   ok(run.clocks.grid.err<=.01 && run.clocks.grid.thinnest>=2,
     'the general run satisfies the original measured grid-resolution gates',JSON.stringify(run.clocks.grid));
@@ -940,7 +977,7 @@ async function checkGeneralSolver(page){
     const before=CELL3D.lastRun();
     document.getElementById('comparePaper').checked=true;
     document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
-    const unchanged=CELL3D.lastRun()===before && CELL3D.clocks().have && state.visualSignature===null;
+    const unchanged=CELL3D.lastRun()===before && CELL3D.clocks().have && !('visualSignature' in state);
     document.getElementById('comparePaper').checked=false;
     document.getElementById('comparePaper').dispatchEvent(new Event('change',{bubbles:true})); recompute();
     return {unchanged,modes:state.states.length};
@@ -948,8 +985,8 @@ async function checkGeneralSolver(page){
   ok(comparison.unchanged && comparison.modes===0,
     'enabling the optional paper comparator leaves the general solver run and field source unchanged',JSON.stringify(comparison));
   const replay=await replayMatches(page);
-  ok(replay.steps>0 && replay.differ===0,
-    'the general C++ frame exactly matches a one-thread JavaScript replay of its actual SI problem',JSON.stringify(replay));
+  ok(replay.steps>0 && replay.differ===0 && replay.tracerDiffer===0,
+    'the general C++ frame, surface and tracers, exactly matches a one-thread JavaScript replay of its actual SI problem',JSON.stringify(replay));
   await checkSolverExport(page, true);
   await page.eval(`document.getElementById('expSeedFraction').value='0';
     document.getElementById('expSeedFraction').dispatchEvent(new Event('change',{bubbles:true}));
@@ -1312,15 +1349,26 @@ async function checkGpuRender(page, label){
 async function replayMatches(page){
   return page.json(`(() => {
     const run = CELL3D.lastRun(), f = CELL3D.lastFrame();
-    if (!run || !f.eta) return { steps: 0, differ: -1, n: 0 };
+    if (!run || !f.eta) return { steps: 0, differ: -1, n: 0, tracerDiffer: -1, tracers: 0, moved: 0 };
     const S = new FARADAY_CELL3D.FaradayCell3D(run.opts);
     for (let i = 0; i < S.nr; i++)
       for (let k = 0; k < S.nth; k++) S.eta[S.ie(i, k)] = run.eta0[i*S.nth + k];
     S.refreshMetric();
-    for (let n = 0; n < f.steps; n++) S.step(S.stableStep());
-    let differ = 0;
+    const x = Float64Array.from(run.tx0), y = Float64Array.from(run.ty0);
+    for (let n = 0; n < f.steps; n++){
+      if (n === f.seededAt){ x.set(run.tx0); y.set(run.ty0); }
+      const dt = S.stableStep();
+      S.advanceSurfaceTracers(x, y, dt);
+      S.step(dt);
+    }
+    let differ = 0, tracerDiffer = 0, moved = 0;
     for (let e = 0; e < S.eta.length; e++) if (!Object.is(S.eta[e], f.eta[e])) differ++;
-    return { steps: f.steps, differ, n: S.eta.length };
+    for (let p = 0; p < x.length; p++){
+      if (!Object.is(x[p], f.tx[p]) || !Object.is(y[p], f.ty[p])) tracerDiffer++;
+      if (x[p] !== run.tx0[p] || y[p] !== run.ty0[p]) moved++;
+    }
+    if (f.tx.length !== x.length) tracerDiffer = -1;
+    return { steps: f.steps, seededAt: f.seededAt, differ, n: S.eta.length, tracerDiffer, tracers: x.length, moved };
   })()`);
 }
 
@@ -1339,8 +1387,8 @@ async function checkSolverThreads(page, label){
   const r = await replayMatches(page);
   console.log(`       ${r.steps} steps on two threads, replayed on one: ${r.differ} of ${r.n} `
     + 'surface values differ');
-  ok(r.steps > 0 && r.differ === 0,
-     'the surface the page draws from two threads is, to the bit, the surface one JavaScript '
+  ok(r.steps > 0 && r.differ === 0 && r.tracerDiffer === 0,
+     'the surface and the tracers the page draws from two threads are, to the bit, what one JavaScript '
      + 'thread computes from the same start in the same number of steps',
      JSON.stringify(r));
   const deck = await page.eval('document.getElementById("ro").textContent');
@@ -1371,8 +1419,8 @@ async function checkStartRace(page){
      'and exactly that run\'s row-forming workers are alive: every other one the page made, '
      + 'the overtaken starts\' included, has been ended', JSON.stringify(t));
   const r = await replayMatches(page);
-  ok(r.steps > 0 && r.differ === 0,
-     'and its surface is, to the bit, the one-thread replay\'s', JSON.stringify(r));
+  ok(r.steps > 0 && r.differ === 0 && r.tracerDiffer === 0,
+     'and its surface and tracers are, to the bit, the one-thread replay\'s', JSON.stringify(r));
 
   /* The order that hung the page. Starts that wait the same make the same progress, and
      finish in the order they were asked; the one that does damage is a SLOW start overtaken
@@ -1518,8 +1566,8 @@ async function checkCppEngine(page, inlined){
   const r = await replayMatches(page);
   console.log(`       ${r.steps} C++ steps on ${c.threads} threads, replayed in JavaScript on `
     + `one: ${r.differ} of ${r.n} surface values differ`);
-  ok(r.steps > 0 && r.differ === 0,
-     `the C++ engine's surface on ${c.threads} threads is, to the bit, the JavaScript `
+  ok(r.steps > 0 && r.differ === 0 && r.tracerDiffer === 0,
+     `the C++ engine's surface and tracers on ${c.threads} threads are, to the bit, the JavaScript `
      + 'engine\'s on one thread, from the same start in the same number of steps',
      JSON.stringify(r));
 

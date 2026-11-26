@@ -95,7 +95,7 @@ test('zero gravity is a valid physical input; negative and nonfinite values fail
 });
 
 test('grid sizing accepts capillary waves at zero gravity and rejects invalid gravity', () => {
-  const input = { ...options, m: 0, k: 2.404825557695773 / options.R, contact: 'pinned',
+  const input = { ...options, modes: [{ m: 0, k: 2.404825557695773 / options.R }], contact: 'pinned',
     omegaResponse: 400, omegaDrive: 800, besselJ, maxCells: 20000 };
   const grid = suggestCell3DGrid(input);
   assert.ok(grid.tried.length > 0);

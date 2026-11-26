@@ -17,11 +17,9 @@ assert.equal(state.gravity, input.gravity);
 assert.equal(state.accelAssumed, input.acceleration);
 assert.equal(state.frequencyHz, input.frequencyHz);
 assert.equal(state.expression, 1);
-assert.equal(state.visualSignature, null);
-assert.equal(state.replicates, null);
-assert.equal(state.transitionStudy, null);
-assert.equal(state.responseHz, null);
-assert.equal(state.transport, null);
+for (const key of ['visualSignature', 'replicates', 'transitionStudy', 'responseHz', 'transport',
+                   'selectedEmpiricalFold', 'empiricalConfidence', 'transitionRisk'])
+  assert.ok(!Object.hasOwn(state, key), `the general physics state carries no ${key}`);
 assert.deepEqual(state.states, []);
 assert.deepEqual(state.nearestTheoryModes, []);
 assert.ok(!Object.hasOwn(state, 'damping'));
@@ -35,7 +33,7 @@ try {
   Object.defineProperty(K.TRANSITION, '115', { configurable: true, get(){ throw new Error('Transition prior accessed by general physics.'); } });
   assert.deepEqual(K.resolveExperimentState(input), state);
   const overlap = K.resolveExperimentState({ ...input, diameterMm: 24.25, frequencyHz: 115 });
-  assert.equal(overlap.visualSignature, null);
+  assert.ok(!Object.hasOwn(overlap, 'visualSignature'));
   assert.deepEqual(overlap.states, []);
 } finally {
   Object.defineProperty(K.ATLAS, 'medium', medium);
