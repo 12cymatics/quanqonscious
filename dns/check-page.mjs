@@ -724,11 +724,13 @@ async function checkSolverDraws(page){
     const m = ctl.seedMode, R = ctl.diameterMm/2000;
     const kTest = K.jZeroNear(m,Math.max(.02,m-2))/R;
     const band = [];
-    const kF = K.kOfOmega(Math.PI*ctl.freq, ctl.sigma, ctl.rho, ctl.depthMm/1000, ctl.gravity);
-    for (let q = 0; K.jZeroNear(q, Math.max(.02, q - 2)) <= kF*R; q++){
-      let z = K.jZeroNear(q, Math.max(.02, q - 2));
-      while (z < kF*R) z = K.jZeroAfter(q, z);
-      band.push({ m: q, k: z/R });
+    for (const hz of [ctl.freq/2, ctl.freq]){
+      const kF = K.kOfOmega(2*Math.PI*hz, ctl.sigma, ctl.rho, ctl.depthMm/1000, ctl.gravity);
+      for (let q = 0; K.jZeroNear(q, Math.max(.02, q - 2)) <= kF*R; q++){
+        let z = K.jZeroNear(q, Math.max(.02, q - 2));
+        while (z < kF*R) z = K.jZeroAfter(q, z);
+        band.push({ m: q, k: z/R });
+      }
     }
     const want = C3.suggestCell3DGrid({ modes: [{ m, k: kTest }, ...band], R, h: ctl.depthMm/1000,
       rho: ctl.rho, nu: ctl.mu/ctl.rho, gamma: ctl.sigma, g: ctl.gravity,
@@ -744,7 +746,7 @@ async function checkSolverDraws(page){
       + `${(want.err*100).toFixed(2)}%, thinnest Stokes layer ${want.thinnest.toFixed(2)} cells`);
     ok(same && want.err <= 0.01 && want.thinnest >= 2
        && c.grid.err === want.err && c.grid.thinnest === want.thinnest,
-       'the solver runs on the grid the explicit pinned seed and every pinned mode of the subharmonic tongue need, '
+       'the solver runs on the grid the explicit pinned seed and every pinned mode of both Faraday tongues need, '
        + 'recomputed here from the page\'s controls: within 1% on the surface operator and two cells in every Stokes layer',
        JSON.stringify({ run, want: { nr: want.nr, nth: want.nth, nz: want.nz,
          rStretch: want.rStretch, zStretch: want.zStretch, err: want.err }, grid: c.grid }));

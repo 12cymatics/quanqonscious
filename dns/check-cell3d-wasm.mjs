@@ -495,13 +495,13 @@ section('9. the freshly built module against the committed one');
 /* The page sizes its grid with suggestCell3DGrid, which refuses past CELL3D_MAX_CELLS and says
    that is what this module's arena holds at the deepest vertical count it searches -- so that
    both engines accept every grid it returns. That is a claim about this module, and it is
-   asserted here: the largest grid the sizing can return at its deepest nz -- 48 x 162 x 32,
-   248 832 cells, nth/2 = 81 = 3^4 -- is laid out in this module's arena without error, its
+   asserted here: the largest grid the sizing can return at its deepest nz -- 96 x 324 x 32,
+   995 328 cells, nth/2 = 162 = 2 x 3^4 -- is laid out in this module's arena without error, its
    families and bracket tables included. Laid out directly rather than through the loader,
    which would also factor the preconditioner on a flat twin of a quarter-million-cell grid. */
 {
   const C3 = C;
-  const nzMax = Math.max(...C3.CELL3D_SIZE_NZ), nr = 48, nth = 162;
+  const nzMax = Math.max(...C3.CELL3D_SIZE_NZ), nr = 96, nth = 324;
   const cells = nr*nth*nzMax;
   const X = WM.instantiateCell3dWasm().exports;
   const S = new C3.FaradayCell3D({ nr, nth, nz: nzMax, ...CELL });

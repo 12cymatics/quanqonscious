@@ -2520,18 +2520,20 @@ const CELL3D = (function(){
     return z;
   }
   function faradayBand(R, h, water, gravity, f){
-    const hz = f/2, k = FARADAY_KERNEL.kOfOmega(2*Math.PI*hz, water.gamma, water.rho, h, gravity);
     const modes = [];
-    for (let q = 0; ; q++){
-      const z = pinnedZeroAtOrAbove(q, k*R);
-      if (z === null) break;
-      modes.push({ m: q, k: z/R });
-    }
-    const harmonic = FARADAY_KERNEL.kOfOmega(2*Math.PI*f, water.gamma, water.rho, h, gravity)*R;
-    const text = `subharmonic tongue at ${hz} Hz, kR ${(k*R).toFixed(2)}: `
-      + (modes.length ? `pinned modes m 0 to ${modes.length - 1}, each at its first zero at or above it` : 'below the first zero of J_0')
-      + `; harmonic tongue at ${f} Hz, kR ${harmonic.toFixed(2)}, not covered by this grid`;
-    return { hz, kR: k*R, harmonicKR: harmonic, modes, text };
+    const tongues = [['subharmonic', f/2], ['harmonic', f]].map(([name, hz]) => {
+      const kR = FARADAY_KERNEL.kOfOmega(2*Math.PI*hz, water.gamma, water.rho, h, gravity)*R;
+      let count = 0;
+      for (let q = 0; ; q++){
+        const z = pinnedZeroAtOrAbove(q, kR);
+        if (z === null) break;
+        modes.push({ m: q, k: z/R });
+        count++;
+      }
+      return `${name} tongue at ${hz} Hz, kR ${kR.toFixed(2)}: `
+        + (count ? `pinned modes m 0 to ${count - 1}, each at its first zero at or above it` : 'below the first zero of J_0');
+    });
+    return { modes, text: tongues.join('; ') };
   }
 
   /* The seed specifies an initial surface displacement, not a predicted response mode. */

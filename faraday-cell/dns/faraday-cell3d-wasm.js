@@ -213,9 +213,9 @@ class FaradayCell3DWasm {
 
   errorMessage(code){
     const X = this.inst.exports;
-    if (code === 1) return 'the C++ module\'s arena is exhausted: this grid needs '
-      + `more than ${X.cell3d_arenaUsed()} doubles. Raise ARENA in `
-      + 'dns/faraday_cell3d.cpp and --initial-memory in dns/build-wasm-cell3d.sh.';
+    if (code === 1) return 'the C++ module could not grow its memory past '
+      + `${X.cell3d_arenaUsed()} doubles for this `
+      + `${this.js.nr}x${this.js.nth}x${this.js.nz} grid: the browser refused more WebAssembly memory.`;
     if (code === 2) return 'three-dimensional pressure solve did not converge: '
       + `residual ${X.cell3d_cgResidual().toExponential(3)} after `
       + `${X.cell3d_cgIters()} iterations on a `

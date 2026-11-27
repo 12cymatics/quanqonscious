@@ -68,8 +68,8 @@ void* memcpy(void* dst, const void* src, unsigned long n){
    the previous instant's. */
 #define CELL3D_GRAVITY_UNSET (-1.0e308)
 
-static const int ARENA = 12000000;         // doubles; 96 MB
-static double arena[ARENA];
+extern "C" unsigned char __heap_base;
+static double* arena = 0;
 static int   arenaUsed = 0;
 
 /* 0 ok. 1 the arena is exhausted. 2 the conjugate gradient did not converge.
@@ -145,7 +145,15 @@ struct Fam {
 static Fam FAMP, FAMU, FAMV, FAMW;
 
 static double* take(int n){
-  if (arenaUsed + n > ARENA){ lastError = 1; return arena; }
+  if (!arena) arena = (double*)(((unsigned long)&__heap_base + 7ul) & ~7ul);
+  const unsigned long base = (unsigned long)arena;
+  if ((unsigned long)arenaUsed + (unsigned long)n > (0xFFFFFFFFul - base)/8ul){ lastError = 1; return arena; }
+  const unsigned long need = base + ((unsigned long)arenaUsed + (unsigned long)n)*8ul;
+  const unsigned long have = (unsigned long)__builtin_wasm_memory_size(0)*65536ul;
+  if (need > have){
+    const unsigned long pages = (need - have + 65535ul)/65536ul;
+    if (__builtin_wasm_memory_grow(0, pages) == (unsigned long)-1){ lastError = 1; return arena; }
+  }
   double* q = arena + arenaUsed; arenaUsed += n;
   for (int i = 0; i < n; i++) q[i] = 0.0;
   return q;

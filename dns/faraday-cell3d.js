@@ -287,7 +287,7 @@ function cell3dGridLimits(drMin, dzMin, Hmin, rc0, nth, dth, g, accel, gamma, rh
 
    The azimuthal count is the smallest even nth >= 16 that holds whose half has no prime
    factor above 7, so the preconditioner's transform stays fast (cell3dFft); more cells never
-   cost accuracy. `maxCells` (250 000) is what the C++ engine's arena holds at the deepest
+   cost accuracy. `maxCells` (1 000 000) is what the C++ engine's arena holds at the deepest
    vertical count searched, so both engines accept every grid this returns -- the gate builds
    the C++ engine at that size. Where no grid within it holds, this returns `unreachable` with
    every grid it tried and the closest, and the caller refuses with those numbers. */
@@ -295,7 +295,7 @@ const CELL3D_SIZE_NR = [24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256];
 const CELL3D_SIZE_NZ = [12, 16, 20, 24, 32];
 const CELL3D_SIZE_ZSTRETCH = [2.2, 3.0, 3.8];
 const CELL3D_SIZE_RSTRETCH_RIM = [3.0, 3.8, 4.6];
-const CELL3D_MAX_CELLS = 250000;
+const CELL3D_MAX_CELLS = 1000000;
 
 function cell3dTransformFriendly(nth){
   let n = nth >> 1;
