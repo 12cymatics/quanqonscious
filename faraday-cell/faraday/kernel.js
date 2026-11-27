@@ -144,6 +144,30 @@ function jZeroNear(m, xStar){
   return Math.abs(up - xStar) <= Math.abs(down - xStar) ? up : down;
 }
 
+function jZeroAfter(m, z){
+  if (!(Number.isInteger(m) && m >= 0)) throw new RangeError(
+    `jZeroAfter: m = ${m} is not a non-negative integer order.`);
+  if (!(typeof z === 'number' && Number.isFinite(z) && z > 0)) throw new RangeError(
+    `jZeroAfter: z = ${z} is not a finite positive zero of J_${m}.`);
+  const step = 0.3;
+  let x = z + step, f = besselJ(m, x);
+  if (f === 0) return x;
+  for (let i = 0; i < 1000000; i++){
+    const nx = x + step, nf = besselJ(m, nx);
+    if (nf === 0) return nx;
+    if (f*nf < 0){
+      let p = x, q = nx;
+      for (let k = 0; k < 80; k++){
+        const mid = (p + q)/2;
+        if (besselJ(m, p)*besselJ(m, mid) <= 0) q = mid; else p = mid;
+      }
+      return (p + q)/2;
+    }
+    x = nx; f = nf;
+  }
+  throw new RangeError(`jZeroAfter: no sign change of J_${m} within ${1000000*step} after ${z}.`);
+}
+
 function radialIndexOf(m, z){
   const floorX = Math.max(0.02, m - 2), step = 0.3, limit = z + 1e-9;
   let count = 0, x = floorX, f = besselJp(m, x);
@@ -1233,6 +1257,7 @@ const FARADAY_KERNEL = {
   besselPair,
   jpZeroNear,
   jZeroNear,
+  jZeroAfter,
   radialIndexOf,
   jpZerosNearN,
   radialProfile,

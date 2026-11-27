@@ -94,19 +94,16 @@ refusals. `dns/check-page.mjs` replays each run in the page on one JavaScript
 thread. The tracers it computes must match the ones drawn bit for bit, on one
 thread, on two, and in the C++ engine.
 
-The solver's grid is now sized for more than the seeded mode. It must also
-carry the cell's own pinned modes in the subharmonic Faraday tongue, the one
-that goes unstable first. For every azimuthal order whose first zero of J_m
-lies within the subharmonic wavenumber k at f/2, that order's first zero at or
-above kR is included. The surface operator must be within 1% for every one of
-them. The harmonic tongue, at f, is not covered, and the deck says so. If no
-grid of at most 250 000 cells meets this, the run is refused, and the message
-names the worst mode and the closest grid tried. For the 30 mm × 4 mm water
-cell this holds from 40 Hz (64 × 60 × 12) to 80 Hz (96 × 140 × 12). At 111 Hz
-the closest grid, 96 × 216, reaches 1.23% against 1%, so that run is refused.
-Lower the frequency or use a smaller cell. The deck shows the band the grid was
-sized for, the worst mode, and the surface's peak height in metres. That peak
-sets the colour scale; it is a display scale only.
+The solver's grid is sized for the seeded mode and for the cell's own pinned
+modes in both Faraday tongues: the subharmonic, at f/2, and the harmonic, at f.
+For every azimuthal order whose first zero of J_m lies within the tongue's
+wavenumber k, that order's first zero at or above kR is included, and the
+surface operator must be within 1% for every one of them. The C++ engine's
+memory grows to the grid it is given, and both engines accept grids of up to
+1 000 000 cells. The 30 mm × 4 mm water cell at 111 Hz is sized to
+192 × 360 × 12 = 829 440 cells, with 283 512 time steps per drive period. The
+deck shows the band the grid was sized for, the worst mode, and the surface's
+peak height in metres, which sets the colour scale.
 
 The solver's state no longer carries placeholder modal fields set to null or
 zero, such as a 0% empirical confidence. The overlay now reads "no empirical

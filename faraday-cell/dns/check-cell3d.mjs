@@ -4419,7 +4419,7 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
   const kF = K.kOfOmega(omegaR, CELL.gamma, CELL.rho, CELL.h, CELL.g), seedMode = { m: 2, k: jz(2, 1)/CELL.R };
   const chain = (q, upTo) => {
     const zs = [K.jZeroNear(q, Math.max(0.02, q - 2))];
-    while (zs[zs.length - 1] < upTo) zs.push(K.jZeroNear(q, zs[zs.length - 1] + 0.9*Math.PI));
+    while (zs[zs.length - 1] < upTo) zs.push(K.jZeroAfter(q, zs[zs.length - 1]));
     return zs;
   };
   let chainWorst = 0;
@@ -4572,6 +4572,39 @@ section('19. surface tracers move with the solver\'s own surface velocity');
   let outside = '';
   try { wall.surfaceVelocityAtXY(wall.R, 0, axis); } catch (e){ outside = String(e.message); }
   ok(/not inside the cell/.test(outside), 'a position on or past the wall has no surface velocity', outside || 'answered');
+}
+
+
+section('20. the surface the page draws from is the solver\'s own, without its volume');
+{
+  for (const contact of ['pinned', 'free']){
+    const opts = { nr: 20, nth: 24, nz: 6, ...CELL, contact, rStretch: 2.2, zStretch: 2.2 };
+    const S = new FaradayCell3D(opts), F = new C.FaradayCell3DSurface(opts);
+    for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++){
+      const e = S.ie(i, k), r = S.rc[i]/S.R, th = (k + 0.5)*S.dth;
+      const v = 1e-5*CELL.h*(Math.cos(2*th)*(1 - r*r) + 0.3*Math.sin(3*th + 1)*r*(1 - r));
+      S.eta[e] = v; F.eta[e] = v;
+      S.Ht[e] = 0.1*v; F.Ht[e] = 0.1*v;
+    }
+    S.refreshMetric(); F.refreshSurfaceMetric();
+    let gridSame = true;
+    for (const name of ['rf', 'rc', 'drc', 'drf', 'rx'])
+      for (let i = 0; i < S[name].length; i++) if (!Object.is(S[name][i], F[name][i])) gridSame = false;
+    let differ = 0, n = 0;
+    for (let q = 0; q < 400; q++){
+      const r = S.R*((q*0.6180339887498949) % 1), th = (q*2.399963229728653) % (2*Math.PI);
+      const a = S.etaAt(r, th), b = F.etaAt(r, th);
+      const sa = S.etaSlopeAt(r, th), sb = F.etaSlopeAt(r, th);
+      const ta = S.etaDotSlopeAt(r, th), tb = F.etaDotSlopeAt(r, th);
+      n++;
+      if (!Object.is(a, b) || !Object.is(sa.Hr, sb.Hr) || !Object.is(sa.Hth, sb.Hth)
+          || !Object.is(ta.Tr, tb.Tr) || !Object.is(ta.Tth, tb.Tth)) differ++;
+    }
+    const volume = ['u', 'v', 'w', 'p', 'om'].filter(name => name in F);
+    ok(gridSame && differ === 0 && volume.length === 0,
+       `${contact} rim: the surface-only object has the solver's radial grid and gives its surface, slopes and their rates to the bit, with no volume arrays`,
+       JSON.stringify({ gridSame, differ, n, volume }));
+  }
 }
 
 console.log('\n' + '-'.repeat(66));

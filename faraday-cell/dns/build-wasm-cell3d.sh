@@ -33,8 +33,6 @@
 #                       to JavaScript's, so none is computed here.
 #   --no-entry          a library, not a program.
 #   --export-all        JavaScript calls the exported functions by name.
-#   --initial-memory    must cover the static arena; see ARENA in the source.
-#                       128 MiB against ARENA's 96 MB of doubles.
 #
 # There is no -ffast-math and there never will be: it permits reassociation,
 # which is exactly the licence to change the arithmetic that this repository
@@ -49,6 +47,5 @@ cd "$(dirname "$0")"
 OUT="${1:-faraday_cell3d.wasm}"
 clang++ --target=wasm32 -O3 -msimd128 -ffp-contract=off -fno-exceptions -fno-rtti \
   -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
-  -Wl,--initial-memory=134217728 \
   -o "$OUT" faraday_cell3d.cpp
 echo "wrote $OUT ($(wc -c < "$OUT") bytes)"
