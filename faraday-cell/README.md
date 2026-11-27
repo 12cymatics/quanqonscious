@@ -67,6 +67,51 @@ python3 dns/check-book-pressure.py
 python3 dns/check-book-surface.py
 ```
 
+## Sand on the 3D solver — 25 November 2026
+
+The sand view works with the 3D Navier-Stokes solver. Every grain is a floating
+tracer on the solver's free surface. At each solver step, before the step is
+taken, each tracer moves by the step's time step times the surface velocity
+at its position. That velocity is the solver's own horizontal velocity, read
+from its staggered faces at the surface height of each column. Between cell
+centres it is interpolated linearly. Beyond the last cell centre it falls
+linearly to zero at the no-slip wall. A step that would carry a tracer through
+the wall stops the run with an error naming the tracer. The tracer is not put
+back inside.
+
+The tracers start on a deterministic spiral of equal area per tracer, with no
+random numbers. Re-sprinkle puts them back on that spiral while the solver
+runs. With the solver on, no grain model moves them: the modal drift,
+agitation and toppling are not applied. The sand view exports from the solver
+as well. Each tracer of the frozen frame is deposited where the solver carried
+it.
+
+`dns/check-cell3d.mjs` section 19 holds the tracers to three velocity fields
+with known answers: a uniform current, a solid-body rotation and a field near
+the axis. Each must be within the azimuthal interpolation's bound,
+1 − cos(Δθ/2). The section also checks the linear fall to the wall and the
+refusals. `dns/check-page.mjs` replays each run in the page on one JavaScript
+thread. The tracers it computes must match the ones drawn bit for bit, on one
+thread, on two, and in the C++ engine.
+
+The solver's grid is now sized for more than the seeded mode. It must also
+carry the cell's own pinned modes in the subharmonic Faraday tongue, the one
+that goes unstable first. For every azimuthal order whose first zero of J_m
+lies within the subharmonic wavenumber k at f/2, that order's first zero at or
+above kR is included. The surface operator must be within 1% for every one of
+them. The harmonic tongue, at f, is not covered, and the deck says so. If no
+grid of at most 250 000 cells meets this, the run is refused, and the message
+names the worst mode and the closest grid tried. For the 30 mm × 4 mm water
+cell this holds from 40 Hz (64 × 60 × 12) to 80 Hz (96 × 140 × 12). At 111 Hz
+the closest grid, 96 × 216, reaches 1.23% against 1%, so that run is refused.
+Lower the frequency or use a smaller cell. The deck shows the band the grid was
+sized for, the worst mode, and the surface's peak height in metres. That peak
+sets the colour scale; it is a display scale only.
+
+The solver's state no longer carries placeholder modal fields set to null or
+zero, such as a 0% empirical confidence. The overlay now reads "no empirical
+prior in the nonlinear run".
+
 ## Grid update — 15 November 2026
 
 The 3D solver refused a 325 mm × 1 mm cell at 180 Hz (gravity 3 m/s², peak

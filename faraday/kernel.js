@@ -829,10 +829,7 @@ function resolveExperimentState(input){
     accelAssumed: experiment.acceleration,
     water: { rho: experiment.rho, mu: experiment.mu, nu: experiment.mu/experiment.rho, sigma: experiment.sigma },
     driveCalibration: { kind: 'acceleration', source: 'user supplied physical acceleration in m/s²', measured: false },
-    states: [], nearestTheoryModes: [], warnings: [], expression: 1,
-    selectedEmpiricalFold: null, empiricalConfidence: 0, transitionRisk: null,
-    replicates: null, transitionStudy: null, visualSignature: null,
-    responseHz: null, transport: null
+    states: [], nearestTheoryModes: [], warnings: [], expression: 1
   };
 }
 

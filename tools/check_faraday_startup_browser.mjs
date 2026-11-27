@@ -63,6 +63,7 @@ try {
       overlay: getComputedStyle(document.getElementById('solverOverlay')).display }));
     assert.deepEqual(opened, { experimentMode: 'reference', useSolver: false, rim: 'free', view: 'sand', overlay: 'none' });
     results.push({ name: scenario.name + '-opens-on-sand', opened, passed: true });
+    await page.locator('#viewSeg [data-v="height"]').click();
     await page.locator('#configurationMode').selectOption('general');
     await page.locator('#rimSeg [data-r="pinned"]').click();
     await page.locator('#srcSeg [data-s="dns"]').click();
@@ -71,7 +72,7 @@ try {
       let exportError = '';
       try { await exportImage(129, () => {}); } catch (error) { exportError = error.message; }
       return { experimentMode, experiment: !!state.experiment, rim, useSolver, solverRequested,
-        haveFrame: CELL3D.clocks().have, comparePaper, visualSignature: state.visualSignature,
+        haveFrame: CELL3D.clocks().have, comparePaper, visualSignature: 'visualSignature' in state,
         fieldIsZero: [ETA, IMF, NX, NY].every(a => a.every(v => v === 0)), exportError };
     });
     assert.equal(pending.experimentMode, 'general');
@@ -81,7 +82,7 @@ try {
     assert.equal(pending.solverRequested, false);
     assert.equal(pending.haveFrame, false);
     assert.equal(pending.comparePaper, false);
-    assert.equal(pending.visualSignature, null);
+    assert.equal(pending.visualSignature, false);
     assert.equal(pending.fieldIsZero, true, 'Pending nonlinear mode must not substitute a modal field');
     assert.match(pending.exportError, /No nonlinear solver frame/);
     assert.equal(await page.locator('#solverOverlay').isVisible(), true);

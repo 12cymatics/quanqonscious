@@ -4370,7 +4370,7 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
   };
   const rows = [];
   for (const c of cases){
-    const g = C.suggestCell3DGrid({ m: c.m, k: c.k, ...CELL, accel: 9, contact: c.contact,
+    const g = C.suggestCell3DGrid({ modes: [{ m: c.m, k: c.k }], ...CELL, accel: 9, contact: c.contact,
                                     omegaResponse: omegaR, omegaDrive: omegaD,
                                     besselJ: K.besselJ });
     if (g.unreachable){ rows.push({ c, bad: ['unreachable'] }); continue; }
@@ -4406,7 +4406,8 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
      rows.filter(r => r.bad.length).map(r => `${r.c.tag}: ${r.bad.join('; ')}`).join(' | '));
 
   /* and where nothing within the cap holds, it says so with what it tried */
-  const tight = C.suggestCell3DGrid({ ...cases[0], ...CELL, accel: 9, omegaResponse: omegaR,
+  const tight = C.suggestCell3DGrid({ modes: [{ m: cases[0].m, k: cases[0].k }], contact: cases[0].contact,
+                                      ...CELL, accel: 9, omegaResponse: omegaR,
                                       omegaDrive: omegaD, besselJ: K.besselJ, maxCells: 20000 });
   ok(tight.unreachable === true && tight.closest && tight.tried.length > 0
      && tight.closest.err > tight.errTol,
@@ -4414,6 +4415,163 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
      + 'tried and the closest grid rather than a grid that misses',
      JSON.stringify({ unreachable: tight.unreachable, closest: tight.closest && {
        nr: tight.closest.nr, nth: tight.closest.nth, err: tight.closest.err } }));
+
+  const kF = K.kOfOmega(omegaR, CELL.gamma, CELL.rho, CELL.h, CELL.g), seedMode = { m: 2, k: jz(2, 1)/CELL.R };
+  const chain = (q, upTo) => {
+    const zs = [K.jZeroNear(q, Math.max(0.02, q - 2))];
+    while (zs[zs.length - 1] < upTo) zs.push(K.jZeroNear(q, zs[zs.length - 1] + 0.9*Math.PI));
+    return zs;
+  };
+  let chainWorst = 0;
+  for (const x of REF.jZeros){
+    const zs = chain(x.m, x.zeros[x.zeros.length - 1] - 1e-9);
+    for (let s = 0; s < x.zeros.length; s++) chainWorst = Math.max(chainWorst, Math.abs(zs[s] - x.zeros[s])/x.zeros[s]);
+  }
+  ok(chainWorst <= 4*Number.EPSILON,
+     'stepping from each zero of J_m to the next finds every zero mpmath lists, in order, none skipped',
+     `worst relative ${chainWorst}`);
+  const band = [];
+  for (let q = 0; K.jZeroNear(q, Math.max(0.02, q - 2)) <= kF*CELL.R; q++){
+    const zs = chain(q, kF*CELL.R);
+    band.push({ m: q, k: zs[zs.length - 1]/CELL.R });
+  }
+  const together = C.suggestCell3DGrid({ modes: [seedMode, ...band], ...CELL, accel: 9, contact: 'pinned',
+                                         omegaResponse: omegaR, omegaDrive: omegaD, besselJ: K.besselJ });
+  const alone = C.suggestCell3DGrid({ modes: [seedMode], ...CELL, accel: 9, contact: 'pinned',
+                                      omegaResponse: omegaR, omegaDrive: omegaD, besselJ: K.besselJ });
+  const each = [seedMode, ...band].map(md => direct({ ...md, contact: 'pinned' }, together.nr, together.nth,
+    together.nz, together.rStretch, together.zStretch).err);
+  const belowBand = friendlyBelow(together.nth);
+  const eachBelow = belowBand === null ? [] : [seedMode, ...band].map(md => direct({ ...md, contact: 'pinned' },
+    together.nr, belowBand, 4, together.rStretch, together.zStretch).err);
+  const worstAt = each.indexOf(Math.max(...each));
+  console.log(`       seed m = 2 and the f/2 band, kR ${(kF*CELL.R).toFixed(2)}, m 0 to ${band.length - 1}: `
+    + `${together.nr}x${together.nth}x${together.nz} against ${alone.nr}x${alone.nth}x${alone.nz} for the seed alone; `
+    + `worst built ${(Math.max(...each)*100).toFixed(3)}% at m = ${[seedMode, ...band][worstAt].m}`);
+  ok(!together.unreachable && band.length > 3 && each.every(e => e <= together.errTol)
+     && (belowBand === null || eachBelow.some(e => e > together.errTol))
+     && together.nth >= alone.nth && together.nr*together.nth >= alone.nr*alone.nth,
+     'sized to the seed and every azimuthal order the Faraday band reaches, the grid holds each of them '
+     + 'within 1% when built, one of them fails at the azimuthal count below, and it is no smaller than the seed\'s alone',
+     JSON.stringify({ each, eachBelow, together: [together.nr, together.nth], alone: [alone.nr, alone.nth] }));
+  ok(together.worst && together.worst.m === [seedMode, ...band][worstAt].m && Object.is(together.worst.k, [seedMode, ...band][worstAt].k),
+     'and the mode it reports as the worst is the one that measures worst when built',
+     JSON.stringify({ worst: together.worst, measured: [seedMode, ...band][worstAt] }));
+  let noModes = '';
+  try { C.suggestCell3DGrid({ modes: [], ...CELL, contact: 'pinned', omegaResponse: omegaR, omegaDrive: omegaD,
+                              besselJ: K.besselJ }); } catch (e){ noModes = e.message; }
+  ok(/modes/.test(noModes), 'with no mode to carry it refuses to size a grid', noModes || 'sized one');
+}
+
+
+section('19. surface tracers move with the solver\'s own surface velocity');
+{
+  const dt = 1e-3, golden = Math.PI*(3 - Math.sqrt(5));
+  const cell = (nth, ur, ut) => {
+    const S = new FaradayCell3D({ nr: 24, nth, nz: 8, ...CELL, contact: 'pinned' });
+    S.refreshMetric();
+    for (let i = 0; i <= S.nr; i++) for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
+      S.u[S.iu(i, k, j)] = i === S.nr ? 0 : ur(S.rf[i], (k + 0.5)*S.dth);
+    for (let i = 0; i < S.nr; i++) for (let k = 0; k < S.nth; k++) for (let j = 0; j < S.nz; j++)
+      S.v[S.iv(i, k, j)] = ut(S.rc[i], k*S.dth);
+    return S;
+  };
+  const spiral = (S, N) => {
+    const x = new Float64Array(N), y = new Float64Array(N);
+    for (let p = 0; p < N; p++){
+      const r = S.R*Math.sqrt((p + 0.5)/N), th = p*golden;
+      x[p] = r*Math.cos(th); y[p] = r*Math.sin(th);
+    }
+    return { x, y };
+  };
+  const U = 3e-3;
+  const current = nth => {
+    const S = cell(nth, (r, th) => U*Math.cos(th), (r, th) => -U*Math.sin(th));
+    const { x, y } = spiral(S, 400), x0 = Float64Array.from(x), y0 = Float64Array.from(y);
+    S.advanceSurfaceTracers(x, y, dt);
+    let interior = 0, worst = 0;
+    for (let p = 0; p < x.length; p++){
+      if (!(Math.hypot(x0[p], y0[p]) < S.rc[S.nr - 2])) continue;
+      interior++;
+      worst = Math.max(worst, Math.hypot(x[p] - x0[p] - U*dt, y[p] - y0[p])/(U*dt));
+    }
+    const at = new Float64Array(2), base = new Float64Array(2);
+    const r1 = S.rc[S.nr - 1] + 1e-3*(S.R - S.rc[S.nr - 1]);
+    let fall = 0, edge = 0;
+    for (let q = 0; q < 24; q++){
+      const th = 0.21 + q*golden;
+      S.surfaceVelocityAtXY(r1*Math.cos(th), r1*Math.sin(th), base);
+      const b = Math.hypot(base[0], base[1]);
+      for (const f of [0.25, 0.5, 0.75, 0.999]){
+        const r = r1 + f*(S.R - r1), keep = (S.R - r)/(S.R - r1);
+        S.surfaceVelocityAtXY(r*Math.cos(th), r*Math.sin(th), at);
+        fall = Math.max(fall, Math.hypot(at[0] - keep*base[0], at[1] - keep*base[1])/b);
+      }
+      const rin = S.rc[S.nr - 1]*(1 - 1e-12), rout = S.rc[S.nr - 1];
+      S.surfaceVelocityAtXY(rin*Math.cos(th), rin*Math.sin(th), at);
+      S.surfaceVelocityAtXY(rout*Math.cos(th), rout*Math.sin(th), base);
+      edge = Math.max(edge, Math.hypot(at[0] - base[0], at[1] - base[1])/Math.hypot(base[0], base[1]));
+    }
+    return { interior, worst, bound: 1 - Math.cos(S.dth/2), fall, edge };
+  };
+  for (const nth of [32, 64]){
+    const c = current(nth);
+    console.log(`       uniform current, ${nth} azimuthal cells: ${c.interior} tracers inside the last ring, worst `
+      + `relative error ${c.worst.toExponential(3)} against 1 - cos(dtheta/2) = ${c.bound.toExponential(3)}`);
+    ok(c.interior > 300 && c.worst <= c.bound + 1e-9,
+       `${nth} cells: a uniform current moves every tracer by U dt, within the azimuthal interpolation's own bound`,
+       `${c.worst} against ${c.bound}`);
+    ok(c.fall <= 1e-12 && c.edge <= 1e-9,
+       `${nth} cells: beyond the last cell centre the velocity falls linearly to the no-slip zero at the wall, continuously`,
+       `linear to ${c.fall}, continuous to ${c.edge}`);
+  }
+
+  const Om = 0.4;
+  const rotation = nth => {
+    const S = cell(nth, () => 0, r => Om*r);
+    const xs = new Float64Array(1), ys = new Float64Array(1);
+    let worst = 0;
+    for (let q = 0; q < 50; q++){
+      const r = S.rc[2] + (S.rc[S.nr - 2] - S.rc[2])*(q/49), th = 0.37 + q*0.61;
+      xs[0] = r*Math.cos(th); ys[0] = r*Math.sin(th);
+      S.advanceSurfaceTracers(xs, ys, dt);
+      const ex = r*Math.cos(th) - Om*r*Math.sin(th)*dt, ey = r*Math.sin(th) + Om*r*Math.cos(th)*dt;
+      worst = Math.max(worst, Math.hypot(xs[0] - ex, ys[0] - ey)/(Om*r*dt));
+    }
+    return { worst, bound: 1 - Math.cos(S.dth/2) };
+  };
+  for (const nth of [32, 64]){
+    const e = rotation(nth);
+    console.log(`       solid-body rotation, ${nth} azimuthal cells: worst relative error ${e.worst.toExponential(3)} `
+      + `against 1 - cos(dtheta/2) = ${e.bound.toExponential(3)}`);
+    ok(e.worst <= e.bound + 1e-9 && e.worst > 0.5*e.bound,
+       `${nth} cells: a solid-body rotation moves each tracer by Omega r dt, to the azimuthal interpolation's bound and no better`,
+       `${e.worst} against ${e.bound}`);
+  }
+
+  const near = cell(32, (r, th) => U*Math.cos(th), (r, th) => -U*Math.sin(th));
+  const axis = new Float64Array(2);
+  near.surfaceVelocityCartesian();
+  let axisWorst = 0;
+  for (let q = 0; q < 16; q++){
+    const r = near.rc[0]*(q/16), th = q*golden;
+    near.surfaceVelocityAtXY(r*Math.cos(th), r*Math.sin(th), axis);
+    axisWorst = Math.max(axisWorst, Math.hypot(axis[0] - U, axis[1])/U);
+  }
+  ok(axisWorst <= 1 - Math.cos(near.dth/2) + 1e-9,
+     'inside the first cell centre the velocity is carried across the axis, within the same bound as anywhere else',
+     `${axisWorst} against ${1 - Math.cos(near.dth/2)}`);
+
+  const wall = cell(32, (r, th) => 50*Math.cos(th), (r, th) => -50*Math.sin(th));
+  const edge = new Float64Array([0.5*(wall.rc[wall.nr - 1] + wall.R)]), ey0 = new Float64Array([0]);
+  let refused = '';
+  try { wall.advanceSurfaceTracers(edge, ey0, 1e-2); } catch (e){ refused = String(e.message); }
+  ok(/would cross the wall/.test(refused) && edge[0] === 0.5*(wall.rc[wall.nr - 1] + wall.R),
+     'a step that would carry a tracer through the wall is refused, and the tracer is left where it was',
+     refused || 'not refused');
+  let outside = '';
+  try { wall.surfaceVelocityAtXY(wall.R, 0, axis); } catch (e){ outside = String(e.message); }
+  ok(/not inside the cell/.test(outside), 'a position on or past the wall has no surface velocity', outside || 'answered');
 }
 
 console.log('\n' + '-'.repeat(66));
