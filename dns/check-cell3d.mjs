@@ -4419,7 +4419,7 @@ section('18. the grid suggestCell3DGrid chooses, held to the direct measurement'
   const kF = K.kOfOmega(omegaR, CELL.gamma, CELL.rho, CELL.h, CELL.g), seedMode = { m: 2, k: jz(2, 1)/CELL.R };
   const chain = (q, upTo) => {
     const zs = [K.jZeroNear(q, Math.max(0.02, q - 2))];
-    while (zs[zs.length - 1] < upTo) zs.push(K.jZeroNear(q, zs[zs.length - 1] + 0.9*Math.PI));
+    while (zs[zs.length - 1] < upTo) zs.push(K.jZeroAfter(q, zs[zs.length - 1]));
     return zs;
   };
   let chainWorst = 0;

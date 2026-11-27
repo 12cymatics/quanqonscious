@@ -727,7 +727,7 @@ async function checkSolverDraws(page){
     const kF = K.kOfOmega(Math.PI*ctl.freq, ctl.sigma, ctl.rho, ctl.depthMm/1000, ctl.gravity);
     for (let q = 0; K.jZeroNear(q, Math.max(.02, q - 2)) <= kF*R; q++){
       let z = K.jZeroNear(q, Math.max(.02, q - 2));
-      while (z < kF*R) z = K.jZeroNear(q, z + 0.9*Math.PI);
+      while (z < kF*R) z = K.jZeroAfter(q, z);
       band.push({ m: q, k: z/R });
     }
     const want = C3.suggestCell3DGrid({ modes: [{ m, k: kTest }, ...band], R, h: ctl.depthMm/1000,

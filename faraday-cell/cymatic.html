@@ -2516,11 +2516,7 @@ const CELL3D = (function(){
     let z = FARADAY_KERNEL.jZeroNear(q, Math.max(0.02, q - 2));
     if (!(z > 0)) throw new Error(`Could not resolve the first zero of J_${q}.`);
     if (z > x) return null;
-    while (z < x){
-      const next = FARADAY_KERNEL.jZeroNear(q, z + 0.9*Math.PI);
-      if (!(next > z + 3)) throw new Error(`Could not step past the zero ${z} of J_${q}.`);
-      z = next;
-    }
+    while (z < x) z = FARADAY_KERNEL.jZeroAfter(q, z);
     return z;
   }
   function faradayBand(R, h, water, gravity, f){
