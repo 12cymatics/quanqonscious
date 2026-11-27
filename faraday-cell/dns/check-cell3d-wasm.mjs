@@ -607,6 +607,45 @@ section('11. what it bought, measured');
   }
 }
 
+
+section('12. the page solver\'s shared layout: one copy of each array, the same numbers');
+{
+  const m = 3, k = kOf(m), omega = omegaOf(k, CELL.h);
+  const opts = { nr: 12, nth: 24, nz: 8, ...CELL, contact: 'pinned', accel: 11, omegaD: 2*omega };
+  const S = fillState(new FaradayCell3D(opts), 71, m, 0.1);
+  const W = new FaradayCell3DWasm(opts, { share: true });
+  const J = W.js;
+  for (const nm of ['u', 'v', 'w', 'om', 'p', 'eta', 'Ht']) J[nm].set(S[nm]);
+  J.refreshMetric();
+  W.pushState();
+  W.refreshMetric();
+  const aliased = CELL3D_ARRAYS.filter(name => {
+    const js = CELL3D_JS_NAME[name] === undefined ? name : CELL3D_JS_NAME[name];
+    return J[js] !== W.views[name];
+  });
+  const N = 40, xs = new Float64Array([0.3*CELL.R, -0.5*CELL.R]), ys = new Float64Array([0.2*CELL.R, 0.1*CELL.R]);
+  const xr = Float64Array.from(xs), yr = Float64Array.from(ys);
+  let dtDiffer = 0;
+  for (let n = 0; n < N; n++){
+    W.pullState();
+    const dw = J.stableStep(), ds = S.stableStep();
+    if (!Object.is(dw, ds)) dtDiffer++;
+    J.advanceSurfaceTracers(xs, ys, dw);
+    S.advanceSurfaceTracers(xr, yr, ds);
+    W.step(dw); S.step(ds);
+  }
+  const names = ['u', 'v', 'w', 'om', 'p', 'eta', 'Ht', ...METRIC];
+  const bad = names.map(nm => diff(nm, S[nm], W.views[nm])).filter(Boolean);
+  const tracersSame = [0, 1].every(q => Object.is(xs[q], xr[q]) && Object.is(ys[q], yr[q]));
+  ok(aliased.length === 0,
+     'every array the module holds is the JavaScript solver\'s own array, not a second copy',
+     aliased.join(', '));
+  ok(bad.length === 0 && dtDiffer === 0 && tracersSame,
+     `${N} steps on the shared layout: every array, every stable step and the surface tracers are a separate JavaScript solver\'s, to the bit`,
+     JSON.stringify({ bad, dtDiffer, tracersSame }));
+  W.release();
+}
+
 } finally { rmSync(work, { recursive: true, force: true }); }
 
 console.log(`\n${pass} checks passed, ${failures.length} failed`);

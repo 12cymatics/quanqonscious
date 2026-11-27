@@ -416,6 +416,21 @@ function suggestCell3DGrid(o){
   return { unreachable: true, modes, errTol, layerCells, maxCells, delta, closest, tried };
 }
 
+function cell3dRadialGrid(nr, R, rs){
+  const rf = GRADE.gradeToEnd(nr, R, rs);
+  const rc = new Float64Array(nr), drc = new Float64Array(nr);
+  const drf = new Float64Array(nr + 1), rx = new Float64Array(nr + 2);
+  for (let i = 0; i < nr; i++) rc[i] = 0.5*(rf[i] + rf[i+1]);
+  for (let i = 0; i < nr; i++) drc[i] = rf[i+1] - rf[i];
+  drf[0] = rc[0];
+  for (let i = 1; i < nr; i++) drf[i] = rc[i] - rc[i-1];
+  drf[nr] = R - rc[nr-1];
+  rx[0] = -rc[0];
+  for (let i = 0; i < nr; i++) rx[i+1] = rc[i];
+  rx[nr+1] = R;
+  return { rf, rc, drc, drf, rx };
+}
+
 class FaradayCell3D {
   constructor(o){
     /* kept so buildPreconditioner can build this cell's flat twin from exactly these */
@@ -456,23 +471,19 @@ class FaradayCell3D {
        sigma on the unit interval, clustered at both ends, for the floor and the
        free-surface layers. theta uniform, because it is periodic and no point on
        the circle is special. */
-    this.rf = GRADE.gradeToEnd(nr, this.R, rs);
+    const RG = cell3dRadialGrid(nr, this.R, rs);
+    this.rf = RG.rf;
     this.sf = GRADE.gradeBothEnds(nz, 1, zs);
     this.dth = 2*Math.PI/nth;
 
-    this.rc = new Float64Array(nr);
+    this.rc = RG.rc;
     this.sc = new Float64Array(nz);
-    for (let i = 0; i < nr; i++) this.rc[i] = 0.5*(this.rf[i] + this.rf[i+1]);
     for (let j = 0; j < nz; j++) this.sc[j] = 0.5*(this.sf[j] + this.sf[j+1]);
-    this.drc = new Float64Array(nr);
+    this.drc = RG.drc;
     this.dsc = new Float64Array(nz);
-    for (let i = 0; i < nr; i++) this.drc[i] = this.rf[i+1] - this.rf[i];
     for (let j = 0; j < nz; j++) this.dsc[j] = this.sf[j+1] - this.sf[j];
-    this.drf = new Float64Array(nr + 1);
+    this.drf = RG.drf;
     this.dsf = new Float64Array(nz + 1);
-    this.drf[0] = this.rc[0];
-    for (let i = 1; i < nr; i++) this.drf[i] = this.rc[i] - this.rc[i-1];
-    this.drf[nr] = this.R - this.rc[nr-1];
     this.dsf[0] = this.sc[0];
     for (let j = 1; j < nz; j++) this.dsf[j] = this.sc[j] - this.sc[j-1];
     this.dsf[nz] = 1 - this.sc[nz-1];
@@ -597,7 +608,7 @@ class FaradayCell3D {
        at h. Interpolating a pure function of position is also what keeps the
        viscous operator symmetric: both cells sharing a face compute that face's H
        identically. */
-    this.rx = new Float64Array(nr + 2);
+    this.rx = RG.rx;
     this.Hx = new Float64Array((nr + 2)*nth);
     /* The centred slopes, extended the same way. Hat's own slopes are the slope of
        the bracket it interpolates in, which is centred at a FACE midpoint and
@@ -616,9 +627,6 @@ class FaradayCell3D {
     this.Txt = new Float64Array((nr + 2)*nth);
     this.Exr = new Float64Array((nr + 2)*nth);
     this.Ext = new Float64Array((nr + 2)*nth);
-    this.rx[0] = -this.rc[0];
-    for (let i = 0; i < nr; i++) this.rx[i+1] = this.rc[i];
-    this.rx[nr+1] = this.R;
 
     this.cgIters = 0; this.cgResidual = 0;
     this._es = new Float64Array(6);        // one cell's four eta slopes, then two weights
@@ -745,7 +753,7 @@ class FaradayCell3D {
   /* H and its derivatives from the current eta. Called whenever eta changes,
      because every operator below is written against this metric and a stale one
      would solve last step's geometry with this step's fields. */
-  refreshMetric(){
+  refreshSurfaceMetric(){
     const nr = this.nr, nth = this.nth, h = this.h;
     const H = this.H, eta = this.eta;
     for (let i = 0; i < nr; i++)
@@ -916,6 +924,12 @@ class FaradayCell3D {
       this.Txt[(nr+1)*nth + k] = free ? this.Tdth[this.ie(nr-1, k)] : 0;
     }
 
+    return this;
+  }
+
+  refreshMetric(){
+    this.refreshSurfaceMetric();
+    const nth = this.nth;
     /* H AT EVERY FAMILY NODE, once per metric rather than once per reconstruction.
        colValueAtZ needs its column's own H to turn a height into a sigma, and it used to
        interpolate it afresh on every call: 639 400 times in one viscous evaluation at
@@ -3279,9 +3293,40 @@ class FaradayCell3D {
 
 }
 
+class FaradayCell3DSurface {
+  constructor(o){
+    const nr = this.nr = o.nr, nth = this.nth = o.nth;
+    if (!(Number.isInteger(nr) && nr >= 4)) throw new RangeError(
+      `nr = ${o.nr}: at least four radial cells are needed for the surface stencil.`);
+    if (!(Number.isInteger(nth) && nth >= 8 && nth % 2 === 0)) throw new RangeError(
+      `nth = ${o.nth}: an even azimuthal count of at least eight is required.`);
+    this.R = requireFinitePositive(o.R, 'R');
+    this.h = requireFinitePositive(o.h, 'h');
+    this.contact = o.contact === undefined ? 'free' : o.contact;
+    if (this.contact !== 'free' && this.contact !== 'pinned') throw new TypeError(
+      `contact = ${JSON.stringify(this.contact)}: the contact line is either 'free' or 'pinned'.`);
+    const rs = o.rStretch === undefined ? 2.2 : requireFinite(o.rStretch, 'rStretch');
+    if (rs < 0) throw new RangeError(`rStretch = ${rs}: a negative stretch would cluster cells where the gradients are not.`);
+    this.rStretch = rs;
+    const RG = cell3dRadialGrid(nr, this.R, rs);
+    this.rf = RG.rf; this.rc = RG.rc; this.drc = RG.drc; this.drf = RG.drf; this.rx = RG.rx;
+    this.dth = 2*Math.PI/nth;
+    const NE = this.NE = nr*nth;
+    this.t = 0;
+    for (const name of ['eta', 'H', 'Ht', 'Hdr', 'Hdth', 'Edr', 'Edth', 'Tdr', 'Tdth'])
+      this[name] = new Float64Array(NE);
+    for (const name of ['Hr', 'Er', 'Tr']) this[name] = new Float64Array((nr + 1)*nth);
+    for (const name of ['Hth', 'Eth', 'Tth']) this[name] = new Float64Array(nr*nth);
+    for (const name of ['Hx', 'Hxr', 'Hxt', 'Ex', 'Exr', 'Ext', 'Tx', 'Txr', 'Txt'])
+      this[name] = new Float64Array((nr + 2)*nth);
+  }
+}
+for (const name of ['kw', 'ie', 'refreshSurfaceMetric', 'etaAt', 'etaSlopeAt', 'etaDotSlopeAt', 'Hslope'])
+  FaradayCell3DSurface.prototype[name] = FaradayCell3D.prototype[name];
+
 /* polyDerivAt and TH_NODE are exported for dns/check-cell3d.mjs, whose reference form of
    famLaplacian must differentiate with exactly these to be held to it bit for bit. */
-const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D, polyDerivAt, TH_NODE, cell3dFft,
+const FARADAY_CELL3D = { CELL3D_G0, FaradayCell3D, FaradayCell3DSurface, cell3dRadialGrid, polyDerivAt, TH_NODE, cell3dFft,
                          cell3dFftFactors, cell3dGridLimits, suggestCell3DGrid,
                          CELL3D_MAX_CELLS, CELL3D_SIZE_NR, CELL3D_SIZE_NZ,
                          CELL3D_SIZE_ZSTRETCH };

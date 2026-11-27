@@ -2408,7 +2408,7 @@ const CELL3D = (function(){
              gen = d.gen; engine = d.engine === 'cpp' ? 'cpp' : 'js';
              if (engine === 'cpp'){
                W = new FARADAY_CELL3D_WASM.FaradayCell3DWasm(d.opts,
-                     { bytes: d.wasmBytes });
+                     { bytes: d.wasmBytes, share: true });
                S = W.js;
              } else {
                W = null;
@@ -2603,8 +2603,8 @@ const CELL3D = (function(){
                    R, h, ...water, g: st.gravity,
                    accel: st.accelAssumed, omegaD: 2*Math.PI*freq,
                    contact: pinned ? 'pinned' : 'free' };
-    vessel = new FARADAY_CELL3D.FaradayCell3D(opts);
-    grid = { nr: vessel.nr, nth: vessel.nth, nz: vessel.nz, m, kR: kTest*R, band, worst: size.worst,
+    vessel = new FARADAY_CELL3D.FaradayCell3DSurface(opts);
+    grid = { nr: vessel.nr, nth: vessel.nth, nz: opts.nz, m, kR: kTest*R, band, worst: size.worst,
              err: size.err, thinnest: size.thinnest, stepsPerPeriod: size.stepsPerPeriod };
     const profile = r => FARADAY_KERNEL.besselJ(m, root*r/R);
     const eta0 = seed(vessel, m, profile, e.seedFraction*h);
@@ -2686,12 +2686,12 @@ const CELL3D = (function(){
   function snapshot(){
     if (err || !haveFrame || !vessel || !lastRun)
       throw new Error(err || 'No nonlinear solver frame is available to export.');
-    const frozen = new FARADAY_CELL3D.FaradayCell3D(lastRun.opts);
+    const frozen = new FARADAY_CELL3D.FaradayCell3DSurface(lastRun.opts);
     for (let i = 0; i < frozen.nr; i++) for (let j = 0; j < frozen.nth; j++){
       const e = frozen.ie(i, j), k = i*frozen.nth + j;
       frozen.eta[e] = etaBuf[k]; frozen.Ht[e] = htBuf[k];
     }
-    frozen.refreshMetric();
+    frozen.refreshSurfaceMetric();
     return {
       provenance: { model: 'nonlinear-incompressible-free-surface-navier-stokes',
         physicalTime: physT, steps: stepsDone, engine: ranEngine,
@@ -2717,7 +2717,7 @@ const CELL3D = (function(){
         vessel.eta[e] = etaBuf[i*nth + j];
         vessel.Ht[e]  = htBuf[i*nth + j];
       }
-    vessel.refreshMetric();
+    vessel.refreshSurfaceMetric();
     const R = vessel.R;
     for (let i = 0; i < NSZ; i++){
       if (COVER[i] <= 0){ ETA[i] = NX[i] = NY[i] = 0; continue; }
@@ -2789,7 +2789,7 @@ let cell3dEngine = 'js';
    Offered up to the cores the browser reports, and set by default to one fewer, which leaves
    the drawing a core. */
 const CELL3D_CORES = Math.max(1, Math.floor(navigator.hardwareConcurrency || 1));
-let cell3dThreads = Math.max(1, CELL3D_CORES - 1);
+let cell3dThreads = 1;
 {
   const counts = [...new Set([1, 2, 4, 8, CELL3D_CORES - 1, CELL3D_CORES])]
     .filter(n => n >= 1 && n <= CELL3D_CORES).sort((a, b) => a - b);

@@ -209,6 +209,19 @@ class FaradayCell3DWasm {
     this.js.buildPreconditioner();
     this.views.pcband.set(this.js._pcBand);
     CELL3D_WASM_LIVE = this;
+    this.shared = options.share === true;
+    if (this.shared){
+      for (const name of CELL3D_ARRAYS){
+        const js = CELL3D_JS_NAME[name] === undefined ? name : CELL3D_JS_NAME[name];
+        if (!(this.js[js] instanceof Float64Array) || this.js[js].length !== this.views[name].length)
+          throw new Error(`share: the module's ${name} and the JavaScript solver's ${js} are not the same array shape.`);
+        this.views[name].set(this.js[js]);
+        this.js[js] = this.views[name];
+      }
+      const F = this.js.FAM;
+      F.p.Hcol = this.js._hcolP; F.u.Hcol = this.js._hcolU;
+      F.v.Hcol = this.js._hcolV; F.w.Hcol = this.js._hcolW;
+    }
   }
 
   errorMessage(code){
@@ -246,7 +259,8 @@ class FaradayCell3DWasm {
 
   /* Copy the JavaScript solver's state in, so both run on the same numbers. */
   pushState(){
-    for (const name of CELL3D_STATE) this.views[name].set(this.js[name]);
+    for (const name of CELL3D_STATE)
+      if (this.views[name] !== this.js[name]) this.views[name].set(this.js[name]);
     return this;
   }
 
@@ -413,6 +427,7 @@ class FaradayCell3DWasm {
     for (const name of CELL3D_ARRAYS){
       const js = CELL3D_JS_NAME[name] === undefined ? name : CELL3D_JS_NAME[name];
       const dst = this.js[js], src = this.views[name];
+      if (dst === src) continue;
       if (!(dst instanceof Float64Array)) throw new Error(
         `pullState: the module's ${name} has nowhere to go -- the JavaScript solver has no `
         + `array ${js}. The two were built from different sources; nothing was copied.`);
