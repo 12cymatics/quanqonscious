@@ -1182,36 +1182,52 @@ class FaradayCell3D {
           `the flat twin built from this cell's own options has ${name}[${x}] = `
           + `${F[name][x]} against ${this[name][x]}: not the same grid.`);
     /* the neighbour couplings, lower band only: cK[a*W + d] couples cell a - d into cell a */
-    const c0 = new Float64Array(n2*W), cP = new Float64Array(n2*W), cM = new Float64Array(n2*W);
-    const up = new Float64Array(n2*W), upP = new Float64Array(n2*W), upM = new Float64Array(n2*W);
     const probe = new Float64Array(NP), q = new Float64Array(NP);
     const kP = 1, kM = nth - 1;
-    for (let i = 0; i < nr; i++)
-      for (let j = 0; j < nz; j++){
-        const src = i*nz + j;
-        probe.fill(0); probe[this.ip(i, 0, j)] = 1;
-        F.applyL(probe, q);
-        for (let i2 = 0; i2 < nr; i2++)
-          for (let k2 = 0; k2 < nth; k2++)
-            for (let j2 = 0; j2 < nz; j2++){
-              const val = q[this.ip(i2, k2, j2)];
-              if (val === 0) continue;
-              const dst = i2*nz + j2;
-              if (k2 !== 0 && k2 !== kP && k2 !== kM) throw new Error(
-                `the flat pressure operator couples column 0 to column ${k2}: it reaches past `
-                + 'the two neighbouring columns, so its azimuthal Fourier modes do not decouple '
-                + 'and the flat-cell preconditioner would not be its inverse.');
-              if (Math.abs(dst - src) > bw) throw new Error(
-                `the flat pressure operator couples cell (${i}, ${j}) to (${i2}, ${j2}): outside `
-                + `the band of half-width ${bw} the per-mode factor is built for.`);
-              /* stored by (row, column) in the lower band, or in the upper band to be mirrored */
-              const lower = dst >= src;
-              const at = lower ? dst*W + (dst - src) : src*W + (src - dst);
-              const C = k2 === 0 ? (lower ? c0 : up) : k2 === kP ? (lower ? cP : upP)
-                                                                  : (lower ? cM : upM);
-              C[at] = val;
-            }
-      }
+    const assemble = space => {
+      const T = { c0: new Float64Array(n2*W), cP: new Float64Array(n2*W), cM: new Float64Array(n2*W),
+                  up: new Float64Array(n2*W), upP: new Float64Array(n2*W), upM: new Float64Array(n2*W) };
+      for (let phase = 0; phase < space; phase++)
+        for (let j = 0; j < nz; j++){
+          probe.fill(0);
+          for (let i = phase; i < nr; i += space) probe[this.ip(i, 0, j)] = 1;
+          F.applyL(probe, q);
+          for (let i2 = 0; i2 < nr; i2++){
+            const near = i2 - phase - Math.round((i2 - phase)/space)*space, i = i2 - near;
+            for (let k2 = 0; k2 < nth; k2++)
+              for (let j2 = 0; j2 < nz; j2++){
+                const val = q[this.ip(i2, k2, j2)];
+                if (val === 0) continue;
+                if (Math.abs(near) > 1 || i < 0 || i >= nr) throw new Error(
+                  `the flat pressure operator couples radial row ${i2} to a probe ${Math.abs(near)} `
+                  + `rows away: it reaches past the radial neighbours, so probes ${space} rows apart `
+                  + 'overlap and the flat-cell preconditioner would not be its inverse.');
+                const src = i*nz + j, dst = i2*nz + j2;
+                if (k2 !== 0 && k2 !== kP && k2 !== kM) throw new Error(
+                  `the flat pressure operator couples column 0 to column ${k2}: it reaches past `
+                  + 'the two neighbouring columns, so its azimuthal Fourier modes do not decouple '
+                  + 'and the flat-cell preconditioner would not be its inverse.');
+                if (Math.abs(dst - src) > bw) throw new Error(
+                  `the flat pressure operator couples cell (${i}, ${j}) to (${i2}, ${j2}): outside `
+                  + `the band of half-width ${bw} the per-mode factor is built for.`);
+                const lower = dst >= src;
+                const at = lower ? dst*W + (dst - src) : src*W + (src - dst);
+                const C = k2 === 0 ? (lower ? T.c0 : T.up) : k2 === kP ? (lower ? T.cP : T.upP)
+                                                                      : (lower ? T.cM : T.upM);
+                C[at] = val;
+              }
+          }
+        }
+      return T;
+    };
+    const A5 = assemble(5), A7 = assemble(7);
+    for (const key of ['c0', 'cP', 'cM', 'up', 'upP', 'upM'])
+      for (let x = 0; x < n2*W; x++)
+        if (!Object.is(A5[key][x], A7[key][x])) throw new Error(
+          `the flat pressure operator's ${key}[${x}] is ${A5[key][x]} from probes five rows apart and `
+          + `${A7[key][x]} from probes seven rows apart: a coupling past the radial neighbours was `
+          + 'attributed to the wrong probe, so the flat-cell preconditioner would not be its inverse.');
+    const { c0, cP, cM, up, upP, upM } = A5;
     for (let x = 0; x < n2*W; x++){
       if (!Object.is(cP[x], cM[x]) || !Object.is(upP[x], upM[x])) throw new Error(
         'the flat pressure operator couples a column to its two azimuthal neighbours '
